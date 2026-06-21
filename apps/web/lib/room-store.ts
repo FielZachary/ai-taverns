@@ -1,5 +1,5 @@
 import type { PoolClient } from "pg";
-import type { GameMessage } from "@ai-dnd/shared";
+import type { GameMessage } from "@/lib/game-types";
 import { query, withTransaction } from "@/lib/db";
 import {
   dungeonMasterInstructions,

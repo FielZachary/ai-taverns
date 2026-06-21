@@ -17,7 +17,7 @@ import {
   Send,
   X
 } from "lucide-react";
-import type { GameMessage, HermesTurnResponse } from "@ai-dnd/shared";
+import type { GameMessage, HermesTurnResponse } from "@/lib/game-types";
 import {
   ChatHistorySidebar,
   type ChatSummary

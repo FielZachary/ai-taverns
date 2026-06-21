@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import type { GameMessage, GameMessageRole } from "@ai-dnd/shared";
+import type { GameMessage, GameMessageRole } from "@/lib/game-types";
 
 const hermesBaseUrl = process.env.HERMES_AGENT_URL?.replace(/\/+$/, "");
 const hermesToken = process.env.HERMES_AGENT_TOKEN;

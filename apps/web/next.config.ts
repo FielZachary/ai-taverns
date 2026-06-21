@@ -4,8 +4,7 @@ import { fileURLToPath } from "node:url";
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 
 const nextConfig: NextConfig = {
-  outputFileTracingRoot: repoRoot,
-  transpilePackages: ["@ai-dnd/shared"]
+  outputFileTracingRoot: repoRoot
 };
 
 export default nextConfig;

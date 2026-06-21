@@ -1,5 +1,5 @@
 import { Bot, Sparkles, UserRound } from "lucide-react";
-import type { GameMessage } from "@ai-dnd/shared";
+import type { GameMessage } from "@/lib/game-types";
 
 type MessageLogProps = {
   messages: GameMessage[];

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import type { HermesTurnRequest, HermesTurnResponse } from "@ai-dnd/shared";
+import type { HermesTurnRequest, HermesTurnResponse } from "@/lib/game-types";
 import {
   assertHermesConfigured,
   dungeonMasterInstructions,
