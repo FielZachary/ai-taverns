@@ -1,0 +1,939 @@
+import type { PoolClient } from "pg";
+import type { GameMessage } from "@ai-dnd/shared";
+import { query, withTransaction } from "@/lib/db";
+import {
+  dungeonMasterInstructions,
+  ensureHermesSession,
+  hermesFetch,
+  normalizeHermesContent,
+  openingSceneRequest,
+  titleFromSessionId
+} from "@/lib/hermes";
+
+const maxPlayers = 4;
+const activeWindowMs = 120_000;
+
+export type RoomPlayerStatus = "waiting" | "submitted";
+
+export type RoomPlayer = {
+  id: string;
+  slot: number;
+  username: string;
+  characterName: string;
+  characterSheet: string;
+  status: RoomPlayerStatus;
+  lastSeenAt: string;
+};
+
+export type RoomSnapshot = {
+  roomId: string;
+  sessionId: string;
+  players: RoomPlayer[];
+  messages: GameMessage[];
+  isResolving: boolean;
+  hasBegun: boolean;
+  updatedAt: string;
+};
+
+export type CampaignSummary = {
+  id: string;
+  hermesSessionId: string;
+  title: string;
+  preview?: string;
+  time?: string;
+  messageCount?: number;
+};
+
+type CampaignRow = {
+  id: string;
+  hermes_session_id: string;
+  title: string;
+  status: "active" | "archived" | "deleted";
+  has_begun: boolean;
+  updated_at: Date | string;
+  created_at: Date | string;
+};
+
+type PlayerRow = {
+  id: string;
+  client_id: string;
+  username: string;
+  character_name: string;
+  character_sheet: string;
+  slot: number | null;
+  status: "active" | "left" | "kicked";
+  last_seen_at: Date | string;
+};
+
+type TurnRow = {
+  id: string;
+  campaign_id: string;
+  status: "collecting" | "resolving" | "resolved" | "failed" | "cancelled";
+  updated_at: Date | string;
+};
+
+type SubmissionRow = {
+  player_id: string | null;
+  client_id: string | null;
+  username: string | null;
+  character_name: string | null;
+  content: string;
+  created_at: Date | string;
+};
+
+type EventRow = {
+  id: string;
+  type: string;
+  payload: unknown;
+  created_at: Date | string;
+};
+
+type HermesSessionChatResponse = {
+  message?: {
+    id?: string;
+    content?: string;
+  };
+};
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function toIso(value: Date | string | null | undefined) {
+  if (!value) {
+    return nowIso();
+  }
+
+  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value
+  );
+}
+
+function formatTime(value: Date | string | undefined) {
+  if (!value) {
+    return undefined;
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return undefined;
+  }
+
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric"
+  }).format(date);
+}
+
+function isPlayerRecentlySeen(player: Pick<PlayerRow, "last_seen_at">) {
+  return Date.now() - new Date(player.last_seen_at).getTime() <= activeWindowMs;
+}
+
+function isProfileComplete(player: PlayerRow) {
+  return Boolean(
+    player.username.trim() &&
+      player.character_name.trim() &&
+      player.character_sheet.trim()
+  );
+}
+
+function eventPayload(payload: unknown) {
+  if (!payload || typeof payload !== "object") {
+    return {};
+  }
+
+  return payload as Record<string, unknown>;
+}
+
+function rowToRoomPlayer(
+  player: PlayerRow,
+  submittedPlayerIds: Set<string>
+): RoomPlayer {
+  return {
+    id: player.client_id,
+    slot: player.slot ?? 0,
+    username: player.username,
+    characterName: player.character_name,
+    characterSheet: player.character_sheet,
+    status: submittedPlayerIds.has(player.id) ? "submitted" : "waiting",
+    lastSeenAt: toIso(player.last_seen_at)
+  };
+}
+
+function normalizeCampaignTitle(title: string | undefined, sessionId: string) {
+  return title?.trim() || titleFromSessionId(sessionId) || "New Adventure";
+}
+
+async function logCampaignEvent(
+  client: PoolClient,
+  campaignId: string,
+  type: string,
+  payload: Record<string, unknown> = {}
+) {
+  await client.query(
+    "insert into campaign_events (campaign_id, type, payload) values ($1, $2, $3::jsonb)",
+    [campaignId, type, JSON.stringify(payload)]
+  );
+}
+
+async function resolveCampaign(
+  roomId: string,
+  sessionId: string,
+  client?: PoolClient
+) {
+  const idFilter = isUuid(roomId) ? "id = $1 or" : "";
+  const statement = `
+    select *
+    from campaigns
+    where (${idFilter} hermes_session_id = $2 or hermes_session_id = $1)
+      and status <> 'deleted'
+    order by created_at desc
+    limit 1
+  `;
+  const values = [roomId, sessionId];
+  const result = client
+    ? await client.query<CampaignRow>(statement, values)
+    : await query<CampaignRow>(statement, values);
+
+  return result.rows[0] ?? null;
+}
+
+async function ensureCollectingTurn(client: PoolClient, campaignId: string) {
+  const existing = await client.query<TurnRow>(
+    `
+      select *
+      from turns
+      where campaign_id = $1 and status = 'collecting'
+      order by created_at desc
+      limit 1
+    `,
+    [campaignId]
+  );
+
+  if (existing.rows[0]) {
+    return existing.rows[0];
+  }
+
+  const created = await client.query<TurnRow>(
+    `
+      insert into turns (campaign_id, status)
+      values ($1, 'collecting')
+      returning *
+    `,
+    [campaignId]
+  );
+
+  await logCampaignEvent(client, campaignId, "turn_created", {
+    turnId: created.rows[0].id
+  });
+
+  return created.rows[0];
+}
+
+async function getCurrentTurn(campaignId: string) {
+  const result = await query<TurnRow>(
+    `
+      select *
+      from turns
+      where campaign_id = $1 and status in ('collecting', 'resolving')
+      order by
+        case status when 'resolving' then 0 else 1 end,
+        created_at desc
+      limit 1
+    `,
+    [campaignId]
+  );
+
+  return result.rows[0] ?? null;
+}
+
+async function getActivePlayers(campaignId: string) {
+  const result = await query<PlayerRow>(
+    `
+      select *
+      from players
+      where campaign_id = $1 and status = 'active'
+      order by slot asc nulls last, created_at asc
+    `,
+    [campaignId]
+  );
+
+  return result.rows.filter(isPlayerRecentlySeen);
+}
+
+async function getTurnSubmissions(turnId: string) {
+  const result = await query<SubmissionRow>(
+    `
+      select
+        submissions.player_id,
+        players.client_id,
+        players.username,
+        players.character_name,
+        submissions.content,
+        submissions.created_at
+      from submissions
+      left join players on players.id = submissions.player_id
+      where submissions.turn_id = $1 and submissions.status = 'submitted'
+      order by submissions.created_at asc
+    `,
+    [turnId]
+  );
+
+  return result.rows;
+}
+
+function formatCombinedTurn(players: PlayerRow[], submissions: SubmissionRow[]) {
+  const submissionByPlayerId = new Map(
+    submissions.map((submission) => [submission.player_id, submission])
+  );
+
+  return [
+    "The party submits their turns at the same time. Resolve these player actions together as one D&D round.",
+    "",
+    ...players.map((player) => {
+      const submission = submissionByPlayerId.get(player.id);
+      const displayName = `${player.username} (${player.character_name})`;
+
+      return `- ${displayName}: ${submission?.content ?? ""}`;
+    })
+  ].join("\n");
+}
+
+function formatPartyOpeningRequest(players: PlayerRow[]) {
+  return [
+    openingSceneRequest,
+    "",
+    `Party size: ${players.length}`,
+    "",
+    "Party:",
+    ...players.map((player, index) =>
+      [
+        `${index + 1}. ${player.username} playing ${player.character_name}`,
+        "Character sheet:",
+        player.character_sheet
+      ].join("\n")
+    )
+  ].join("\n\n");
+}
+
+async function askHermes(sessionId: string, message: string, instructions: string) {
+  await ensureHermesSession(sessionId);
+
+  const hermesResponse = await hermesFetch(
+    `/api/sessions/${encodeURIComponent(sessionId)}/chat`,
+    {
+      method: "POST",
+      headers: {
+        "X-Hermes-Session-Key": `ai-dnd:${sessionId}`
+      },
+      body: JSON.stringify({
+        message,
+        instructions
+      })
+    }
+  );
+
+  if (!hermesResponse.ok) {
+    throw new Error(`Hermes turn failed with status ${hermesResponse.status}.`);
+  }
+
+  const hermesData = (await hermesResponse.json()) as HermesSessionChatResponse;
+  const reply = normalizeHermesContent(hermesData.message?.content);
+
+  if (!reply) {
+    throw new Error("Hermes returned an empty reply.");
+  }
+
+  return {
+    id: hermesData.message?.id,
+    content: reply
+  };
+}
+
+async function buildSnapshot(campaign: CampaignRow): Promise<RoomSnapshot> {
+  const currentTurn = await getCurrentTurn(campaign.id);
+  const submissions = currentTurn ? await getTurnSubmissions(currentTurn.id) : [];
+  const submittedPlayerIds = new Set(
+    submissions
+      .map((submission) => submission.player_id)
+      .filter((playerId): playerId is string => Boolean(playerId))
+  );
+  const playersResult = await query<PlayerRow>(
+    `
+      select *
+      from players
+      where campaign_id = $1 and status = 'active'
+      order by slot asc nulls last, created_at asc
+    `,
+    [campaign.id]
+  );
+  const players = playersResult.rows
+    .filter(isPlayerRecentlySeen)
+    .map((player) => rowToRoomPlayer(player, submittedPlayerIds));
+  const events = await query<EventRow>(
+    `
+      select id, type, payload, created_at
+      from campaign_events
+      where campaign_id = $1
+        and type in ('turn_submitted', 'turn_resolved', 'adventure_begun')
+      order by created_at asc
+      limit 100
+    `,
+    [campaign.id]
+  );
+  const messages = events.rows
+    .map((event): GameMessage | null => {
+      const payload = eventPayload(event.payload);
+      const content = typeof payload.content === "string" ? payload.content : "";
+
+      if (!content.trim()) {
+        return null;
+      }
+
+      const role = payload.role === "player" ? "player" : "dm";
+
+      return {
+        id: String(payload.messageId || event.id),
+        role,
+        content,
+        createdAt: toIso(event.created_at)
+      };
+    })
+    .filter((message): message is GameMessage => message !== null);
+
+  return {
+    roomId: campaign.id,
+    sessionId: campaign.hermes_session_id,
+    players,
+    messages,
+    isResolving: currentTurn?.status === "resolving",
+    hasBegun: campaign.has_begun,
+    updatedAt: toIso(campaign.updated_at)
+  };
+}
+
+async function markTurnFailed(turnId: string, error: unknown) {
+  await query(
+    `
+      update turns
+      set status = 'failed', error = $2
+      where id = $1
+    `,
+    [turnId, error instanceof Error ? error.message : "Hermes call failed."]
+  );
+}
+
+async function finishResolvedTurn(
+  campaignId: string,
+  turnId: string,
+  hermesMessageId: string | undefined,
+  reply: string,
+  eventType: "adventure_begun" | "turn_resolved"
+) {
+  await withTransaction(async (client) => {
+    await client.query(
+      `
+        update turns
+        set status = 'resolved', hermes_message_id = $2, resolved_at = now(), error = null
+        where id = $1
+      `,
+      [turnId, hermesMessageId ?? null]
+    );
+    await client.query(
+      `
+        update submissions
+        set status = 'included_in_turn'
+        where turn_id = $1 and status = 'submitted'
+      `,
+      [turnId]
+    );
+    await logCampaignEvent(client, campaignId, eventType, {
+      turnId,
+      hermesMessageId,
+      messageId: hermesMessageId ?? crypto.randomUUID(),
+      role: "dm",
+      content: reply
+    });
+    await ensureCollectingTurn(client, campaignId);
+  });
+}
+
+async function maybeResolveTurn(campaign: CampaignRow, turn: TurnRow) {
+  const activePlayers = (await getActivePlayers(campaign.id)).filter(isProfileComplete);
+  const submissions = await getTurnSubmissions(turn.id);
+  const submittedPlayerIds = new Set(submissions.map((submission) => submission.player_id));
+
+  if (
+    activePlayers.length === 0 ||
+    activePlayers.some((player) => !submittedPlayerIds.has(player.id))
+  ) {
+    return false;
+  }
+
+  const claimedTurn = await query<TurnRow>(
+    `
+      update turns
+      set status = 'resolving'
+      where id = $1 and status = 'collecting'
+      returning *
+    `,
+    [turn.id]
+  );
+
+  if (!claimedTurn.rows[0]) {
+    return false;
+  }
+
+  await query(
+    `
+      insert into campaign_events (campaign_id, type, payload)
+      values ($1, 'turn_resolving', $2::jsonb)
+    `,
+    [campaign.id, JSON.stringify({ turnId: turn.id })]
+  );
+
+  try {
+    const reply = await askHermes(
+      campaign.hermes_session_id,
+      formatCombinedTurn(activePlayers, submissions),
+      dungeonMasterInstructions
+    );
+
+    await finishResolvedTurn(
+      campaign.id,
+      turn.id,
+      reply.id,
+      reply.content,
+      "turn_resolved"
+    );
+    return true;
+  } catch (error) {
+    await markTurnFailed(turn.id, error);
+    await query(
+      `
+        insert into campaign_events (campaign_id, type, payload)
+        values ($1, 'turn_failed', $2::jsonb)
+      `,
+      [
+        campaign.id,
+        JSON.stringify({
+          turnId: turn.id,
+          error: error instanceof Error ? error.message : "Hermes call failed."
+        })
+      ]
+    );
+    throw error;
+  }
+}
+
+export async function createCampaignForHermesSession(
+  sessionId: string,
+  title?: string,
+  ownerClientId?: string
+) {
+  const campaign = await withTransaction(async (client) => {
+    const result = await client.query<CampaignRow>(
+      `
+        insert into campaigns (hermes_session_id, title, owner_client_id)
+        values ($1, $2, $3)
+        on conflict (hermes_session_id) do update
+        set title = excluded.title,
+            status = 'active',
+            deleted_at = null
+        returning *
+      `,
+      [sessionId, normalizeCampaignTitle(title, sessionId), ownerClientId ?? null]
+    );
+    const row = result.rows[0];
+    await ensureCollectingTurn(client, row.id);
+    await logCampaignEvent(client, row.id, "campaign_created", {
+      hermesSessionId: sessionId
+    });
+    return row;
+  });
+
+  return campaign;
+}
+
+export async function listCampaignSummaries() {
+  const result = await query<CampaignRow>(
+    `
+      select *
+      from campaigns
+      where status = 'active'
+      order by updated_at desc, created_at desc
+      limit 100
+    `
+  );
+
+  return result.rows.map(
+    (campaign): CampaignSummary => ({
+      id: campaign.id,
+      hermesSessionId: campaign.hermes_session_id,
+      title: campaign.title,
+      time: formatTime(campaign.updated_at),
+      messageCount: 0
+    })
+  );
+}
+
+export async function archiveCampaignBySessionId(sessionId: string) {
+  await query(
+    `
+      update campaigns
+      set status = 'archived', deleted_at = now()
+      where hermes_session_id = $1 and status <> 'deleted'
+    `,
+    [sessionId]
+  );
+}
+
+export async function renameCampaignBySessionId(sessionId: string, title: string) {
+  const result = await query<CampaignRow>(
+    `
+      update campaigns
+      set title = $2
+      where hermes_session_id = $1 and status = 'active'
+      returning *
+    `,
+    [sessionId, title]
+  );
+
+  if (!result.rows[0]) {
+    throw new Error("Campaign could not be renamed.");
+  }
+
+  await query(
+    `
+      insert into campaign_events (campaign_id, type, payload)
+      values ($1, 'campaign_renamed', $2::jsonb)
+    `,
+    [result.rows[0].id, JSON.stringify({ title })]
+  );
+
+  return result.rows[0];
+}
+
+export async function getRoom(roomId: string, sessionId: string) {
+  let campaign = await resolveCampaign(roomId, sessionId);
+
+  if (!campaign) {
+    campaign = await createCampaignForHermesSession(sessionId);
+  }
+
+  return buildSnapshot(campaign);
+}
+
+export async function registerRoomPlayer(
+  roomId: string,
+  sessionId: string,
+  profile: {
+    playerId: string;
+    username: string;
+    characterName: string;
+    characterSheet: string;
+  }
+) {
+  const campaign = await withTransaction(async (client) => {
+    const resolved = await resolveCampaign(roomId, sessionId, client);
+    const campaignRow =
+      resolved ?? (await createCampaignForHermesSession(sessionId));
+    const existing = await client.query<PlayerRow>(
+      `
+        select *
+        from players
+        where campaign_id = $1 and client_id = $2
+        limit 1
+      `,
+      [campaignRow.id, profile.playerId]
+    );
+    const slotResult = await client.query<{ slot: number }>(
+      `
+        select slot
+        from players
+        where campaign_id = $1 and status <> 'kicked' and slot is not null
+        order by slot asc
+      `,
+      [campaignRow.id]
+    );
+    const usedSlots = new Set(slotResult.rows.map((row) => row.slot));
+    const firstOpenSlot = Array.from({ length: maxPlayers }, (_, slot) => slot).find(
+      (slot) => !usedSlots.has(slot)
+    );
+    const slot = existing.rows[0]?.slot ?? firstOpenSlot;
+
+    if (slot === undefined) {
+      throw new Error("The room already has four active players.");
+    }
+
+    const wasJoined = !existing.rows[0];
+    await client.query(
+      `
+        insert into players (
+          campaign_id,
+          client_id,
+          username,
+          character_name,
+          character_sheet,
+          slot,
+          status,
+          last_seen_at
+        )
+        values ($1, $2, $3, $4, $5, $6, 'active', now())
+        on conflict (campaign_id, client_id) do update
+        set username = excluded.username,
+            character_name = excluded.character_name,
+            character_sheet = excluded.character_sheet,
+            status = 'active',
+            kicked_at = null,
+            last_seen_at = now()
+      `,
+      [
+        campaignRow.id,
+        profile.playerId,
+        profile.username,
+        profile.characterName,
+        profile.characterSheet,
+        slot
+      ]
+    );
+    await logCampaignEvent(
+      client,
+      campaignRow.id,
+      wasJoined ? "player_joined" : "profile_updated",
+      {
+        clientId: profile.playerId,
+        username: profile.username,
+        characterName: profile.characterName,
+        slot
+      }
+    );
+    return campaignRow;
+  });
+
+  return buildSnapshot(campaign);
+}
+
+export async function kickRoomPlayer(
+  roomId: string,
+  sessionId: string,
+  playerId: string
+) {
+  const campaign = await resolveCampaign(roomId, sessionId);
+
+  if (!campaign) {
+    throw new Error("Campaign not found.");
+  }
+
+  await withTransaction(async (client) => {
+    const player = await client.query<PlayerRow>(
+      `
+        update players
+        set status = 'kicked', kicked_at = now()
+        where campaign_id = $1 and client_id = $2
+        returning *
+      `,
+      [campaign.id, playerId]
+    );
+
+    await client.query(
+      `
+        update submissions
+        set status = 'cancelled'
+        where campaign_id = $1 and player_id = $2 and status = 'submitted'
+      `,
+      [campaign.id, player.rows[0]?.id ?? null]
+    );
+    await logCampaignEvent(client, campaign.id, "player_kicked", {
+      clientId: playerId
+    });
+  });
+
+  return buildSnapshot(campaign);
+}
+
+export async function beginRoomAdventure(roomId: string, sessionId: string) {
+  const beginState = await withTransaction(async (client) => {
+    const campaign = await resolveCampaign(roomId, sessionId, client);
+
+    if (!campaign) {
+      throw new Error("Campaign not found.");
+    }
+
+    const locked = await client.query<CampaignRow>(
+      "select * from campaigns where id = $1 for update",
+      [campaign.id]
+    );
+    const lockedCampaign = locked.rows[0];
+
+    if (lockedCampaign.has_begun) {
+      return { campaign: lockedCampaign, turn: null, players: [] as PlayerRow[] };
+    }
+
+    const players = (
+      await client.query<PlayerRow>(
+        `
+          select *
+          from players
+          where campaign_id = $1 and status = 'active'
+          order by slot asc nulls last, created_at asc
+        `,
+        [lockedCampaign.id]
+      )
+    ).rows.filter(isPlayerRecentlySeen);
+    const usablePlayers = players.filter(isProfileComplete);
+
+    if (usablePlayers.length < 2) {
+      throw new Error("At least two players are needed to begin the adventure.");
+    }
+
+    const turn = await ensureCollectingTurn(client, lockedCampaign.id);
+    const claimedTurn = await client.query<TurnRow>(
+      `
+        update turns
+        set status = 'resolving'
+        where id = $1 and status = 'collecting'
+        returning *
+      `,
+      [turn.id]
+    );
+
+    if (!claimedTurn.rows[0]) {
+      return { campaign: lockedCampaign, turn: null, players: [] as PlayerRow[] };
+    }
+
+    const begun = await client.query<CampaignRow>(
+      `
+        update campaigns
+        set has_begun = true
+        where id = $1 and has_begun = false
+        returning *
+      `,
+      [lockedCampaign.id]
+    );
+    await logCampaignEvent(client, lockedCampaign.id, "turn_resolving", {
+      turnId: turn.id,
+      reason: "adventure_begun"
+    });
+
+    return {
+      campaign: begun.rows[0],
+      turn: claimedTurn.rows[0],
+      players: usablePlayers
+    };
+  });
+
+  if (!beginState.turn) {
+    return buildSnapshot(beginState.campaign);
+  }
+
+  try {
+    const reply = await askHermes(
+      beginState.campaign.hermes_session_id,
+      formatPartyOpeningRequest(beginState.players),
+      [
+        dungeonMasterInstructions,
+        "The website has provided the full current party. Begin the campaign with a scene that naturally includes or immediately matters to these characters. Do not mention implementation details."
+      ].join(" ")
+    );
+
+    await finishResolvedTurn(
+      beginState.campaign.id,
+      beginState.turn.id,
+      reply.id,
+      reply.content,
+      "adventure_begun"
+    );
+  } catch (error) {
+    await markTurnFailed(beginState.turn.id, error);
+    await query("update campaigns set has_begun = false where id = $1", [
+      beginState.campaign.id
+    ]);
+    throw error;
+  }
+
+  const updatedCampaign = await resolveCampaign(
+    beginState.campaign.id,
+    beginState.campaign.hermes_session_id
+  );
+
+  return buildSnapshot(updatedCampaign ?? beginState.campaign);
+}
+
+export async function submitRoomTurn(
+  roomId: string,
+  sessionId: string,
+  playerId: string,
+  content: string
+) {
+  const submissionState = await withTransaction(async (client) => {
+    const campaign = await resolveCampaign(roomId, sessionId, client);
+
+    if (!campaign) {
+      throw new Error("Campaign not found.");
+    }
+
+    if (!campaign.has_begun) {
+      throw new Error("Begin the adventure before sending turns.");
+    }
+
+    const player = (
+      await client.query<PlayerRow>(
+        `
+          select *
+          from players
+          where campaign_id = $1 and client_id = $2 and status = 'active'
+          limit 1
+        `,
+        [campaign.id, playerId]
+      )
+    ).rows[0];
+
+    if (!player) {
+      throw new Error("Join the room before submitting a turn.");
+    }
+
+    if (!isProfileComplete(player)) {
+      throw new Error("Player profile is incomplete.");
+    }
+
+    const turn = await ensureCollectingTurn(client, campaign.id);
+    const trimmedContent = content.trim();
+    await client.query(
+      `
+        insert into submissions (campaign_id, turn_id, player_id, content)
+        values ($1, $2, $3, $4)
+        on conflict (turn_id, player_id) do update
+        set content = excluded.content,
+            status = 'submitted'
+      `,
+      [campaign.id, turn.id, player.id, trimmedContent]
+    );
+    await client.query("update players set last_seen_at = now() where id = $1", [
+      player.id
+    ]);
+    await logCampaignEvent(client, campaign.id, "turn_submitted", {
+      turnId: turn.id,
+      clientId: player.client_id,
+      role: "player",
+      messageId: crypto.randomUUID(),
+      content: `${player.username} (${player.character_name}): ${trimmedContent}`
+    });
+
+    return { campaign, turn };
+  });
+
+  await maybeResolveTurn(submissionState.campaign, submissionState.turn);
+
+  const updatedCampaign = await resolveCampaign(
+    submissionState.campaign.id,
+    submissionState.campaign.hermes_session_id
+  );
+
+  return buildSnapshot(updatedCampaign ?? submissionState.campaign);
+}
