@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { HermesTurnResponse } from "@/lib/game-types";
+import { HttpError, requireUser } from "@/lib/auth";
 import {
   assertHermesConfigured,
   campaignPrepRequest,
@@ -16,6 +17,7 @@ export const maxDuration = 180;
 
 type PrepRequest = {
   sessionId?: string;
+  ownerClientId?: string;
 };
 
 type HermesSessionChatResponse = {
@@ -27,8 +29,10 @@ type HermesSessionChatResponse = {
 export async function POST(request: Request) {
   const body = (await request.json()) as PrepRequest;
   const sessionId = (body.sessionId || "new-adventure").trim();
+  const ownerClientId = body.ownerClientId?.trim();
 
   try {
+    const user = await requireUser();
     assertHermesConfigured();
     await ensureHermesSession(sessionId);
 
@@ -61,7 +65,12 @@ export async function POST(request: Request) {
       throw new Error("Hermes returned an empty prep message.");
     }
 
-    await createCampaignForHermesSession(sessionId);
+    await createCampaignForHermesSession(
+      sessionId,
+      undefined,
+      ownerClientId,
+      user.id
+    );
 
     const response: HermesTurnResponse = {
       message: {
@@ -75,6 +84,9 @@ export async function POST(request: Request) {
     return NextResponse.json(response);
   } catch (error) {
     console.error(error);
+    if (error instanceof HttpError) {
+      return jsonError(error.message, error.status);
+    }
     return jsonError("Hermes could not prepare the campaign room.", 502);
   }
 }

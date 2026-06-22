@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import {
+  HttpError,
+  requireUser
+} from "@/lib/auth";
+import {
   assertHermesConfigured,
   hermesFetch,
   isInternalHermesMessage,
@@ -47,7 +51,8 @@ function normalizePreview(value: string | undefined) {
 
 export async function GET() {
   try {
-    const campaigns = await listCampaignSummaries();
+    const user = await requireUser();
+    const campaigns = await listCampaignSummaries(user.id);
     let hermesSessions = new Map<string, HermesSessionRecord>();
 
     try {
@@ -94,6 +99,9 @@ export async function GET() {
     return NextResponse.json({ sessions });
   } catch (error) {
     console.error(error);
+    if (error instanceof HttpError) {
+      return jsonError(error.message, error.status);
+    }
     return jsonError("Hermes sessions are unavailable.", 503);
   }
 }

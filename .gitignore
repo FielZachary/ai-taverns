@@ -9,3 +9,4 @@ dist/
 *.tsbuildinfo
 npm-debug.log*
 .vercel
+supabase/.temp/

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { HermesTurnResponse } from "@/lib/game-types";
+import { HttpError, requireUser } from "@/lib/auth";
 import {
   assertHermesConfigured,
   dungeonMasterInstructions,
@@ -28,6 +29,7 @@ export async function POST(request: Request) {
   const sessionId = (body.sessionId || "new-adventure").trim();
 
   try {
+    await requireUser();
     assertHermesConfigured();
     await ensureHermesSession(sessionId);
 
@@ -72,6 +74,9 @@ export async function POST(request: Request) {
     return NextResponse.json(response);
   } catch (error) {
     console.error(error);
+    if (error instanceof HttpError) {
+      return jsonError(error.message, error.status);
+    }
     return jsonError("Hermes could not open the campaign.", 502);
   }
 }

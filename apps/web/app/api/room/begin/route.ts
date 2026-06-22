@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { HttpError, requireUser } from "@/lib/auth";
 import { jsonError } from "@/lib/hermes";
 import { beginRoomAdventure } from "@/lib/room-store";
 
@@ -17,9 +18,13 @@ export async function POST(request: Request) {
   const roomId = body.roomId?.trim() || sessionId;
 
   try {
-    return NextResponse.json(await beginRoomAdventure(roomId, sessionId));
+    const user = await requireUser();
+    return NextResponse.json(await beginRoomAdventure(roomId, sessionId, user.id));
   } catch (error) {
     console.error(error);
+    if (error instanceof HttpError) {
+      return jsonError(error.message, error.status);
+    }
     return jsonError(
       error instanceof Error
         ? error.message

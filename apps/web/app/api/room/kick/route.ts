@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { HttpError, requireUser } from "@/lib/auth";
 import { jsonError } from "@/lib/hermes";
 import { kickRoomPlayer } from "@/lib/room-store";
 
@@ -22,8 +23,14 @@ export async function POST(request: Request) {
   }
 
   try {
-    return NextResponse.json(await kickRoomPlayer(roomId, sessionId, playerId));
+    const user = await requireUser();
+    return NextResponse.json(
+      await kickRoomPlayer(roomId, sessionId, playerId, user.id)
+    );
   } catch (error) {
+    if (error instanceof HttpError) {
+      return jsonError(error.message, error.status);
+    }
     return jsonError(
       error instanceof Error ? error.message : "Player could not be removed.",
       404

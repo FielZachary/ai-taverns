@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { HttpError, requireUser } from "@/lib/auth";
+import { jsonError } from "@/lib/hermes";
 import { getRoom } from "@/lib/room-store";
 
 export const runtime = "nodejs";
@@ -15,5 +17,14 @@ function getRoomParams(request: Request) {
 export async function GET(request: Request) {
   const { roomId, sessionId } = getRoomParams(request);
 
-  return NextResponse.json(await getRoom(roomId, sessionId));
+  try {
+    const user = await requireUser();
+    return NextResponse.json(await getRoom(roomId, sessionId, user.id));
+  } catch (error) {
+    if (error instanceof HttpError) {
+      return jsonError(error.message, error.status);
+    }
+
+    return jsonError("Room state could not be loaded.", 404);
+  }
 }

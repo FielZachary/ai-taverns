@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { HttpError, requireUser } from "@/lib/auth";
 import {
   assertHermesConfigured,
   hermesFetch,
@@ -32,7 +33,8 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   try {
-    const campaign = await renameCampaignBySessionId(sessionId, title);
+    const user = await requireUser();
+    const campaign = await renameCampaignBySessionId(sessionId, title, user.id);
 
     return NextResponse.json({
       id: sessionId,
@@ -41,6 +43,9 @@ export async function PATCH(request: Request, context: RouteContext) {
     });
   } catch (error) {
     console.error(error);
+    if (error instanceof HttpError) {
+      return jsonError(error.message, error.status);
+    }
     return jsonError("Adventure could not be renamed.", 404);
   }
 }
@@ -49,7 +54,8 @@ export async function DELETE(_request: Request, context: RouteContext) {
   const { sessionId } = await context.params;
 
   try {
-    await archiveCampaignBySessionId(sessionId);
+    const user = await requireUser();
+    await archiveCampaignBySessionId(sessionId, user.id);
 
     try {
       assertHermesConfigured();
@@ -82,6 +88,9 @@ export async function DELETE(_request: Request, context: RouteContext) {
     }
   } catch (error) {
     console.error(error);
+    if (error instanceof HttpError) {
+      return jsonError(error.message, error.status);
+    }
     return jsonError("Adventure could not be archived.", 503);
   }
 }

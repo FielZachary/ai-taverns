@@ -1,5 +1,6 @@
 import type { PoolClient } from "pg";
 import type { GameMessage } from "@/lib/game-types";
+import { HttpError } from "@/lib/auth";
 import { query, withTransaction } from "@/lib/db";
 import {
   dungeonMasterInstructions,
@@ -27,6 +28,7 @@ export type RoomPlayer = {
 
 export type RoomSnapshot = {
   roomId: string;
+  mode: CampaignMode;
   sessionId: string;
   players: RoomPlayer[];
   messages: GameMessage[];
@@ -38,18 +40,24 @@ export type RoomSnapshot = {
 export type CampaignSummary = {
   id: string;
   hermesSessionId: string;
+  mode: CampaignMode;
   title: string;
   preview?: string;
   time?: string;
   messageCount?: number;
 };
 
+export type CampaignMode = "single_player" | "multiplayer";
+
 type CampaignRow = {
   id: string;
   hermes_session_id: string;
+  mode: CampaignMode;
   title: string;
   status: "active" | "archived" | "deleted";
   has_begun: boolean;
+  owner_user_id: string | null;
+  owner_client_id: string | null;
   updated_at: Date | string;
   created_at: Date | string;
 };
@@ -57,6 +65,7 @@ type CampaignRow = {
 type PlayerRow = {
   id: string;
   client_id: string;
+  user_id: string | null;
   username: string;
   character_name: string;
   character_sheet: string;
@@ -169,6 +178,17 @@ function normalizeCampaignTitle(title: string | undefined, sessionId: string) {
   return title?.trim() || titleFromSessionId(sessionId) || "New Adventure";
 }
 
+function campaignSummaryFromRow(campaign: CampaignRow): CampaignSummary {
+  return {
+    id: campaign.id,
+    hermesSessionId: campaign.hermes_session_id,
+    mode: campaign.mode,
+    title: campaign.title,
+    time: formatTime(campaign.updated_at),
+    messageCount: 0
+  };
+}
+
 async function logCampaignEvent(
   client: PoolClient,
   campaignId: string,
@@ -201,6 +221,50 @@ async function resolveCampaign(
     : await query<CampaignRow>(statement, values);
 
   return result.rows[0] ?? null;
+}
+
+async function assertCampaignAccessForUser(
+  campaign: CampaignRow,
+  userId: string,
+  client?: PoolClient
+) {
+  if (campaign.owner_user_id === userId) {
+    return;
+  }
+
+  const result = client
+    ? await client.query<{ id: string }>(
+        `
+          select id
+          from players
+          where campaign_id = $1
+            and user_id = $2
+            and status = 'active'
+          limit 1
+        `,
+        [campaign.id, userId]
+      )
+    : await query<{ id: string }>(
+        `
+          select id
+          from players
+          where campaign_id = $1
+            and user_id = $2
+            and status = 'active'
+          limit 1
+        `,
+        [campaign.id, userId]
+      );
+
+  if (!result.rows[0]) {
+    throw new HttpError("You do not have access to that campaign.", 403);
+  }
+}
+
+function assertCampaignOwnerForUser(campaign: CampaignRow, userId: string) {
+  if (campaign.owner_user_id !== userId) {
+    throw new HttpError("Only the campaign owner can do that.", 403);
+  }
 }
 
 async function ensureCollectingTurn(client: PoolClient, campaignId: string) {
@@ -408,6 +472,7 @@ async function buildSnapshot(campaign: CampaignRow): Promise<RoomSnapshot> {
 
   return {
     roomId: campaign.id,
+    mode: campaign.mode,
     sessionId: campaign.hermes_session_id,
     players,
     messages,
@@ -534,20 +599,31 @@ async function maybeResolveTurn(campaign: CampaignRow, turn: TurnRow) {
 export async function createCampaignForHermesSession(
   sessionId: string,
   title?: string,
-  ownerClientId?: string
+  ownerClientId?: string,
+  ownerUserId?: string,
+  mode: CampaignMode = "multiplayer"
 ) {
   const campaign = await withTransaction(async (client) => {
     const result = await client.query<CampaignRow>(
       `
-        insert into campaigns (hermes_session_id, title, owner_client_id)
-        values ($1, $2, $3)
+        insert into campaigns (hermes_session_id, title, owner_client_id, owner_user_id, mode)
+        values ($1, $2, $3, $4, $5)
         on conflict (hermes_session_id) do update
         set title = excluded.title,
+            mode = excluded.mode,
             status = 'active',
-            deleted_at = null
+            deleted_at = null,
+            owner_client_id = coalesce(campaigns.owner_client_id, excluded.owner_client_id),
+            owner_user_id = coalesce(campaigns.owner_user_id, excluded.owner_user_id)
         returning *
       `,
-      [sessionId, normalizeCampaignTitle(title, sessionId), ownerClientId ?? null]
+      [
+        sessionId,
+        normalizeCampaignTitle(title, sessionId),
+        ownerClientId ?? null,
+        ownerUserId ?? null,
+        mode
+      ]
     );
     const row = result.rows[0];
     await ensureCollectingTurn(client, row.id);
@@ -560,48 +636,329 @@ export async function createCampaignForHermesSession(
   return campaign;
 }
 
-export async function listCampaignSummaries() {
+export async function listCampaignSummaries(userId: string) {
+  const result = await query<CampaignRow>(
+    `
+      select distinct campaigns.*
+      from campaigns
+      left join players on players.campaign_id = campaigns.id
+        and players.user_id = $1
+        and players.status = 'active'
+      where campaigns.status = 'active'
+        and (
+          campaigns.owner_user_id = $1
+          or players.id is not null
+        )
+      order by campaigns.updated_at desc, campaigns.created_at desc
+      limit 100
+    `,
+    [userId]
+  );
+
+  return result.rows.map(
+    (campaign): CampaignSummary => campaignSummaryFromRow(campaign)
+  );
+}
+
+export async function getCampaignById(campaignId: string, userId: string) {
   const result = await query<CampaignRow>(
     `
       select *
       from campaigns
-      where status = 'active'
-      order by updated_at desc, created_at desc
-      limit 100
-    `
+      where id = $1 and status <> 'deleted'
+      limit 1
+    `,
+    [campaignId]
   );
+  const campaign = result.rows[0];
 
-  return result.rows.map(
-    (campaign): CampaignSummary => ({
-      id: campaign.id,
-      hermesSessionId: campaign.hermes_session_id,
-      title: campaign.title,
-      time: formatTime(campaign.updated_at),
-      messageCount: 0
-    })
-  );
+  if (!campaign) {
+    throw new HttpError("Campaign not found.", 404);
+  }
+
+  await assertCampaignAccessForUser(campaign, userId);
+
+  return campaignSummaryFromRow(campaign);
 }
 
-export async function archiveCampaignBySessionId(sessionId: string) {
-  await query(
+export async function archiveCampaignById(campaignId: string, userId: string) {
+  const result = await query<CampaignRow>(
     `
       update campaigns
       set status = 'archived', deleted_at = now()
-      where hermes_session_id = $1 and status <> 'deleted'
+      where id = $1
+        and owner_user_id = $2
+        and status <> 'deleted'
+      returning *
     `,
-    [sessionId]
+    [campaignId, userId]
   );
+
+  if (!result.rows[0]) {
+    throw new HttpError("Adventure could not be archived.", 403);
+  }
+
+  return result.rows[0];
 }
 
-export async function renameCampaignBySessionId(sessionId: string, title: string) {
+export async function renameCampaignById(
+  campaignId: string,
+  title: string,
+  userId: string
+) {
   const result = await query<CampaignRow>(
     `
       update campaigns
       set title = $2
-      where hermes_session_id = $1 and status = 'active'
+      where id = $1
+        and owner_user_id = $3
+        and status = 'active'
       returning *
     `,
-    [sessionId, title]
+    [campaignId, title, userId]
+  );
+
+  if (!result.rows[0]) {
+    throw new HttpError("Campaign could not be renamed.", 403);
+  }
+
+  await query(
+    `
+      insert into campaign_events (campaign_id, type, payload)
+      values ($1, 'campaign_renamed', $2::jsonb)
+    `,
+    [result.rows[0].id, JSON.stringify({ title })]
+  );
+
+  return campaignSummaryFromRow(result.rows[0]);
+}
+
+export async function createCampaignForMode(input: {
+  mode: CampaignMode;
+  title: string;
+  ownerClientId?: string;
+  playerName: string;
+  characterName?: string;
+  characterSheet?: string;
+  userId: string;
+}) {
+  const sessionId = `ai-dnd-${crypto.randomUUID()}`;
+  await ensureHermesSession(sessionId);
+
+  if (input.mode === "multiplayer") {
+    const campaign = await createCampaignForHermesSession(
+      sessionId,
+      input.title,
+      input.ownerClientId,
+      input.userId,
+      "multiplayer"
+    );
+
+    await withTransaction(async (client) => {
+      await client.query(
+        `
+          insert into players (
+            campaign_id,
+            client_id,
+            user_id,
+            username,
+            character_name,
+            character_sheet,
+            slot,
+            status,
+            last_seen_at
+          )
+          values ($1, $2, $3, $4, $5, $6, 0, 'active', now())
+          on conflict (campaign_id, client_id) do update
+          set username = excluded.username,
+              character_name = excluded.character_name,
+              character_sheet = excluded.character_sheet,
+              user_id = coalesce(players.user_id, excluded.user_id),
+              status = 'active',
+              kicked_at = null,
+              last_seen_at = now()
+        `,
+        [
+          campaign.id,
+          input.ownerClientId ?? input.userId,
+          input.userId,
+          input.playerName,
+          input.characterName ?? "",
+          input.characterSheet ?? ""
+        ]
+      );
+      await logCampaignEvent(client, campaign.id, "player_joined", {
+        clientId: input.ownerClientId ?? input.userId,
+        username: input.playerName,
+        characterName: input.characterName ?? "",
+        slot: 0
+      });
+    });
+
+    return campaignSummaryFromRow(campaign);
+  }
+
+  const opening = await askHermes(
+    sessionId,
+    [
+      openingSceneRequest,
+      "",
+      `Solo player: ${input.playerName}`,
+      `Character: ${input.characterName || input.playerName}`,
+      "Character sheet:",
+      input.characterSheet || "Use a quick fantasy adventurer template."
+    ].join("\n"),
+    [
+      dungeonMasterInstructions,
+      "The website has provided the solo player's character setup. Begin immediately with an opening scene tailored to this character. Do not mention implementation details."
+    ].join(" ")
+  );
+
+  const campaign = await withTransaction(async (client) => {
+    const inserted = await client.query<CampaignRow>(
+      `
+        insert into campaigns (
+          hermes_session_id,
+          title,
+          mode,
+          has_begun,
+          owner_client_id,
+          owner_user_id
+        )
+        values ($1, $2, 'single_player', true, $3, $4)
+        returning *
+      `,
+      [
+        sessionId,
+        normalizeCampaignTitle(input.title, sessionId),
+        input.ownerClientId ?? null,
+        input.userId
+      ]
+    );
+    const campaignRow = inserted.rows[0];
+    const player = await client.query<PlayerRow>(
+      `
+        insert into players (
+          campaign_id,
+          client_id,
+          user_id,
+          username,
+          character_name,
+          character_sheet,
+          slot,
+          status,
+          last_seen_at
+        )
+        values ($1, $2, $3, $4, $5, $6, 0, 'active', now())
+        returning *
+      `,
+      [
+        campaignRow.id,
+        input.ownerClientId ?? input.userId,
+        input.userId,
+        input.playerName,
+        input.characterName || input.playerName,
+        input.characterSheet || "Quick fantasy adventurer template."
+      ]
+    );
+    const turn = await ensureCollectingTurn(client, campaignRow.id);
+
+    await logCampaignEvent(client, campaignRow.id, "campaign_created", {
+      hermesSessionId: sessionId,
+      mode: "single_player"
+    });
+    await logCampaignEvent(client, campaignRow.id, "player_joined", {
+      clientId: player.rows[0].client_id,
+      username: player.rows[0].username,
+      characterName: player.rows[0].character_name,
+      slot: 0
+    });
+    await logCampaignEvent(client, campaignRow.id, "adventure_begun", {
+      turnId: turn.id,
+      hermesMessageId: opening.id,
+      messageId: opening.id ?? crypto.randomUUID(),
+      role: "dm",
+      content: opening.content
+    });
+
+    return campaignRow;
+  });
+
+  return campaignSummaryFromRow(campaign);
+}
+
+export async function claimGuestStateForUser(clientId: string, userId: string) {
+  return withTransaction(async (client) => {
+    const claimedCampaigns = await client.query<CampaignRow>(
+      `
+        update campaigns
+        set owner_user_id = $2
+        where owner_client_id = $1
+          and owner_user_id is null
+          and status <> 'deleted'
+        returning *
+      `,
+      [clientId, userId]
+    );
+    const claimedPlayers = await client.query<{ id: string }>(
+      `
+        update players
+        set user_id = $2
+        where client_id = $1
+          and user_id is null
+          and status = 'active'
+        returning id
+      `,
+      [clientId, userId]
+    );
+
+    for (const campaign of claimedCampaigns.rows) {
+      await logCampaignEvent(client, campaign.id, "guest_state_claimed", {
+        clientId,
+        userId
+      });
+    }
+
+    return {
+      claimedCampaigns: claimedCampaigns.rowCount ?? 0,
+      claimedPlayers: claimedPlayers.rowCount ?? 0
+    };
+  });
+}
+
+export async function archiveCampaignBySessionId(sessionId: string, userId: string) {
+  const result = await query<CampaignRow>(
+    `
+      update campaigns
+      set status = 'archived', deleted_at = now()
+      where hermes_session_id = $1
+        and owner_user_id = $2
+        and status <> 'deleted'
+      returning *
+    `,
+    [sessionId, userId]
+  );
+
+  if (!result.rows[0]) {
+    throw new HttpError("Adventure could not be archived.", 403);
+  }
+}
+
+export async function renameCampaignBySessionId(
+  sessionId: string,
+  title: string,
+  userId: string
+) {
+  const result = await query<CampaignRow>(
+    `
+      update campaigns
+      set title = $2
+      where hermes_session_id = $1
+        and owner_user_id = $3
+        and status = 'active'
+      returning *
+    `,
+    [sessionId, title, userId]
   );
 
   if (!result.rows[0]) {
@@ -619,11 +976,18 @@ export async function renameCampaignBySessionId(sessionId: string, title: string
   return result.rows[0];
 }
 
-export async function getRoom(roomId: string, sessionId: string) {
+export async function getRoom(roomId: string, sessionId: string, userId: string) {
   let campaign = await resolveCampaign(roomId, sessionId);
 
   if (!campaign) {
-    campaign = await createCampaignForHermesSession(sessionId);
+    campaign = await createCampaignForHermesSession(
+      sessionId,
+      undefined,
+      undefined,
+      userId
+    );
+  } else {
+    await assertCampaignAccessForUser(campaign, userId);
   }
 
   return buildSnapshot(campaign);
@@ -637,12 +1001,23 @@ export async function registerRoomPlayer(
     username: string;
     characterName: string;
     characterSheet: string;
-  }
+  },
+  userId?: string
 ) {
   const campaign = await withTransaction(async (client) => {
     const resolved = await resolveCampaign(roomId, sessionId, client);
     const campaignRow =
-      resolved ?? (await createCampaignForHermesSession(sessionId));
+      resolved ??
+      (await createCampaignForHermesSession(
+        sessionId,
+        undefined,
+        profile.playerId,
+        userId
+      ));
+
+    if (userId) {
+      await assertCampaignAccessForUser(campaignRow, userId, client);
+    }
     const existing = await client.query<PlayerRow>(
       `
         select *
@@ -680,15 +1055,17 @@ export async function registerRoomPlayer(
           username,
           character_name,
           character_sheet,
+          user_id,
           slot,
           status,
           last_seen_at
         )
-        values ($1, $2, $3, $4, $5, $6, 'active', now())
+        values ($1, $2, $3, $4, $5, $6, $7, 'active', now())
         on conflict (campaign_id, client_id) do update
         set username = excluded.username,
             character_name = excluded.character_name,
             character_sheet = excluded.character_sheet,
+            user_id = coalesce(players.user_id, excluded.user_id),
             status = 'active',
             kicked_at = null,
             last_seen_at = now()
@@ -699,6 +1076,7 @@ export async function registerRoomPlayer(
         profile.username,
         profile.characterName,
         profile.characterSheet,
+        userId ?? null,
         slot
       ]
     );
@@ -722,13 +1100,16 @@ export async function registerRoomPlayer(
 export async function kickRoomPlayer(
   roomId: string,
   sessionId: string,
-  playerId: string
+  playerId: string,
+  userId: string
 ) {
   const campaign = await resolveCampaign(roomId, sessionId);
 
   if (!campaign) {
     throw new Error("Campaign not found.");
   }
+
+  assertCampaignOwnerForUser(campaign, userId);
 
   await withTransaction(async (client) => {
     const player = await client.query<PlayerRow>(
@@ -757,13 +1138,19 @@ export async function kickRoomPlayer(
   return buildSnapshot(campaign);
 }
 
-export async function beginRoomAdventure(roomId: string, sessionId: string) {
+export async function beginRoomAdventure(
+  roomId: string,
+  sessionId: string,
+  userId: string
+) {
   const beginState = await withTransaction(async (client) => {
     const campaign = await resolveCampaign(roomId, sessionId, client);
 
     if (!campaign) {
       throw new Error("Campaign not found.");
     }
+
+    assertCampaignOwnerForUser(campaign, userId);
 
     const locked = await client.query<CampaignRow>(
       "select * from campaigns where id = $1 for update",
@@ -869,7 +1256,8 @@ export async function submitRoomTurn(
   roomId: string,
   sessionId: string,
   playerId: string,
-  content: string
+  content: string,
+  userId: string
 ) {
   const submissionState = await withTransaction(async (client) => {
     const campaign = await resolveCampaign(roomId, sessionId, client);
@@ -878,19 +1266,24 @@ export async function submitRoomTurn(
       throw new Error("Campaign not found.");
     }
 
+    await assertCampaignAccessForUser(campaign, userId, client);
+
     if (!campaign.has_begun) {
       throw new Error("Begin the adventure before sending turns.");
     }
 
     const player = (
       await client.query<PlayerRow>(
-        `
-          select *
-          from players
-          where campaign_id = $1 and client_id = $2 and status = 'active'
-          limit 1
-        `,
-        [campaign.id, playerId]
+      `
+        select *
+        from players
+        where campaign_id = $1
+          and client_id = $2
+          and user_id = $3
+          and status = 'active'
+        limit 1
+      `,
+        [campaign.id, playerId, userId]
       )
     ).rows[0];
 
@@ -936,4 +1329,135 @@ export async function submitRoomTurn(
   );
 
   return buildSnapshot(updatedCampaign ?? submissionState.campaign);
+}
+
+export async function submitSoloTurn(
+  campaignId: string,
+  content: string,
+  userId: string
+) {
+  const soloState = await withTransaction(async (client) => {
+    const campaign = (
+      await client.query<CampaignRow>(
+        `
+          select *
+          from campaigns
+          where id = $1 and status = 'active'
+          limit 1
+        `,
+        [campaignId]
+      )
+    ).rows[0];
+
+    if (!campaign) {
+      throw new HttpError("Campaign not found.", 404);
+    }
+
+    await assertCampaignAccessForUser(campaign, userId, client);
+
+    if (campaign.mode !== "single_player") {
+      throw new HttpError("Solo turns are only available in singleplayer campaigns.", 400);
+    }
+
+    const player = (
+      await client.query<PlayerRow>(
+        `
+          select *
+          from players
+          where campaign_id = $1
+            and user_id = $2
+            and status = 'active'
+          order by created_at asc
+          limit 1
+        `,
+        [campaign.id, userId]
+      )
+    ).rows[0];
+
+    if (!player) {
+      throw new HttpError("A solo player profile is required.", 400);
+    }
+
+    const turn = await ensureCollectingTurn(client, campaign.id);
+    const claimedTurn = await client.query<TurnRow>(
+      `
+        update turns
+        set status = 'resolving'
+        where id = $1 and status = 'collecting'
+        returning *
+      `,
+      [turn.id]
+    );
+
+    if (!claimedTurn.rows[0]) {
+      throw new HttpError("That turn is already resolving.", 409);
+    }
+
+    const trimmedContent = content.trim();
+    await client.query(
+      `
+        insert into submissions (campaign_id, turn_id, player_id, content)
+        values ($1, $2, $3, $4)
+        on conflict (turn_id, player_id) do update
+        set content = excluded.content,
+            status = 'submitted'
+      `,
+      [campaign.id, turn.id, player.id, trimmedContent]
+    );
+    await client.query("update players set last_seen_at = now() where id = $1", [
+      player.id
+    ]);
+    await logCampaignEvent(client, campaign.id, "turn_submitted", {
+      turnId: turn.id,
+      clientId: player.client_id,
+      role: "player",
+      messageId: crypto.randomUUID(),
+      content: trimmedContent
+    });
+    await logCampaignEvent(client, campaign.id, "turn_resolving", {
+      turnId: turn.id,
+      reason: "solo_turn"
+    });
+
+    return { campaign, turn: claimedTurn.rows[0], player, content: trimmedContent };
+  });
+
+  try {
+    const reply = await askHermes(
+      soloState.campaign.hermes_session_id,
+      `${soloState.player.username} (${soloState.player.character_name}): ${soloState.content}`,
+      dungeonMasterInstructions
+    );
+
+    await finishResolvedTurn(
+      soloState.campaign.id,
+      soloState.turn.id,
+      reply.id,
+      reply.content,
+      "turn_resolved"
+    );
+  } catch (error) {
+    await markTurnFailed(soloState.turn.id, error);
+    await query(
+      `
+        insert into campaign_events (campaign_id, type, payload)
+        values ($1, 'turn_failed', $2::jsonb)
+      `,
+      [
+        soloState.campaign.id,
+        JSON.stringify({
+          turnId: soloState.turn.id,
+          error: error instanceof Error ? error.message : "Hermes call failed."
+        })
+      ]
+    );
+    throw error;
+  }
+
+  const updatedCampaign = await resolveCampaign(
+    soloState.campaign.id,
+    soloState.campaign.hermes_session_id
+  );
+
+  return buildSnapshot(updatedCampaign ?? soloState.campaign);
 }

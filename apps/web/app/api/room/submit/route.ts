@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { HttpError, requireUser } from "@/lib/auth";
 import { submitRoomTurn } from "@/lib/room-store";
 import { jsonError } from "@/lib/hermes";
 
@@ -25,11 +26,15 @@ export async function POST(request: Request) {
   }
 
   try {
+    const user = await requireUser();
     return NextResponse.json(
-      await submitRoomTurn(roomId, sessionId, playerId, message)
+      await submitRoomTurn(roomId, sessionId, playerId, message, user.id)
     );
   } catch (error) {
     console.error(error);
+    if (error instanceof HttpError) {
+      return jsonError(error.message, error.status);
+    }
     return jsonError(
       error instanceof Error ? error.message : "The room turn could not be sent.",
       502

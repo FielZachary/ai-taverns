@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { HermesTurnRequest, HermesTurnResponse } from "@/lib/game-types";
+import { HttpError, requireUser } from "@/lib/auth";
 import {
   assertHermesConfigured,
   dungeonMasterInstructions,
@@ -29,6 +30,7 @@ export async function POST(request: Request) {
   }
 
   try {
+    await requireUser();
     assertHermesConfigured();
     await ensureHermesSession(sessionId);
 
@@ -70,6 +72,9 @@ export async function POST(request: Request) {
     return NextResponse.json(response);
   } catch (error) {
     console.error(error);
+    if (error instanceof HttpError) {
+      return jsonError(error.message, error.status);
+    }
     return jsonError("Hermes did not complete the turn.", 502);
   }
 }

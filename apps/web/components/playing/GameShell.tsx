@@ -11,13 +11,14 @@ import {
 import {
   Dice5,
   Flame,
+  LogOut,
   Play,
   PanelRightClose,
   PanelRightOpen,
   Send,
   X
 } from "lucide-react";
-import type { GameMessage, HermesTurnResponse } from "@/lib/game-types";
+import type { GameMessage } from "@/lib/game-types";
 import {
   ChatHistorySidebar,
   type ChatSummary
@@ -32,19 +33,20 @@ import {
 import { PlayerInput } from "./PlayerInput";
 
 const openingMessages: GameMessage[] = [];
-
-const chats: ChatSummary[] = [
-  {
-    id: "new-adventure",
-    title: "New Adventure"
-  }
-];
-
 const playerIdStorageKey = "ai-dnd.playerId";
 const maxPlayers = 4;
 
-type HermesSessionsApiResponse = {
-  sessions?: ChatSummary[];
+type CampaignMode = "single_player" | "multiplayer";
+
+type CampaignSummary = ChatSummary & {
+  hermesSessionId: string;
+  mode: CampaignMode;
+};
+
+type CampaignsApiResponse = {
+  campaigns?: CampaignSummary[];
+  campaign?: CampaignSummary;
+  error?: string;
 };
 
 type HermesMessagesApiResponse = {
@@ -72,10 +74,18 @@ type PlayerStatusSlot = {
 };
 
 type RoomSnapshot = {
+  roomId: string;
+  mode: CampaignMode;
+  sessionId: string;
   players: RoomPlayer[];
   messages: GameMessage[];
   isResolving: boolean;
   hasBegun: boolean;
+};
+
+type GameShellProps = {
+  initialCampaignId?: string;
+  userEmail?: string;
 };
 
 function getMissingPlayerProfileFields(profile: PlayerProfile) {
@@ -109,34 +119,31 @@ async function getApiErrorMessage(response: Response, fallback: string) {
   }
 }
 
-function mergeChats(localChats: ChatSummary[], remoteChats: ChatSummary[]) {
-  const remoteChatIds = new Set(remoteChats.map((chat) => chat.id));
-  const localOnlyChats = localChats.filter(
-    (chat) => !remoteChatIds.has(chat.id) && chat.id.startsWith("ai-dnd-")
+function updateCampaignPreview(
+  campaigns: CampaignSummary[],
+  campaignId: string,
+  preview: string
+) {
+  return campaigns.map((campaign) =>
+    campaign.id === campaignId
+      ? {
+          ...campaign,
+          preview,
+          time: "Now"
+        }
+      : campaign
   );
-
-  return [...localOnlyChats, ...remoteChats];
 }
 
-function upsertChat(chatsToUpdate: ChatSummary[], updatedChat: ChatSummary) {
-  if (chatsToUpdate.some((chat) => chat.id === updatedChat.id)) {
-    return chatsToUpdate.map((chat) =>
-      chat.id === updatedChat.id ? updatedChat : chat
-    );
-  }
-
-  return [updatedChat, ...chatsToUpdate];
-}
-
-export function GameShell() {
+export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
   const [messages, setMessages] = useState<GameMessage[]>(openingMessages);
-  const [availableChats, setAvailableChats] = useState<ChatSummary[]>(chats);
+  const [availableCampaigns, setAvailableCampaigns] = useState<CampaignSummary[]>([]);
   const [draft, setDraft] = useState("");
   const [isSending, setIsSending] = useState(false);
-  const [isLoadingChats, setIsLoadingChats] = useState(true);
+  const [isLoadingCampaigns, setIsLoadingCampaigns] = useState(true);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
-  const [isCreatingChat, setIsCreatingChat] = useState(false);
-  const [activeChatId, setActiveChatId] = useState(chats[0].id);
+  const [isCreatingChat] = useState(false);
+  const [activeCampaignId, setActiveCampaignId] = useState(initialCampaignId ?? "");
   const [isSessionPanelOpen, setIsSessionPanelOpen] = useState(true);
   const [playerProfile, setPlayerProfile] =
     useState<PlayerProfile>(emptyPlayerProfile);
@@ -151,13 +158,14 @@ export function GameShell() {
   const [hasAdventureBegun, setHasAdventureBegun] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const activeChat = useMemo(
+  const activeCampaign = useMemo(
     () =>
-      availableChats.find((chat) => chat.id === activeChatId) ??
-      availableChats[0] ??
-      chats[0],
-    [activeChatId, availableChats]
+      availableCampaigns.find((campaign) => campaign.id === activeCampaignId) ??
+      availableCampaigns[0],
+    [activeCampaignId, availableCampaigns]
   );
+  const isSinglePlayer = activeCampaign?.mode === "single_player";
+  const activeHermesSessionId = activeCampaign?.hermesSessionId ?? "";
 
   const playerStatusSlots = useMemo<PlayerStatusSlot[]>(() => {
     return Array.from({ length: maxPlayers }, (_, slot) => {
@@ -178,9 +186,7 @@ export function GameShell() {
         status: player.status === "submitted" ? "Submitted." : "Waiting",
         name: player.characterName || player.username,
         detail:
-          player.characterName && player.username
-            ? player.username
-            : "",
+          player.characterName && player.username ? player.username : "",
         canKick: true
       };
     });
@@ -195,7 +201,11 @@ export function GameShell() {
     return [...messages, ...newRoomMessages];
   }, [messages, roomMessages]);
 
-  const canBeginAdventure = roomPlayers.length >= 2 && !hasAdventureBegun;
+  const canBeginAdventure =
+    Boolean(activeCampaign) &&
+    !isSinglePlayer &&
+    roomPlayers.length >= 2 &&
+    !hasAdventureBegun;
 
   const applyRoomSnapshot = useCallback(
     (room: RoomSnapshot) => {
@@ -217,6 +227,43 @@ export function GameShell() {
     [playerId]
   );
 
+  const loadSessionMessages = useCallback(async (sessionId: string) => {
+    setIsLoadingMessages(true);
+
+    try {
+      const response = await fetch(
+        `/api/hermes/sessions/${encodeURIComponent(sessionId)}/messages`
+      );
+
+      if (!response.ok) {
+        throw new Error("Session messages could not be loaded.");
+      }
+
+      const data = (await response.json()) as HermesMessagesApiResponse;
+      setMessages(
+        data.messages && data.messages.length > 0
+          ? data.messages
+          : openingMessages
+      );
+    } catch {
+      setMessages(openingMessages);
+    } finally {
+      setIsLoadingMessages(false);
+    }
+  }, []);
+
+  const fetchCampaigns = useCallback(async () => {
+    const response = await fetch("/api/campaigns");
+
+    if (!response.ok) {
+      throw new Error("Campaigns could not be loaded.");
+    }
+
+    const data = (await response.json()) as CampaignsApiResponse;
+
+    return data.campaigns ?? [];
+  }, []);
+
   useEffect(() => {
     const savedPlayerId = localStorage.getItem(playerIdStorageKey);
 
@@ -231,6 +278,22 @@ export function GameShell() {
   }, []);
 
   useEffect(() => {
+    if (!playerId) {
+      return;
+    }
+
+    void fetch("/api/auth/claim-guest-state", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        clientId: playerId
+      })
+    }).catch(() => undefined);
+  }, [playerId]);
+
+  useEffect(() => {
     if (
       inputValidationMessage &&
       getMissingPlayerProfileFields(playerProfile).length === 0
@@ -239,9 +302,79 @@ export function GameShell() {
     }
   }, [inputValidationMessage, playerProfile]);
 
+  useEffect(() => {
+    let shouldIgnore = false;
+
+    async function loadCampaigns() {
+      setIsLoadingCampaigns(true);
+
+      try {
+        const campaigns = await fetchCampaigns();
+
+        if (shouldIgnore) {
+          return;
+        }
+
+        setAvailableCampaigns(campaigns);
+
+        const selectedCampaign =
+          campaigns.find((campaign) => campaign.id === initialCampaignId) ??
+          campaigns[0];
+
+        if (!selectedCampaign) {
+          window.location.assign("/new-adventure");
+          return;
+        }
+
+        setActiveCampaignId(selectedCampaign.id);
+        await loadSessionMessages(selectedCampaign.hermesSessionId);
+      } catch {
+        if (!shouldIgnore) {
+          setAvailableCampaigns([]);
+          setMessages(openingMessages);
+        }
+      } finally {
+        if (!shouldIgnore) {
+          setIsLoadingCampaigns(false);
+        }
+      }
+    }
+
+    void loadCampaigns();
+
+    return () => {
+      shouldIgnore = true;
+    };
+  }, [fetchCampaigns, initialCampaignId, loadSessionMessages]);
+
+  useEffect(() => {
+    let shouldIgnore = false;
+
+    async function refreshCampaigns() {
+      try {
+        const campaigns = await fetchCampaigns();
+
+        if (!shouldIgnore) {
+          setAvailableCampaigns(campaigns);
+        }
+      } catch {
+        // Keep the last good sidebar list if the server is briefly unavailable.
+      }
+    }
+
+    const interval = window.setInterval(() => {
+      void refreshCampaigns();
+    }, 3000);
+
+    return () => {
+      shouldIgnore = true;
+      window.clearInterval(interval);
+    };
+  }, [fetchCampaigns]);
+
   const registerPlayerProfile = useCallback(
     async (profile: PlayerProfile) => {
-      if (!playerId) {
+      if (!playerId || !activeCampaign || isSinglePlayer) {
         return;
       }
 
@@ -262,8 +395,8 @@ export function GameShell() {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          roomId: activeChat.id,
-          sessionId: activeChat.id,
+          roomId: activeCampaign.id,
+          sessionId: activeCampaign.hermesSessionId,
           playerId,
           username: profile.username,
           characterName: profile.characterName,
@@ -278,11 +411,16 @@ export function GameShell() {
       const room = (await response.json()) as RoomSnapshot;
       applyRoomSnapshot(room);
     },
-    [activeChat.id, applyRoomSnapshot, playerId]
+    [activeCampaign, applyRoomSnapshot, isSinglePlayer, playerId]
   );
 
   useEffect(() => {
-    if (!playerId || getMissingPlayerProfileFields(playerProfile).length > 0) {
+    if (
+      !activeCampaign ||
+      isSinglePlayer ||
+      !playerId ||
+      getMissingPlayerProfileFields(playerProfile).length > 0
+    ) {
       return;
     }
 
@@ -297,17 +435,32 @@ export function GameShell() {
       window.clearTimeout(timeout);
       window.clearInterval(interval);
     };
-  }, [playerId, playerProfile, registerPlayerProfile]);
+  }, [
+    activeCampaign,
+    isSinglePlayer,
+    playerId,
+    playerProfile,
+    registerPlayerProfile
+  ]);
 
   useEffect(() => {
+    if (!activeCampaign || isSinglePlayer) {
+      setRoomPlayers([]);
+      setRoomMessages([]);
+      setHasAdventureBegun(Boolean(activeCampaign));
+      setIsRoomResolving(false);
+      setIsInputSubmitted(false);
+      return;
+    }
+
     let shouldIgnore = false;
 
     async function pollRoom() {
       try {
         const response = await fetch(
           `/api/room?roomId=${encodeURIComponent(
-            activeChat.id
-          )}&sessionId=${encodeURIComponent(activeChat.id)}`
+            activeCampaign.id
+          )}&sessionId=${encodeURIComponent(activeCampaign.hermesSessionId)}`
         );
 
         if (!response.ok) {
@@ -335,260 +488,118 @@ export function GameShell() {
       shouldIgnore = true;
       window.clearInterval(interval);
     };
-  }, [activeChat.id, applyRoomSnapshot]);
+  }, [activeCampaign, applyRoomSnapshot, isSinglePlayer]);
 
-  const loadSessionMessages = useCallback(async (sessionId: string) => {
-    setIsLoadingMessages(true);
+  function handleStartNewChat() {
+    window.location.assign("/new-adventure");
+  }
 
-    try {
-      const response = await fetch(
-        `/api/hermes/sessions/${encodeURIComponent(sessionId)}/messages`
-      );
+  async function handleSelectChat(campaignId: string) {
+    const campaign = availableCampaigns.find(
+      (availableCampaign) => availableCampaign.id === campaignId
+    );
 
-      if (!response.ok) {
-        throw new Error("Session messages could not be loaded.");
-      }
-
-      const data = (await response.json()) as HermesMessagesApiResponse;
-      setMessages(
-        data.messages && data.messages.length > 0
-          ? data.messages
-          : openingMessages
-      );
-    } catch {
-      setMessages(openingMessages);
-    } finally {
-      setIsLoadingMessages(false);
-    }
-  }, []);
-
-  const fetchHermesSessions = useCallback(async () => {
-    const response = await fetch("/api/hermes/sessions");
-
-    if (!response.ok) {
-      throw new Error("Sessions could not be loaded.");
-    }
-
-    const data = (await response.json()) as HermesSessionsApiResponse;
-
-    return data.sessions && data.sessions.length > 0 ? data.sessions : chats;
-  }, []);
-
-  useEffect(() => {
-    let shouldIgnore = false;
-
-    async function loadChats() {
-      setIsLoadingChats(true);
-
-      try {
-        const sessions = await fetchHermesSessions();
-        const firstSession = sessions[0];
-
-        if (shouldIgnore) {
-          return;
-        }
-
-        setAvailableChats(sessions);
-        setActiveChatId(firstSession.id);
-        await loadSessionMessages(firstSession.id);
-      } catch {
-        if (!shouldIgnore) {
-          setAvailableChats(chats);
-          setActiveChatId(chats[0].id);
-          setMessages(openingMessages);
-        }
-      } finally {
-        if (!shouldIgnore) {
-          setIsLoadingChats(false);
-        }
-      }
-    }
-
-    void loadChats();
-
-    return () => {
-      shouldIgnore = true;
-    };
-  }, [fetchHermesSessions, loadSessionMessages]);
-
-  useEffect(() => {
-    let shouldIgnore = false;
-
-    async function refreshChats() {
-      try {
-        const sessions = await fetchHermesSessions();
-
-        if (!shouldIgnore) {
-          setAvailableChats((currentChats) => mergeChats(currentChats, sessions));
-        }
-      } catch {
-        // Keep the last good sidebar list if Hermes is briefly unavailable.
-      }
-    }
-
-    const interval = window.setInterval(() => {
-      void refreshChats();
-    }, 3000);
-
-    return () => {
-      shouldIgnore = true;
-      window.clearInterval(interval);
-    };
-  }, [fetchHermesSessions]);
-
-  async function handleStartNewChat() {
-    if (isCreatingChat) {
+    if (!campaign) {
       return;
     }
 
-    const newChat: ChatSummary = {
-      id: `ai-dnd-${Date.now()}`,
-      title: "New Adventure"
-    };
-
-    setInputValidationMessage("");
-    setTableAlert("");
-    setIsInputSubmitted(false);
-    setIsCreatingChat(true);
-    setIsLoadingMessages(true);
-
-    try {
-      const response = await fetch("/api/hermes/prep", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          sessionId: newChat.id
-        })
-      });
-
-      if (!response.ok) {
-        const message = await getApiErrorMessage(
-          response,
-          "Hermes could not prepare the campaign room."
-        );
-        throw new Error(message);
-      }
-
-      const data = (await response.json()) as HermesTurnResponse;
-      setActiveChatId(newChat.id);
-      setMessages([data.message]);
-      setRoomMessages([]);
-      setRoomPlayers([]);
-      setHasAdventureBegun(false);
-      setDraft("");
-      setAvailableChats((currentChats) =>
-        upsertChat(currentChats, {
-          ...newChat,
-          preview: data.message.content,
-          time: "Now"
-        })
-      );
-    } catch (error) {
-      setTableAlert(
-        error instanceof Error
-          ? error.message
-          : "Hermes could not create the campaign yet."
-      );
-    } finally {
-      setIsCreatingChat(false);
-      setIsLoadingMessages(false);
-      inputRef.current?.focus();
-    }
-  }
-
-  async function handleSelectChat(chatId: string) {
-    setActiveChatId(chatId);
+    window.history.replaceState(null, "", `/play?campaignId=${campaign.id}`);
+    setActiveCampaignId(campaign.id);
     setDraft("");
     setRoomMessages([]);
     setRoomPlayers([]);
-    setHasAdventureBegun(false);
+    setHasAdventureBegun(campaign.mode === "single_player");
     setInputValidationMessage("");
     setTableAlert("");
     setIsInputSubmitted(false);
-    await loadSessionMessages(chatId);
+    await loadSessionMessages(campaign.hermesSessionId);
     inputRef.current?.focus();
   }
 
-  async function handleDeleteChat(chatId: string) {
-    const chatToDelete = availableChats.find((chat) => chat.id === chatId);
+  async function handleDeleteChat(campaignId: string) {
+    const campaignToDelete = availableCampaigns.find(
+      (campaign) => campaign.id === campaignId
+    );
 
     if (
       !window.confirm(
-        `Archive "${chatToDelete?.title ?? "this adventure"}"?`
+        `Archive "${campaignToDelete?.title ?? "this adventure"}"?`
       )
     ) {
       return;
     }
 
-    const nextChats =
-      availableChats.filter((chat) => chat.id !== chatId).length > 0
-        ? availableChats.filter((chat) => chat.id !== chatId)
-        : chats;
-    const nextActiveChat =
-      chatId === activeChatId ? nextChats[0] : activeChat;
+    const previousCampaigns = availableCampaigns;
+    const nextCampaigns = availableCampaigns.filter(
+      (campaign) => campaign.id !== campaignId
+    );
+    const nextActiveCampaign =
+      campaignId === activeCampaignId ? nextCampaigns[0] : activeCampaign;
 
-    setAvailableChats(nextChats);
-    setActiveChatId(nextActiveChat.id);
+    setAvailableCampaigns(nextCampaigns);
+    setActiveCampaignId(nextActiveCampaign?.id ?? "");
     setDraft("");
 
-    if (chatId === activeChatId) {
+    if (campaignId === activeCampaignId) {
       setMessages(openingMessages);
-      void loadSessionMessages(nextActiveChat.id);
+      if (nextActiveCampaign) {
+        void loadSessionMessages(nextActiveCampaign.hermesSessionId);
+      }
     }
 
     try {
       const response = await fetch(
-        `/api/hermes/sessions/${encodeURIComponent(chatId)}`,
+        `/api/campaigns/${encodeURIComponent(campaignId)}`,
         {
           method: "DELETE"
         }
       );
 
       if (!response.ok) {
-        throw new Error("Hermes could not delete that adventure.");
+        throw new Error("Campaign could not be archived.");
       }
     } catch {
-      setAvailableChats(availableChats);
-      setActiveChatId(activeChatId);
+      setAvailableCampaigns(previousCampaigns);
+      setActiveCampaignId(activeCampaignId);
       setMessages((currentMessages) => [
         ...currentMessages,
         {
           id: createClientId(),
           role: "system",
           content:
-            "That adventure could not be archived. The session is still saved.",
+            "That adventure could not be archived. The campaign is still saved.",
           createdAt: new Date().toISOString()
         }
       ]);
     }
   }
 
-  async function handleRenameChat(chatId: string) {
-    const chatToRename = availableChats.find((chat) => chat.id === chatId);
+  async function handleRenameChat(campaignId: string) {
+    const campaignToRename = availableCampaigns.find(
+      (campaign) => campaign.id === campaignId
+    );
     const nextTitle = window
-      .prompt("Rename adventure", chatToRename?.title ?? "")
+      .prompt("Rename adventure", campaignToRename?.title ?? "")
       ?.trim();
 
     if (!nextTitle) {
       return;
     }
 
-    setAvailableChats((currentChats) =>
-      currentChats.map((chat) =>
-        chat.id === chatId
+    setAvailableCampaigns((currentCampaigns) =>
+      currentCampaigns.map((campaign) =>
+        campaign.id === campaignId
           ? {
-              ...chat,
+              ...campaign,
               title: nextTitle
             }
-          : chat
+          : campaign
       )
     );
 
     try {
       const response = await fetch(
-        `/api/hermes/sessions/${encodeURIComponent(chatId)}`,
+        `/api/campaigns/${encodeURIComponent(campaignId)}`,
         {
           method: "PATCH",
           headers: {
@@ -604,14 +615,14 @@ export function GameShell() {
         throw new Error("Adventure could not be renamed.");
       }
     } catch {
-      setAvailableChats((currentChats) =>
-        currentChats.map((chat) =>
-          chat.id === chatId
+      setAvailableCampaigns((currentCampaigns) =>
+        currentCampaigns.map((campaign) =>
+          campaign.id === campaignId
             ? {
-                ...chat,
-                title: chatToRename?.title ?? chat.title
+                ...campaign,
+                title: campaignToRename?.title ?? campaign.title
               }
-            : chat
+            : campaign
         )
       );
       setMessages((currentMessages) => [
@@ -627,7 +638,7 @@ export function GameShell() {
   }
 
   async function handleBeginAdventure() {
-    if (!canBeginAdventure || isRoomResolving) {
+    if (!activeCampaign || !canBeginAdventure || isRoomResolving) {
       return;
     }
 
@@ -640,8 +651,8 @@ export function GameShell() {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          roomId: activeChat.id,
-          sessionId: activeChat.id
+          roomId: activeCampaign.id,
+          sessionId: activeCampaign.hermesSessionId
         })
       });
 
@@ -653,15 +664,11 @@ export function GameShell() {
       applyRoomSnapshot(room);
       const latestMessage = room.messages[room.messages.length - 1];
 
-      setAvailableChats((currentChats) =>
-        currentChats.map((chat) =>
-          chat.id === activeChat.id
-            ? {
-                ...chat,
-                preview: latestMessage?.content ?? "Adventure begun",
-                time: "Now"
-              }
-            : chat
+      setAvailableCampaigns((currentCampaigns) =>
+        updateCampaignPreview(
+          currentCampaigns,
+          activeCampaign.id,
+          latestMessage?.content ?? "Adventure begun"
         )
       );
     } catch {
@@ -682,6 +689,10 @@ export function GameShell() {
   }
 
   async function handleKickPlayer(kickedPlayerId: string) {
+    if (!activeCampaign) {
+      return;
+    }
+
     try {
       const response = await fetch("/api/room/kick", {
         method: "POST",
@@ -689,8 +700,8 @@ export function GameShell() {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          roomId: activeChat.id,
-          sessionId: activeChat.id,
+          roomId: activeCampaign.id,
+          sessionId: activeCampaign.hermesSessionId,
           playerId: kickedPlayerId
         })
       });
@@ -717,26 +728,28 @@ export function GameShell() {
   async function sendTurn(messageText: string) {
     const content = messageText.trim();
 
-    if (!content || isSending) {
+    if (!content || isSending || !activeCampaign) {
       return;
     }
 
-    if (!hasAdventureBegun) {
+    if (!isSinglePlayer && !hasAdventureBegun) {
       setInputValidationMessage("Begin the adventure before sending turns.");
       setInputValidationPulse((currentPulse) => currentPulse + 1);
       return;
     }
 
-    const missingProfileFields = getMissingPlayerProfileFields(playerProfile);
+    if (!isSinglePlayer) {
+      const missingProfileFields = getMissingPlayerProfileFields(playerProfile);
 
-    if (missingProfileFields.length > 0) {
-      setIsSessionPanelOpen(true);
-      setInputValidationMessage(
-        `Finish your ${missingProfileFields.join(", ")} before sending.`
-      );
-      setInputValidationPulse((currentPulse) => currentPulse + 1);
-      inputRef.current?.focus();
-      return;
+      if (missingProfileFields.length > 0) {
+        setIsSessionPanelOpen(true);
+        setInputValidationMessage(
+          `Finish your ${missingProfileFields.join(", ")} before sending.`
+        );
+        setInputValidationPulse((currentPulse) => currentPulse + 1);
+        inputRef.current?.focus();
+        return;
+      }
     }
 
     setInputValidationMessage("");
@@ -747,68 +760,80 @@ export function GameShell() {
       createdAt: new Date().toISOString()
     };
 
-    const nextMessages = [...messages, playerMessage];
+    setMessages((currentMessages) => [...currentMessages, playerMessage]);
     setDraft("");
     setIsSending(true);
-    setIsInputSubmitted(true);
-    setAvailableChats((currentChats) =>
-      currentChats.map((chat) =>
-        chat.id === activeChat.id
-          ? {
-              ...chat,
-              preview: content,
-              time: "Now"
-            }
-          : chat
-      )
+    setIsInputSubmitted(!isSinglePlayer);
+    setAvailableCampaigns((currentCampaigns) =>
+      updateCampaignPreview(currentCampaigns, activeCampaign.id, content)
     );
 
     try {
-      const response = await fetch("/api/room/submit", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          roomId: activeChat.id,
-          sessionId: activeChat.id,
-          playerId,
-          message: content,
-          history: nextMessages
-        })
-      });
+      const response = await fetch(
+        isSinglePlayer
+          ? `/api/campaigns/${encodeURIComponent(activeCampaign.id)}/solo-turn`
+          : "/api/room/submit",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(
+            isSinglePlayer
+              ? {
+                  message: content
+                }
+              : {
+                  roomId: activeCampaign.id,
+                  sessionId: activeCampaign.hermesSessionId,
+                  playerId,
+                  message: content
+                }
+          )
+        }
+      );
 
       if (!response.ok) {
-        throw new Error("The dungeon master did not answer.");
+        const message = await getApiErrorMessage(
+          response,
+          "The dungeon master did not answer."
+        );
+        throw new Error(message);
       }
 
       const room = (await response.json()) as RoomSnapshot;
       applyRoomSnapshot(room);
       const latestMessage = room.messages[room.messages.length - 1];
-      setAvailableChats((currentChats) =>
-        currentChats.map((chat) =>
-          chat.id === activeChat.id
-            ? {
-                ...chat,
-                preview: latestMessage?.content ?? content,
-                time: "Now"
-              }
-            : chat
+
+      if (isSinglePlayer) {
+        setMessages(room.messages.length > 0 ? room.messages : openingMessages);
+      }
+
+      setAvailableCampaigns((currentCampaigns) =>
+        updateCampaignPreview(
+          currentCampaigns,
+          activeCampaign.id,
+          latestMessage?.content ?? content
         )
       );
-    } catch {
+    } catch (error) {
       setMessages((currentMessages) => [
         ...currentMessages,
         {
           id: createClientId(),
           role: "system",
           content:
-            "The room connection flickered. Your turn may need to be sent again.",
+            error instanceof Error
+              ? error.message
+              : "The room connection flickered. Your turn may need to be sent again.",
           createdAt: new Date().toISOString()
         }
       ]);
     } finally {
       setIsSending(false);
+      if (isSinglePlayer) {
+        setIsInputSubmitted(false);
+      }
       inputRef.current?.focus();
     }
   }
@@ -829,6 +854,30 @@ export function GameShell() {
     inputRef.current?.focus();
   }
 
+  async function handleSignOut() {
+    await fetch("/auth/sign-out", {
+      method: "POST"
+    });
+    window.location.assign("/login");
+  }
+
+  if (!activeCampaign && isLoadingCampaigns) {
+    return (
+      <main className="table-page">
+        <section className="play-table loading-table" aria-label="Loading table">
+          <p className="rune-loader">
+            Loading adventures
+            <span className="rune-loader-dots" aria-hidden="true">
+              <span>.</span>
+              <span>.</span>
+              <span>.</span>
+            </span>
+          </p>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="table-page">
       <div className="ambient ambient-one" />
@@ -840,46 +889,60 @@ export function GameShell() {
             <Dice5 size={30} />
           </div>
           <div>
-            <p className="eyebrow">Hermes Table</p>
-            <h1>{activeChat.title}</h1>
+            <p className="eyebrow">
+              {isSinglePlayer ? "Hermes Solo" : "Hermes Table"}
+            </p>
+            <h1>{activeCampaign?.title ?? "New Adventure"}</h1>
           </div>
           <div className="status-pill">
             <Flame size={16} />
-            Live Session
+            {isSinglePlayer ? "Singleplayer" : "Multiplayer"}
           </div>
-          <button
-            className="panel-toggle"
-            type="button"
-            aria-label={
-              isSessionPanelOpen
-                ? "Collapse session panel"
-                : "Expand session panel"
-            }
-            aria-pressed={isSessionPanelOpen}
-            onClick={() => setIsSessionPanelOpen((isOpen) => !isOpen)}
-          >
-            {isSessionPanelOpen ? (
-              <PanelRightClose size={20} />
-            ) : (
-              <PanelRightOpen size={20} />
-            )}
-          </button>
+          <div className="account-pill">
+            <span>{userEmail ?? "Signed in"}</span>
+            <button
+              type="button"
+              aria-label="Sign out"
+              onClick={() => void handleSignOut()}
+            >
+              <LogOut size={16} />
+            </button>
+          </div>
+          {!isSinglePlayer ? (
+            <button
+              className="panel-toggle"
+              type="button"
+              aria-label={
+                isSessionPanelOpen
+                  ? "Collapse session panel"
+                  : "Expand session panel"
+              }
+              aria-pressed={isSessionPanelOpen}
+              onClick={() => setIsSessionPanelOpen((isOpen) => !isOpen)}
+            >
+              {isSessionPanelOpen ? (
+                <PanelRightClose size={20} />
+              ) : (
+                <PanelRightOpen size={20} />
+              )}
+            </button>
+          ) : null}
         </header>
 
         <div
           className={`table-grid ${
-            isSessionPanelOpen ? "" : "session-panel-collapsed"
+            isSessionPanelOpen && !isSinglePlayer ? "" : "session-panel-collapsed"
           }`}
         >
           <ChatHistorySidebar
-            chats={availableChats}
-            activeChatId={activeChatId}
-            isLoading={isLoadingChats}
+            chats={availableCampaigns}
+            activeChatId={activeCampaignId}
+            isLoading={isLoadingCampaigns}
             isCreatingChat={isCreatingChat}
-            onStartNewChat={() => void handleStartNewChat()}
-            onDeleteChat={(chatId) => void handleDeleteChat(chatId)}
-            onRenameChat={handleRenameChat}
-            onSelectChat={(chatId) => void handleSelectChat(chatId)}
+            onStartNewChat={handleStartNewChat}
+            onDeleteChat={(campaignId) => void handleDeleteChat(campaignId)}
+            onRenameChat={(campaignId) => void handleRenameChat(campaignId)}
+            onSelectChat={(campaignId) => void handleSelectChat(campaignId)}
           />
           <div className="story-column">
             {tableAlert ? (
@@ -900,70 +963,77 @@ export function GameShell() {
               isSending={isSending || isLoadingMessages || isRoomResolving}
             />
 
-            <section className="player-status-board" aria-label="Player action status">
-              {playerStatusSlots.map((player) => (
-                <div className="player-status-item" key={player.id}>
-                  <div className="player-avatar" aria-hidden="true" />
-                  <div className="player-status-content">
-                    <div className="player-status-name">
-                      <strong>
-                        {player.name}
-                        {player.canKick ? (
-                          <button
-                            className="player-kick-button"
-                            type="button"
-                            aria-label={`Kick ${player.name}`}
-                            onClick={() => void handleKickPlayer(player.id)}
-                          >
-                            <X size={13} />
-                          </button>
-                        ) : null}
-                      </strong>
-                      {player.detail ? <span>{player.detail}</span> : null}
-                    </div>
-                    <div
-                      className={`player-status-pill ${
-                        player.status === "Submitted."
-                          ? "status-submitted"
-                          : player.status === "Waiting"
-                            ? "status-waiting"
-                            : "status-empty"
-                      }`}
-                    >
-                      {player.status === "Waiting" ? (
-                        <>
-                          Waiting
-                          <span className="waiting-dots" aria-hidden="true">
-                            <span>.</span>
-                            <span>.</span>
-                            <span>.</span>
-                          </span>
-                        </>
-                      ) : (
-                        player.status
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </section>
-
-            {!hasAdventureBegun ? (
-              <section className="begin-adventure-panel">
-                <p>
-                  {roomPlayers.length >= 2
-                    ? "The party is gathered. Let Hermes open the campaign."
-                    : "Gather at least two players to begin the adventure."}
-                </p>
-                <button
-                  type="button"
-                  disabled={!canBeginAdventure || isRoomResolving}
-                  onClick={() => void handleBeginAdventure()}
+            {!isSinglePlayer ? (
+              <>
+                <section
+                  className="player-status-board"
+                  aria-label="Player action status"
                 >
-                  <Play size={17} />
-                  Begin Adventure
-                </button>
-              </section>
+                  {playerStatusSlots.map((player) => (
+                    <div className="player-status-item" key={player.id}>
+                      <div className="player-avatar" aria-hidden="true" />
+                      <div className="player-status-content">
+                        <div className="player-status-name">
+                          <strong>
+                            {player.name}
+                            {player.canKick ? (
+                              <button
+                                className="player-kick-button"
+                                type="button"
+                                aria-label={`Kick ${player.name}`}
+                                onClick={() => void handleKickPlayer(player.id)}
+                              >
+                                <X size={13} />
+                              </button>
+                            ) : null}
+                          </strong>
+                          {player.detail ? <span>{player.detail}</span> : null}
+                        </div>
+                        <div
+                          className={`player-status-pill ${
+                            player.status === "Submitted."
+                              ? "status-submitted"
+                              : player.status === "Waiting"
+                                ? "status-waiting"
+                                : "status-empty"
+                          }`}
+                        >
+                          {player.status === "Waiting" ? (
+                            <>
+                              Waiting
+                              <span className="waiting-dots" aria-hidden="true">
+                                <span>.</span>
+                                <span>.</span>
+                                <span>.</span>
+                              </span>
+                            </>
+                          ) : (
+                            player.status
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </section>
+
+                {!hasAdventureBegun ? (
+                  <section className="begin-adventure-panel">
+                    <p>
+                      {roomPlayers.length >= 2
+                        ? "The party is gathered. Let Hermes open the campaign."
+                        : "Gather at least two players to begin the adventure."}
+                    </p>
+                    <button
+                      type="button"
+                      disabled={!canBeginAdventure || isRoomResolving}
+                      onClick={() => void handleBeginAdventure()}
+                    >
+                      <Play size={17} />
+                      Begin Adventure
+                    </button>
+                  </section>
+                ) : null}
+              </>
             ) : null}
 
             <PlayerInput
@@ -972,9 +1042,9 @@ export function GameShell() {
               isSending={isSending}
               isSubmitted={isSending || isInputSubmitted}
               lockMessage={
-                hasAdventureBegun
-                  ? undefined
-                  : "You can only start once the adventure has begun"
+                !isSinglePlayer && !hasAdventureBegun
+                  ? "You can only start once the adventure has begun"
+                  : undefined
               }
               validationMessage={inputValidationMessage}
               validationPulse={inputValidationPulse}
@@ -984,7 +1054,7 @@ export function GameShell() {
             />
           </div>
 
-          {isSessionPanelOpen ? (
+          {isSessionPanelOpen && !isSinglePlayer ? (
             <PlayerPanel
               onProfileChange={setPlayerProfile}
               onProfileUpdate={(profile) => {

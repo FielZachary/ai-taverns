@@ -4,6 +4,7 @@ create table if not exists campaigns (
   id uuid primary key default gen_random_uuid(),
   hermes_session_id text unique not null,
   title text not null,
+  mode text not null default 'multiplayer',
   status text not null default 'active',
   has_begun boolean not null default false,
   owner_client_id text,
@@ -11,7 +12,8 @@ create table if not exists campaigns (
   deleted_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  constraint campaigns_status_check check (status in ('active', 'archived', 'deleted'))
+  constraint campaigns_status_check check (status in ('active', 'archived', 'deleted')),
+  constraint campaigns_mode_check check (mode in ('single_player', 'multiplayer'))
 );
 
 create table if not exists players (

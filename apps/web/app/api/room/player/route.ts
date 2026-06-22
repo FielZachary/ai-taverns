@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getOptionalUser, HttpError } from "@/lib/auth";
 import { registerRoomPlayer } from "@/lib/room-store";
 import { jsonError } from "@/lib/hermes";
 
@@ -28,15 +29,19 @@ export async function POST(request: Request) {
   }
 
   try {
+    const user = await getOptionalUser();
     return NextResponse.json(
       await registerRoomPlayer(roomId, sessionId, {
         playerId,
         username,
         characterName,
         characterSheet
-      })
+      }, user?.id)
     );
   } catch (error) {
+    if (error instanceof HttpError) {
+      return jsonError(error.message, error.status);
+    }
     return jsonError(
       error instanceof Error ? error.message : "Player could not join the room.",
       409
