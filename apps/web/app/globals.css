@@ -100,17 +100,12 @@ button {
   min-height: 78px;
   padding: 20px clamp(18px, 4vw, 56px);
   color: #fff8e8;
-  font-family: ui-sans-serif, system-ui, sans-serif;
   font-size: 0.84rem;
   font-weight: 800;
   text-transform: uppercase;
 }
 
 .landing-brand {
-  font-family:
-    Georgia,
-    "Times New Roman",
-    serif;
   font-size: clamp(1.1rem, 2.3vw, 1.65rem);
   text-transform: none;
 }
@@ -176,10 +171,6 @@ button {
   min-height: 66px;
   padding: 20px 34px;
   border-radius: 8px;
-  font-family:
-    Georgia,
-    "Times New Roman",
-    serif;
   font-size: 0.96rem;
   font-weight: 800;
   letter-spacing: 0;
