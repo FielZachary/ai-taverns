@@ -1,7 +1,14 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight, Check, ScrollText, Swords, Users } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  ScrollText,
+  Swords,
+  Users
+} from "lucide-react";
 import { defaultCharacterSheet } from "@/components/playing/PlayerPanel";
 
 type CampaignMode = "single_player" | "multiplayer";
@@ -19,6 +26,28 @@ type CreateCampaignResponse = {
 
 const playerIdStorageKey = "ai-dnd.playerId";
 const steps = ["Mode", "Campaign", "Character", "Review"];
+const campaignGenres = [
+  {
+    id: "classic_fantasy",
+    label: "Classic Fantasy",
+    description: "Ancient ruins, strange magic, and mythic quests."
+  },
+  {
+    id: "dark_fantasy",
+    label: "Dark Fantasy",
+    description: "Curses, hard choices, and candlelit danger."
+  },
+  {
+    id: "high_adventure",
+    label: "High Adventure",
+    description: "Bold heroes, wild travel, and sweeping stakes."
+  },
+  {
+    id: "mystery",
+    label: "Mystery",
+    description: "Secrets, suspects, and clues hidden in plain sight."
+  }
+];
 
 function createClientId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -34,15 +63,17 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
   const [stepIndex, setStepIndex] = useState(0);
   const [mode, setMode] = useState<CampaignMode>("single_player");
   const [title, setTitle] = useState("Lanterns Below the Old Road");
-  const [playerName, setPlayerName] = useState("");
+  const [campaignGenre, setCampaignGenre] = useState(campaignGenres[0].id);
   const [characterName, setCharacterName] = useState("");
   const [characterSheet, setCharacterSheet] = useState(defaultCharacterSheet);
   const [ownerClientId, setOwnerClientId] = useState("");
   const [error, setError] = useState("");
   const [isCreating, setIsCreating] = useState(false);
-  const currentStep = steps[stepIndex];
   const isLastStep = stepIndex === steps.length - 1;
   const modeLabel = mode === "single_player" ? "Singleplayer" : "Multiplayer";
+  const selectedGenre =
+    campaignGenres.find((genre) => genre.id === campaignGenre) ??
+    campaignGenres[0];
   const stepTitle = useMemo(() => {
     if (stepIndex === 0) {
       return "Choose your game mode";
@@ -74,14 +105,11 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
 
   function canAdvance() {
     if (stepIndex === 1) {
-      return Boolean(title.trim());
+      return Boolean(title.trim() && campaignGenre);
     }
 
     if (stepIndex === 2) {
-      return Boolean(
-        playerName.trim() &&
-          (mode === "multiplayer" || characterName.trim())
-      );
+      return mode === "multiplayer" || Boolean(characterName.trim());
     }
 
     return true;
@@ -93,10 +121,10 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
     if (!canAdvance()) {
       setError(
         stepIndex === 1
-          ? "Give the adventure a title before continuing."
+          ? "Give the adventure a title and genre before continuing."
           : mode === "single_player"
-            ? "Add your player and character names before continuing."
-            : "Add your owner name before continuing."
+            ? "Add your character name before continuing."
+            : "Add your character details or continue without them."
       );
       return;
     }
@@ -127,8 +155,12 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
         body: JSON.stringify({
           mode,
           title,
+          campaignGenre: selectedGenre.label,
           ownerClientId,
-          playerName,
+          playerName:
+            mode === "single_player"
+              ? characterName.trim() || "Solo Player"
+              : "Table Owner",
           characterName,
           characterSheet
         })
@@ -225,32 +257,41 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
             ) : null}
 
             {stepIndex === 1 ? (
-              <label>
-                <span>
-                  {mode === "single_player" ? "Campaign title" : "Table title"}
-                </span>
-                <input
-                  required
-                  value={title}
-                  onChange={(event) => setTitle(event.target.value)}
-                  autoFocus
-                />
-              </label>
-            ) : null}
-
-            {stepIndex === 2 ? (
               <>
                 <label>
-                  <span>{mode === "single_player" ? "Player name" : "Owner name"}</span>
+                  <span>
+                    {mode === "single_player" ? "Campaign title" : "Table title"}
+                  </span>
                   <input
                     required
-                    value={playerName}
-                    onChange={(event) => setPlayerName(event.target.value)}
-                    placeholder="What should Hermes call you?"
+                    value={title}
+                    onChange={(event) => setTitle(event.target.value)}
                     autoFocus
                   />
                 </label>
 
+                <fieldset className="genre-picker">
+                  <legend>Campaign genre</legend>
+                  <div>
+                    {campaignGenres.map((genre) => (
+                      <button
+                        type="button"
+                        className={campaignGenre === genre.id ? "selected" : ""}
+                        aria-pressed={campaignGenre === genre.id}
+                        key={genre.id}
+                        onClick={() => setCampaignGenre(genre.id)}
+                      >
+                        <strong>{genre.label}</strong>
+                        <small>{genre.description}</small>
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+              </>
+            ) : null}
+
+            {stepIndex === 2 ? (
+              <>
                 <label>
                   <span>
                     {mode === "single_player"
@@ -262,6 +303,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                     value={characterName}
                     onChange={(event) => setCharacterName(event.target.value)}
                     placeholder={mode === "multiplayer" ? "Optional for now" : ""}
+                    autoFocus
                   />
                 </label>
 
@@ -293,8 +335,8 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                     <dd>{title}</dd>
                   </div>
                   <div>
-                    <dt>{mode === "single_player" ? "Player" : "Owner"}</dt>
-                    <dd>{playerName}</dd>
+                    <dt>Genre</dt>
+                    <dd>{selectedGenre.label}</dd>
                   </div>
                   <div>
                     <dt>Character</dt>

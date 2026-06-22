@@ -14,6 +14,7 @@ export const maxDuration = 180;
 type CreateCampaignBody = {
   mode?: CampaignMode;
   title?: string;
+  campaignGenre?: string;
   ownerClientId?: string;
   playerName?: string;
   characterName?: string;
@@ -39,10 +40,14 @@ export async function POST(request: Request) {
   const body = (await request.json()) as CreateCampaignBody;
   const mode = body.mode === "single_player" ? "single_player" : "multiplayer";
   const title = body.title?.trim();
-  const playerName = body.playerName?.trim();
+  const campaignGenre = body.campaignGenre?.trim();
+  const playerName =
+    body.playerName?.trim() ||
+    body.characterName?.trim() ||
+    (mode === "single_player" ? "Solo Player" : "Table Owner");
 
-  if (!title || !playerName) {
-    return jsonError("A campaign title and player name are required.", 400);
+  if (!title || !campaignGenre) {
+    return jsonError("A campaign title and genre are required.", 400);
   }
 
   if (mode === "single_player" && !body.characterName?.trim()) {
@@ -54,6 +59,7 @@ export async function POST(request: Request) {
     const campaign = await createCampaignForMode({
       mode,
       title,
+      campaignGenre,
       ownerClientId: body.ownerClientId?.trim(),
       playerName,
       characterName: body.characterName?.trim(),

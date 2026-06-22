@@ -736,6 +736,7 @@ export async function renameCampaignById(
 export async function createCampaignForMode(input: {
   mode: CampaignMode;
   title: string;
+  campaignGenre?: string;
   ownerClientId?: string;
   playerName: string;
   characterName?: string;
@@ -755,6 +756,19 @@ export async function createCampaignForMode(input: {
     );
 
     await withTransaction(async (client) => {
+      await client.query(
+        `
+          update campaigns
+          set metadata = metadata || $2::jsonb
+          where id = $1
+        `,
+        [
+          campaign.id,
+          JSON.stringify({
+            genre: input.campaignGenre ?? null
+          })
+        ]
+      );
       await client.query(
         `
           insert into players (
@@ -791,7 +805,8 @@ export async function createCampaignForMode(input: {
         clientId: input.ownerClientId ?? input.userId,
         username: input.playerName,
         characterName: input.characterName ?? "",
-        slot: 0
+        slot: 0,
+        genre: input.campaignGenre
       });
     });
 
@@ -803,6 +818,7 @@ export async function createCampaignForMode(input: {
     [
       openingSceneRequest,
       "",
+      input.campaignGenre ? `Campaign genre: ${input.campaignGenre}` : "",
       `Solo player: ${input.playerName}`,
       `Character: ${input.characterName || input.playerName}`,
       "Character sheet:",
@@ -823,16 +839,20 @@ export async function createCampaignForMode(input: {
           mode,
           has_begun,
           owner_client_id,
-          owner_user_id
+          owner_user_id,
+          metadata
         )
-        values ($1, $2, 'single_player', true, $3, $4)
+        values ($1, $2, 'single_player', true, $3, $4, $5::jsonb)
         returning *
       `,
       [
         sessionId,
         normalizeCampaignTitle(input.title, sessionId),
         input.ownerClientId ?? null,
-        input.userId
+        input.userId,
+        JSON.stringify({
+          genre: input.campaignGenre ?? null
+        })
       ]
     );
     const campaignRow = inserted.rows[0];
@@ -865,7 +885,8 @@ export async function createCampaignForMode(input: {
 
     await logCampaignEvent(client, campaignRow.id, "campaign_created", {
       hermesSessionId: sessionId,
-      mode: "single_player"
+      mode: "single_player",
+      genre: input.campaignGenre
     });
     await logCampaignEvent(client, campaignRow.id, "player_joined", {
       clientId: player.rows[0].client_id,

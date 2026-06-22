@@ -787,6 +787,60 @@ h1 {
   line-height: 1.45;
 }
 
+.genre-picker {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.genre-picker legend {
+  margin-bottom: 9px;
+  color: var(--gold-bright);
+  font-size: 0.8rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.genre-picker > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.genre-picker button {
+  display: grid;
+  gap: 5px;
+  min-height: 84px;
+  padding: 12px;
+  border: 1px solid rgba(244, 207, 122, 0.22);
+  border-radius: 8px;
+  color: var(--ink);
+  background: rgba(17, 13, 10, 0.48);
+  text-align: left;
+}
+
+.genre-picker button.selected,
+.genre-picker button:hover {
+  border-color: rgba(244, 207, 122, 0.72);
+  background:
+    linear-gradient(90deg, rgba(173, 71, 43, 0.16), transparent),
+    rgba(255, 255, 255, 0.05);
+}
+
+.genre-picker strong {
+  color: var(--ink);
+  font-size: 0.92rem;
+  font-weight: 900;
+}
+
+.genre-picker small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
 .new-adventure-form input,
 .new-adventure-form textarea {
   width: 100%;
@@ -1971,6 +2025,10 @@ h1 {
   }
 
   .mode-picker {
+    grid-template-columns: 1fr;
+  }
+
+  .genre-picker > div {
     grid-template-columns: 1fr;
   }
 
