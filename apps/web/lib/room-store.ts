@@ -737,6 +737,9 @@ export async function createCampaignForMode(input: {
   mode: CampaignMode;
   title: string;
   campaignGenre?: string;
+  campaignGenreKind?: "preset" | "custom";
+  campaignGenrePresetId?: string;
+  customWorldDescription?: string;
   ownerClientId?: string;
   playerName: string;
   characterName?: string;
@@ -765,7 +768,12 @@ export async function createCampaignForMode(input: {
         [
           campaign.id,
           JSON.stringify({
-            genre: input.campaignGenre ?? null
+            genre: {
+              kind: input.campaignGenreKind ?? "preset",
+              presetId: input.campaignGenrePresetId ?? null,
+              label: input.campaignGenre ?? null,
+              customWorldDescription: input.customWorldDescription ?? null
+            }
           })
         ]
       );
@@ -806,7 +814,8 @@ export async function createCampaignForMode(input: {
         username: input.playerName,
         characterName: input.characterName ?? "",
         slot: 0,
-        genre: input.campaignGenre
+        genre: input.campaignGenre,
+        genreKind: input.campaignGenreKind ?? "preset"
       });
     });
 
@@ -819,6 +828,9 @@ export async function createCampaignForMode(input: {
       openingSceneRequest,
       "",
       input.campaignGenre ? `Campaign genre: ${input.campaignGenre}` : "",
+      input.customWorldDescription
+        ? `Custom world description: ${input.customWorldDescription}`
+        : "",
       `Solo player: ${input.playerName}`,
       `Character: ${input.characterName || input.playerName}`,
       "Character sheet:",
@@ -851,7 +863,12 @@ export async function createCampaignForMode(input: {
         input.ownerClientId ?? null,
         input.userId,
         JSON.stringify({
-          genre: input.campaignGenre ?? null
+          genre: {
+            kind: input.campaignGenreKind ?? "preset",
+            presetId: input.campaignGenrePresetId ?? null,
+            label: input.campaignGenre ?? null,
+            customWorldDescription: input.customWorldDescription ?? null
+          }
         })
       ]
     );
@@ -886,7 +903,8 @@ export async function createCampaignForMode(input: {
     await logCampaignEvent(client, campaignRow.id, "campaign_created", {
       hermesSessionId: sessionId,
       mode: "single_player",
-      genre: input.campaignGenre
+      genre: input.campaignGenre,
+      genreKind: input.campaignGenreKind ?? "preset"
     });
     await logCampaignEvent(client, campaignRow.id, "player_joined", {
       clientId: player.rows[0].client_id,

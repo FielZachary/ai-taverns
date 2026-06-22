@@ -46,6 +46,11 @@ const campaignGenres = [
     id: "mystery",
     label: "Mystery",
     description: "Secrets, suspects, and clues hidden in plain sight."
+  },
+  {
+    id: "custom",
+    label: "Custom World",
+    description: "Describe the tone, setting, and premise yourself."
   }
 ];
 
@@ -64,6 +69,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
   const [mode, setMode] = useState<CampaignMode>("single_player");
   const [title, setTitle] = useState("Lanterns Below the Old Road");
   const [campaignGenre, setCampaignGenre] = useState(campaignGenres[0].id);
+  const [customWorldDescription, setCustomWorldDescription] = useState("");
   const [characterName, setCharacterName] = useState("");
   const [characterSheet, setCharacterSheet] = useState(defaultCharacterSheet);
   const [ownerClientId, setOwnerClientId] = useState("");
@@ -74,6 +80,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
   const selectedGenre =
     campaignGenres.find((genre) => genre.id === campaignGenre) ??
     campaignGenres[0];
+  const isCustomGenre = campaignGenre === "custom";
   const stepTitle = useMemo(() => {
     if (stepIndex === 0) {
       return "Choose your game mode";
@@ -105,7 +112,11 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
 
   function canAdvance() {
     if (stepIndex === 1) {
-      return Boolean(title.trim() && campaignGenre);
+      return Boolean(
+        title.trim() &&
+          campaignGenre &&
+          (!isCustomGenre || customWorldDescription.trim())
+      );
     }
 
     if (stepIndex === 2) {
@@ -121,7 +132,9 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
     if (!canAdvance()) {
       setError(
         stepIndex === 1
-          ? "Give the adventure a title and genre before continuing."
+          ? isCustomGenre
+            ? "Give the adventure a title and describe the custom world before continuing."
+            : "Give the adventure a title and genre before continuing."
           : mode === "single_player"
             ? "Add your character name before continuing."
             : "Add your character details or continue without them."
@@ -156,6 +169,11 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
           mode,
           title,
           campaignGenre: selectedGenre.label,
+          campaignGenreKind: isCustomGenre ? "custom" : "preset",
+          campaignGenrePresetId: isCustomGenre ? undefined : selectedGenre.id,
+          customWorldDescription: isCustomGenre
+            ? customWorldDescription.trim()
+            : undefined,
           ownerClientId,
           playerName:
             mode === "single_player"
@@ -287,6 +305,26 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                     ))}
                   </div>
                 </fieldset>
+
+                <div
+                  className={`custom-world-field ${
+                    isCustomGenre ? "expanded" : ""
+                  }`}
+                  aria-hidden={!isCustomGenre}
+                >
+                  <label>
+                    <span>World description</span>
+                    <textarea
+                      value={customWorldDescription}
+                      onChange={(event) =>
+                        setCustomWorldDescription(event.target.value)
+                      }
+                      placeholder="A sea of floating islands ruled by oathbound sky courts, where every spell costs a memory..."
+                      rows={7}
+                      tabIndex={isCustomGenre ? 0 : -1}
+                    />
+                  </label>
+                </div>
               </>
             ) : null}
 
@@ -338,6 +376,12 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                     <dt>Genre</dt>
                     <dd>{selectedGenre.label}</dd>
                   </div>
+                  {isCustomGenre ? (
+                    <div>
+                      <dt>World</dt>
+                      <dd>{customWorldDescription}</dd>
+                    </div>
+                  ) : null}
                   <div>
                     <dt>Character</dt>
                     <dd>{characterName || "Set later"}</dd>

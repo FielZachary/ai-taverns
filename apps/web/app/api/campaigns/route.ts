@@ -15,6 +15,9 @@ type CreateCampaignBody = {
   mode?: CampaignMode;
   title?: string;
   campaignGenre?: string;
+  campaignGenreKind?: "preset" | "custom";
+  campaignGenrePresetId?: string;
+  customWorldDescription?: string;
   ownerClientId?: string;
   playerName?: string;
   characterName?: string;
@@ -41,6 +44,9 @@ export async function POST(request: Request) {
   const mode = body.mode === "single_player" ? "single_player" : "multiplayer";
   const title = body.title?.trim();
   const campaignGenre = body.campaignGenre?.trim();
+  const campaignGenreKind =
+    body.campaignGenreKind === "custom" ? "custom" : "preset";
+  const customWorldDescription = body.customWorldDescription?.trim();
   const playerName =
     body.playerName?.trim() ||
     body.characterName?.trim() ||
@@ -48,6 +54,10 @@ export async function POST(request: Request) {
 
   if (!title || !campaignGenre) {
     return jsonError("A campaign title and genre are required.", 400);
+  }
+
+  if (campaignGenreKind === "custom" && !customWorldDescription) {
+    return jsonError("A custom world description is required.", 400);
   }
 
   if (mode === "single_player" && !body.characterName?.trim()) {
@@ -60,6 +70,9 @@ export async function POST(request: Request) {
       mode,
       title,
       campaignGenre,
+      campaignGenreKind,
+      campaignGenrePresetId: body.campaignGenrePresetId?.trim(),
+      customWorldDescription,
       ownerClientId: body.ownerClientId?.trim(),
       playerName,
       characterName: body.characterName?.trim(),

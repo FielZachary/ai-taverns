@@ -701,6 +701,7 @@ h1 {
 .creation-stage {
   display: grid;
   align-content: center;
+  gap: 18px;
   min-height: 360px;
   padding: clamp(18px, 4vw, 34px);
   border-top: 1px solid rgba(226, 176, 93, 0.2);
@@ -762,7 +763,7 @@ h1 {
 .mode-picker span,
 .new-adventure-form label {
   display: grid;
-  gap: 7px;
+  gap: 11px;
   min-width: 0;
 }
 
@@ -795,7 +796,7 @@ h1 {
 }
 
 .genre-picker legend {
-  margin-bottom: 9px;
+  margin-bottom: 12px;
   color: var(--gold-bright);
   font-size: 0.8rem;
   font-weight: 900;
@@ -839,6 +840,32 @@ h1 {
   font-size: 0.78rem;
   font-weight: 700;
   line-height: 1.35;
+}
+
+.custom-world-field {
+  display: grid;
+  grid-template-rows: 0fr;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(-6px);
+  transition:
+    grid-template-rows 220ms ease,
+    opacity 180ms ease,
+    transform 220ms ease;
+}
+
+.custom-world-field.expanded {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.custom-world-field > label {
+  min-height: 0;
+}
+
+.custom-world-field textarea {
+  min-height: 190px;
 }
 
 .new-adventure-form input,
