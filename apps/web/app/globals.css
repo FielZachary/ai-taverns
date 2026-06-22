@@ -609,7 +609,6 @@ h1 {
   display: grid;
   gap: 24px;
   width: min(100%, 1040px);
-  min-height: min(760px, calc(100dvh - 56px));
   padding: clamp(22px, 4vw, 38px);
   border: 1px solid var(--line);
   border-radius: 8px;
