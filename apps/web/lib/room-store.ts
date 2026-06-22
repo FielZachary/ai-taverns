@@ -232,33 +232,67 @@ async function assertCampaignAccessForUser(
     return;
   }
 
-  const result = client
-    ? await client.query<{ id: string }>(
-        `
-          select id
-          from players
-          where campaign_id = $1
-            and user_id::text = $2
-            and status = 'active'
-          limit 1
-        `,
-        [campaign.id, userId]
-      )
-    : await query<{ id: string }>(
-        `
-          select id
-          from players
-          where campaign_id = $1
-            and user_id::text = $2
-            and status = 'active'
-          limit 1
-        `,
-        [campaign.id, userId]
-      );
+  const player = await getActivePlayerForUser(campaign.id, userId, client);
 
-  if (!result.rows[0]) {
+  if (!player) {
     throw new HttpError("You do not have access to that campaign.", 403);
   }
+}
+
+async function getActivePlayerForUser(
+  campaignId: string,
+  userId: string,
+  client?: PoolClient
+) {
+  const result = client
+    ? await client.query<PlayerRow>(
+        `
+          select *
+          from players
+          where campaign_id = $1
+            and user_id = $2
+            and status = 'active'
+          order by created_at asc
+          limit 1
+        `,
+        [campaignId, userId]
+      )
+    : await query<PlayerRow>(
+        `
+          select *
+          from players
+          where campaign_id = $1
+            and user_id = $2
+            and status = 'active'
+          order by created_at asc
+          limit 1
+        `,
+        [campaignId, userId]
+      );
+
+  return result.rows[0] ?? null;
+}
+
+async function getActiveRoomPlayerForUser(
+  client: PoolClient,
+  campaignId: string,
+  clientId: string,
+  userId: string
+) {
+  const result = await client.query<PlayerRow>(
+    `
+      select *
+      from players
+      where campaign_id = $1
+        and client_id = $2
+        and user_id = $3
+        and status = 'active'
+      limit 1
+    `,
+    [campaignId, clientId, userId]
+  );
+
+  return result.rows[0] ?? null;
 }
 
 function assertCampaignOwnerForUser(campaign: CampaignRow, userId: string) {
@@ -642,17 +676,17 @@ export async function listCampaignSummaries(userId: string) {
       select distinct campaigns.*
       from campaigns
       left join players on players.campaign_id = campaigns.id
-        and players.user_id::text = $1
+        and players.user_id = $1
         and players.status = 'active'
       where campaigns.status = 'active'
         and (
-          campaigns.owner_user_id::text = $1
+          campaigns.owner_user_id = $2
           or players.id is not null
         )
       order by campaigns.updated_at desc, campaigns.created_at desc
       limit 100
     `,
-    [userId]
+    [userId, userId]
   );
 
   return result.rows.map(
@@ -687,7 +721,7 @@ export async function archiveCampaignById(campaignId: string, userId: string) {
       update campaigns
       set status = 'archived', deleted_at = now()
       where id = $1
-        and owner_user_id::text = $2
+        and owner_user_id = $2
         and status <> 'deleted'
       returning *
     `,
@@ -711,7 +745,7 @@ export async function renameCampaignById(
       update campaigns
       set title = $2
       where id = $1
-        and owner_user_id::text = $3
+        and owner_user_id = $3
         and status = 'active'
       returning *
     `,
@@ -978,7 +1012,7 @@ export async function archiveCampaignBySessionId(sessionId: string, userId: stri
       update campaigns
       set status = 'archived', deleted_at = now()
       where hermes_session_id = $1
-        and owner_user_id::text = $2
+        and owner_user_id = $2
         and status <> 'deleted'
       returning *
     `,
@@ -1000,7 +1034,7 @@ export async function renameCampaignBySessionId(
       update campaigns
       set title = $2
       where hermes_session_id = $1
-        and owner_user_id::text = $3
+        and owner_user_id = $3
         and status = 'active'
       returning *
     `,
@@ -1318,20 +1352,12 @@ export async function submitRoomTurn(
       throw new Error("Begin the adventure before sending turns.");
     }
 
-    const player = (
-      await client.query<PlayerRow>(
-      `
-        select *
-        from players
-        where campaign_id = $1
-          and client_id = $2
-          and user_id::text = $3
-          and status = 'active'
-        limit 1
-      `,
-        [campaign.id, playerId, userId]
-      )
-    ).rows[0];
+    const player = await getActiveRoomPlayerForUser(
+      client,
+      campaign.id,
+      playerId,
+      userId
+    );
 
     if (!player) {
       throw new Error("Join the room before submitting a turn.");
@@ -1405,20 +1431,7 @@ export async function submitSoloTurn(
       throw new HttpError("Solo turns are only available in singleplayer campaigns.", 400);
     }
 
-    const player = (
-      await client.query<PlayerRow>(
-        `
-          select *
-          from players
-          where campaign_id = $1
-            and user_id::text = $2
-            and status = 'active'
-          order by created_at asc
-          limit 1
-        `,
-        [campaign.id, userId]
-      )
-    ).rows[0];
+    const player = await getActivePlayerForUser(campaign.id, userId, client);
 
     if (!player) {
       throw new HttpError("A solo player profile is required.", 400);
