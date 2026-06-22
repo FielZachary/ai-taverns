@@ -18,9 +18,8 @@
 
 html,
 body {
-  height: 100%;
+  min-height: 100%;
   margin: 0;
-  overflow: hidden;
 }
 
 body {
@@ -36,12 +35,278 @@ body {
 }
 
 button,
-textarea {
+textarea,
+a {
   font: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
 }
 
 button {
   cursor: pointer;
+}
+
+.landing-page {
+  min-height: 100dvh;
+  overflow-x: hidden;
+  color: #fff8e8;
+  background: #050403;
+}
+
+.landing-hero {
+  position: relative;
+  display: grid;
+  min-height: 92dvh;
+  place-items: center;
+  padding: 28px clamp(18px, 4vw, 56px) 54px;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.landing-background,
+.landing-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+}
+
+.landing-background {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+.landing-scrim {
+  z-index: -1;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.64) 0%, rgba(0, 0, 0, 0.2) 44%, #050403 100%),
+    radial-gradient(circle at 50% 48%, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.7) 72%),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0.12) 46%, rgba(0, 0, 0, 0.56));
+}
+
+.landing-nav {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 78px;
+  padding: 20px clamp(18px, 4vw, 56px);
+  color: #fff8e8;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.84rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.landing-brand {
+  font-family:
+    Georgia,
+    "Times New Roman",
+    serif;
+  font-size: clamp(1.1rem, 2.3vw, 1.65rem);
+  text-transform: none;
+}
+
+.landing-nav nav {
+  display: flex;
+  align-items: center;
+  gap: clamp(18px, 3vw, 34px);
+}
+
+.landing-nav a {
+  text-shadow: 0 1px 18px rgba(0, 0, 0, 0.72);
+}
+
+.landing-nav a:hover {
+  color: #ffcf6f;
+}
+
+.landing-hero-copy {
+  display: grid;
+  justify-items: center;
+  width: min(100%, 980px);
+  padding-top: 64px;
+  text-align: center;
+  text-shadow: 0 2px 28px rgba(0, 0, 0, 0.82);
+}
+
+.landing-kicker,
+.landing-section-label,
+.landing-scroll-cue,
+.landing-author {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.landing-kicker {
+  margin-bottom: 18px;
+  color: #ffcf6f;
+  font-size: 0.82rem;
+}
+
+.landing-hero h1 {
+  max-width: 15ch;
+  margin-bottom: 30px;
+  font-size: clamp(2.25rem, 7vw, 5.8rem);
+  line-height: 0.96;
+}
+
+.landing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+
+.landing-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 210px;
+  min-height: 66px;
+  padding: 20px 34px;
+  border-radius: 8px;
+  font-family:
+    Georgia,
+    "Times New Roman",
+    serif;
+  font-size: 0.96rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-align: center;
+  text-transform: uppercase;
+  transition:
+    border-color 180ms ease,
+    color 180ms ease,
+    transform 180ms ease,
+    background 180ms ease;
+}
+
+.landing-button:hover {
+  transform: translateY(-1px);
+}
+
+.landing-button-primary {
+  border: 1px solid #ffcf6f;
+  color: #080605;
+  background: #ffcf6f;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
+}
+
+.landing-button-primary:hover {
+  background: #ffe4a3;
+}
+
+.landing-button-secondary {
+  border: 1px solid rgba(255, 207, 111, 0.72);
+  color: #ffcf6f;
+  background: rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(10px);
+}
+
+.landing-button-secondary:hover {
+  border-color: #ffe4a3;
+  color: #ffe4a3;
+}
+
+.landing-scroll-cue {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  color: rgba(255, 248, 232, 0.76);
+  font-size: 0.68rem;
+  transform: translateX(-50%);
+}
+
+.landing-section {
+  width: min(100% - 36px, 1120px);
+  margin: 0 auto;
+  padding: clamp(56px, 9vw, 104px) 0;
+}
+
+.landing-section h2 {
+  max-width: 760px;
+  margin-bottom: 18px;
+  font-size: clamp(2rem, 5vw, 4rem);
+  line-height: 1;
+}
+
+.landing-section > p {
+  max-width: 720px;
+  color: rgba(255, 248, 232, 0.74);
+  font-size: clamp(1rem, 2vw, 1.22rem);
+  line-height: 1.7;
+}
+
+.landing-section-label {
+  margin-bottom: 16px;
+  color: #68d2b3;
+  font-size: 0.78rem;
+}
+
+.landing-steps,
+.landing-scenario-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 22px;
+  margin-top: 44px;
+}
+
+.landing-steps article,
+.landing-scenario-grid article {
+  min-width: 0;
+  border-top: 1px solid rgba(255, 207, 111, 0.34);
+  padding-top: 22px;
+}
+
+.landing-steps span {
+  display: block;
+  margin-bottom: 18px;
+  color: #ffcf6f;
+  font-size: 2.8rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.landing-steps h3,
+.landing-scenario-grid h3 {
+  margin-bottom: 10px;
+  font-size: clamp(1.25rem, 2.4vw, 1.75rem);
+}
+
+.landing-steps p,
+.landing-scenario-grid p {
+  margin-bottom: 0;
+  color: rgba(255, 248, 232, 0.7);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.96rem;
+  line-height: 1.6;
+}
+
+.landing-scenarios {
+  display: grid;
+  justify-items: start;
+  padding-top: 34px;
+  padding-bottom: 96px;
+}
+
+.landing-scenario-grid {
+  margin-bottom: 38px;
+}
+
+.landing-author {
+  color: #68d2b3;
+  font-size: 0.72rem;
 }
 
 .table-page {
@@ -1154,6 +1419,11 @@ h1 {
 }
 
 @media (max-width: 1040px) {
+  .landing-steps,
+  .landing-scenario-grid {
+    grid-template-columns: 1fr;
+  }
+
   .table-grid,
   .table-grid.session-panel-collapsed {
     grid-template-columns: 252px minmax(0, 1fr);
@@ -1166,6 +1436,49 @@ h1 {
 }
 
 @media (max-width: 720px) {
+  .landing-hero {
+    min-height: 92dvh;
+    padding: 88px 18px 48px;
+  }
+
+  .landing-background {
+    object-position: 58% center;
+  }
+
+  .landing-nav {
+    min-height: 64px;
+    padding: 16px 18px;
+  }
+
+  .landing-nav nav {
+    gap: 14px;
+    font-size: 0.76rem;
+  }
+
+  .landing-hero-copy {
+    padding-top: 0;
+  }
+
+  .landing-hero h1 {
+    max-width: 12ch;
+    margin-bottom: 24px;
+  }
+
+  .landing-actions {
+    width: 100%;
+  }
+
+  .landing-button {
+    width: min(100%, 330px);
+    min-height: 58px;
+    padding: 17px 22px;
+    font-size: 0.88rem;
+  }
+
+  .landing-section {
+    width: min(100% - 32px, 1120px);
+  }
+
   .table-page {
     padding: 0;
   }

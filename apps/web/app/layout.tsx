@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Hermes Table",
+  title: "AI Taverns",
   description: "A fantasy AI dungeon master playing table."
 };
 
