@@ -702,13 +702,16 @@ h1 {
   display: grid;
   align-content: center;
   gap: 18px;
-  min-height: 360px;
   padding: clamp(18px, 4vw, 34px);
   border-top: 1px solid rgba(226, 176, 93, 0.2);
   border-bottom: 1px solid rgba(226, 176, 93, 0.2);
   background:
     linear-gradient(90deg, transparent, rgba(244, 207, 122, 0.08), transparent),
     rgba(10, 8, 7, 0.18);
+}
+
+.creation-stage-roomy {
+  min-height: 360px;
 }
 
 .mode-picker {

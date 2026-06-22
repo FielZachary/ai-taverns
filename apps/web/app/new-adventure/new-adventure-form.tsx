@@ -225,7 +225,11 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
             ))}
           </ol>
 
-          <div className="creation-stage">
+          <div
+            className={`creation-stage ${
+              stepIndex === 0 || isCustomGenre ? "creation-stage-roomy" : ""
+            }`}
+          >
             {stepIndex === 0 ? (
               <div className="mode-picker" role="radiogroup" aria-label="Campaign mode">
                 <button
