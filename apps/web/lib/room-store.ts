@@ -206,15 +206,23 @@ async function resolveCampaign(
   sessionId: string,
   client?: PoolClient
 ) {
-  const idFilter = isUuid(roomId) ? "id = $1 or" : "";
-  const statement = `
-    select *
-    from campaigns
-    where (${idFilter} hermes_session_id = $2 or hermes_session_id = $1)
-      and status <> 'deleted'
-    order by created_at desc
-    limit 1
-  `;
+  const statement = isUuid(roomId)
+    ? `
+        select *
+        from campaigns
+        where (id = $1 or hermes_session_id = $2)
+          and status <> 'deleted'
+        order by created_at desc
+        limit 1
+      `
+    : `
+        select *
+        from campaigns
+        where (hermes_session_id = $1 or hermes_session_id = $2)
+          and status <> 'deleted'
+        order by created_at desc
+        limit 1
+      `;
   const values = [roomId, sessionId];
   const result = client
     ? await client.query<CampaignRow>(statement, values)
