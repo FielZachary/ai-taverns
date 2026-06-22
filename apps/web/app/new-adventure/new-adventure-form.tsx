@@ -48,8 +48,8 @@ function createClientId() {
 export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
   const [stepIndex, setStepIndex] = useState(0);
   const [mode, setMode] = useState<CampaignMode>("single_player");
-  const [title, setTitle] = useState("Lanterns Below the Old Road");
   const [campaignGenre, setCampaignGenre] = useState(campaignGenres[0].id);
+  const [customWorldName, setCustomWorldName] = useState("");
   const [customWorldDescription, setCustomWorldDescription] = useState("");
   const [characterName, setCharacterName] = useState("");
   const [characterSheet, setCharacterSheet] = useState(defaultCharacterSheet);
@@ -62,13 +62,16 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
     campaignGenres.find((genre) => genre.id === campaignGenre) ??
     campaignGenres[0];
   const isCustomGenre = campaignGenre === "custom";
+  const campaignDisplayName = isCustomGenre
+    ? customWorldName.trim() || "Custom World"
+    : `${selectedGenre.label} Adventure`;
   const stepTitle = useMemo(() => {
     if (stepIndex === 0) {
       return "Choose your game mode";
     }
 
     if (stepIndex === 1) {
-      return mode === "single_player" ? "Name the campaign" : "Name the table";
+      return "Choose the campaign genre";
     }
 
     if (stepIndex === 2) {
@@ -94,8 +97,8 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
   function canAdvance() {
     if (stepIndex === 1) {
       return Boolean(
-        title.trim() &&
-          campaignGenre &&
+        campaignGenre &&
+          (!isCustomGenre || customWorldName.trim()) &&
           (!isCustomGenre || customWorldDescription.trim())
       );
     }
@@ -114,8 +117,8 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
       setError(
         stepIndex === 1
           ? isCustomGenre
-            ? "Give the adventure a title and describe the custom world before continuing."
-            : "Give the adventure a title and genre before continuing."
+            ? "Name the world and describe it before continuing."
+            : "Choose a campaign genre before continuing."
           : mode === "single_player"
             ? "Add your character name before continuing."
             : "Add your character details or continue without them."
@@ -148,10 +151,11 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
         },
         body: JSON.stringify({
           mode,
-          title,
+          title: campaignDisplayName,
           campaignGenre: selectedGenre.label,
           campaignGenreKind: isCustomGenre ? "custom" : "preset",
           campaignGenrePresetId: isCustomGenre ? undefined : selectedGenre.id,
+          customWorldName: isCustomGenre ? customWorldName.trim() : undefined,
           customWorldDescription: isCustomGenre
             ? customWorldDescription.trim()
             : undefined,
@@ -257,18 +261,6 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
 
             {stepIndex === 1 ? (
               <>
-                <label>
-                  <span>
-                    {mode === "single_player" ? "Campaign title" : "Table title"}
-                  </span>
-                  <input
-                    required
-                    value={title}
-                    onChange={(event) => setTitle(event.target.value)}
-                    autoFocus
-                  />
-                </label>
-
                 <fieldset className="genre-picker">
                   <legend>Campaign genre</legend>
                   <div>
@@ -293,6 +285,15 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                   }`}
                   aria-hidden={!isCustomGenre}
                 >
+                  <label>
+                    <span>World name</span>
+                    <input
+                      value={customWorldName}
+                      onChange={(event) => setCustomWorldName(event.target.value)}
+                      placeholder="The Ashen Crownlands"
+                      tabIndex={isCustomGenre ? 0 : -1}
+                    />
+                  </label>
                   <label>
                     <span>World description</span>
                     <textarea
@@ -351,7 +352,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                   </div>
                   <div>
                     <dt>{mode === "single_player" ? "Campaign" : "Table"}</dt>
-                    <dd>{title}</dd>
+                    <dd>{campaignDisplayName}</dd>
                   </div>
                   <div>
                     <dt>Genre</dt>

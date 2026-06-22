@@ -18,6 +18,7 @@ type CreateCampaignBody = {
   campaignGenre?: string;
   campaignGenreKind?: "preset" | "custom";
   campaignGenrePresetId?: string;
+  customWorldName?: string;
   customWorldDescription?: string;
   ownerClientId?: string;
   playerName?: string;
@@ -43,9 +44,9 @@ export async function GET() {
 export async function POST(request: Request) {
   const body = (await request.json()) as CreateCampaignBody;
   const mode = body.mode === "single_player" ? "single_player" : "multiplayer";
-  const title = body.title?.trim();
   const campaignGenreKind =
     body.campaignGenreKind === "custom" ? "custom" : "preset";
+  const customWorldName = body.customWorldName?.trim();
   const campaignGenrePresetId = body.campaignGenrePresetId?.trim();
   const campaignGenrePreset = getCampaignGenrePreset(campaignGenrePresetId);
   const campaignGenre =
@@ -57,17 +58,27 @@ export async function POST(request: Request) {
       ? body.customWorldDescription?.trim()
       : campaignGenrePreset?.promptBrief;
   const customWorldDescription = body.customWorldDescription?.trim();
+  const title =
+    body.title?.trim() ||
+    (campaignGenreKind === "custom"
+      ? customWorldName
+      : campaignGenre
+        ? `${campaignGenre} Adventure`
+        : undefined);
   const playerName =
     body.playerName?.trim() ||
     body.characterName?.trim() ||
     (mode === "single_player" ? "Solo Player" : "Table Owner");
 
   if (!title || !campaignGenre || !campaignGenrePromptBrief) {
-    return jsonError("A campaign title and genre are required.", 400);
+    return jsonError("A campaign genre is required.", 400);
   }
 
-  if (campaignGenreKind === "custom" && !customWorldDescription) {
-    return jsonError("A custom world description is required.", 400);
+  if (
+    campaignGenreKind === "custom" &&
+    (!customWorldName || !customWorldDescription)
+  ) {
+    return jsonError("A custom world name and description are required.", 400);
   }
 
   if (mode === "single_player" && !body.characterName?.trim()) {
@@ -83,6 +94,7 @@ export async function POST(request: Request) {
       campaignGenreKind,
       campaignGenrePresetId,
       campaignGenrePromptBrief,
+      customWorldName,
       customWorldDescription,
       ownerClientId: body.ownerClientId?.trim(),
       playerName,
