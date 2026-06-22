@@ -50,12 +50,12 @@ export async function assertCampaignAccess(campaignId: string, userId: string) {
       where campaigns.id = $1
         and campaigns.status <> 'deleted'
         and (
-          campaigns.owner_user_id = $2
+          campaigns.owner_user_id::text = $2
           or exists (
             select 1
             from players
             where players.campaign_id = campaigns.id
-              and players.user_id = $2
+              and players.user_id::text = $2
               and players.status = 'active'
           )
         )
@@ -80,12 +80,12 @@ export async function assertCampaignAccessBySessionId(
       where campaigns.hermes_session_id = $1
         and campaigns.status <> 'deleted'
         and (
-          campaigns.owner_user_id = $2
+          campaigns.owner_user_id::text = $2
           or exists (
             select 1
             from players
             where players.campaign_id = campaigns.id
-              and players.user_id = $2
+              and players.user_id::text = $2
               and players.status = 'active'
           )
         )
@@ -105,7 +105,7 @@ export async function assertCampaignOwner(campaignId: string, userId: string) {
       select id
       from campaigns
       where id = $1
-        and owner_user_id = $2
+        and owner_user_id::text = $2
         and status <> 'deleted'
       limit 1
     `,

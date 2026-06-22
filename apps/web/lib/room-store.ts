@@ -238,7 +238,7 @@ async function assertCampaignAccessForUser(
           select id
           from players
           where campaign_id = $1
-            and user_id = $2
+            and user_id::text = $2
             and status = 'active'
           limit 1
         `,
@@ -249,7 +249,7 @@ async function assertCampaignAccessForUser(
           select id
           from players
           where campaign_id = $1
-            and user_id = $2
+            and user_id::text = $2
             and status = 'active'
           limit 1
         `,
@@ -642,11 +642,11 @@ export async function listCampaignSummaries(userId: string) {
       select distinct campaigns.*
       from campaigns
       left join players on players.campaign_id = campaigns.id
-        and players.user_id = $1
+        and players.user_id::text = $1
         and players.status = 'active'
       where campaigns.status = 'active'
         and (
-          campaigns.owner_user_id = $1
+          campaigns.owner_user_id::text = $1
           or players.id is not null
         )
       order by campaigns.updated_at desc, campaigns.created_at desc
@@ -687,7 +687,7 @@ export async function archiveCampaignById(campaignId: string, userId: string) {
       update campaigns
       set status = 'archived', deleted_at = now()
       where id = $1
-        and owner_user_id = $2
+        and owner_user_id::text = $2
         and status <> 'deleted'
       returning *
     `,
@@ -711,7 +711,7 @@ export async function renameCampaignById(
       update campaigns
       set title = $2
       where id = $1
-        and owner_user_id = $3
+        and owner_user_id::text = $3
         and status = 'active'
       returning *
     `,
@@ -978,7 +978,7 @@ export async function archiveCampaignBySessionId(sessionId: string, userId: stri
       update campaigns
       set status = 'archived', deleted_at = now()
       where hermes_session_id = $1
-        and owner_user_id = $2
+        and owner_user_id::text = $2
         and status <> 'deleted'
       returning *
     `,
@@ -1000,7 +1000,7 @@ export async function renameCampaignBySessionId(
       update campaigns
       set title = $2
       where hermes_session_id = $1
-        and owner_user_id = $3
+        and owner_user_id::text = $3
         and status = 'active'
       returning *
     `,
@@ -1325,7 +1325,7 @@ export async function submitRoomTurn(
         from players
         where campaign_id = $1
           and client_id = $2
-          and user_id = $3
+          and user_id::text = $3
           and status = 'active'
         limit 1
       `,
@@ -1411,7 +1411,7 @@ export async function submitSoloTurn(
           select *
           from players
           where campaign_id = $1
-            and user_id = $2
+            and user_id::text = $2
             and status = 'active'
           order by created_at asc
           limit 1
