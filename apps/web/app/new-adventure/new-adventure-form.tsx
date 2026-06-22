@@ -9,6 +9,10 @@ import {
   Swords,
   Users
 } from "lucide-react";
+import {
+  campaignGenrePresets,
+  customCampaignGenre
+} from "@/lib/campaign-genres";
 import { defaultCharacterSheet } from "@/components/playing/PlayerPanel";
 
 type CampaignMode = "single_player" | "multiplayer";
@@ -27,31 +31,8 @@ type CreateCampaignResponse = {
 const playerIdStorageKey = "ai-dnd.playerId";
 const steps = ["Mode", "Campaign", "Character", "Review"];
 const campaignGenres = [
-  {
-    id: "classic_fantasy",
-    label: "Classic Fantasy",
-    description: "Ancient ruins, strange magic, and mythic quests."
-  },
-  {
-    id: "dark_fantasy",
-    label: "Dark Fantasy",
-    description: "Curses, hard choices, and candlelit danger."
-  },
-  {
-    id: "high_adventure",
-    label: "High Adventure",
-    description: "Bold heroes, wild travel, and sweeping stakes."
-  },
-  {
-    id: "mystery",
-    label: "Mystery",
-    description: "Secrets, suspects, and clues hidden in plain sight."
-  },
-  {
-    id: "custom",
-    label: "Custom World",
-    description: "Describe the tone, setting, and premise yourself."
-  }
+  ...campaignGenrePresets,
+  customCampaignGenre
 ];
 
 function createClientId() {
@@ -300,7 +281,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                         onClick={() => setCampaignGenre(genre.id)}
                       >
                         <strong>{genre.label}</strong>
-                        <small>{genre.description}</small>
+                        <small>{genre.uiDescription}</small>
                       </button>
                     ))}
                   </div>

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { HttpError, requireUser } from "@/lib/auth";
+import { getCampaignGenrePreset } from "@/lib/campaign-genres";
 import { jsonError } from "@/lib/hermes";
 import {
   createCampaignForMode,
@@ -43,16 +44,25 @@ export async function POST(request: Request) {
   const body = (await request.json()) as CreateCampaignBody;
   const mode = body.mode === "single_player" ? "single_player" : "multiplayer";
   const title = body.title?.trim();
-  const campaignGenre = body.campaignGenre?.trim();
   const campaignGenreKind =
     body.campaignGenreKind === "custom" ? "custom" : "preset";
+  const campaignGenrePresetId = body.campaignGenrePresetId?.trim();
+  const campaignGenrePreset = getCampaignGenrePreset(campaignGenrePresetId);
+  const campaignGenre =
+    campaignGenreKind === "custom"
+      ? body.campaignGenre?.trim() || "Custom World"
+      : campaignGenrePreset?.label;
+  const campaignGenrePromptBrief =
+    campaignGenreKind === "custom"
+      ? body.customWorldDescription?.trim()
+      : campaignGenrePreset?.promptBrief;
   const customWorldDescription = body.customWorldDescription?.trim();
   const playerName =
     body.playerName?.trim() ||
     body.characterName?.trim() ||
     (mode === "single_player" ? "Solo Player" : "Table Owner");
 
-  if (!title || !campaignGenre) {
+  if (!title || !campaignGenre || !campaignGenrePromptBrief) {
     return jsonError("A campaign title and genre are required.", 400);
   }
 
@@ -71,7 +81,8 @@ export async function POST(request: Request) {
       title,
       campaignGenre,
       campaignGenreKind,
-      campaignGenrePresetId: body.campaignGenrePresetId?.trim(),
+      campaignGenrePresetId,
+      campaignGenrePromptBrief,
       customWorldDescription,
       ownerClientId: body.ownerClientId?.trim(),
       playerName,

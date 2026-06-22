@@ -739,6 +739,7 @@ export async function createCampaignForMode(input: {
   campaignGenre?: string;
   campaignGenreKind?: "preset" | "custom";
   campaignGenrePresetId?: string;
+  campaignGenrePromptBrief?: string;
   customWorldDescription?: string;
   ownerClientId?: string;
   playerName: string;
@@ -772,6 +773,7 @@ export async function createCampaignForMode(input: {
               kind: input.campaignGenreKind ?? "preset",
               presetId: input.campaignGenrePresetId ?? null,
               label: input.campaignGenre ?? null,
+              promptBrief: input.campaignGenrePromptBrief ?? null,
               customWorldDescription: input.customWorldDescription ?? null
             }
           })
@@ -828,8 +830,8 @@ export async function createCampaignForMode(input: {
       openingSceneRequest,
       "",
       input.campaignGenre ? `Campaign genre: ${input.campaignGenre}` : "",
-      input.customWorldDescription
-        ? `Custom world description: ${input.customWorldDescription}`
+      input.campaignGenrePromptBrief
+        ? `Campaign genre guidance: ${input.campaignGenrePromptBrief}`
         : "",
       `Solo player: ${input.playerName}`,
       `Character: ${input.characterName || input.playerName}`,
@@ -867,6 +869,7 @@ export async function createCampaignForMode(input: {
             kind: input.campaignGenreKind ?? "preset",
             presetId: input.campaignGenrePresetId ?? null,
             label: input.campaignGenre ?? null,
+            promptBrief: input.campaignGenrePromptBrief ?? null,
             customWorldDescription: input.customWorldDescription ?? null
           }
         })
