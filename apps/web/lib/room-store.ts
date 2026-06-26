@@ -1,6 +1,10 @@
 import { randomInt } from "crypto";
 import type { PoolClient } from "pg";
-import type { DiceRollRequest, GameMessage } from "@/lib/game-types";
+import type {
+  DiceRollRequest,
+  DiceRollResult,
+  GameMessage
+} from "@/lib/game-types";
 import { HttpError } from "@/lib/auth";
 import { query, withTransaction } from "@/lib/db";
 import {
@@ -216,16 +220,58 @@ function rollDiceExpression(dice: string, modifier: number | undefined) {
   };
 }
 
-function formatRollSubmission(request: DiceRollRequest) {
-  const result = rollDiceExpression(request.dice, request.modifier);
-  const rollsText =
-    result.rolls.length === 1
-      ? `natural roll ${result.rolls[0]}`
-      : `natural rolls ${result.rolls.join(", ")}`;
+function validateRollSubmissionResult(
+  request: DiceRollRequest,
+  result: DiceRollResult | undefined
+) {
+  if (!result) {
+    return rollDiceExpression(request.dice, request.modifier);
+  }
 
-  return `Rolled ${request.label}: ${request.dice}${modifierText(
-    request.modifier
-  )} = ${result.total} (${rollsText})`;
+  const match = request.dice.trim().match(/^(\d*)d(\d+)$/i);
+
+  if (!match) {
+    throw new HttpError("Hermes requested an unsupported dice roll.", 400);
+  }
+
+  const count = Number(match[1] || "1");
+  const sides = Number(match[2]);
+
+  if (
+    !Array.isArray(result.rolls) ||
+    result.rolls.length !== count ||
+    !result.rolls.every(
+      (roll) => Number.isInteger(roll) && roll >= 1 && roll <= sides
+    )
+  ) {
+    throw new HttpError("The submitted roll result is invalid.", 400);
+  }
+
+  const total = result.rolls.reduce(
+    (sum, roll) => sum + roll,
+    request.modifier ?? 0
+  );
+
+  if (result.total !== total) {
+    throw new HttpError("The submitted roll total does not match the dice.", 400);
+  }
+
+  return result;
+}
+
+function formatRollSubmission(
+  request: DiceRollRequest,
+  submittedResult?: DiceRollResult
+) {
+  const result = validateRollSubmissionResult(request, submittedResult);
+  const rollText =
+    result.rolls.length === 1
+      ? String(result.rolls[0])
+      : result.rolls.join(", ");
+
+  return `I rolled ${request.dice}${modifierText(request.modifier)}: ${
+    result.total
+  } (${rollText}) for ${request.label}.`;
 }
 
 async function setPendingRollRequests(
@@ -1458,7 +1504,9 @@ export async function submitRoomTurn(
   playerId: string,
   content: string,
   userId: string,
-  rollRequestId?: string
+  rollRequestId?: string,
+  rollResult?: DiceRollResult,
+  clientMessageId?: string
 ) {
   const submissionState = await withTransaction(async (client) => {
     const campaign = await resolveCampaign(roomId, sessionId, client);
@@ -1504,7 +1552,7 @@ export async function submitRoomTurn(
 
     const turn = await ensureCollectingTurn(client, campaign.id);
     const trimmedContent = pendingRollRequest
-      ? formatRollSubmission(pendingRollRequest)
+      ? formatRollSubmission(pendingRollRequest, rollResult)
       : content.trim();
 
     if (!trimmedContent) {
@@ -1534,7 +1582,7 @@ export async function submitRoomTurn(
       turnId: turn.id,
       clientId: player.client_id,
       role: "player",
-      messageId: crypto.randomUUID(),
+      messageId: clientMessageId || crypto.randomUUID(),
       content: `${player.username} (${player.character_name}): ${trimmedContent}`
     });
 
@@ -1566,7 +1614,9 @@ export async function submitSoloTurn(
   campaignId: string,
   content: string,
   userId: string,
-  rollRequestId?: string
+  rollRequestId?: string,
+  rollResult?: DiceRollResult,
+  clientMessageId?: string
 ) {
   const soloState = await withTransaction(async (client) => {
     const campaign = (
@@ -1613,7 +1663,7 @@ export async function submitSoloTurn(
 
     const turn = await ensureCollectingTurn(client, campaign.id);
     const trimmedContent = pendingRollRequest
-      ? formatRollSubmission(pendingRollRequest)
+      ? formatRollSubmission(pendingRollRequest, rollResult)
       : content.trim();
 
     if (!trimmedContent) {
@@ -1646,7 +1696,7 @@ export async function submitSoloTurn(
       turnId: turn.id,
       clientId: player.client_id,
       role: "player",
-      messageId: crypto.randomUUID(),
+      messageId: clientMessageId || crypto.randomUUID(),
       content: trimmedContent
     });
 

@@ -18,7 +18,11 @@ import {
   Send,
   X
 } from "lucide-react";
-import type { DiceRollRequest, GameMessage } from "@/lib/game-types";
+import type {
+  DiceRollRequest,
+  DiceRollResult,
+  GameMessage
+} from "@/lib/game-types";
 import {
   ChatHistorySidebar,
   type ChatSummary
@@ -117,6 +121,61 @@ function createClientId() {
   return `id-${Date.now().toString(36)}-${Math.random()
     .toString(36)
     .slice(2, 10)}`;
+}
+
+function modifierText(modifier: number | undefined) {
+  if (!modifier) {
+    return "";
+  }
+
+  return modifier > 0 ? ` + ${modifier}` : ` - ${Math.abs(modifier)}`;
+}
+
+function rollDiceExpression(dice: string, modifier: number | undefined) {
+  const match = dice.trim().match(/^(\d*)d(\d+)$/i);
+
+  if (!match) {
+    throw new Error("Hermes requested an unsupported dice roll.");
+  }
+
+  const count = Number(match[1] || "1");
+  const sides = Number(match[2]);
+
+  if (
+    !Number.isInteger(count) ||
+    !Number.isInteger(sides) ||
+    count < 1 ||
+    count > 20 ||
+    sides < 2 ||
+    sides > 1000
+  ) {
+    throw new Error("Hermes requested an unsupported dice roll.");
+  }
+
+  const rolls = Array.from(
+    { length: count },
+    () => Math.floor(Math.random() * sides) + 1
+  );
+  const total = rolls.reduce((sum, roll) => sum + roll, modifier ?? 0);
+
+  return {
+    rolls,
+    total
+  };
+}
+
+function formatRollSubmission(
+  request: DiceRollRequest,
+  result: DiceRollResult
+) {
+  const rollText =
+    result.rolls.length === 1
+      ? String(result.rolls[0])
+      : result.rolls.join(", ");
+
+  return `I rolled ${request.dice}${modifierText(request.modifier)}: ${
+    result.total
+  } (${rollText}) for ${request.label}.`;
 }
 
 async function getApiErrorMessage(response: Response, fallback: string) {
@@ -877,8 +936,27 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     }
 
     setInputValidationMessage("");
+    const rollResult = rollDiceExpression(
+      pendingRollRequest.dice,
+      pendingRollRequest.modifier
+    );
+    const rollMessage: GameMessage = {
+      id: createClientId(),
+      role: "player",
+      content: formatRollSubmission(pendingRollRequest, rollResult),
+      createdAt: new Date().toISOString()
+    };
+
+    setMessages((currentMessages) => [...currentMessages, rollMessage]);
     setIsSending(true);
     setDraft("");
+    setAvailableCampaigns((currentCampaigns) =>
+      updateCampaignPreview(
+        currentCampaigns,
+        activeCampaign.id,
+        rollMessage.content
+      )
+    );
 
     try {
       const response = await fetch(
@@ -893,13 +971,17 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
           body: JSON.stringify(
             isSinglePlayer
               ? {
-                  rollRequestId: pendingRollRequest.id
+                  rollRequestId: pendingRollRequest.id,
+                  rollResult,
+                  clientMessageId: rollMessage.id
                 }
               : {
                   roomId: activeCampaign.id,
                   sessionId: activeCampaign.hermesSessionId,
                   playerId,
-                  rollRequestId: pendingRollRequest.id
+                  rollRequestId: pendingRollRequest.id,
+                  rollResult,
+                  clientMessageId: rollMessage.id
                 }
           )
         }

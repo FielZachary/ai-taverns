@@ -16,6 +16,11 @@ export type DiceRollRequest = {
   advantageState?: string;
 };
 
+export type DiceRollResult = {
+  rolls: number[];
+  total: number;
+};
+
 export type HermesTurnRequest = {
   message: string;
   history: GameMessage[];

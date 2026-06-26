@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { HttpError, requireUser } from "@/lib/auth";
 import { submitRoomTurn } from "@/lib/room-store";
 import { jsonError } from "@/lib/hermes";
+import type { DiceRollResult } from "@/lib/game-types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +14,8 @@ type SubmitTurnBody = {
   playerId?: string;
   message?: string;
   rollRequestId?: string;
+  rollResult?: DiceRollResult;
+  clientMessageId?: string;
 };
 
 export async function POST(request: Request) {
@@ -20,6 +23,7 @@ export async function POST(request: Request) {
   const playerId = body.playerId?.trim();
   const message = body.message?.trim();
   const rollRequestId = body.rollRequestId?.trim();
+  const clientMessageId = body.clientMessageId?.trim();
   const sessionId = body.sessionId?.trim() || "new-adventure";
   const roomId = body.roomId?.trim() || sessionId;
 
@@ -36,7 +40,9 @@ export async function POST(request: Request) {
         playerId,
         message ?? "",
         user.id,
-        rollRequestId
+        rollRequestId,
+        body.rollResult,
+        clientMessageId
       )
     );
   } catch (error) {
