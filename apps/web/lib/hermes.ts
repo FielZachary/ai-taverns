@@ -220,6 +220,12 @@ export function normalizeHermesContent(content: string | undefined) {
     return "";
   }
 
+  try {
+    return parseHermesDmContract(text).publicNarration;
+  } catch {
+    // Older Hermes messages and user messages are plain text.
+  }
+
   const replyMarkers = ["Dungeon Master", "Hermes"];
   const visibleReplyMarker = replyMarkers
     .map((marker) => ({
