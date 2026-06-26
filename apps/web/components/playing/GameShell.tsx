@@ -34,7 +34,7 @@ import {
   PlayerPanel,
   type PlayerProfile
 } from "./PlayerPanel";
-import { PlayerInput } from "./PlayerInput";
+import { PlayerInput, type DiceFace, type QueuedDice } from "./PlayerInput";
 
 const openingMessages: GameMessage[] = [];
 const playerIdStorageKey = "ai-dnd.playerId";
@@ -161,6 +161,51 @@ function rollDiceExpression(dice: string, modifier: number | undefined) {
   return {
     rolls,
     total
+  };
+}
+
+function queuedDiceEntries(queuedDice: QueuedDice) {
+  const faceOrder: DiceFace[] = ["d4", "d6", "d8", "d10", "d12", "d20"];
+
+  return faceOrder
+    .map((face) => ({
+      face,
+      count: queuedDice[face] ?? 0
+    }))
+    .filter((entry) => entry.count > 0);
+}
+
+function diceExpressionFromQueue(queuedDice: QueuedDice) {
+  return queuedDiceEntries(queuedDice)
+    .map(({ face, count }) => `${count}${face}`)
+    .join(" + ");
+}
+
+function rollQueuedDice(queuedDice: QueuedDice) {
+  const entries = queuedDiceEntries(queuedDice);
+  const rollsByFace = entries.map(({ face, count }) => {
+    const sides = Number(face.slice(1));
+    const rolls = Array.from(
+      { length: count },
+      () => Math.floor(Math.random() * sides) + 1
+    );
+
+    return {
+      face,
+      rolls
+    };
+  });
+  const total = rollsByFace.reduce(
+    (sum, group) => sum + group.rolls.reduce((groupSum, roll) => groupSum + roll, 0),
+    0
+  );
+  const details = rollsByFace
+    .map(({ face, rolls }) => `${face}: ${rolls.join(", ")}`)
+    .join("; ");
+
+  return {
+    expression: diceExpressionFromQueue(queuedDice),
+    content: `I rolled ${diceExpressionFromQueue(queuedDice)}: ${total} (${details}).`
   };
 }
 
@@ -930,12 +975,20 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     void sendTurn(draft);
   }
 
-  async function sendPendingRoll() {
+  async function sendPendingRoll(queuedDice: QueuedDice) {
     if (!pendingRollRequest || isSending || !activeCampaign) {
       return;
     }
 
     setInputValidationMessage("");
+    const queuedExpression = diceExpressionFromQueue(queuedDice);
+
+    if (queuedExpression !== pendingRollRequest.dice) {
+      setInputValidationMessage(`Queue ${pendingRollRequest.dice} to continue.`);
+      setInputValidationPulse((currentPulse) => currentPulse + 1);
+      return;
+    }
+
     const rollResult = rollDiceExpression(
       pendingRollRequest.dice,
       pendingRollRequest.modifier
@@ -1032,18 +1085,19 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     }
   }
 
-  function handleRollD20() {
+  function handleRollDice(queuedDice: QueuedDice) {
     if (pendingRollRequest) {
-      void sendPendingRoll();
+      void sendPendingRoll(queuedDice);
       return;
     }
 
-    const roll = Math.floor(Math.random() * 20) + 1;
-    const rollText = `I rolled a d20: ${roll}`;
+    const queuedRoll = rollQueuedDice(queuedDice);
 
     setInputValidationMessage("");
     setDraft((currentDraft) =>
-      currentDraft.trim() ? `${currentDraft.trim()}\n${rollText}` : rollText
+      currentDraft.trim()
+        ? `${currentDraft.trim()}\n${queuedRoll.content}`
+        : queuedRoll.content
     );
     inputRef.current?.focus();
   }
@@ -1246,7 +1300,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
               validationMessage={inputValidationMessage}
               validationPulse={inputValidationPulse}
               onDraftChange={setDraft}
-              onRollD20={handleRollD20}
+              onRollDice={handleRollDice}
               onSubmit={handleSubmit}
             />
           </div>

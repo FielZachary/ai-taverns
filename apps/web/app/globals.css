@@ -1658,12 +1658,18 @@ h1 {
   color: rgba(249, 237, 214, 0.44);
 }
 
+.dice-roll-control {
+  position: relative;
+  min-width: 0;
+}
+
 .turn-form .dice-roll-button {
   display: inline-flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 4px;
+  width: 100%;
   min-height: 72px;
   padding: 8px;
   color: var(--gold-bright);
@@ -1674,6 +1680,78 @@ h1 {
   font-size: 0.72rem;
   line-height: 1;
   text-transform: uppercase;
+}
+
+.dice-picker-popover {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 0;
+  z-index: 8;
+  display: grid;
+  gap: 10px;
+  width: 228px;
+  padding: 10px;
+  border: 1px solid rgba(244, 207, 122, 0.42);
+  border-radius: 8px;
+  background: rgba(20, 14, 10, 0.98);
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.44);
+  animation: dice-picker-appear 0.18s ease;
+}
+
+.dice-picker-popover::after {
+  position: absolute;
+  bottom: -6px;
+  left: 27px;
+  width: 10px;
+  height: 10px;
+  border-right: 1px solid rgba(244, 207, 122, 0.42);
+  border-bottom: 1px solid rgba(244, 207, 122, 0.42);
+  background: rgba(20, 14, 10, 0.98);
+  content: "";
+  transform: rotate(45deg);
+}
+
+.dice-picker-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.turn-form .dice-picker-option {
+  position: relative;
+  min-height: 42px;
+  padding: 0 8px;
+  color: var(--gold-bright);
+  background: rgba(217, 169, 74, 0.1);
+}
+
+.dice-picker-option strong {
+  position: absolute;
+  top: -7px;
+  right: -5px;
+  display: grid;
+  min-width: 20px;
+  height: 20px;
+  place-items: center;
+  padding: 0 6px;
+  border: 1px solid rgba(244, 207, 122, 0.72);
+  border-radius: 999px;
+  color: #1b120b;
+  background: var(--gold-bright);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.68rem;
+  line-height: 1;
+}
+
+.dice-picker-actions {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.turn-form .dice-picker-clear,
+.turn-form .dice-picker-roll {
+  min-height: 42px;
 }
 
 .turn-form button {
@@ -1693,6 +1771,23 @@ h1 {
 .turn-form button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
+}
+
+.turn-form .dice-picker-clear {
+  color: var(--gold-bright);
+  background: rgba(217, 169, 74, 0.08);
+}
+
+@keyframes dice-picker-appear {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes turn-submitted-appear {

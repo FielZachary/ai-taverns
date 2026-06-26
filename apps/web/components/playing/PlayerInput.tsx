@@ -1,6 +1,9 @@
-import { forwardRef, type FormEvent, useEffect, useState } from "react";
+import { forwardRef, type FormEvent, useEffect, useMemo, useState } from "react";
 import { Dice5, Send } from "lucide-react";
 import type { DiceRollRequest } from "@/lib/game-types";
+
+export type DiceFace = "d4" | "d6" | "d8" | "d10" | "d12" | "d20";
+export type QueuedDice = Partial<Record<DiceFace, number>>;
 
 type PlayerInputProps = {
   draft: string;
@@ -11,9 +14,15 @@ type PlayerInputProps = {
   validationMessage?: string;
   validationPulse: number;
   onDraftChange: (value: string) => void;
-  onRollD20: () => void;
+  onRollDice: (queuedDice: QueuedDice) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 };
+
+const diceFaces: DiceFace[] = ["d4", "d6", "d8", "d10", "d12", "d20"];
+
+function queuedDiceTotal(queuedDice: QueuedDice) {
+  return Object.values(queuedDice).reduce((sum, count) => sum + (count ?? 0), 0);
+}
 
 export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
   function PlayerInput(
@@ -26,12 +35,14 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
       validationMessage,
       validationPulse,
       onDraftChange,
-      onRollD20,
+      onRollDice,
       onSubmit
     },
     ref
   ) {
     const [isCallingAttention, setIsCallingAttention] = useState(false);
+    const [isDicePickerOpen, setIsDicePickerOpen] = useState(false);
+    const [queuedDice, setQueuedDice] = useState<QueuedDice>({});
 
     useEffect(() => {
       if (!validationMessage) {
@@ -52,6 +63,28 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
       : lockMessage || (isSubmitted ? "Submitted." : "");
     const isLocked = Boolean(lockMessage) || isSubmitted;
     const isRollRequired = Boolean(requiredRoll);
+    const queuedCount = useMemo(() => queuedDiceTotal(queuedDice), [queuedDice]);
+
+    function incrementDie(face: DiceFace) {
+      setQueuedDice((currentDice) => ({
+        ...currentDice,
+        [face]: (currentDice[face] ?? 0) + 1
+      }));
+    }
+
+    function clearQueuedDice() {
+      setQueuedDice({});
+    }
+
+    function rollQueuedDice() {
+      if (queuedCount === 0) {
+        return;
+      }
+
+      onRollDice(queuedDice);
+      setQueuedDice({});
+      setIsDicePickerOpen(false);
+    }
 
     return (
       <form
@@ -67,16 +100,55 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
             {validationMessage}
           </p>
         ) : null}
-        <button
-          className="dice-roll-button"
-          type="button"
-          aria-label={requiredRoll ? `Roll ${requiredRoll.dice}` : "Roll d20"}
-          disabled={(isLocked && !isRollRequired) || isSending}
-          onClick={onRollD20}
-        >
-          <Dice5 size={22} />
-          <span>{requiredRoll?.dice ?? "d20"}</span>
-        </button>
+        <div className="dice-roll-control">
+          <button
+            className="dice-roll-button"
+            type="button"
+            aria-label={requiredRoll ? `Roll ${requiredRoll.dice}` : "Open dice roller"}
+            aria-expanded={isDicePickerOpen}
+            disabled={(isLocked && !isRollRequired) || isSending}
+            onClick={() => setIsDicePickerOpen((isOpen) => !isOpen)}
+          >
+            <Dice5 size={22} />
+            <span>{queuedCount > 0 ? `${queuedCount} dice` : requiredRoll?.dice ?? "dice"}</span>
+          </button>
+          {isDicePickerOpen ? (
+            <div className="dice-picker-popover" role="dialog" aria-label="Dice roller">
+              <div className="dice-picker-options">
+                {diceFaces.map((face) => (
+                  <button
+                    key={face}
+                    className="dice-picker-option"
+                    type="button"
+                    disabled={isSending}
+                    onClick={() => incrementDie(face)}
+                  >
+                    <span>{face}</span>
+                    {queuedDice[face] ? <strong>{queuedDice[face]}</strong> : null}
+                  </button>
+                ))}
+              </div>
+              <div className="dice-picker-actions">
+                <button
+                  className="dice-picker-clear"
+                  type="button"
+                  disabled={queuedCount === 0 || isSending}
+                  onClick={clearQueuedDice}
+                >
+                  Clear
+                </button>
+                <button
+                  className="dice-picker-roll"
+                  type="button"
+                  disabled={queuedCount === 0 || isSending}
+                  onClick={rollQueuedDice}
+                >
+                  Roll
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </div>
         <div className="turn-form-input-wrap">
           <textarea
             ref={ref}
