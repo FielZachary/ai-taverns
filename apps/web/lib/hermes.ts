@@ -32,7 +32,7 @@ const noRollResponseExample = JSON.stringify(
 const rollRequestResponseExample = JSON.stringify(
   {
     public_narration:
-      "The lock is old, swollen by rain, and threaded with a faint blue ward. Your tools can reach the pins, but doing this quietly will take precision.",
+      "The lock is old, swollen by rain, and threaded with a faint blue ward. Your tools can reach the pins, but doing this quietly will take precision. Roll 1d20 + 5 for a thieves' tools check.",
     roll_requests: [
       {
         player: "Zach",
@@ -52,7 +52,7 @@ const rollRequestResponseExample = JSON.stringify(
 const impossibleActionRollExample = JSON.stringify(
   {
     public_narration:
-      "You cannot simply charm Lord Veyr into surrender through force of personality alone; his oath, pride, and command magic are stronger than a normal social opening. But your approach could still matter. If you play this beautifully, you may make him hesitate, reveal what he wants, or create an opening for the party.",
+      "You cannot simply charm Lord Veyr into surrender through force of personality alone; his oath, pride, and command magic are stronger than a normal social opening. But your approach could still matter. If you play this beautifully, you may make him hesitate, reveal what he wants, or create an opening for the party. Roll 1d20 + 7 for Persuasion.",
     roll_requests: [
       {
         player: "Mira",
@@ -97,7 +97,8 @@ export const dungeonMasterInstructions = [
   "Return only valid JSON for gameplay turns. Do not wrap it in Markdown. Do not include any text before or after the JSON.",
   `Required JSON shape:\n${responseContractExample}`,
   "`public_narration` is the only player-visible DM narration.",
-  "`roll_requests` must contain every required player-facing roll. Do not ask a player to roll only in prose.",
+  "When a roll is required, end `public_narration` with an immersive sentence that tells the player what to roll.",
+  "`roll_requests` must also contain every required player-facing roll. Do not ask a player to roll only in prose.",
   "`next_input_needed` must be `dice_results` when roll results are needed before resolving the turn, otherwise `player_actions`.",
   "Each roll request should include player, dice, modifier, label, advantage_state, and reason when known.",
   `Example with no roll:\n${noRollResponseExample}`,

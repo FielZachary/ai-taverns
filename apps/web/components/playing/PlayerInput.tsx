@@ -48,7 +48,7 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
     }, [validationMessage, validationPulse]);
 
     const overlayMessage = requiredRoll
-      ? `Roll ${requiredRoll.dice}: ${requiredRoll.label}`
+      ? "Roll to continue"
       : lockMessage || (isSubmitted ? "Submitted." : "");
     const isLocked = Boolean(lockMessage) || isSubmitted;
     const isRollRequired = Boolean(requiredRoll);
