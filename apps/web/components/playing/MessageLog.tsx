@@ -1,3 +1,6 @@
+"use client";
+
+import { useLayoutEffect, useMemo, useRef } from "react";
 import { Bot, Sparkles, UserRound } from "lucide-react";
 import type { GameMessage } from "@/lib/game-types";
 
@@ -27,6 +30,22 @@ function MessageBody({ content }: { content: string }) {
 }
 
 export function MessageLog({ messages, isSending }: MessageLogProps) {
+  const bottomAnchorRef = useRef<HTMLDivElement>(null);
+  const scrollKey = useMemo(
+    () => messages.map((message) => message.id).join("|"),
+    [messages]
+  );
+
+  useLayoutEffect(() => {
+    const frameId = window.requestAnimationFrame(() => {
+      bottomAnchorRef.current?.scrollIntoView({ block: "end" });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [scrollKey, isSending]);
+
   return (
     <div className="message-log" aria-live="polite">
       {messages.map((message) => (
@@ -74,6 +93,7 @@ export function MessageLog({ messages, isSending }: MessageLogProps) {
           </div>
         </article>
       ) : null}
+      <div ref={bottomAnchorRef} aria-hidden="true" className="message-end" />
     </div>
   );
 }
