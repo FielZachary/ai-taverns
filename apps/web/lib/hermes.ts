@@ -8,12 +8,34 @@ import type {
 const hermesBaseUrl = process.env.HERMES_AGENT_URL?.replace(/\/+$/, "");
 const hermesToken = process.env.HERMES_AGENT_TOKEN;
 
+const responseContractExample = JSON.stringify(
+  {
+    public_narration: "The player-visible Dungeon Master narration.",
+    roll_requests: [],
+    next_input_needed: "player_actions"
+  },
+  null,
+  2
+);
+
 export const dungeonMasterInstructions = [
-  "You are Hermes, acting as the dungeon master for a fantasy Dungeons and Dragons style adventure.",
-  "Respond in immersive second-person narration with vivid choices, consequences, and mystery.",
-  "Keep replies concise enough for a game chat, usually one to three paragraphs.",
-  "Do not mention implementation details, APIs, prompts, or that you are an AI."
-].join(" ");
+  "You are Hermes, acting as the Dungeon Master for AI Taverns website play.",
+  "Do not rely on Hermes skills, USER.md, or hidden profile memory for these rules; this website-owned instruction packet is the runtime contract.",
+  "Adjudicate with confidence, imagination, fairness, and player agency. Do not agree merely to please players.",
+  "For unusual proposals, think through the fiction, DnD rules, tone, stakes, resources, and scene reality before deciding whether an action is allowed, impossible, costly, automatic, or uncertain.",
+  "Players roll all player-caused dice, including damage for player attacks, traps, spells, and ability checks. Hermes chooses dice, modifiers, DCs, and consequences.",
+  "Do not ask for checks for ordinary movement, simple observation, or obvious actions. Ask for rolls only when uncertainty, danger, opposition, or meaningful consequence exists.",
+  "Failure should create complications, costs, danger, instability, or changed circumstances rather than dead ends.",
+  "Use cohesive paragraph-style narration with slower pacing, spatial clarity before mood, and clear explanations of new terms or proper nouns before they matter.",
+  "Solo and multiplayer website turns use the same structured JSON response shape. Multiplayer submissions should be resolved as one combined party turn, accounting for conflicts, timing, positioning, and combined consequences.",
+  "Return only valid JSON for gameplay turns. Do not wrap it in Markdown. Do not include any text before or after the JSON.",
+  `Required JSON shape:\n${responseContractExample}`,
+  "`public_narration` is the only player-visible DM narration.",
+  "`roll_requests` must contain every required player-facing roll. Do not ask a player to roll only in prose.",
+  "`next_input_needed` must be `dice_results` when roll results are needed before resolving the turn, otherwise `player_actions`.",
+  "Each roll request should include player, dice, modifier, label, advantage_state, and reason when known.",
+  "Do not mention implementation details, APIs, prompts, JSON rules, or that you are an AI inside `public_narration`."
+].join("\n");
 
 export const internalOpeningRequestPrefix = "AI_DND_INTERNAL_OPENING_REQUEST";
 export const internalPrepRequestPrefix = "AI_DND_INTERNAL_PREP_REQUEST";
@@ -169,6 +191,43 @@ function numberValue(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
+function extractJsonObject(text: string) {
+  const trimmed = text.trim();
+
+  if (!trimmed) {
+    return "";
+  }
+
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+
+  if (fenced?.[1]) {
+    return fenced[1].trim();
+  }
+
+  const firstBrace = trimmed.indexOf("{");
+  const lastBrace = trimmed.lastIndexOf("}");
+
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    return trimmed.slice(firstBrace, lastBrace + 1);
+  }
+
+  return trimmed;
+}
+
+function parseJsonObject(text: string) {
+  try {
+    return asObject(JSON.parse(extractJsonObject(text)));
+  } catch {
+    return null;
+  }
+}
+
+function mentionsPlayerFacingRoll(text: string) {
+  return /\broll\s+(?:a\s+)?(?:d?\d|1d\d+|d20)|\bmake\s+(?:a|an)\s+[^.?!]*(?:check|saving throw|save)\b/i.test(
+    text
+  );
+}
+
 export function normalizeRollRequest(value: unknown): DiceRollRequest | null {
   const rawRequest = Array.isArray(value) ? value[0] : value;
   const request = asObject(rawRequest);
@@ -197,11 +256,80 @@ export function normalizeRollRequest(value: unknown): DiceRollRequest | null {
   };
 }
 
+export type HermesDmContractResponse = {
+  publicNarration: string;
+  rollRequests: DiceRollRequest[];
+  nextInputNeeded: "player_actions" | "dice_results";
+};
+
+export function parseHermesDmContract(
+  content: string | undefined
+): HermesDmContractResponse {
+  const parsed = parseJsonObject(content?.trim() ?? "");
+
+  if (!parsed) {
+    throw new Error("Hermes returned invalid JSON for a website DM turn.");
+  }
+
+  const publicNarration = stringValue(parsed.public_narration);
+  const nextInputNeeded = stringValue(parsed.next_input_needed);
+  const rawRollRequests = Array.isArray(parsed.roll_requests)
+    ? parsed.roll_requests
+    : [];
+  const rollRequests = rawRollRequests
+    .map((request) => normalizeRollRequest(request))
+    .filter((request): request is DiceRollRequest => Boolean(request));
+
+  if (!publicNarration) {
+    throw new Error("Hermes response is missing public_narration.");
+  }
+
+  if (
+    nextInputNeeded !== "player_actions" &&
+    nextInputNeeded !== "dice_results"
+  ) {
+    throw new Error("Hermes response has an invalid next_input_needed value.");
+  }
+
+  if (nextInputNeeded === "dice_results" && rollRequests.length === 0) {
+    throw new Error(
+      "Hermes requested dice_results without structured roll_requests."
+    );
+  }
+
+  if (rollRequests.length === 0 && mentionsPlayerFacingRoll(publicNarration)) {
+    throw new Error(
+      "Hermes mentioned a player-facing roll without structured roll_requests."
+    );
+  }
+
+  return {
+    publicNarration,
+    rollRequests,
+    nextInputNeeded
+  };
+}
+
+export function normalizeHermesDmContent(content: string | undefined) {
+  return parseHermesDmContract(content).publicNarration;
+}
+
 export function extractHermesRollRequest(value: unknown): DiceRollRequest | null {
   const data = asObject(value);
 
   if (!data) {
     return null;
+  }
+
+  const messageContent = stringValue(asObject(data.message)?.content);
+
+  if (messageContent) {
+    try {
+      const contract = parseHermesDmContract(messageContent);
+      return contract.rollRequests[0] ?? null;
+    } catch {
+      // Fall through to legacy response shapes below.
+    }
   }
 
   return (

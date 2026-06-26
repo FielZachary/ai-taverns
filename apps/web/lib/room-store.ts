@@ -8,7 +8,7 @@ import {
   ensureHermesSession,
   extractHermesRollRequest,
   hermesFetch,
-  normalizeHermesContent,
+  normalizeHermesDmContent,
   normalizeRollRequest,
   openingSceneRequest,
   titleFromSessionId
@@ -509,7 +509,7 @@ async function askHermes(sessionId: string, message: string, instructions: strin
   }
 
   const hermesData = (await hermesResponse.json()) as HermesSessionChatResponse;
-  const reply = normalizeHermesContent(hermesData.message?.content);
+  const reply = normalizeHermesDmContent(hermesData.message?.content);
 
   if (!reply) {
     throw new Error("Hermes returned an empty reply.");

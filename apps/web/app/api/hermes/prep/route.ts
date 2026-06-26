@@ -8,7 +8,7 @@ import {
   ensureHermesSession,
   hermesFetch,
   jsonError,
-  normalizeHermesContent
+  normalizeHermesDmContent
 } from "@/lib/hermes";
 import { createCampaignForHermesSession } from "@/lib/room-store";
 
@@ -59,7 +59,7 @@ export async function POST(request: Request) {
 
     const hermesData =
       (await hermesResponse.json()) as HermesSessionChatResponse;
-    const reply = normalizeHermesContent(hermesData.message?.content);
+    const reply = normalizeHermesDmContent(hermesData.message?.content);
 
     if (!reply) {
       throw new Error("Hermes returned an empty prep message.");

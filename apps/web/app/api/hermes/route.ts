@@ -8,7 +8,7 @@ import {
   extractHermesRollRequest,
   hermesFetch,
   jsonError,
-  normalizeHermesContent
+  normalizeHermesDmContent
 } from "@/lib/hermes";
 
 export const runtime = "nodejs";
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
 
     const hermesData =
       (await hermesResponse.json()) as HermesSessionChatResponse;
-    const reply = normalizeHermesContent(hermesData.message?.content);
+    const reply = normalizeHermesDmContent(hermesData.message?.content);
 
     if (!reply) {
       throw new Error("Hermes returned an empty reply.");
