@@ -9,7 +9,6 @@
     "dev": "npm run dev -w @ai-dnd/web",
     "build": "npm run build -w @ai-dnd/web",
     "db:migrate": "node scripts/run-db-migrations.mjs",
-    "e2e": "playwright test",
     "hermes:bridge": "bash scripts/start-hermes-bridge.sh",
     "lint": "npm run lint -w @ai-dnd/web"
   },
@@ -17,7 +16,6 @@
     "pg": "^8.22.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.61.1",
     "@types/pg": "^8.20.0"
   }
 }

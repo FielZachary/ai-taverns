@@ -1,6 +1,5 @@
 import { query } from "@/lib/db";
 import { createClient } from "@/lib/supabase/server";
-import { cookies } from "next/headers";
 
 export type AuthUser = {
   id: string;
@@ -17,21 +16,6 @@ export class HttpError extends Error {
 }
 
 export async function getOptionalUser(): Promise<AuthUser | null> {
-  if (
-    process.env.E2E_TEST_AUTH_ENABLED === "true" &&
-    process.env.NODE_ENV !== "production"
-  ) {
-    const cookieStore = await cookies();
-    const userId = cookieStore.get("ai-taverns-e2e-user-id")?.value.trim();
-
-    if (userId) {
-      return {
-        id: userId,
-        email: "e2e@ai-taverns.test"
-      };
-    }
-  }
-
   const supabase = await createClient();
   const {
     data: { user },

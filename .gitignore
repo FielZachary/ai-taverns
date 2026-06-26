@@ -10,5 +10,3 @@ dist/
 npm-debug.log*
 .vercel
 supabase/.temp/
-test-results/
-playwright-report/
