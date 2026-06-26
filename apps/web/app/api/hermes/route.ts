@@ -5,7 +5,7 @@ import {
   assertHermesConfigured,
   dungeonMasterInstructions,
   ensureHermesSession,
-  extractHermesRollRequest,
+  extractHermesRollRequests,
   hermesFetch,
   jsonError,
   normalizeHermesDmContent
@@ -61,6 +61,7 @@ export async function POST(request: Request) {
       throw new Error("Hermes returned an empty reply.");
     }
 
+    const pendingRollRequests = extractHermesRollRequests(hermesData);
     const response: HermesTurnResponse = {
       message: {
         id: crypto.randomUUID(),
@@ -68,7 +69,8 @@ export async function POST(request: Request) {
         content: reply,
         createdAt: new Date().toISOString()
       },
-      pendingRollRequest: extractHermesRollRequest(hermesData)
+      pendingRollRequest: pendingRollRequests[0] ?? null,
+      pendingRollRequests
     };
 
     return NextResponse.json(response);

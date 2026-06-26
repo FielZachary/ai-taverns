@@ -6,10 +6,11 @@ import { query, withTransaction } from "@/lib/db";
 import {
   dungeonMasterInstructions,
   ensureHermesSession,
-  extractHermesRollRequest,
+  extractHermesRollRequests,
   hermesFetch,
   normalizeHermesDmContent,
   normalizeRollRequest,
+  normalizeRollRequests,
   openingSceneRequest,
   titleFromSessionId
 } from "@/lib/hermes";
@@ -38,6 +39,7 @@ export type RoomSnapshot = {
   isResolving: boolean;
   hasBegun: boolean;
   pendingRollRequest: DiceRollRequest | null;
+  pendingRollRequests: DiceRollRequest[];
   updatedAt: string;
 };
 
@@ -164,9 +166,16 @@ function eventPayload(payload: unknown) {
   return payload as Record<string, unknown>;
 }
 
-function pendingRollRequestFromCampaign(campaign: CampaignRow) {
+function pendingRollRequestsFromCampaign(campaign: CampaignRow) {
   const metadata = eventPayload(campaign.metadata);
-  return normalizeRollRequest(metadata.pendingRollRequest);
+  const requests = normalizeRollRequests(metadata.pendingRollRequests);
+
+  if (requests.length > 0) {
+    return requests;
+  }
+
+  const legacyRequest = normalizeRollRequest(metadata.pendingRollRequest);
+  return legacyRequest ? [legacyRequest] : [];
 }
 
 function modifierText(modifier: number | undefined) {
@@ -217,6 +226,31 @@ function formatRollSubmission(request: DiceRollRequest) {
   return `Rolled ${request.label}: ${request.dice}${modifierText(
     request.modifier
   )} = ${result.total} (${rollsText})`;
+}
+
+async function setPendingRollRequests(
+  client: PoolClient,
+  campaignId: string,
+  requests: DiceRollRequest[]
+) {
+  const currentRequest = requests[0] ?? null;
+
+  await client.query(
+    `
+      update campaigns
+      set metadata = case
+        when $2::jsonb = '[]'::jsonb then metadata - 'pendingRollRequest' - 'pendingRollRequests'
+        else jsonb_set(
+          jsonb_set(metadata, '{pendingRollRequest}', $3::jsonb, true),
+          '{pendingRollRequests}',
+          $2::jsonb,
+          true
+        )
+      end
+      where id = $1
+    `,
+    [campaignId, JSON.stringify(requests), JSON.stringify(currentRequest)]
+  );
 }
 
 function rowToRoomPlayer(
@@ -518,7 +552,7 @@ async function askHermes(sessionId: string, message: string, instructions: strin
   return {
     id: hermesData.message?.id,
     content: reply,
-    rollRequest: extractHermesRollRequest(hermesData)
+    rollRequests: extractHermesRollRequests(hermesData)
   };
 }
 
@@ -573,6 +607,8 @@ async function buildSnapshot(campaign: CampaignRow): Promise<RoomSnapshot> {
     })
     .filter((message): message is GameMessage => message !== null);
 
+  const pendingRollRequests = pendingRollRequestsFromCampaign(campaign);
+
   return {
     roomId: campaign.id,
     mode: campaign.mode,
@@ -581,7 +617,8 @@ async function buildSnapshot(campaign: CampaignRow): Promise<RoomSnapshot> {
     messages,
     isResolving: currentTurn?.status === "resolving",
     hasBegun: campaign.has_begun,
-    pendingRollRequest: pendingRollRequestFromCampaign(campaign),
+    pendingRollRequest: pendingRollRequests[0] ?? null,
+    pendingRollRequests,
     updatedAt: toIso(campaign.updated_at)
   };
 }
@@ -603,8 +640,10 @@ async function finishResolvedTurn(
   hermesMessageId: string | undefined,
   reply: string,
   eventType: "adventure_begun" | "turn_resolved",
-  pendingRollRequest: DiceRollRequest | null = null
+  pendingRollRequests: DiceRollRequest[] = []
 ) {
+  const currentPendingRollRequest = pendingRollRequests[0] ?? null;
+
   await withTransaction(async (client) => {
     await client.query(
       `
@@ -628,19 +667,10 @@ async function finishResolvedTurn(
       messageId: hermesMessageId ?? crypto.randomUUID(),
       role: "dm",
       content: reply,
-      pendingRollRequest
+      pendingRollRequest: currentPendingRollRequest,
+      pendingRollRequests
     });
-    await client.query(
-      `
-        update campaigns
-        set metadata = case
-          when $2::jsonb = 'null'::jsonb then metadata - 'pendingRollRequest'
-          else jsonb_set(metadata, '{pendingRollRequest}', $2::jsonb, true)
-        end
-        where id = $1
-      `,
-      [campaignId, JSON.stringify(pendingRollRequest)]
-    );
+    await setPendingRollRequests(client, campaignId, pendingRollRequests);
     await ensureCollectingTurn(client, campaignId);
   });
 }
@@ -697,7 +727,7 @@ async function maybeResolveTurn(
       reply.id,
       reply.content,
       "turn_resolved",
-      reply.rollRequest
+      reply.rollRequests
     );
     return true;
   } catch (error) {
@@ -1404,7 +1434,7 @@ export async function beginRoomAdventure(
       reply.id,
       reply.content,
       "adventure_begun",
-      reply.rollRequest
+      reply.rollRequests
     );
   } catch (error) {
     await markTurnFailed(beginState.turn.id, error);
@@ -1458,8 +1488,11 @@ export async function submitRoomTurn(
       throw new Error("Player profile is incomplete.");
     }
 
-    const pendingRollRequest = pendingRollRequestFromCampaign(campaign);
+    const pendingRollRequests = pendingRollRequestsFromCampaign(campaign);
+    const pendingRollRequest = pendingRollRequests[0] ?? null;
     const isRollSubmission = Boolean(rollRequestId);
+    const remainingRollRequests =
+      isRollSubmission && pendingRollRequest ? pendingRollRequests.slice(1) : [];
 
     if (pendingRollRequest) {
       if (rollRequestId !== pendingRollRequest.id) {
@@ -1483,11 +1516,17 @@ export async function submitRoomTurn(
         insert into submissions (campaign_id, turn_id, player_id, content)
         values ($1, $2, $3, $4)
         on conflict (turn_id, player_id) do update
-        set content = excluded.content,
+        set content = case
+              when $5 then submissions.content || E'\n' || excluded.content
+              else excluded.content
+            end,
             status = 'submitted'
       `,
-      [campaign.id, turn.id, player.id, trimmedContent]
+      [campaign.id, turn.id, player.id, trimmedContent, isRollSubmission]
     );
+    if (isRollSubmission) {
+      await setPendingRollRequests(client, campaign.id, remainingRollRequests);
+    }
     await client.query("update players set last_seen_at = now() where id = $1", [
       player.id
     ]);
@@ -1499,14 +1538,21 @@ export async function submitRoomTurn(
       content: `${player.username} (${player.character_name}): ${trimmedContent}`
     });
 
-    return { campaign, turn, shouldResolveImmediately: isRollSubmission };
+    return {
+      campaign,
+      turn,
+      shouldResolve: !isRollSubmission || remainingRollRequests.length === 0,
+      shouldResolveImmediately: isRollSubmission
+    };
   });
 
-  await maybeResolveTurn(
-    submissionState.campaign,
-    submissionState.turn,
-    submissionState.shouldResolveImmediately
-  );
+  if (submissionState.shouldResolve) {
+    await maybeResolveTurn(
+      submissionState.campaign,
+      submissionState.turn,
+      submissionState.shouldResolveImmediately
+    );
+  }
 
   const updatedCampaign = await resolveCampaign(
     submissionState.campaign.id,
@@ -1551,8 +1597,11 @@ export async function submitSoloTurn(
       throw new HttpError("A solo player profile is required.", 400);
     }
 
-    const pendingRollRequest = pendingRollRequestFromCampaign(campaign);
+    const pendingRollRequests = pendingRollRequestsFromCampaign(campaign);
+    const pendingRollRequest = pendingRollRequests[0] ?? null;
     const isRollSubmission = Boolean(rollRequestId);
+    const remainingRollRequests =
+      isRollSubmission && pendingRollRequest ? pendingRollRequests.slice(1) : [];
 
     if (pendingRollRequest) {
       if (rollRequestId !== pendingRollRequest.id) {
@@ -1563,6 +1612,54 @@ export async function submitSoloTurn(
     }
 
     const turn = await ensureCollectingTurn(client, campaign.id);
+    const trimmedContent = pendingRollRequest
+      ? formatRollSubmission(pendingRollRequest)
+      : content.trim();
+
+    if (!trimmedContent) {
+      throw new HttpError("A player message is required.", 400);
+    }
+
+    const submissionResult = await client.query<{ content: string }>(
+      `
+        insert into submissions (campaign_id, turn_id, player_id, content)
+        values ($1, $2, $3, $4)
+        on conflict (turn_id, player_id) do update
+        set content = case
+              when $5 then submissions.content || E'\n' || excluded.content
+              else excluded.content
+            end,
+            status = 'submitted'
+        returning content
+      `,
+      [campaign.id, turn.id, player.id, trimmedContent, isRollSubmission]
+    );
+    const submittedContent = submissionResult.rows[0]?.content ?? trimmedContent;
+
+    if (isRollSubmission) {
+      await setPendingRollRequests(client, campaign.id, remainingRollRequests);
+    }
+    await client.query("update players set last_seen_at = now() where id = $1", [
+      player.id
+    ]);
+    await logCampaignEvent(client, campaign.id, "turn_submitted", {
+      turnId: turn.id,
+      clientId: player.client_id,
+      role: "player",
+      messageId: crypto.randomUUID(),
+      content: trimmedContent
+    });
+
+    if (isRollSubmission && remainingRollRequests.length > 0) {
+      return {
+        campaign,
+        shouldResolve: false,
+        turn,
+        player,
+        content: submittedContent
+      };
+    }
+
     const claimedTurn = await client.query<TurnRow>(
       `
         update turns
@@ -1577,41 +1674,28 @@ export async function submitSoloTurn(
       throw new HttpError("That turn is already resolving.", 409);
     }
 
-    const trimmedContent = pendingRollRequest
-      ? formatRollSubmission(pendingRollRequest)
-      : content.trim();
-
-    if (!trimmedContent) {
-      throw new HttpError("A player message is required.", 400);
-    }
-
-    await client.query(
-      `
-        insert into submissions (campaign_id, turn_id, player_id, content)
-        values ($1, $2, $3, $4)
-        on conflict (turn_id, player_id) do update
-        set content = excluded.content,
-            status = 'submitted'
-      `,
-      [campaign.id, turn.id, player.id, trimmedContent]
-    );
-    await client.query("update players set last_seen_at = now() where id = $1", [
-      player.id
-    ]);
-    await logCampaignEvent(client, campaign.id, "turn_submitted", {
-      turnId: turn.id,
-      clientId: player.client_id,
-      role: "player",
-      messageId: crypto.randomUUID(),
-      content: trimmedContent
-    });
     await logCampaignEvent(client, campaign.id, "turn_resolving", {
       turnId: turn.id,
       reason: "solo_turn"
     });
 
-    return { campaign, turn: claimedTurn.rows[0], player, content: trimmedContent };
+    return {
+      campaign,
+      shouldResolve: true,
+      turn: claimedTurn.rows[0],
+      player,
+      content: submittedContent
+    };
   });
+
+  if (!soloState.shouldResolve) {
+    const updatedCampaign = await resolveCampaign(
+      soloState.campaign.id,
+      soloState.campaign.hermes_session_id
+    );
+
+    return buildSnapshot(updatedCampaign ?? soloState.campaign);
+  }
 
   try {
     const reply = await askHermes(
@@ -1626,7 +1710,7 @@ export async function submitSoloTurn(
       reply.id,
       reply.content,
       "turn_resolved",
-      reply.rollRequest
+      reply.rollRequests
     );
   } catch (error) {
     await markTurnFailed(soloState.turn.id, error);

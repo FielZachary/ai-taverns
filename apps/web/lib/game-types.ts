@@ -25,4 +25,5 @@ export type HermesTurnRequest = {
 export type HermesTurnResponse = {
   message: GameMessage;
   pendingRollRequest?: DiceRollRequest | null;
+  pendingRollRequests?: DiceRollRequest[];
 };

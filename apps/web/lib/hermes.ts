@@ -325,6 +325,17 @@ export function normalizeRollRequest(value: unknown): DiceRollRequest | null {
   };
 }
 
+export function normalizeRollRequests(value: unknown): DiceRollRequest[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((request) => normalizeRollRequest(request))
+      .filter((request): request is DiceRollRequest => Boolean(request));
+  }
+
+  const request = normalizeRollRequest(value);
+  return request ? [request] : [];
+}
+
 export type HermesDmContractResponse = {
   publicNarration: string;
   rollRequests: DiceRollRequest[];
@@ -345,9 +356,7 @@ export function parseHermesDmContract(
   const rawRollRequests = Array.isArray(parsed.roll_requests)
     ? parsed.roll_requests
     : [];
-  const rollRequests = rawRollRequests
-    .map((request) => normalizeRollRequest(request))
-    .filter((request): request is DiceRollRequest => Boolean(request));
+  const rollRequests = normalizeRollRequests(rawRollRequests);
 
   if (!publicNarration) {
     throw new Error("Hermes response is missing public_narration.");
@@ -383,11 +392,11 @@ export function normalizeHermesDmContent(content: string | undefined) {
   return parseHermesDmContract(content).publicNarration;
 }
 
-export function extractHermesRollRequest(value: unknown): DiceRollRequest | null {
+export function extractHermesRollRequests(value: unknown): DiceRollRequest[] {
   const data = asObject(value);
 
   if (!data) {
-    return null;
+    return [];
   }
 
   const messageContent = stringValue(asObject(data.message)?.content);
@@ -395,20 +404,34 @@ export function extractHermesRollRequest(value: unknown): DiceRollRequest | null
   if (messageContent) {
     try {
       const contract = parseHermesDmContract(messageContent);
-      return contract.rollRequests[0] ?? null;
+      return contract.rollRequests;
     } catch {
       // Fall through to legacy response shapes below.
     }
   }
 
-  return (
-    normalizeRollRequest(data.rollRequest) ||
-    normalizeRollRequest(data.roll_request) ||
-    normalizeRollRequest(data.rollRequests) ||
-    normalizeRollRequest(data.roll_requests) ||
-    normalizeRollRequest(asObject(data.message)?.rollRequest) ||
-    normalizeRollRequest(asObject(data.message)?.roll_request)
-  );
+  const legacyFields = [
+    data.rollRequests,
+    data.roll_requests,
+    data.rollRequest,
+    data.roll_request,
+    asObject(data.message)?.rollRequest,
+    asObject(data.message)?.roll_request
+  ];
+
+  for (const field of legacyFields) {
+    const requests = normalizeRollRequests(field);
+
+    if (requests.length > 0) {
+      return requests;
+    }
+  }
+
+  return [];
+}
+
+export function extractHermesRollRequest(value: unknown): DiceRollRequest | null {
+  return extractHermesRollRequests(value)[0] ?? null;
 }
 
 export function mapHermesMessage(message: HermesMessageRecord): GameMessage {

@@ -82,6 +82,7 @@ type RoomSnapshot = {
   isResolving: boolean;
   hasBegun: boolean;
   pendingRollRequest: DiceRollRequest | null;
+  pendingRollRequests?: DiceRollRequest[];
 };
 
 type GameShellProps = {
@@ -99,6 +100,13 @@ function getMissingPlayerProfileFields(profile: PlayerProfile) {
     profile.characterName.trim() ? null : "character name",
     hasCharacterSheetContent ? null : "character sheet"
   ].filter((field): field is string => field !== null);
+}
+
+function rollRequestsFromRoom(room: RoomSnapshot) {
+  return (
+    room.pendingRollRequests ??
+    (room.pendingRollRequest ? [room.pendingRollRequest] : [])
+  );
 }
 
 function createClientId() {
@@ -157,8 +165,9 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
   const [roomMessages, setRoomMessages] = useState<GameMessage[]>([]);
   const [isRoomResolving, setIsRoomResolving] = useState(false);
   const [hasAdventureBegun, setHasAdventureBegun] = useState(false);
-  const [pendingRollRequest, setPendingRollRequest] =
-    useState<DiceRollRequest | null>(null);
+  const [pendingRollRequests, setPendingRollRequests] = useState<
+    DiceRollRequest[]
+  >([]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const activeCampaign = useMemo(
@@ -169,6 +178,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
   );
   const isSinglePlayer = activeCampaign?.mode === "single_player";
   const activeHermesSessionId = activeCampaign?.hermesSessionId ?? "";
+  const pendingRollRequest = pendingRollRequests[0] ?? null;
 
   const playerStatusSlots = useMemo<PlayerStatusSlot[]>(() => {
     return Array.from({ length: maxPlayers }, (_, slot) => {
@@ -216,7 +226,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
       setRoomMessages(room.messages);
       setIsRoomResolving(room.isResolving);
       setHasAdventureBegun(room.hasBegun);
-      setPendingRollRequest(room.pendingRollRequest);
+      setPendingRollRequests(rollRequestsFromRoom(room));
 
       const currentPlayer = room.players.find(
         (roomPlayer) => roomPlayer.id === playerId
@@ -454,7 +464,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
       setHasAdventureBegun(false);
       setIsRoomResolving(false);
       setIsInputSubmitted(false);
-      setPendingRollRequest(null);
+      setPendingRollRequests([]);
       return;
     }
 
@@ -478,7 +488,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
           if (isSinglePlayer) {
             setIsRoomResolving(room.isResolving);
             setHasAdventureBegun(true);
-            setPendingRollRequest(room.pendingRollRequest);
+            setPendingRollRequests(rollRequestsFromRoom(room));
           } else {
             applyRoomSnapshot(room);
           }
@@ -520,7 +530,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     setRoomMessages([]);
     setRoomPlayers([]);
     setHasAdventureBegun(campaign.mode === "single_player");
-    setPendingRollRequest(null);
+    setPendingRollRequests([]);
     setInputValidationMessage("");
     setTableAlert("");
     setIsInputSubmitted(false);
