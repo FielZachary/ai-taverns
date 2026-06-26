@@ -645,14 +645,19 @@ async function finishResolvedTurn(
   });
 }
 
-async function maybeResolveTurn(campaign: CampaignRow, turn: TurnRow) {
+async function maybeResolveTurn(
+  campaign: CampaignRow,
+  turn: TurnRow,
+  force = false
+) {
   const activePlayers = (await getActivePlayers(campaign.id)).filter(isProfileComplete);
   const submissions = await getTurnSubmissions(turn.id);
   const submittedPlayerIds = new Set(submissions.map((submission) => submission.player_id));
 
   if (
     activePlayers.length === 0 ||
-    activePlayers.some((player) => !submittedPlayerIds.has(player.id))
+    (!force &&
+      activePlayers.some((player) => !submittedPlayerIds.has(player.id)))
   ) {
     return false;
   }
@@ -1494,10 +1499,14 @@ export async function submitRoomTurn(
       content: `${player.username} (${player.character_name}): ${trimmedContent}`
     });
 
-    return { campaign, turn };
+    return { campaign, turn, shouldResolveImmediately: isRollSubmission };
   });
 
-  await maybeResolveTurn(submissionState.campaign, submissionState.turn);
+  await maybeResolveTurn(
+    submissionState.campaign,
+    submissionState.turn,
+    submissionState.shouldResolveImmediately
+  );
 
   const updatedCampaign = await resolveCampaign(
     submissionState.campaign.id,
