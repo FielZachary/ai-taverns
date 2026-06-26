@@ -17,12 +17,66 @@ type DiceBoxConstructor = new (
   config?: Record<string, unknown>
 ) => DiceBoxInstance;
 
+declare global {
+  interface Window {
+    "dice-box-threejs"?: DiceBoxConstructor;
+  }
+}
+
 type DiceRollReveal3DProps = {
   notation: string;
   expression: string;
   total: number;
   onComplete: () => void;
 };
+
+let diceBoxScriptPromise: Promise<DiceBoxConstructor> | null = null;
+
+function loadDiceBoxConstructor() {
+  if (typeof window === "undefined") {
+    return Promise.reject(new Error("Dice animation is browser-only."));
+  }
+
+  if (window["dice-box-threejs"]) {
+    return Promise.resolve(window["dice-box-threejs"]);
+  }
+
+  if (!diceBoxScriptPromise) {
+    diceBoxScriptPromise = new Promise((resolve, reject) => {
+      const existingScript = document.querySelector<HTMLScriptElement>(
+        'script[data-dice-box-threejs="true"]'
+      );
+
+      if (existingScript) {
+        existingScript.addEventListener("load", () => {
+          const DiceBox = window["dice-box-threejs"];
+          DiceBox ? resolve(DiceBox) : reject(new Error("DiceBox did not load."));
+        });
+        existingScript.addEventListener("error", () => {
+          reject(new Error("DiceBox script failed to load."));
+        });
+        return;
+      }
+
+      const script = document.createElement("script");
+      script.src = "/vendor/dice-box-threejs.umd.js";
+      script.async = true;
+      script.dataset.diceBoxThreejs = "true";
+      script.addEventListener("load", () => {
+        script.dataset.loaded = "true";
+        const DiceBox = window["dice-box-threejs"];
+        DiceBox ? resolve(DiceBox) : reject(new Error("DiceBox did not load."));
+      });
+      script.addEventListener("error", () => {
+        diceBoxScriptPromise = null;
+        reject(new Error("DiceBox script failed to load."));
+      });
+      document.head.appendChild(script);
+    });
+  }
+
+  return diceBoxScriptPromise;
+}
 
 export function DiceRollReveal3D({
   notation,
@@ -45,10 +99,7 @@ export function DiceRollReveal3D({
 
     async function rollDice() {
       try {
-        const module = (await import("@3d-dice/dice-box-threejs")) as {
-          default: DiceBoxConstructor;
-        };
-        const DiceBox = module.default;
+        const DiceBox = await loadDiceBoxConstructor();
         diceBox = new DiceBox(`#${containerId}`, {
           assetPath: "/",
           shadows: false,
