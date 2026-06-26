@@ -5,6 +5,7 @@ import {
   assertHermesConfigured,
   dungeonMasterInstructions,
   ensureHermesSession,
+  extractHermesRollRequest,
   hermesFetch,
   jsonError,
   normalizeHermesContent
@@ -66,7 +67,8 @@ export async function POST(request: Request) {
         role: "dm",
         content: reply,
         createdAt: new Date().toISOString()
-      }
+      },
+      pendingRollRequest: extractHermesRollRequest(hermesData)
     };
 
     return NextResponse.json(response);

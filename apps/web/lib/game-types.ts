@@ -7,6 +7,15 @@ export type GameMessage = {
   createdAt: string;
 };
 
+export type DiceRollRequest = {
+  id: string;
+  dice: string;
+  label: string;
+  player?: string;
+  modifier?: number;
+  advantageState?: string;
+};
+
 export type HermesTurnRequest = {
   message: string;
   history: GameMessage[];
@@ -15,4 +24,5 @@ export type HermesTurnRequest = {
 
 export type HermesTurnResponse = {
   message: GameMessage;
+  pendingRollRequest?: DiceRollRequest | null;
 };

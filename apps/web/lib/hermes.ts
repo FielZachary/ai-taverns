@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import type { GameMessage, GameMessageRole } from "@/lib/game-types";
+import type {
+  DiceRollRequest,
+  GameMessage,
+  GameMessageRole
+} from "@/lib/game-types";
 
 const hermesBaseUrl = process.env.HERMES_AGENT_URL?.replace(/\/+$/, "");
 const hermesToken = process.env.HERMES_AGENT_TOKEN;
@@ -149,6 +153,65 @@ export function normalizeHermesContent(content: string | undefined) {
   }
 
   return text;
+}
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function numberValue(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+export function normalizeRollRequest(value: unknown): DiceRollRequest | null {
+  const rawRequest = Array.isArray(value) ? value[0] : value;
+  const request = asObject(rawRequest);
+
+  if (!request) {
+    return null;
+  }
+
+  const dice = stringValue(request.dice) || "1d20";
+  const label =
+    stringValue(request.label) ||
+    stringValue(request.check) ||
+    stringValue(request.reason) ||
+    "Required roll";
+
+  return {
+    id: stringValue(request.id) || crypto.randomUUID(),
+    dice,
+    label,
+    player: stringValue(request.player) || undefined,
+    modifier: numberValue(request.modifier),
+    advantageState:
+      stringValue(request.advantageState) ||
+      stringValue(request.advantage_state) ||
+      undefined
+  };
+}
+
+export function extractHermesRollRequest(value: unknown): DiceRollRequest | null {
+  const data = asObject(value);
+
+  if (!data) {
+    return null;
+  }
+
+  return (
+    normalizeRollRequest(data.rollRequest) ||
+    normalizeRollRequest(data.roll_request) ||
+    normalizeRollRequest(data.rollRequests) ||
+    normalizeRollRequest(data.roll_requests) ||
+    normalizeRollRequest(asObject(data.message)?.rollRequest) ||
+    normalizeRollRequest(asObject(data.message)?.roll_request)
+  );
 }
 
 export function mapHermesMessage(message: HermesMessageRecord): GameMessage {

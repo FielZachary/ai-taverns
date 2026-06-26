@@ -7,6 +7,15 @@ export type GameMessage = {
   createdAt: string;
 };
 
+export type DiceRollRequest = {
+  id: string;
+  dice: string;
+  label: string;
+  player?: string;
+  modifier?: number;
+  advantageState?: string;
+};
+
 export type SessionState = {
   campaignTitle: string;
   location: string;

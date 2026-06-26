@@ -1,11 +1,13 @@
 import { forwardRef, type FormEvent, useEffect, useState } from "react";
 import { Dice5, Send } from "lucide-react";
+import type { DiceRollRequest } from "@/lib/game-types";
 
 type PlayerInputProps = {
   draft: string;
   isSending: boolean;
   isSubmitted: boolean;
   lockMessage?: string;
+  requiredRoll?: DiceRollRequest | null;
   validationMessage?: string;
   validationPulse: number;
   onDraftChange: (value: string) => void;
@@ -20,6 +22,7 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
       isSending,
       isSubmitted,
       lockMessage,
+      requiredRoll,
       validationMessage,
       validationPulse,
       onDraftChange,
@@ -44,8 +47,11 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
       return () => window.clearTimeout(timeout);
     }, [validationMessage, validationPulse]);
 
-    const overlayMessage = lockMessage || (isSubmitted ? "Submitted." : "");
+    const overlayMessage = requiredRoll
+      ? `Roll ${requiredRoll.dice}: ${requiredRoll.label}`
+      : lockMessage || (isSubmitted ? "Submitted." : "");
     const isLocked = Boolean(lockMessage) || isSubmitted;
+    const isRollRequired = Boolean(requiredRoll);
 
     return (
       <form
@@ -64,12 +70,12 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
         <button
           className="dice-roll-button"
           type="button"
-          aria-label="Roll d20"
-          disabled={isLocked || isSending}
+          aria-label={requiredRoll ? `Roll ${requiredRoll.dice}` : "Roll d20"}
+          disabled={(isLocked && !isRollRequired) || isSending}
           onClick={onRollD20}
         >
           <Dice5 size={22} />
-          <span>d20</span>
+          <span>{requiredRoll?.dice ?? "d20"}</span>
         </button>
         <div className="turn-form-input-wrap">
           <textarea
@@ -86,7 +92,10 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
             </div>
           ) : null}
         </div>
-        <button type="submit" disabled={isLocked || isSending || !draft.trim()}>
+        <button
+          type="submit"
+          disabled={isRollRequired || isLocked || isSending || !draft.trim()}
+        >
           <Send size={18} />
           Send
         </button>

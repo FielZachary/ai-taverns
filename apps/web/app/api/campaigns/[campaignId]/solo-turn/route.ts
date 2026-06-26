@@ -15,20 +15,24 @@ type RouteContext = {
 
 type SoloTurnBody = {
   message?: string;
+  rollRequestId?: string;
 };
 
 export async function POST(request: Request, context: RouteContext) {
   const { campaignId } = await context.params;
   const body = (await request.json()) as SoloTurnBody;
   const message = body.message?.trim();
+  const rollRequestId = body.rollRequestId?.trim();
 
-  if (!message) {
+  if (!message && !rollRequestId) {
     return jsonError("A player message is required.", 400);
   }
 
   try {
     const user = await requireUser();
-    return NextResponse.json(await submitSoloTurn(campaignId, message, user.id));
+    return NextResponse.json(
+      await submitSoloTurn(campaignId, message ?? "", user.id, rollRequestId)
+    );
   } catch (error) {
     console.error(error);
     if (error instanceof HttpError) {

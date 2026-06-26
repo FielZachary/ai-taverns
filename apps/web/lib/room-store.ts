@@ -1,12 +1,15 @@
+import { randomInt } from "crypto";
 import type { PoolClient } from "pg";
-import type { GameMessage } from "@/lib/game-types";
+import type { DiceRollRequest, GameMessage } from "@/lib/game-types";
 import { HttpError } from "@/lib/auth";
 import { query, withTransaction } from "@/lib/db";
 import {
   dungeonMasterInstructions,
   ensureHermesSession,
+  extractHermesRollRequest,
   hermesFetch,
   normalizeHermesContent,
+  normalizeRollRequest,
   openingSceneRequest,
   titleFromSessionId
 } from "@/lib/hermes";
@@ -34,6 +37,7 @@ export type RoomSnapshot = {
   messages: GameMessage[];
   isResolving: boolean;
   hasBegun: boolean;
+  pendingRollRequest: DiceRollRequest | null;
   updatedAt: string;
 };
 
@@ -58,6 +62,7 @@ type CampaignRow = {
   has_begun: boolean;
   owner_user_id: string | null;
   owner_client_id: string | null;
+  metadata: unknown;
   updated_at: Date | string;
   created_at: Date | string;
 };
@@ -157,6 +162,61 @@ function eventPayload(payload: unknown) {
   }
 
   return payload as Record<string, unknown>;
+}
+
+function pendingRollRequestFromCampaign(campaign: CampaignRow) {
+  const metadata = eventPayload(campaign.metadata);
+  return normalizeRollRequest(metadata.pendingRollRequest);
+}
+
+function modifierText(modifier: number | undefined) {
+  if (!modifier) {
+    return "";
+  }
+
+  return modifier > 0 ? ` + ${modifier}` : ` - ${Math.abs(modifier)}`;
+}
+
+function rollDiceExpression(dice: string, modifier: number | undefined) {
+  const match = dice.trim().match(/^(\d*)d(\d+)$/i);
+
+  if (!match) {
+    throw new HttpError("Hermes requested an unsupported dice roll.", 400);
+  }
+
+  const count = Number(match[1] || "1");
+  const sides = Number(match[2]);
+
+  if (
+    !Number.isInteger(count) ||
+    !Number.isInteger(sides) ||
+    count < 1 ||
+    count > 20 ||
+    sides < 2 ||
+    sides > 1000
+  ) {
+    throw new HttpError("Hermes requested an unsupported dice roll.", 400);
+  }
+
+  const rolls = Array.from({ length: count }, () => randomInt(1, sides + 1));
+  const total = rolls.reduce((sum, roll) => sum + roll, modifier ?? 0);
+
+  return {
+    rolls,
+    total
+  };
+}
+
+function formatRollSubmission(request: DiceRollRequest) {
+  const result = rollDiceExpression(request.dice, request.modifier);
+  const rollsText =
+    result.rolls.length === 1
+      ? `natural roll ${result.rolls[0]}`
+      : `natural rolls ${result.rolls.join(", ")}`;
+
+  return `Rolled ${request.label}: ${request.dice}${modifierText(
+    request.modifier
+  )} = ${result.total} (${rollsText})`;
 }
 
 function rowToRoomPlayer(
@@ -457,7 +517,8 @@ async function askHermes(sessionId: string, message: string, instructions: strin
 
   return {
     id: hermesData.message?.id,
-    content: reply
+    content: reply,
+    rollRequest: extractHermesRollRequest(hermesData)
   };
 }
 
@@ -520,6 +581,7 @@ async function buildSnapshot(campaign: CampaignRow): Promise<RoomSnapshot> {
     messages,
     isResolving: currentTurn?.status === "resolving",
     hasBegun: campaign.has_begun,
+    pendingRollRequest: pendingRollRequestFromCampaign(campaign),
     updatedAt: toIso(campaign.updated_at)
   };
 }
@@ -540,7 +602,8 @@ async function finishResolvedTurn(
   turnId: string,
   hermesMessageId: string | undefined,
   reply: string,
-  eventType: "adventure_begun" | "turn_resolved"
+  eventType: "adventure_begun" | "turn_resolved",
+  pendingRollRequest: DiceRollRequest | null = null
 ) {
   await withTransaction(async (client) => {
     await client.query(
@@ -564,8 +627,20 @@ async function finishResolvedTurn(
       hermesMessageId,
       messageId: hermesMessageId ?? crypto.randomUUID(),
       role: "dm",
-      content: reply
+      content: reply,
+      pendingRollRequest
     });
+    await client.query(
+      `
+        update campaigns
+        set metadata = case
+          when $2::jsonb = 'null'::jsonb then metadata - 'pendingRollRequest'
+          else jsonb_set(metadata, '{pendingRollRequest}', $2::jsonb, true)
+        end
+        where id = $1
+      `,
+      [campaignId, JSON.stringify(pendingRollRequest)]
+    );
     await ensureCollectingTurn(client, campaignId);
   });
 }
@@ -616,7 +691,8 @@ async function maybeResolveTurn(campaign: CampaignRow, turn: TurnRow) {
       turn.id,
       reply.id,
       reply.content,
-      "turn_resolved"
+      "turn_resolved",
+      reply.rollRequest
     );
     return true;
   } catch (error) {
@@ -1322,7 +1398,8 @@ export async function beginRoomAdventure(
       beginState.turn.id,
       reply.id,
       reply.content,
-      "adventure_begun"
+      "adventure_begun",
+      reply.rollRequest
     );
   } catch (error) {
     await markTurnFailed(beginState.turn.id, error);
@@ -1345,7 +1422,8 @@ export async function submitRoomTurn(
   sessionId: string,
   playerId: string,
   content: string,
-  userId: string
+  userId: string,
+  rollRequestId?: string
 ) {
   const submissionState = await withTransaction(async (client) => {
     const campaign = await resolveCampaign(roomId, sessionId, client);
@@ -1375,8 +1453,26 @@ export async function submitRoomTurn(
       throw new Error("Player profile is incomplete.");
     }
 
+    const pendingRollRequest = pendingRollRequestFromCampaign(campaign);
+    const isRollSubmission = Boolean(rollRequestId);
+
+    if (pendingRollRequest) {
+      if (rollRequestId !== pendingRollRequest.id) {
+        throw new HttpError("Hermes is waiting for the required roll.", 409);
+      }
+    } else if (isRollSubmission) {
+      throw new HttpError("There is no pending roll to resolve.", 400);
+    }
+
     const turn = await ensureCollectingTurn(client, campaign.id);
-    const trimmedContent = content.trim();
+    const trimmedContent = pendingRollRequest
+      ? formatRollSubmission(pendingRollRequest)
+      : content.trim();
+
+    if (!trimmedContent) {
+      throw new HttpError("A player message is required.", 400);
+    }
+
     await client.query(
       `
         insert into submissions (campaign_id, turn_id, player_id, content)
@@ -1414,7 +1510,8 @@ export async function submitRoomTurn(
 export async function submitSoloTurn(
   campaignId: string,
   content: string,
-  userId: string
+  userId: string,
+  rollRequestId?: string
 ) {
   const soloState = await withTransaction(async (client) => {
     const campaign = (
@@ -1445,6 +1542,17 @@ export async function submitSoloTurn(
       throw new HttpError("A solo player profile is required.", 400);
     }
 
+    const pendingRollRequest = pendingRollRequestFromCampaign(campaign);
+    const isRollSubmission = Boolean(rollRequestId);
+
+    if (pendingRollRequest) {
+      if (rollRequestId !== pendingRollRequest.id) {
+        throw new HttpError("Hermes is waiting for the required roll.", 409);
+      }
+    } else if (isRollSubmission) {
+      throw new HttpError("There is no pending roll to resolve.", 400);
+    }
+
     const turn = await ensureCollectingTurn(client, campaign.id);
     const claimedTurn = await client.query<TurnRow>(
       `
@@ -1460,7 +1568,14 @@ export async function submitSoloTurn(
       throw new HttpError("That turn is already resolving.", 409);
     }
 
-    const trimmedContent = content.trim();
+    const trimmedContent = pendingRollRequest
+      ? formatRollSubmission(pendingRollRequest)
+      : content.trim();
+
+    if (!trimmedContent) {
+      throw new HttpError("A player message is required.", 400);
+    }
+
     await client.query(
       `
         insert into submissions (campaign_id, turn_id, player_id, content)
@@ -1501,7 +1616,8 @@ export async function submitSoloTurn(
       soloState.turn.id,
       reply.id,
       reply.content,
-      "turn_resolved"
+      "turn_resolved",
+      reply.rollRequest
     );
   } catch (error) {
     await markTurnFailed(soloState.turn.id, error);

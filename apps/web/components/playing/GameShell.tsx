@@ -18,7 +18,7 @@ import {
   Send,
   X
 } from "lucide-react";
-import type { GameMessage } from "@/lib/game-types";
+import type { DiceRollRequest, GameMessage } from "@/lib/game-types";
 import {
   ChatHistorySidebar,
   type ChatSummary
@@ -81,6 +81,7 @@ type RoomSnapshot = {
   messages: GameMessage[];
   isResolving: boolean;
   hasBegun: boolean;
+  pendingRollRequest: DiceRollRequest | null;
 };
 
 type GameShellProps = {
@@ -156,6 +157,8 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
   const [roomMessages, setRoomMessages] = useState<GameMessage[]>([]);
   const [isRoomResolving, setIsRoomResolving] = useState(false);
   const [hasAdventureBegun, setHasAdventureBegun] = useState(false);
+  const [pendingRollRequest, setPendingRollRequest] =
+    useState<DiceRollRequest | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const activeCampaign = useMemo(
@@ -213,6 +216,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
       setRoomMessages(room.messages);
       setIsRoomResolving(room.isResolving);
       setHasAdventureBegun(room.hasBegun);
+      setPendingRollRequest(room.pendingRollRequest);
 
       const currentPlayer = room.players.find(
         (roomPlayer) => roomPlayer.id === playerId
@@ -444,12 +448,13 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
   ]);
 
   useEffect(() => {
-    if (!activeCampaign || isSinglePlayer) {
+    if (!activeCampaign) {
       setRoomPlayers([]);
       setRoomMessages([]);
-      setHasAdventureBegun(Boolean(activeCampaign));
+      setHasAdventureBegun(false);
       setIsRoomResolving(false);
       setIsInputSubmitted(false);
+      setPendingRollRequest(null);
       return;
     }
 
@@ -470,7 +475,13 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
         const room = (await response.json()) as RoomSnapshot;
 
         if (!shouldIgnore) {
-          applyRoomSnapshot(room);
+          if (isSinglePlayer) {
+            setIsRoomResolving(room.isResolving);
+            setHasAdventureBegun(true);
+            setPendingRollRequest(room.pendingRollRequest);
+          } else {
+            applyRoomSnapshot(room);
+          }
         }
       } catch {
         if (!shouldIgnore) {
@@ -509,6 +520,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     setRoomMessages([]);
     setRoomPlayers([]);
     setHasAdventureBegun(campaign.mode === "single_player");
+    setPendingRollRequest(null);
     setInputValidationMessage("");
     setTableAlert("");
     setIsInputSubmitted(false);
@@ -732,6 +744,12 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
       return;
     }
 
+    if (pendingRollRequest) {
+      setInputValidationMessage("Hermes is waiting for the required roll.");
+      setInputValidationPulse((currentPulse) => currentPulse + 1);
+      return;
+    }
+
     if (!isSinglePlayer && !hasAdventureBegun) {
       setInputValidationMessage("Begin the adventure before sending turns.");
       setInputValidationPulse((currentPulse) => currentPulse + 1);
@@ -843,7 +861,91 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     void sendTurn(draft);
   }
 
+  async function sendPendingRoll() {
+    if (!pendingRollRequest || isSending || !activeCampaign) {
+      return;
+    }
+
+    setInputValidationMessage("");
+    setIsSending(true);
+    setDraft("");
+
+    try {
+      const response = await fetch(
+        isSinglePlayer
+          ? `/api/campaigns/${encodeURIComponent(activeCampaign.id)}/solo-turn`
+          : "/api/room/submit",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(
+            isSinglePlayer
+              ? {
+                  rollRequestId: pendingRollRequest.id
+                }
+              : {
+                  roomId: activeCampaign.id,
+                  sessionId: activeCampaign.hermesSessionId,
+                  playerId,
+                  rollRequestId: pendingRollRequest.id
+                }
+          )
+        }
+      );
+
+      if (!response.ok) {
+        const message = await getApiErrorMessage(
+          response,
+          "The roll could not be sent."
+        );
+        throw new Error(message);
+      }
+
+      const room = (await response.json()) as RoomSnapshot;
+      applyRoomSnapshot(room);
+
+      if (isSinglePlayer) {
+        setMessages(room.messages.length > 0 ? room.messages : openingMessages);
+      }
+
+      const latestMessage = room.messages[room.messages.length - 1];
+      setAvailableCampaigns((currentCampaigns) =>
+        updateCampaignPreview(
+          currentCampaigns,
+          activeCampaign.id,
+          latestMessage?.content ?? "Roll sent"
+        )
+      );
+    } catch (error) {
+      setMessages((currentMessages) => [
+        ...currentMessages,
+        {
+          id: createClientId(),
+          role: "system",
+          content:
+            error instanceof Error
+              ? error.message
+              : "The roll could not be sent.",
+          createdAt: new Date().toISOString()
+        }
+      ]);
+    } finally {
+      setIsSending(false);
+      if (isSinglePlayer) {
+        setIsInputSubmitted(false);
+      }
+      inputRef.current?.focus();
+    }
+  }
+
   function handleRollD20() {
+    if (pendingRollRequest) {
+      void sendPendingRoll();
+      return;
+    }
+
     const roll = Math.floor(Math.random() * 20) + 1;
     const rollText = `I rolled a d20: ${roll}`;
 
@@ -1042,10 +1144,13 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
               isSending={isSending}
               isSubmitted={isSending || isInputSubmitted}
               lockMessage={
-                !isSinglePlayer && !hasAdventureBegun
+                pendingRollRequest
+                  ? `Roll required: ${pendingRollRequest.label}`
+                  : !isSinglePlayer && !hasAdventureBegun
                   ? "You can only start once the adventure has begun"
                   : undefined
               }
+              requiredRoll={pendingRollRequest}
               validationMessage={inputValidationMessage}
               validationPulse={inputValidationPulse}
               onDraftChange={setDraft}
@@ -1069,6 +1174,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
         className="floating-send"
         type="button"
         aria-label="Send turn"
+        disabled={Boolean(pendingRollRequest) || isSending || !draft.trim()}
         onClick={() => void sendTurn(draft)}
       >
         <Send size={22} />
