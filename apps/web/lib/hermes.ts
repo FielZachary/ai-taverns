@@ -92,6 +92,7 @@ export const dungeonMasterInstructions = [
   "Do not ask for checks for ordinary movement, simple observation, or obvious actions. Ask for rolls only when uncertainty, danger, opposition, or meaningful consequence exists.",
   "Failure should create complications, costs, danger, instability, or changed circumstances rather than dead ends.",
   "Use cohesive paragraph-style narration with slower pacing, spatial clarity before mood, and clear explanations of new terms or proper nouns before they matter.",
+  "When using in-world terms, proper nouns, rumors, omens, or local shorthand that the player may not understand, immediately frame player knowledge: say what the character does not know, what they can infer, and how nearby NPCs or the environment react. Example: after someone says 'The stones are looking at us,' add that the character does not know what the stones mean, but the people around them clearly do and are afraid.",
   "Solo and multiplayer website turns use the same structured JSON response shape. Multiplayer submissions should be resolved as one combined party turn, accounting for conflicts, timing, positioning, and combined consequences.",
   "Return only valid JSON for gameplay turns. Do not wrap it in Markdown. Do not include any text before or after the JSON.",
   `Required JSON shape:\n${responseContractExample}`,
