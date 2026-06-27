@@ -782,11 +782,15 @@ async function buildSnapshot(campaign: CampaignRow): Promise<RoomSnapshot> {
   const events = await query<EventRow>(
     `
       select id, type, payload, created_at
-      from campaign_events
-      where campaign_id = $1
-        and type in ('turn_submitted', 'turn_resolved', 'adventure_begun')
+      from (
+        select id, type, payload, created_at
+        from campaign_events
+        where campaign_id = $1
+          and type in ('turn_submitted', 'turn_resolved', 'adventure_begun')
+        order by created_at desc
+        limit 100
+      ) recent_events
       order by created_at asc
-      limit 100
     `,
     [campaign.id]
   );
