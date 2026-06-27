@@ -31,11 +31,50 @@ type DiceRollReveal3DProps = {
 };
 
 let diceBoxScriptPromise: Promise<DiceBoxConstructor> | null = null;
+const diceRollSoundPath = "/audio/dice-roll.mp3";
+const diceRollSoundDelayMs = 50;
 
 function nextFrame() {
   return new Promise<void>((resolve) => {
     window.requestAnimationFrame(() => resolve());
   });
+}
+
+function diceCountFromNotation(notation: string) {
+  const diceExpression = notation.split("@")[0] ?? "";
+  const matches = diceExpression.matchAll(/(\d*)d\d+/gi);
+  let count = 0;
+
+  for (const match of matches) {
+    count += Number(match[1] || "1");
+  }
+
+  return Math.max(1, Math.min(count, 20));
+}
+
+function playDiceRollSounds(notation: string) {
+  const soundCount = diceCountFromNotation(notation);
+  const timers: number[] = [];
+  const sounds: HTMLAudioElement[] = [];
+
+  for (let index = 0; index < soundCount; index += 1) {
+    const timer = window.setTimeout(() => {
+      const sound = new Audio(diceRollSoundPath);
+      sound.volume = 0.75;
+      sounds.push(sound);
+      void sound.play().catch(() => undefined);
+    }, index * diceRollSoundDelayMs);
+
+    timers.push(timer);
+  }
+
+  return () => {
+    timers.forEach((timer) => window.clearTimeout(timer));
+    sounds.forEach((sound) => {
+      sound.pause();
+      sound.currentTime = 0;
+    });
+  };
 }
 
 function loadDiceBoxConstructor(): Promise<DiceBoxConstructor> {
@@ -123,6 +162,7 @@ export function DiceRollReveal3D({
     let fallbackTimer: number | undefined;
     let safetyTimer: number | undefined;
     let diceBox: DiceBoxInstance | undefined;
+    const stopDiceRollSounds = playDiceRollSounds(notation);
 
     function finishWithFallback() {
       if (isCancelled || hasFinished) {
@@ -203,6 +243,7 @@ export function DiceRollReveal3D({
       if (safetyTimer) {
         window.clearTimeout(safetyTimer);
       }
+      stopDiceRollSounds();
       diceBox?.clearDice?.();
       document.getElementById(containerId)?.replaceChildren();
     };
