@@ -56,9 +56,8 @@ const customCharacterCreationSteps = [
 const quickCharacterCreationSteps = [
   "Build",
   "Class",
-  "Fantasy",
+  "Archetype",
   "Species",
-  "Background",
   "Identity",
   "Sheet"
 ];
@@ -525,6 +524,21 @@ type CharacterSpecies = (typeof speciesOptions)[number];
 type CharacterBackground = (typeof backgroundOptions)[number];
 type Alignment = (typeof alignmentOptions)[number];
 
+const quickBuildBackgroundByClass: Record<CharacterClass, CharacterBackground> = {
+  Barbarian: "Outlander",
+  Bard: "Entertainer",
+  Cleric: "Acolyte",
+  Druid: "Hermit",
+  Fighter: "Soldier",
+  Monk: "Hermit",
+  Paladin: "Noble",
+  Ranger: "Outlander",
+  Rogue: "Criminal",
+  Sorcerer: "Hermit",
+  Warlock: "Sage",
+  Wizard: "Sage"
+};
+
 function formatList(items: readonly string[]) {
   return items.length > 0 ? items.join(", ") : "None";
 }
@@ -648,7 +662,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
       `Player Name: ${mode === "single_player" ? name : "Table Owner"}`,
       `Build Mode: ${characterBuildMode === "custom" ? "Custom Build" : "Quick Build"}`,
       characterBuildMode === "quick"
-        ? `Character Fantasy: ${selectedQuickBuildFantasy.label}`
+        ? `Character Archetype: ${selectedQuickBuildFantasy.label}`
         : null,
       `Level: ${characterLevel}`,
       `Class: ${selectedClass.id}`,
@@ -751,7 +765,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
       }
 
       if (isQuickBuild && characterStepIndex === 2) {
-        return "Choose your character fantasy";
+        return "Choose your character archetype";
       }
 
       return `Choose your ${characterCreationSteps[characterStepIndex].toLowerCase()}`;
@@ -792,6 +806,10 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
     setSelectedSkills([...nextClassData.defaultSkills] as SkillName[]);
     setEquipmentKitId(nextClassData.equipmentKits[0].id);
     setSelectedSpells(nextClassData.spells.slice(0, Math.min(5, nextClassData.spells.length)));
+
+    if (characterBuildMode === "quick") {
+      setCharacterBackground(quickBuildBackgroundByClass[nextClass]);
+    }
   }
 
   function applyQuickBuildFantasy(nextFantasy: QuickBuildFantasy) {
@@ -820,6 +838,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
     );
 
     setQuickBuildFantasy(nextFantasy);
+    setCharacterBackground(quickBuildBackgroundByClass[characterClass]);
     setSubclass(subclassChoice);
     setClassFeatureChoice(featureChoice);
     setSelectedSkills(
@@ -882,7 +901,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
 
       if (isQuickBuild) {
         return (
-          characterStepIndex !== 5 ||
+          characterStepIndex !== 4 ||
           mode === "multiplayer" ||
           Boolean(characterName.trim())
         );
@@ -916,7 +935,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
             ? "Name the world and describe it before continuing."
             : "Choose a campaign genre before continuing."
           : mode === "single_player" &&
-              ((isQuickBuild && characterStepIndex === 5) ||
+              ((isQuickBuild && characterStepIndex === 4) ||
                 (!isQuickBuild && characterStepIndex === 10))
             ? "Add your character name before continuing."
             : characterStepIndex === 9
@@ -1202,7 +1221,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
 
                 {isQuickBuild && characterStepIndex === 2 ? (
                   <fieldset className="option-picker quick-fantasy-picker">
-                    <legend>Character fantasy</legend>
+                    <legend>Character archetype</legend>
                     <div>
                       {quickBuildFantasyOptions.map((option) => (
                         <button
@@ -1240,8 +1259,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                   </fieldset>
                 ) : null}
 
-                {(!isQuickBuild && characterStepIndex === 3) ||
-                (isQuickBuild && characterStepIndex === 4) ? (
+                {!isQuickBuild && characterStepIndex === 3 ? (
                   <fieldset className="option-picker compact-option-picker">
                     <legend>Background</legend>
                     <div>
@@ -1431,7 +1449,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                 ) : null}
 
                 {(!isQuickBuild && characterStepIndex === 10) ||
-                (isQuickBuild && characterStepIndex === 5) ? (
+                (isQuickBuild && characterStepIndex === 4) ? (
                   <div className="identity-panel">
                     <div className="character-identity-fields">
                       <label>
@@ -1474,7 +1492,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                 ) : null}
 
                 {(!isQuickBuild && characterStepIndex === 11) ||
-                (isQuickBuild && characterStepIndex === 6) ? (
+                (isQuickBuild && characterStepIndex === 5) ? (
                   <>
                     <div className="character-summary-grid">
                       <div>
@@ -1513,7 +1531,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                   </>
                 ) : null}
 
-                {characterStepIndex < 11 ? (
+                {!isLastCharacterStep ? (
                   <section className="character-current-pick">
                     <span>Current character</span>
                     <strong>
