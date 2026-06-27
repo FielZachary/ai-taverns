@@ -1016,7 +1016,6 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     }
 
     setActiveDiceReveal(null);
-    setMessages((currentMessages) => [...currentMessages, rollMessage]);
     setIsSending(true);
     setDraft("");
     setAvailableCampaigns((currentCampaigns) =>
@@ -1102,7 +1101,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
   }
 
   async function sendPendingRoll(queuedDice: QueuedDice) {
-    if (!pendingRollRequest || isSending || !activeCampaign) {
+    if (!pendingRollRequest || isSending || activeDiceReveal || !activeCampaign) {
       return;
     }
 
@@ -1129,6 +1128,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     const campaign = activeCampaign;
     const singlePlayer = isSinglePlayer;
 
+    setMessages((currentMessages) => [...currentMessages, rollMessage]);
     setActiveDiceReveal({
       id: rollMessage.id,
       notation: predeterminedDiceNotation(rollRequest.dice, rollResult.rolls),

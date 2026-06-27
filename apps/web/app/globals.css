@@ -1820,6 +1820,39 @@ h1 {
   height: 100% !important;
 }
 
+.dice-reveal-fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.dice-reveal-fallback-die {
+  display: grid;
+  width: clamp(78px, 14vw, 148px);
+  height: clamp(78px, 14vw, 148px);
+  place-items: center;
+  border: 2px solid rgba(244, 207, 122, 0.62);
+  border-radius: 22px;
+  color: #1b120b;
+  background:
+    linear-gradient(145deg, rgba(255, 244, 210, 0.98), rgba(196, 159, 93, 0.92));
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.5),
+    inset 0 2px 12px rgba(255, 255, 255, 0.55);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(1.6rem, 5vw, 3.3rem);
+  font-weight: 900;
+  transform: rotate(12deg);
+  animation: dice-reveal-fallback-roll 0.58s ease-in-out infinite alternate;
+}
+
+.dice-reveal-fallback-die:empty::after {
+  color: rgba(27, 18, 11, 0.72);
+  content: "?";
+}
+
 .dice-reveal-summary {
   position: absolute;
   right: clamp(18px, 4vw, 48px);
@@ -1860,6 +1893,16 @@ h1 {
 
   to {
     opacity: 1;
+  }
+}
+
+@keyframes dice-reveal-fallback-roll {
+  from {
+    transform: translate(-8px, 4px) rotate(-14deg) scale(0.96);
+  }
+
+  to {
+    transform: translate(8px, -4px) rotate(14deg) scale(1.04);
   }
 }
 
