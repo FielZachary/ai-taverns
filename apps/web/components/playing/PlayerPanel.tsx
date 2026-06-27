@@ -35,11 +35,13 @@ export const emptyPlayerProfile: PlayerProfile = {
 };
 
 type PlayerPanelProps = {
+  initialProfile?: PlayerProfile;
   onProfileChange: (profile: PlayerProfile) => void;
   onProfileUpdate: (profile: PlayerProfile) => void;
 };
 
 export function PlayerPanel({
+  initialProfile,
   onProfileChange,
   onProfileUpdate
 }: PlayerPanelProps) {
@@ -49,12 +51,22 @@ export function PlayerPanel({
   const [isSheetOpen, setIsSheetOpen] = useState(false);
 
   useEffect(() => {
-    setUsername(localStorage.getItem(storageKeys.username) ?? "");
-    setCharacterName(localStorage.getItem(storageKeys.characterName) ?? "");
-    setCharacterSheet(
-      localStorage.getItem(storageKeys.characterSheet) ?? defaultCharacterSheet
+    const savedUsername = localStorage.getItem(storageKeys.username) ?? "";
+    const savedCharacterName =
+      localStorage.getItem(storageKeys.characterName) ?? "";
+    const savedCharacterSheet =
+      localStorage.getItem(storageKeys.characterSheet) ?? "";
+
+    setUsername(savedUsername || initialProfile?.username || "");
+    setCharacterName(
+      savedCharacterName || initialProfile?.characterName || ""
     );
-  }, []);
+    setCharacterSheet(
+      savedCharacterSheet ||
+        initialProfile?.characterSheet ||
+        defaultCharacterSheet
+    );
+  }, [initialProfile]);
 
   useEffect(() => {
     localStorage.setItem(storageKeys.username, username);

@@ -65,6 +65,7 @@ type RoomPlayer = {
   slot: number;
   username: string;
   characterName: string;
+  characterSheet: string;
   status: "waiting" | "submitted";
 };
 
@@ -426,6 +427,8 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
   const [isSessionPanelOpen, setIsSessionPanelOpen] = useState(true);
   const [playerProfile, setPlayerProfile] =
     useState<PlayerProfile>(emptyPlayerProfile);
+  const [roomPlayerProfile, setRoomPlayerProfile] =
+    useState<PlayerProfile | undefined>();
   const [inputValidationMessage, setInputValidationMessage] = useState("");
   const [inputValidationPulse, setInputValidationPulse] = useState(0);
   const [isInputSubmitted, setIsInputSubmitted] = useState(false);
@@ -502,6 +505,31 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
       const currentPlayer = room.players.find(
         (roomPlayer) => roomPlayer.id === playerId
       );
+
+      if (
+        currentPlayer?.username ||
+        currentPlayer?.characterName ||
+        currentPlayer?.characterSheet
+      ) {
+        const snapshotProfile = {
+          username: currentPlayer.username,
+          characterName: currentPlayer.characterName,
+          characterSheet: currentPlayer.characterSheet
+        };
+
+        setPlayerProfile((currentProfile) =>
+          getMissingPlayerProfileFields(currentProfile).length === 0
+            ? currentProfile
+            : snapshotProfile
+        );
+        setRoomPlayerProfile((currentProfile) =>
+          currentProfile?.username === snapshotProfile.username &&
+          currentProfile.characterName === snapshotProfile.characterName &&
+          currentProfile.characterSheet === snapshotProfile.characterSheet
+            ? currentProfile
+            : snapshotProfile
+        );
+      }
 
       if (currentPlayer?.status === "submitted" || room.isResolving) {
         setIsInputSubmitted(true);
@@ -1522,6 +1550,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
 
           {isSessionPanelOpen && !isSinglePlayer ? (
             <PlayerPanel
+              initialProfile={roomPlayerProfile}
               onProfileChange={setPlayerProfile}
               onProfileUpdate={(profile) => {
                 void registerPlayerProfile(profile);
