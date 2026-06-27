@@ -55,10 +55,6 @@ type CampaignsApiResponse = {
   error?: string;
 };
 
-type HermesMessagesApiResponse = {
-  messages?: GameMessage[];
-};
-
 type ApiErrorResponse = {
   error?: string;
 };
@@ -452,7 +448,6 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     [activeCampaignId, availableCampaigns]
   );
   const isSinglePlayer = activeCampaign?.mode === "single_player";
-  const activeHermesSessionId = activeCampaign?.hermesSessionId ?? "";
   const pendingRollRequest = pendingRollRequests[0] ?? null;
 
   const playerStatusSlots = useMemo<PlayerStatusSlot[]>(() => {
@@ -516,30 +511,42 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     [playerId]
   );
 
-  const loadSessionMessages = useCallback(async (sessionId: string) => {
+  const loadCampaignMessages = useCallback(async (campaign: CampaignSummary) => {
     setIsLoadingMessages(true);
 
     try {
       const response = await fetch(
-        `/api/hermes/sessions/${encodeURIComponent(sessionId)}/messages`
+        `/api/room?roomId=${encodeURIComponent(
+          campaign.id
+        )}&sessionId=${encodeURIComponent(campaign.hermesSessionId)}`
       );
 
       if (!response.ok) {
-        throw new Error("Session messages could not be loaded.");
+        throw new Error("Campaign messages could not be loaded.");
       }
 
-      const data = (await response.json()) as HermesMessagesApiResponse;
+      const room = (await response.json()) as RoomSnapshot;
       setMessages(
-        data.messages && data.messages.length > 0
-          ? data.messages
+        campaign.mode === "single_player" && room.messages.length > 0
+          ? room.messages
           : openingMessages
       );
+
+      if (campaign.mode === "single_player") {
+        setRoomMessages([]);
+        setRoomPlayers(room.players);
+        setIsRoomResolving(room.isResolving);
+        setHasAdventureBegun(true);
+        setPendingRollRequests(rollRequestsFromRoom(room));
+      } else {
+        applyRoomSnapshot(room);
+      }
     } catch {
       setMessages(openingMessages);
     } finally {
       setIsLoadingMessages(false);
     }
-  }, []);
+  }, [applyRoomSnapshot]);
 
   const fetchCampaigns = useCallback(async () => {
     const response = await fetch("/api/campaigns");
@@ -616,7 +623,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
         }
 
         setActiveCampaignId(selectedCampaign.id);
-        await loadSessionMessages(selectedCampaign.hermesSessionId);
+        await loadCampaignMessages(selectedCampaign);
       } catch {
         if (!shouldIgnore) {
           setAvailableCampaigns([]);
@@ -634,7 +641,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     return () => {
       shouldIgnore = true;
     };
-  }, [fetchCampaigns, initialCampaignId, loadSessionMessages]);
+  }, [fetchCampaigns, initialCampaignId, loadCampaignMessages]);
 
   useEffect(() => {
     let shouldIgnore = false;
@@ -809,7 +816,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     setInputValidationMessage("");
     setTableAlert("");
     setIsInputSubmitted(false);
-    await loadSessionMessages(campaign.hermesSessionId);
+    await loadCampaignMessages(campaign);
     inputRef.current?.focus();
   }
 
@@ -840,7 +847,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     if (campaignId === activeCampaignId) {
       setMessages(openingMessages);
       if (nextActiveCampaign) {
-        void loadSessionMessages(nextActiveCampaign.hermesSessionId);
+        void loadCampaignMessages(nextActiveCampaign);
       }
     }
 
