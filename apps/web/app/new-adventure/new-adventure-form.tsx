@@ -32,12 +32,14 @@ type CreateCampaignResponse = {
 type AbilityKey = "str" | "dex" | "con" | "int" | "wis" | "cha";
 type AbilityScores = Record<AbilityKey, number>;
 type SkillName = (typeof skillDefinitions)[number]["name"];
+type CharacterBuildMode = "quick" | "custom";
 
 const playerIdStorageKey = "ai-dnd.playerId";
 const characterLevel = 5;
 const proficiencyBonus = 3;
 const steps = ["Mode", "Campaign", "Character", "Review"];
 const characterCreationSteps = [
+  "Build",
   "Class",
   "Species",
   "Background",
@@ -525,6 +527,8 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
   const [customWorldName, setCustomWorldName] = useState("");
   const [customWorldDescription, setCustomWorldDescription] = useState("");
   const [characterName, setCharacterName] = useState("");
+  const [characterBuildMode, setCharacterBuildMode] =
+    useState<CharacterBuildMode>("custom");
   const [characterClass, setCharacterClass] = useState<CharacterClass>("Fighter");
   const [characterSpecies, setCharacterSpecies] = useState<CharacterSpecies>("Human");
   const [characterBackground, setCharacterBackground] = useState<CharacterBackground>("Folk Hero");
@@ -592,6 +596,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
     return [
       `Character Name: ${name}`,
       `Player Name: ${mode === "single_player" ? name : "Table Owner"}`,
+      `Build Mode: ${characterBuildMode === "custom" ? "Custom Build" : "Quick Build"}`,
       `Level: ${characterLevel}`,
       `Class: ${selectedClass.id}`,
       `Subclass: ${subclass}`,
@@ -648,6 +653,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
     alignment,
     backgroundSkillList,
     characterBackground,
+    characterBuildMode,
     characterName,
     characterSpecies,
     classFeatureChoice,
@@ -680,7 +686,11 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
         return "Review your character";
       }
 
-      if (characterStepIndex === 3) {
+      if (characterStepIndex === 0) {
+        return "Choose your character build";
+      }
+
+      if (characterStepIndex === 4) {
         return "Set your Level 5 abilities";
       }
 
@@ -757,16 +767,20 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
     }
 
     if (stepIndex === 2) {
-      if (characterStepIndex === 5) {
+      if (characterStepIndex === 0) {
+        return characterBuildMode === "custom";
+      }
+
+      if (characterStepIndex === 6) {
         return selectedSkills.length > 0;
       }
 
-      if (characterStepIndex === 8 && hasSpells) {
+      if (characterStepIndex === 9 && hasSpells) {
         return selectedSpells.length > 0;
       }
 
       return (
-        characterStepIndex !== 9 ||
+        characterStepIndex !== 10 ||
         mode === "multiplayer" ||
         Boolean(characterName.trim())
       );
@@ -784,9 +798,11 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
           ? isCustomGenre
             ? "Name the world and describe it before continuing."
             : "Choose a campaign genre before continuing."
-          : mode === "single_player" && characterStepIndex === 9
+          : characterStepIndex === 0 && characterBuildMode === "quick"
+            ? "Quick Build is coming soon. Choose Custom Build for now."
+            : mode === "single_player" && characterStepIndex === 10
             ? "Add your character name before continuing."
-            : characterStepIndex === 8
+            : characterStepIndex === 9
               ? "Choose at least one spell before continuing."
               : "Choose at least one option before continuing."
       );
@@ -1018,6 +1034,32 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                 </ol>
 
                 {characterStepIndex === 0 ? (
+                  <fieldset className="option-picker build-mode-picker">
+                    <legend>Build style</legend>
+                    <div>
+                      <button
+                        type="button"
+                        className={characterBuildMode === "quick" ? "selected" : ""}
+                        aria-pressed={characterBuildMode === "quick"}
+                        onClick={() => setCharacterBuildMode("quick")}
+                      >
+                        <strong>Quick Build</strong>
+                        <small>Coming soon. We will design this flow together next.</small>
+                      </button>
+                      <button
+                        type="button"
+                        className={characterBuildMode === "custom" ? "selected" : ""}
+                        aria-pressed={characterBuildMode === "custom"}
+                        onClick={() => setCharacterBuildMode("custom")}
+                      >
+                        <strong>Custom Build</strong>
+                        <small>Choose each Level 5 character detail step by step.</small>
+                      </button>
+                    </div>
+                  </fieldset>
+                ) : null}
+
+                {characterStepIndex === 1 ? (
                   <fieldset className="option-picker class-picker">
                     <legend>Class</legend>
                     <div>
@@ -1037,7 +1079,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                   </fieldset>
                 ) : null}
 
-                {characterStepIndex === 1 ? (
+                {characterStepIndex === 2 ? (
                   <fieldset className="option-picker compact-option-picker">
                     <legend>Species</legend>
                     <div>
@@ -1056,7 +1098,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                   </fieldset>
                 ) : null}
 
-                {characterStepIndex === 2 ? (
+                {characterStepIndex === 3 ? (
                   <fieldset className="option-picker compact-option-picker">
                     <legend>Background</legend>
                     <div>
@@ -1076,7 +1118,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                   </fieldset>
                 ) : null}
 
-                {characterStepIndex === 3 ? (
+                {characterStepIndex === 4 ? (
                   <section className="ability-score-panel">
                     <div className="character-step-note">
                       <strong>Level 5 scores</strong>
@@ -1100,7 +1142,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                   </section>
                 ) : null}
 
-                {characterStepIndex === 4 ? (
+                {characterStepIndex === 5 ? (
                   <div className="character-builder-grid">
                     <fieldset className="option-picker compact-option-picker">
                       <legend>{selectedClass.subclassLabel}</legend>
@@ -1137,7 +1179,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                   </div>
                 ) : null}
 
-                {characterStepIndex === 5 ? (
+                {characterStepIndex === 6 ? (
                   <fieldset className="option-picker compact-option-picker">
                     <legend>Skills</legend>
                     <div>
@@ -1159,7 +1201,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                   </fieldset>
                 ) : null}
 
-                {characterStepIndex === 6 ? (
+                {characterStepIndex === 7 ? (
                   <div className="character-builder-grid">
                     <fieldset className="option-picker compact-option-picker">
                       <legend>Tool proficiency</legend>
@@ -1196,7 +1238,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                   </div>
                 ) : null}
 
-                {characterStepIndex === 7 ? (
+                {characterStepIndex === 8 ? (
                   <fieldset className="option-picker equipment-picker">
                     <legend>Equipment</legend>
                     <div>
@@ -1216,7 +1258,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                   </fieldset>
                 ) : null}
 
-                {characterStepIndex === 8 ? (
+                {characterStepIndex === 9 ? (
                   hasSpells ? (
                     <fieldset className="option-picker compact-option-picker">
                       <legend>Spells</legend>
@@ -1245,7 +1287,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                   )
                 ) : null}
 
-                {characterStepIndex === 9 ? (
+                {characterStepIndex === 10 ? (
                   <div className="identity-panel">
                     <div className="character-identity-fields">
                       <label>
@@ -1287,7 +1329,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                   </div>
                 ) : null}
 
-                {characterStepIndex === 10 ? (
+                {characterStepIndex === 11 ? (
                   <>
                     <div className="character-summary-grid">
                       <div>
@@ -1326,7 +1368,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                   </>
                 ) : null}
 
-                {characterStepIndex < 10 ? (
+                {characterStepIndex < 11 ? (
                   <section className="character-current-pick">
                     <span>Current character</span>
                     <strong>
@@ -1360,6 +1402,14 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                       <dd>{customWorldDescription}</dd>
                     </div>
                   ) : null}
+                  <div>
+                    <dt>Build</dt>
+                    <dd>
+                      {characterBuildMode === "custom"
+                        ? "Custom Build"
+                        : "Quick Build"}
+                    </dd>
+                  </div>
                   <div>
                     <dt>Character</dt>
                     <dd>
