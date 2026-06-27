@@ -11,12 +11,11 @@ import { query, withTransaction } from "@/lib/db";
 import {
   dungeonMasterInstructions,
   ensureHermesSession,
-  extractHermesRollRequests,
   hermesFetch,
-  normalizeHermesDmContent,
   normalizeRollRequest,
   normalizeRollRequests,
   openingSceneRequest,
+  parseHermesDmContract,
   titleFromSessionId
 } from "@/lib/hermes";
 
@@ -122,6 +121,12 @@ type HermesSessionChatResponse = {
     id?: string;
     content?: string;
   };
+};
+
+type CampaignSettingSummary = {
+  displayLocation?: string;
+  worldName?: string;
+  startingLocation?: string;
 };
 
 function nowIso() {
@@ -418,12 +423,46 @@ function normalizeCampaignTitle(title: string | undefined, sessionId: string) {
 
 function campaignWorldName(campaign: CampaignRow) {
   const metadata = eventPayload(campaign.metadata);
+  const setting = eventPayload(metadata.setting);
   const genre = eventPayload(metadata.genre);
+  const displayLocation =
+    typeof setting.displayLocation === "string"
+      ? setting.displayLocation.trim()
+      : "";
+  const startingLocation =
+    typeof setting.startingLocation === "string"
+      ? setting.startingLocation.trim()
+      : "";
+  const worldName =
+    typeof setting.worldName === "string" ? setting.worldName.trim() : "";
   const customWorldName =
     typeof genre.customWorldName === "string" ? genre.customWorldName.trim() : "";
-  const label = typeof genre.label === "string" ? genre.label.trim() : "";
 
-  return customWorldName || label || campaign.title;
+  return (
+    displayLocation ||
+    startingLocation ||
+    worldName ||
+    customWorldName ||
+    campaign.title
+  );
+}
+
+function settingMetadata(setting: CampaignSettingSummary | undefined) {
+  const displayLocation = setting?.displayLocation?.trim();
+  const worldName = setting?.worldName?.trim();
+  const startingLocation = setting?.startingLocation?.trim();
+
+  if (!displayLocation && !worldName && !startingLocation) {
+    return {};
+  }
+
+  return {
+    setting: {
+      displayLocation: displayLocation || startingLocation || worldName || null,
+      worldName: worldName || null,
+      startingLocation: startingLocation || null
+    }
+  };
 }
 
 function campaignSummaryFromRow(campaign: CampaignRow): CampaignSummary {
@@ -705,7 +744,8 @@ async function askHermes(sessionId: string, message: string, instructions: strin
   }
 
   const hermesData = (await hermesResponse.json()) as HermesSessionChatResponse;
-  const reply = normalizeHermesDmContent(hermesData.message?.content);
+  const contract = parseHermesDmContract(hermesData.message?.content);
+  const reply = contract.publicNarration;
 
   if (!reply) {
     throw new Error("Hermes returned an empty reply.");
@@ -714,7 +754,8 @@ async function askHermes(sessionId: string, message: string, instructions: strin
   return {
     id: hermesData.message?.id,
     content: reply,
-    rollRequests: extractHermesRollRequests(hermesData)
+    rollRequests: contract.rollRequests,
+    setting: contract.setting
   };
 }
 
@@ -802,9 +843,11 @@ async function finishResolvedTurn(
   hermesMessageId: string | undefined,
   reply: string,
   eventType: "adventure_begun" | "turn_resolved",
-  pendingRollRequests: DiceRollRequest[] = []
+  pendingRollRequests: DiceRollRequest[] = [],
+  setting?: CampaignSettingSummary
 ) {
   const currentPendingRollRequest = pendingRollRequests[0] ?? null;
+  const settingPatch = settingMetadata(setting);
 
   await withTransaction(async (client) => {
     await client.query(
@@ -829,9 +872,20 @@ async function finishResolvedTurn(
       messageId: hermesMessageId ?? crypto.randomUUID(),
       role: "dm",
       content: reply,
+      ...settingPatch,
       pendingRollRequest: currentPendingRollRequest,
       pendingRollRequests
     });
+    if (eventType === "adventure_begun" && Object.keys(settingPatch).length > 0) {
+      await client.query(
+        `
+          update campaigns
+          set metadata = metadata || $2::jsonb
+          where id = $1
+        `,
+        [campaignId, JSON.stringify(settingPatch)]
+      );
+    }
     await setPendingRollRequests(client, campaignId, pendingRollRequests);
     await ensureCollectingTurn(client, campaignId);
   });
@@ -1196,6 +1250,10 @@ export async function createCampaignForMode(input: {
         customWorldDescription: input.customWorldDescription ?? null
       }
     };
+    const initialMetadata = {
+      ...genreMetadata,
+      ...settingMetadata(opening.setting)
+    };
     const inserted = await client.query<CampaignRow>(
       `
         insert into campaigns (
@@ -1215,7 +1273,7 @@ export async function createCampaignForMode(input: {
         normalizeCampaignTitle(input.title, sessionId),
         input.ownerClientId ?? null,
         input.userId,
-        JSON.stringify(genreMetadata)
+        JSON.stringify(initialMetadata)
       ]
     );
     const campaignRow = inserted.rows[0];
@@ -1263,11 +1321,13 @@ export async function createCampaignForMode(input: {
       hermesMessageId: opening.id,
       messageId: opening.id ?? crypto.randomUUID(),
       role: "dm",
-      content: opening.content
+      content: opening.content,
+      ...settingMetadata(opening.setting)
     });
 
     return {
       ...campaignRow,
+      metadata: initialMetadata,
       display_character_name: player.rows[0].character_name,
       display_username: player.rows[0].username
     };
@@ -1624,7 +1684,8 @@ export async function beginRoomAdventure(
       reply.id,
       reply.content,
       "adventure_begun",
-      reply.rollRequests
+      reply.rollRequests,
+      reply.setting
     );
   } catch (error) {
     await markTurnFailed(beginState.turn.id, error);

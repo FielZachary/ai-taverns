@@ -12,7 +12,12 @@ const responseContractExample = JSON.stringify(
   {
     public_narration: "The player-visible Dungeon Master narration.",
     roll_requests: [],
-    next_input_needed: "player_actions"
+    next_input_needed: "player_actions",
+    setting: {
+      display_location: "A short player-facing location name",
+      world_name: "Optional world or region name",
+      starting_location: "Optional village, city, tavern, ruin, or road"
+    }
   },
   null,
   2
@@ -115,6 +120,8 @@ export const openingSceneRequest = [
   `${internalOpeningRequestPrefix}:`,
   "Begin this new campaign by speaking first as the Dungeon Master.",
   "Create an immediate fantasy opening scene with a clear situation, sensory detail, and a direct question for the party.",
+  "Also include a `setting` object in the JSON response with `display_location`, `world_name`, and `starting_location` when known.",
+  "`display_location` should be a short location label for the campaign sidebar, such as a village, tavern, road, ruin, city district, region, or named world. Do not use a genre label.",
   "Do not ask the players what kind of world they want. Drop them into the world now."
 ].join(" ");
 
@@ -348,6 +355,11 @@ export type HermesDmContractResponse = {
   publicNarration: string;
   rollRequests: DiceRollRequest[];
   nextInputNeeded: "player_actions" | "dice_results";
+  setting?: {
+    displayLocation?: string;
+    worldName?: string;
+    startingLocation?: string;
+  };
 };
 
 export function parseHermesDmContract(
@@ -365,6 +377,15 @@ export function parseHermesDmContract(
     ? parsed.roll_requests
     : [];
   const rollRequests = normalizeRollRequests(rawRollRequests);
+  const setting = asObject(parsed.setting);
+  const displayLocation =
+    stringValue(setting?.display_location) ||
+    stringValue(setting?.displayLocation);
+  const worldName =
+    stringValue(setting?.world_name) || stringValue(setting?.worldName);
+  const startingLocation =
+    stringValue(setting?.starting_location) ||
+    stringValue(setting?.startingLocation);
 
   if (!publicNarration) {
     throw new Error("Hermes response is missing public_narration.");
@@ -392,7 +413,15 @@ export function parseHermesDmContract(
   return {
     publicNarration,
     rollRequests,
-    nextInputNeeded
+    nextInputNeeded,
+    setting:
+      displayLocation || worldName || startingLocation
+        ? {
+            displayLocation: displayLocation || startingLocation || worldName,
+            worldName: worldName || undefined,
+            startingLocation: startingLocation || undefined
+          }
+        : undefined
   };
 }
 

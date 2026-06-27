@@ -959,15 +959,9 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
 
       const room = (await response.json()) as RoomSnapshot;
       applyRoomSnapshot(room);
-      const latestMessage = room.messages[room.messages.length - 1];
+      const campaigns = await fetchCampaigns();
 
-      setAvailableCampaigns((currentCampaigns) =>
-        updateCampaignPreview(
-          currentCampaigns,
-          activeCampaign.id,
-          latestMessage?.content ?? "Adventure begun"
-        )
-      );
+      setAvailableCampaigns(campaigns);
     } catch {
       setMessages((currentMessages) => [
         ...currentMessages,
