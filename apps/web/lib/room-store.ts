@@ -61,6 +61,7 @@ export type CampaignSummary = {
   preview?: string;
   time?: string;
   messageCount?: number;
+  joinCode?: string;
 };
 
 export type CampaignMode = "single_player" | "multiplayer";
@@ -79,6 +80,7 @@ type CampaignRow = {
   created_at: Date | string;
   display_character_name?: string | null;
   display_username?: string | null;
+  join_code?: string | null;
 };
 
 type PlayerRow = {
@@ -129,6 +131,17 @@ type CampaignSettingSummary = {
   startingLocation?: string;
 };
 
+type JoinCodeRow = {
+  campaign_id: string;
+  code: string;
+  title: string;
+  status: "active" | "archived" | "deleted";
+  mode: CampaignMode;
+  has_begun: boolean;
+};
+
+const joinCodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -145,6 +158,17 @@ function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
     value
   );
+}
+
+function normalizeJoinCode(code: string | undefined) {
+  return (code ?? "").replace(/[^a-z0-9]/gi, "").toUpperCase();
+}
+
+function generateJoinCode() {
+  return Array.from(
+    { length: 6 },
+    () => joinCodeAlphabet[randomInt(0, joinCodeAlphabet.length)]
+  ).join("");
 }
 
 function formatTime(value: Date | string | undefined) {
@@ -468,6 +492,7 @@ function settingMetadata(setting: CampaignSettingSummary | undefined) {
 function campaignSummaryFromRow(campaign: CampaignRow): CampaignSummary {
   const characterName = campaign.display_character_name?.trim();
   const playerName = campaign.display_username?.trim();
+  const joinCode = campaign.join_code?.trim();
 
   return {
     id: campaign.id,
@@ -475,7 +500,8 @@ function campaignSummaryFromRow(campaign: CampaignRow): CampaignSummary {
     mode: campaign.mode,
     title: characterName || playerName || campaign.title,
     preview: campaignWorldName(campaign),
-    messageCount: 0
+    messageCount: 0,
+    ...(joinCode ? { joinCode } : {})
   };
 }
 
@@ -489,6 +515,47 @@ async function logCampaignEvent(
     "insert into campaign_events (campaign_id, type, payload) values ($1, $2, $3::jsonb)",
     [campaignId, type, JSON.stringify(payload)]
   );
+}
+
+async function ensureCampaignJoinCode(
+  client: PoolClient,
+  campaignId: string,
+  userId: string
+) {
+  const existing = await client.query<{ code: string }>(
+    `
+      select code
+      from campaign_join_codes
+      where campaign_id = $1 and enabled = true
+      order by created_at desc
+      limit 1
+    `,
+    [campaignId]
+  );
+
+  if (existing.rows[0]?.code) {
+    return existing.rows[0].code;
+  }
+
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const code = generateJoinCode();
+    const inserted = await client.query<{ code: string }>(
+      `
+        insert into campaign_join_codes (campaign_id, code, created_by_user_id)
+        values ($1, $2, $3)
+        on conflict (code) do nothing
+        returning code
+      `,
+      [campaignId, code, userId]
+    );
+
+    if (inserted.rows[0]?.code) {
+      await logCampaignEvent(client, campaignId, "join_code_created", { code });
+      return inserted.rows[0].code;
+    }
+  }
+
+  throw new Error("A game code could not be generated.");
 }
 
 async function resolveCampaign(
@@ -1015,7 +1082,8 @@ export async function listCampaignSummaries(userId: string) {
       select
         campaigns.*,
         display_player.character_name as display_character_name,
-        display_player.username as display_username
+        display_player.username as display_username,
+        join_code.code as join_code
       from campaigns
       left join lateral (
         select players.character_name, players.username
@@ -1028,6 +1096,15 @@ export async function listCampaignSummaries(userId: string) {
           players.created_at asc
         limit 1
       ) display_player on true
+      left join lateral (
+        select campaign_join_codes.code
+        from campaign_join_codes
+        where campaign_join_codes.campaign_id = campaigns.id
+          and campaign_join_codes.enabled = true
+          and campaigns.owner_user_id = $4
+        order by campaign_join_codes.created_at desc
+        limit 1
+      ) join_code on true
       where campaigns.status = 'active'
         and (
           campaigns.owner_user_id = $2
@@ -1042,7 +1119,7 @@ export async function listCampaignSummaries(userId: string) {
       order by campaigns.updated_at desc, campaigns.created_at desc
       limit 100
     `,
-    [userId, userId, userId]
+    [userId, userId, userId, userId]
   );
 
   return result.rows.map(
@@ -1160,7 +1237,7 @@ export async function createCampaignForMode(input: {
       "multiplayer"
     );
 
-    await withTransaction(async (client) => {
+    const joinCode = await withTransaction(async (client) => {
       await client.query(
         `
           update campaigns
@@ -1212,13 +1289,15 @@ export async function createCampaignForMode(input: {
         genre: input.campaignGenre,
         genreKind: input.campaignGenreKind ?? "preset"
       });
+      return ensureCampaignJoinCode(client, campaign.id, input.userId);
     });
 
     return campaignSummaryFromRow({
       ...campaign,
       metadata: genreMetadata,
       display_character_name: input.characterName ?? "",
-      display_username: input.playerName
+      display_username: input.playerName,
+      join_code: joinCode
     });
   }
 
@@ -1338,6 +1417,237 @@ export async function createCampaignForMode(input: {
   });
 
   return campaignSummaryFromRow(campaign);
+}
+
+export async function previewCampaignJoinByCode(gameCode: string) {
+  const code = normalizeJoinCode(gameCode);
+
+  if (!code) {
+    throw new HttpError("Enter a game code.", 400);
+  }
+
+  const result = await query<
+    JoinCodeRow & {
+      active_players: string | number;
+    }
+  >(
+    `
+      select
+        campaigns.id as campaign_id,
+        campaign_join_codes.code,
+        campaigns.title,
+        campaigns.status,
+        campaigns.mode,
+        campaigns.has_begun,
+        count(players.id) filter (where players.status = 'active') as active_players
+      from campaign_join_codes
+      join campaigns on campaigns.id = campaign_join_codes.campaign_id
+      left join players on players.campaign_id = campaigns.id
+      where campaign_join_codes.code = $1
+        and campaign_join_codes.enabled = true
+      group by campaigns.id, campaign_join_codes.code
+      limit 1
+    `,
+    [code]
+  );
+  const campaign = result.rows[0];
+
+  if (!campaign || campaign.status !== "active" || campaign.mode !== "multiplayer") {
+    throw new HttpError("That game code was not found.", 404);
+  }
+
+  const activePlayers = Number(campaign.active_players);
+  const availableSlots = Math.max(0, maxPlayers - activePlayers);
+
+  if (availableSlots <= 0) {
+    throw new HttpError("That game is already full.", 409);
+  }
+
+  return {
+    code: campaign.code,
+    campaignTitle: campaign.title,
+    availableSlots,
+    hasBegun: campaign.has_begun
+  };
+}
+
+export async function joinCampaignByCode(input: {
+  gameCode: string;
+  clientId: string;
+  username: string;
+  characterName: string;
+  characterSheet: string;
+  userId: string;
+}) {
+  const code = normalizeJoinCode(input.gameCode);
+  const clientId = input.clientId.trim();
+  const username = input.username.trim();
+  const characterName = input.characterName.trim();
+  const characterSheet = input.characterSheet.trim();
+
+  if (!code) {
+    throw new HttpError("Enter a game code.", 400);
+  }
+
+  if (!clientId || !username || !characterName || !characterSheet) {
+    throw new HttpError("Complete your player profile before joining.", 400);
+  }
+
+  const campaign = await withTransaction(async (client) => {
+    const codeResult = await client.query<CampaignRow & { join_code: string }>(
+      `
+        select campaigns.*, campaign_join_codes.code as join_code
+        from campaign_join_codes
+        join campaigns on campaigns.id = campaign_join_codes.campaign_id
+        where campaign_join_codes.code = $1
+          and campaign_join_codes.enabled = true
+          and campaigns.status = 'active'
+          and campaigns.mode = 'multiplayer'
+        limit 1
+        for update of campaigns
+      `,
+      [code]
+    );
+    const campaignRow = codeResult.rows[0];
+
+    if (!campaignRow) {
+      throw new HttpError("That game code was not found.", 404);
+    }
+
+    const existingForUser = await client.query<PlayerRow>(
+      `
+        select *
+        from players
+        where campaign_id = $1 and user_id = $2
+        order by
+          (status = 'active') desc,
+          created_at asc
+        limit 1
+      `,
+      [campaignRow.id, input.userId]
+    );
+    const userPlayer = existingForUser.rows[0];
+
+    if (userPlayer?.status === "kicked") {
+      throw new HttpError("You cannot join this game.", 403);
+    }
+
+    const existingForClient = await client.query<PlayerRow>(
+      `
+        select *
+        from players
+        where campaign_id = $1 and client_id = $2
+        limit 1
+      `,
+      [campaignRow.id, clientId]
+    );
+    const clientPlayer = existingForClient.rows[0];
+
+    if (clientPlayer?.status === "kicked") {
+      throw new HttpError("You cannot join this game from this device.", 403);
+    }
+
+    if (
+      clientPlayer &&
+      clientPlayer.user_id &&
+      clientPlayer.user_id !== input.userId
+    ) {
+      throw new HttpError("This browser is already joined to that game.", 409);
+    }
+
+    const slotResult = await client.query<{ slot: number }>(
+      `
+        select slot
+        from players
+        where campaign_id = $1 and status <> 'kicked' and slot is not null
+        order by slot asc
+      `,
+      [campaignRow.id]
+    );
+    const usedSlots = new Set(slotResult.rows.map((row) => row.slot));
+    const existingSlot = userPlayer?.slot ?? clientPlayer?.slot ?? undefined;
+    const firstOpenSlot = Array.from({ length: maxPlayers }, (_, slot) => slot).find(
+      (slot) => !usedSlots.has(slot)
+    );
+    const slot = existingSlot ?? firstOpenSlot;
+
+    if (slot === undefined) {
+      throw new HttpError("That game is already full.", 409);
+    }
+
+    if (userPlayer?.status === "active") {
+      await client.query(
+        `
+          update players
+          set client_id = $2,
+              username = $3,
+              character_name = $4,
+              character_sheet = $5,
+              slot = $6,
+              last_seen_at = now()
+          where id = $1
+        `,
+        [userPlayer.id, clientId, username, characterName, characterSheet, slot]
+      );
+      await logCampaignEvent(client, campaignRow.id, "player_profile_updated_by_code", {
+        clientId,
+        username,
+        characterName,
+        slot
+      });
+      return campaignRow;
+    }
+
+    await client.query(
+      `
+        insert into players (
+          campaign_id,
+          client_id,
+          user_id,
+          username,
+          character_name,
+          character_sheet,
+          slot,
+          status,
+          last_seen_at
+        )
+        values ($1, $2, $3, $4, $5, $6, $7, 'active', now())
+        on conflict (campaign_id, client_id) do update
+        set user_id = excluded.user_id,
+            username = excluded.username,
+            character_name = excluded.character_name,
+            character_sheet = excluded.character_sheet,
+            slot = excluded.slot,
+            status = 'active',
+            kicked_at = null,
+            last_seen_at = now()
+      `,
+      [
+        campaignRow.id,
+        clientId,
+        input.userId,
+        username,
+        characterName,
+        characterSheet,
+        slot
+      ]
+    );
+    await logCampaignEvent(client, campaignRow.id, "player_joined_by_code", {
+      clientId,
+      username,
+      characterName,
+      slot
+    });
+
+    return campaignRow;
+  });
+
+  return campaignSummaryFromRow({
+    ...campaign,
+    display_character_name: characterName,
+    display_username: username,
+    join_code: undefined
+  });
 }
 
 export async function claimGuestStateForUser(clientId: string, userId: string) {

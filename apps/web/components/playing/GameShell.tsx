@@ -47,6 +47,7 @@ type CampaignMode = "single_player" | "multiplayer";
 type CampaignSummary = ChatSummary & {
   hermesSessionId: string;
   mode: CampaignMode;
+  joinCode?: string;
 };
 
 type CampaignsApiResponse = {
@@ -1474,6 +1475,12 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
 
                 {!hasAdventureBegun ? (
                   <section className="begin-adventure-panel">
+                    {activeCampaign?.joinCode ? (
+                      <div className="game-code-callout">
+                        <span>Game Code</span>
+                        <strong>{activeCampaign.joinCode}</strong>
+                      </div>
+                    ) : null}
                     <p>
                       {roomPlayers.length >= 2
                         ? "The party is gathered. Let Hermes open the campaign."

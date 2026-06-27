@@ -17,6 +17,7 @@ import {
 import { defaultCharacterSheet } from "@/components/playing/PlayerPanel";
 
 type CampaignMode = "single_player" | "multiplayer";
+type MultiplayerIntent = "create" | "join";
 
 type NewAdventureFormProps = {
   userEmail?: string;
@@ -25,7 +26,19 @@ type NewAdventureFormProps = {
 type CreateCampaignResponse = {
   campaign?: {
     id: string;
+    joinCode?: string;
   };
+  error?: string;
+};
+
+type JoinPreview = {
+  code: string;
+  campaignTitle: string;
+  availableSlots: number;
+  hasBegun: boolean;
+};
+
+type JoinPreviewResponse = JoinPreview & {
   error?: string;
 };
 
@@ -38,7 +51,8 @@ type QuickBuildFantasy = (typeof quickBuildFantasyOptions)[number]["id"];
 const playerIdStorageKey = "ai-dnd.playerId";
 const characterLevel = 5;
 const proficiencyBonus = 3;
-const steps = ["Mode", "Campaign", "Character", "Review"];
+const createSteps = ["Mode", "Campaign", "Character", "Review"];
+const joinSteps = ["Mode", "Game Code", "Character", "Review"];
 const customCharacterCreationSteps = [
   "Build",
   "Class",
@@ -576,6 +590,11 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
   const [stepIndex, setStepIndex] = useState(0);
   const [characterStepIndex, setCharacterStepIndex] = useState(0);
   const [mode, setMode] = useState<CampaignMode>("single_player");
+  const [multiplayerIntent, setMultiplayerIntent] =
+    useState<MultiplayerIntent>("create");
+  const [gameCode, setGameCode] = useState("");
+  const [joinPreview, setJoinPreview] = useState<JoinPreview | null>(null);
+  const [playerName, setPlayerName] = useState("");
   const [campaignGenre, setCampaignGenre] = useState(campaignGenres[0].id);
   const [customWorldName, setCustomWorldName] = useState("");
   const [customWorldDescription, setCustomWorldDescription] = useState("");
@@ -600,8 +619,11 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
   const [ownerClientId, setOwnerClientId] = useState("");
   const [error, setError] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+  const isJoinFlow = mode === "multiplayer" && multiplayerIntent === "join";
+  const steps = isJoinFlow ? joinSteps : createSteps;
   const isLastStep = stepIndex === steps.length - 1;
   const isCharacterStep = stepIndex === 2;
+  const requiresCharacterName = mode === "single_player" || isJoinFlow;
   const characterCreationSteps =
     characterBuildMode === "quick"
       ? quickCharacterCreationSteps
@@ -610,6 +632,9 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
   const isLastCharacterStep =
     characterStepIndex === characterCreationSteps.length - 1;
   const modeLabel = mode === "single_player" ? "Singleplayer" : "Multiplayer";
+  const normalizedGameCode = gameCode.replace(/[^a-z0-9]/gi, "").toUpperCase();
+  const hasRequiredIdentity =
+    Boolean(characterName.trim()) && (!isJoinFlow || Boolean(playerName.trim()));
   const selectedGenre = campaignGenres.find((genre) => genre.id === campaignGenre) ?? campaignGenres[0];
   const isCustomGenre = campaignGenre === "custom";
   const campaignDisplayName = isCustomGenre
@@ -659,7 +684,13 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
 
     return [
       `Character Name: ${name}`,
-      `Player Name: ${mode === "single_player" ? name : "Table Owner"}`,
+      `Player Name: ${
+        mode === "single_player"
+          ? name
+          : isJoinFlow
+            ? playerName.trim() || "Player"
+            : "Table Owner"
+      }`,
       `Build Mode: ${characterBuildMode === "custom" ? "Custom Build" : "Quick Build"}`,
       characterBuildMode === "quick"
         ? `Character Archetype: ${selectedQuickBuildFantasy.label}`
@@ -728,6 +759,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
     classFeatureChoice,
     hasSpells,
     maxHp,
+    isJoinFlow,
     mode,
     passivePerception,
     proficientSkills,
@@ -737,6 +769,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
     selectedQuickBuildFantasy.label,
     selectedSpells,
     selectedTool,
+    playerName,
     spellAttackBonus,
     spellSaveDc,
     spellcastingAbility,
@@ -748,6 +781,10 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
     }
 
     if (stepIndex === 1) {
+      if (isJoinFlow) {
+        return "Enter the game code";
+      }
+
       return "Choose the campaign genre";
     }
 
@@ -775,6 +812,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
   }, [
     characterCreationSteps,
     characterStepIndex,
+    isJoinFlow,
     isLastCharacterStep,
     isQuickBuild,
     stepIndex
@@ -796,6 +834,10 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
     localStorage.setItem(playerIdStorageKey, nextPlayerId);
     setOwnerClientId(nextPlayerId);
   }, []);
+
+  useEffect(() => {
+    setJoinPreview(null);
+  }, [normalizedGameCode]);
 
   function handleClassChange(nextClass: CharacterClass) {
     const nextClassData = classOptions.find((option) => option.id === nextClass) ?? classOptions[4];
@@ -887,6 +929,10 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
 
   function canAdvance() {
     if (stepIndex === 1) {
+      if (isJoinFlow) {
+        return normalizedGameCode.length === 6;
+      }
+
       return Boolean(
         campaignGenre &&
           (!isCustomGenre || customWorldName.trim()) &&
@@ -902,8 +948,8 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
       if (isQuickBuild) {
         return (
           characterStepIndex !== 4 ||
-          mode === "multiplayer" ||
-          Boolean(characterName.trim())
+          !requiresCharacterName ||
+          hasRequiredIdentity
         );
       }
 
@@ -917,32 +963,66 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
 
       return (
         characterStepIndex !== 10 ||
-        mode === "multiplayer" ||
-        Boolean(characterName.trim())
+        !requiresCharacterName ||
+        hasRequiredIdentity
       );
     }
 
     return true;
   }
 
-  function handleNext() {
+  async function previewJoinCode() {
+    const response = await fetch("/api/campaigns/join/preview", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        gameCode: normalizedGameCode
+      })
+    });
+    const data = (await response.json()) as JoinPreviewResponse;
+
+    if (!response.ok) {
+      throw new Error(data.error || "That game code could not be checked.");
+    }
+
+    setJoinPreview(data);
+  }
+
+  async function handleNext() {
     setError("");
 
     if (!canAdvance()) {
       setError(
         stepIndex === 1
-          ? isCustomGenre
+          ? isJoinFlow
+            ? "Enter the six-character game code before continuing."
+            : isCustomGenre
             ? "Name the world and describe it before continuing."
             : "Choose a campaign genre before continuing."
-          : mode === "single_player" &&
+          : requiresCharacterName &&
               ((isQuickBuild && characterStepIndex === 4) ||
                 (!isQuickBuild && characterStepIndex === 10))
-            ? "Add your character name before continuing."
+            ? isJoinFlow
+              ? "Add your player and character names before continuing."
+              : "Add your character name before continuing."
             : characterStepIndex === 9
               ? "Choose at least one spell before continuing."
               : "Choose at least one option before continuing."
       );
       return;
+    }
+
+    if (isJoinFlow && stepIndex === 1) {
+      try {
+        await previewJoinCode();
+      } catch (caught) {
+        setError(
+          caught instanceof Error ? caught.message : "That game code could not be checked."
+        );
+        return;
+      }
     }
 
     if (isQuickBuild && characterStepIndex === 2) {
@@ -1025,15 +1105,53 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
     }
   }
 
+  async function joinCampaign() {
+    if (isCreating) {
+      return;
+    }
+
+    setIsCreating(true);
+
+    try {
+      const response = await fetch("/api/campaigns/join", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          gameCode: normalizedGameCode,
+          clientId: ownerClientId,
+          username: playerName.trim(),
+          characterName: characterName.trim(),
+          characterSheet
+        })
+      });
+      const data = (await response.json()) as CreateCampaignResponse;
+
+      if (!response.ok || !data.campaign?.id) {
+        throw new Error(data.error || "The game could not be joined.");
+      }
+
+      window.location.assign(
+        `/play?campaignId=${encodeURIComponent(data.campaign.id)}`
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "The game could not be joined."
+      );
+      setIsCreating(false);
+    }
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (isLastStep) {
-      void createCampaign();
+      void (isJoinFlow ? joinCampaign() : createCampaign());
       return;
     }
 
-    handleNext();
+    void handleNext();
   }
 
   return (
@@ -1069,39 +1187,92 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
             }`}
           >
             {stepIndex === 0 ? (
-              <div className="mode-picker" role="radiogroup" aria-label="Campaign mode">
-                <button
-                  type="button"
-                  className={mode === "single_player" ? "selected" : ""}
-                  aria-pressed={mode === "single_player"}
-                  onClick={() => setMode("single_player")}
-                >
-                  <span className="mode-medallion">
-                    <Swords size={34} />
-                  </span>
-                  <span>
-                    <strong>Singleplayer</strong>
-                    <small>Private play with Hermes as your DM.</small>
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  className={mode === "multiplayer" ? "selected" : ""}
-                  aria-pressed={mode === "multiplayer"}
-                  onClick={() => setMode("multiplayer")}
-                >
-                  <span className="mode-medallion">
-                    <Users size={34} />
-                  </span>
-                  <span>
-                    <strong>Multiplayer</strong>
-                    <small>Invite players and resolve party turns together.</small>
-                  </span>
-                </button>
+              <>
+                <div className="mode-picker" role="radiogroup" aria-label="Campaign mode">
+                  <button
+                    type="button"
+                    className={mode === "single_player" ? "selected" : ""}
+                    aria-pressed={mode === "single_player"}
+                    onClick={() => setMode("single_player")}
+                  >
+                    <span className="mode-medallion">
+                      <Swords size={34} />
+                    </span>
+                    <span>
+                      <strong>Singleplayer</strong>
+                      <small>Private play with Hermes as your DM.</small>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className={mode === "multiplayer" ? "selected" : ""}
+                    aria-pressed={mode === "multiplayer"}
+                    onClick={() => setMode("multiplayer")}
+                  >
+                    <span className="mode-medallion">
+                      <Users size={34} />
+                    </span>
+                    <span>
+                      <strong>Multiplayer</strong>
+                      <small>Invite players and resolve party turns together.</small>
+                    </span>
+                  </button>
+                </div>
+
+                {mode === "multiplayer" ? (
+                  <fieldset className="option-picker multiplayer-intent-picker">
+                    <legend>Multiplayer</legend>
+                    <div>
+                      <button
+                        type="button"
+                        className={multiplayerIntent === "create" ? "selected" : ""}
+                        aria-pressed={multiplayerIntent === "create"}
+                        onClick={() => setMultiplayerIntent("create")}
+                      >
+                        <strong>Create Game</strong>
+                        <small>Start a new table and share its game code.</small>
+                      </button>
+                      <button
+                        type="button"
+                        className={multiplayerIntent === "join" ? "selected" : ""}
+                        aria-pressed={multiplayerIntent === "join"}
+                        onClick={() => setMultiplayerIntent("join")}
+                      >
+                        <strong>Join Game</strong>
+                        <small>Enter a code, build your character, and join the table.</small>
+                      </button>
+                    </div>
+                  </fieldset>
+                ) : null}
+              </>
+            ) : null}
+
+            {stepIndex === 1 && isJoinFlow ? (
+              <div className="join-code-panel">
+                <label>
+                  <span>Game code</span>
+                  <input
+                    value={gameCode}
+                    onChange={(event) => setGameCode(event.target.value)}
+                    placeholder="K7M2QH"
+                    autoCapitalize="characters"
+                    autoFocus
+                  />
+                </label>
+                {joinPreview ? (
+                  <section className="join-preview">
+                    <strong>{joinPreview.campaignTitle}</strong>
+                    <span>
+                      {joinPreview.availableSlots}{" "}
+                      {joinPreview.availableSlots === 1 ? "seat" : "seats"} open
+                    </span>
+                    {joinPreview.hasBegun ? <span>Adventure in progress</span> : null}
+                  </section>
+                ) : null}
               </div>
             ) : null}
 
-            {stepIndex === 1 ? (
+            {stepIndex === 1 && !isJoinFlow ? (
               <>
                 <fieldset className="genre-picker">
                   <legend>Campaign genre</legend>
@@ -1452,22 +1623,36 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                 (isQuickBuild && characterStepIndex === 4) ? (
                   <div className="identity-panel">
                     <div className="character-identity-fields">
+                      {isJoinFlow ? (
+                        <label>
+                          <span>Player name</span>
+                          <input
+                            required
+                            value={playerName}
+                            onChange={(event) => setPlayerName(event.target.value)}
+                            placeholder="Your name at the table"
+                            autoFocus
+                          />
+                        </label>
+                      ) : null}
                       <label>
                         <span>
-                          {mode === "single_player"
+                          {isJoinFlow
+                            ? "Character name"
+                            : mode === "single_player"
                             ? "Character name"
                             : "Owner character name"}
                         </span>
                         <input
-                          required={mode === "single_player"}
+                          required={requiresCharacterName}
                           value={characterName}
                           onChange={(event) => setCharacterName(event.target.value)}
                           placeholder={
-                            mode === "multiplayer"
+                            mode === "multiplayer" && !isJoinFlow
                               ? "Optional for now"
                               : "Name your adventurer"
                           }
-                          autoFocus
+                          autoFocus={!isJoinFlow}
                         />
                       </label>
                     </div>
@@ -1544,16 +1729,28 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                   </div>
                   <div>
                     <dt>{mode === "single_player" ? "Campaign" : "Table"}</dt>
-                    <dd>{campaignDisplayName}</dd>
+                    <dd>
+                      {isJoinFlow
+                        ? joinPreview?.campaignTitle ?? normalizedGameCode
+                        : campaignDisplayName}
+                    </dd>
                   </div>
-                  <div>
-                    <dt>Genre</dt>
-                    <dd>{selectedGenre.label}</dd>
-                  </div>
-                  {isCustomGenre ? (
+                  {!isJoinFlow ? (
+                    <div>
+                      <dt>Genre</dt>
+                      <dd>{selectedGenre.label}</dd>
+                    </div>
+                  ) : null}
+                  {isCustomGenre && !isJoinFlow ? (
                     <div>
                       <dt>World</dt>
                       <dd>{customWorldDescription}</dd>
+                    </div>
+                  ) : null}
+                  {isJoinFlow ? (
+                    <div>
+                      <dt>Game Code</dt>
+                      <dd>{normalizedGameCode}</dd>
                     </div>
                   ) : null}
                   <div>
@@ -1565,10 +1762,13 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                     </dd>
                   </div>
                   <div>
-                    <dt>Character</dt>
+                    <dt>{isJoinFlow ? "Player" : "Character"}</dt>
                     <dd>
+                      {isJoinFlow && playerName ? `${playerName}: ` : ""}
                       {characterName || "Set later"}{" "}
-                      {characterName ? `the Level ${characterLevel} ${characterSpecies} ${characterClass}` : ""}
+                      {characterName
+                        ? `the Level ${characterLevel} ${characterSpecies} ${characterClass}`
+                        : ""}
                     </dd>
                   </div>
                   <div>
@@ -1606,10 +1806,10 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
             </button>
             <button type="submit" disabled={isCreating}>
               {isCreating ? (
-                "Creating..."
+                isJoinFlow ? "Joining..." : "Creating..."
               ) : isLastStep ? (
                 <>
-                  Create Campaign
+                  {isJoinFlow ? "Join Game" : "Create Campaign"}
                   <Check size={16} />
                 </>
               ) : (

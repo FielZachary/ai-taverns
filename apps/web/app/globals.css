@@ -791,6 +791,17 @@ h1 {
   line-height: 1.45;
 }
 
+.multiplayer-intent-picker {
+  width: min(100%, 600px);
+  margin: 0 auto;
+}
+
+.multiplayer-intent-picker > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .genre-picker {
   min-width: 0;
   margin: 0;
@@ -1107,6 +1118,42 @@ h1 {
 
 .custom-world-field textarea {
   min-height: 190px;
+}
+
+.join-code-panel {
+  display: grid;
+  gap: 16px;
+  width: min(100%, 460px);
+  margin: 0 auto;
+}
+
+.join-code-panel input {
+  text-align: center;
+  font-size: 1.35rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.join-preview {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid rgba(244, 207, 122, 0.26);
+  border-radius: 8px;
+  background: rgba(17, 13, 10, 0.48);
+  text-align: center;
+}
+
+.join-preview strong {
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.join-preview span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
 }
 
 .new-adventure-form input,
@@ -1613,6 +1660,31 @@ h1 {
   font-size: 0.86rem;
   font-weight: 800;
   letter-spacing: 0;
+}
+
+.game-code-callout {
+  display: grid;
+  gap: 2px;
+  min-width: 112px;
+  padding: 8px 10px;
+  border: 1px solid rgba(244, 207, 122, 0.24);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.game-code-callout span {
+  color: var(--muted);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.62rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.game-code-callout strong {
+  color: var(--gold-bright);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 1rem;
+  letter-spacing: 0.08em;
 }
 
 .begin-adventure-panel button {
