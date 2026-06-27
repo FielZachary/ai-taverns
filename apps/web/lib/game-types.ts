@@ -21,6 +21,12 @@ export type DiceRollResult = {
   total: number;
 };
 
+export type DiceRollSubmission = {
+  rollRequestId: string;
+  rollResult: DiceRollResult;
+  clientMessageId?: string;
+};
+
 export type HermesTurnRequest = {
   message: string;
   history: GameMessage[];

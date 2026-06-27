@@ -21,6 +21,7 @@ import {
 import type {
   DiceRollRequest,
   DiceRollResult,
+  DiceRollSubmission,
   GameMessage
 } from "@/lib/game-types";
 import {
@@ -103,6 +104,14 @@ type ActiveDiceReveal = {
   onComplete: () => void;
 };
 
+type PendingRollBatch = {
+  requests: DiceRollRequest[];
+  expression: string;
+  notation: string;
+  sides: number;
+  rollCount: number;
+};
+
 function getMissingPlayerProfileFields(profile: PlayerProfile) {
   const hasCharacterSheetContent =
     profile.characterSheet.trim().length > 0 &&
@@ -173,6 +182,23 @@ function rollDiceExpression(dice: string, modifier: number | undefined) {
   };
 }
 
+function parseSimpleDiceExpression(dice: string) {
+  const match = dice.trim().match(/^(\d*)d(4|6|8|10|12|20)$/i);
+
+  if (!match) {
+    return null;
+  }
+
+  return {
+    count: Number(match[1] || "1"),
+    sides: Number(match[2])
+  };
+}
+
+function diceExpression(count: number, sides: number) {
+  return `${count}d${sides}`;
+}
+
 function queuedDiceEntries(queuedDice: QueuedDice) {
   const faceOrder: DiceFace[] = ["d4", "d6", "d8", "d10", "d12", "d20"];
 
@@ -233,6 +259,122 @@ function rollQueuedDice(queuedDice: QueuedDice) {
     rolls,
     total,
     content: `I rolled ${diceExpressionFromQueue(queuedDice)}: ${total} (${details}).`
+  };
+}
+
+function pendingRollBatchFromQueue(
+  queuedDice: QueuedDice,
+  pendingRequests: DiceRollRequest[]
+): PendingRollBatch | null {
+  const queuedEntries = queuedDiceEntries(queuedDice);
+
+  if (queuedEntries.length !== 1) {
+    return null;
+  }
+
+  const queuedEntry = queuedEntries[0];
+  const queuedSides = Number(queuedEntry.face.slice(1));
+  const queuedRollCount = queuedEntry.count;
+  const requests: DiceRollRequest[] = [];
+  let rollCount = 0;
+
+  for (const request of pendingRequests) {
+    const parsed = parseSimpleDiceExpression(request.dice);
+
+    if (!parsed || parsed.sides !== queuedSides) {
+      break;
+    }
+
+    if (rollCount + parsed.count > queuedRollCount) {
+      break;
+    }
+
+    requests.push(request);
+    rollCount += parsed.count;
+
+    if (rollCount === queuedRollCount) {
+      const expression = diceExpression(rollCount, queuedSides);
+
+      return {
+        requests,
+        expression,
+        notation: expression,
+        sides: queuedSides,
+        rollCount
+      };
+    }
+  }
+
+  return null;
+}
+
+function expectedPendingRollExpression(pendingRequests: DiceRollRequest[]) {
+  const firstRequest = pendingRequests[0];
+  const firstParsed = firstRequest
+    ? parseSimpleDiceExpression(firstRequest.dice)
+    : null;
+
+  if (!firstRequest || !firstParsed) {
+    return firstRequest?.dice ?? "the required dice";
+  }
+
+  let rollCount = 0;
+
+  for (const request of pendingRequests) {
+    const parsed = parseSimpleDiceExpression(request.dice);
+
+    if (!parsed || parsed.sides !== firstParsed.sides) {
+      break;
+    }
+
+    rollCount += parsed.count;
+  }
+
+  return diceExpression(rollCount, firstParsed.sides);
+}
+
+function rollPendingBatch(batch: PendingRollBatch, clientMessageId: string) {
+  const rolls = Array.from(
+    { length: batch.rollCount },
+    () => Math.floor(Math.random() * batch.sides) + 1
+  );
+  let rollOffset = 0;
+  const rollSubmissions: DiceRollSubmission[] = batch.requests.map((request) => {
+    const parsed = parseSimpleDiceExpression(request.dice);
+    const requestRolls = rolls.slice(
+      rollOffset,
+      rollOffset + (parsed?.count ?? 0)
+    );
+
+    rollOffset += parsed?.count ?? 0;
+
+    return {
+      rollRequestId: request.id,
+      rollResult: {
+        rolls: requestRolls,
+        total: requestRolls.reduce(
+          (sum, roll) => sum + roll,
+          request.modifier ?? 0
+        )
+      },
+      clientMessageId
+    };
+  });
+  const total = rollSubmissions.reduce(
+    (sum, submission) => sum + submission.rollResult.total,
+    0
+  );
+  const content = rollSubmissions
+    .map((submission, index) =>
+      formatRollSubmission(batch.requests[index], submission.rollResult)
+    )
+    .join("\n");
+
+  return {
+    rolls,
+    total,
+    content,
+    rollSubmissions
   };
 }
 
@@ -1004,9 +1146,8 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     void sendTurn(draft);
   }
 
-  async function completePendingRoll(
-    rollRequest: DiceRollRequest,
-    rollResult: DiceRollResult,
+  async function completePendingRollBatch(
+    rollSubmissions: DiceRollSubmission[],
     rollMessage: GameMessage,
     campaign: CampaignSummary,
     singlePlayer: boolean
@@ -1039,16 +1180,14 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
           body: JSON.stringify(
             singlePlayer
               ? {
-                  rollRequestId: rollRequest.id,
-                  rollResult,
+                  rollSubmissions,
                   clientMessageId: rollMessage.id
                 }
               : {
                   roomId: campaign.id,
                   sessionId: campaign.hermesSessionId,
                   playerId,
-                  rollRequestId: rollRequest.id,
-                  rollResult,
+                  rollSubmissions,
                   clientMessageId: rollMessage.id
                 }
           )
@@ -1106,38 +1245,36 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     }
 
     setInputValidationMessage("");
-    const queuedExpression = diceExpressionFromQueue(queuedDice);
+    const rollBatch = pendingRollBatchFromQueue(queuedDice, pendingRollRequests);
 
-    if (queuedExpression !== pendingRollRequest.dice) {
-      setInputValidationMessage(`Queue ${pendingRollRequest.dice} to continue.`);
+    if (!rollBatch) {
+      setInputValidationMessage(
+        `Queue ${expectedPendingRollExpression(pendingRollRequests)} to continue.`
+      );
       setInputValidationPulse((currentPulse) => currentPulse + 1);
       return;
     }
 
-    const rollResult = rollDiceExpression(
-      pendingRollRequest.dice,
-      pendingRollRequest.modifier
-    );
+    const clientMessageId = createClientId();
+    const batchResult = rollPendingBatch(rollBatch, clientMessageId);
     const rollMessage: GameMessage = {
-      id: createClientId(),
+      id: clientMessageId,
       role: "player",
-      content: formatRollSubmission(pendingRollRequest, rollResult),
+      content: batchResult.content,
       createdAt: new Date().toISOString()
     };
-    const rollRequest = pendingRollRequest;
     const campaign = activeCampaign;
     const singlePlayer = isSinglePlayer;
 
     setMessages((currentMessages) => [...currentMessages, rollMessage]);
     setActiveDiceReveal({
       id: rollMessage.id,
-      notation: predeterminedDiceNotation(rollRequest.dice, rollResult.rolls),
-      expression: rollRequest.dice,
-      total: rollResult.total,
+      notation: predeterminedDiceNotation(rollBatch.notation, batchResult.rolls),
+      expression: rollBatch.expression,
+      total: batchResult.total,
       onComplete: () => {
-        void completePendingRoll(
-          rollRequest,
-          rollResult,
+        void completePendingRollBatch(
+          batchResult.rollSubmissions,
           rollMessage,
           campaign,
           singlePlayer

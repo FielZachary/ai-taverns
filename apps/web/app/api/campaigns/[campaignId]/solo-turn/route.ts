@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { HttpError, requireUser } from "@/lib/auth";
 import { jsonError } from "@/lib/hermes";
 import { submitSoloTurn } from "@/lib/room-store";
-import type { DiceRollResult } from "@/lib/game-types";
+import type { DiceRollResult, DiceRollSubmission } from "@/lib/game-types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +19,7 @@ type SoloTurnBody = {
   rollRequestId?: string;
   rollResult?: DiceRollResult;
   clientMessageId?: string;
+  rollSubmissions?: DiceRollSubmission[];
 };
 
 export async function POST(request: Request, context: RouteContext) {
@@ -27,8 +28,11 @@ export async function POST(request: Request, context: RouteContext) {
   const message = body.message?.trim();
   const rollRequestId = body.rollRequestId?.trim();
   const clientMessageId = body.clientMessageId?.trim();
+  const rollSubmissions = Array.isArray(body.rollSubmissions)
+    ? body.rollSubmissions
+    : undefined;
 
-  if (!message && !rollRequestId) {
+  if (!message && !rollRequestId && !rollSubmissions?.length) {
     return jsonError("A player message is required.", 400);
   }
 
@@ -41,7 +45,8 @@ export async function POST(request: Request, context: RouteContext) {
         user.id,
         rollRequestId,
         body.rollResult,
-        clientMessageId
+        clientMessageId,
+        rollSubmissions
       )
     );
   } catch (error) {

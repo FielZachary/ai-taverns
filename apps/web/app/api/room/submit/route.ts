@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { HttpError, requireUser } from "@/lib/auth";
 import { submitRoomTurn } from "@/lib/room-store";
 import { jsonError } from "@/lib/hermes";
-import type { DiceRollResult } from "@/lib/game-types";
+import type { DiceRollResult, DiceRollSubmission } from "@/lib/game-types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,6 +16,7 @@ type SubmitTurnBody = {
   rollRequestId?: string;
   rollResult?: DiceRollResult;
   clientMessageId?: string;
+  rollSubmissions?: DiceRollSubmission[];
 };
 
 export async function POST(request: Request) {
@@ -24,10 +25,13 @@ export async function POST(request: Request) {
   const message = body.message?.trim();
   const rollRequestId = body.rollRequestId?.trim();
   const clientMessageId = body.clientMessageId?.trim();
+  const rollSubmissions = Array.isArray(body.rollSubmissions)
+    ? body.rollSubmissions
+    : undefined;
   const sessionId = body.sessionId?.trim() || "new-adventure";
   const roomId = body.roomId?.trim() || sessionId;
 
-  if (!playerId || (!message && !rollRequestId)) {
+  if (!playerId || (!message && !rollRequestId && !rollSubmissions?.length)) {
     return jsonError("A player and message are required.", 400);
   }
 
@@ -42,7 +46,8 @@ export async function POST(request: Request) {
         user.id,
         rollRequestId,
         body.rollResult,
-        clientMessageId
+        clientMessageId,
+        rollSubmissions
       )
     );
   } catch (error) {

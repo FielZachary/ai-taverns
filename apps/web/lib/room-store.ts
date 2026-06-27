@@ -3,6 +3,7 @@ import type { PoolClient } from "pg";
 import type {
   DiceRollRequest,
   DiceRollResult,
+  DiceRollSubmission,
   GameMessage
 } from "@/lib/game-types";
 import { HttpError } from "@/lib/auth";
@@ -45,6 +46,12 @@ export type RoomSnapshot = {
   pendingRollRequest: DiceRollRequest | null;
   pendingRollRequests: DiceRollRequest[];
   updatedAt: string;
+};
+
+type NormalizedRollSubmission = {
+  rollRequestId: string;
+  rollResult?: DiceRollResult;
+  clientMessageId?: string;
 };
 
 export type CampaignSummary = {
@@ -272,6 +279,74 @@ function formatRollSubmission(
   return `I rolled ${request.dice}${modifierText(request.modifier)}: ${
     result.total
   } (${rollText}) for ${request.label}.`;
+}
+
+function rollSubmissionsFromPayload(
+  rollRequestId?: string,
+  rollResult?: DiceRollResult,
+  clientMessageId?: string,
+  rollSubmissions?: DiceRollSubmission[]
+) {
+  const submittedRolls = rollSubmissions?.length
+    ? rollSubmissions
+    : rollRequestId
+      ? [
+          {
+            rollRequestId,
+            rollResult,
+            clientMessageId
+          }
+        ]
+      : [];
+
+  return submittedRolls.map((submission) => ({
+    rollRequestId: submission.rollRequestId?.trim() ?? "",
+    rollResult: submission.rollResult,
+    clientMessageId: submission.clientMessageId?.trim() || undefined
+  }));
+}
+
+function validatePendingRollSubmissions(
+  pendingRollRequests: DiceRollRequest[],
+  submittedRolls: NormalizedRollSubmission[]
+) {
+  if (submittedRolls.length === 0) {
+    return {
+      content: "",
+      remainingRollRequests: pendingRollRequests,
+      clientMessageId: undefined
+    };
+  }
+
+  if (pendingRollRequests.length === 0) {
+    throw new HttpError("There is no pending roll to resolve.", 400);
+  }
+
+  if (submittedRolls.length > pendingRollRequests.length) {
+    throw new HttpError("Too many roll results were submitted.", 400);
+  }
+
+  const content = submittedRolls
+    .map((submission, index) => {
+      const pendingRollRequest = pendingRollRequests[index];
+
+      if (!submission.rollRequestId) {
+        throw new HttpError("A roll request id is required.", 400);
+      }
+
+      if (submission.rollRequestId !== pendingRollRequest.id) {
+        throw new HttpError("Hermes is waiting for the required roll.", 409);
+      }
+
+      return formatRollSubmission(pendingRollRequest, submission.rollResult);
+    })
+    .join("\n");
+
+  return {
+    content,
+    remainingRollRequests: pendingRollRequests.slice(submittedRolls.length),
+    clientMessageId: submittedRolls[0]?.clientMessageId
+  };
 }
 
 function formatCanonicalCharacterContext(players: PlayerRow[]) {
@@ -1532,7 +1607,8 @@ export async function submitRoomTurn(
   userId: string,
   rollRequestId?: string,
   rollResult?: DiceRollResult,
-  clientMessageId?: string
+  clientMessageId?: string,
+  rollSubmissions?: DiceRollSubmission[]
 ) {
   const submissionState = await withTransaction(async (client) => {
     const campaign = await resolveCampaign(roomId, sessionId, client);
@@ -1563,22 +1639,21 @@ export async function submitRoomTurn(
     }
 
     const pendingRollRequests = pendingRollRequestsFromCampaign(campaign);
-    const pendingRollRequest = pendingRollRequests[0] ?? null;
-    const isRollSubmission = Boolean(rollRequestId);
-    const remainingRollRequests =
-      isRollSubmission && pendingRollRequest ? pendingRollRequests.slice(1) : [];
-
-    if (pendingRollRequest) {
-      if (rollRequestId !== pendingRollRequest.id) {
-        throw new HttpError("Hermes is waiting for the required roll.", 409);
-      }
-    } else if (isRollSubmission) {
-      throw new HttpError("There is no pending roll to resolve.", 400);
-    }
+    const submittedRolls = rollSubmissionsFromPayload(
+      rollRequestId,
+      rollResult,
+      clientMessageId,
+      rollSubmissions
+    );
+    const isRollSubmission = submittedRolls.length > 0;
+    const rollSubmission = validatePendingRollSubmissions(
+      pendingRollRequests,
+      submittedRolls
+    );
 
     const turn = await ensureCollectingTurn(client, campaign.id);
-    const trimmedContent = pendingRollRequest
-      ? formatRollSubmission(pendingRollRequest, rollResult)
+    const trimmedContent = isRollSubmission
+      ? rollSubmission.content
       : content.trim();
 
     if (!trimmedContent) {
@@ -1599,7 +1674,11 @@ export async function submitRoomTurn(
       [campaign.id, turn.id, player.id, trimmedContent, isRollSubmission]
     );
     if (isRollSubmission) {
-      await setPendingRollRequests(client, campaign.id, remainingRollRequests);
+      await setPendingRollRequests(
+        client,
+        campaign.id,
+        rollSubmission.remainingRollRequests
+      );
     }
     await client.query("update players set last_seen_at = now() where id = $1", [
       player.id
@@ -1608,14 +1687,15 @@ export async function submitRoomTurn(
       turnId: turn.id,
       clientId: player.client_id,
       role: "player",
-      messageId: clientMessageId || crypto.randomUUID(),
+      messageId: rollSubmission.clientMessageId || clientMessageId || crypto.randomUUID(),
       content: `${player.username} (${player.character_name}): ${trimmedContent}`
     });
 
     return {
       campaign,
       turn,
-      shouldResolve: !isRollSubmission || remainingRollRequests.length === 0,
+      shouldResolve:
+        !isRollSubmission || rollSubmission.remainingRollRequests.length === 0,
       shouldResolveImmediately: isRollSubmission
     };
   });
@@ -1642,7 +1722,8 @@ export async function submitSoloTurn(
   userId: string,
   rollRequestId?: string,
   rollResult?: DiceRollResult,
-  clientMessageId?: string
+  clientMessageId?: string,
+  rollSubmissions?: DiceRollSubmission[]
 ) {
   const soloState = await withTransaction(async (client) => {
     const campaign = (
@@ -1674,22 +1755,21 @@ export async function submitSoloTurn(
     }
 
     const pendingRollRequests = pendingRollRequestsFromCampaign(campaign);
-    const pendingRollRequest = pendingRollRequests[0] ?? null;
-    const isRollSubmission = Boolean(rollRequestId);
-    const remainingRollRequests =
-      isRollSubmission && pendingRollRequest ? pendingRollRequests.slice(1) : [];
-
-    if (pendingRollRequest) {
-      if (rollRequestId !== pendingRollRequest.id) {
-        throw new HttpError("Hermes is waiting for the required roll.", 409);
-      }
-    } else if (isRollSubmission) {
-      throw new HttpError("There is no pending roll to resolve.", 400);
-    }
+    const submittedRolls = rollSubmissionsFromPayload(
+      rollRequestId,
+      rollResult,
+      clientMessageId,
+      rollSubmissions
+    );
+    const isRollSubmission = submittedRolls.length > 0;
+    const rollSubmission = validatePendingRollSubmissions(
+      pendingRollRequests,
+      submittedRolls
+    );
 
     const turn = await ensureCollectingTurn(client, campaign.id);
-    const trimmedContent = pendingRollRequest
-      ? formatRollSubmission(pendingRollRequest, rollResult)
+    const trimmedContent = isRollSubmission
+      ? rollSubmission.content
       : content.trim();
 
     if (!trimmedContent) {
@@ -1713,7 +1793,11 @@ export async function submitSoloTurn(
     const submittedContent = submissionResult.rows[0]?.content ?? trimmedContent;
 
     if (isRollSubmission) {
-      await setPendingRollRequests(client, campaign.id, remainingRollRequests);
+      await setPendingRollRequests(
+        client,
+        campaign.id,
+        rollSubmission.remainingRollRequests
+      );
     }
     await client.query("update players set last_seen_at = now() where id = $1", [
       player.id
@@ -1722,11 +1806,11 @@ export async function submitSoloTurn(
       turnId: turn.id,
       clientId: player.client_id,
       role: "player",
-      messageId: clientMessageId || crypto.randomUUID(),
+      messageId: rollSubmission.clientMessageId || clientMessageId || crypto.randomUUID(),
       content: trimmedContent
     });
 
-    if (isRollSubmission && remainingRollRequests.length > 0) {
+    if (isRollSubmission && rollSubmission.remainingRollRequests.length > 0) {
       return {
         campaign,
         shouldResolve: false,
