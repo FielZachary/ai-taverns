@@ -36,7 +36,7 @@ const characterCreationSteps = [
   "Species",
   "Background",
   "Ability",
-  "Personality",
+  "Identity",
   "Sheet"
 ];
 const campaignGenres = [
@@ -173,19 +173,22 @@ const abilityStyleOptions = [
     summary: "Fine tune the sheet later once the campaign begins."
   }
 ] as const;
-const personalityPrompts = [
-  "Charming troublemaker",
-  "Grim oathkeeper",
-  "Curious scholar",
-  "Reluctant hero",
-  "Secretive survivor",
-  "Idealistic protector"
+const alignmentOptions = [
+  "Lawful Good",
+  "Neutral Good",
+  "Chaotic Good",
+  "Lawful Neutral",
+  "True Neutral",
+  "Chaotic Neutral",
+  "Lawful Evil",
+  "Neutral Evil",
+  "Chaotic Evil"
 ] as const;
 type CharacterClass = (typeof classOptions)[number]["id"];
 type CharacterSpecies = (typeof speciesOptions)[number];
 type CharacterBackground = (typeof backgroundOptions)[number];
 type AbilityStyle = (typeof abilityStyleOptions)[number]["id"];
-type PersonalityPrompt = (typeof personalityPrompts)[number];
+type Alignment = (typeof alignmentOptions)[number];
 
 function formatList(items: readonly string[]) {
   return items.length > 0 ? items.join(", ") : "None";
@@ -217,9 +220,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
     useState<CharacterBackground>("Folk Hero");
   const [abilityStyle, setAbilityStyle] =
     useState<AbilityStyle>("Quick Build");
-  const [personality, setPersonality] =
-    useState<PersonalityPrompt>("Charming troublemaker");
-  const [backstoryHook, setBackstoryHook] = useState("");
+  const [alignment, setAlignment] = useState<Alignment>("Neutral Good");
   const [characterSheet, setCharacterSheet] = useState(defaultCharacterSheet);
   const [ownerClientId, setOwnerClientId] = useState("");
   const [error, setError] = useState("");
@@ -250,28 +251,22 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
         `Class: ${selectedClass.id}`,
         `Species: ${characterSpecies}`,
         `Background: ${characterBackground}`,
+        `Alignment: ${alignment}`,
         `Ability style: ${selectedAbilityStyle.id} - ${selectedAbilityStyle.summary}`,
         `Core skills: ${formatList(selectedClass.skills)}`,
         `Starting equipment: ${formatList(selectedClass.equipment)}`,
         `Magic: ${formatList(selectedClass.spells)}`,
         "",
-        `Personality: ${personality}`,
-        `Backstory hook: ${
-          backstoryHook.trim() ||
-          "A fresh adventurer whose deeper story can emerge during play."
-        }`,
-        "",
         "DM notes:",
-        `${characterName.trim() || "This character"} is a ${characterSpecies} ${selectedClass.id.toLowerCase()} with the ${characterBackground.toLowerCase()} background. Use the class, species, background, personality, and hook to tailor the opening scene.`
+        `${characterName.trim() || "This character"} is a ${alignment} ${characterSpecies} ${selectedClass.id.toLowerCase()} with the ${characterBackground.toLowerCase()} background. Use the class, species, background, and alignment to tailor the opening scene.`
       ].join("\n"),
     [
       abilityStyle,
-      backstoryHook,
+      alignment,
       characterBackground,
       characterClass,
       characterName,
       characterSpecies,
-      personality,
       selectedAbilityStyle.id,
       selectedAbilityStyle.summary,
       selectedClass
@@ -664,12 +659,12 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                 ) : null}
 
                 {characterStepIndex === 4 ? (
-                  <div className="personality-panel">
+                  <div className="identity-panel">
                     <div className="character-identity-fields">
                       <label>
                         <span>
                           {mode === "single_player"
-                            ? "Name and personality"
+                            ? "Character name"
                             : "Owner character name"}
                         </span>
                         <input
@@ -684,27 +679,18 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                           autoFocus
                         />
                       </label>
-
-                      <label>
-                        <span>Backstory hook</span>
-                        <input
-                          value={backstoryHook}
-                          onChange={(event) => setBackstoryHook(event.target.value)}
-                          placeholder="What trouble, promise, or mystery follows them?"
-                        />
-                      </label>
                     </div>
 
                     <fieldset className="option-picker compact-option-picker">
-                      <legend>Personality</legend>
+                      <legend>Alignment</legend>
                       <div>
-                        {personalityPrompts.map((option) => (
+                        {alignmentOptions.map((option) => (
                           <button
                             type="button"
-                            className={personality === option ? "selected" : ""}
-                            aria-pressed={personality === option}
+                            className={alignment === option ? "selected" : ""}
+                            aria-pressed={alignment === option}
                             key={option}
-                            onClick={() => setPersonality(option)}
+                            onClick={() => setAlignment(option)}
                           >
                             <strong>{option}</strong>
                           </button>
@@ -730,8 +716,8 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                         <strong>{characterBackground}</strong>
                       </div>
                       <div>
-                        <span>Personality</span>
-                        <strong>{personality}</strong>
+                        <span>Alignment</span>
+                        <strong>{alignment}</strong>
                       </div>
                     </div>
 
@@ -789,6 +775,10 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                   <div>
                     <dt>Background</dt>
                     <dd>{characterBackground}</dd>
+                  </div>
+                  <div>
+                    <dt>Alignment</dt>
+                    <dd>{alignment}</dd>
                   </div>
                 </dl>
               </div>
