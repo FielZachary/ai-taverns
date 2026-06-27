@@ -274,6 +274,27 @@ function formatRollSubmission(
   } (${rollText}) for ${request.label}.`;
 }
 
+function formatCanonicalCharacterContext(players: PlayerRow[]) {
+  const playablePlayers = players.filter(isProfileComplete);
+
+  if (playablePlayers.length === 0) {
+    return "Canonical player characters:\nNo completed character sheets are available.";
+  }
+
+  return [
+    "Canonical player characters:",
+    "Use these website-owned character sheets when framing scenes, choosing checks and modifiers, judging character capabilities, and spotlighting class, species, background, or story hooks. If Hermes session history conflicts with these sheets, these sheets win.",
+    "",
+    ...playablePlayers.map((player, index) =>
+      [
+        `${index + 1}. ${player.username} playing ${player.character_name}`,
+        "Character sheet:",
+        player.character_sheet
+      ].join("\n")
+    )
+  ].join("\n\n");
+}
+
 async function setPendingRollRequests(
   client: PoolClient,
   campaignId: string,
@@ -539,6 +560,9 @@ function formatCombinedTurn(players: PlayerRow[], submissions: SubmissionRow[]) 
   );
 
   return [
+    formatCanonicalCharacterContext(players),
+    "",
+    "Current player actions:",
     "The party submits their turns at the same time. Resolve these player actions together as one D&D round.",
     "",
     ...players.map((player) => {
@@ -556,15 +580,17 @@ function formatPartyOpeningRequest(players: PlayerRow[]) {
     "",
     `Party size: ${players.length}`,
     "",
-    "Party:",
-    ...players.map((player, index) =>
-      [
-        `${index + 1}. ${player.username} playing ${player.character_name}`,
-        "Character sheet:",
-        player.character_sheet
-      ].join("\n")
-    )
+    formatCanonicalCharacterContext(players)
   ].join("\n\n");
+}
+
+function formatSoloTurn(player: PlayerRow, content: string) {
+  return [
+    formatCanonicalCharacterContext([player]),
+    "",
+    "Current player action:",
+    `${player.username} (${player.character_name}): ${content}`
+  ].join("\n");
 }
 
 async function askHermes(sessionId: string, message: string, instructions: string) {
@@ -1750,7 +1776,7 @@ export async function submitSoloTurn(
   try {
     const reply = await askHermes(
       soloState.campaign.hermes_session_id,
-      `${soloState.player.username} (${soloState.player.character_name}): ${soloState.content}`,
+      formatSoloTurn(soloState.player, soloState.content),
       dungeonMasterInstructions
     );
 
