@@ -13,8 +13,6 @@ import {
   Flame,
   LogOut,
   Play,
-  PanelRightClose,
-  PanelRightOpen,
   Send,
   X
 } from "lucide-react";
@@ -32,7 +30,6 @@ import { MessageLog } from "./MessageLog";
 import {
   defaultCharacterSheet,
   emptyPlayerProfile,
-  PlayerPanel,
   type PlayerProfile
 } from "./PlayerPanel";
 import { DiceRollReveal3D } from "./DiceRollReveal3D";
@@ -424,11 +421,8 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isCreatingChat] = useState(false);
   const [activeCampaignId, setActiveCampaignId] = useState(initialCampaignId ?? "");
-  const [isSessionPanelOpen, setIsSessionPanelOpen] = useState(true);
   const [playerProfile, setPlayerProfile] =
     useState<PlayerProfile>(emptyPlayerProfile);
-  const [roomPlayerProfile, setRoomPlayerProfile] =
-    useState<PlayerProfile | undefined>();
   const [inputValidationMessage, setInputValidationMessage] = useState("");
   const [inputValidationPulse, setInputValidationPulse] = useState(0);
   const [isInputSubmitted, setIsInputSubmitted] = useState(false);
@@ -519,13 +513,6 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
 
         setPlayerProfile((currentProfile) =>
           getMissingPlayerProfileFields(currentProfile).length === 0
-            ? currentProfile
-            : snapshotProfile
-        );
-        setRoomPlayerProfile((currentProfile) =>
-          currentProfile?.username === snapshotProfile.username &&
-          currentProfile.characterName === snapshotProfile.characterName &&
-          currentProfile.characterSheet === snapshotProfile.characterSheet
             ? currentProfile
             : snapshotProfile
         );
@@ -706,7 +693,6 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
       const missingProfileFields = getMissingPlayerProfileFields(profile);
 
       if (missingProfileFields.length > 0) {
-        setIsSessionPanelOpen(true);
         setInputValidationMessage(
           `Finish your ${missingProfileFields.join(", ")} before updating.`
         );
@@ -1075,7 +1061,6 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
       const missingProfileFields = getMissingPlayerProfileFields(playerProfile);
 
       if (missingProfileFields.length > 0) {
-        setIsSessionPanelOpen(true);
         setInputValidationMessage(
           `Finish your ${missingProfileFields.join(", ")} before sending.`
         );
@@ -1393,32 +1378,9 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
               <LogOut size={16} />
             </button>
           </div>
-          {!isSinglePlayer ? (
-            <button
-              className="panel-toggle"
-              type="button"
-              aria-label={
-                isSessionPanelOpen
-                  ? "Collapse session panel"
-                  : "Expand session panel"
-              }
-              aria-pressed={isSessionPanelOpen}
-              onClick={() => setIsSessionPanelOpen((isOpen) => !isOpen)}
-            >
-              {isSessionPanelOpen ? (
-                <PanelRightClose size={20} />
-              ) : (
-                <PanelRightOpen size={20} />
-              )}
-            </button>
-          ) : null}
         </header>
 
-        <div
-          className={`table-grid ${
-            isSessionPanelOpen && !isSinglePlayer ? "" : "session-panel-collapsed"
-          }`}
-        >
+        <div className="table-grid session-panel-collapsed">
           <ChatHistorySidebar
             chats={availableCampaigns}
             activeChatId={activeCampaignId}
@@ -1548,15 +1510,6 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
             />
           </div>
 
-          {isSessionPanelOpen && !isSinglePlayer ? (
-            <PlayerPanel
-              initialProfile={roomPlayerProfile}
-              onProfileChange={setPlayerProfile}
-              onProfileUpdate={(profile) => {
-                void registerPlayerProfile(profile);
-              }}
-            />
-          ) : null}
         </div>
       </section>
 

@@ -459,22 +459,6 @@ h1 {
   background: rgba(173, 71, 43, 0.24);
 }
 
-.panel-toggle {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  border: 1px solid rgba(244, 207, 122, 0.32);
-  border-radius: 8px;
-  color: var(--gold-bright);
-  background: rgba(17, 13, 10, 0.48);
-}
-
-.panel-toggle:hover {
-  border-color: rgba(244, 207, 122, 0.68);
-  background: rgba(173, 71, 43, 0.24);
-}
-
 .auth-page {
   display: grid;
   min-height: 100dvh;
