@@ -33,12 +33,13 @@ type AbilityKey = "str" | "dex" | "con" | "int" | "wis" | "cha";
 type AbilityScores = Record<AbilityKey, number>;
 type SkillName = (typeof skillDefinitions)[number]["name"];
 type CharacterBuildMode = "quick" | "custom";
+type QuickBuildFantasy = (typeof quickBuildFantasyOptions)[number]["id"];
 
 const playerIdStorageKey = "ai-dnd.playerId";
 const characterLevel = 5;
 const proficiencyBonus = 3;
 const steps = ["Mode", "Campaign", "Character", "Review"];
-const characterCreationSteps = [
+const customCharacterCreationSteps = [
   "Build",
   "Class",
   "Species",
@@ -49,6 +50,15 @@ const characterCreationSteps = [
   "Proficiencies",
   "Equipment",
   "Spells",
+  "Identity",
+  "Sheet"
+];
+const quickCharacterCreationSteps = [
+  "Build",
+  "Class",
+  "Fantasy",
+  "Species",
+  "Background",
   "Identity",
   "Sheet"
 ];
@@ -80,6 +90,35 @@ const skillDefinitions = [
   { name: "Sleight of Hand", ability: "dex" },
   { name: "Stealth", ability: "dex" },
   { name: "Survival", ability: "wis" }
+] as const;
+const quickBuildFantasyOptions = [
+  {
+    id: "Guardian",
+    label: "Guardian",
+    summary: "Durable, reliable, and built to keep the party alive.",
+    subclassIndex: 0,
+    featureIndex: 0,
+    equipmentIndex: 0,
+    spellOffset: 0
+  },
+  {
+    id: "Striker",
+    label: "Striker",
+    summary: "Direct, dangerous, and tuned for decisive action.",
+    subclassIndex: 1,
+    featureIndex: 1,
+    equipmentIndex: 1,
+    spellOffset: 2
+  },
+  {
+    id: "Tactician",
+    label: "Tactician",
+    summary: "Perceptive, flexible, and strongest when solving problems cleverly.",
+    subclassIndex: 2,
+    featureIndex: 2,
+    equipmentIndex: 0,
+    spellOffset: 4
+  }
 ] as const;
 const classOptions = [
   {
@@ -529,6 +568,8 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
   const [characterName, setCharacterName] = useState("");
   const [characterBuildMode, setCharacterBuildMode] =
     useState<CharacterBuildMode>("custom");
+  const [quickBuildFantasy, setQuickBuildFantasy] =
+    useState<QuickBuildFantasy>("Guardian");
   const [characterClass, setCharacterClass] = useState<CharacterClass>("Fighter");
   const [characterSpecies, setCharacterSpecies] = useState<CharacterSpecies>("Human");
   const [characterBackground, setCharacterBackground] = useState<CharacterBackground>("Folk Hero");
@@ -547,7 +588,13 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
   const [isCreating, setIsCreating] = useState(false);
   const isLastStep = stepIndex === steps.length - 1;
   const isCharacterStep = stepIndex === 2;
-  const isLastCharacterStep = characterStepIndex === characterCreationSteps.length - 1;
+  const characterCreationSteps =
+    characterBuildMode === "quick"
+      ? quickCharacterCreationSteps
+      : customCharacterCreationSteps;
+  const isQuickBuild = characterBuildMode === "quick";
+  const isLastCharacterStep =
+    characterStepIndex === characterCreationSteps.length - 1;
   const modeLabel = mode === "single_player" ? "Singleplayer" : "Multiplayer";
   const selectedGenre = campaignGenres.find((genre) => genre.id === campaignGenre) ?? campaignGenres[0];
   const isCustomGenre = campaignGenre === "custom";
@@ -566,6 +613,9 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
   const spellSaveDc = 8 + proficiencyBonus + spellcastingModifier;
   const spellAttackBonus = proficiencyBonus + spellcastingModifier;
   const hasSpells = selectedClass.spells.length > 0;
+  const selectedQuickBuildFantasy =
+    quickBuildFantasyOptions.find((option) => option.id === quickBuildFantasy) ??
+    quickBuildFantasyOptions[0];
   const characterSheetPreview = useMemo(() => {
     const abilityLines = abilityDefinitions.map(({ key, label }) => {
       const modifier = getModifier(abilityScores[key]);
@@ -597,6 +647,9 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
       `Character Name: ${name}`,
       `Player Name: ${mode === "single_player" ? name : "Table Owner"}`,
       `Build Mode: ${characterBuildMode === "custom" ? "Custom Build" : "Quick Build"}`,
+      characterBuildMode === "quick"
+        ? `Character Fantasy: ${selectedQuickBuildFantasy.label}`
+        : null,
       `Level: ${characterLevel}`,
       `Class: ${selectedClass.id}`,
       `Subclass: ${subclass}`,
@@ -647,7 +700,9 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
       "",
       "DM Brief",
       `${name} is a Level ${characterLevel} ${alignment} ${characterSpecies} ${selectedClass.id} (${subclass}) with the ${characterBackground} background. Use their proficient skills (${formatList(proficientSkills)}) and key class choices to frame checks, spotlight moments, and opening-scene hooks.`
-    ].join("\n");
+    ]
+      .filter((line): line is string => line !== null)
+      .join("\n");
   }, [
     abilityScores,
     alignment,
@@ -665,6 +720,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
     selectedClass,
     selectedEquipmentKit,
     selectedLanguage,
+    selectedQuickBuildFantasy.label,
     selectedSpells,
     selectedTool,
     spellAttackBonus,
@@ -690,15 +746,25 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
         return "Choose your character build";
       }
 
-      if (characterStepIndex === 4) {
+      if (!isQuickBuild && characterStepIndex === 4) {
         return "Set your Level 5 abilities";
+      }
+
+      if (isQuickBuild && characterStepIndex === 2) {
+        return "Choose your character fantasy";
       }
 
       return `Choose your ${characterCreationSteps[characterStepIndex].toLowerCase()}`;
     }
 
     return "Ready the first page";
-  }, [characterStepIndex, isLastCharacterStep, stepIndex]);
+  }, [
+    characterCreationSteps,
+    characterStepIndex,
+    isLastCharacterStep,
+    isQuickBuild,
+    stepIndex
+  ]);
 
   useEffect(() => {
     setCharacterSheet(characterSheetPreview);
@@ -726,6 +792,49 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
     setSelectedSkills([...nextClassData.defaultSkills] as SkillName[]);
     setEquipmentKitId(nextClassData.equipmentKits[0].id);
     setSelectedSpells(nextClassData.spells.slice(0, Math.min(5, nextClassData.spells.length)));
+  }
+
+  function applyQuickBuildFantasy(nextFantasy: QuickBuildFantasy) {
+    const fantasy =
+      quickBuildFantasyOptions.find((option) => option.id === nextFantasy) ??
+      quickBuildFantasyOptions[0];
+    const subclassChoice =
+      selectedClass.subclassOptions[
+        Math.min(fantasy.subclassIndex, selectedClass.subclassOptions.length - 1)
+      ];
+    const featureChoice =
+      selectedClass.featureOptions[
+        Math.min(fantasy.featureIndex, selectedClass.featureOptions.length - 1)
+      ];
+    const equipmentChoice =
+      selectedClass.equipmentKits[
+        Math.min(fantasy.equipmentIndex, selectedClass.equipmentKits.length - 1)
+      ];
+    const skillChoices = selectedClass.skillChoices.slice(
+      0,
+      Math.max(2, Math.min(4, selectedClass.defaultSkills.length))
+    ) as SkillName[];
+    const spellChoices = selectedClass.spells.slice(
+      fantasy.spellOffset,
+      fantasy.spellOffset + 5
+    );
+
+    setQuickBuildFantasy(nextFantasy);
+    setSubclass(subclassChoice);
+    setClassFeatureChoice(featureChoice);
+    setSelectedSkills(
+      skillChoices.length > 0
+        ? skillChoices
+        : ([...selectedClass.defaultSkills] as SkillName[])
+    );
+    setEquipmentKitId(equipmentChoice.id);
+    setSelectedTool(fantasy.id === "Tactician" ? "Navigator's tools" : "Dice set");
+    setSelectedLanguage(fantasy.id === "Guardian" ? "Dwarvish" : fantasy.id === "Striker" ? "Draconic" : "Elvish");
+    setSelectedSpells(
+      spellChoices.length > 0
+        ? spellChoices
+        : selectedClass.spells.slice(0, Math.min(5, selectedClass.spells.length))
+    );
   }
 
   function updateAbilityScore(key: AbilityKey, value: string) {
@@ -768,7 +877,15 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
 
     if (stepIndex === 2) {
       if (characterStepIndex === 0) {
-        return characterBuildMode === "custom";
+        return true;
+      }
+
+      if (isQuickBuild) {
+        return (
+          characterStepIndex !== 5 ||
+          mode === "multiplayer" ||
+          Boolean(characterName.trim())
+        );
       }
 
       if (characterStepIndex === 6) {
@@ -798,15 +915,19 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
           ? isCustomGenre
             ? "Name the world and describe it before continuing."
             : "Choose a campaign genre before continuing."
-          : characterStepIndex === 0 && characterBuildMode === "quick"
-            ? "Quick Build is coming soon. Choose Custom Build for now."
-            : mode === "single_player" && characterStepIndex === 10
+          : mode === "single_player" &&
+              ((isQuickBuild && characterStepIndex === 5) ||
+                (!isQuickBuild && characterStepIndex === 10))
             ? "Add your character name before continuing."
             : characterStepIndex === 9
               ? "Choose at least one spell before continuing."
               : "Choose at least one option before continuing."
       );
       return;
+    }
+
+    if (isQuickBuild && characterStepIndex === 2) {
+      applyQuickBuildFantasy(quickBuildFantasy);
     }
 
     if (isCharacterStep && !isLastCharacterStep) {
@@ -1079,7 +1200,28 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                   </fieldset>
                 ) : null}
 
-                {characterStepIndex === 2 ? (
+                {isQuickBuild && characterStepIndex === 2 ? (
+                  <fieldset className="option-picker quick-fantasy-picker">
+                    <legend>Character fantasy</legend>
+                    <div>
+                      {quickBuildFantasyOptions.map((option) => (
+                        <button
+                          type="button"
+                          className={quickBuildFantasy === option.id ? "selected" : ""}
+                          aria-pressed={quickBuildFantasy === option.id}
+                          key={option.id}
+                          onClick={() => applyQuickBuildFantasy(option.id)}
+                        >
+                          <strong>{option.label}</strong>
+                          <small>{option.summary}</small>
+                        </button>
+                      ))}
+                    </div>
+                  </fieldset>
+                ) : null}
+
+                {(!isQuickBuild && characterStepIndex === 2) ||
+                (isQuickBuild && characterStepIndex === 3) ? (
                   <fieldset className="option-picker compact-option-picker">
                     <legend>Species</legend>
                     <div>
@@ -1098,7 +1240,8 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                   </fieldset>
                 ) : null}
 
-                {characterStepIndex === 3 ? (
+                {(!isQuickBuild && characterStepIndex === 3) ||
+                (isQuickBuild && characterStepIndex === 4) ? (
                   <fieldset className="option-picker compact-option-picker">
                     <legend>Background</legend>
                     <div>
@@ -1118,7 +1261,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                   </fieldset>
                 ) : null}
 
-                {characterStepIndex === 4 ? (
+                {!isQuickBuild && characterStepIndex === 4 ? (
                   <section className="ability-score-panel">
                     <div className="character-step-note">
                       <strong>Level 5 scores</strong>
@@ -1142,7 +1285,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                   </section>
                 ) : null}
 
-                {characterStepIndex === 5 ? (
+                {!isQuickBuild && characterStepIndex === 5 ? (
                   <div className="character-builder-grid">
                     <fieldset className="option-picker compact-option-picker">
                       <legend>{selectedClass.subclassLabel}</legend>
@@ -1179,7 +1322,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                   </div>
                 ) : null}
 
-                {characterStepIndex === 6 ? (
+                {!isQuickBuild && characterStepIndex === 6 ? (
                   <fieldset className="option-picker compact-option-picker">
                     <legend>Skills</legend>
                     <div>
@@ -1201,7 +1344,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                   </fieldset>
                 ) : null}
 
-                {characterStepIndex === 7 ? (
+                {!isQuickBuild && characterStepIndex === 7 ? (
                   <div className="character-builder-grid">
                     <fieldset className="option-picker compact-option-picker">
                       <legend>Tool proficiency</legend>
@@ -1238,7 +1381,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                   </div>
                 ) : null}
 
-                {characterStepIndex === 8 ? (
+                {!isQuickBuild && characterStepIndex === 8 ? (
                   <fieldset className="option-picker equipment-picker">
                     <legend>Equipment</legend>
                     <div>
@@ -1258,7 +1401,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                   </fieldset>
                 ) : null}
 
-                {characterStepIndex === 9 ? (
+                {!isQuickBuild && characterStepIndex === 9 ? (
                   hasSpells ? (
                     <fieldset className="option-picker compact-option-picker">
                       <legend>Spells</legend>
@@ -1287,7 +1430,8 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                   )
                 ) : null}
 
-                {characterStepIndex === 10 ? (
+                {(!isQuickBuild && characterStepIndex === 10) ||
+                (isQuickBuild && characterStepIndex === 5) ? (
                   <div className="identity-panel">
                     <div className="character-identity-fields">
                       <label>
@@ -1329,7 +1473,8 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                   </div>
                 ) : null}
 
-                {characterStepIndex === 11 ? (
+                {(!isQuickBuild && characterStepIndex === 11) ||
+                (isQuickBuild && characterStepIndex === 6) ? (
                   <>
                     <div className="character-summary-grid">
                       <div>

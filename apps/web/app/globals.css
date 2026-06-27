@@ -930,6 +930,15 @@ h1 {
   align-content: center;
 }
 
+.quick-fantasy-picker > div {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.quick-fantasy-picker button {
+  min-height: 124px;
+  align-content: center;
+}
+
 .equipment-picker > div {
   grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
 }
@@ -2503,6 +2512,7 @@ h1 {
 
   .class-picker > div,
   .build-mode-picker > div,
+  .quick-fantasy-picker > div,
   .character-builder-grid,
   .ability-score-grid,
   .character-summary-grid {
