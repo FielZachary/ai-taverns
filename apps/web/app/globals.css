@@ -857,7 +857,7 @@ h1 {
 
 .character-creation-steps {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
   gap: 6px;
   margin: 0;
   padding: 0;
@@ -919,6 +919,62 @@ h1 {
 
 .compact-option-picker button {
   min-height: 50px;
+}
+
+.equipment-picker > div {
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+}
+
+.ability-score-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.ability-score-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ability-score-grid label {
+  position: relative;
+  padding: 12px;
+  border: 1px solid rgba(244, 207, 122, 0.18);
+  border-radius: 8px;
+  background: rgba(17, 13, 10, 0.4);
+}
+
+.ability-score-grid input {
+  min-height: 46px;
+  padding-right: 52px;
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.ability-score-grid strong {
+  position: absolute;
+  right: 26px;
+  bottom: 25px;
+  color: var(--gold-bright);
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.character-step-note {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.character-step-note strong {
+  color: var(--gold-bright);
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
 }
 
 .character-builder-grid {
@@ -2438,12 +2494,13 @@ h1 {
 
   .class-picker > div,
   .character-builder-grid,
+  .ability-score-grid,
   .character-summary-grid {
     grid-template-columns: 1fr;
   }
 
   .character-creation-steps {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .table-header {
