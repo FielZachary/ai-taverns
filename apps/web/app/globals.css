@@ -1725,8 +1725,9 @@ h1 {
 
 .message-body p {
   margin-bottom: 0;
+  font-size: 0.94rem;
   white-space: pre-wrap;
-  line-height: 1.55;
+  line-height: 1.5;
 }
 
 .message-dm .message-body {
@@ -1734,8 +1735,8 @@ h1 {
 }
 
 .message-dm .message-body p {
-  font-size: 1.04rem;
-  line-height: 1.68;
+  font-size: 0.96rem;
+  line-height: 1.58;
 }
 
 .rune-loader {
