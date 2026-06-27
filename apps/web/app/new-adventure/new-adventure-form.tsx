@@ -1355,7 +1355,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                         onClick={() => setCharacterBuildMode("quick")}
                       >
                         <strong>Quick Build</strong>
-                        <small>Coming soon. We will design this flow together next.</small>
+                        <small>Start fast with a ready-to-play Level 5 character.</small>
                       </button>
                       <button
                         type="button"
