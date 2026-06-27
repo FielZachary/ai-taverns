@@ -158,20 +158,52 @@ export function assertHermesConfigured() {
       "Hermes is not configured. Set HERMES_AGENT_URL and HERMES_AGENT_TOKEN."
     );
   }
+
+  let hermesUrl: URL;
+
+  try {
+    hermesUrl = new URL(hermesBaseUrl);
+  } catch {
+    throw new Error("Hermes is not configured with a valid HERMES_AGENT_URL.");
+  }
+
+  const localHosts = new Set([
+    "localhost",
+    "127.0.0.1",
+    "::1",
+    "[::1]",
+    "0.0.0.0"
+  ]);
+  const isHostedProduction =
+    process.env.NODE_ENV === "production" || Boolean(process.env.VERCEL);
+
+  if (isHostedProduction && localHosts.has(hermesUrl.hostname)) {
+    throw new Error(
+      "Hermes is configured with a local-only URL. Set HERMES_AGENT_URL to a public HTTPS Hermes endpoint for production."
+    );
+  }
 }
 
 export async function hermesFetch(path: string, init?: RequestInit) {
   assertHermesConfigured();
 
-  return fetch(`${hermesBaseUrl}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${hermesToken}`,
-      ...init?.headers
-    },
-    signal: AbortSignal.timeout(175_000)
-  });
+  try {
+    return await fetch(`${hermesBaseUrl}${path}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${hermesToken}`,
+        ...init?.headers
+      },
+      signal: AbortSignal.timeout(175_000)
+    });
+  } catch (error) {
+    throw new Error(
+      `Hermes could not be reached at HERMES_AGENT_URL. ${
+        error instanceof Error ? error.message : "Network request failed."
+      }`
+    );
+  }
 }
 
 export function titleFromSessionId(sessionId: string) {
