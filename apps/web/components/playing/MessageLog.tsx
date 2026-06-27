@@ -30,7 +30,7 @@ function MessageBody({ content }: { content: string }) {
 }
 
 export function MessageLog({ messages, isSending }: MessageLogProps) {
-  const bottomAnchorRef = useRef<HTMLDivElement>(null);
+  const logRef = useRef<HTMLDivElement>(null);
   const scrollKey = useMemo(
     () => messages.map((message) => message.id).join("|"),
     [messages]
@@ -38,7 +38,11 @@ export function MessageLog({ messages, isSending }: MessageLogProps) {
 
   useLayoutEffect(() => {
     const frameId = window.requestAnimationFrame(() => {
-      bottomAnchorRef.current?.scrollIntoView({ block: "end" });
+      const log = logRef.current;
+
+      if (log) {
+        log.scrollTo({ top: log.scrollHeight });
+      }
     });
 
     return () => {
@@ -47,7 +51,7 @@ export function MessageLog({ messages, isSending }: MessageLogProps) {
   }, [scrollKey, isSending]);
 
   return (
-    <div className="message-log" aria-live="polite">
+    <div className="message-log" aria-live="polite" ref={logRef}>
       {messages.map((message) => (
         <article
           className={`message-card message-${message.role}`}
@@ -93,7 +97,7 @@ export function MessageLog({ messages, isSending }: MessageLogProps) {
           </div>
         </article>
       ) : null}
-      <div ref={bottomAnchorRef} aria-hidden="true" className="message-end" />
+      <div aria-hidden="true" className="message-end" />
     </div>
   );
 }

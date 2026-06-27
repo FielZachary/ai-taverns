@@ -301,8 +301,9 @@ button {
 }
 
 .table-page {
-  position: relative;
-  height: 100dvh;
+  position: fixed;
+  inset: 0;
+  height: auto;
   overflow: hidden;
   padding: 28px;
 }
