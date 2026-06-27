@@ -126,6 +126,73 @@ function rollRequestsFromRoom(room: RoomSnapshot) {
   );
 }
 
+function normalizePlayerTarget(value: string | undefined) {
+  return value
+    ?.trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function rollRequestTargetsCurrentPlayer(
+  request: DiceRollRequest,
+  profile: PlayerProfile,
+  roomPlayer?: RoomPlayer
+) {
+  const target = normalizePlayerTarget(request.player);
+
+  if (!target) {
+    return true;
+  }
+
+  const playerNames = [
+    profile.username,
+    profile.characterName,
+    roomPlayer?.username,
+    roomPlayer?.characterName
+  ]
+    .map(normalizePlayerTarget)
+    .filter((name): name is string => Boolean(name));
+
+  return playerNames.some(
+    (name) =>
+      target === name ||
+      target.includes(name) ||
+      name.includes(target)
+  );
+}
+
+function currentPlayerRollRequests(
+  pendingRequests: DiceRollRequest[],
+  profile: PlayerProfile,
+  roomPlayer: RoomPlayer | undefined,
+  isSinglePlayer: boolean
+) {
+  if (isSinglePlayer) {
+    return pendingRequests;
+  }
+
+  if (
+    pendingRequests.length === 0 ||
+    !rollRequestTargetsCurrentPlayer(pendingRequests[0], profile, roomPlayer)
+  ) {
+    return [];
+  }
+
+  const targetedRequests: DiceRollRequest[] = [];
+
+  for (const request of pendingRequests) {
+    if (!rollRequestTargetsCurrentPlayer(request, profile, roomPlayer)) {
+      break;
+    }
+
+    targetedRequests.push(request);
+  }
+
+  return targetedRequests;
+}
+
 function createClientId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID();
@@ -446,7 +513,24 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     [activeCampaignId, availableCampaigns]
   );
   const isSinglePlayer = activeCampaign?.mode === "single_player";
-  const pendingRollRequest = pendingRollRequests[0] ?? null;
+  const currentRoomPlayer = useMemo(
+    () => roomPlayers.find((roomPlayer) => roomPlayer.id === playerId),
+    [playerId, roomPlayers]
+  );
+  const currentPendingRollRequests = useMemo(
+    () =>
+      currentPlayerRollRequests(
+        pendingRollRequests,
+        playerProfile,
+        currentRoomPlayer,
+        isSinglePlayer
+      ),
+    [currentRoomPlayer, isSinglePlayer, pendingRollRequests, playerProfile]
+  );
+  const currentPendingRollRequest = currentPendingRollRequests[0] ?? null;
+  const isInputSubmittedForCurrentState =
+    isInputSubmitted &&
+    (pendingRollRequests.length === 0 || Boolean(currentPendingRollRequest));
 
   const playerStatusSlots = useMemo<PlayerStatusSlot[]>(() => {
     return Array.from({ length: maxPlayers }, (_, slot) => {
@@ -1045,7 +1129,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
       return;
     }
 
-    if (pendingRollRequest) {
+    if (currentPendingRollRequest) {
       setInputValidationMessage("Hermes is waiting for the required roll.");
       setInputValidationPulse((currentPulse) => currentPulse + 1);
       return;
@@ -1255,16 +1339,24 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
   }
 
   async function sendPendingRoll(queuedDice: QueuedDice) {
-    if (!pendingRollRequest || isSending || activeDiceReveal || !activeCampaign) {
+    if (
+      !currentPendingRollRequest ||
+      isSending ||
+      activeDiceReveal ||
+      !activeCampaign
+    ) {
       return;
     }
 
     setInputValidationMessage("");
-    const rollBatch = pendingRollBatchFromQueue(queuedDice, pendingRollRequests);
+    const rollBatch = pendingRollBatchFromQueue(
+      queuedDice,
+      currentPendingRollRequests
+    );
 
     if (!rollBatch) {
       setInputValidationMessage(
-        `Queue ${expectedPendingRollExpression(pendingRollRequests)} to continue.`
+        `Queue ${expectedPendingRollExpression(currentPendingRollRequests)} to continue.`
       );
       setInputValidationPulse((currentPulse) => currentPulse + 1);
       return;
@@ -1299,7 +1391,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
   }
 
   function handleRollDice(queuedDice: QueuedDice) {
-    if (pendingRollRequest) {
+    if (currentPendingRollRequest) {
       void sendPendingRoll(queuedDice);
       return;
     }
@@ -1493,15 +1585,19 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
               ref={inputRef}
               draft={draft}
               isSending={isSending || Boolean(activeDiceReveal)}
-              isSubmitted={isSending || Boolean(activeDiceReveal) || isInputSubmitted}
+              isSubmitted={
+                isSending ||
+                Boolean(activeDiceReveal) ||
+                isInputSubmittedForCurrentState
+              }
               lockMessage={
-                pendingRollRequest
-                  ? `Roll required: ${pendingRollRequest.label}`
+                currentPendingRollRequest
+                  ? `Roll required: ${currentPendingRollRequest.label}`
                   : !isSinglePlayer && !hasAdventureBegun
                   ? "You can only start once the adventure has begun"
                   : undefined
               }
-              requiredRoll={pendingRollRequest}
+              requiredRoll={currentPendingRollRequest}
               validationMessage={inputValidationMessage}
               validationPulse={inputValidationPulse}
               onDraftChange={setDraft}
@@ -1528,7 +1624,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
         type="button"
         aria-label="Send turn"
         disabled={
-          Boolean(pendingRollRequest) ||
+          Boolean(currentPendingRollRequest) ||
           Boolean(activeDiceReveal) ||
           isSending ||
           !draft.trim()

@@ -200,6 +200,34 @@ function isProfileComplete(player: PlayerRow) {
   );
 }
 
+function normalizeRollTarget(value: string | null | undefined) {
+  return value
+    ?.trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function rollRequestTargetsPlayer(request: DiceRollRequest, player: PlayerRow) {
+  const target = normalizeRollTarget(request.player);
+
+  if (!target) {
+    return true;
+  }
+
+  const playerNames = [player.username, player.character_name]
+    .map(normalizeRollTarget)
+    .filter((name): name is string => Boolean(name));
+
+  return playerNames.some(
+    (name) =>
+      target === name ||
+      target.includes(name) ||
+      name.includes(target)
+  );
+}
+
 function eventPayload(payload: unknown) {
   if (!payload || typeof payload !== "object") {
     return {};
@@ -339,7 +367,8 @@ function rollSubmissionsFromPayload(
 
 function validatePendingRollSubmissions(
   pendingRollRequests: DiceRollRequest[],
-  submittedRolls: NormalizedRollSubmission[]
+  submittedRolls: NormalizedRollSubmission[],
+  player?: PlayerRow
 ) {
   if (submittedRolls.length === 0) {
     return {
@@ -367,6 +396,10 @@ function validatePendingRollSubmissions(
 
       if (submission.rollRequestId !== pendingRollRequest.id) {
         throw new HttpError("Hermes is waiting for the required roll.", 409);
+      }
+
+      if (player && !rollRequestTargetsPlayer(pendingRollRequest, player)) {
+        throw new HttpError("That roll is waiting on another player.", 403);
       }
 
       return formatRollSubmission(pendingRollRequest, submission.rollResult);
@@ -2090,7 +2123,8 @@ export async function submitRoomTurn(
     const isRollSubmission = submittedRolls.length > 0;
     const rollSubmission = validatePendingRollSubmissions(
       pendingRollRequests,
-      submittedRolls
+      submittedRolls,
+      player
     );
 
     const turn = await ensureCollectingTurn(client, campaign.id);
@@ -2137,7 +2171,9 @@ export async function submitRoomTurn(
       campaign,
       turn,
       shouldResolve:
-        !isRollSubmission || rollSubmission.remainingRollRequests.length === 0,
+        (isRollSubmission &&
+          rollSubmission.remainingRollRequests.length === 0) ||
+        (!isRollSubmission && pendingRollRequests.length === 0),
       shouldResolveImmediately: isRollSubmission
     };
   });
@@ -2206,7 +2242,8 @@ export async function submitSoloTurn(
     const isRollSubmission = submittedRolls.length > 0;
     const rollSubmission = validatePendingRollSubmissions(
       pendingRollRequests,
-      submittedRolls
+      submittedRolls,
+      player
     );
 
     const turn = await ensureCollectingTurn(client, campaign.id);
