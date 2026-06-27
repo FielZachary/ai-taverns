@@ -31,6 +31,14 @@ type CreateCampaignResponse = {
 
 const playerIdStorageKey = "ai-dnd.playerId";
 const steps = ["Mode", "Campaign", "Character", "Review"];
+const characterCreationSteps = [
+  "Class",
+  "Species",
+  "Background",
+  "Ability",
+  "Personality",
+  "Sheet"
+];
 const campaignGenres = [
   ...campaignGenrePresets,
   customCampaignGenre
@@ -195,6 +203,7 @@ function createClientId() {
 
 export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
   const [stepIndex, setStepIndex] = useState(0);
+  const [characterStepIndex, setCharacterStepIndex] = useState(0);
   const [mode, setMode] = useState<CampaignMode>("single_player");
   const [campaignGenre, setCampaignGenre] = useState(campaignGenres[0].id);
   const [customWorldName, setCustomWorldName] = useState("");
@@ -216,6 +225,9 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
   const [error, setError] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const isLastStep = stepIndex === steps.length - 1;
+  const isCharacterStep = stepIndex === 2;
+  const isLastCharacterStep =
+    characterStepIndex === characterCreationSteps.length - 1;
   const modeLabel = mode === "single_player" ? "Singleplayer" : "Multiplayer";
   const selectedGenre =
     campaignGenres.find((genre) => genre.id === campaignGenre) ??
@@ -275,11 +287,21 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
     }
 
     if (stepIndex === 2) {
-      return "Shape your character";
+      if (characterStepIndex === 5) {
+        return "Review your character";
+      }
+
+      if (characterStepIndex === 3) {
+        return "Choose your ability style";
+      }
+
+      return `Choose your ${characterCreationSteps[
+        characterStepIndex
+      ].toLowerCase()}`;
     }
 
     return "Ready the first page";
-  }, [mode, stepIndex]);
+  }, [characterStepIndex, stepIndex]);
 
   useEffect(() => {
     setCharacterSheet(characterSheetPreview);
@@ -308,7 +330,11 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
     }
 
     if (stepIndex === 2) {
-      return mode === "multiplayer" || Boolean(characterName.trim());
+      return (
+        characterStepIndex !== 4 ||
+        mode === "multiplayer" ||
+        Boolean(characterName.trim())
+      );
     }
 
     return true;
@@ -323,9 +349,16 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
           ? isCustomGenre
             ? "Name the world and describe it before continuing."
             : "Choose a campaign genre before continuing."
-          : mode === "single_player"
+          : mode === "single_player" && characterStepIndex === 4
             ? "Add your character name before continuing."
-            : "Add your character details or continue without them."
+            : "Choose an option before continuing."
+      );
+      return;
+    }
+
+    if (isCharacterStep && !isLastCharacterStep) {
+      setCharacterStepIndex((currentStepIndex) =>
+        Math.min(currentStepIndex + 1, characterCreationSteps.length - 1)
       );
       return;
     }
@@ -337,6 +370,14 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
 
   function handleBack() {
     setError("");
+
+    if (isCharacterStep && characterStepIndex > 0) {
+      setCharacterStepIndex((currentStepIndex) =>
+        Math.max(currentStepIndex - 1, 0)
+      );
+      return;
+    }
+
     setStepIndex((currentStepIndex) => Math.max(currentStepIndex - 1, 0));
   }
 
@@ -520,42 +561,68 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
 
             {stepIndex === 2 ? (
               <div className="character-builder">
-                <fieldset className="option-picker class-picker">
-                  <legend>Class</legend>
-                  <div>
-                    {classOptions.map((option) => (
-                      <button
-                        type="button"
-                        className={characterClass === option.id ? "selected" : ""}
-                        aria-pressed={characterClass === option.id}
-                        key={option.id}
-                        onClick={() => setCharacterClass(option.id)}
-                      >
-                        <strong>{option.id}</strong>
-                        <small>{option.summary}</small>
-                      </button>
-                    ))}
-                  </div>
-                </fieldset>
+                <ol
+                  className="character-creation-steps"
+                  aria-label="Character creation progress"
+                >
+                  {characterCreationSteps.map((step, index) => (
+                    <li
+                      className={[
+                        index === characterStepIndex ? "active" : "",
+                        index < characterStepIndex ? "complete" : ""
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      key={step}
+                    >
+                      <span>
+                        {index < characterStepIndex ? <Check size={11} /> : index + 1}
+                      </span>
+                      <strong>{step}</strong>
+                    </li>
+                  ))}
+                </ol>
 
-                <fieldset className="option-picker compact-option-picker">
-                  <legend>Species</legend>
-                  <div>
-                    {speciesOptions.map((option) => (
-                      <button
-                        type="button"
-                        className={characterSpecies === option ? "selected" : ""}
-                        aria-pressed={characterSpecies === option}
-                        key={option}
-                        onClick={() => setCharacterSpecies(option)}
-                      >
-                        <strong>{option}</strong>
-                      </button>
-                    ))}
-                  </div>
-                </fieldset>
+                {characterStepIndex === 0 ? (
+                  <fieldset className="option-picker class-picker">
+                    <legend>Class</legend>
+                    <div>
+                      {classOptions.map((option) => (
+                        <button
+                          type="button"
+                          className={characterClass === option.id ? "selected" : ""}
+                          aria-pressed={characterClass === option.id}
+                          key={option.id}
+                          onClick={() => setCharacterClass(option.id)}
+                        >
+                          <strong>{option.id}</strong>
+                          <small>{option.summary}</small>
+                        </button>
+                      ))}
+                    </div>
+                  </fieldset>
+                ) : null}
 
-                <div className="character-builder-grid">
+                {characterStepIndex === 1 ? (
+                  <fieldset className="option-picker compact-option-picker">
+                    <legend>Species</legend>
+                    <div>
+                      {speciesOptions.map((option) => (
+                        <button
+                          type="button"
+                          className={characterSpecies === option ? "selected" : ""}
+                          aria-pressed={characterSpecies === option}
+                          key={option}
+                          onClick={() => setCharacterSpecies(option)}
+                        >
+                          <strong>{option}</strong>
+                        </button>
+                      ))}
+                    </div>
+                  </fieldset>
+                ) : null}
+
+                {characterStepIndex === 2 ? (
                   <fieldset className="option-picker compact-option-picker">
                     <legend>Background</legend>
                     <div>
@@ -574,7 +641,9 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                       ))}
                     </div>
                   </fieldset>
+                ) : null}
 
+                {characterStepIndex === 3 ? (
                   <fieldset className="option-picker compact-option-picker">
                     <legend>Ability style</legend>
                     <div>
@@ -592,64 +661,99 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                       ))}
                     </div>
                   </fieldset>
-                </div>
+                ) : null}
 
-                <div className="personality-panel">
-                  <div className="character-identity-fields">
-                    <label>
-                      <span>
-                        {mode === "single_player"
-                          ? "Name and personality"
-                          : "Owner character name"}
-                      </span>
-                      <input
-                        required={mode === "single_player"}
-                        value={characterName}
-                        onChange={(event) => setCharacterName(event.target.value)}
-                        placeholder={
-                          mode === "multiplayer"
-                            ? "Optional for now"
-                            : "Name your adventurer"
-                        }
-                        autoFocus
-                      />
-                    </label>
+                {characterStepIndex === 4 ? (
+                  <div className="personality-panel">
+                    <div className="character-identity-fields">
+                      <label>
+                        <span>
+                          {mode === "single_player"
+                            ? "Name and personality"
+                            : "Owner character name"}
+                        </span>
+                        <input
+                          required={mode === "single_player"}
+                          value={characterName}
+                          onChange={(event) => setCharacterName(event.target.value)}
+                          placeholder={
+                            mode === "multiplayer"
+                              ? "Optional for now"
+                              : "Name your adventurer"
+                          }
+                          autoFocus
+                        />
+                      </label>
 
-                    <label>
-                      <span>Backstory hook</span>
-                      <input
-                        value={backstoryHook}
-                        onChange={(event) => setBackstoryHook(event.target.value)}
-                        placeholder="What trouble, promise, or mystery follows them?"
-                      />
-                    </label>
-                  </div>
-
-                  <fieldset className="option-picker compact-option-picker">
-                    <legend>Personality</legend>
-                    <div>
-                      {personalityPrompts.map((option) => (
-                        <button
-                          type="button"
-                          className={personality === option ? "selected" : ""}
-                          aria-pressed={personality === option}
-                          key={option}
-                          onClick={() => setPersonality(option)}
-                        >
-                          <strong>{option}</strong>
-                        </button>
-                      ))}
+                      <label>
+                        <span>Backstory hook</span>
+                        <input
+                          value={backstoryHook}
+                          onChange={(event) => setBackstoryHook(event.target.value)}
+                          placeholder="What trouble, promise, or mystery follows them?"
+                        />
+                      </label>
                     </div>
-                  </fieldset>
-                </div>
 
-                <section className="character-sheet-preview">
-                  <div>
-                    <Sparkles size={18} />
-                    <strong>Generated character sheet</strong>
+                    <fieldset className="option-picker compact-option-picker">
+                      <legend>Personality</legend>
+                      <div>
+                        {personalityPrompts.map((option) => (
+                          <button
+                            type="button"
+                            className={personality === option ? "selected" : ""}
+                            aria-pressed={personality === option}
+                            key={option}
+                            onClick={() => setPersonality(option)}
+                          >
+                            <strong>{option}</strong>
+                          </button>
+                        ))}
+                      </div>
+                    </fieldset>
                   </div>
-                  <pre>{characterSheet}</pre>
-                </section>
+                ) : null}
+
+                {characterStepIndex === 5 ? (
+                  <>
+                    <div className="character-summary-grid">
+                      <div>
+                        <span>Class</span>
+                        <strong>{characterClass}</strong>
+                      </div>
+                      <div>
+                        <span>Species</span>
+                        <strong>{characterSpecies}</strong>
+                      </div>
+                      <div>
+                        <span>Background</span>
+                        <strong>{characterBackground}</strong>
+                      </div>
+                      <div>
+                        <span>Personality</span>
+                        <strong>{personality}</strong>
+                      </div>
+                    </div>
+
+                    <section className="character-sheet-preview">
+                      <div>
+                        <Sparkles size={18} />
+                        <strong>Generated character sheet</strong>
+                      </div>
+                      <pre>{characterSheet}</pre>
+                    </section>
+                  </>
+                ) : null}
+
+                {characterStepIndex < 5 ? (
+                  <section className="character-current-pick">
+                    <span>Current character</span>
+                    <strong>
+                      {characterName.trim() || "Unnamed adventurer"} the{" "}
+                      {characterSpecies} {characterClass}
+                    </strong>
+                  </section>
+                ) : null}
               </div>
             ) : null}
 
@@ -717,7 +821,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                 </>
               ) : (
                 <>
-                  Continue
+                  {isCharacterStep ? "Next" : "Continue"}
                   <ArrowRight size={16} />
                 </>
               )}

@@ -855,6 +855,48 @@ h1 {
   gap: 20px;
 }
 
+.character-creation-steps {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.character-creation-steps li {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: rgba(249, 237, 214, 0.42);
+  font-size: 0.62rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.character-creation-steps span {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 1px solid rgba(226, 176, 93, 0.22);
+  border-radius: 999px;
+  background: rgba(10, 8, 7, 0.52);
+}
+
+.character-creation-steps li.active,
+.character-creation-steps li.complete {
+  color: var(--gold-bright);
+}
+
+.character-creation-steps li.active span,
+.character-creation-steps li.complete span {
+  border-color: rgba(244, 207, 122, 0.74);
+  color: #140f0b;
+  background: var(--gold-bright);
+}
+
 .option-picker {
   min-width: 0;
   margin: 0;
@@ -923,6 +965,42 @@ h1 {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.82rem;
   line-height: 1.5;
+}
+
+.character-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.character-summary-grid div,
+.character-current-pick {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(244, 207, 122, 0.18);
+  border-radius: 8px;
+  background: rgba(17, 13, 10, 0.4);
+}
+
+.character-summary-grid span,
+.character-current-pick span {
+  color: var(--gold-bright);
+  font-size: 0.68rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.character-summary-grid strong,
+.character-current-pick strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.02rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .custom-world-field {
@@ -2356,8 +2434,13 @@ h1 {
   .class-picker > div,
   .character-builder-grid,
   .personality-panel,
-  .character-identity-fields {
+  .character-identity-fields,
+  .character-summary-grid {
     grid-template-columns: 1fr;
+  }
+
+  .character-creation-steps {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .table-header {
