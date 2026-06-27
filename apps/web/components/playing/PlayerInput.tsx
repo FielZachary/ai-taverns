@@ -1,4 +1,11 @@
-import { forwardRef, type FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  forwardRef,
+  type FormEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from "react";
 import { Dice5, Send } from "lucide-react";
 import type { DiceRollRequest } from "@/lib/game-types";
 
@@ -43,6 +50,7 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
     const [isCallingAttention, setIsCallingAttention] = useState(false);
     const [isDicePickerOpen, setIsDicePickerOpen] = useState(false);
     const [queuedDice, setQueuedDice] = useState<QueuedDice>({});
+    const diceRollControlRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
       if (!validationMessage) {
@@ -57,6 +65,29 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
 
       return () => window.clearTimeout(timeout);
     }, [validationMessage, validationPulse]);
+
+    useEffect(() => {
+      if (!isDicePickerOpen) {
+        return;
+      }
+
+      function closeDicePickerOnOutsideClick(event: PointerEvent) {
+        if (
+          event.target instanceof Node &&
+          diceRollControlRef.current?.contains(event.target)
+        ) {
+          return;
+        }
+
+        setIsDicePickerOpen(false);
+      }
+
+      document.addEventListener("pointerdown", closeDicePickerOnOutsideClick);
+
+      return () => {
+        document.removeEventListener("pointerdown", closeDicePickerOnOutsideClick);
+      };
+    }, [isDicePickerOpen]);
 
     const overlayMessage = requiredRoll
       ? "Roll to continue"
@@ -100,7 +131,7 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
             {validationMessage}
           </p>
         ) : null}
-        <div className="dice-roll-control">
+        <div className="dice-roll-control" ref={diceRollControlRef}>
           <button
             className="dice-roll-button"
             type="button"
