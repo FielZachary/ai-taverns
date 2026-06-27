@@ -797,7 +797,8 @@ h1 {
   border: 0;
 }
 
-.genre-picker legend {
+.genre-picker legend,
+.option-picker legend {
   margin-bottom: 12px;
   color: var(--gold-bright);
   font-size: 0.8rem;
@@ -811,7 +812,8 @@ h1 {
   gap: 10px;
 }
 
-.genre-picker button {
+.genre-picker button,
+.option-picker button {
   display: grid;
   gap: 5px;
   min-height: 84px;
@@ -824,24 +826,103 @@ h1 {
 }
 
 .genre-picker button.selected,
-.genre-picker button:hover {
+.genre-picker button:hover,
+.option-picker button.selected,
+.option-picker button:hover {
   border-color: rgba(244, 207, 122, 0.72);
   background:
     linear-gradient(90deg, rgba(173, 71, 43, 0.16), transparent),
     rgba(255, 255, 255, 0.05);
 }
 
-.genre-picker strong {
+.genre-picker strong,
+.option-picker strong {
   color: var(--ink);
   font-size: 0.92rem;
   font-weight: 900;
 }
 
-.genre-picker small {
+.genre-picker small,
+.option-picker small {
   color: var(--muted);
   font-size: 0.78rem;
   font-weight: 700;
   line-height: 1.35;
+}
+
+.character-builder {
+  display: grid;
+  gap: 20px;
+}
+
+.option-picker {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.option-picker > div {
+  display: grid;
+  gap: 10px;
+}
+
+.class-picker > div {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.compact-option-picker > div {
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+}
+
+.compact-option-picker button {
+  min-height: 50px;
+}
+
+.character-builder-grid,
+.personality-panel,
+.character-identity-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.personality-panel {
+  align-items: start;
+  padding-top: 2px;
+}
+
+.character-sheet-preview {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid rgba(95, 119, 81, 0.42);
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(95, 119, 81, 0.18), transparent),
+    rgba(10, 8, 7, 0.36);
+}
+
+.character-sheet-preview > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--gold-bright);
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.character-sheet-preview pre {
+  max-height: 260px;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  color: rgba(249, 237, 214, 0.88);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.82rem;
+  line-height: 1.5;
 }
 
 .custom-world-field {
@@ -2269,6 +2350,13 @@ h1 {
   }
 
   .genre-picker > div {
+    grid-template-columns: 1fr;
+  }
+
+  .class-picker > div,
+  .character-builder-grid,
+  .personality-panel,
+  .character-identity-fields {
     grid-template-columns: 1fr;
   }
 

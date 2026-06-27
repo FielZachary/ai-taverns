@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
+  Sparkles,
   ScrollText,
   Swords,
   Users
@@ -34,6 +35,153 @@ const campaignGenres = [
   ...campaignGenrePresets,
   customCampaignGenre
 ];
+const classOptions = [
+  {
+    id: "Barbarian",
+    summary: "A fierce front-line survivor who turns danger into momentum.",
+    skills: ["Athletics", "Intimidation", "Survival"],
+    equipment: ["Greataxe", "Handaxes", "Explorer's pack"],
+    spells: []
+  },
+  {
+    id: "Bard",
+    summary: "A charismatic spellcaster who wins with wit, music, and nerve.",
+    skills: ["Performance", "Persuasion", "Deception"],
+    equipment: ["Rapier", "Lute", "Entertainer's pack"],
+    spells: ["Vicious Mockery", "Healing Word", "Charm Person"]
+  },
+  {
+    id: "Cleric",
+    summary: "A divine caster who protects allies and carries sacred purpose.",
+    skills: ["Religion", "Insight", "Medicine"],
+    equipment: ["Mace", "Shield", "Holy symbol"],
+    spells: ["Guidance", "Cure Wounds", "Bless"]
+  },
+  {
+    id: "Druid",
+    summary: "A primal spellcaster tied to beasts, weather, and old places.",
+    skills: ["Nature", "Animal Handling", "Survival"],
+    equipment: ["Quarterstaff", "Druidic focus", "Explorer's pack"],
+    spells: ["Produce Flame", "Entangle", "Speak with Animals"]
+  },
+  {
+    id: "Fighter",
+    summary: "A trained warrior who solves problems with discipline and steel.",
+    skills: ["Athletics", "Perception", "Survival"],
+    equipment: ["Longsword", "Shield", "Dungeoneer's pack"],
+    spells: []
+  },
+  {
+    id: "Monk",
+    summary: "A focused martial artist who moves quickly and strikes precisely.",
+    skills: ["Acrobatics", "Insight", "Stealth"],
+    equipment: ["Shortsword", "Simple weapon", "Explorer's pack"],
+    spells: []
+  },
+  {
+    id: "Paladin",
+    summary: "An oathbound champion with armor, conviction, and divine power.",
+    skills: ["Athletics", "Persuasion", "Religion"],
+    equipment: ["Longsword", "Shield", "Holy symbol"],
+    spells: ["Lay on Hands", "Divine Smite", "Shield of Faith"]
+  },
+  {
+    id: "Ranger",
+    summary: "A wilderness scout who hunts threats before they reach the firelight.",
+    skills: ["Survival", "Perception", "Stealth"],
+    equipment: ["Longbow", "Shortswords", "Explorer's pack"],
+    spells: ["Hunter's Mark", "Goodberry", "Animal Friendship"]
+  },
+  {
+    id: "Rogue",
+    summary: "A precise infiltrator who thrives on timing, secrets, and leverage.",
+    skills: ["Stealth", "Sleight of Hand", "Investigation"],
+    equipment: ["Rapier", "Shortbow", "Thieves' tools"],
+    spells: []
+  },
+  {
+    id: "Sorcerer",
+    summary: "An innate spellcaster whose magic comes from blood, fate, or anomaly.",
+    skills: ["Arcana", "Persuasion", "Deception"],
+    equipment: ["Dagger", "Arcane focus", "Explorer's pack"],
+    spells: ["Fire Bolt", "Mage Armor", "Magic Missile"]
+  },
+  {
+    id: "Warlock",
+    summary: "A pact-bound caster with strange power and stranger obligations.",
+    skills: ["Arcana", "Deception", "Intimidation"],
+    equipment: ["Dagger", "Arcane focus", "Scholar's pack"],
+    spells: ["Eldritch Blast", "Hex", "Armor of Agathys"]
+  },
+  {
+    id: "Wizard",
+    summary: "A learned spellcaster who studies patterns the world tries to hide.",
+    skills: ["Arcana", "History", "Investigation"],
+    equipment: ["Quarterstaff", "Spellbook", "Scholar's pack"],
+    spells: ["Prestidigitation", "Shield", "Detect Magic"]
+  }
+] as const;
+const speciesOptions = [
+  "Human",
+  "Elf",
+  "Dwarf",
+  "Halfling",
+  "Gnome",
+  "Half-Elf",
+  "Half-Orc",
+  "Tiefling",
+  "Dragonborn"
+] as const;
+const backgroundOptions = [
+  "Acolyte",
+  "Charlatan",
+  "Criminal",
+  "Entertainer",
+  "Folk Hero",
+  "Guild Artisan",
+  "Hermit",
+  "Noble",
+  "Outlander",
+  "Sage",
+  "Sailor",
+  "Soldier",
+  "Urchin"
+] as const;
+const abilityStyleOptions = [
+  {
+    id: "Quick Build",
+    summary: "Recommended stats based on class, with no number crunching."
+  },
+  {
+    id: "Classic Array",
+    summary: "Assign a traditional heroic spread to the six abilities."
+  },
+  {
+    id: "Roll for Stats",
+    summary: "Old-school dice energy with a little more swing."
+  },
+  {
+    id: "Custom",
+    summary: "Fine tune the sheet later once the campaign begins."
+  }
+] as const;
+const personalityPrompts = [
+  "Charming troublemaker",
+  "Grim oathkeeper",
+  "Curious scholar",
+  "Reluctant hero",
+  "Secretive survivor",
+  "Idealistic protector"
+] as const;
+type CharacterClass = (typeof classOptions)[number]["id"];
+type CharacterSpecies = (typeof speciesOptions)[number];
+type CharacterBackground = (typeof backgroundOptions)[number];
+type AbilityStyle = (typeof abilityStyleOptions)[number]["id"];
+type PersonalityPrompt = (typeof personalityPrompts)[number];
+
+function formatList(items: readonly string[]) {
+  return items.length > 0 ? items.join(", ") : "None";
+}
 
 function createClientId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -52,6 +200,17 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
   const [customWorldName, setCustomWorldName] = useState("");
   const [customWorldDescription, setCustomWorldDescription] = useState("");
   const [characterName, setCharacterName] = useState("");
+  const [characterClass, setCharacterClass] =
+    useState<CharacterClass>("Fighter");
+  const [characterSpecies, setCharacterSpecies] =
+    useState<CharacterSpecies>("Human");
+  const [characterBackground, setCharacterBackground] =
+    useState<CharacterBackground>("Folk Hero");
+  const [abilityStyle, setAbilityStyle] =
+    useState<AbilityStyle>("Quick Build");
+  const [personality, setPersonality] =
+    useState<PersonalityPrompt>("Charming troublemaker");
+  const [backstoryHook, setBackstoryHook] = useState("");
   const [characterSheet, setCharacterSheet] = useState(defaultCharacterSheet);
   const [ownerClientId, setOwnerClientId] = useState("");
   const [error, setError] = useState("");
@@ -65,6 +224,47 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
   const campaignDisplayName = isCustomGenre
     ? customWorldName.trim() || "Custom World"
     : `${selectedGenre.label} Adventure`;
+  const selectedClass =
+    classOptions.find((option) => option.id === characterClass) ??
+    classOptions[4];
+  const selectedAbilityStyle =
+    abilityStyleOptions.find((option) => option.id === abilityStyle) ??
+    abilityStyleOptions[0];
+  const characterSheetPreview = useMemo(
+    () =>
+      [
+        `Name: ${characterName.trim() || "Unnamed adventurer"}`,
+        "Level: 1",
+        `Class: ${selectedClass.id}`,
+        `Species: ${characterSpecies}`,
+        `Background: ${characterBackground}`,
+        `Ability style: ${selectedAbilityStyle.id} - ${selectedAbilityStyle.summary}`,
+        `Core skills: ${formatList(selectedClass.skills)}`,
+        `Starting equipment: ${formatList(selectedClass.equipment)}`,
+        `Magic: ${formatList(selectedClass.spells)}`,
+        "",
+        `Personality: ${personality}`,
+        `Backstory hook: ${
+          backstoryHook.trim() ||
+          "A fresh adventurer whose deeper story can emerge during play."
+        }`,
+        "",
+        "DM notes:",
+        `${characterName.trim() || "This character"} is a ${characterSpecies} ${selectedClass.id.toLowerCase()} with the ${characterBackground.toLowerCase()} background. Use the class, species, background, personality, and hook to tailor the opening scene.`
+      ].join("\n"),
+    [
+      abilityStyle,
+      backstoryHook,
+      characterBackground,
+      characterClass,
+      characterName,
+      characterSpecies,
+      personality,
+      selectedAbilityStyle.id,
+      selectedAbilityStyle.summary,
+      selectedClass
+    ]
+  );
   const stepTitle = useMemo(() => {
     if (stepIndex === 0) {
       return "Choose your game mode";
@@ -75,11 +275,15 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
     }
 
     if (stepIndex === 2) {
-      return mode === "single_player" ? "Shape your character" : "Set your seat";
+      return "Shape your character";
     }
 
     return "Ready the first page";
   }, [mode, stepIndex]);
+
+  useEffect(() => {
+    setCharacterSheet(characterSheetPreview);
+  }, [characterSheetPreview]);
 
   useEffect(() => {
     const savedPlayerId = localStorage.getItem(playerIdStorageKey);
@@ -315,35 +519,138 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
             ) : null}
 
             {stepIndex === 2 ? (
-              <>
-                <label>
-                  <span>
-                    {mode === "single_player"
-                      ? "Character name"
-                      : "Owner character name"}
-                  </span>
-                  <input
-                    required={mode === "single_player"}
-                    value={characterName}
-                    onChange={(event) => setCharacterName(event.target.value)}
-                    placeholder={mode === "multiplayer" ? "Optional for now" : ""}
-                    autoFocus
-                  />
-                </label>
+              <div className="character-builder">
+                <fieldset className="option-picker class-picker">
+                  <legend>Class</legend>
+                  <div>
+                    {classOptions.map((option) => (
+                      <button
+                        type="button"
+                        className={characterClass === option.id ? "selected" : ""}
+                        aria-pressed={characterClass === option.id}
+                        key={option.id}
+                        onClick={() => setCharacterClass(option.id)}
+                      >
+                        <strong>{option.id}</strong>
+                        <small>{option.summary}</small>
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
 
-                <label>
-                  <span>
-                    {mode === "single_player"
-                      ? "Character sheet or quick template"
-                      : "Owner character notes"}
-                  </span>
-                  <textarea
-                    value={characterSheet}
-                    onChange={(event) => setCharacterSheet(event.target.value)}
-                    rows={8}
-                  />
-                </label>
-              </>
+                <fieldset className="option-picker compact-option-picker">
+                  <legend>Species</legend>
+                  <div>
+                    {speciesOptions.map((option) => (
+                      <button
+                        type="button"
+                        className={characterSpecies === option ? "selected" : ""}
+                        aria-pressed={characterSpecies === option}
+                        key={option}
+                        onClick={() => setCharacterSpecies(option)}
+                      >
+                        <strong>{option}</strong>
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+
+                <div className="character-builder-grid">
+                  <fieldset className="option-picker compact-option-picker">
+                    <legend>Background</legend>
+                    <div>
+                      {backgroundOptions.map((option) => (
+                        <button
+                          type="button"
+                          className={
+                            characterBackground === option ? "selected" : ""
+                          }
+                          aria-pressed={characterBackground === option}
+                          key={option}
+                          onClick={() => setCharacterBackground(option)}
+                        >
+                          <strong>{option}</strong>
+                        </button>
+                      ))}
+                    </div>
+                  </fieldset>
+
+                  <fieldset className="option-picker compact-option-picker">
+                    <legend>Ability style</legend>
+                    <div>
+                      {abilityStyleOptions.map((option) => (
+                        <button
+                          type="button"
+                          className={abilityStyle === option.id ? "selected" : ""}
+                          aria-pressed={abilityStyle === option.id}
+                          key={option.id}
+                          onClick={() => setAbilityStyle(option.id)}
+                        >
+                          <strong>{option.id}</strong>
+                          <small>{option.summary}</small>
+                        </button>
+                      ))}
+                    </div>
+                  </fieldset>
+                </div>
+
+                <div className="personality-panel">
+                  <div className="character-identity-fields">
+                    <label>
+                      <span>
+                        {mode === "single_player"
+                          ? "Name and personality"
+                          : "Owner character name"}
+                      </span>
+                      <input
+                        required={mode === "single_player"}
+                        value={characterName}
+                        onChange={(event) => setCharacterName(event.target.value)}
+                        placeholder={
+                          mode === "multiplayer"
+                            ? "Optional for now"
+                            : "Name your adventurer"
+                        }
+                        autoFocus
+                      />
+                    </label>
+
+                    <label>
+                      <span>Backstory hook</span>
+                      <input
+                        value={backstoryHook}
+                        onChange={(event) => setBackstoryHook(event.target.value)}
+                        placeholder="What trouble, promise, or mystery follows them?"
+                      />
+                    </label>
+                  </div>
+
+                  <fieldset className="option-picker compact-option-picker">
+                    <legend>Personality</legend>
+                    <div>
+                      {personalityPrompts.map((option) => (
+                        <button
+                          type="button"
+                          className={personality === option ? "selected" : ""}
+                          aria-pressed={personality === option}
+                          key={option}
+                          onClick={() => setPersonality(option)}
+                        >
+                          <strong>{option}</strong>
+                        </button>
+                      ))}
+                    </div>
+                  </fieldset>
+                </div>
+
+                <section className="character-sheet-preview">
+                  <div>
+                    <Sparkles size={18} />
+                    <strong>Generated character sheet</strong>
+                  </div>
+                  <pre>{characterSheet}</pre>
+                </section>
+              </div>
             ) : null}
 
             {stepIndex === 3 ? (
@@ -370,7 +677,14 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                   ) : null}
                   <div>
                     <dt>Character</dt>
-                    <dd>{characterName || "Set later"}</dd>
+                    <dd>
+                      {characterName || "Set later"}{" "}
+                      {characterName ? `the ${characterSpecies} ${characterClass}` : ""}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Background</dt>
+                    <dd>{characterBackground}</dd>
                   </div>
                 </dl>
               </div>
