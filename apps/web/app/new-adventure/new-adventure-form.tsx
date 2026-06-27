@@ -1531,15 +1531,6 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                   </>
                 ) : null}
 
-                {!isLastCharacterStep ? (
-                  <section className="character-current-pick">
-                    <span>Current character</span>
-                    <strong>
-                      Level {characterLevel} {characterName.trim() || "Unnamed adventurer"} the{" "}
-                      {characterSpecies} {characterClass}
-                    </strong>
-                  </section>
-                ) : null}
               </div>
             ) : null}
 
