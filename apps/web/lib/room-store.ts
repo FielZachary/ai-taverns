@@ -78,6 +78,8 @@ type CampaignRow = {
   metadata: unknown;
   updated_at: Date | string;
   created_at: Date | string;
+  display_character_name?: string | null;
+  display_username?: string | null;
 };
 
 type PlayerRow = {
@@ -414,13 +416,26 @@ function normalizeCampaignTitle(title: string | undefined, sessionId: string) {
   return title?.trim() || titleFromSessionId(sessionId) || "New Adventure";
 }
 
+function campaignWorldName(campaign: CampaignRow) {
+  const metadata = eventPayload(campaign.metadata);
+  const genre = eventPayload(metadata.genre);
+  const customWorldName =
+    typeof genre.customWorldName === "string" ? genre.customWorldName.trim() : "";
+  const label = typeof genre.label === "string" ? genre.label.trim() : "";
+
+  return customWorldName || label || campaign.title;
+}
+
 function campaignSummaryFromRow(campaign: CampaignRow): CampaignSummary {
+  const characterName = campaign.display_character_name?.trim();
+  const playerName = campaign.display_username?.trim();
+
   return {
     id: campaign.id,
     hermesSessionId: campaign.hermes_session_id,
     mode: campaign.mode,
-    title: campaign.title,
-    time: formatTime(campaign.updated_at),
+    title: characterName || playerName || campaign.title,
+    preview: campaignWorldName(campaign),
     messageCount: 0
   };
 }
@@ -939,20 +954,37 @@ export async function createCampaignForHermesSession(
 export async function listCampaignSummaries(userId: string) {
   const result = await query<CampaignRow>(
     `
-      select distinct campaigns.*
+      select
+        campaigns.*,
+        display_player.character_name as display_character_name,
+        display_player.username as display_username
       from campaigns
-      left join players on players.campaign_id = campaigns.id
-        and players.user_id = $1
-        and players.status = 'active'
+      left join lateral (
+        select players.character_name, players.username
+        from players
+        where players.campaign_id = campaigns.id
+          and players.status = 'active'
+        order by
+          (players.user_id = $1) desc,
+          players.slot asc nulls last,
+          players.created_at asc
+        limit 1
+      ) display_player on true
       where campaigns.status = 'active'
         and (
           campaigns.owner_user_id = $2
-          or players.id is not null
+          or exists (
+            select 1
+            from players access_player
+            where access_player.campaign_id = campaigns.id
+              and access_player.user_id = $3
+              and access_player.status = 'active'
+          )
         )
       order by campaigns.updated_at desc, campaigns.created_at desc
       limit 100
     `,
-    [userId, userId]
+    [userId, userId, userId]
   );
 
   return result.rows.map(
@@ -1052,6 +1084,16 @@ export async function createCampaignForMode(input: {
   await ensureHermesSession(sessionId);
 
   if (input.mode === "multiplayer") {
+    const genreMetadata = {
+      genre: {
+        kind: input.campaignGenreKind ?? "preset",
+        presetId: input.campaignGenrePresetId ?? null,
+        label: input.campaignGenre ?? null,
+        promptBrief: input.campaignGenrePromptBrief ?? null,
+        customWorldName: input.customWorldName ?? null,
+        customWorldDescription: input.customWorldDescription ?? null
+      }
+    };
     const campaign = await createCampaignForHermesSession(
       sessionId,
       input.title,
@@ -1069,16 +1111,7 @@ export async function createCampaignForMode(input: {
         `,
         [
           campaign.id,
-          JSON.stringify({
-            genre: {
-              kind: input.campaignGenreKind ?? "preset",
-              presetId: input.campaignGenrePresetId ?? null,
-              label: input.campaignGenre ?? null,
-              promptBrief: input.campaignGenrePromptBrief ?? null,
-              customWorldName: input.customWorldName ?? null,
-              customWorldDescription: input.customWorldDescription ?? null
-            }
-          })
+          JSON.stringify(genreMetadata)
         ]
       );
       await client.query(
@@ -1123,7 +1156,12 @@ export async function createCampaignForMode(input: {
       });
     });
 
-    return campaignSummaryFromRow(campaign);
+    return campaignSummaryFromRow({
+      ...campaign,
+      metadata: genreMetadata,
+      display_character_name: input.characterName ?? "",
+      display_username: input.playerName
+    });
   }
 
   const opening = await askHermes(
@@ -1148,6 +1186,16 @@ export async function createCampaignForMode(input: {
   );
 
   const campaign = await withTransaction(async (client) => {
+    const genreMetadata = {
+      genre: {
+        kind: input.campaignGenreKind ?? "preset",
+        presetId: input.campaignGenrePresetId ?? null,
+        label: input.campaignGenre ?? null,
+        promptBrief: input.campaignGenrePromptBrief ?? null,
+        customWorldName: input.customWorldName ?? null,
+        customWorldDescription: input.customWorldDescription ?? null
+      }
+    };
     const inserted = await client.query<CampaignRow>(
       `
         insert into campaigns (
@@ -1167,16 +1215,7 @@ export async function createCampaignForMode(input: {
         normalizeCampaignTitle(input.title, sessionId),
         input.ownerClientId ?? null,
         input.userId,
-        JSON.stringify({
-          genre: {
-            kind: input.campaignGenreKind ?? "preset",
-            presetId: input.campaignGenrePresetId ?? null,
-            label: input.campaignGenre ?? null,
-            promptBrief: input.campaignGenrePromptBrief ?? null,
-            customWorldName: input.customWorldName ?? null,
-            customWorldDescription: input.customWorldDescription ?? null
-          }
-        })
+        JSON.stringify(genreMetadata)
       ]
     );
     const campaignRow = inserted.rows[0];
@@ -1227,7 +1266,11 @@ export async function createCampaignForMode(input: {
       content: opening.content
     });
 
-    return campaignRow;
+    return {
+      ...campaignRow,
+      display_character_name: player.rows[0].character_name,
+      display_username: player.rows[0].username
+    };
   });
 
   return campaignSummaryFromRow(campaign);

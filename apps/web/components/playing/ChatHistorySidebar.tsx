@@ -1,4 +1,4 @@
-import { MessageSquare, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Pencil, Plus, Search, Trash2 } from "lucide-react";
 
 export type ChatSummary = {
   id: string;
@@ -65,12 +65,10 @@ export function ChatHistorySidebar({
               type="button"
               onClick={() => onSelectChat(chat.id)}
             >
-              <MessageSquare size={18} />
               <span>
                 <strong>{chat.title}</strong>
                 {chat.preview ? <small>{chat.preview}</small> : null}
               </span>
-              {chat.time ? <em>{chat.time}</em> : null}
             </button>
             <div className="chat-row-actions">
               <button

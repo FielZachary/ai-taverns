@@ -406,12 +406,12 @@ function updateCampaignPreview(
   campaignId: string,
   preview: string
 ) {
+  void preview;
+
   return campaigns.map((campaign) =>
     campaign.id === campaignId
       ? {
-          ...campaign,
-          preview,
-          time: "Now"
+          ...campaign
         }
       : campaign
   );
