@@ -10,6 +10,7 @@
     "build": "npm run build -w @ai-dnd/web",
     "db:migrate": "node scripts/run-db-migrations.mjs",
     "hermes:bridge": "bash scripts/start-hermes-bridge.sh",
+    "hermes:secure-bridge": "bash scripts/start-hermes-secure-bridge.sh",
     "lint": "npm run lint -w @ai-dnd/web"
   },
   "dependencies": {
