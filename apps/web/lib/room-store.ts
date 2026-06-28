@@ -900,6 +900,8 @@ function formatCombinedTurn(players: PlayerRow[], submissions: SubmissionRow[]) 
     "",
     "Current player actions:",
     "The party submits their turns at the same time. Resolve these player actions together as one D&D round.",
+    "Only treat concrete declared actions as actions. Quoted speech, table disagreement, promises, questions, clarifications, threats, and plans are dialogue or intent unless a player also says they move, travel, enter, search, attack, take something, cast a spell, or otherwise change the scene.",
+    "If the submissions are dialogue-only or players disagree about whether to proceed, keep the party in the current scene, respond to the speech or tension, and ask what they do next instead of moving them forward.",
     "",
     ...players.map((player) => {
       const submission = submissionByPlayerId.get(player.id);
@@ -980,6 +982,7 @@ function formatSoloTurn(player: PlayerRow, content: string) {
     formatCanonicalCharacterContext([player]),
     "",
     "Current player action:",
+    "Only treat concrete declared actions as actions. Quoted speech, questions, promises, plans, and corrections are dialogue or intent unless the player also says they move, travel, enter, search, attack, take something, cast a spell, or otherwise change the scene.",
     `${player.username} (${player.character_name}): ${content}`
   ].join("\n");
 }

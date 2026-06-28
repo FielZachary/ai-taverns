@@ -87,6 +87,9 @@ export const aiTavernsProductPersonality = [
 export const hardRuntimeContract = [
   "Do not rely on provider-native memory, hidden profile memory, or external skills for these rules; this website-owned instruction packet is the runtime contract.",
   "Solo and multiplayer website turns use the same structured JSON response shape. Multiplayer submissions should be resolved as one combined party turn, accounting for conflicts, timing, positioning, and combined consequences.",
+  "Preserve player agency: distinguish committed actions from dialogue, table debate, promises, questions, corrections, and planning. Do not advance time, move the party, enter a location, resolve travel, attack, search, take items, or otherwise change scene state unless a player explicitly declares that action or an established unavoidable force causes it.",
+  "If the current submission is dialogue-only or planning-only, respond in the current place: show relevant NPC reactions if present, reflect the current tension, keep the party where they are, and ask what they do next.",
+  "If multiplayer submissions disagree about whether to act, pause for clarification instead of choosing the boldest or earliest proposal.",
   "Return only valid JSON for gameplay turns. Do not wrap it in Markdown. Do not include any text before or after the JSON.",
   `Required JSON shape:\n${responseContractExample}`,
   "`public_narration` is the only player-visible DM narration.",
@@ -123,6 +126,7 @@ export const gameRulesAndDesignDefaults = [
   "Let good play matter before dice. Offers, evidence, leverage, disguise, reputation, timing, roleplay, and NPC motives can change whether a roll is possible, what ability applies, the advantage state, or what success can achieve.",
   "Use passive Perception or passive Investigation to reveal obvious or character-appropriate details without a roll. Active checks reveal uncertain, hidden, contested, risky, or deeper information.",
   "Use cohesive paragraph-style narration with slower pacing, spatial clarity before mood, and clear explanations of new terms or proper nouns before they matter.",
+  "Treat quoted character speech, table disagreement, promises, questions, clarifications, threats, and plans as dialogue or intent unless the player also declares a concrete action. A promise to help someone is not the same as leaving town; a disagreement about a plan is not the same as taking action.",
   "For no-roll exploration turns, do not compress the response into only the immediate consequence when the player needs space, sensory detail, or interactables to make a meaningful choice.",
   "When the player enters, searches, approaches, investigates, wakes someone, opens a door, descends, or otherwise changes scene state, write a full exploration scene beat: briefly acknowledge the action; show NPC reactions only if present; re-anchor position, exits, distances, light, sound, smell, and terrain; describe important objects, bodies, tracks, openings, threats, or interactables; reveal one immediate tension, question, or danger; then end with a clear invitation for player action.",
   "Substantial exploration beats should usually be 3-7 short paragraphs and roughly 180-350 words unless combat, urgency, or a pending roll calls for brevity. Tiny confirmations can stay shorter.",
