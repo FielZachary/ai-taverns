@@ -127,6 +127,15 @@ type CampaignSettingSummary = {
   startingLocation?: string;
 };
 
+type CampaignOpeningMode = "single_player" | "multiplayer";
+
+type CampaignOpeningStyle = {
+  campaignGenre?: string;
+  campaignGenrePromptBrief?: string;
+  customWorldName?: string;
+  customWorldDescription?: string;
+};
+
 type JoinCodeRow = {
   campaign_id: string;
   code: string;
@@ -230,6 +239,22 @@ function eventPayload(payload: unknown) {
   }
 
   return payload as Record<string, unknown>;
+}
+
+function metadataString(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function campaignOpeningStyleFromMetadata(campaign: CampaignRow): CampaignOpeningStyle {
+  const metadata = eventPayload(campaign.metadata);
+  const genre = eventPayload(metadata.genre);
+
+  return {
+    campaignGenre: metadataString(genre.label),
+    campaignGenrePromptBrief: metadataString(genre.promptBrief),
+    customWorldName: metadataString(genre.customWorldName),
+    customWorldDescription: metadataString(genre.customWorldDescription)
+  };
 }
 
 function pendingRollRequestsFromCampaign(campaign: CampaignRow) {
@@ -885,14 +910,60 @@ function formatCombinedTurn(players: PlayerRow[], submissions: SubmissionRow[]) 
   ].join("\n");
 }
 
-function formatPartyOpeningRequest(players: PlayerRow[]) {
+function formatOpeningSceneRequest(input: {
+  mode: CampaignOpeningMode;
+  players: PlayerRow[];
+  style: CampaignOpeningStyle;
+}) {
+  const modeDirection =
+    input.mode === "single_player"
+      ? "This is a singleplayer campaign. Spotlight the solo character directly and make the first choice immediately actionable for one player."
+      : "This is a multiplayer campaign. Give the whole party one shared immediate situation; do not over-focus on only one character.";
+  const customWorldName = input.style.customWorldName
+    ? `World name: ${input.style.customWorldName}`
+    : "";
+  const customWorldDescription = input.style.customWorldDescription
+    ? `Custom world description: ${input.style.customWorldDescription}`
+    : "";
+
   return [
+    formatCanonicalCharacterContext(input.players),
+    "",
+    "Current player action:",
     openingSceneRequest,
     "",
-    `Party size: ${players.length}`,
+    "Campaign opening setup:",
+    `Mode: ${input.mode}`,
+    `Party size: ${input.players.length}`,
+    input.style.campaignGenre ? `Campaign genre: ${input.style.campaignGenre}` : "",
+    input.style.campaignGenrePromptBrief
+      ? `Campaign genre guidance: ${input.style.campaignGenrePromptBrief}`
+      : "",
+    customWorldName,
+    customWorldDescription,
     "",
-    formatCanonicalCharacterContext(players)
-  ].join("\n\n");
+    "Opening scene quality bar:",
+    "Write 3-6 rich paragraphs with concrete sensory detail, spatial clarity, an immediate tension, and clear interactable choices.",
+    "Begin in the fiction immediately; do not ask what kind of world the players want.",
+    "Return no player-facing roll requests unless danger or uncertainty already requires dice before the players can act.",
+    "End with a direct player-facing prompt such as 'What do you do?'",
+    modeDirection
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function openingSceneInstructions(mode: CampaignOpeningMode) {
+  const modeDirection =
+    mode === "single_player"
+      ? "The website has provided the solo player's character setup."
+      : "The website has provided the full current party.";
+
+  return [
+    dungeonMasterInstructions,
+    modeDirection,
+    "Use the campaign setup and canonical character sheets to begin with a rich opening scene that naturally matters to the character or party. Do not mention implementation details."
+  ].join(" ");
 }
 
 function formatSoloTurn(player: PlayerRow, content: string) {
@@ -1442,40 +1513,7 @@ export async function createCampaignForMode(input: {
     });
   }
 
-  const soloOpeningAction = [
-    openingSceneRequest,
-    "",
-    input.campaignGenre ? `Campaign genre: ${input.campaignGenre}` : "",
-    input.customWorldName ? `World name: ${input.customWorldName}` : "",
-    input.campaignGenrePromptBrief
-      ? `Campaign genre guidance: ${input.campaignGenrePromptBrief}`
-      : "",
-    `Solo player: ${input.playerName}`,
-    `Character: ${input.characterName || input.playerName}`,
-    "Character sheet:",
-    input.characterSheet || "Use a quick fantasy adventurer template."
-  ].join("\n");
-  const opening = await askDungeonMaster(
-    {
-      id: sessionId,
-      hermes_session_id: sessionId
-    },
-    soloOpeningAction,
-    [
-      dungeonMasterInstructions,
-      "The website has provided the solo player's character setup. Begin immediately with an opening scene tailored to this character. Do not mention implementation details."
-    ].join(" "),
-    false
-  );
-
-  let soloOpeningContextJob:
-    | {
-        campaignId: string;
-        turnId: string;
-        dmEventId?: string;
-      }
-    | undefined;
-  const campaign = await withTransaction(async (client) => {
+  const soloState = await withTransaction(async (client) => {
     const genreMetadata = {
       genre: {
         kind: input.campaignGenreKind ?? "preset",
@@ -1485,10 +1523,6 @@ export async function createCampaignForMode(input: {
         customWorldName: input.customWorldName ?? null,
         customWorldDescription: input.customWorldDescription ?? null
       }
-    };
-    const initialMetadata = {
-      ...genreMetadata,
-      ...settingMetadata(opening.setting)
     };
     const inserted = await client.query<CampaignRow>(
       `
@@ -1501,7 +1535,7 @@ export async function createCampaignForMode(input: {
           owner_user_id,
           metadata
         )
-        values ($1, $2, 'single_player', true, $3, $4, $5::jsonb)
+        values ($1, $2, 'single_player', false, $3, $4, $5::jsonb)
         returning *
       `,
       [
@@ -1509,7 +1543,7 @@ export async function createCampaignForMode(input: {
         normalizeCampaignTitle(input.title, sessionId),
         input.ownerClientId ?? null,
         input.userId,
-        JSON.stringify(initialMetadata)
+        JSON.stringify(genreMetadata)
       ]
     );
     const campaignRow = inserted.rows[0];
@@ -1552,38 +1586,88 @@ export async function createCampaignForMode(input: {
       characterName: player.rows[0].character_name,
       slot: 0
     });
-    const dmEventId = await logCampaignEvent(client, campaignRow.id, "adventure_begun", {
+    const claimedTurn = await client.query<TurnRow>(
+      `
+        update turns
+        set status = 'resolving'
+        where id = $1 and status = 'collecting'
+        returning *
+      `,
+      [turn.id]
+    );
+
+    if (!claimedTurn.rows[0]) {
+      throw new Error("The opening turn could not be claimed.");
+    }
+
+    await logCampaignEvent(client, campaignRow.id, "turn_resolving", {
       turnId: turn.id,
-      hermesMessageId: opening.id,
-      messageId: opening.id ?? crypto.randomUUID(),
-      role: "dm",
-      content: opening.content,
-      ...settingMetadata(opening.setting)
+      reason: "adventure_begun"
     });
-    soloOpeningContextJob = {
-      campaignId: campaignRow.id,
-      turnId: turn.id,
-      dmEventId
-    };
 
     return {
-      ...campaignRow,
-      metadata: initialMetadata,
-      display_character_name: player.rows[0].character_name,
-      display_username: player.rows[0].username
+      campaign: {
+        ...campaignRow,
+        metadata: genreMetadata,
+        display_character_name: player.rows[0].character_name,
+        display_username: player.rows[0].username
+      },
+      player: player.rows[0],
+      turn: claimedTurn.rows[0]
     };
   });
 
-  if (soloOpeningContextJob) {
+  const soloOpeningAction = formatOpeningSceneRequest({
+    mode: "single_player",
+    players: [soloState.player],
+    style: {
+      campaignGenre: input.campaignGenre,
+      campaignGenrePromptBrief: input.campaignGenrePromptBrief,
+      customWorldName: input.customWorldName,
+      customWorldDescription: input.customWorldDescription
+    }
+  });
+
+  try {
+    const opening = await askDungeonMaster(
+      soloState.campaign,
+      soloOpeningAction,
+      openingSceneInstructions("single_player"),
+      true,
+      soloState.turn.id
+    );
+    const resolvedTurn = await finishResolvedTurn(
+      soloState.campaign.id,
+      soloState.turn.id,
+      opening.id,
+      opening.content,
+      "adventure_begun",
+      opening.rollRequests,
+      opening.setting
+    );
+    await query("update campaigns set has_begun = true where id = $1", [
+      soloState.campaign.id
+    ]);
+
     schedulePostTurnContextJobs({
-      ...soloOpeningContextJob,
+      campaignId: soloState.campaign.id,
+      turnId: soloState.turn.id,
+      dmEventId: resolvedTurn.dmEventId,
       currentAction: soloOpeningAction,
       dmResponse: opening.content,
       rollRequests: opening.rollRequests
     });
-  }
 
-  return campaignSummaryFromRow(campaign);
+    const updatedCampaign = await resolveCampaign(
+      soloState.campaign.id,
+      soloState.campaign.hermes_session_id
+    );
+
+    return campaignSummaryFromRow(updatedCampaign ?? soloState.campaign);
+  } catch (error) {
+    await markTurnFailed(soloState.turn.id, error);
+    throw error;
+  }
 }
 
 export async function previewCampaignJoinByCode(gameCode: string) {
@@ -2152,14 +2236,15 @@ export async function beginRoomAdventure(
   }
 
   try {
-    const currentAction = formatPartyOpeningRequest(beginState.players);
+    const currentAction = formatOpeningSceneRequest({
+      mode: "multiplayer",
+      players: beginState.players,
+      style: campaignOpeningStyleFromMetadata(beginState.campaign)
+    });
     const reply = await askDungeonMaster(
       beginState.campaign,
       currentAction,
-      [
-        dungeonMasterInstructions,
-        "The website has provided the full current party. Begin the campaign with a scene that naturally includes or immediately matters to these characters. Do not mention implementation details."
-      ].join(" "),
+      openingSceneInstructions("multiplayer"),
       true,
       beginState.turn.id
     );
