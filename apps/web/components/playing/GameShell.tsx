@@ -215,7 +215,7 @@ function rollDiceExpression(dice: string, modifier: number | undefined) {
   const match = dice.trim().match(/^(\d*)d(\d+)$/i);
 
   if (!match) {
-    throw new Error("Hermes requested an unsupported dice roll.");
+    throw new Error("The DM requested an unsupported dice roll.");
   }
 
   const count = Number(match[1] || "1");
@@ -229,7 +229,7 @@ function rollDiceExpression(dice: string, modifier: number | undefined) {
     sides < 2 ||
     sides > 1000
   ) {
-    throw new Error("Hermes requested an unsupported dice roll.");
+    throw new Error("The DM requested an unsupported dice roll.");
   }
 
   const rolls = Array.from(
@@ -1075,7 +1075,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
           id: createClientId(),
           role: "system",
           content:
-            "Hermes could not begin the adventure. Make sure at least two players have joined.",
+            "The DM could not begin the adventure. Make sure at least two players have joined.",
           createdAt: new Date().toISOString()
         }
       ]);
@@ -1130,7 +1130,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     }
 
     if (currentPendingRollRequest) {
-      setInputValidationMessage("Hermes is waiting for the required roll.");
+      setInputValidationMessage("The DM is waiting for the required roll.");
       setInputValidationPulse((currentPulse) => currentPulse + 1);
       return;
     }
@@ -1452,7 +1452,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
           </div>
           <div>
             <p className="eyebrow">
-              {isSinglePlayer ? "Hermes Solo" : "Hermes Table"}
+              {isSinglePlayer ? "Solo Adventure" : "Party Table"}
             </p>
             <h1>{activeCampaign?.title ?? "New Adventure"}</h1>
           </div>
@@ -1565,7 +1565,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
                     ) : null}
                     <p>
                       {roomPlayers.length >= 2
-                        ? "The party is gathered. Let Hermes open the campaign."
+                        ? "The party is gathered. Let the DM open the campaign."
                         : "Gather at least two players to begin the adventure."}
                     </p>
                     <button

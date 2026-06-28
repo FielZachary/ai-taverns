@@ -85,7 +85,7 @@ export function MessageLog({ messages, isSending }: MessageLogProps) {
             <Sparkles size={18} />
           </div>
           <div>
-            <p className="message-label">Hermes</p>
+            <p className="message-label">Dungeon Master</p>
             <p className="rune-loader">
               Reading the runes
               <span className="rune-loader-dots" aria-hidden="true">

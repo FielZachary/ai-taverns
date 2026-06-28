@@ -1200,7 +1200,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                     </span>
                     <span>
                       <strong>Singleplayer</strong>
-                      <small>Private play with Hermes as your DM.</small>
+                      <small>Private play with AI Taverns as your DM.</small>
                     </span>
                   </button>
                   <button

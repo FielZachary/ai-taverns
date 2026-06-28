@@ -1,12 +1,5 @@
 import { NextResponse } from "next/server";
-import type {
-  DiceRollRequest,
-  GameMessage,
-  GameMessageRole
-} from "@/lib/game-types";
-
-const hermesBaseUrl = process.env.HERMES_AGENT_URL?.replace(/\/+$/, "");
-const hermesToken = process.env.HERMES_AGENT_TOKEN;
+import type { DiceRollRequest } from "@/lib/game-types";
 
 const responseContractExample = JSON.stringify(
   {
@@ -87,13 +80,13 @@ const impossibleActionHighRollResultExample = JSON.stringify(
 );
 
 export const dungeonMasterInstructions = [
-  "You are Hermes, acting as the Dungeon Master for AI Taverns website play.",
-  "Do not rely on Hermes skills, USER.md, or hidden profile memory for these rules; this website-owned instruction packet is the runtime contract.",
+  "You are the Dungeon Master for AI Taverns website play.",
+  "Do not rely on provider-native memory, hidden profile memory, or external skills for these rules; this website-owned instruction packet is the runtime contract.",
   "Adjudicate with confidence, imagination, fairness, and player agency. Do not agree merely to please players.",
   "For unusual proposals, think through the fiction, DnD rules, tone, stakes, resources, and scene reality before deciding whether an action is allowed, impossible, costly, automatic, or uncertain.",
   "If a player attempts something impossible or world-breaking, do not let a high roll make the impossible happen. You may still request a roll, but that roll measures execution, leverage, reduced cost, information gained, or how impressive the attempt is.",
   "When a high roll still fails because the action is impossible, honor the high roll: narrate that the character performs skillfully or persuasively, then show that a stronger rule, oath, magic, physical limit, or story reality prevails. Do not narrate a high impossible-action roll as incompetence.",
-  "Players roll all player-caused dice, including damage for player attacks, traps, spells, and ability checks. Hermes chooses dice, modifiers, DCs, and consequences.",
+  "Players roll all player-caused dice, including damage for player attacks, traps, spells, and ability checks. You choose dice, modifiers, DCs, and consequences.",
   "Do not ask for checks for ordinary movement, simple observation, or obvious actions. Ask for rolls only when uncertainty, danger, opposition, or meaningful consequence exists.",
   "Failure should create complications, costs, danger, instability, or changed circumstances rather than dead ends.",
   "Use cohesive paragraph-style narration with slower pacing, spatial clarity before mood, and clear explanations of new terms or proper nouns before they matter.",
@@ -128,82 +121,12 @@ export const openingSceneRequest = [
 export const campaignPrepRequest = [
   `${internalPrepRequestPrefix}:`,
   "The campaign room has just been created, but the adventure has not begun.",
-  "Speak as Hermes, the Dungeon Master, and invite the players to fill out their character sheets and press Begin Adventure when they are ready.",
+  "Speak as the Dungeon Master and invite the players to fill out their character sheets and press Begin Adventure when they are ready.",
   "Keep it short, warm, and in a fantasy table tone. Do not begin the story yet."
 ].join(" ");
 
-export type HermesSessionRecord = {
-  id?: string;
-  title?: string;
-  preview?: string;
-  last_active?: string;
-  started_at?: string;
-  message_count?: number;
-};
-
-export type HermesMessageRecord = {
-  id?: string;
-  role?: string;
-  content?: string;
-  timestamp?: string;
-};
-
 export function jsonError(message: string, status: number) {
   return NextResponse.json({ error: message }, { status });
-}
-
-export function assertHermesConfigured() {
-  if (!hermesBaseUrl || !hermesToken) {
-    throw new Error(
-      "Hermes is not configured. Set HERMES_AGENT_URL and HERMES_AGENT_TOKEN."
-    );
-  }
-
-  let hermesUrl: URL;
-
-  try {
-    hermesUrl = new URL(hermesBaseUrl);
-  } catch {
-    throw new Error("Hermes is not configured with a valid HERMES_AGENT_URL.");
-  }
-
-  const localHosts = new Set([
-    "localhost",
-    "127.0.0.1",
-    "::1",
-    "[::1]",
-    "0.0.0.0"
-  ]);
-  const isHostedProduction =
-    process.env.NODE_ENV === "production" || Boolean(process.env.VERCEL);
-
-  if (isHostedProduction && localHosts.has(hermesUrl.hostname)) {
-    throw new Error(
-      "Hermes is configured with a local-only URL. Set HERMES_AGENT_URL to a public HTTPS Hermes endpoint for production."
-    );
-  }
-}
-
-export async function hermesFetch(path: string, init?: RequestInit) {
-  assertHermesConfigured();
-
-  try {
-    return await fetch(`${hermesBaseUrl}${path}`, {
-      ...init,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${hermesToken}`,
-        ...init?.headers
-      },
-      signal: AbortSignal.timeout(175_000)
-    });
-  } catch (error) {
-    throw new Error(
-      `Hermes could not be reached at HERMES_AGENT_URL. ${
-        error instanceof Error ? error.message : "Network request failed."
-      }`
-    );
-  }
 }
 
 export function titleFromSessionId(sessionId: string) {
@@ -219,35 +142,6 @@ export function titleFromSessionId(sessionId: string) {
     .filter(Boolean)
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
-}
-
-export async function ensureHermesSession(sessionId: string) {
-  const response = await hermesFetch("/api/sessions", {
-    method: "POST",
-    body: JSON.stringify({
-      id: sessionId,
-      title: titleFromSessionId(sessionId) || "New Adventure",
-      system_prompt: dungeonMasterInstructions
-    })
-  });
-
-  if (response.ok || response.status === 409) {
-    return;
-  }
-
-  throw new Error(`Hermes session setup failed with status ${response.status}.`);
-}
-
-export function mapHermesRole(role: string | undefined): GameMessageRole {
-  if (role === "user") {
-    return "player";
-  }
-
-  if (role === "assistant") {
-    return "dm";
-  }
-
-  return "system";
 }
 
 export function isInternalHermesMessage(content: string | undefined) {
@@ -400,7 +294,7 @@ export function parseHermesDmContract(
   const parsed = parseJsonObject(content?.trim() ?? "");
 
   if (!parsed) {
-    throw new Error("Hermes returned invalid JSON for a website DM turn.");
+    throw new Error("The DM provider returned invalid JSON for a website turn.");
   }
 
   const publicNarration = stringValue(parsed.public_narration);
@@ -420,25 +314,25 @@ export function parseHermesDmContract(
     stringValue(setting?.startingLocation);
 
   if (!publicNarration) {
-    throw new Error("Hermes response is missing public_narration.");
+    throw new Error("The DM provider response is missing public_narration.");
   }
 
   if (
     nextInputNeeded !== "player_actions" &&
     nextInputNeeded !== "dice_results"
   ) {
-    throw new Error("Hermes response has an invalid next_input_needed value.");
+    throw new Error("The DM provider response has an invalid next_input_needed value.");
   }
 
   if (nextInputNeeded === "dice_results" && rollRequests.length === 0) {
     throw new Error(
-      "Hermes requested dice_results without structured roll_requests."
+      "The DM provider requested dice_results without structured roll_requests."
     );
   }
 
   if (rollRequests.length === 0 && mentionsPlayerFacingRoll(publicNarration)) {
     throw new Error(
-      "Hermes mentioned a player-facing roll without structured roll_requests."
+      "The DM provider mentioned a player-facing roll without structured roll_requests."
     );
   }
 
@@ -501,13 +395,4 @@ export function extractHermesRollRequests(value: unknown): DiceRollRequest[] {
 
 export function extractHermesRollRequest(value: unknown): DiceRollRequest | null {
   return extractHermesRollRequests(value)[0] ?? null;
-}
-
-export function mapHermesMessage(message: HermesMessageRecord): GameMessage {
-  return {
-    id: message.id || crypto.randomUUID(),
-    role: mapHermesRole(message.role),
-    content: normalizeHermesContent(message.content),
-    createdAt: message.timestamp || new Date().toISOString()
-  };
 }

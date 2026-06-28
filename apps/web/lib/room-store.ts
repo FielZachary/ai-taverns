@@ -8,10 +8,9 @@ import type {
 } from "@/lib/game-types";
 import { HttpError } from "@/lib/auth";
 import { query, withTransaction } from "@/lib/db";
+import { askDungeonMasterProvider } from "@/lib/dm-provider";
 import {
   dungeonMasterInstructions,
-  ensureHermesSession,
-  hermesFetch,
   normalizeRollRequest,
   normalizeRollRequests,
   openingSceneRequest,
@@ -116,13 +115,6 @@ type EventRow = {
   type: string;
   payload: unknown;
   created_at: Date | string;
-};
-
-type HermesSessionChatResponse = {
-  message?: {
-    id?: string;
-    content?: string;
-  };
 };
 
 type CampaignSettingSummary = {
@@ -260,7 +252,7 @@ function rollDiceExpression(dice: string, modifier: number | undefined) {
   const match = dice.trim().match(/^(\d*)d(\d+)$/i);
 
   if (!match) {
-    throw new HttpError("Hermes requested an unsupported dice roll.", 400);
+    throw new HttpError("The DM requested an unsupported dice roll.", 400);
   }
 
   const count = Number(match[1] || "1");
@@ -274,7 +266,7 @@ function rollDiceExpression(dice: string, modifier: number | undefined) {
     sides < 2 ||
     sides > 1000
   ) {
-    throw new HttpError("Hermes requested an unsupported dice roll.", 400);
+    throw new HttpError("The DM requested an unsupported dice roll.", 400);
   }
 
   const rolls = Array.from({ length: count }, () => randomInt(1, sides + 1));
@@ -297,7 +289,7 @@ function validateRollSubmissionResult(
   const match = request.dice.trim().match(/^(\d*)d(\d+)$/i);
 
   if (!match) {
-    throw new HttpError("Hermes requested an unsupported dice roll.", 400);
+    throw new HttpError("The DM requested an unsupported dice roll.", 400);
   }
 
   const count = Number(match[1] || "1");
@@ -395,7 +387,7 @@ function validatePendingRollSubmissions(
       }
 
       if (submission.rollRequestId !== pendingRollRequest.id) {
-        throw new HttpError("Hermes is waiting for the required roll.", 409);
+        throw new HttpError("The DM is waiting for the required roll.", 409);
       }
 
       if (player && !rollRequestTargetsPlayer(pendingRollRequest, player)) {
@@ -422,7 +414,7 @@ function formatCanonicalCharacterContext(players: PlayerRow[]) {
 
   return [
     "Canonical player characters:",
-    "Use these website-owned character sheets when framing scenes, choosing checks and modifiers, judging character capabilities, and spotlighting class, species, background, or story hooks. If Hermes session history conflicts with these sheets, these sheets win.",
+    "Use these website-owned character sheets when framing scenes, choosing checks and modifiers, judging character capabilities, and spotlighting class, species, background, or story hooks. If recent transcript context conflicts with these sheets, these sheets win.",
     "",
     ...playablePlayers.map((player, index) =>
       [
@@ -805,6 +797,68 @@ async function getTurnSubmissions(turnId: string) {
   return result.rows;
 }
 
+async function getCampaignEventMessages(
+  campaignId: string,
+  limit = 30
+): Promise<GameMessage[]> {
+  const events = await query<EventRow>(
+    `
+      select id, type, payload, created_at
+      from (
+        select id, type, payload, created_at
+        from campaign_events
+        where campaign_id = $1
+          and type in ('turn_submitted', 'turn_resolved', 'adventure_begun')
+        order by created_at desc
+        limit $2
+      ) recent_events
+      order by created_at asc
+    `,
+    [campaignId, limit]
+  );
+
+  return events.rows
+    .map((event): GameMessage | null => {
+      const payload = eventPayload(event.payload);
+      const content = typeof payload.content === "string" ? payload.content : "";
+
+      if (!content.trim()) {
+        return null;
+      }
+
+      return {
+        id: String(payload.messageId || event.id),
+        role: payload.role === "player" ? "player" : "dm",
+        content,
+        createdAt: toIso(event.created_at)
+      };
+    })
+    .filter((message): message is GameMessage => message !== null);
+}
+
+export async function listCampaignMessagesBySessionId(
+  sessionId: string,
+  limit = 100
+) {
+  const campaign = (
+    await query<CampaignRow>(
+      `
+        select *
+        from campaigns
+        where hermes_session_id = $1 and status <> 'deleted'
+        limit 1
+      `,
+      [sessionId]
+    )
+  ).rows[0];
+
+  if (!campaign) {
+    return [];
+  }
+
+  return getCampaignEventMessages(campaign.id, limit);
+}
+
 function formatCombinedTurn(players: PlayerRow[], submissions: SubmissionRow[]) {
   const submissionByPlayerId = new Map(
     submissions.map((submission) => [submission.player_id, submission])
@@ -844,37 +898,29 @@ function formatSoloTurn(player: PlayerRow, content: string) {
   ].join("\n");
 }
 
-async function askHermes(sessionId: string, message: string, instructions: string) {
-  await ensureHermesSession(sessionId);
-
-  const hermesResponse = await hermesFetch(
-    `/api/sessions/${encodeURIComponent(sessionId)}/chat`,
-    {
-      method: "POST",
-      headers: {
-        "X-Hermes-Session-Key": `ai-dnd:${sessionId}`
-      },
-      body: JSON.stringify({
-        message,
-        instructions
-      })
-    }
-  );
-
-  if (!hermesResponse.ok) {
-    throw new Error(`Hermes turn failed with status ${hermesResponse.status}.`);
-  }
-
-  const hermesData = (await hermesResponse.json()) as HermesSessionChatResponse;
-  const contract = parseHermesDmContract(hermesData.message?.content);
+async function askDungeonMaster(
+  campaign: Pick<CampaignRow, "id" | "hermes_session_id">,
+  message: string,
+  instructions: string,
+  includeHistory = true
+) {
+  const history = includeHistory
+    ? await getCampaignEventMessages(campaign.id)
+    : [];
+  const providerData = await askDungeonMasterProvider({
+    message,
+    instructions,
+    history
+  });
+  const contract = parseHermesDmContract(providerData.content);
   const reply = contract.publicNarration;
 
   if (!reply) {
-    throw new Error("Hermes returned an empty reply.");
+    throw new Error("The DM provider returned an empty reply.");
   }
 
   return {
-    id: hermesData.message?.id,
+    id: providerData.id,
     content: reply,
     rollRequests: contract.rollRequests,
     setting: contract.setting
@@ -959,7 +1005,7 @@ async function markTurnFailed(turnId: string, error: unknown) {
       set status = 'failed', error = $2
       where id = $1
     `,
-    [turnId, error instanceof Error ? error.message : "Hermes call failed."]
+    [turnId, error instanceof Error ? error.message : "DM provider call failed."]
   );
 }
 
@@ -1057,8 +1103,8 @@ async function maybeResolveTurn(
   );
 
   try {
-    const reply = await askHermes(
-      campaign.hermes_session_id,
+    const reply = await askDungeonMaster(
+      campaign,
       formatCombinedTurn(activePlayers, submissions),
       dungeonMasterInstructions
     );
@@ -1083,7 +1129,7 @@ async function maybeResolveTurn(
         campaign.id,
         JSON.stringify({
           turnId: turn.id,
-          error: error instanceof Error ? error.message : "Hermes call failed."
+          error: error instanceof Error ? error.message : "DM provider call failed."
         })
       ]
     );
@@ -1271,7 +1317,6 @@ export async function createCampaignForMode(input: {
   userId: string;
 }) {
   const sessionId = `ai-dnd-${crypto.randomUUID()}`;
-  await ensureHermesSession(sessionId);
 
   if (input.mode === "multiplayer") {
     const genreMetadata = {
@@ -1356,8 +1401,11 @@ export async function createCampaignForMode(input: {
     });
   }
 
-  const opening = await askHermes(
-    sessionId,
+  const opening = await askDungeonMaster(
+    {
+      id: sessionId,
+      hermes_session_id: sessionId
+    },
     [
       openingSceneRequest,
       "",
@@ -1374,7 +1422,8 @@ export async function createCampaignForMode(input: {
     [
       dungeonMasterInstructions,
       "The website has provided the solo player's character setup. Begin immediately with an opening scene tailored to this character. Do not mention implementation details."
-    ].join(" ")
+    ].join(" "),
+    false
   );
 
   const campaign = await withTransaction(async (client) => {
@@ -2040,8 +2089,8 @@ export async function beginRoomAdventure(
   }
 
   try {
-    const reply = await askHermes(
-      beginState.campaign.hermes_session_id,
+    const reply = await askDungeonMaster(
+      beginState.campaign,
       formatPartyOpeningRequest(beginState.players),
       [
         dungeonMasterInstructions,
@@ -2337,8 +2386,8 @@ export async function submitSoloTurn(
   }
 
   try {
-    const reply = await askHermes(
-      soloState.campaign.hermes_session_id,
+    const reply = await askDungeonMaster(
+      soloState.campaign,
       formatSoloTurn(soloState.player, soloState.content),
       dungeonMasterInstructions
     );
@@ -2362,7 +2411,7 @@ export async function submitSoloTurn(
         soloState.campaign.id,
         JSON.stringify({
           turnId: soloState.turn.id,
-          error: error instanceof Error ? error.message : "Hermes call failed."
+          error: error instanceof Error ? error.message : "DM provider call failed."
         })
       ]
     );

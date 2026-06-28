@@ -1,10 +1,6 @@
 import { NextResponse } from "next/server";
 import { HttpError, requireUser } from "@/lib/auth";
-import {
-  assertHermesConfigured,
-  hermesFetch,
-  jsonError
-} from "@/lib/hermes";
+import { jsonError } from "@/lib/hermes";
 import {
   archiveCampaignBySessionId,
   renameCampaignBySessionId
@@ -57,35 +53,7 @@ export async function DELETE(_request: Request, context: RouteContext) {
     const user = await requireUser();
     await archiveCampaignBySessionId(sessionId, user.id);
 
-    try {
-      assertHermesConfigured();
-
-      const response = await hermesFetch(
-        `/api/sessions/${encodeURIComponent(sessionId)}`,
-        {
-          method: "DELETE"
-        }
-      );
-
-      if (response.status === 404) {
-        return NextResponse.json({ deleted: true, id: sessionId });
-      }
-
-      if (!response.ok) {
-        console.error(`Hermes delete failed with status ${response.status}.`);
-        return NextResponse.json({ deleted: true, id: sessionId });
-      }
-
-      const data = (await response.json()) as { deleted?: boolean; id?: string };
-
-      return NextResponse.json({
-        deleted: data.deleted ?? true,
-        id: data.id ?? sessionId
-      });
-    } catch (error) {
-      console.error(error);
-      return NextResponse.json({ deleted: true, id: sessionId });
-    }
+    return NextResponse.json({ deleted: true, id: sessionId });
   } catch (error) {
     console.error(error);
     if (error instanceof HttpError) {

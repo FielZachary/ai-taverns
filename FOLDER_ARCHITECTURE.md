@@ -3,7 +3,7 @@
 Compact guide for AI agents and contributors working in this repo.
 
 ```txt
-hermes/
+ai-taverns/
   apps/
     web/
   packages/
@@ -29,7 +29,7 @@ Expected responsibilities:
 - Campaign and character management UI
 - Live AI dungeon master session UI
 - Subscription and billing UI
-- Server-side API routes that safely call the Hermes agent
+- Server-side API routes that safely call the configured DM provider
 
 Important Next.js note:
 
@@ -55,7 +55,7 @@ Expected responsibilities:
 - Shared constants
 - Subscription tier definitions
 - Campaign, character, message, and session models
-- Typed request/response contracts for the Hermes agent
+- Typed request/response contracts for the DM provider layer
 
 ## `infra/`
 
@@ -82,7 +82,7 @@ Expected responsibilities:
 - Billing and subscription rules
 - Data model drafts
 - Game design notes
-- Hermes agent integration notes
+- DM provider integration notes
 
 ## `scripts/`
 
@@ -96,22 +96,23 @@ Expected responsibilities:
 - Export/import content
 - Maintenance tasks
 
-## Hermes Agent Boundary
+## DM Provider Boundary
 
-The Hermes AI agent already runs on a DigitalOcean server. The browser should
-not call it directly.
+The browser should not call Hermes, DeepSeek, or any model provider directly.
 
-Preferred request flow:
+Target request flow:
 
 ```txt
 Browser
   -> Next.js server/API in apps/web
-  -> Hermes agent on DigitalOcean
+  -> server-side DM provider abstraction
+  -> DeepSeek API
 ```
 
 The Next.js server should verify auth, subscription status, usage limits, and
-request validity before forwarding requests to the Hermes agent with private
-server-side credentials.
+request validity before calling the configured DM provider with private
+server-side credentials. Existing `hermes_*` database names are legacy
+migration details and should be renamed only in a later cleanup pass.
 
 ## Root Files
 
