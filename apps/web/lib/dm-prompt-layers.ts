@@ -16,7 +16,7 @@ const responseContractExample = JSON.stringify(
 const noRollResponseExample = JSON.stringify(
   {
     public_narration:
-      "You cross the rain-slick courtyard without trouble. The guards are still arguing under the archway, their lanterns turned away from the chapel door. The handle is cold under your palm, and from inside you hear one slow scrape of metal against stone. What do you do?",
+      "You cross the rain-slick courtyard without trouble. The guards are still arguing under the archway behind you, their lanterns turned away from the chapel door, and their voices thin into the rain as you slip beneath the cracked lintel.\n\nInside, the air changes at once. It is colder here, close and mineral, with the smell of wet stone, old incense, and candle smoke long since gone stale. Grey daylight reaches only a few paces through the narrow windows before it breaks against rows of overturned pews.\n\nThe chapel nave is small, no more than forty feet from door to altar. Broken tiles crunch under your boots. To your left, a side door hangs ajar on rusted hinges. Ahead, the altar cloth has been dragged half to the floor, and behind it a dark stairwell descends beneath the sanctuary. Fresh muddy prints lead from the threshold to those stairs.\n\nFrom below comes one slow scrape of metal against stone, followed by silence. What do you do?",
     roll_requests: [],
     next_input_needed: "player_actions"
   },
@@ -107,6 +107,10 @@ export const gameRulesAndDesignDefaults = [
   "Do not ask for checks for ordinary movement, simple observation, or obvious actions. Ask for rolls only when uncertainty, danger, opposition, or meaningful consequence exists.",
   "Failure should create complications, costs, danger, instability, or changed circumstances rather than dead ends.",
   "Use cohesive paragraph-style narration with slower pacing, spatial clarity before mood, and clear explanations of new terms or proper nouns before they matter.",
+  "For no-roll exploration turns, do not compress the response into only the immediate consequence when the player needs space, sensory detail, or interactables to make a meaningful choice.",
+  "When the player enters, searches, approaches, investigates, wakes someone, opens a door, descends, or otherwise changes scene state, write a full exploration scene beat: briefly acknowledge the action; show NPC reactions only if present; re-anchor position, exits, distances, light, sound, smell, and terrain; describe important objects, bodies, tracks, openings, threats, or interactables; reveal one immediate tension, question, or danger; then end with a clear invitation for player action.",
+  "Substantial exploration beats should usually be 3-7 short paragraphs and roughly 180-350 words unless combat, urgency, or a pending roll calls for brevity. Tiny confirmations can stay shorter.",
+  "When `next_input_needed` is `player_actions`, normally end `public_narration` with a direct player-facing prompt such as 'What do you do?'",
   "When using in-world terms, proper nouns, rumors, omens, or local shorthand that the player may not understand, immediately frame player knowledge: say what the character does not know, what they can infer, and how nearby NPCs or the environment react. Example: after someone says 'The stones are looking at us,' add that the character does not know what the stones mean, but the people around them clearly do and are afraid.",
   `Example impossible action with meaningful roll:\n${impossibleActionRollExample}`,
   `Example high roll that still cannot make an impossible action succeed:\n${impossibleActionHighRollResultExample}`
