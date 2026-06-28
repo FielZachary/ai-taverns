@@ -4,7 +4,7 @@ const deepSeekApiKey = process.env.DEEPSEEK_API_KEY;
 const deepSeekBaseUrl = (
   process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com"
 ).replace(/\/+$/, "");
-const deepSeekModel = process.env.DEEPSEEK_MODEL || "deepseek-chat";
+const deepSeekModel = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
 
 type DeepSeekMessage = {
   role: "system" | "user" | "assistant";
