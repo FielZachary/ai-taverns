@@ -10,6 +10,10 @@ import { HttpError } from "@/lib/auth";
 import { query, withTransaction } from "@/lib/db";
 import { askDungeonMasterProvider } from "@/lib/dm-provider";
 import {
+  buildDungeonMasterPromptContext,
+  runPostTurnContextJobs
+} from "@/lib/prompt-context";
+import {
   dungeonMasterInstructions,
   normalizeRollRequest,
   normalizeRollRequests,
@@ -536,10 +540,12 @@ async function logCampaignEvent(
   type: string,
   payload: Record<string, unknown> = {}
 ) {
-  await client.query(
-    "insert into campaign_events (campaign_id, type, payload) values ($1, $2, $3::jsonb)",
+  const result = await client.query<{ id: string }>(
+    "insert into campaign_events (campaign_id, type, payload) values ($1, $2, $3::jsonb) returning id",
     [campaignId, type, JSON.stringify(payload)]
   );
+
+  return result.rows[0]?.id;
 }
 
 async function ensureCampaignJoinCode(
@@ -902,15 +908,23 @@ async function askDungeonMaster(
   campaign: Pick<CampaignRow, "id" | "hermes_session_id">,
   message: string,
   instructions: string,
-  includeHistory = true
+  includeHistory = true,
+  turnId?: string
 ) {
-  const history = includeHistory
-    ? await getCampaignEventMessages(campaign.id)
-    : [];
+  const promptContext = includeHistory
+    ? await buildDungeonMasterPromptContext({
+        campaignId: campaign.id,
+        turnId,
+        currentAction: message,
+        baseInstructions: instructions
+      })
+    : null;
   const providerData = await askDungeonMasterProvider({
-    message,
-    instructions,
-    history
+    message: promptContext?.message ?? message,
+    instructions: promptContext?.instructions ?? instructions,
+    history: includeHistory && !promptContext
+      ? await getCampaignEventMessages(campaign.id)
+      : []
   });
   const contract = parseHermesDmContract(providerData.content);
   const reply = contract.publicNarration;
@@ -925,6 +939,19 @@ async function askDungeonMaster(
     rollRequests: contract.rollRequests,
     setting: contract.setting
   };
+}
+
+function schedulePostTurnContextJobs(input: {
+  campaignId: string;
+  turnId: string;
+  currentAction: string;
+  dmResponse: string;
+  dmEventId?: string;
+  rollRequests?: DiceRollRequest[];
+}) {
+  void runPostTurnContextJobs(input).catch((error) => {
+    console.error("Prompt context jobs failed.", error);
+  });
 }
 
 async function buildSnapshot(campaign: CampaignRow): Promise<RoomSnapshot> {
@@ -1020,6 +1047,7 @@ async function finishResolvedTurn(
 ) {
   const currentPendingRollRequest = pendingRollRequests[0] ?? null;
   const settingPatch = settingMetadata(setting);
+  let dmEventId: string | undefined;
 
   await withTransaction(async (client) => {
     await client.query(
@@ -1038,7 +1066,7 @@ async function finishResolvedTurn(
       `,
       [turnId]
     );
-    await logCampaignEvent(client, campaignId, eventType, {
+    dmEventId = await logCampaignEvent(client, campaignId, eventType, {
       turnId,
       hermesMessageId,
       messageId: hermesMessageId ?? crypto.randomUUID(),
@@ -1061,6 +1089,8 @@ async function finishResolvedTurn(
     await setPendingRollRequests(client, campaignId, pendingRollRequests);
     await ensureCollectingTurn(client, campaignId);
   });
+
+  return { dmEventId };
 }
 
 async function maybeResolveTurn(
@@ -1103,13 +1133,16 @@ async function maybeResolveTurn(
   );
 
   try {
+    const currentAction = formatCombinedTurn(activePlayers, submissions);
     const reply = await askDungeonMaster(
       campaign,
-      formatCombinedTurn(activePlayers, submissions),
-      dungeonMasterInstructions
+      currentAction,
+      dungeonMasterInstructions,
+      true,
+      turn.id
     );
 
-    await finishResolvedTurn(
+    const resolvedTurn = await finishResolvedTurn(
       campaign.id,
       turn.id,
       reply.id,
@@ -1117,6 +1150,14 @@ async function maybeResolveTurn(
       "turn_resolved",
       reply.rollRequests
     );
+    schedulePostTurnContextJobs({
+      campaignId: campaign.id,
+      turnId: turn.id,
+      currentAction,
+      dmResponse: reply.content,
+      dmEventId: resolvedTurn.dmEventId,
+      rollRequests: reply.rollRequests
+    });
     return true;
   } catch (error) {
     await markTurnFailed(turn.id, error);
@@ -1401,24 +1442,25 @@ export async function createCampaignForMode(input: {
     });
   }
 
+  const soloOpeningAction = [
+    openingSceneRequest,
+    "",
+    input.campaignGenre ? `Campaign genre: ${input.campaignGenre}` : "",
+    input.customWorldName ? `World name: ${input.customWorldName}` : "",
+    input.campaignGenrePromptBrief
+      ? `Campaign genre guidance: ${input.campaignGenrePromptBrief}`
+      : "",
+    `Solo player: ${input.playerName}`,
+    `Character: ${input.characterName || input.playerName}`,
+    "Character sheet:",
+    input.characterSheet || "Use a quick fantasy adventurer template."
+  ].join("\n");
   const opening = await askDungeonMaster(
     {
       id: sessionId,
       hermes_session_id: sessionId
     },
-    [
-      openingSceneRequest,
-      "",
-      input.campaignGenre ? `Campaign genre: ${input.campaignGenre}` : "",
-      input.customWorldName ? `World name: ${input.customWorldName}` : "",
-      input.campaignGenrePromptBrief
-        ? `Campaign genre guidance: ${input.campaignGenrePromptBrief}`
-        : "",
-      `Solo player: ${input.playerName}`,
-      `Character: ${input.characterName || input.playerName}`,
-      "Character sheet:",
-      input.characterSheet || "Use a quick fantasy adventurer template."
-    ].join("\n"),
+    soloOpeningAction,
     [
       dungeonMasterInstructions,
       "The website has provided the solo player's character setup. Begin immediately with an opening scene tailored to this character. Do not mention implementation details."
@@ -1426,6 +1468,13 @@ export async function createCampaignForMode(input: {
     false
   );
 
+  let soloOpeningContextJob:
+    | {
+        campaignId: string;
+        turnId: string;
+        dmEventId?: string;
+      }
+    | undefined;
   const campaign = await withTransaction(async (client) => {
     const genreMetadata = {
       genre: {
@@ -1503,7 +1552,7 @@ export async function createCampaignForMode(input: {
       characterName: player.rows[0].character_name,
       slot: 0
     });
-    await logCampaignEvent(client, campaignRow.id, "adventure_begun", {
+    const dmEventId = await logCampaignEvent(client, campaignRow.id, "adventure_begun", {
       turnId: turn.id,
       hermesMessageId: opening.id,
       messageId: opening.id ?? crypto.randomUUID(),
@@ -1511,6 +1560,11 @@ export async function createCampaignForMode(input: {
       content: opening.content,
       ...settingMetadata(opening.setting)
     });
+    soloOpeningContextJob = {
+      campaignId: campaignRow.id,
+      turnId: turn.id,
+      dmEventId
+    };
 
     return {
       ...campaignRow,
@@ -1519,6 +1573,15 @@ export async function createCampaignForMode(input: {
       display_username: player.rows[0].username
     };
   });
+
+  if (soloOpeningContextJob) {
+    schedulePostTurnContextJobs({
+      ...soloOpeningContextJob,
+      currentAction: soloOpeningAction,
+      dmResponse: opening.content,
+      rollRequests: opening.rollRequests
+    });
+  }
 
   return campaignSummaryFromRow(campaign);
 }
@@ -2089,16 +2152,19 @@ export async function beginRoomAdventure(
   }
 
   try {
+    const currentAction = formatPartyOpeningRequest(beginState.players);
     const reply = await askDungeonMaster(
       beginState.campaign,
-      formatPartyOpeningRequest(beginState.players),
+      currentAction,
       [
         dungeonMasterInstructions,
         "The website has provided the full current party. Begin the campaign with a scene that naturally includes or immediately matters to these characters. Do not mention implementation details."
-      ].join(" ")
+      ].join(" "),
+      true,
+      beginState.turn.id
     );
 
-    await finishResolvedTurn(
+    const resolvedTurn = await finishResolvedTurn(
       beginState.campaign.id,
       beginState.turn.id,
       reply.id,
@@ -2107,6 +2173,14 @@ export async function beginRoomAdventure(
       reply.rollRequests,
       reply.setting
     );
+    schedulePostTurnContextJobs({
+      campaignId: beginState.campaign.id,
+      turnId: beginState.turn.id,
+      currentAction,
+      dmResponse: reply.content,
+      dmEventId: resolvedTurn.dmEventId,
+      rollRequests: reply.rollRequests
+    });
   } catch (error) {
     await markTurnFailed(beginState.turn.id, error);
     await query("update campaigns set has_begun = false where id = $1", [
@@ -2386,13 +2460,16 @@ export async function submitSoloTurn(
   }
 
   try {
+    const currentAction = formatSoloTurn(soloState.player, soloState.content);
     const reply = await askDungeonMaster(
       soloState.campaign,
-      formatSoloTurn(soloState.player, soloState.content),
-      dungeonMasterInstructions
+      currentAction,
+      dungeonMasterInstructions,
+      true,
+      soloState.turn.id
     );
 
-    await finishResolvedTurn(
+    const resolvedTurn = await finishResolvedTurn(
       soloState.campaign.id,
       soloState.turn.id,
       reply.id,
@@ -2400,6 +2477,14 @@ export async function submitSoloTurn(
       "turn_resolved",
       reply.rollRequests
     );
+    schedulePostTurnContextJobs({
+      campaignId: soloState.campaign.id,
+      turnId: soloState.turn.id,
+      currentAction,
+      dmResponse: reply.content,
+      dmEventId: resolvedTurn.dmEventId,
+      rollRequests: reply.rollRequests
+    });
   } catch (error) {
     await markTurnFailed(soloState.turn.id, error);
     await query(
