@@ -917,8 +917,8 @@ function formatOpeningSceneRequest(input: {
 }) {
   const modeDirection =
     input.mode === "single_player"
-      ? "This is a singleplayer campaign. Spotlight the solo character directly and make the first choice immediately actionable for one player."
-      : "This is a multiplayer campaign. Give the whole party one shared immediate situation; do not over-focus on only one character.";
+      ? "This is a singleplayer campaign. Spotlight the solo character directly, tie the premise to their sheet or background when possible, and make the first choice immediately actionable for one player."
+      : "This is a multiplayer campaign. Establish why the party is together now with a shared job, summons, debt, journey, investigation, emergency, or mutual destination; do not make them feel like unrelated strangers standing near an encounter.";
   const customWorldName = input.style.customWorldName
     ? `World name: ${input.style.customWorldName}`
     : "";
@@ -942,8 +942,17 @@ function formatOpeningSceneRequest(input: {
     customWorldName,
     customWorldDescription,
     "",
+    "Campaign opener requirements:",
+    "Write a true campaign opener, not only a room description, road encounter, or local hazard.",
+    "Establish a named starting place and a named larger region, realm, frontier, city, or world. If the setup does not provide names, invent strong fantasy names.",
+    "Establish why the character or party is here now and what brought them together or set them on this path.",
+    "Give the character or party a concrete first objective, destination, mystery, obligation, rescue, delivery, investigation, or promise that can drive the next several scenes.",
+    "Introduce an immediate obstacle, threat, discovery, or NPC demand that blocks or complicates that objective right now.",
+    "Make the campaign promise legible: what kind of adventure this is, what larger problem is stirring, and why the character or party should care.",
+    "Use character sheet details to personalize hooks, warnings, sensory cues, relationships, or stakes without rewriting character backstories.",
+    "",
     "Opening scene quality bar:",
-    "Write 3-6 rich paragraphs with concrete sensory detail, spatial clarity, an immediate tension, and clear interactable choices.",
+    "Write 4-7 rich paragraphs with concrete sensory detail, spatial clarity, premise, purpose, an immediate tension, and clear interactable choices.",
     "Begin in the fiction immediately; do not ask what kind of world the players want.",
     "Return no player-facing roll requests unless danger or uncertainty already requires dice before the players can act.",
     "End with a direct player-facing prompt such as 'What do you do?'",
@@ -962,7 +971,7 @@ function openingSceneInstructions(mode: CampaignOpeningMode) {
   return [
     dungeonMasterInstructions,
     modeDirection,
-    "Use the campaign setup and canonical character sheets to begin with a rich opening scene that naturally matters to the character or party. Do not mention implementation details."
+    "Use the campaign setup and canonical character sheets to begin with a rich campaign opener: establish named place, larger context, shared purpose, first objective, and immediate obstacle. Do not mention implementation details."
   ].join(" ");
 }
 
