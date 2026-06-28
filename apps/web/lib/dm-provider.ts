@@ -13,9 +13,12 @@ type DeepSeekMessage = {
 
 type DeepSeekChatResponse = {
   id?: string;
+  model?: string;
   choices?: {
+    finish_reason?: string;
     message?: {
       content?: string;
+      reasoning_content?: string;
     };
   }[];
   error?: {
@@ -53,27 +56,7 @@ function mapHistoryMessage(message: GameMessage): DeepSeekMessage {
   };
 }
 
-export async function askDungeonMasterProvider({
-  message,
-  instructions,
-  history = []
-}: DungeonMasterProviderInput): Promise<DungeonMasterProviderResponse> {
-  assertDungeonMasterProviderConfigured();
-
-  const messages: DeepSeekMessage[] = [
-    {
-      role: "system",
-      content: instructions
-    },
-    ...history
-      .filter((historyMessage) => historyMessage.content.trim())
-      .map(mapHistoryMessage),
-    {
-      role: "user",
-      content: message
-    }
-  ];
-
+async function requestDeepSeek(messages: DeepSeekMessage[], retry = false) {
   let response: Response;
 
   try {
@@ -85,7 +68,18 @@ export async function askDungeonMasterProvider({
       },
       body: JSON.stringify({
         model: deepSeekModel,
-        messages,
+        messages: retry
+          ? [
+              ...messages,
+              {
+                role: "user",
+                content:
+                  "Your previous response was empty. Return exactly one valid JSON object matching the requested AI Taverns DM contract now."
+              }
+            ]
+          : messages,
+        temperature: 0.8,
+        max_tokens: 4096,
         response_format: {
           type: "json_object"
         }
@@ -110,10 +104,56 @@ export async function askDungeonMasterProvider({
     );
   }
 
-  const content = data.choices?.[0]?.message?.content?.trim();
+  return data;
+}
+
+function emptyReplyDiagnostic(data: DeepSeekChatResponse) {
+  const firstChoice = data.choices?.[0];
+  const message = firstChoice?.message;
+  const messageKeys = message ? Object.keys(message).sort().join(",") : "none";
+
+  return [
+    `finish_reason=${firstChoice?.finish_reason ?? "unknown"}`,
+    `model=${data.model ?? deepSeekModel}`,
+    `choices=${data.choices?.length ?? 0}`,
+    `message_keys=${messageKeys}`,
+    `has_reasoning=${message?.reasoning_content ? "true" : "false"}`
+  ].join("; ");
+}
+
+export async function askDungeonMasterProvider({
+  message,
+  instructions,
+  history = []
+}: DungeonMasterProviderInput): Promise<DungeonMasterProviderResponse> {
+  assertDungeonMasterProviderConfigured();
+
+  const messages: DeepSeekMessage[] = [
+    {
+      role: "system",
+      content: instructions
+    },
+    ...history
+      .filter((historyMessage) => historyMessage.content.trim())
+      .map(mapHistoryMessage),
+    {
+      role: "user",
+      content: message
+    }
+  ];
+
+  let data = await requestDeepSeek(messages);
+  let content = data.choices?.[0]?.message?.content?.trim();
 
   if (!content) {
-    throw new Error("DeepSeek returned an empty reply.");
+    data = await requestDeepSeek(messages, true);
+    content = data.choices?.[0]?.message?.content?.trim();
+  }
+
+  if (!content) {
+    throw new Error(
+      `DeepSeek returned an empty reply. ${emptyReplyDiagnostic(data)}`
+    );
   }
 
   return {
