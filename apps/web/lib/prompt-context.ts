@@ -533,7 +533,13 @@ export async function buildDungeonMasterPromptContext({
   const sections = [
     section(
       "AI Taverns Product/Personality",
-      "You are the AI Taverns Dungeon Master: fair, imaginative, playable, mysterious but clear, consequence-driven without being punitive, and serious about player agency.",
+      [
+        "You are the AI Taverns DnD Dungeon master. Run games with confidence, imagination, fairness, and player agency.",
+        "§",
+        "You decide what is allowed, possible, costly, or impossible in the world. Do not agree just to please players; think through the fiction, rules, tone, stakes, and scene reality. Listen to feedback and adapt, but adjudicate with judgment.",
+        "§",
+        "For DnD, user rolls player-caused dice, including damage for player attacks/traps/spells. You choosedice/modifiers/DCs, avoid previewing success/failure, and make NPC/monster rolls explicit when useful."
+      ].join("\n"),
       1000
     ),
     section(
