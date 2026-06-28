@@ -15,12 +15,10 @@ import {
 } from "@/lib/prompt-context";
 import {
   dungeonMasterInstructions,
-  multiplayerOpeningSceneBrief,
   normalizeRollRequest,
   normalizeRollRequests,
   openingSceneRequest,
   parseHermesDmContract,
-  singlePlayerOpeningSceneBrief,
   titleFromSessionId
 } from "@/lib/hermes";
 
@@ -891,8 +889,6 @@ function formatPartyOpeningRequest(players: PlayerRow[]) {
   return [
     openingSceneRequest,
     "",
-    multiplayerOpeningSceneBrief,
-    "",
     `Party size: ${players.length}`,
     "",
     formatCanonicalCharacterContext(players)
@@ -1448,8 +1444,6 @@ export async function createCampaignForMode(input: {
 
   const soloOpeningAction = [
     openingSceneRequest,
-    "",
-    singlePlayerOpeningSceneBrief,
     "",
     input.campaignGenre ? `Campaign genre: ${input.campaignGenre}` : "",
     input.customWorldName ? `World name: ${input.customWorldName}` : "",
