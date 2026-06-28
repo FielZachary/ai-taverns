@@ -14,6 +14,30 @@ export const openingSceneRequest = [
   "Do not ask the players what kind of world they want. Drop them into the world now."
 ].join(" ");
 
+export const singlePlayerOpeningSceneBrief = [
+  "Use this opening scene as the exact player-visible public_narration for the singleplayer campaign:",
+  "",
+  "The scent of damp earth and ancient stone fills your nostrils as you trudge along the old dwarven road, now little more than a rutted track through the Whisperwood. The canopy of gnarled oaks and silver birches filters the late afternoon sun into shifting patterns of gold and shadow. You've been walking for three days, following a star chart you deciphered in your hermitage - a map leading to the Starfall Spire, a place whispered of in the oldest druidic circles.",
+  "",
+  "A cool breeze carries the sound of running water and, faintly, the clink of metal. As you round a bend, the trees open onto a clearing. In its center stands a weathered stone well, its rim carved with spiraling constellations. Beside it, a hooded figure sits on a mossy log, sharpening a dagger with slow, deliberate strokes. The figure looks up as you approach, revealing a weathered half-elf face with eyes that gleam like polished amber.",
+  "",
+  "'You're early,' she says, her voice rough but not unfriendly. 'Or late, depending on who's counting. The Spire's gates only open under the Hunter's Moon, and that's three nights hence. But there's a problem.' She gestures with the dagger toward the well. 'Something's poisoned the water. The animals won't drink, and the roots downstream are black. I've been tracking the source - it leads into the old barrow mounds to the east. I'd go myself, but I'm bound to watch this crossing.'",
+  "",
+  "She sheathes the dagger and stands, offering a crooked smile. 'Name's Lira. If you're headed to the Spire, you'll need a clear path. Help me clear the poison, and I'll tell you what I know about the wards on the Spire's door. What do you say, dwarf?'",
+  "",
+  "Return no player-facing roll requests for this opening. Use setting.display_location \"Whisperwood Crossing\", setting.world_name \"Starfall Spire\", and setting.starting_location \"Whisperwood Crossing\"."
+].join("\n");
+
+export const multiplayerOpeningSceneBrief = [
+  "Use this opening scene as the exact player-visible public_narration for the multiplayer campaign:",
+  "",
+  "The rain falls in heavy sheets over the muddy crossroads village of Thornwell. You stand at the edge of the common, where a single oak tree offers meager shelter. Before you, the road splits: one path leads toward the smoldering ruins of a farmhouse, another winds up into the mist-shrouded hills, and a third descends toward the flickering lights of a tavern called The Broken Antler. A riderless horse stands trembling near the well, its saddle soaked and torn. From the tavern, you hear raised voices - angry, fearful. Then a woman's scream cuts through the rain.",
+  "",
+  "What do you do?",
+  "",
+  "Return no player-facing roll requests for this opening. Use setting.display_location \"Thornwell\", setting.world_name \"Thornwell\", and setting.starting_location \"Thornwell Common\"."
+].join("\n");
+
 export const campaignPrepRequest = [
   `${internalPrepRequestPrefix}:`,
   "The campaign room has just been created, but the adventure has not begun.",
