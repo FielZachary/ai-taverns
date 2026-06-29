@@ -4,7 +4,8 @@ import type {
   DiceRollRequest,
   DiceRollResult,
   DiceRollSubmission,
-  GameMessage
+  GameMessage,
+  InputPolicy
 } from "@/lib/game-types";
 import { HttpError } from "@/lib/auth";
 import { query, withTransaction } from "@/lib/db";
@@ -47,6 +48,8 @@ export type RoomSnapshot = {
   hasBegun: boolean;
   pendingRollRequest: DiceRollRequest | null;
   pendingRollRequests: DiceRollRequest[];
+  inputTargets: string[];
+  inputPolicy: InputPolicy;
   updatedAt: string;
 };
 
@@ -245,6 +248,14 @@ function metadataString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function metadataStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value
+        .map((item) => metadataString(item))
+        .filter((item): item is string => Boolean(item))
+    : [];
+}
+
 function campaignOpeningStyleFromMetadata(campaign: CampaignRow): CampaignOpeningStyle {
   const metadata = eventPayload(campaign.metadata);
   const genre = eventPayload(metadata.genre);
@@ -267,6 +278,84 @@ function pendingRollRequestsFromCampaign(campaign: CampaignRow) {
 
   const legacyRequest = normalizeRollRequest(metadata.pendingRollRequest);
   return legacyRequest ? [legacyRequest] : [];
+}
+
+function inputTargetsFromCampaign(campaign: CampaignRow) {
+  const metadata = eventPayload(campaign.metadata);
+  return metadataStringArray(metadata.inputTargets);
+}
+
+function inputPolicyFromCampaign(campaign: CampaignRow): InputPolicy {
+  const metadata = eventPayload(campaign.metadata);
+  const inputTargets = inputTargetsFromCampaign(campaign);
+
+  return metadata.inputPolicy === "only_targeted_players" && inputTargets.length > 0
+    ? "only_targeted_players"
+    : "all_players";
+}
+
+function inputTargetMatchesPlayer(target: string, player: PlayerRow) {
+  const normalizedTarget = normalizeRollTarget(target);
+
+  if (!normalizedTarget) {
+    return false;
+  }
+
+  const playerNames = [player.username, player.character_name]
+    .map(normalizeRollTarget)
+    .filter((name): name is string => Boolean(name));
+
+  return playerNames.some(
+    (name) =>
+      normalizedTarget === name ||
+      normalizedTarget.includes(name) ||
+      name.includes(normalizedTarget)
+  );
+}
+
+function playerMatchesInputTargets(player: PlayerRow, inputTargets: string[]) {
+  return inputTargets.some((target) => inputTargetMatchesPlayer(target, player));
+}
+
+async function allTargetedPlayersSubmitted(
+  client: PoolClient,
+  campaignId: string,
+  turnId: string,
+  inputTargets: string[]
+) {
+  const activePlayers = (
+    await client.query<PlayerRow>(
+      `
+        select *
+        from players
+        where campaign_id = $1 and status = 'active'
+      `,
+      [campaignId]
+    )
+  ).rows.filter(isProfileComplete);
+  const targetedPlayers = activePlayers.filter((player) =>
+    playerMatchesInputTargets(player, inputTargets)
+  );
+
+  if (targetedPlayers.length === 0) {
+    return true;
+  }
+
+  const submissions = await client.query<{ player_id: string | null }>(
+    `
+      select player_id
+      from submissions
+      where turn_id = $1 and status = 'submitted'
+    `,
+    [turnId]
+  );
+  const submittedPlayerIds = new Set(
+    submissions.rows
+      .map((submission) => submission.player_id)
+      .filter((playerId): playerId is string => Boolean(playerId))
+  );
+
+  return targetedPlayers.every((player) => submittedPlayerIds.has(player.id));
 }
 
 function modifierText(modifier: number | undefined) {
@@ -477,6 +566,37 @@ async function setPendingRollRequests(
       where id = $1
     `,
     [campaignId, JSON.stringify(requests), JSON.stringify(currentRequest)]
+  );
+}
+
+async function setPendingInputTargets(
+  client: PoolClient,
+  campaignId: string,
+  inputTargets: string[],
+  inputPolicy: InputPolicy
+) {
+  const shouldTargetPlayers =
+    inputPolicy === "only_targeted_players" && inputTargets.length > 0;
+
+  await client.query(
+    `
+      update campaigns
+      set metadata = case
+        when $2::jsonb = '[]'::jsonb then metadata - 'inputTargets' - 'inputPolicy'
+        else jsonb_set(
+          jsonb_set(metadata, '{inputTargets}', $2::jsonb, true),
+          '{inputPolicy}',
+          $3::jsonb,
+          true
+        )
+      end
+      where id = $1
+    `,
+    [
+      campaignId,
+      JSON.stringify(shouldTargetPlayers ? inputTargets : []),
+      JSON.stringify(shouldTargetPlayers ? inputPolicy : "all_players")
+    ]
   );
 }
 
@@ -1020,6 +1140,8 @@ async function askDungeonMaster(
     id: providerData.id,
     content: reply,
     rollRequests: contract.rollRequests,
+    inputTargets: contract.inputTargets,
+    inputPolicy: contract.inputPolicy,
     setting: contract.setting
   };
 }
@@ -1093,6 +1215,8 @@ async function buildSnapshot(campaign: CampaignRow): Promise<RoomSnapshot> {
     .filter((message): message is GameMessage => message !== null);
 
   const pendingRollRequests = pendingRollRequestsFromCampaign(campaign);
+  const inputTargets = inputTargetsFromCampaign(campaign);
+  const inputPolicy = inputPolicyFromCampaign(campaign);
 
   return {
     roomId: campaign.id,
@@ -1104,6 +1228,8 @@ async function buildSnapshot(campaign: CampaignRow): Promise<RoomSnapshot> {
     hasBegun: campaign.has_begun,
     pendingRollRequest: pendingRollRequests[0] ?? null,
     pendingRollRequests,
+    inputTargets,
+    inputPolicy,
     updatedAt: toIso(campaign.updated_at)
   };
 }
@@ -1126,6 +1252,8 @@ async function finishResolvedTurn(
   reply: string,
   eventType: "adventure_begun" | "turn_resolved",
   pendingRollRequests: DiceRollRequest[] = [],
+  inputTargets: string[] = [],
+  inputPolicy: InputPolicy = "all_players",
   setting?: CampaignSettingSummary
 ) {
   const currentPendingRollRequest = pendingRollRequests[0] ?? null;
@@ -1157,7 +1285,9 @@ async function finishResolvedTurn(
       content: reply,
       ...settingPatch,
       pendingRollRequest: currentPendingRollRequest,
-      pendingRollRequests
+      pendingRollRequests,
+      inputTargets,
+      inputPolicy
     });
     if (eventType === "adventure_begun" && Object.keys(settingPatch).length > 0) {
       await client.query(
@@ -1170,6 +1300,7 @@ async function finishResolvedTurn(
       );
     }
     await setPendingRollRequests(client, campaignId, pendingRollRequests);
+    await setPendingInputTargets(client, campaignId, inputTargets, inputPolicy);
     await ensureCollectingTurn(client, campaignId);
   });
 
@@ -1231,7 +1362,9 @@ async function maybeResolveTurn(
       reply.id,
       reply.content,
       "turn_resolved",
-      reply.rollRequests
+      reply.rollRequests,
+      reply.inputTargets,
+      reply.inputPolicy
     );
     schedulePostTurnContextJobs({
       campaignId: campaign.id,
@@ -1655,6 +1788,8 @@ export async function createCampaignForMode(input: {
       opening.content,
       "adventure_begun",
       opening.rollRequests,
+      opening.inputTargets,
+      opening.inputPolicy,
       opening.setting
     );
     await query("update campaigns set has_begun = true where id = $1", [
@@ -2268,6 +2403,8 @@ export async function beginRoomAdventure(
       reply.content,
       "adventure_begun",
       reply.rollRequests,
+      reply.inputTargets,
+      reply.inputPolicy,
       reply.setting
     );
     schedulePostTurnContextJobs({
@@ -2334,6 +2471,8 @@ export async function submitRoomTurn(
     }
 
     const pendingRollRequests = pendingRollRequestsFromCampaign(campaign);
+    const inputTargets = inputTargetsFromCampaign(campaign);
+    const inputPolicy = inputPolicyFromCampaign(campaign);
     const submittedRolls = rollSubmissionsFromPayload(
       rollRequestId,
       rollResult,
@@ -2346,6 +2485,18 @@ export async function submitRoomTurn(
       submittedRolls,
       player
     );
+
+    if (!isRollSubmission && pendingRollRequests.length > 0) {
+      throw new HttpError("The DM is waiting for the required roll.", 409);
+    }
+
+    if (
+      !isRollSubmission &&
+      inputPolicy === "only_targeted_players" &&
+      !playerMatchesInputTargets(player, inputTargets)
+    ) {
+      throw new HttpError("The DM is waiting on another player.", 403);
+    }
 
     const turn = await ensureCollectingTurn(client, campaign.id);
     const trimmedContent = isRollSubmission
@@ -2386,6 +2537,15 @@ export async function submitRoomTurn(
       messageId: rollSubmission.clientMessageId || clientMessageId || crypto.randomUUID(),
       content: `${player.username} (${player.character_name}): ${trimmedContent}`
     });
+    const targetedInputComplete =
+      !isRollSubmission &&
+      inputPolicy === "only_targeted_players" &&
+      (await allTargetedPlayersSubmitted(
+        client,
+        campaign.id,
+        turn.id,
+        inputTargets
+      ));
 
     return {
       campaign,
@@ -2393,8 +2553,10 @@ export async function submitRoomTurn(
       shouldResolve:
         (isRollSubmission &&
           rollSubmission.remainingRollRequests.length === 0) ||
-        (!isRollSubmission && pendingRollRequests.length === 0),
-      shouldResolveImmediately: isRollSubmission
+        (!isRollSubmission &&
+          pendingRollRequests.length === 0 &&
+          (inputPolicy !== "only_targeted_players" || targetedInputComplete)),
+      shouldResolveImmediately: isRollSubmission || targetedInputComplete
     };
   });
 
@@ -2465,6 +2627,10 @@ export async function submitSoloTurn(
       submittedRolls,
       player
     );
+
+    if (!isRollSubmission && pendingRollRequests.length > 0) {
+      throw new HttpError("The DM is waiting for the required roll.", 409);
+    }
 
     const turn = await ensureCollectingTurn(client, campaign.id);
     const trimmedContent = isRollSubmission
@@ -2572,7 +2738,9 @@ export async function submitSoloTurn(
       reply.id,
       reply.content,
       "turn_resolved",
-      reply.rollRequests
+      reply.rollRequests,
+      reply.inputTargets,
+      reply.inputPolicy
     );
     schedulePostTurnContextJobs({
       campaignId: soloState.campaign.id,

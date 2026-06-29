@@ -20,7 +20,8 @@ import type {
   DiceRollRequest,
   DiceRollResult,
   DiceRollSubmission,
-  GameMessage
+  GameMessage,
+  InputPolicy
 } from "@/lib/game-types";
 import {
   ChatHistorySidebar,
@@ -84,6 +85,8 @@ type RoomSnapshot = {
   hasBegun: boolean;
   pendingRollRequest: DiceRollRequest | null;
   pendingRollRequests?: DiceRollRequest[];
+  inputTargets?: string[];
+  inputPolicy?: InputPolicy;
 };
 
 type GameShellProps = {
@@ -160,6 +163,29 @@ function rollRequestTargetsCurrentPlayer(
       target === name ||
       target.includes(name) ||
       name.includes(target)
+  );
+}
+
+function inputTargetsCurrentPlayer(
+  inputTargets: string[],
+  profile: PlayerProfile,
+  roomPlayer?: RoomPlayer
+) {
+  if (inputTargets.length === 0) {
+    return true;
+  }
+
+  return inputTargets.some((target) =>
+    rollRequestTargetsCurrentPlayer(
+      {
+        id: "input-target",
+        dice: "1d20",
+        label: "Input target",
+        player: target
+      },
+      profile,
+      roomPlayer
+    )
   );
 }
 
@@ -502,6 +528,8 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
   const [pendingRollRequests, setPendingRollRequests] = useState<
     DiceRollRequest[]
   >([]);
+  const [inputTargets, setInputTargets] = useState<string[]>([]);
+  const [inputPolicy, setInputPolicy] = useState<InputPolicy>("all_players");
   const [activeDiceReveal, setActiveDiceReveal] =
     useState<ActiveDiceReveal | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -528,9 +556,19 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     [currentRoomPlayer, isSinglePlayer, pendingRollRequests, playerProfile]
   );
   const currentPendingRollRequest = currentPendingRollRequests[0] ?? null;
+  const isWaitingOnAnotherPlayerRoll =
+    !isSinglePlayer &&
+    pendingRollRequests.length > 0 &&
+    !currentPendingRollRequest;
+  const isWaitingOnTargetedInput =
+    !isSinglePlayer &&
+    inputPolicy === "only_targeted_players" &&
+    inputTargets.length > 0 &&
+    !inputTargetsCurrentPlayer(inputTargets, playerProfile, currentRoomPlayer);
   const isInputSubmittedForCurrentState =
     isInputSubmitted &&
-    (pendingRollRequests.length === 0 || Boolean(currentPendingRollRequest));
+    (pendingRollRequests.length === 0 || Boolean(currentPendingRollRequest)) &&
+    !isWaitingOnTargetedInput;
 
   const playerStatusSlots = useMemo<PlayerStatusSlot[]>(() => {
     return Array.from({ length: maxPlayers }, (_, slot) => {
@@ -586,6 +624,8 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
       setIsRoomResolving(room.isResolving);
       setHasAdventureBegun(room.hasBegun);
       setPendingRollRequests(rollRequestsFromRoom(room));
+      setInputTargets(room.inputTargets ?? []);
+      setInputPolicy(room.inputPolicy ?? "all_players");
 
       const currentPlayer = room.players.find(
         (roomPlayer) => roomPlayer.id === playerId
@@ -645,6 +685,8 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
         setIsRoomResolving(room.isResolving);
         setHasAdventureBegun(true);
         setPendingRollRequests(rollRequestsFromRoom(room));
+        setInputTargets(room.inputTargets ?? []);
+        setInputPolicy(room.inputPolicy ?? "all_players");
       } else {
         applyRoomSnapshot(room);
       }
@@ -853,6 +895,8 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
       setIsRoomResolving(false);
       setIsInputSubmitted(false);
       setPendingRollRequests([]);
+      setInputTargets([]);
+      setInputPolicy("all_players");
       return;
     }
 
@@ -877,6 +921,8 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
             setIsRoomResolving(room.isResolving);
             setHasAdventureBegun(true);
             setPendingRollRequests(rollRequestsFromRoom(room));
+            setInputTargets(room.inputTargets ?? []);
+            setInputPolicy(room.inputPolicy ?? "all_players");
           } else {
             applyRoomSnapshot(room);
           }
@@ -919,6 +965,8 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     setRoomPlayers([]);
     setHasAdventureBegun(campaign.mode === "single_player");
     setPendingRollRequests([]);
+    setInputTargets([]);
+    setInputPolicy("all_players");
     setInputValidationMessage("");
     setTableAlert("");
     setIsInputSubmitted(false);
@@ -1136,8 +1184,18 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
       return;
     }
 
-    if (currentPendingRollRequest) {
-      setInputValidationMessage("The DM is waiting for the required roll.");
+    if (pendingRollRequests.length > 0) {
+      setInputValidationMessage(
+        currentPendingRollRequest
+          ? "The DM is waiting for the required roll."
+          : "The DM is waiting on another player's roll."
+      );
+      setInputValidationPulse((currentPulse) => currentPulse + 1);
+      return;
+    }
+
+    if (isWaitingOnTargetedInput) {
+      setInputValidationMessage("The DM is waiting on another player.");
       setInputValidationPulse((currentPulse) => currentPulse + 1);
       return;
     }
@@ -1602,6 +1660,10 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
               lockMessage={
                 currentPendingRollRequest
                   ? `Roll required: ${currentPendingRollRequest.label}`
+                  : isWaitingOnAnotherPlayerRoll
+                    ? "Waiting on another player's roll"
+                    : isWaitingOnTargetedInput
+                      ? "Waiting on another player"
                   : !isSinglePlayer && !hasAdventureBegun
                   ? "You can only start once the adventure has begun"
                   : undefined
@@ -1633,7 +1695,8 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
         type="button"
         aria-label="Send turn"
         disabled={
-          Boolean(currentPendingRollRequest) ||
+          pendingRollRequests.length > 0 ||
+          isWaitingOnTargetedInput ||
           Boolean(activeDiceReveal) ||
           isSending ||
           !draft.trim()

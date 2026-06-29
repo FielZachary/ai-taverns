@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import type { DiceRollRequest } from "@/lib/game-types";
+import type { DiceRollRequest, InputPolicy } from "@/lib/game-types";
 export { dungeonMasterInstructions } from "@/lib/dm-prompt-layers";
 
 export const internalOpeningRequestPrefix = "AI_DND_INTERNAL_OPENING_REQUEST";
@@ -97,6 +97,14 @@ function numberValue(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
+function stringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value
+        .map((item) => stringValue(item))
+        .filter((item): item is string => Boolean(item))
+    : [];
+}
+
 function extractJsonObject(text: string) {
   const trimmed = text.trim();
 
@@ -177,6 +185,8 @@ export type HermesDmContractResponse = {
   publicNarration: string;
   rollRequests: DiceRollRequest[];
   nextInputNeeded: "player_actions" | "dice_results";
+  inputTargets: string[];
+  inputPolicy: InputPolicy;
   setting?: {
     displayLocation?: string;
     worldName?: string;
@@ -199,6 +209,12 @@ export function parseHermesDmContract(
     ? parsed.roll_requests
     : [];
   const rollRequests = normalizeRollRequests(rawRollRequests);
+  const inputTargets = stringArray(parsed.input_targets ?? parsed.inputTargets);
+  const rawInputPolicy = stringValue(parsed.input_policy ?? parsed.inputPolicy);
+  const inputPolicy: InputPolicy =
+    rawInputPolicy === "only_targeted_players" && inputTargets.length > 0
+      ? "only_targeted_players"
+      : "all_players";
   const setting = asObject(parsed.setting);
   const displayLocation =
     stringValue(setting?.display_location) ||
@@ -236,6 +252,8 @@ export function parseHermesDmContract(
     publicNarration,
     rollRequests,
     nextInputNeeded,
+    inputTargets,
+    inputPolicy,
     setting:
       displayLocation || worldName || startingLocation
         ? {

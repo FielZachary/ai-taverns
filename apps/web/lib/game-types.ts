@@ -16,6 +16,8 @@ export type DiceRollRequest = {
   advantageState?: string;
 };
 
+export type InputPolicy = "all_players" | "only_targeted_players";
+
 export type DiceRollResult = {
   rolls: number[];
   total: number;
@@ -37,4 +39,6 @@ export type HermesTurnResponse = {
   message: GameMessage;
   pendingRollRequest?: DiceRollRequest | null;
   pendingRollRequests?: DiceRollRequest[];
+  inputTargets?: string[];
+  inputPolicy?: InputPolicy;
 };

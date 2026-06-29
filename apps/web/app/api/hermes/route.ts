@@ -42,7 +42,9 @@ export async function POST(request: Request) {
         createdAt: new Date().toISOString()
       },
       pendingRollRequest: pendingRollRequests[0] ?? null,
-      pendingRollRequests
+      pendingRollRequests,
+      inputTargets: contract.inputTargets,
+      inputPolicy: contract.inputPolicy
     };
 
     return NextResponse.json(response);
