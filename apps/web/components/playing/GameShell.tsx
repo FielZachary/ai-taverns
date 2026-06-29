@@ -558,12 +558,19 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
   }, [roomPlayers]);
 
   const visibleMessages = useMemo(() => {
-    const seenMessageIds = new Set(messages.map((message) => message.id));
-    const newRoomMessages = roomMessages.filter(
-      (message) => !seenMessageIds.has(message.id)
-    );
+    const mergedMessages = new Map<string, GameMessage>();
 
-    return [...messages, ...newRoomMessages];
+    messages.forEach((message) => {
+      mergedMessages.set(message.id, message);
+    });
+    roomMessages.forEach((message) => {
+      mergedMessages.set(message.id, message);
+    });
+
+    return Array.from(mergedMessages.values()).sort(
+      (firstMessage, secondMessage) =>
+        Date.parse(firstMessage.createdAt) - Date.parse(secondMessage.createdAt)
+    );
   }, [messages, roomMessages]);
 
   const canBeginAdventure =
@@ -1183,13 +1190,15 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
           body: JSON.stringify(
             isSinglePlayer
               ? {
-                  message: content
+                  message: content,
+                  clientMessageId: playerMessage.id
                 }
               : {
                   roomId: activeCampaign.id,
                   sessionId: activeCampaign.hermesSessionId,
                   playerId,
-                  message: content
+                  message: content,
+                  clientMessageId: playerMessage.id
                 }
           )
         }
