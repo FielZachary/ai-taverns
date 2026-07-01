@@ -142,6 +142,81 @@ function mentionsPlayerFacingRoll(text: string) {
   );
 }
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function countDiceMentions(text: string, dice: string) {
+  const dicePattern = escapeRegExp(dice.trim()).replace(/\\ /g, "\\s*");
+  return Array.from(text.matchAll(new RegExp(`\\b${dicePattern}\\b`, "gi"))).length;
+}
+
+function hasRollRequestDiceCoverage(text: string, requests: DiceRollRequest[]) {
+  const requiredCounts = requests.reduce<Record<string, number>>((counts, request) => {
+    const dice = request.dice.trim().toLowerCase();
+    counts[dice] = (counts[dice] ?? 0) + 1;
+    return counts;
+  }, {});
+
+  return Object.entries(requiredCounts).every(
+    ([dice, count]) => countDiceMentions(text, dice) >= count
+  );
+}
+
+function modifierText(modifier: number | undefined) {
+  if (!modifier) {
+    return "";
+  }
+
+  return modifier > 0 ? ` + ${modifier}` : ` - ${Math.abs(modifier)}`;
+}
+
+function advantageText(advantageState: string | undefined) {
+  const normalized = advantageState?.trim().toLowerCase();
+
+  if (normalized === "advantage") {
+    return " at advantage";
+  }
+
+  if (normalized === "disadvantage") {
+    return " at disadvantage";
+  }
+
+  return "";
+}
+
+function formatRollInstruction(request: DiceRollRequest, index: number) {
+  const verb = index === 0 ? "Roll" : "then roll";
+  return `${verb} ${request.dice}${modifierText(request.modifier)}${advantageText(
+    request.advantageState
+  )} for ${request.label}`;
+}
+
+function rollInstructionsFromRequests(requests: DiceRollRequest[]) {
+  const instructions = requests.map(formatRollInstruction);
+
+  if (instructions.length === 1) {
+    return `${instructions[0]}.`;
+  }
+
+  const lastInstruction = instructions[instructions.length - 1];
+  return `${instructions.slice(0, -1).join(", ")}, and ${lastInstruction}.`;
+}
+
+function narrationWithRollInstructions(
+  publicNarration: string,
+  rollRequests: DiceRollRequest[]
+) {
+  if (
+    rollRequests.length === 0 ||
+    hasRollRequestDiceCoverage(publicNarration, rollRequests)
+  ) {
+    return publicNarration;
+  }
+
+  return `${publicNarration.trim()} ${rollInstructionsFromRequests(rollRequests)}`;
+}
+
 export function normalizeRollRequest(value: unknown): DiceRollRequest | null {
   const rawRequest = Array.isArray(value) ? value[0] : value;
   const request = asObject(rawRequest);
@@ -203,7 +278,7 @@ export function parseHermesDmContract(
     throw new Error("The DM provider returned invalid JSON for a website turn.");
   }
 
-  const publicNarration = stringValue(parsed.public_narration);
+  let publicNarration = stringValue(parsed.public_narration);
   const nextInputNeeded = stringValue(parsed.next_input_needed);
   const rawRollRequests = Array.isArray(parsed.roll_requests)
     ? parsed.roll_requests
@@ -247,6 +322,8 @@ export function parseHermesDmContract(
       "The DM provider mentioned a player-facing roll without structured roll_requests."
     );
   }
+
+  publicNarration = narrationWithRollInstructions(publicNarration, rollRequests);
 
   return {
     publicNarration,

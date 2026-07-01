@@ -53,7 +53,7 @@ const rollRequestResponseExample = JSON.stringify(
 const chainedRollRequestResponseExample = JSON.stringify(
   {
     public_narration:
-      "The wiry guard's back is turned, and the campfire masks the scrape of loose stone underfoot. You can try to slip close and strike before he notices. Roll Stealth first, then the rapier attack with advantage, and roll rapier damage as part of the same attempt so the strike can be resolved immediately if it hits.",
+      "The wiry guard's back is turned, and the campfire masks the scrape of loose stone underfoot. You can try to slip close and strike before he notices. Roll 1d20 + 6 for Stealth to determine whether you stay quiet. If you succeed, roll 1d20 + 7 at advantage for the rapier attack, then roll 1d8 + 4 for rapier damage so the strike can be resolved immediately if it hits.",
     roll_requests: [
       {
         player: "Zach",
@@ -136,7 +136,7 @@ export const hardRuntimeContract = [
   "Return only valid JSON for gameplay turns. Do not wrap it in Markdown. Do not include any text before or after the JSON.",
   `Required JSON shape:\n${responseContractExample}`,
   "`public_narration` is the only player-visible DM narration.",
-  "When a roll is required, end `public_narration` with an immersive sentence that tells the player what to roll.",
+  "When a roll is required, end `public_narration` with an immersive sentence that explicitly names every dice expression, modifier, advantage or disadvantage state, and roll purpose the player must roll.",
   "`roll_requests` must also contain every required player-facing roll. Do not ask a player to roll only in prose.",
   "`next_input_needed` must be `dice_results` when roll results are needed before resolving the turn, otherwise `player_actions`.",
   "Each roll request should include player, dice, modifier, label, advantage_state, and reason when known.",
