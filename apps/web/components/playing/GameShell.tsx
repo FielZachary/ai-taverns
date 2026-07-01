@@ -900,7 +900,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
 
     const interval = window.setInterval(() => {
       void refreshCampaigns();
-    }, 10_000);
+    }, 3000);
 
     return () => {
       shouldIgnore = true;
@@ -974,7 +974,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     }
 
     const timeout = window.setTimeout(registerPlayer, 350);
-    const interval = window.setInterval(registerPlayer, 30_000);
+    const interval = window.setInterval(registerPlayer, 10_000);
 
     return () => {
       window.clearTimeout(timeout);
@@ -1047,13 +1047,13 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     void pollRoom();
     const interval = window.setInterval(() => {
       void pollRoom();
-    }, isRoomResolving ? 3000 : 5000);
+    }, 1500);
 
     return () => {
       shouldIgnore = true;
       window.clearInterval(interval);
     };
-  }, [activeCampaign, applyRoomSnapshot, isRoomResolving, isSinglePlayer]);
+  }, [activeCampaign, applyRoomSnapshot, isSinglePlayer]);
 
   function handleStartNewChat() {
     window.location.assign("/new-adventure");

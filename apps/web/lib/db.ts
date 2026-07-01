@@ -26,18 +26,6 @@ function getPositiveIntegerEnv(name: string, fallback: number) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function getOptionalPositiveIntegerEnv(name: string) {
-  const value = process.env[name];
-
-  if (!value) {
-    return undefined;
-  }
-
-  const parsed = Number.parseInt(value, 10);
-
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
-}
-
 export function getPool() {
   globalThis.aiDndPgPool ??= new Pool({
     connectionString: getDatabaseUrl(),
@@ -45,10 +33,9 @@ export function getPool() {
       "DATABASE_CONNECTION_TIMEOUT_MS",
       5_000
     ),
-    idleTimeoutMillis: getPositiveIntegerEnv("DATABASE_IDLE_TIMEOUT_MS", 1_000),
+    idleTimeoutMillis: getPositiveIntegerEnv("DATABASE_IDLE_TIMEOUT_MS", 10_000),
     max: getPositiveIntegerEnv("DATABASE_POOL_MAX", 1),
-    maxUses: getOptionalPositiveIntegerEnv("DATABASE_POOL_MAX_USES"),
-    allowExitOnIdle: true,
+    maxUses: getPositiveIntegerEnv("DATABASE_POOL_MAX_USES", 100),
     ssl:
       process.env.DATABASE_SSL_DISABLED === "true"
         ? false
