@@ -149,6 +149,16 @@ type JoinCodeRow = {
   has_begun: boolean;
 };
 
+type DeferredTask = () => Promise<void>;
+
+type TurnResolutionState = {
+  campaign: CampaignRow;
+  turn: TurnRow;
+  activePlayers: PlayerRow[];
+  submissions: SubmissionRow[];
+  currentAction: string;
+};
+
 const joinCodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 function nowIso() {
@@ -1478,6 +1488,20 @@ async function maybeResolveTurn(
   turn: TurnRow,
   force = false
 ) {
+  const resolutionState = await maybeStartTurnResolution(campaign, turn, force);
+
+  if (!resolutionState) {
+    return false;
+  }
+
+  return resolveClaimedTurn(resolutionState);
+}
+
+async function maybeStartTurnResolution(
+  campaign: CampaignRow,
+  turn: TurnRow,
+  force = false
+): Promise<TurnResolutionState | null> {
   const activePlayers = (await getActivePlayers(campaign.id)).filter(isProfileComplete);
   const submissions = await getTurnSubmissions(turn.id);
   const submittedPlayerIds = new Set(submissions.map((submission) => submission.player_id));
@@ -1487,7 +1511,7 @@ async function maybeResolveTurn(
     (!force &&
       activePlayers.some((player) => !submittedPlayerIds.has(player.id)))
   ) {
-    return false;
+    return null;
   }
 
   const claimedTurn = await query<TurnRow>(
@@ -1501,7 +1525,7 @@ async function maybeResolveTurn(
   );
 
   if (!claimedTurn.rows[0]) {
-    return false;
+    return null;
   }
 
   await query(
@@ -1512,8 +1536,21 @@ async function maybeResolveTurn(
     [campaign.id, JSON.stringify({ turnId: turn.id })]
   );
 
+  return {
+    campaign,
+    turn: claimedTurn.rows[0],
+    activePlayers,
+    submissions,
+    currentAction: formatCombinedTurn(activePlayers, submissions)
+  };
+}
+
+async function resolveClaimedTurn({
+  campaign,
+  currentAction,
+  turn
+}: TurnResolutionState) {
   try {
-    const currentAction = formatCombinedTurn(activePlayers, submissions);
     const reply = await askDungeonMaster(
       campaign,
       currentAction,
@@ -2610,7 +2647,10 @@ export async function submitRoomTurn(
   rollRequestId?: string,
   rollResult?: DiceRollResult,
   clientMessageId?: string,
-  rollSubmissions?: DiceRollSubmission[]
+  rollSubmissions?: DiceRollSubmission[],
+  options?: {
+    defer?: (task: DeferredTask) => void;
+  }
 ) {
   const submissionState = await withTransaction(async (client) => {
     const campaign = await resolveCampaign(roomId, sessionId, client);
@@ -2731,11 +2771,21 @@ export async function submitRoomTurn(
   });
 
   if (submissionState.shouldResolve) {
-    await maybeResolveTurn(
+    const resolutionState = await maybeStartTurnResolution(
       submissionState.campaign,
       submissionState.turn,
       submissionState.shouldResolveImmediately
     );
+
+    if (resolutionState) {
+      if (options?.defer) {
+        options.defer(async () => {
+          await resolveClaimedTurn(resolutionState);
+        });
+      } else {
+        await resolveClaimedTurn(resolutionState);
+      }
+    }
   }
 
   const updatedCampaign = await resolveCampaign(
