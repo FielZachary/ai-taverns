@@ -889,28 +889,6 @@ async function assertCampaignAccessForUser(
   }
 }
 
-async function touchActivePlayersForUser(
-  campaignId: string,
-  userId: string,
-  client?: PoolClient
-) {
-  const statement = `
-    update players
-    set last_seen_at = now()
-    where campaign_id = $1
-      and user_id = $2
-      and status = 'active'
-  `;
-  const values = [campaignId, userId];
-
-  if (client) {
-    await client.query(statement, values);
-    return;
-  }
-
-  await query(statement, values);
-}
-
 async function getActivePlayerForUser(
   campaignId: string,
   userId: string,
@@ -2356,8 +2334,6 @@ export async function getRoom(roomId: string, sessionId: string, userId: string)
   } else {
     await assertCampaignAccessForUser(campaign, userId);
   }
-
-  await touchActivePlayersForUser(campaign.id, userId);
 
   return buildSnapshot(campaign);
 }

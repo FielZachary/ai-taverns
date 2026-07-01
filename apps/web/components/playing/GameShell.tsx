@@ -39,6 +39,7 @@ import { PlayerInput, type DiceFace, type QueuedDice } from "./PlayerInput";
 const openingMessages: GameMessage[] = [];
 const playerIdStorageKey = "ai-dnd.playerId";
 const maxPlayers = 4;
+const roomRequestTimeoutMs = 8_000;
 
 type CampaignMode = "single_player" | "multiplayer";
 
@@ -557,6 +558,24 @@ function updateCampaignPreview(
   );
 }
 
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+  timeoutMs = roomRequestTimeoutMs
+) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: controller.signal
+    });
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
 export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
   const [messages, setMessages] = useState<GameMessage[]>(openingMessages);
   const [availableCampaigns, setAvailableCampaigns] = useState<CampaignSummary[]>([]);
@@ -589,6 +608,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     useState<ActiveDiceReveal | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const roomPollInFlightRef = useRef(false);
+  const playerRegistrationInFlightRef = useRef(false);
 
   const activeCampaign = useMemo(
     () =>
@@ -904,27 +924,37 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
         return;
       }
 
-      const response = await fetch("/api/room/player", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          roomId: activeCampaign.id,
-          sessionId: activeCampaign.hermesSessionId,
-          playerId,
-          username: profile.username,
-          characterName: profile.characterName,
-          characterSheet: profile.characterSheet
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error("Room registration failed.");
+      if (playerRegistrationInFlightRef.current) {
+        return;
       }
 
-      const room = (await response.json()) as RoomSnapshot;
-      applyRoomSnapshot(room);
+      playerRegistrationInFlightRef.current = true;
+
+      try {
+        const response = await fetchWithTimeout("/api/room/player", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            roomId: activeCampaign.id,
+            sessionId: activeCampaign.hermesSessionId,
+            playerId,
+            username: profile.username,
+            characterName: profile.characterName,
+            characterSheet: profile.characterSheet
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error("Room registration failed.");
+        }
+
+        const room = (await response.json()) as RoomSnapshot;
+        applyRoomSnapshot(room);
+      } finally {
+        playerRegistrationInFlightRef.current = false;
+      }
     },
     [activeCampaign, applyRoomSnapshot, isSinglePlayer, playerId]
   );
@@ -981,7 +1011,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
       roomPollInFlightRef.current = true;
 
       try {
-        const response = await fetch(
+        const response = await fetchWithTimeout(
           `/api/room?roomId=${encodeURIComponent(
             activeCampaign.id
           )}&sessionId=${encodeURIComponent(activeCampaign.hermesSessionId)}`,
