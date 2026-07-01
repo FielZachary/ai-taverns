@@ -1,12 +1,15 @@
 "use client";
 
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Bot, Bug, Sparkles, UserRound, X } from "lucide-react";
+import { Bot, Bug, RefreshCcw, Sparkles, UserRound, X } from "lucide-react";
 import type { AiDebugInfo, GameMessage } from "@/lib/game-types";
 
 type MessageLogProps = {
   messages: GameMessage[];
   isSending: boolean;
+  regeneratingMessageId?: string | null;
+  regeneratableMessageId?: string | null;
+  onRegenerateResponse?: (messageId: string) => void;
 };
 
 function MessageBody({ content }: { content: string }) {
@@ -83,7 +86,13 @@ function MessageDebugModal({
   );
 }
 
-export function MessageLog({ messages, isSending }: MessageLogProps) {
+export function MessageLog({
+  messages,
+  isSending,
+  regeneratingMessageId,
+  regeneratableMessageId,
+  onRegenerateResponse
+}: MessageLogProps) {
   const logRef = useRef<HTMLDivElement>(null);
   const [openDebug, setOpenDebug] = useState<AiDebugInfo | null>(null);
   const scrollKey = useMemo(
@@ -130,16 +139,33 @@ export function MessageLog({ messages, isSending }: MessageLogProps) {
                     ? "Dungeon Master"
                     : "Table"}
               </p>
-              {message.role === "dm" && message.debug ? (
-                <button
-                  type="button"
-                  className="message-debug-button"
-                  onClick={() => setOpenDebug(message.debug ?? null)}
-                  aria-label="Show AI debug details"
-                  title="Show AI debug details"
-                >
-                  <Bug size={15} />
-                </button>
+              {message.role === "dm" &&
+              (message.debug || message.id === regeneratableMessageId) ? (
+                <div className="message-actions">
+                  {message.debug ? (
+                    <button
+                      type="button"
+                      className="message-action-button"
+                      onClick={() => setOpenDebug(message.debug ?? null)}
+                      aria-label="Show AI debug details"
+                      title="Show AI debug details"
+                    >
+                      <Bug size={15} />
+                    </button>
+                  ) : null}
+                  {message.id === regeneratableMessageId ? (
+                    <button
+                      type="button"
+                      className="message-action-button"
+                      onClick={() => onRegenerateResponse?.(message.id)}
+                      disabled={isSending || regeneratingMessageId === message.id}
+                      aria-label="Regenerate AI response"
+                      title="Regenerate AI response"
+                    >
+                      <RefreshCcw size={15} />
+                    </button>
+                  ) : null}
+                </div>
               ) : null}
             </div>
             <MessageBody content={message.content} />

@@ -562,6 +562,9 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
   const [availableCampaigns, setAvailableCampaigns] = useState<CampaignSummary[]>([]);
   const [draft, setDraft] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [regeneratingMessageId, setRegeneratingMessageId] = useState<
+    string | null
+  >(null);
   const [isLoadingCampaigns, setIsLoadingCampaigns] = useState(true);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isCreatingChat] = useState(false);
@@ -666,6 +669,13 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
         Date.parse(firstMessage.createdAt) - Date.parse(secondMessage.createdAt)
     );
   }, [messages, roomMessages]);
+  const regeneratableMessageId = useMemo(() => {
+    const latestDmMessage = [...visibleMessages]
+      .reverse()
+      .find((message) => message.role === "dm");
+
+    return latestDmMessage?.id ?? null;
+  }, [visibleMessages]);
 
   const canBeginAdventure =
     Boolean(activeCampaign) &&
@@ -1363,6 +1373,70 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     }
   }
 
+  async function handleRegenerateResponse(messageId: string) {
+    if (!activeCampaign || isSending || regeneratingMessageId) {
+      return;
+    }
+
+    setRegeneratingMessageId(messageId);
+    setIsSending(true);
+    setInputValidationMessage("");
+
+    try {
+      const response = await fetch(
+        `/api/campaigns/${encodeURIComponent(activeCampaign.id)}/regenerate`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ messageId })
+        }
+      );
+
+      if (!response.ok) {
+        const message = await getApiErrorMessage(
+          response,
+          "The dungeon master could not regenerate that response."
+        );
+        throw new Error(message);
+      }
+
+      const room = (await response.json()) as RoomSnapshot;
+      applyRoomSnapshot(room);
+
+      if (isSinglePlayer) {
+        setMessages(room.messages.length > 0 ? room.messages : openingMessages);
+      }
+
+      const latestMessage = room.messages[room.messages.length - 1];
+      setAvailableCampaigns((currentCampaigns) =>
+        updateCampaignPreview(
+          currentCampaigns,
+          activeCampaign.id,
+          latestMessage?.content ?? ""
+        )
+      );
+    } catch (error) {
+      setMessages((currentMessages) => [
+        ...currentMessages,
+        {
+          id: createClientId(),
+          role: "system",
+          content:
+            error instanceof Error
+              ? error.message
+              : "The dungeon master could not regenerate that response.",
+          createdAt: new Date().toISOString()
+        }
+      ]);
+    } finally {
+      setRegeneratingMessageId(null);
+      setIsSending(false);
+      inputRef.current?.focus();
+    }
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     void sendTurn(draft);
@@ -1623,6 +1697,11 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
             <MessageLog
               messages={visibleMessages}
               isSending={isSending || isLoadingMessages || isRoomResolving}
+              regeneratingMessageId={regeneratingMessageId}
+              regeneratableMessageId={regeneratableMessageId}
+              onRegenerateResponse={(messageId) =>
+                void handleRegenerateResponse(messageId)
+              }
             />
 
             {!isSinglePlayer ? (

@@ -1047,6 +1047,68 @@ async function getTurnSubmissions(turnId: string) {
   return result.rows;
 }
 
+async function getTurnSubmissionsForRegeneration(
+  client: PoolClient,
+  turnId: string
+) {
+  const result = await client.query<
+    SubmissionRow & { character_sheet: string | null; slot: number | null }
+  >(
+    `
+      select
+        submissions.player_id,
+        players.client_id,
+        players.username,
+        players.character_name,
+        players.character_sheet,
+        players.slot,
+        submissions.content,
+        submissions.created_at
+      from submissions
+      left join players on players.id = submissions.player_id
+      where submissions.turn_id = $1
+        and submissions.status in ('submitted', 'included_in_turn')
+      order by submissions.created_at asc
+    `,
+    [turnId]
+  );
+
+  return result.rows;
+}
+
+function playerRowsFromSubmissions(
+  submissions: Array<
+    SubmissionRow & { character_sheet: string | null; slot: number | null }
+  >
+) {
+  const players = new Map<string, PlayerRow>();
+
+  submissions.forEach((submission) => {
+    if (
+      !submission.player_id ||
+      !submission.client_id ||
+      !submission.username ||
+      !submission.character_name
+    ) {
+      return;
+    }
+
+    players.set(submission.player_id, {
+      id: submission.player_id,
+      client_id: submission.client_id,
+      user_id: null,
+      username: submission.username,
+      character_name: submission.character_name,
+      character_sheet: submission.character_sheet ?? "",
+      slot: submission.slot,
+      status: "active",
+      last_seen_at: new Date()
+    });
+  });
+
+  return Array.from(players.values());
+}
+
 async function getCampaignEventMessages(
   campaignId: string,
   limit = 30
@@ -2682,6 +2744,200 @@ export async function submitRoomTurn(
   );
 
   return buildSnapshot(updatedCampaign ?? submissionState.campaign);
+}
+
+export async function regenerateCampaignResponse(
+  campaignId: string,
+  messageId: string,
+  userId: string
+) {
+  const regenerationState = await withTransaction(async (client) => {
+    const campaign = (
+      await client.query<CampaignRow>(
+        `
+          select *
+          from campaigns
+          where id = $1 and status = 'active'
+          limit 1
+        `,
+        [campaignId]
+      )
+    ).rows[0];
+
+    if (!campaign) {
+      throw new HttpError("Campaign not found.", 404);
+    }
+
+    await assertCampaignAccessForUser(campaign, userId, client);
+
+    const latestVisibleEvent = (
+      await client.query<EventRow>(
+        `
+          select id, type, payload, created_at
+          from campaign_events
+          where campaign_id = $1
+            and type in ('turn_submitted', 'turn_resolved', 'adventure_begun')
+          order by created_at desc
+          limit 1
+        `,
+        [campaign.id]
+      )
+    ).rows[0];
+
+    const latestPayload = eventPayload(latestVisibleEvent?.payload);
+
+    if (
+      !latestVisibleEvent ||
+      (latestVisibleEvent.type !== "turn_resolved" &&
+        latestVisibleEvent.type !== "adventure_begun") ||
+      latestPayload.role !== "dm" ||
+      latestPayload.messageId !== messageId
+    ) {
+      throw new HttpError("Only the latest DM response can be regenerated.", 409);
+    }
+
+    const eventType: "turn_resolved" | "adventure_begun" =
+      latestVisibleEvent.type === "adventure_begun"
+        ? "adventure_begun"
+        : "turn_resolved";
+    const turnId = metadataString(latestPayload.turnId);
+
+    if (!turnId) {
+      throw new HttpError("That response is missing turn information.", 409);
+    }
+
+    const resolvingTurn = (
+      await client.query<TurnRow>(
+        `
+          update turns
+          set status = 'resolving', error = null, updated_at = now()
+          where id = $1
+            and campaign_id = $2
+            and status in ('resolved', 'failed')
+          returning *
+        `,
+        [turnId, campaign.id]
+      )
+    ).rows[0];
+
+    if (!resolvingTurn) {
+      throw new HttpError("That response cannot be regenerated right now.", 409);
+    }
+
+    await client.query(
+      `
+        update submissions
+        set status = 'submitted', updated_at = now()
+        where turn_id = $1 and status = 'included_in_turn'
+      `,
+      [turnId]
+    );
+    await client.query("delete from campaign_events where id = $1", [
+      latestVisibleEvent.id
+    ]);
+    await logCampaignEvent(client, campaign.id, "turn_resolving", {
+      turnId,
+      reason: "regenerate_response",
+      replacedMessageId: messageId
+    });
+    await setPendingRollRequests(client, campaign.id, []);
+    await setPendingInputTargets(client, campaign.id, [], "all_players");
+
+    if (eventType === "adventure_begun") {
+      const players = await getActivePlayers(campaign.id);
+
+      if (players.length === 0) {
+        throw new HttpError("No player characters are available.", 409);
+      }
+
+      return {
+        campaign,
+        currentAction: formatOpeningSceneRequest({
+          mode: campaign.mode,
+          players,
+          style: campaignOpeningStyleFromMetadata(campaign)
+        }),
+        eventType,
+        instructions: openingSceneInstructions(campaign.mode),
+        turn: resolvingTurn
+      };
+    }
+
+    const submissions = await getTurnSubmissionsForRegeneration(
+      client,
+      resolvingTurn.id
+    );
+    const players = playerRowsFromSubmissions(submissions);
+
+    if (submissions.length === 0 || players.length === 0) {
+      throw new HttpError("That turn is missing player input.", 409);
+    }
+
+    return {
+      campaign,
+      currentAction:
+        campaign.mode === "single_player"
+          ? formatSoloTurn(players[0], submissions[0].content)
+          : formatCombinedTurn(players, submissions),
+      eventType,
+      instructions: dungeonMasterInstructions,
+      turn: resolvingTurn
+    };
+  });
+
+  try {
+    const reply = await askDungeonMaster(
+      regenerationState.campaign,
+      regenerationState.currentAction,
+      regenerationState.instructions,
+      true,
+      regenerationState.turn.id
+    );
+    const resolvedTurn = await finishResolvedTurn(
+      regenerationState.campaign.id,
+      regenerationState.turn.id,
+      reply.id,
+      reply.content,
+      regenerationState.eventType,
+      reply.rollRequests,
+      reply.inputTargets,
+      reply.inputPolicy,
+      reply.setting,
+      reply.debug
+    );
+
+    schedulePostTurnContextJobs({
+      campaignId: regenerationState.campaign.id,
+      turnId: regenerationState.turn.id,
+      currentAction: regenerationState.currentAction,
+      dmResponse: reply.content,
+      dmEventId: resolvedTurn.dmEventId,
+      rollRequests: reply.rollRequests
+    });
+  } catch (error) {
+    await markTurnFailed(regenerationState.turn.id, error);
+    await query(
+      `
+        insert into campaign_events (campaign_id, type, payload)
+        values ($1, 'turn_failed', $2::jsonb)
+      `,
+      [
+        regenerationState.campaign.id,
+        JSON.stringify({
+          turnId: regenerationState.turn.id,
+          error: error instanceof Error ? error.message : "DM provider call failed."
+        })
+      ]
+    );
+    throw error;
+  }
+
+  const updatedCampaign = await resolveCampaign(
+    regenerationState.campaign.id,
+    regenerationState.campaign.hermes_session_id
+  );
+
+  return buildSnapshot(updatedCampaign ?? regenerationState.campaign);
 }
 
 export async function submitSoloTurn(

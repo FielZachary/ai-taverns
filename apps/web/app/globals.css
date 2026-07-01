@@ -1784,7 +1784,14 @@ h1 {
   font-weight: 800;
 }
 
-.message-debug-button {
+.message-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.message-action-button {
   display: grid;
   flex: 0 0 auto;
   width: 30px;
@@ -1796,11 +1803,16 @@ h1 {
   background: rgba(17, 13, 10, 0.42);
 }
 
-.message-debug-button:hover,
-.message-debug-button:focus-visible {
+.message-action-button:hover,
+.message-action-button:focus-visible {
   color: var(--gold-bright);
   border-color: rgba(244, 207, 122, 0.58);
   background: rgba(217, 169, 74, 0.12);
+}
+
+.message-action-button:disabled {
+  cursor: wait;
+  opacity: 0.48;
 }
 
 .message-body {
