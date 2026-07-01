@@ -24,12 +24,13 @@ export async function POST(request: Request) {
   const sessionId = body.sessionId?.trim() || "new-adventure";
   const roomId = body.roomId?.trim() || sessionId;
 
-  if (!playerId || !username || !characterName || !characterSheet) {
-    return jsonError("Player profile is incomplete.", 400);
-  }
-
   try {
     const user = await requireUser();
+
+    if (!playerId || !username || !characterName || !characterSheet) {
+      return jsonError("Player profile is incomplete.", 400);
+    }
+
     return NextResponse.json(
       await registerRoomPlayer(
         roomId,
