@@ -106,8 +106,11 @@ type PendingRollBatch = {
   requests: DiceRollRequest[];
   expression: string;
   notation: string;
-  sides: number;
-  rollCount: number;
+  entries: {
+    request: DiceRollRequest;
+    count: number;
+    sides: number;
+  }[];
 };
 
 function getMissingPlayerProfileFields(profile: PlayerProfile) {
@@ -310,6 +313,73 @@ function diceNotationFromQueue(queuedDice: QueuedDice) {
     .join("+");
 }
 
+function diceFaceFromSides(sides: number): DiceFace | null {
+  const face = `d${sides}` as DiceFace;
+
+  return ["d4", "d6", "d8", "d10", "d12", "d20"].includes(face)
+    ? face
+    : null;
+}
+
+function diceExpressionFromBatchEntries(
+  entries: PendingRollBatch["entries"],
+  separator = " + "
+) {
+  const groups: { count: number; sides: number }[] = [];
+
+  entries.forEach((entry) => {
+    const previousGroup = groups[groups.length - 1];
+
+    if (previousGroup?.sides === entry.sides) {
+      previousGroup.count += entry.count;
+      return;
+    }
+
+    groups.push({
+      count: entry.count,
+      sides: entry.sides
+    });
+  });
+
+  return groups
+    .map((group) => diceExpression(group.count, group.sides))
+    .join(separator);
+}
+
+function requiredDiceQueueFromRequests(pendingRequests: DiceRollRequest[]) {
+  const queuedDice: QueuedDice = {};
+  const entries: PendingRollBatch["entries"] = [];
+
+  for (const request of pendingRequests) {
+    const parsed = parseSimpleDiceExpression(request.dice);
+    const face = parsed ? diceFaceFromSides(parsed.sides) : null;
+
+    if (!parsed || !face) {
+      return null;
+    }
+
+    queuedDice[face] = (queuedDice[face] ?? 0) + parsed.count;
+    entries.push({
+      request,
+      count: parsed.count,
+      sides: parsed.sides
+    });
+  }
+
+  return {
+    queuedDice,
+    entries,
+    expression: diceExpressionFromBatchEntries(entries),
+    notation: diceExpressionFromBatchEntries(entries, "+")
+  };
+}
+
+function diceQueuesMatch(left: QueuedDice, right: QueuedDice) {
+  const faces: DiceFace[] = ["d4", "d6", "d8", "d10", "d12", "d20"];
+
+  return faces.every((face) => (left[face] ?? 0) === (right[face] ?? 0));
+}
+
 function predeterminedDiceNotation(dice: string, rolls: number[]) {
   return `${dice.replace(/\s+/g, "")}@${rolls.join(",")}`;
 }
@@ -354,95 +424,43 @@ function pendingRollBatchFromQueue(
   queuedDice: QueuedDice,
   pendingRequests: DiceRollRequest[]
 ): PendingRollBatch | null {
-  const queuedEntries = queuedDiceEntries(queuedDice);
+  const requiredDice = requiredDiceQueueFromRequests(pendingRequests);
 
-  if (queuedEntries.length !== 1) {
+  if (!requiredDice || !diceQueuesMatch(queuedDice, requiredDice.queuedDice)) {
     return null;
   }
 
-  const queuedEntry = queuedEntries[0];
-  const queuedSides = Number(queuedEntry.face.slice(1));
-  const queuedRollCount = queuedEntry.count;
-  const requests: DiceRollRequest[] = [];
-  let rollCount = 0;
-
-  for (const request of pendingRequests) {
-    const parsed = parseSimpleDiceExpression(request.dice);
-
-    if (!parsed || parsed.sides !== queuedSides) {
-      break;
-    }
-
-    if (rollCount + parsed.count > queuedRollCount) {
-      break;
-    }
-
-    requests.push(request);
-    rollCount += parsed.count;
-
-    if (rollCount === queuedRollCount) {
-      const expression = diceExpression(rollCount, queuedSides);
-
-      return {
-        requests,
-        expression,
-        notation: expression,
-        sides: queuedSides,
-        rollCount
-      };
-    }
-  }
-
-  return null;
+  return {
+    requests: pendingRequests,
+    expression: requiredDice.expression,
+    notation: requiredDice.notation,
+    entries: requiredDice.entries
+  };
 }
 
 function expectedPendingRollExpression(pendingRequests: DiceRollRequest[]) {
-  const firstRequest = pendingRequests[0];
-  const firstParsed = firstRequest
-    ? parseSimpleDiceExpression(firstRequest.dice)
-    : null;
+  const requiredDice = requiredDiceQueueFromRequests(pendingRequests);
 
-  if (!firstRequest || !firstParsed) {
-    return firstRequest?.dice ?? "the required dice";
-  }
-
-  let rollCount = 0;
-
-  for (const request of pendingRequests) {
-    const parsed = parseSimpleDiceExpression(request.dice);
-
-    if (!parsed || parsed.sides !== firstParsed.sides) {
-      break;
-    }
-
-    rollCount += parsed.count;
-  }
-
-  return diceExpression(rollCount, firstParsed.sides);
+  return requiredDice?.expression ?? pendingRequests[0]?.dice ?? "the required dice";
 }
 
 function rollPendingBatch(batch: PendingRollBatch, clientMessageId: string) {
-  const rolls = Array.from(
-    { length: batch.rollCount },
-    () => Math.floor(Math.random() * batch.sides) + 1
-  );
-  let rollOffset = 0;
-  const rollSubmissions: DiceRollSubmission[] = batch.requests.map((request) => {
-    const parsed = parseSimpleDiceExpression(request.dice);
-    const requestRolls = rolls.slice(
-      rollOffset,
-      rollOffset + (parsed?.count ?? 0)
+  const rolls: number[] = [];
+  const rollSubmissions: DiceRollSubmission[] = batch.entries.map((entry) => {
+    const requestRolls = Array.from(
+      { length: entry.count },
+      () => Math.floor(Math.random() * entry.sides) + 1
     );
 
-    rollOffset += parsed?.count ?? 0;
+    rolls.push(...requestRolls);
 
     return {
-      rollRequestId: request.id,
+      rollRequestId: entry.request.id,
       rollResult: {
         rolls: requestRolls,
         total: requestRolls.reduce(
           (sum, roll) => sum + roll,
-          request.modifier ?? 0
+          entry.request.modifier ?? 0
         )
       },
       clientMessageId
@@ -556,6 +574,10 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     [currentRoomPlayer, isSinglePlayer, pendingRollRequests, playerProfile]
   );
   const currentPendingRollRequest = currentPendingRollRequests[0] ?? null;
+  const currentRequiredRollDice = useMemo(
+    () => requiredDiceQueueFromRequests(currentPendingRollRequests),
+    [currentPendingRollRequests]
+  );
   const isWaitingOnAnotherPlayerRoll =
     !isSinglePlayer &&
     pendingRollRequests.length > 0 &&
@@ -1659,7 +1681,10 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
               }
               lockMessage={
                 currentPendingRollRequest
-                  ? `Roll required: ${currentPendingRollRequest.label}`
+                  ? `Roll required: ${
+                      currentRequiredRollDice?.expression ??
+                      currentPendingRollRequest.label
+                    }`
                   : isWaitingOnAnotherPlayerRoll
                     ? "Waiting on another player's roll"
                     : isWaitingOnTargetedInput
@@ -1669,6 +1694,8 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
                   : undefined
               }
               requiredRoll={currentPendingRollRequest}
+              requiredRollExpression={currentRequiredRollDice?.expression}
+              requiredQueuedDice={currentRequiredRollDice?.queuedDice}
               validationMessage={inputValidationMessage}
               validationPulse={inputValidationPulse}
               onDraftChange={setDraft}

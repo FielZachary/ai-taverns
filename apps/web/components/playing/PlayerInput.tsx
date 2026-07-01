@@ -18,6 +18,8 @@ type PlayerInputProps = {
   isSubmitted: boolean;
   lockMessage?: string;
   requiredRoll?: DiceRollRequest | null;
+  requiredRollExpression?: string;
+  requiredQueuedDice?: QueuedDice | null;
   validationMessage?: string;
   validationPulse: number;
   onDraftChange: (value: string) => void;
@@ -39,6 +41,8 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
       isSubmitted,
       lockMessage,
       requiredRoll,
+      requiredRollExpression,
+      requiredQueuedDice,
       validationMessage,
       validationPulse,
       onDraftChange,
@@ -96,6 +100,14 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
     const isRollRequired = Boolean(requiredRoll);
     const queuedCount = useMemo(() => queuedDiceTotal(queuedDice), [queuedDice]);
 
+    useEffect(() => {
+      if (!isRollRequired) {
+        return;
+      }
+
+      setQueuedDice(requiredQueuedDice ?? {});
+    }, [isRollRequired, requiredRoll?.id, requiredRollExpression, requiredQueuedDice]);
+
     function incrementDie(face: DiceFace) {
       setQueuedDice((currentDice) => ({
         ...currentDice,
@@ -135,13 +147,21 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
           <button
             className="dice-roll-button"
             type="button"
-            aria-label={requiredRoll ? `Roll ${requiredRoll.dice}` : "Open dice roller"}
+            aria-label={
+              requiredRoll
+                ? `Roll ${requiredRollExpression ?? requiredRoll.dice}`
+                : "Open dice roller"
+            }
             aria-expanded={isDicePickerOpen}
             disabled={(isLocked && !isRollRequired) || isSending}
             onClick={() => setIsDicePickerOpen((isOpen) => !isOpen)}
           >
             <Dice5 size={22} />
-            <span>{queuedCount > 0 ? `${queuedCount} dice` : requiredRoll?.dice ?? "dice"}</span>
+            <span>
+              {queuedCount > 0
+                ? `${queuedCount} dice`
+                : requiredRollExpression ?? requiredRoll?.dice ?? "dice"}
+            </span>
           </button>
           {isDicePickerOpen ? (
             <div className="dice-picker-popover" role="dialog" aria-label="Dice roller">
