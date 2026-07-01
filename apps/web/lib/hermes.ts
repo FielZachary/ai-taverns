@@ -167,27 +167,13 @@ function currentActionIsRollSubmission(currentAction: string | undefined) {
   return /\bI rolled\b/i.test(currentAction ?? "");
 }
 
-function playerDeclaredActionText(currentAction: string | undefined) {
-  const text = currentAction ?? "";
-  const markerMatch = text.match(/Current player actions?:/i);
-  const scopedText = markerMatch ? text.slice(markerMatch.index) : text;
-  const actionLines = scopedText
-    .split(/\n+/)
-    .map((line) => line.trim())
-    .filter((line) => /^-\s+.+:\s*\S/.test(line) || /^[^:\n]+ \([^)]+\):\s*\S/.test(line));
-
-  return actionLines.length > 0 ? actionLines.join("\n") : scopedText;
-}
-
 function currentActionRequiresCombatRoll(currentAction: string | undefined) {
   if (!currentAction || currentActionIsRollSubmission(currentAction)) {
     return false;
   }
 
-  const declaredAction = playerDeclaredActionText(currentAction);
-
   return /\b(attack|attacks|strike|strikes|stab|stabs|shoot|shoots|fireball|fire bolt|magic missile|cast|casts|spell|rapier|sword|bow|axe|dagger)\b/i.test(
-    declaredAction
+    currentAction
   );
 }
 
