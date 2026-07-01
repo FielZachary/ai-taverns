@@ -16,9 +16,7 @@ import {
   runPostTurnContextJobs
 } from "@/lib/prompt-context";
 import {
-  combatRollCorrectionMessage,
   dungeonMasterInstructions,
-  isCombatRollContractError,
   normalizeRollRequest,
   normalizeRollRequests,
   openingSceneRequest,
@@ -1283,31 +1281,33 @@ async function askDungeonMaster(
   let providerResponse = providerData;
   let contract;
 
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      contract = parseHermesDmContract(providerResponse.content, {
-        currentAction: message
-      });
-      break;
-    } catch (error) {
-      if (!isCombatRollContractError(error) || attempt >= 2) {
-        throw error;
-      }
-
-      providerResponse = await askDungeonMasterProvider({
-        message: combatRollCorrectionMessage(promptContext?.message ?? message),
-        instructions: promptContext?.instructions ?? instructions,
-        history: includeHistory && !promptContext
-          ? await getCampaignEventMessages(campaign.id)
-          : []
-      });
+  try {
+    contract = parseHermesDmContract(providerResponse.content, {
+      currentAction: message
+    });
+  } catch (error) {
+    if (
+      !(error instanceof Error) ||
+      !error.message.includes("resolved a player combat action")
+    ) {
+      throw error;
     }
-  }
 
-  if (!contract) {
-    throw new Error("The DM provider did not return a valid turn contract.");
+    providerResponse = await askDungeonMasterProvider({
+      message: [
+        promptContext?.message ?? message,
+        "",
+        "Your previous response resolved a player attack, spell, or damage outcome before collecting dice. Rewrite the same turn as valid AI Taverns JSON. Stop before the outcome is resolved, set `next_input_needed` to `dice_results`, and include every required attack, saving throw, and damage roll in `roll_requests`."
+      ].join("\n"),
+      instructions: promptContext?.instructions ?? instructions,
+      history: includeHistory && !promptContext
+        ? await getCampaignEventMessages(campaign.id)
+        : []
+    });
+    contract = parseHermesDmContract(providerResponse.content, {
+      currentAction: message
+    });
   }
-
   const reply = contract.publicNarration;
 
   if (!reply) {
