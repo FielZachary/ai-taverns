@@ -203,18 +203,73 @@ function rollInstructionsFromRequests(requests: DiceRollRequest[]) {
   return `${instructions.slice(0, -1).join(", ")}, and ${lastInstruction}.`;
 }
 
+function sentencesFromParagraph(paragraph: string) {
+  const matches = paragraph.match(/[^.!?]+[.!?]+(?:['")\]]+)?|[^.!?]+$/g);
+  return (matches ?? [paragraph]).map((sentence) => sentence.trim()).filter(Boolean);
+}
+
+function paragraphizeFlatNarration(paragraph: string) {
+  const sentences = sentencesFromParagraph(paragraph);
+
+  if (sentences.length < 3) {
+    return paragraph;
+  }
+
+  const targetParagraphs = Math.min(4, Math.max(2, Math.ceil(sentences.length / 3)));
+  const sentencesPerParagraph = Math.ceil(sentences.length / targetParagraphs);
+  const paragraphs: string[] = [];
+
+  for (let index = 0; index < sentences.length; index += sentencesPerParagraph) {
+    paragraphs.push(sentences.slice(index, index + sentencesPerParagraph).join(" "));
+  }
+
+  return paragraphs.join("\n\n");
+}
+
+function normalizePublicNarrationParagraphs(publicNarration: string) {
+  const paragraphs = publicNarration
+    .trim()
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
+  if (paragraphs.length === 0) {
+    return "";
+  }
+
+  const normalizedParagraphs = paragraphs.flatMap((paragraph) => {
+    const withoutPrompt = paragraph.replace(/\s*What do you do\?\s*$/i, "").trim();
+
+    if (!withoutPrompt) {
+      return ["What do you do?"];
+    }
+
+    const paragraphText =
+      paragraphs.length === 1 ? paragraphizeFlatNarration(withoutPrompt) : withoutPrompt;
+    const splitParagraphs = paragraphText.split(/\n{2,}/).filter(Boolean);
+
+    return /What do you do\?\s*$/i.test(paragraph)
+      ? [...splitParagraphs, "What do you do?"]
+      : splitParagraphs;
+  });
+
+  return normalizedParagraphs.join("\n\n");
+}
+
 function narrationWithRollInstructions(
   publicNarration: string,
   rollRequests: DiceRollRequest[]
 ) {
+  const normalizedNarration = normalizePublicNarrationParagraphs(publicNarration);
+
   if (
     rollRequests.length === 0 ||
-    hasRollRequestDiceCoverage(publicNarration, rollRequests)
+    hasRollRequestDiceCoverage(normalizedNarration, rollRequests)
   ) {
-    return publicNarration;
+    return normalizedNarration;
   }
 
-  return `${publicNarration.trim()} ${rollInstructionsFromRequests(rollRequests)}`;
+  return `${normalizedNarration}\n\n${rollInstructionsFromRequests(rollRequests)}`;
 }
 
 export function normalizeRollRequest(value: unknown): DiceRollRequest | null {
