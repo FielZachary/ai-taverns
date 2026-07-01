@@ -1167,6 +1167,8 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     }
 
     setIsRoomResolving(true);
+    let failureMessage =
+      "The DM could not begin the adventure. Make sure at least two players have joined.";
 
     try {
       const response = await fetch("/api/room/begin", {
@@ -1181,7 +1183,17 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
       });
 
       if (!response.ok) {
-        throw new Error("The adventure could not begin.");
+        try {
+          const body = (await response.json()) as { error?: string };
+
+          if (body.error?.trim()) {
+            failureMessage = body.error;
+          }
+        } catch {
+          // Keep the default begin-adventure guidance when the server sends no JSON.
+        }
+
+        throw new Error(failureMessage);
       }
 
       const room = (await response.json()) as RoomSnapshot;
@@ -1195,8 +1207,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
         {
           id: createClientId(),
           role: "system",
-          content:
-            "The DM could not begin the adventure. Make sure at least two players have joined.",
+          content: failureMessage,
           createdAt: new Date().toISOString()
         }
       ]);

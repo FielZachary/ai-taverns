@@ -2504,7 +2504,7 @@ export async function beginRoomAdventure(
         `,
         [lockedCampaign.id]
       )
-    ).rows.filter(isPlayerRecentlySeen);
+    ).rows;
     const usablePlayers = players.filter(isProfileComplete);
 
     if (usablePlayers.length < 2) {
