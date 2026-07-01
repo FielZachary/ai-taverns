@@ -588,6 +588,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
   const [activeDiceReveal, setActiveDiceReveal] =
     useState<ActiveDiceReveal | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const roomPollInFlightRef = useRef(false);
 
   const activeCampaign = useMemo(
     () =>
@@ -717,8 +718,12 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
 
       if (currentPlayer?.status === "submitted" || room.isResolving) {
         setIsInputSubmitted(true);
+        if (currentPlayer?.status === "submitted") {
+          setIsSending(false);
+        }
       } else if (currentPlayer?.status === "waiting") {
         setIsInputSubmitted(false);
+        setIsSending(false);
       }
     },
     [playerId]
@@ -969,11 +974,18 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     let shouldIgnore = false;
 
     async function pollRoom() {
+      if (roomPollInFlightRef.current) {
+        return;
+      }
+
+      roomPollInFlightRef.current = true;
+
       try {
         const response = await fetch(
           `/api/room?roomId=${encodeURIComponent(
             activeCampaign.id
-          )}&sessionId=${encodeURIComponent(activeCampaign.hermesSessionId)}`
+          )}&sessionId=${encodeURIComponent(activeCampaign.hermesSessionId)}`,
+          { cache: "no-store" }
         );
 
         if (!response.ok) {
@@ -997,6 +1009,8 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
         if (!shouldIgnore) {
           setIsRoomResolving(false);
         }
+      } finally {
+        roomPollInFlightRef.current = false;
       }
     }
 
@@ -1308,6 +1322,15 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     setDraft("");
     setIsSending(true);
     setIsInputSubmitted(!isSinglePlayer);
+    if (!isSinglePlayer) {
+      setRoomPlayers((currentPlayers) =>
+        currentPlayers.map((roomPlayer) =>
+          roomPlayer.id === playerId
+            ? { ...roomPlayer, status: "submitted" }
+            : roomPlayer
+        )
+      );
+    }
     setAvailableCampaigns((currentCampaigns) =>
       updateCampaignPreview(currentCampaigns, activeCampaign.id, content)
     );
@@ -1707,7 +1730,11 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
 
             <MessageLog
               messages={visibleMessages}
-              isSending={isSending || isLoadingMessages || isRoomResolving}
+              isSending={
+                isLoadingMessages ||
+                isRoomResolving ||
+                (isSinglePlayer && isSending)
+              }
               regeneratingMessageId={regeneratingMessageId}
               regeneratableMessageId={regeneratableMessageId}
               onRegenerateResponse={(messageId) =>
