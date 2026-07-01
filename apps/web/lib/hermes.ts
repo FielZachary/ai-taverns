@@ -140,6 +140,23 @@ export type HermesDmContractParseOptions = {
   currentAction?: string;
 };
 
+export function isCombatRollContractError(error: unknown) {
+  return (
+    error instanceof Error &&
+    error.message.includes("resolved a player combat action")
+  );
+}
+
+export function combatRollCorrectionMessage(originalMessage: string) {
+  return [
+    originalMessage,
+    "",
+    "Your previous response resolved a player attack, spell, damage, death, or destruction outcome before the requested dice were answered. Rewrite the same turn as valid AI Taverns JSON.",
+    "If dice are needed, set `next_input_needed` to `dice_results` and include every required attack, saving throw, and damage roll in `roll_requests`.",
+    "The `public_narration` must be setup-only: do not say the attack hits, the spell detonates, creatures are damaged, bodies are burned, a target dies, eggs shatter, a nest is destroyed, or any similar outcome happens. Stop with the action in motion and the requested dice."
+  ].join("\n");
+}
+
 function mentionsPlayerFacingRoll(text: string) {
   return /\broll\s+(?:a\s+)?(?:d?\d|1d\d+|d20)|\bmake\s+(?:a|an)\s+[^.?!]*(?:check|saving throw|save)\b/i.test(
     text

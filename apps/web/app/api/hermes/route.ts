@@ -3,7 +3,9 @@ import type { HermesTurnRequest, HermesTurnResponse } from "@/lib/game-types";
 import { HttpError, requireUser } from "@/lib/auth";
 import { askDungeonMasterProvider } from "@/lib/dm-provider";
 import {
+  combatRollCorrectionMessage,
   dungeonMasterInstructions,
+  isCombatRollContractError,
   jsonError,
   parseHermesDmContract
 } from "@/lib/hermes";
@@ -22,13 +24,34 @@ export async function POST(request: Request) {
 
   try {
     await requireUser();
-    const providerData = await askDungeonMasterProvider({
+    let providerData = await askDungeonMasterProvider({
       message: playerMessage,
       instructions: dungeonMasterInstructions
     });
-    const contract = parseHermesDmContract(providerData.content, {
-      currentAction: playerMessage
-    });
+    let contract;
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        contract = parseHermesDmContract(providerData.content, {
+          currentAction: playerMessage
+        });
+        break;
+      } catch (error) {
+        if (!isCombatRollContractError(error) || attempt >= 2) {
+          throw error;
+        }
+
+        providerData = await askDungeonMasterProvider({
+          message: combatRollCorrectionMessage(playerMessage),
+          instructions: dungeonMasterInstructions
+        });
+      }
+    }
+
+    if (!contract) {
+      throw new Error("The DM provider did not return a valid turn contract.");
+    }
+
     const reply = contract.publicNarration;
 
     if (!reply) {
