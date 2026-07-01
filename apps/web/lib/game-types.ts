@@ -1,10 +1,23 @@
 export type GameMessageRole = "player" | "dm" | "system";
 
+export type AiDebugMessage = {
+  role: "system" | "user" | "assistant";
+  content: string;
+};
+
+export type AiDebugInfo = {
+  requestMessages: AiDebugMessage[];
+  rawResponse: string;
+  providerResponseId?: string;
+  model?: string;
+};
+
 export type GameMessage = {
   id: string;
   role: GameMessageRole;
   content: string;
   createdAt: string;
+  debug?: AiDebugInfo;
 };
 
 export type DiceRollRequest = {

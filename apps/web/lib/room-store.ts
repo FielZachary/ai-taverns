@@ -1,6 +1,7 @@
 import { randomInt } from "crypto";
 import type { PoolClient } from "pg";
 import type {
+  AiDebugInfo,
   DiceRollRequest,
   DiceRollResult,
   DiceRollSubmission,
@@ -242,6 +243,54 @@ function eventPayload(payload: unknown) {
   }
 
   return payload as Record<string, unknown>;
+}
+
+function aiDebugInfoFromPayload(value: unknown): AiDebugInfo | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const debug = value as Partial<AiDebugInfo>;
+
+  if (
+    !Array.isArray(debug.requestMessages) ||
+    typeof debug.rawResponse !== "string"
+  ) {
+    return undefined;
+  }
+
+  const requestMessages = debug.requestMessages
+    .map((message) => {
+      if (!message || typeof message !== "object") {
+        return null;
+      }
+
+      const candidate = message as Record<string, unknown>;
+      const role = candidate.role;
+      const content = candidate.content;
+
+      if (
+        (role !== "system" && role !== "user" && role !== "assistant") ||
+        typeof content !== "string"
+      ) {
+        return null;
+      }
+
+      return { role, content };
+    })
+    .filter((message): message is AiDebugInfo["requestMessages"][number] =>
+      Boolean(message)
+    );
+
+  return {
+    requestMessages,
+    rawResponse: debug.rawResponse,
+    providerResponseId:
+      typeof debug.providerResponseId === "string"
+        ? debug.providerResponseId
+        : undefined,
+    model: typeof debug.model === "string" ? debug.model : undefined
+  };
 }
 
 function metadataString(value: unknown) {
@@ -1139,6 +1188,7 @@ async function askDungeonMaster(
   return {
     id: providerData.id,
     content: reply,
+    debug: providerData.debug,
     rollRequests: contract.rollRequests,
     inputTargets: contract.inputTargets,
     inputPolicy: contract.inputPolicy,
@@ -1209,7 +1259,9 @@ async function buildSnapshot(campaign: CampaignRow): Promise<RoomSnapshot> {
         id: String(payload.messageId || event.id),
         role,
         content,
-        createdAt: toIso(event.created_at)
+        createdAt: toIso(event.created_at),
+        debug:
+          role === "dm" ? aiDebugInfoFromPayload(payload.aiDebug) : undefined
       };
     })
     .filter((message): message is GameMessage => message !== null);
@@ -1254,7 +1306,8 @@ async function finishResolvedTurn(
   pendingRollRequests: DiceRollRequest[] = [],
   inputTargets: string[] = [],
   inputPolicy: InputPolicy = "all_players",
-  setting?: CampaignSettingSummary
+  setting?: CampaignSettingSummary,
+  aiDebug?: AiDebugInfo
 ) {
   const currentPendingRollRequest = pendingRollRequests[0] ?? null;
   const settingPatch = settingMetadata(setting);
@@ -1287,7 +1340,8 @@ async function finishResolvedTurn(
       pendingRollRequest: currentPendingRollRequest,
       pendingRollRequests,
       inputTargets,
-      inputPolicy
+      inputPolicy,
+      aiDebug
     });
     if (eventType === "adventure_begun" && Object.keys(settingPatch).length > 0) {
       await client.query(
@@ -1364,7 +1418,9 @@ async function maybeResolveTurn(
       "turn_resolved",
       reply.rollRequests,
       reply.inputTargets,
-      reply.inputPolicy
+      reply.inputPolicy,
+      undefined,
+      reply.debug
     );
     schedulePostTurnContextJobs({
       campaignId: campaign.id,
@@ -1790,7 +1846,8 @@ export async function createCampaignForMode(input: {
       opening.rollRequests,
       opening.inputTargets,
       opening.inputPolicy,
-      opening.setting
+      opening.setting,
+      opening.debug
     );
     await query("update campaigns set has_begun = true where id = $1", [
       soloState.campaign.id
@@ -2405,7 +2462,8 @@ export async function beginRoomAdventure(
       reply.rollRequests,
       reply.inputTargets,
       reply.inputPolicy,
-      reply.setting
+      reply.setting,
+      reply.debug
     );
     schedulePostTurnContextJobs({
       campaignId: beginState.campaign.id,
@@ -2740,7 +2798,9 @@ export async function submitSoloTurn(
       "turn_resolved",
       reply.rollRequests,
       reply.inputTargets,
-      reply.inputPolicy
+      reply.inputPolicy,
+      undefined,
+      reply.debug
     );
     schedulePostTurnContextJobs({
       campaignId: soloState.campaign.id,
