@@ -26,7 +26,9 @@ export async function POST(request: Request) {
       message: playerMessage,
       instructions: dungeonMasterInstructions
     });
-    const contract = parseHermesDmContract(providerData.content);
+    const contract = parseHermesDmContract(providerData.content, {
+      currentAction: playerMessage
+    });
     const reply = contract.publicNarration;
 
     if (!reply) {

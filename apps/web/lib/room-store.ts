@@ -1278,7 +1278,36 @@ async function askDungeonMaster(
       ? await getCampaignEventMessages(campaign.id)
       : []
   });
-  const contract = parseHermesDmContract(providerData.content);
+  let providerResponse = providerData;
+  let contract;
+
+  try {
+    contract = parseHermesDmContract(providerResponse.content, {
+      currentAction: message
+    });
+  } catch (error) {
+    if (
+      !(error instanceof Error) ||
+      !error.message.includes("resolved a player combat action")
+    ) {
+      throw error;
+    }
+
+    providerResponse = await askDungeonMasterProvider({
+      message: [
+        promptContext?.message ?? message,
+        "",
+        "Your previous response resolved a player attack, spell, or damage outcome before collecting dice. Rewrite the same turn as valid AI Taverns JSON. Stop before the outcome is resolved, set `next_input_needed` to `dice_results`, and include every required attack, saving throw, and damage roll in `roll_requests`."
+      ].join("\n"),
+      instructions: promptContext?.instructions ?? instructions,
+      history: includeHistory && !promptContext
+        ? await getCampaignEventMessages(campaign.id)
+        : []
+    });
+    contract = parseHermesDmContract(providerResponse.content, {
+      currentAction: message
+    });
+  }
   const reply = contract.publicNarration;
 
   if (!reply) {
@@ -1286,9 +1315,9 @@ async function askDungeonMaster(
   }
 
   return {
-    id: providerData.id,
+    id: providerResponse.id,
     content: reply,
-    debug: providerData.debug,
+    debug: providerResponse.debug,
     rollRequests: contract.rollRequests,
     inputTargets: contract.inputTargets,
     inputPolicy: contract.inputPolicy,

@@ -136,9 +136,45 @@ function parseJsonObject(text: string) {
   }
 }
 
+export type HermesDmContractParseOptions = {
+  currentAction?: string;
+};
+
 function mentionsPlayerFacingRoll(text: string) {
   return /\broll\s+(?:a\s+)?(?:d?\d|1d\d+|d20)|\bmake\s+(?:a|an)\s+[^.?!]*(?:check|saving throw|save)\b/i.test(
     text
+  );
+}
+
+function currentActionIsRollSubmission(currentAction: string | undefined) {
+  return /\bI rolled\b/i.test(currentAction ?? "");
+}
+
+function currentActionRequiresCombatRoll(currentAction: string | undefined) {
+  if (!currentAction || currentActionIsRollSubmission(currentAction)) {
+    return false;
+  }
+
+  return /\b(attack|attacks|strike|strikes|stab|stabs|shoot|shoots|fireball|fire bolt|magic missile|cast|casts|spell|rapier|sword|bow|axe|dagger)\b/i.test(
+    currentAction
+  );
+}
+
+function resolvesCombatOutcome(publicNarration: string) {
+  return /\b(hit|hits|struck|stabbed|wound|wounds|wounded|damage|damages|damaged|detonate|detonates|detonated|engulf|engulfs|engulfed|burn|burns|burned|blackened|split|destroy|destroys|destroyed|kill|kills|killed|dead|dies|death|goes still|convulses)\b/i.test(
+    publicNarration
+  );
+}
+
+function resolvesRequiredCombatRollWithoutRolls(
+  publicNarration: string,
+  rollRequests: DiceRollRequest[],
+  options: HermesDmContractParseOptions | undefined
+) {
+  return (
+    rollRequests.length === 0 &&
+    currentActionRequiresCombatRoll(options?.currentAction) &&
+    resolvesCombatOutcome(publicNarration)
   );
 }
 
@@ -325,7 +361,8 @@ export type HermesDmContractResponse = {
 };
 
 export function parseHermesDmContract(
-  content: string | undefined
+  content: string | undefined,
+  options?: HermesDmContractParseOptions
 ): HermesDmContractResponse {
   const parsed = parseJsonObject(content?.trim() ?? "");
 
@@ -375,6 +412,14 @@ export function parseHermesDmContract(
   if (rollRequests.length === 0 && mentionsPlayerFacingRoll(publicNarration)) {
     throw new Error(
       "The DM provider mentioned a player-facing roll without structured roll_requests."
+    );
+  }
+
+  if (
+    resolvesRequiredCombatRollWithoutRolls(publicNarration, rollRequests, options)
+  ) {
+    throw new Error(
+      "The DM provider resolved a player combat action without structured roll_requests."
     );
   }
 
