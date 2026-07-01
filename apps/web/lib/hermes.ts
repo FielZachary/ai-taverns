@@ -161,7 +161,7 @@ function currentActionRequiresCombatRoll(currentAction: string | undefined) {
 }
 
 function resolvesCombatOutcome(publicNarration: string) {
-  return /\b(hit|hits|struck|stabbed|wound|wounds|wounded|damage|damages|damaged|detonate|detonates|detonated|engulf|engulfs|engulfed|consume|consumes|consumed|burn|burns|burned|blackened|split|shatter|shatters|shattered|destroy|destroys|destroyed|kill|kills|killed|dead|dies|death|unmoving|goes still|convulses|drives? .{0,40} deep)\b/i.test(
+  return /\b(hit|hits|struck|stabbed|wound|wounds|wounded|damage|damages|damaged|detonate|detonates|detonated|engulf|engulfs|engulfed|burn|burns|burned|blackened|split|destroy|destroys|destroyed|kill|kills|killed|dead|dies|death|goes still|convulses)\b/i.test(
     publicNarration
   );
 }
@@ -174,19 +174,6 @@ function resolvesRequiredCombatRollWithoutRolls(
   return (
     rollRequests.length === 0 &&
     currentActionRequiresCombatRoll(options?.currentAction) &&
-    resolvesCombatOutcome(publicNarration)
-  );
-}
-
-function resolvesPendingCombatRolls(
-  publicNarration: string,
-  rollRequests: DiceRollRequest[],
-  options: HermesDmContractParseOptions | undefined
-) {
-  return (
-    rollRequests.length > 0 &&
-    currentActionRequiresCombatRoll(options?.currentAction) &&
-    !currentActionIsRollSubmission(options?.currentAction) &&
     resolvesCombatOutcome(publicNarration)
   );
 }
@@ -422,12 +409,6 @@ export function parseHermesDmContract(
     );
   }
 
-  if (rollRequests.length > 0 && nextInputNeeded !== "dice_results") {
-    throw new Error(
-      "The DM provider returned structured roll_requests without requesting dice_results."
-    );
-  }
-
   if (rollRequests.length === 0 && mentionsPlayerFacingRoll(publicNarration)) {
     throw new Error(
       "The DM provider mentioned a player-facing roll without structured roll_requests."
@@ -439,12 +420,6 @@ export function parseHermesDmContract(
   ) {
     throw new Error(
       "The DM provider resolved a player combat action without structured roll_requests."
-    );
-  }
-
-  if (resolvesPendingCombatRolls(publicNarration, rollRequests, options)) {
-    throw new Error(
-      "The DM provider resolved a player combat action before pending roll_requests were answered."
     );
   }
 
