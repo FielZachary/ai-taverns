@@ -13,6 +13,9 @@
     "hermes:secure-bridge": "bash scripts/start-hermes-secure-bridge.sh",
     "lint": "npm run lint -w @ai-dnd/web"
   },
+  "overrides": {
+    "postcss": "^8.5.10"
+  },
   "dependencies": {
     "pg": "^8.22.0"
   },
