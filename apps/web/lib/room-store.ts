@@ -445,14 +445,59 @@ function rollDiceExpression(dice: string, modifier: number | undefined) {
   };
 }
 
+function normalizedAdvantageState(request: DiceRollRequest) {
+  const state = request.advantageState?.trim().toLowerCase();
+
+  return state === "advantage" || state === "disadvantage" ? state : "normal";
+}
+
+function physicalRollCountForRequest(
+  request: DiceRollRequest,
+  count: number,
+  sides: number
+) {
+  return count === 1 &&
+    sides === 20 &&
+    normalizedAdvantageState(request) !== "normal"
+    ? 2
+    : count;
+}
+
+function scoredRollsForRequest(request: DiceRollRequest, rolls: number[]) {
+  const advantageState = normalizedAdvantageState(request);
+
+  if (rolls.length === 2 && advantageState === "advantage") {
+    return [Math.max(...rolls)];
+  }
+
+  if (rolls.length === 2 && advantageState === "disadvantage") {
+    return [Math.min(...rolls)];
+  }
+
+  return rolls;
+}
+
+function rollRequestedDice(request: DiceRollRequest, count: number, sides: number) {
+  const physicalCount = physicalRollCountForRequest(request, count, sides);
+  const rolls = Array.from(
+    { length: physicalCount },
+    () => randomInt(1, sides + 1)
+  );
+  const total = scoredRollsForRequest(request, rolls).reduce(
+    (sum, roll) => sum + roll,
+    request.modifier ?? 0
+  );
+
+  return {
+    rolls,
+    total
+  };
+}
+
 function validateRollSubmissionResult(
   request: DiceRollRequest,
   result: DiceRollResult | undefined
 ) {
-  if (!result) {
-    return rollDiceExpression(request.dice, request.modifier);
-  }
-
   const match = request.dice.trim().match(/^(\d*)d(\d+)$/i);
 
   if (!match) {
@@ -461,10 +506,15 @@ function validateRollSubmissionResult(
 
   const count = Number(match[1] || "1");
   const sides = Number(match[2]);
+  const physicalCount = physicalRollCountForRequest(request, count, sides);
+
+  if (!result) {
+    return rollRequestedDice(request, count, sides);
+  }
 
   if (
     !Array.isArray(result.rolls) ||
-    result.rolls.length !== count ||
+    result.rolls.length !== physicalCount ||
     !result.rolls.every(
       (roll) => Number.isInteger(roll) && roll >= 1 && roll <= sides
     )
@@ -472,7 +522,7 @@ function validateRollSubmissionResult(
     throw new HttpError("The submitted roll result is invalid.", 400);
   }
 
-  const total = result.rolls.reduce(
+  const total = scoredRollsForRequest(request, result.rolls).reduce(
     (sum, roll) => sum + roll,
     request.modifier ?? 0
   );

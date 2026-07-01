@@ -290,6 +290,34 @@ function diceExpression(count: number, sides: number) {
   return `${count}d${sides}`;
 }
 
+function normalizedAdvantageState(request: DiceRollRequest) {
+  const state = request.advantageState?.trim().toLowerCase();
+
+  return state === "advantage" || state === "disadvantage" ? state : "normal";
+}
+
+function physicalRollCountForRequest(request: DiceRollRequest, count: number, sides: number) {
+  return count === 1 &&
+    sides === 20 &&
+    normalizedAdvantageState(request) !== "normal"
+    ? 2
+    : count;
+}
+
+function scoredRollsForRequest(request: DiceRollRequest, rolls: number[]) {
+  const advantageState = normalizedAdvantageState(request);
+
+  if (rolls.length === 2 && advantageState === "advantage") {
+    return [Math.max(...rolls)];
+  }
+
+  if (rolls.length === 2 && advantageState === "disadvantage") {
+    return [Math.min(...rolls)];
+  }
+
+  return rolls;
+}
+
 function queuedDiceEntries(queuedDice: QueuedDice) {
   const faceOrder: DiceFace[] = ["d4", "d6", "d8", "d10", "d12", "d20"];
 
@@ -358,10 +386,16 @@ function requiredDiceQueueFromRequests(pendingRequests: DiceRollRequest[]) {
       return null;
     }
 
-    queuedDice[face] = (queuedDice[face] ?? 0) + parsed.count;
+    const physicalCount = physicalRollCountForRequest(
+      request,
+      parsed.count,
+      parsed.sides
+    );
+
+    queuedDice[face] = (queuedDice[face] ?? 0) + physicalCount;
     entries.push({
       request,
-      count: parsed.count,
+      count: physicalCount,
       sides: parsed.sides
     });
   }
@@ -458,7 +492,7 @@ function rollPendingBatch(batch: PendingRollBatch, clientMessageId: string) {
       rollRequestId: entry.request.id,
       rollResult: {
         rolls: requestRolls,
-        total: requestRolls.reduce(
+        total: scoredRollsForRequest(entry.request, requestRolls).reduce(
           (sum, roll) => sum + roll,
           entry.request.modifier ?? 0
         )
