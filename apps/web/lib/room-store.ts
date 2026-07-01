@@ -1338,9 +1338,9 @@ async function buildSnapshot(campaign: CampaignRow): Promise<RoomSnapshot> {
     `,
     [campaign.id]
   );
-  const players = playersResult.rows
-    .filter(isPlayerRecentlySeen)
-    .map((player) => rowToRoomPlayer(player, submittedPlayerIds));
+  const players = playersResult.rows.map((player) =>
+    rowToRoomPlayer(player, submittedPlayerIds)
+  );
   const events = await query<EventRow>(
     `
       select id, type, payload, created_at
