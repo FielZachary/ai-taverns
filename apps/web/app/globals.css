@@ -1557,14 +1557,17 @@ h1 {
   inset: 0;
   z-index: 30;
   display: grid;
+  place-items: center;
   padding: clamp(14px, 3vw, 28px);
-  background: rgba(3, 2, 2, 0.78);
-  backdrop-filter: blur(10px);
+  background: rgba(18, 15, 13, 0.16);
+  backdrop-filter: blur(12px) saturate(1.08);
 }
 
 .character-sheet-overlay-panel {
   display: flex;
   flex-direction: column;
+  width: min(760px, 100%);
+  height: min(680px, calc(100dvh - 56px));
   min-width: 0;
   min-height: 0;
   border: 1px solid var(--line);
@@ -1572,7 +1575,7 @@ h1 {
   background:
     linear-gradient(180deg, rgba(255, 248, 220, 0.045), transparent 28%),
     rgba(26, 19, 15, 0.98);
-  box-shadow: 0 26px 90px rgba(0, 0, 0, 0.58);
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.42);
 }
 
 .character-sheet-overlay-panel header {
