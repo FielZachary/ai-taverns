@@ -256,6 +256,120 @@ function providerDebugSummary(
   };
 }
 
+function extractLatestPlayerSubmissions(currentAction: string) {
+  const markerMatch = currentAction.match(/Current player actions?:/i);
+  const scopedText = markerMatch
+    ? currentAction.slice(markerMatch.index)
+    : currentAction;
+  const submissions = scopedText
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter((line) => /^-\s+.+:\s*\S/.test(line) || /^[^:\n]+ \([^)]+\):\s*\S/.test(line));
+
+  return submissions.length > 0 ? submissions : [previewText(scopedText, 1200)];
+}
+
+function parseJsonRecord(value: string) {
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    const firstBrace = value.indexOf("{");
+    const lastBrace = value.lastIndexOf("}");
+
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      try {
+        const parsed = JSON.parse(value.slice(firstBrace, lastBrace + 1));
+        return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+          ? (parsed as Record<string, unknown>)
+          : {};
+      } catch {
+        return {};
+      }
+    }
+
+    return {};
+  }
+}
+
+async function adjudicateCombatRollHeuristic(input: {
+  campaignId: string;
+  traceId: string;
+  turnId?: string;
+  startedAt: number;
+  currentAction: string;
+  providerContent: string;
+  diagnostics: Record<string, unknown>;
+}) {
+  const packet = {
+    task:
+      "Decide whether a server combat-roll heuristic should block this AI Taverns DM draft.",
+    rules: [
+      "Return JSON only.",
+      "Only reject when the latest player submissions concretely declare an attack, damaging spell, forced hostile action, or risky action that must be rolled before outcome narration.",
+      "Allow dialogue, questions, waiting, watching, asking what happens next, tense readiness, and NPC lore even when weapons, destroyed objects, attacks, or danger appear in prior context.",
+      "Do not infer an attack merely because a character has a weapon drawn, is tense, or watches for movement.",
+      "Treat words like destroyed, opened, taken, damaged, dead, or attacked as lore/dialogue unless they resolve the latest submitted player action."
+    ],
+    expected_shape: {
+      verdict: "allow | reject_needs_rolls | uncertain",
+      reason: "short explanation",
+      latest_action_requires_rolls: false,
+      draft_resolves_latest_action: false
+    },
+    latest_player_submissions: extractLatestPlayerSubmissions(input.currentAction),
+    current_action_preview: previewText(input.currentAction, 1600),
+    dm_draft_response: previewText(input.providerContent, 2000),
+    heuristic_diagnostics: input.diagnostics
+  };
+  const startedAt = Date.now();
+  const providerData = await askDungeonMasterProvider({
+    instructions: [
+      "You are a narrow AI Taverns rules adjudicator, not the Dungeon Master.",
+      "Decide only whether the server should allow or reject a draft DM response that a regex heuristic flagged.",
+      "Return exactly one JSON object and no prose.",
+      "Use this schema: {\"verdict\":\"allow|reject_needs_rolls|uncertain\",\"reason\":\"...\",\"latest_action_requires_rolls\":false,\"draft_resolves_latest_action\":false}"
+    ].join("\n"),
+    message: JSON.stringify(packet),
+    history: []
+  });
+  const parsed = parseJsonRecord(providerData.content);
+  const verdict =
+    typeof parsed.verdict === "string" ? parsed.verdict.trim() : "uncertain";
+  const result = {
+    verdict:
+      verdict === "allow" || verdict === "reject_needs_rolls"
+        ? verdict
+        : "uncertain",
+    reason: typeof parsed.reason === "string" ? parsed.reason : "",
+    latestActionRequiresRolls: Boolean(parsed.latest_action_requires_rolls),
+    draftResolvesLatestAction: Boolean(parsed.draft_resolves_latest_action)
+  };
+
+  await logTurnDebugTrace({
+    campaignId: input.campaignId,
+    traceId: input.traceId,
+    phase: "combat_roll_adjudicator_verdict",
+    turnId: input.turnId,
+    elapsedMs: Date.now() - input.startedAt,
+    payload: {
+      durationMs: Date.now() - startedAt,
+      packet: {
+        latestPlayerSubmissions: packet.latest_player_submissions,
+        currentActionPreview: packet.current_action_preview,
+        dmDraftResponse: packet.dm_draft_response,
+        heuristicDiagnostics: packet.heuristic_diagnostics
+      },
+      result,
+      provider: providerDebugSummary(providerData.debug)
+    }
+  });
+
+  return result;
+}
+
 async function logTurnDebugTrace(input: {
   campaignId: string;
   traceId: string;
@@ -1442,6 +1556,9 @@ async function askDungeonMaster(
         }
       });
     } catch (error) {
+      const diagnostics = debugHermesDmContractFailure(providerResponse.content, {
+        currentAction: message
+      });
       await logTurnDebugTrace({
         campaignId: campaign.id,
         traceId,
@@ -1451,9 +1568,7 @@ async function askDungeonMaster(
         payload: {
           attempt: 1,
           error: errorSummary(error),
-          diagnostics: debugHermesDmContractFailure(providerResponse.content, {
-            currentAction: message
-          }),
+          diagnostics,
           provider: providerDebugSummary(providerResponse.debug)
         }
       });
@@ -1465,35 +1580,21 @@ async function askDungeonMaster(
         throw new Error(`${error instanceof Error ? error.message : error} Trace ID: ${traceId}`);
       }
 
-      const correctionMessage = [
-        promptContext?.message ?? message,
-        "",
-        "Your previous response resolved a player attack, spell, or damage outcome before collecting dice. Rewrite the same turn as valid AI Taverns JSON. Stop before the outcome is resolved, set `next_input_needed` to `dice_results`, and include every required attack, saving throw, and damage roll in `roll_requests`."
-      ].join("\n");
-      const retryStartedAt = Date.now();
-      providerResponse = await askDungeonMasterProvider({
-        message: correctionMessage,
-        instructions: promptContext?.instructions ?? instructions,
-        history
-      });
-      await logTurnDebugTrace({
+      const adjudicatorVerdict = await adjudicateCombatRollHeuristic({
         campaignId: campaign.id,
         traceId,
-        phase: "provider_response_received",
         turnId,
-        elapsedMs: Date.now() - startedAt,
-        payload: {
-          attempt: 2,
-          durationMs: Date.now() - retryStartedAt,
-          correctionMessage: textStats(correctionMessage),
-          provider: providerDebugSummary(providerResponse.debug)
-        }
+        startedAt,
+        currentAction: message,
+        providerContent: providerResponse.content,
+        diagnostics
       });
 
-      try {
-        const retryParseStartedAt = Date.now();
+      if (adjudicatorVerdict.verdict === "allow") {
+        const adjudicatedParseStartedAt = Date.now();
         contract = parseHermesDmContract(providerResponse.content, {
-          currentAction: message
+          currentAction: message,
+          allowResolvedCombatWithoutRolls: true
         });
         await logTurnDebugTrace({
           campaignId: campaign.id,
@@ -1502,8 +1603,9 @@ async function askDungeonMaster(
           turnId,
           elapsedMs: Date.now() - startedAt,
           payload: {
-            attempt: 2,
-            durationMs: Date.now() - retryParseStartedAt,
+            attempt: 1,
+            allowedByAdjudicator: true,
+            durationMs: Date.now() - adjudicatedParseStartedAt,
             rollRequestsCount: contract.rollRequests.length,
             rollRequestLabels: contract.rollRequests.map((request) => request.label),
             nextInputNeeded: contract.nextInputNeeded,
@@ -1511,27 +1613,77 @@ async function askDungeonMaster(
             inputTargets: contract.inputTargets
           }
         });
-      } catch (retryError) {
+      }
+
+      if (!contract) {
+        const correctionMessage = [
+          promptContext?.message ?? message,
+          "",
+          "Your previous response resolved a player attack, spell, or damage outcome before collecting dice. Rewrite the same turn as valid AI Taverns JSON. Stop before the outcome is resolved, set `next_input_needed` to `dice_results`, and include every required attack, saving throw, and damage roll in `roll_requests`."
+        ].join("\n");
+        const retryStartedAt = Date.now();
+        providerResponse = await askDungeonMasterProvider({
+          message: correctionMessage,
+          instructions: promptContext?.instructions ?? instructions,
+          history
+        });
         await logTurnDebugTrace({
           campaignId: campaign.id,
           traceId,
-          phase: "dm_contract_parse_failed",
+          phase: "provider_response_received",
           turnId,
           elapsedMs: Date.now() - startedAt,
           payload: {
             attempt: 2,
-            error: errorSummary(retryError),
-            diagnostics: debugHermesDmContractFailure(providerResponse.content, {
-              currentAction: message
-            }),
+            durationMs: Date.now() - retryStartedAt,
+            correctionMessage: textStats(correctionMessage),
             provider: providerDebugSummary(providerResponse.debug)
           }
         });
-        throw new Error(
-          `${
-            retryError instanceof Error ? retryError.message : retryError
-          } Trace ID: ${traceId}`
-        );
+
+        try {
+          const retryParseStartedAt = Date.now();
+          contract = parseHermesDmContract(providerResponse.content, {
+            currentAction: message
+          });
+          await logTurnDebugTrace({
+            campaignId: campaign.id,
+            traceId,
+            phase: "dm_contract_parse_succeeded",
+            turnId,
+            elapsedMs: Date.now() - startedAt,
+            payload: {
+              attempt: 2,
+              durationMs: Date.now() - retryParseStartedAt,
+              rollRequestsCount: contract.rollRequests.length,
+              rollRequestLabels: contract.rollRequests.map((request) => request.label),
+              nextInputNeeded: contract.nextInputNeeded,
+              inputPolicy: contract.inputPolicy,
+              inputTargets: contract.inputTargets
+            }
+          });
+        } catch (retryError) {
+          await logTurnDebugTrace({
+            campaignId: campaign.id,
+            traceId,
+            phase: "dm_contract_parse_failed",
+            turnId,
+            elapsedMs: Date.now() - startedAt,
+            payload: {
+              attempt: 2,
+              error: errorSummary(retryError),
+              diagnostics: debugHermesDmContractFailure(providerResponse.content, {
+                currentAction: message
+              }),
+              provider: providerDebugSummary(providerResponse.debug)
+            }
+          });
+          throw new Error(
+            `${
+              retryError instanceof Error ? retryError.message : retryError
+            } Trace ID: ${traceId}`
+          );
+        }
       }
     }
 

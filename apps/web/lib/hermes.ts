@@ -138,6 +138,7 @@ function parseJsonObject(text: string) {
 
 export type HermesDmContractParseOptions = {
   currentAction?: string;
+  allowResolvedCombatWithoutRolls?: boolean;
 };
 
 function previewText(value: string, maxLength = 800) {
@@ -451,6 +452,7 @@ export function parseHermesDmContract(
   }
 
   if (
+    !options?.allowResolvedCombatWithoutRolls &&
     resolvesRequiredCombatRollWithoutRolls(publicNarration, rollRequests, options)
   ) {
     throw new Error(
