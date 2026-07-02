@@ -674,6 +674,14 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
             : undefined
       }));
   }, [hasAdventureBegun, isSinglePlayer, roomPlayers]);
+  const activeCharacterSheet = useMemo(() => {
+    return (
+      currentRoomPlayer?.characterSheet ||
+      roomPlayers.find((roomPlayer) => roomPlayer.characterSheet.trim())
+        ?.characterSheet ||
+      playerProfile.characterSheet
+    );
+  }, [currentRoomPlayer?.characterSheet, playerProfile.characterSheet, roomPlayers]);
   const regeneratableMessageId = useMemo(() => {
     const latestDmMessage = [...visibleMessages]
       .reverse()
@@ -1810,7 +1818,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
                 <X size={18} />
               </button>
             </header>
-            <pre>{playerProfile.characterSheet.trim() || "No character sheet yet."}</pre>
+            <pre>{activeCharacterSheet.trim() || "No character sheet yet."}</pre>
           </div>
         </section>
       ) : null}
