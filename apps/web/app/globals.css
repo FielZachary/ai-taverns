@@ -1300,6 +1300,7 @@ h1 {
 
 .chat-sidebar-actions {
   gap: 10px;
+  justify-content: flex-end;
   padding-top: 14px;
 }
 
