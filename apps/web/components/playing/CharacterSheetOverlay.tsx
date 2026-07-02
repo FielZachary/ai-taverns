@@ -174,19 +174,136 @@ function listWithoutLabels(lines: string[] = []) {
   return lines.map((line) => line.replace(/^[^:]+:\s*/, "").trim()).filter(Boolean);
 }
 
-function parseSpellLines(lines: string[] = []) {
-  const spellListLine = lines.find((line) =>
-    /^Known \/ Prepared:/i.test(line)
-  );
-  const spellList = spellListLine
-    ?.replace(/^Known \/ Prepared:\s*/i, "")
+const spellLevels: Record<string, string> = {
+  "Absorb Elements": "Level 1",
+  Aid: "Level 2",
+  "Armor of Agathys": "Level 1",
+  Bless: "Level 1",
+  "Burning Hands": "Level 1",
+  "Call Lightning": "Level 3",
+  "Charm Person": "Level 1",
+  Command: "Level 1",
+  "Cure Wounds": "Level 1",
+  "Detect Magic": "Level 1",
+  "Dissonant Whispers": "Level 1",
+  "Eldritch Blast": "Cantrips",
+  Entangle: "Level 1",
+  "Faerie Fire": "Level 1",
+  Fireball: "Level 3",
+  "Fire Bolt": "Cantrips",
+  Goodberry: "Level 1",
+  Guidance: "Cantrips",
+  "Guiding Bolt": "Level 1",
+  "Healing Word": "Level 1",
+  "Hellish Rebuke": "Level 1",
+  "Hex": "Level 1",
+  "Hunger of Hadar": "Level 3",
+  "Hypnotic Pattern": "Level 3",
+  Invisibility: "Level 2",
+  "Lesser Restoration": "Level 2",
+  "Mage Armor": "Level 1",
+  "Mage Hand": "Cantrips",
+  "Magic Missile": "Level 1",
+  "Mirror Image": "Level 2",
+  "Misty Step": "Level 2",
+  Moonbeam: "Level 2",
+  "Pass without Trace": "Level 2",
+  Prestidigitation: "Cantrips",
+  "Produce Flame": "Cantrips",
+  Revivify: "Level 3",
+  "Sacred Flame": "Cantrips",
+  Shield: "Level 1",
+  "Shield of Faith": "Level 1",
+  "Speak with Animals": "Level 1",
+  "Spike Growth": "Level 2",
+  "Spiritual Weapon": "Level 2",
+  Suggestion: "Level 2",
+  "Vicious Mockery": "Cantrips",
+  Web: "Level 2",
+  "Wrathful Smite": "Level 1"
+};
+
+const spellGroupOrder = [
+  "Cantrips",
+  "Level 1",
+  "Level 2",
+  "Level 3",
+  "Level 4",
+  "Level 5",
+  "Level 6",
+  "Level 7",
+  "Level 8",
+  "Level 9",
+  "Other"
+];
+
+function parseSpellList(value = "") {
+  return value
     .split(",")
     .map((spell) => spell.trim())
-    .filter(Boolean) ?? [];
-  const details = lines.filter((line) => line !== spellListLine);
+    .filter((spell) => spell && spell.toLowerCase() !== "none");
+}
+
+function normalizeSpellGroupLabel(label: string) {
+  const trimmedLabel = label.trim();
+  const levelMatch = trimmedLabel.match(/(?:level\s*(\d+)|(\d+)(?:st|nd|rd|th)?(?:\s|-)*level)/i);
+
+  if (/cantrips?/i.test(trimmedLabel)) {
+    return "Cantrips";
+  }
+
+  if (levelMatch) {
+    return `Level ${levelMatch[1] ?? levelMatch[2]}`;
+  }
+
+  return trimmedLabel;
+}
+
+function parseSpellLines(lines: string[] = []) {
+  const groups = new Map<string, string[]>();
+  const details: string[] = [];
+
+  lines.forEach((line) => {
+    const groupedLine = line.match(
+      /^(Cantrips?|Level\s+\d+|(?:\d+)(?:st|nd|rd|th)?(?:\s|-)*level(?: spells?)?):\s*(.*)$/i
+    );
+    const knownPreparedLine = line.match(/^Known \/ Prepared:\s*(.*)$/i);
+
+    if (groupedLine) {
+      const [, rawLabel, rawSpells] = groupedLine;
+      const label = normalizeSpellGroupLabel(rawLabel);
+      const spells = parseSpellList(rawSpells);
+
+      if (spells.length > 0) {
+        groups.set(label, [...(groups.get(label) ?? []), ...spells]);
+      }
+
+      return;
+    }
+
+    if (knownPreparedLine) {
+      parseSpellList(knownPreparedLine[1]).forEach((spell) => {
+        const label = spellLevels[spell] ?? "Other";
+        groups.set(label, [...(groups.get(label) ?? []), spell]);
+      });
+
+      return;
+    }
+
+    if (line.toLowerCase() !== "none") {
+      details.push(line);
+    }
+  });
+
+  const spellGroups = spellGroupOrder
+    .map((label) => ({
+      label,
+      spells: groups.get(label) ?? []
+    }))
+    .filter((group) => group.spells.length > 0);
 
   return {
-    spellList,
+    spellGroups,
     details
   };
 }
@@ -207,15 +324,22 @@ function SheetBox({
 }
 
 function SpellPanel({ lines }: { lines?: string[] }) {
-  const { spellList, details } = parseSpellLines(lines);
+  const { spellGroups, details } = parseSpellLines(lines);
 
   return (
     <section className="dnd-sheet-lined-panel dnd-spell-panel">
       <div className="dnd-sheet-lined-content">
-        {spellList.length > 0 ? (
-          <div className="dnd-spell-list" aria-label="Spell list">
-            {spellList.map((spell) => (
-              <span key={spell}>{spell}</span>
+        {spellGroups.length > 0 ? (
+          <div className="dnd-spell-groups" aria-label="Spell list">
+            {spellGroups.map((group) => (
+              <div className="dnd-spell-group" key={group.label}>
+                <h4>{group.label}</h4>
+                <div className="dnd-spell-list">
+                  {group.spells.map((spell) => (
+                    <span key={`${group.label}-${spell}`}>{spell}</span>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         ) : (
