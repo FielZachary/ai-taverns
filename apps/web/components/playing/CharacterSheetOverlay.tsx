@@ -174,6 +174,23 @@ function listWithoutLabels(lines: string[] = []) {
   return lines.map((line) => line.replace(/^[^:]+:\s*/, "").trim()).filter(Boolean);
 }
 
+function parseSpellLines(lines: string[] = []) {
+  const spellListLine = lines.find((line) =>
+    /^Known \/ Prepared:/i.test(line)
+  );
+  const spellList = spellListLine
+    ?.replace(/^Known \/ Prepared:\s*/i, "")
+    .split(",")
+    .map((spell) => spell.trim())
+    .filter(Boolean) ?? [];
+  const details = lines.filter((line) => line !== spellListLine);
+
+  return {
+    spellList,
+    details
+  };
+}
+
 function SheetBox({
   label,
   value
@@ -186,6 +203,34 @@ function SheetBox({
       <strong>{value}</strong>
       <span>{label}</span>
     </div>
+  );
+}
+
+function SpellPanel({ lines }: { lines?: string[] }) {
+  const { spellList, details } = parseSpellLines(lines);
+
+  return (
+    <section className="dnd-sheet-lined-panel dnd-spell-panel">
+      <div className="dnd-sheet-lined-content">
+        {spellList.length > 0 ? (
+          <div className="dnd-spell-list" aria-label="Spell list">
+            {spellList.map((spell) => (
+              <span key={spell}>{spell}</span>
+            ))}
+          </div>
+        ) : (
+          <p>None</p>
+        )}
+        {details.length > 0 ? (
+          <div className="dnd-spell-details">
+            {details.map((line) => (
+              <p key={line}>{line}</p>
+            ))}
+          </div>
+        ) : null}
+      </div>
+      <h3>Spells</h3>
+    </section>
   );
 }
 
@@ -310,17 +355,14 @@ export function CharacterSheetOverlay({
               <SheetBox label="Armor Class" value={statValue(sheet, "Armor Class")} />
               <SheetBox label="Initiative" value={statValue(sheet, "Initiative")} />
               <SheetBox label="Speed" value={statValue(sheet, "Speed")} />
+              <SheetBox
+                label="Hit Points"
+                value={`${statValue(sheet, "Current HP")} / ${statValue(sheet, "Max HP")}`}
+              />
+              <SheetBox label="Hit Dice" value={statValue(sheet, "Hit Dice")} />
             </div>
-            <LinedPanel
-              title="Hit Points"
-              lines={[
-                `Max: ${statValue(sheet, "Max HP")}`,
-                `Current: ${statValue(sheet, "Current HP")}`,
-                `Temporary: ${statValue(sheet, "Temporary HP")}`,
-                `Hit Dice: ${statValue(sheet, "Hit Dice")}`
-              ]}
-            />
-            <LinedPanel title="Attacks & Spellcasting" lines={attackLines} />
+            <LinedPanel title="Attacks" lines={attackLines} />
+            <SpellPanel lines={spells} />
             <LinedPanel title="Equipment" lines={equipmentLines} />
           </section>
 
@@ -333,7 +375,6 @@ export function CharacterSheetOverlay({
             <LinedPanel title="Bonds" lines={[]} />
             <LinedPanel title="Flaws" lines={[]} />
             <LinedPanel title="Features & Traits" lines={featureLines} />
-            <LinedPanel title="Spells" lines={spells} empty="None" />
             <LinedPanel title="DM Brief" lines={dmBrief} />
           </section>
         </div>

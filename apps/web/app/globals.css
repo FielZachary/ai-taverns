@@ -1773,7 +1773,7 @@ h1 {
 
 .dnd-combat-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -1812,10 +1812,43 @@ h1 {
   text-align: center;
 }
 
+.dnd-spell-panel .dnd-sheet-lined-content {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.dnd-spell-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.dnd-spell-list span {
+  min-width: 0;
+  border: 1px solid rgba(244, 207, 122, 0.22);
+  border-radius: 8px;
+  padding: 8px 10px;
+  overflow: hidden;
+  color: var(--ink);
+  background: rgba(217, 169, 74, 0.08);
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dnd-spell-details {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
 .dnd-sheet-right .dnd-sheet-lined-panel:nth-child(-n + 4) {
   min-height: 94px;
 }
 
+.dnd-sheet-center .dnd-sheet-lined-panel:nth-child(2),
 .dnd-sheet-center .dnd-sheet-lined-panel:nth-child(3),
 .dnd-sheet-center .dnd-sheet-lined-panel:nth-child(4),
 .dnd-sheet-right .dnd-sheet-lined-panel:nth-child(5) {
@@ -2809,6 +2842,10 @@ h1 {
     grid-template-columns: minmax(210px, 0.8fr) minmax(0, 1fr);
   }
 
+  .dnd-combat-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .dnd-sheet-right {
     grid-column: 1 / -1;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2956,6 +2993,11 @@ h1 {
   .dnd-sheet-body {
     grid-template-columns: 1fr;
     padding: 10px;
+  }
+
+  .dnd-combat-grid,
+  .dnd-spell-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .dnd-sheet-right {
