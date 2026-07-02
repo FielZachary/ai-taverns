@@ -38,7 +38,6 @@ import { PlayerInput, type DiceFace, type QueuedDice } from "./PlayerInput";
 
 const openingMessages: GameMessage[] = [];
 const playerIdStorageKey = "ai-dnd.playerId";
-const maxPlayers = 4;
 const roomRequestTimeoutMs = 8_000;
 
 type CampaignMode = "single_player" | "multiplayer";
@@ -66,14 +65,6 @@ type RoomPlayer = {
   characterName: string;
   characterSheet: string;
   status: "waiting" | "submitted";
-};
-
-type PlayerStatusSlot = {
-  id: string;
-  status: string;
-  name: string;
-  detail: string;
-  canKick: boolean;
 };
 
 type RoomSnapshot = {
@@ -649,31 +640,6 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     isInputSubmitted &&
     (pendingRollRequests.length === 0 || Boolean(currentPendingRollRequest)) &&
     !isWaitingOnTargetedInput;
-
-  const playerStatusSlots = useMemo<PlayerStatusSlot[]>(() => {
-    return Array.from({ length: maxPlayers }, (_, slot) => {
-      const player = roomPlayers.find((roomPlayer) => roomPlayer.slot === slot);
-
-      if (!player) {
-        return {
-          id: `slot-${slot}`,
-          status: "No Player",
-          name: "Open Slot",
-          detail: "",
-          canKick: false
-        };
-      }
-
-      return {
-        id: player.id,
-        status: player.status === "submitted" ? "Submitted." : "Waiting",
-        name: player.characterName || player.username,
-        detail:
-          player.characterName && player.username ? player.username : "",
-        canKick: true
-      };
-    });
-  }, [roomPlayers]);
 
   const visibleMessages = useMemo(() => {
     const mergedMessages = new Map<string, GameMessage>();
@@ -1261,43 +1227,6 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     }
   }
 
-  async function handleKickPlayer(kickedPlayerId: string) {
-    if (!activeCampaign) {
-      return;
-    }
-
-    try {
-      const response = await fetch("/api/room/kick", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          roomId: activeCampaign.id,
-          sessionId: activeCampaign.hermesSessionId,
-          playerId: kickedPlayerId
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error("Player could not be removed.");
-      }
-
-      const room = (await response.json()) as RoomSnapshot;
-      applyRoomSnapshot(room);
-    } catch {
-      setMessages((currentMessages) => [
-        ...currentMessages,
-        {
-          id: createClientId(),
-          role: "system",
-          content: "That player could not be removed from the room.",
-          createdAt: new Date().toISOString()
-        }
-      ]);
-    }
-  }
-
   async function sendTurn(messageText: string) {
     const content = messageText.trim();
 
@@ -1772,83 +1701,28 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
               }
             />
 
-            {!isSinglePlayer ? (
-              <>
-                <section
-                  className="player-status-board"
-                  aria-label="Player action status"
-                >
-                  {playerStatusSlots.map((player) => (
-                    <div className="player-status-item" key={player.id}>
-                      <div className="player-avatar" aria-hidden="true" />
-                      <div className="player-status-content">
-                        <div className="player-status-name">
-                          <strong>
-                            {player.name}
-                            {player.canKick ? (
-                              <button
-                                className="player-kick-button"
-                                type="button"
-                                aria-label={`Kick ${player.name}`}
-                                onClick={() => void handleKickPlayer(player.id)}
-                              >
-                                <X size={13} />
-                              </button>
-                            ) : null}
-                          </strong>
-                          {player.detail ? <span>{player.detail}</span> : null}
-                        </div>
-                        <div
-                          className={`player-status-pill ${
-                            player.status === "Submitted."
-                              ? "status-submitted"
-                              : player.status === "Waiting"
-                                ? "status-waiting"
-                                : "status-empty"
-                          }`}
-                        >
-                          {player.status === "Waiting" ? (
-                            <>
-                              Waiting
-                              <span className="waiting-dots" aria-hidden="true">
-                                <span>.</span>
-                                <span>.</span>
-                                <span>.</span>
-                              </span>
-                            </>
-                          ) : (
-                            player.status
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </section>
-
-                {!hasAdventureBegun ? (
-                  <section className="begin-adventure-panel">
-                    {activeCampaign?.joinCode ? (
-                      <div className="game-code-callout">
-                        <span>Game Code</span>
-                        <strong>{activeCampaign.joinCode}</strong>
-                      </div>
-                    ) : null}
-                    <p>
-                      {roomPlayers.length >= 2
-                        ? "The party is gathered. Let the DM open the campaign."
-                        : "Gather at least two players to begin the adventure."}
-                    </p>
-                    <button
-                      type="button"
-                      disabled={!canBeginAdventure || isRoomResolving}
-                      onClick={() => void handleBeginAdventure()}
-                    >
-                      <Play size={17} />
-                      Begin Adventure
-                    </button>
-                  </section>
+            {!isSinglePlayer && !hasAdventureBegun ? (
+              <section className="begin-adventure-panel">
+                {activeCampaign?.joinCode ? (
+                  <div className="game-code-callout">
+                    <span>Game Code</span>
+                    <strong>{activeCampaign.joinCode}</strong>
+                  </div>
                 ) : null}
-              </>
+                <p>
+                  {roomPlayers.length >= 2
+                    ? "The party is gathered. Let the DM open the campaign."
+                    : "Gather at least two players to begin the adventure."}
+                </p>
+                <button
+                  type="button"
+                  disabled={!canBeginAdventure || isRoomResolving}
+                  onClick={() => void handleBeginAdventure()}
+                >
+                  <Play size={17} />
+                  Begin Adventure
+                </button>
+              </section>
             ) : null}
 
             <PlayerInput
