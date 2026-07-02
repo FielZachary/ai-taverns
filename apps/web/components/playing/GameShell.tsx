@@ -1771,7 +1771,6 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
               requiredQueuedDice={currentRequiredRollDice?.queuedDice}
               validationMessage={inputValidationMessage}
               validationPulse={inputValidationPulse}
-              characterSheet={playerProfile.characterSheet}
               onDraftChange={setDraft}
               onRollDice={handleRollDice}
               onSubmit={handleSubmit}
