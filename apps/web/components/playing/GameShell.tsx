@@ -27,7 +27,7 @@ import {
   ChatHistorySidebar,
   type ChatSummary
 } from "./ChatHistorySidebar";
-import { MessageLog } from "./MessageLog";
+import { MessageLog, type ChatPlayerStatus } from "./MessageLog";
 import {
   defaultCharacterSheet,
   emptyPlayerProfile,
@@ -656,6 +656,23 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
         Date.parse(firstMessage.createdAt) - Date.parse(secondMessage.createdAt)
     );
   }, [messages, roomMessages]);
+  const waitingPlayers = useMemo<ChatPlayerStatus[]>(() => {
+    if (isSinglePlayer || !hasAdventureBegun) {
+      return [];
+    }
+
+    return roomPlayers
+      .filter((roomPlayer) => roomPlayer.status === "waiting")
+      .map((roomPlayer) => ({
+        id: roomPlayer.id,
+        status: roomPlayer.status,
+        name: roomPlayer.characterName || roomPlayer.username || "Player",
+        detail:
+          roomPlayer.characterName && roomPlayer.username
+            ? roomPlayer.username
+            : undefined
+      }));
+  }, [hasAdventureBegun, isSinglePlayer, roomPlayers]);
   const regeneratableMessageId = useMemo(() => {
     const latestDmMessage = [...visibleMessages]
       .reverse()
@@ -1696,6 +1713,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
               }
               regeneratingMessageId={regeneratingMessageId}
               regeneratableMessageId={regeneratableMessageId}
+              waitingPlayers={waitingPlayers}
               onRegenerateResponse={(messageId) =>
                 void handleRegenerateResponse(messageId)
               }

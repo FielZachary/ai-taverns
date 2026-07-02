@@ -1,12 +1,20 @@
 "use client";
 
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Bot, Bug, RefreshCcw, Sparkles, UserRound, X } from "lucide-react";
+import { Bug, RefreshCcw, Sparkles, UserRound, X } from "lucide-react";
 import type { AiDebugInfo, GameMessage } from "@/lib/game-types";
+
+export type ChatPlayerStatus = {
+  id: string;
+  name: string;
+  detail?: string;
+  status: "waiting" | "submitted";
+};
 
 type MessageLogProps = {
   messages: GameMessage[];
   isSending: boolean;
+  waitingPlayers?: ChatPlayerStatus[];
   regeneratingMessageId?: string | null;
   regeneratableMessageId?: string | null;
   onRegenerateResponse?: (messageId: string) => void;
@@ -89,6 +97,7 @@ function MessageDebugModal({
 export function MessageLog({
   messages,
   isSending,
+  waitingPlayers = [],
   regeneratingMessageId,
   regeneratableMessageId,
   onRegenerateResponse
@@ -125,7 +134,11 @@ export function MessageLog({
             {message.role === "player" ? (
               <UserRound size={18} />
             ) : message.role === "dm" ? (
-              <Bot size={18} />
+              <img
+                alt=""
+                className="message-avatar-image"
+                src="/avatars/dungeon-master.jpg"
+              />
             ) : (
               <Sparkles size={18} />
             )}
@@ -173,10 +186,43 @@ export function MessageLog({
         </article>
       ))}
 
-      {isSending ? (
-        <article className="message-card message-system">
+      {waitingPlayers.map((player) => (
+        <article
+          className="message-card message-player message-waiting"
+          key={`waiting-${player.id}`}
+        >
           <div className="message-icon" aria-hidden="true">
-            <Sparkles size={18} />
+            <UserRound size={18} />
+          </div>
+          <div>
+            <div className="message-heading">
+              <p className="message-label">
+                {player.name}
+                {player.detail ? (
+                  <span className="message-label-detail"> {player.detail}</span>
+                ) : null}
+              </p>
+            </div>
+            <p className="rune-loader">
+              Waiting
+              <span className="rune-loader-dots" aria-hidden="true">
+                <span>.</span>
+                <span>.</span>
+                <span>.</span>
+              </span>
+            </p>
+          </div>
+        </article>
+      ))}
+
+      {isSending ? (
+        <article className="message-card message-dm">
+          <div className="message-icon" aria-hidden="true">
+            <img
+              alt=""
+              className="message-avatar-image"
+              src="/avatars/dungeon-master.jpg"
+            />
           </div>
           <div>
             <p className="message-label">Dungeon Master</p>
