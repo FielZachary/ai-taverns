@@ -27,6 +27,7 @@ import {
   ChatHistorySidebar,
   type ChatSummary
 } from "./ChatHistorySidebar";
+import { CharacterSheetOverlay } from "./CharacterSheetOverlay";
 import { MessageLog, type ChatPlayerStatus } from "./MessageLog";
 import {
   defaultCharacterSheet,
@@ -1801,26 +1802,10 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
       ) : null}
 
       {isCharacterSheetOpen ? (
-        <section
-          className="character-sheet-overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="character-sheet-title"
-        >
-          <div className="character-sheet-overlay-panel">
-            <header>
-              <h2 id="character-sheet-title">Character Sheet</h2>
-              <button
-                type="button"
-                aria-label="Close character sheet"
-                onClick={() => setIsCharacterSheetOpen(false)}
-              >
-                <X size={18} />
-              </button>
-            </header>
-            <pre>{activeCharacterSheet.trim() || "No character sheet yet."}</pre>
-          </div>
-        </section>
+        <CharacterSheetOverlay
+          characterSheet={activeCharacterSheet}
+          onClose={() => setIsCharacterSheetOpen(false)}
+        />
       ) : null}
 
       <button
