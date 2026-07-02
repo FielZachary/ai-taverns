@@ -597,6 +597,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
   const [inputPolicy, setInputPolicy] = useState<InputPolicy>("all_players");
   const [activeDiceReveal, setActiveDiceReveal] =
     useState<ActiveDiceReveal | null>(null);
+  const [isCharacterSheetOpen, setIsCharacterSheetOpen] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const roomPollInFlightRef = useRef(false);
   const playerRegistrationInFlightRef = useRef(false);
@@ -1689,6 +1690,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
             onDeleteChat={(campaignId) => void handleDeleteChat(campaignId)}
             onRenameChat={(campaignId) => void handleRenameChat(campaignId)}
             onSelectChat={(campaignId) => void handleSelectChat(campaignId)}
+            onViewCharacterSheet={() => setIsCharacterSheetOpen(true)}
           />
           <div className="story-column">
             {tableAlert ? (
@@ -1788,6 +1790,29 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
           total={activeDiceReveal.total}
           onComplete={activeDiceReveal.onComplete}
         />
+      ) : null}
+
+      {isCharacterSheetOpen ? (
+        <section
+          className="character-sheet-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="character-sheet-title"
+        >
+          <div className="character-sheet-overlay-panel">
+            <header>
+              <h2 id="character-sheet-title">Character Sheet</h2>
+              <button
+                type="button"
+                aria-label="Close character sheet"
+                onClick={() => setIsCharacterSheetOpen(false)}
+              >
+                <X size={18} />
+              </button>
+            </header>
+            <pre>{playerProfile.characterSheet.trim() || "No character sheet yet."}</pre>
+          </div>
+        </section>
       ) : null}
 
       <button
