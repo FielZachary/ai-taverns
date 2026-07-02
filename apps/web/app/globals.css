@@ -1871,9 +1871,14 @@ h1 {
   }
 }
 
-.turn-form {
+.turn-input-stack {
   display: grid;
   position: relative;
+  gap: 8px;
+}
+
+.turn-form {
+  display: grid;
   grid-template-columns: minmax(0, 1fr) 108px;
   gap: 8px;
   padding: 9px;
@@ -1966,34 +1971,41 @@ h1 {
 
 .turn-form-tools {
   display: flex;
-  grid-column: 1 / -1;
   flex-wrap: wrap;
   gap: 8px;
   min-width: 0;
 }
 
-.turn-form .dice-roll-button {
+.turn-form-tools button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
+  gap: 8px;
   min-height: 36px;
+  border: 1px solid rgba(244, 207, 122, 0.34);
+  border-radius: 8px;
   padding: 0 12px;
   color: var(--gold-bright);
   background: rgba(217, 169, 74, 0.1);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-weight: 900;
 }
 
-.turn-form .dice-roll-button span {
+.turn-form-tools button:hover,
+.turn-form-tools button:focus-visible {
+  border-color: rgba(244, 207, 122, 0.58);
+  background: rgba(217, 169, 74, 0.16);
+}
+
+.turn-form-tools button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.turn-form-tools .dice-roll-button span {
   font-size: 0.76rem;
   line-height: 1;
   text-transform: uppercase;
-}
-
-.turn-form .character-sheet-button {
-  min-height: 36px;
-  padding: 0 12px;
-  color: var(--gold-bright);
-  background: rgba(217, 169, 74, 0.1);
 }
 
 .dice-picker-popover {
@@ -2031,7 +2043,7 @@ h1 {
   gap: 8px;
 }
 
-.turn-form .dice-picker-option {
+.turn-form-tools .dice-picker-option {
   position: relative;
   min-height: 42px;
   padding: 0 8px;
@@ -2063,8 +2075,8 @@ h1 {
   gap: 8px;
 }
 
-.turn-form .dice-picker-clear,
-.turn-form .dice-picker-roll {
+.turn-form-tools .dice-picker-clear,
+.turn-form-tools .dice-picker-roll {
   min-height: 42px;
 }
 
@@ -2087,7 +2099,7 @@ h1 {
   opacity: 0.5;
 }
 
-.turn-form .dice-picker-clear {
+.turn-form-tools .dice-picker-clear {
   color: var(--gold-bright);
   background: rgba(217, 169, 74, 0.08);
 }
@@ -2127,9 +2139,13 @@ h1 {
   text-transform: uppercase;
 }
 
-.turn-form .character-sheet-popover button {
+.character-sheet-popover button {
+  display: inline-grid;
+  place-items: center;
   width: 32px;
   min-height: 32px;
+  border: 1px solid rgba(244, 207, 122, 0.34);
+  border-radius: 8px;
   padding: 0;
   color: var(--gold-bright);
   background: rgba(217, 169, 74, 0.08);
@@ -2711,10 +2727,6 @@ h1 {
 
   .turn-form button {
     min-height: 46px;
-  }
-
-  .turn-form .dice-roll-button {
-    min-height: 36px;
   }
 
   .turn-form-input-wrap {
