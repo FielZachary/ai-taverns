@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { after } from "next/server";
 import { HttpError, requireUser } from "@/lib/auth";
 import { submitRoomTurn } from "@/lib/room-store";
 import { jsonError } from "@/lib/hermes";
@@ -48,12 +47,7 @@ export async function POST(request: Request) {
         rollRequestId,
         body.rollResult,
         clientMessageId,
-        rollSubmissions,
-        {
-          defer(task) {
-            after(task);
-          }
-        }
+        rollSubmissions
       )
     );
   } catch (error) {
