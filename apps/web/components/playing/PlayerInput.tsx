@@ -133,7 +133,14 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
     }
 
     return (
-      <div className="turn-input-stack">
+      <form
+        className={`turn-form ${
+          validationMessage ? "turn-form-warning" : ""
+        } ${isCallingAttention ? "turn-form-attention" : ""} ${
+          isLocked ? "turn-form-submitted" : ""
+        }`}
+        onSubmit={onSubmit}
+      >
         {validationMessage ? (
           <p className="turn-form-validation" key={validationPulse} role="alert">
             {validationMessage}
@@ -207,37 +214,28 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
             View Character Sheet
           </button>
         </div>
-        <form
-          className={`turn-form ${
-            validationMessage ? "turn-form-warning" : ""
-          } ${isCallingAttention ? "turn-form-attention" : ""} ${
-            isLocked ? "turn-form-submitted" : ""
-          }`}
-          onSubmit={onSubmit}
+        <div className="turn-form-input-wrap">
+          <textarea
+            ref={ref}
+            value={draft}
+            onChange={(event) => onDraftChange(event.target.value)}
+            placeholder="Speak, search, attack, bargain..."
+            readOnly={isLocked}
+            rows={2}
+          />
+          {overlayMessage ? (
+            <div className="turn-form-submitted-label" aria-live="polite">
+              {overlayMessage}
+            </div>
+          ) : null}
+        </div>
+        <button
+          type="submit"
+          disabled={isRollRequired || isLocked || isSending || !draft.trim()}
         >
-          <div className="turn-form-input-wrap">
-            <textarea
-              ref={ref}
-              value={draft}
-              onChange={(event) => onDraftChange(event.target.value)}
-              placeholder="Speak, search, attack, bargain..."
-              readOnly={isLocked}
-              rows={2}
-            />
-            {overlayMessage ? (
-              <div className="turn-form-submitted-label" aria-live="polite">
-                {overlayMessage}
-              </div>
-            ) : null}
-          </div>
-          <button
-            type="submit"
-            disabled={isRollRequired || isLocked || isSending || !draft.trim()}
-          >
-            <Send size={18} />
-            Send
-          </button>
-        </form>
+          <Send size={18} />
+          Send
+        </button>
         {isCharacterSheetOpen ? (
           <section
             className="character-sheet-popover"
@@ -256,7 +254,7 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
             <pre>{characterSheet.trim() || "No character sheet yet."}</pre>
           </section>
         ) : null}
-      </div>
+      </form>
     );
   }
 );
