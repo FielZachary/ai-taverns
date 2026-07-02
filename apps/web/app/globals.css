@@ -1723,14 +1723,16 @@ h1 {
   grid-template-columns: 64px minmax(0, 1fr);
   gap: 8px;
   min-height: 82px;
-  padding: 8px;
+  padding: 6px 8px;
 }
 
 .dnd-ability-score {
   display: grid;
+  align-self: stretch;
   place-items: center;
   border: 1px solid rgba(244, 207, 122, 0.32);
   border-radius: 8px;
+  margin: 2px 0;
   background: rgba(217, 169, 74, 0.08);
 }
 
@@ -1740,13 +1742,6 @@ h1 {
   font-size: 1.55rem;
   font-weight: 900;
   line-height: 1;
-}
-
-.dnd-ability-score span {
-  color: var(--gold-bright);
-  font-family: ui-sans-serif, system-ui, sans-serif;
-  font-size: 0.82rem;
-  font-weight: 900;
 }
 
 .dnd-ability-card h3,

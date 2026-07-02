@@ -287,7 +287,6 @@ export function CharacterSheetOverlay({
                   <article className="dnd-ability-card" key={ability.label}>
                     <div className="dnd-ability-score">
                       <strong>{ability.score}</strong>
-                      <span>{ability.modifier}</span>
                     </div>
                     <h3>{ability.label}</h3>
                     <p>{saveLine || "Saving Throw -"}</p>
