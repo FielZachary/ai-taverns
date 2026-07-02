@@ -140,6 +140,41 @@ export type HermesDmContractParseOptions = {
   currentAction?: string;
 };
 
+function previewText(value: string, maxLength = 800) {
+  return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
+}
+
+export function debugHermesDmContractFailure(
+  content: string | undefined,
+  options?: HermesDmContractParseOptions
+) {
+  const parsed = parseJsonObject(content?.trim() ?? "");
+  const publicNarration = stringValue(parsed?.public_narration);
+  const nextInputNeeded = stringValue(parsed?.next_input_needed);
+  const rawRollRequests = Array.isArray(parsed?.roll_requests)
+    ? parsed?.roll_requests
+    : [];
+  const rollRequests = normalizeRollRequests(rawRollRequests);
+
+  return {
+    hasJsonObject: Boolean(parsed),
+    contentLength: content?.length ?? 0,
+    contentPreview: previewText(content?.trim() ?? ""),
+    publicNarrationLength: publicNarration.length,
+    publicNarrationPreview: previewText(publicNarration),
+    nextInputNeeded,
+    rollRequestsCount: rollRequests.length,
+    rollRequestLabels: rollRequests.map((request) => request.label),
+    mentionsPlayerFacingRoll: mentionsPlayerFacingRoll(publicNarration),
+    currentActionRequiresCombatRoll: currentActionRequiresCombatRoll(
+      options?.currentAction
+    ),
+    resolvesCombatOutcome: resolvesCombatOutcome(publicNarration),
+    resolvesRequiredCombatRollWithoutRolls:
+      resolvesRequiredCombatRollWithoutRolls(publicNarration, rollRequests, options)
+  };
+}
+
 function mentionsPlayerFacingRoll(text: string) {
   return /\broll\s+(?:a\s+)?(?:d?\d|1d\d+|d20)|\bmake\s+(?:a|an)\s+[^.?!]*(?:check|saving throw|save)\b/i.test(
     text

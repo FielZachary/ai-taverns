@@ -16,6 +16,7 @@ import {
   runPostTurnContextJobs
 } from "@/lib/prompt-context";
 import {
+  debugHermesDmContractFailure,
   dungeonMasterInstructions,
   normalizeRollRequest,
   normalizeRollRequests,
@@ -26,6 +27,8 @@ import {
 
 const maxPlayers = 4;
 const activeWindowMs = 120_000;
+const traceFullPrompts = process.env.AI_TAVERNS_TRACE_FULL_PROMPTS === "true";
+const traceTurns = process.env.AI_TAVERNS_TRACE_TURNS !== "false";
 
 export type RoomPlayerStatus = "waiting" | "submitted";
 
@@ -205,6 +208,88 @@ function formatTime(value: Date | string | undefined) {
     month: "short",
     day: "numeric"
   }).format(date);
+}
+
+function previewText(value: string | undefined, maxLength = 1000) {
+  const text = value ?? "";
+  return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+}
+
+function textStats(value: string | undefined) {
+  const text = value ?? "";
+
+  return {
+    length: text.length,
+    preview: previewText(text)
+  };
+}
+
+function errorSummary(error: unknown) {
+  return {
+    name: error instanceof Error ? error.name : "UnknownError",
+    message: error instanceof Error ? error.message : String(error)
+  };
+}
+
+function providerDebugSummary(
+  debug: AiDebugInfo | undefined,
+  includeFullPayload = traceFullPrompts
+) {
+  if (!debug) {
+    return undefined;
+  }
+
+  return {
+    providerResponseId: debug.providerResponseId,
+    model: debug.model,
+    requestMessageCount: debug.requestMessages.length,
+    requestMessages: debug.requestMessages.map((message, index) => ({
+      index,
+      role: message.role,
+      contentLength: message.content.length,
+      contentPreview: previewText(message.content),
+      ...(includeFullPayload ? { content: message.content } : {})
+    })),
+    rawResponseLength: debug.rawResponse.length,
+    rawResponsePreview: previewText(debug.rawResponse),
+    ...(includeFullPayload ? { rawResponse: debug.rawResponse } : {})
+  };
+}
+
+async function logTurnDebugTrace(input: {
+  campaignId: string;
+  traceId: string;
+  phase: string;
+  turnId?: string;
+  elapsedMs?: number;
+  payload?: Record<string, unknown>;
+}) {
+  if (!traceTurns) {
+    return;
+  }
+
+  const tracePayload = {
+    traceId: input.traceId,
+    phase: input.phase,
+    turnId: input.turnId,
+    elapsedMs: input.elapsedMs,
+    at: nowIso(),
+    ...(input.payload ?? {})
+  };
+
+  console.info("[ai-taverns-turn-trace]", JSON.stringify(tracePayload));
+
+  try {
+    await query(
+      `
+        insert into campaign_events (campaign_id, type, payload)
+        values ($1, 'turn_debug_trace', $2::jsonb)
+      `,
+      [input.campaignId, JSON.stringify(tracePayload)]
+    );
+  } catch (error) {
+    console.error("Could not persist AI Taverns turn trace.", error);
+  }
 }
 
 function isPlayerRecentlySeen(player: Pick<PlayerRow, "last_seen_at">) {
@@ -1263,66 +1348,241 @@ async function askDungeonMaster(
   includeHistory = true,
   turnId?: string
 ) {
-  const promptContext = includeHistory
-    ? await buildDungeonMasterPromptContext({
-        campaignId: campaign.id,
-        turnId,
-        currentAction: message,
-        baseInstructions: instructions
-      })
-    : null;
-  const providerData = await askDungeonMasterProvider({
-    message: promptContext?.message ?? message,
-    instructions: promptContext?.instructions ?? instructions,
-    history: includeHistory && !promptContext
-      ? await getCampaignEventMessages(campaign.id)
-      : []
+  const traceId = crypto.randomUUID();
+  const startedAt = Date.now();
+  let promptContextStartedAt = startedAt;
+  let promptContext;
+
+  await logTurnDebugTrace({
+    campaignId: campaign.id,
+    traceId,
+    phase: "dm_turn_started",
+    turnId,
+    elapsedMs: 0,
+    payload: {
+      hermesSessionId: campaign.hermes_session_id,
+      includeHistory,
+      message: textStats(message),
+      instructions: textStats(instructions)
+    }
   });
-  let providerResponse = providerData;
-  let contract;
 
   try {
-    contract = parseHermesDmContract(providerResponse.content, {
-      currentAction: message
+    promptContextStartedAt = Date.now();
+    promptContext = includeHistory
+      ? await buildDungeonMasterPromptContext({
+          campaignId: campaign.id,
+          turnId,
+          currentAction: message,
+          baseInstructions: instructions
+        })
+      : null;
+    await logTurnDebugTrace({
+      campaignId: campaign.id,
+      traceId,
+      phase: "prompt_context_ready",
+      turnId,
+      elapsedMs: Date.now() - startedAt,
+      payload: {
+        durationMs: Date.now() - promptContextStartedAt,
+        usedPromptContext: Boolean(promptContext),
+        message: textStats(promptContext?.message ?? message),
+        instructions: textStats(promptContext?.instructions ?? instructions),
+        sectionCount: promptContext?.sections.length,
+        budget: promptContext?.budget
+      }
     });
-  } catch (error) {
-    if (
-      !(error instanceof Error) ||
-      !error.message.includes("resolved a player combat action")
-    ) {
-      throw error;
-    }
 
-    providerResponse = await askDungeonMasterProvider({
-      message: [
+    const history =
+      includeHistory && !promptContext
+        ? await getCampaignEventMessages(campaign.id)
+        : [];
+    const providerStartedAt = Date.now();
+    const providerData = await askDungeonMasterProvider({
+      message: promptContext?.message ?? message,
+      instructions: promptContext?.instructions ?? instructions,
+      history
+    });
+    await logTurnDebugTrace({
+      campaignId: campaign.id,
+      traceId,
+      phase: "provider_response_received",
+      turnId,
+      elapsedMs: Date.now() - startedAt,
+      payload: {
+        attempt: 1,
+        durationMs: Date.now() - providerStartedAt,
+        historyCount: history.length,
+        provider: providerDebugSummary(providerData.debug)
+      }
+    });
+
+    let providerResponse = providerData;
+    let contract;
+
+    try {
+      const parseStartedAt = Date.now();
+      contract = parseHermesDmContract(providerResponse.content, {
+        currentAction: message
+      });
+      await logTurnDebugTrace({
+        campaignId: campaign.id,
+        traceId,
+        phase: "dm_contract_parse_succeeded",
+        turnId,
+        elapsedMs: Date.now() - startedAt,
+        payload: {
+          attempt: 1,
+          durationMs: Date.now() - parseStartedAt,
+          rollRequestsCount: contract.rollRequests.length,
+          rollRequestLabels: contract.rollRequests.map((request) => request.label),
+          nextInputNeeded: contract.nextInputNeeded,
+          inputPolicy: contract.inputPolicy,
+          inputTargets: contract.inputTargets
+        }
+      });
+    } catch (error) {
+      await logTurnDebugTrace({
+        campaignId: campaign.id,
+        traceId,
+        phase: "dm_contract_parse_failed",
+        turnId,
+        elapsedMs: Date.now() - startedAt,
+        payload: {
+          attempt: 1,
+          error: errorSummary(error),
+          diagnostics: debugHermesDmContractFailure(providerResponse.content, {
+            currentAction: message
+          }),
+          provider: providerDebugSummary(providerResponse.debug)
+        }
+      });
+
+      if (
+        !(error instanceof Error) ||
+        !error.message.includes("resolved a player combat action")
+      ) {
+        throw new Error(`${error instanceof Error ? error.message : error} Trace ID: ${traceId}`);
+      }
+
+      const correctionMessage = [
         promptContext?.message ?? message,
         "",
         "Your previous response resolved a player attack, spell, or damage outcome before collecting dice. Rewrite the same turn as valid AI Taverns JSON. Stop before the outcome is resolved, set `next_input_needed` to `dice_results`, and include every required attack, saving throw, and damage roll in `roll_requests`."
-      ].join("\n"),
-      instructions: promptContext?.instructions ?? instructions,
-      history: includeHistory && !promptContext
-        ? await getCampaignEventMessages(campaign.id)
-        : []
-    });
-    contract = parseHermesDmContract(providerResponse.content, {
-      currentAction: message
-    });
-  }
-  const reply = contract.publicNarration;
+      ].join("\n");
+      const retryStartedAt = Date.now();
+      providerResponse = await askDungeonMasterProvider({
+        message: correctionMessage,
+        instructions: promptContext?.instructions ?? instructions,
+        history
+      });
+      await logTurnDebugTrace({
+        campaignId: campaign.id,
+        traceId,
+        phase: "provider_response_received",
+        turnId,
+        elapsedMs: Date.now() - startedAt,
+        payload: {
+          attempt: 2,
+          durationMs: Date.now() - retryStartedAt,
+          correctionMessage: textStats(correctionMessage),
+          provider: providerDebugSummary(providerResponse.debug)
+        }
+      });
 
-  if (!reply) {
-    throw new Error("The DM provider returned an empty reply.");
-  }
+      try {
+        const retryParseStartedAt = Date.now();
+        contract = parseHermesDmContract(providerResponse.content, {
+          currentAction: message
+        });
+        await logTurnDebugTrace({
+          campaignId: campaign.id,
+          traceId,
+          phase: "dm_contract_parse_succeeded",
+          turnId,
+          elapsedMs: Date.now() - startedAt,
+          payload: {
+            attempt: 2,
+            durationMs: Date.now() - retryParseStartedAt,
+            rollRequestsCount: contract.rollRequests.length,
+            rollRequestLabels: contract.rollRequests.map((request) => request.label),
+            nextInputNeeded: contract.nextInputNeeded,
+            inputPolicy: contract.inputPolicy,
+            inputTargets: contract.inputTargets
+          }
+        });
+      } catch (retryError) {
+        await logTurnDebugTrace({
+          campaignId: campaign.id,
+          traceId,
+          phase: "dm_contract_parse_failed",
+          turnId,
+          elapsedMs: Date.now() - startedAt,
+          payload: {
+            attempt: 2,
+            error: errorSummary(retryError),
+            diagnostics: debugHermesDmContractFailure(providerResponse.content, {
+              currentAction: message
+            }),
+            provider: providerDebugSummary(providerResponse.debug)
+          }
+        });
+        throw new Error(
+          `${
+            retryError instanceof Error ? retryError.message : retryError
+          } Trace ID: ${traceId}`
+        );
+      }
+    }
 
-  return {
-    id: providerResponse.id,
-    content: reply,
-    debug: providerResponse.debug,
-    rollRequests: contract.rollRequests,
-    inputTargets: contract.inputTargets,
-    inputPolicy: contract.inputPolicy,
-    setting: contract.setting
-  };
+    const reply = contract.publicNarration;
+
+    if (!reply) {
+      throw new Error(`The DM provider returned an empty reply. Trace ID: ${traceId}`);
+    }
+
+    await logTurnDebugTrace({
+      campaignId: campaign.id,
+      traceId,
+      phase: "dm_turn_completed",
+      turnId,
+      elapsedMs: Date.now() - startedAt,
+      payload: {
+        reply: textStats(reply),
+        rollRequestsCount: contract.rollRequests.length,
+        nextInputNeeded: contract.nextInputNeeded
+      }
+    });
+
+    return {
+      id: providerResponse.id,
+      content: reply,
+      debug: providerResponse.debug,
+      rollRequests: contract.rollRequests,
+      inputTargets: contract.inputTargets,
+      inputPolicy: contract.inputPolicy,
+      setting: contract.setting
+    };
+  } catch (error) {
+    await logTurnDebugTrace({
+      campaignId: campaign.id,
+      traceId,
+      phase: "dm_turn_failed",
+      turnId,
+      elapsedMs: Date.now() - startedAt,
+      payload: {
+        error: errorSummary(error)
+      }
+    });
+
+    if (error instanceof Error && error.message.includes("Trace ID:")) {
+      throw error;
+    }
+
+    throw new Error(
+      `${error instanceof Error ? error.message : "DM provider call failed."} Trace ID: ${traceId}`
+    );
+  }
 }
 
 function schedulePostTurnContextJobs(input: {
@@ -1716,6 +1976,50 @@ export async function getCampaignById(campaignId: string, userId: string) {
   await assertCampaignAccessForUser(campaign, userId);
 
   return campaignSummaryFromRow(campaign);
+}
+
+export async function listCampaignDebugTraces(input: {
+  campaignId: string;
+  userId: string;
+  traceId?: string;
+  limit?: number;
+}) {
+  const result = await query<CampaignRow>(
+    `
+      select *
+      from campaigns
+      where id = $1 and status <> 'deleted'
+      limit 1
+    `,
+    [input.campaignId]
+  );
+  const campaign = result.rows[0];
+
+  if (!campaign) {
+    throw new HttpError("Campaign not found.", 404);
+  }
+
+  await assertCampaignAccessForUser(campaign, input.userId);
+
+  const limit = Math.max(1, Math.min(input.limit ?? 50, 200));
+  const traceResult = await query<EventRow>(
+    `
+      select id, type, payload, created_at
+      from campaign_events
+      where campaign_id = $1
+        and type = 'turn_debug_trace'
+        and ($2::text is null or payload->>'traceId' = $2)
+      order by created_at desc
+      limit $3
+    `,
+    [input.campaignId, input.traceId ?? null, limit]
+  );
+
+  return traceResult.rows.map((event) => ({
+    id: event.id,
+    createdAt: toIso(event.created_at),
+    ...eventPayload(event.payload)
+  }));
 }
 
 export async function archiveCampaignById(campaignId: string, userId: string) {
