@@ -1619,7 +1619,12 @@ async function askDungeonMaster(
         const correctionMessage = [
           promptContext?.message ?? message,
           "",
-          "Your previous response resolved a player attack, spell, or damage outcome before collecting dice. Rewrite the same turn as valid AI Taverns JSON. Stop before the outcome is resolved, set `next_input_needed` to `dice_results`, and include every required attack, saving throw, and damage roll in `roll_requests`."
+          "Your previous response resolved a player action outcome before collecting required dice.",
+          `Adjudicator verdict: ${adjudicatorVerdict.verdict}.`,
+          `Adjudicator reason: ${adjudicatorVerdict.reason || "The latest player action needs dice before its outcome can be narrated."}`,
+          "Rewrite the same turn as valid AI Taverns JSON. Stop before the outcome is resolved, set `next_input_needed` to `dice_results`, and include every required roll in `roll_requests`.",
+          "Required rolls can include skill checks such as Stealth, Perception, Investigation, Insight, Athletics, Acrobatics, tool checks, saving throws, opposed checks, attack rolls, spell saves, damage rolls, healing rolls, and any other dice needed by the declared action.",
+          "Do not narrate success, failure, discovery, being unnoticed, reaching a risky position, damage, death, escape, or other rolled outcomes until the dice results are submitted."
         ].join("\n");
         const retryStartedAt = Date.now();
         providerResponse = await askDungeonMasterProvider({
