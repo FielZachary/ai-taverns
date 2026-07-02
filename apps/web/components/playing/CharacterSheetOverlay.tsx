@@ -13,6 +13,13 @@ type ParsedSheet = {
   raw: string;
 };
 
+type SheetTableRow = {
+  name: string;
+  range: string;
+  hitDc: string;
+  effect: string;
+};
+
 const abilityNames = [
   "Strength",
   "Dexterity",
@@ -174,6 +181,41 @@ function listWithoutLabels(lines: string[] = []) {
   return lines.map((line) => line.replace(/^[^:]+:\s*/, "").trim()).filter(Boolean);
 }
 
+function parseAttackLine(line: string): SheetTableRow {
+  const [rawName = line, rawDetails = ""] = line.split(/:\s(.+)/);
+  const detailParts = rawDetails
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const rangeIndex = detailParts.findIndex((part) =>
+    /\b(range|thrown|reach)\b/i.test(part)
+  );
+  const hitDcIndex = detailParts.findIndex((part) =>
+    /\b(to hit|dc|save)\b/i.test(part)
+  );
+  const range = rangeIndex >= 0 ? detailParts.splice(rangeIndex, 1)[0] : "";
+  const adjustedHitDcIndex =
+    rangeIndex >= 0 && hitDcIndex > rangeIndex ? hitDcIndex - 1 : hitDcIndex;
+  const hitDc =
+    adjustedHitDcIndex >= 0 ? detailParts.splice(adjustedHitDcIndex, 1)[0] : "";
+
+  return {
+    name: rawName.trim(),
+    range,
+    hitDc,
+    effect: detailParts.join(", ")
+  };
+}
+
+function spellTableRow(name: string): SheetTableRow {
+  return {
+    name,
+    range: "",
+    hitDc: "",
+    effect: ""
+  };
+}
+
 const spellLevels: Record<string, string> = {
   "Absorb Elements": "Level 1",
   Aid: "Level 2",
@@ -323,6 +365,58 @@ function SheetBox({
   );
 }
 
+function SheetTable({
+  rows,
+  empty = "-"
+}: {
+  rows: SheetTableRow[];
+  empty?: string;
+}) {
+  return (
+    <div className="dnd-sheet-table-wrap">
+      <table className="dnd-sheet-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Range</th>
+            <th>Hit/DC</th>
+            <th>Damage/Effect</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length > 0 ? (
+            rows.map((row, index) => (
+              <tr key={`${row.name}-${index}`}>
+                <td>{row.name}</td>
+                <td>{row.range}</td>
+                <td>{row.hitDc}</td>
+                <td>{row.effect}</td>
+              </tr>
+            ))
+          ) : (
+            <tr>
+              <td colSpan={4}>{empty}</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function AttackPanel({ lines }: { lines?: string[] }) {
+  const rows = lines?.filter(Boolean).map(parseAttackLine) ?? [];
+
+  return (
+    <section className="dnd-sheet-lined-panel dnd-attack-panel">
+      <div className="dnd-sheet-lined-content">
+        <SheetTable rows={rows} />
+      </div>
+      <h3>Attacks</h3>
+    </section>
+  );
+}
+
 function SpellPanel({ lines }: { lines?: string[] }) {
   const { spellGroups, details } = parseSpellLines(lines);
 
@@ -334,11 +428,7 @@ function SpellPanel({ lines }: { lines?: string[] }) {
             {spellGroups.map((group) => (
               <div className="dnd-spell-group" key={group.label}>
                 <h4>{group.label}</h4>
-                <div className="dnd-spell-list">
-                  {group.spells.map((spell) => (
-                    <span key={`${group.label}-${spell}`}>{spell}</span>
-                  ))}
-                </div>
+                <SheetTable rows={group.spells.map(spellTableRow)} empty="None" />
               </div>
             ))}
           </div>
@@ -485,7 +575,7 @@ export function CharacterSheetOverlay({
               />
               <SheetBox label="Hit Dice" value={statValue(sheet, "Hit Dice")} />
             </div>
-            <LinedPanel title="Attacks" lines={attackLines} />
+            <AttackPanel lines={attackLines} />
             <SpellPanel lines={spells} />
             <LinedPanel title="Equipment" lines={equipmentLines} />
           </section>

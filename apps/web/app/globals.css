@@ -1845,23 +1845,54 @@ h1 {
   text-transform: uppercase;
 }
 
-.dnd-spell-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 7px;
+.dnd-sheet-table-wrap {
+  width: 100%;
+  overflow-x: auto;
 }
 
-.dnd-spell-list span {
-  min-width: 0;
-  border: 1px solid rgba(244, 207, 122, 0.22);
-  border-radius: 8px;
-  padding: 8px 10px;
-  overflow: hidden;
+.dnd-sheet-table {
+  width: 100%;
+  min-width: 520px;
+  border-collapse: collapse;
   color: var(--ink);
-  background: rgba(217, 169, 74, 0.08);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.75rem;
+  line-height: 1.25;
+}
+
+.dnd-sheet-table th,
+.dnd-sheet-table td {
+  border: 1px solid rgba(226, 176, 93, 0.18);
+  padding: 7px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.dnd-sheet-table th {
+  color: var(--gold-bright);
+  background: rgba(217, 169, 74, 0.09);
+  font-size: 0.65rem;
+  font-weight: 950;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.dnd-sheet-table td {
+  background: rgba(17, 12, 8, 0.34);
+  font-weight: 750;
+}
+
+.dnd-sheet-table th:first-child,
+.dnd-sheet-table td:first-child {
+  width: 30%;
   font-weight: 900;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.dnd-sheet-table th:nth-child(2),
+.dnd-sheet-table td:nth-child(2),
+.dnd-sheet-table th:nth-child(3),
+.dnd-sheet-table td:nth-child(3) {
+  width: 17%;
 }
 
 .dnd-spell-details {
@@ -3018,8 +3049,7 @@ h1 {
     padding: 10px;
   }
 
-  .dnd-combat-grid,
-  .dnd-spell-list {
+  .dnd-combat-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
