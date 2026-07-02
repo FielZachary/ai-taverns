@@ -1856,7 +1856,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
               draft={draft}
               isSending={isSending || Boolean(activeDiceReveal)}
               isSubmitted={
-                isSending ||
+                (isSinglePlayer && isSending) ||
                 Boolean(activeDiceReveal) ||
                 isInputSubmittedForCurrentState
               }
