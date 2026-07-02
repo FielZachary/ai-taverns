@@ -588,6 +588,8 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
   const [tableAlert, setTableAlert] = useState("");
   const [playerId, setPlayerId] = useState("");
   const [roomPlayers, setRoomPlayers] = useState<RoomPlayer[]>([]);
+  const [optimisticSubmittedPlayerId, setOptimisticSubmittedPlayerId] =
+    useState<string | null>(null);
   const [roomMessages, setRoomMessages] = useState<GameMessage[]>([]);
   const [isRoomResolving, setIsRoomResolving] = useState(false);
   const [hasAdventureBegun, setHasAdventureBegun] = useState(false);
@@ -610,9 +612,20 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     [activeCampaignId, availableCampaigns]
   );
   const isSinglePlayer = activeCampaign?.mode === "single_player";
+  const displayedRoomPlayers = useMemo(
+    () =>
+      optimisticSubmittedPlayerId
+        ? roomPlayers.map((roomPlayer) =>
+            roomPlayer.id === optimisticSubmittedPlayerId
+              ? { ...roomPlayer, status: "submitted" as const }
+              : roomPlayer
+          )
+        : roomPlayers,
+    [optimisticSubmittedPlayerId, roomPlayers]
+  );
   const currentRoomPlayer = useMemo(
-    () => roomPlayers.find((roomPlayer) => roomPlayer.id === playerId),
-    [playerId, roomPlayers]
+    () => displayedRoomPlayers.find((roomPlayer) => roomPlayer.id === playerId),
+    [displayedRoomPlayers, playerId]
   );
   const currentPendingRollRequests = useMemo(
     () =>
@@ -638,8 +651,10 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     inputPolicy === "only_targeted_players" &&
     inputTargets.length > 0 &&
     !inputTargetsCurrentPlayer(inputTargets, playerProfile, currentRoomPlayer);
+  const hasOptimisticSubmission =
+    !isSinglePlayer && optimisticSubmittedPlayerId === playerId;
   const isInputSubmittedForCurrentState =
-    isInputSubmitted &&
+    (isInputSubmitted || hasOptimisticSubmission) &&
     (pendingRollRequests.length === 0 || Boolean(currentPendingRollRequest)) &&
     !isWaitingOnTargetedInput;
 
@@ -663,7 +678,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
       return [];
     }
 
-    return roomPlayers
+    return displayedRoomPlayers
       .filter((roomPlayer) => roomPlayer.status === "waiting")
       .map((roomPlayer) => ({
         id: roomPlayer.id,
@@ -674,15 +689,19 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
             ? roomPlayer.username
             : undefined
       }));
-  }, [hasAdventureBegun, isSinglePlayer, roomPlayers]);
+  }, [displayedRoomPlayers, hasAdventureBegun, isSinglePlayer]);
   const activeCharacterSheet = useMemo(() => {
     return (
       currentRoomPlayer?.characterSheet ||
-      roomPlayers.find((roomPlayer) => roomPlayer.characterSheet.trim())
+      displayedRoomPlayers.find((roomPlayer) => roomPlayer.characterSheet.trim())
         ?.characterSheet ||
       playerProfile.characterSheet
     );
-  }, [currentRoomPlayer?.characterSheet, playerProfile.characterSheet, roomPlayers]);
+  }, [
+    currentRoomPlayer?.characterSheet,
+    displayedRoomPlayers,
+    playerProfile.characterSheet
+  ]);
   const regeneratableMessageId = useMemo(() => {
     const latestDmMessage = [...visibleMessages]
       .reverse()
@@ -735,6 +754,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
           setIsSending(false);
         }
       } else if (currentPlayer?.status === "waiting") {
+        setOptimisticSubmittedPlayerId(null);
         setIsInputSubmitted(false);
         setIsSending(false);
       }
@@ -988,6 +1008,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
       setHasAdventureBegun(false);
       setIsRoomResolving(false);
       setIsInputSubmitted(false);
+      setOptimisticSubmittedPlayerId(null);
       setPendingRollRequests([]);
       setInputTargets([]);
       setInputPolicy("all_players");
@@ -1309,6 +1330,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     setIsSending(true);
     setIsInputSubmitted(!isSinglePlayer);
     if (!isSinglePlayer) {
+      setOptimisticSubmittedPlayerId(playerId);
       setRoomPlayers((currentPlayers) =>
         currentPlayers.map((roomPlayer) =>
           roomPlayer.id === playerId
@@ -1384,6 +1406,10 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
           createdAt: new Date().toISOString()
         }
       ]);
+      if (!isSinglePlayer) {
+        setOptimisticSubmittedPlayerId(null);
+        setIsInputSubmitted(false);
+      }
     } finally {
       setIsSending(false);
       if (isSinglePlayer) {
