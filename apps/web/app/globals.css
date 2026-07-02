@@ -1721,6 +1721,7 @@ h1 {
 .dnd-ability-card {
   display: grid;
   grid-template-columns: 64px minmax(0, 1fr);
+  grid-template-rows: 1fr 1fr;
   gap: 8px;
   min-height: 82px;
   padding: 6px 8px;
@@ -1729,6 +1730,7 @@ h1 {
 .dnd-ability-score {
   display: grid;
   align-self: stretch;
+  grid-row: 1 / -1;
   place-items: center;
   border: 1px solid rgba(244, 207, 122, 0.32);
   border-radius: 8px;
