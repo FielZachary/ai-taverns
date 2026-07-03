@@ -252,6 +252,7 @@ function providerDebugSummary(
     })),
     rawResponseLength: debug.rawResponse.length,
     rawResponsePreview: previewText(debug.rawResponse),
+    providerTimings: debug.providerTimings,
     ...(includeFullPayload ? { rawResponse: debug.rawResponse } : {})
   };
 }
@@ -490,6 +491,84 @@ function aiDebugInfoFromPayload(value: unknown): AiDebugInfo | undefined {
     .filter((message): message is AiDebugInfo["requestMessages"][number] =>
       Boolean(message)
     );
+  const providerTimings = Array.isArray(debug.providerTimings)
+    ? debug.providerTimings
+        .map((timing): NonNullable<AiDebugInfo["providerTimings"]>[number] | null => {
+          if (!timing || typeof timing !== "object") {
+            return null;
+          }
+
+          const candidate = timing as Record<string, unknown>;
+          const attempt = Number(candidate.attempt);
+          const totalMs = Number(candidate.totalMs);
+          const requestBytes = Number(candidate.requestBytes);
+          const requestMessageCount = Number(candidate.requestMessageCount);
+          const requestContentChars = Number(candidate.requestContentChars);
+          const status =
+            candidate.status === undefined ? undefined : Number(candidate.status);
+          const ok = typeof candidate.ok === "boolean" ? candidate.ok : undefined;
+          const headersMs =
+            candidate.headersMs === undefined
+              ? undefined
+              : Number(candidate.headersMs);
+          const bodyReadMs =
+            candidate.bodyReadMs === undefined
+              ? undefined
+              : Number(candidate.bodyReadMs);
+          const jsonParseMs =
+            candidate.jsonParseMs === undefined
+              ? undefined
+              : Number(candidate.jsonParseMs);
+          const responseBytes =
+            candidate.responseBytes === undefined
+              ? undefined
+              : Number(candidate.responseBytes);
+
+          if (
+            !Number.isFinite(attempt) ||
+            !Number.isFinite(totalMs) ||
+            !Number.isFinite(requestBytes) ||
+            !Number.isFinite(requestMessageCount) ||
+            !Number.isFinite(requestContentChars) ||
+            candidate.responseFormat !== "json_object" ||
+            typeof candidate.requestStartedAt !== "string" ||
+            typeof candidate.completedAt !== "string"
+          ) {
+            return null;
+          }
+
+          return {
+            attempt,
+            requestStartedAt: candidate.requestStartedAt,
+            headersReceivedAt:
+              typeof candidate.headersReceivedAt === "string"
+                ? candidate.headersReceivedAt
+                : undefined,
+            bodyReceivedAt:
+              typeof candidate.bodyReceivedAt === "string"
+                ? candidate.bodyReceivedAt
+                : undefined,
+            completedAt: candidate.completedAt,
+            totalMs,
+            headersMs: Number.isFinite(headersMs) ? headersMs : undefined,
+            bodyReadMs: Number.isFinite(bodyReadMs) ? bodyReadMs : undefined,
+            jsonParseMs: Number.isFinite(jsonParseMs) ? jsonParseMs : undefined,
+            status: Number.isFinite(status) ? status : undefined,
+            ok,
+            requestBytes,
+            responseBytes: Number.isFinite(responseBytes)
+              ? responseBytes
+              : undefined,
+            requestMessageCount,
+            requestContentChars,
+            responseFormat: "json_object" as const
+          };
+        })
+        .filter(
+          (timing): timing is NonNullable<AiDebugInfo["providerTimings"]>[number] =>
+            Boolean(timing)
+        )
+    : undefined;
 
   return {
     requestMessages,
@@ -498,7 +577,8 @@ function aiDebugInfoFromPayload(value: unknown): AiDebugInfo | undefined {
       typeof debug.providerResponseId === "string"
         ? debug.providerResponseId
         : undefined,
-    model: typeof debug.model === "string" ? debug.model : undefined
+    model: typeof debug.model === "string" ? debug.model : undefined,
+    providerTimings
   };
 }
 

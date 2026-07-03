@@ -10,6 +10,24 @@ export type AiDebugInfo = {
   rawResponse: string;
   providerResponseId?: string;
   model?: string;
+  providerTimings?: {
+    attempt: number;
+    requestStartedAt: string;
+    headersReceivedAt?: string;
+    bodyReceivedAt?: string;
+    completedAt: string;
+    totalMs: number;
+    headersMs?: number;
+    bodyReadMs?: number;
+    jsonParseMs?: number;
+    status?: number;
+    ok?: boolean;
+    requestBytes: number;
+    responseBytes?: number;
+    requestMessageCount: number;
+    requestContentChars: number;
+    responseFormat: "json_object";
+  }[];
 };
 
 export type GameMessage = {

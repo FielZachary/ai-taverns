@@ -23,6 +23,8 @@ type DeepSeekChatResponse = {
   };
 };
 
+type DeepSeekTiming = NonNullable<AiDebugInfo["providerTimings"]>[number];
+
 export type DungeonMasterProviderResponse = {
   id?: string;
   content: string;
@@ -54,8 +56,32 @@ function mapHistoryMessage(message: GameMessage): DeepSeekMessage {
   };
 }
 
-async function requestDeepSeek(messages: DeepSeekMessage[]) {
+function requestContentChars(messages: DeepSeekMessage[]) {
+  return messages.reduce((sum, message) => sum + message.content.length, 0);
+}
+
+async function requestDeepSeek(messages: DeepSeekMessage[], attempt: number) {
   let response: Response;
+  const requestBody = JSON.stringify({
+    model: deepSeekModel,
+    messages,
+    temperature: 0.8,
+    max_tokens: 4096,
+    response_format: {
+      type: "json_object"
+    }
+  });
+  const requestStarted = Date.now();
+  const timing: DeepSeekTiming = {
+    attempt,
+    requestStartedAt: new Date(requestStarted).toISOString(),
+    completedAt: new Date(requestStarted).toISOString(),
+    totalMs: 0,
+    requestBytes: Buffer.byteLength(requestBody, "utf8"),
+    requestMessageCount: messages.length,
+    requestContentChars: requestContentChars(messages),
+    responseFormat: "json_object"
+  };
 
   try {
     response = await fetch(`${deepSeekBaseUrl}/chat/completions`, {
@@ -64,18 +90,12 @@ async function requestDeepSeek(messages: DeepSeekMessage[]) {
         "Content-Type": "application/json",
         Authorization: `Bearer ${deepSeekApiKey}`
       },
-      body: JSON.stringify({
-        model: deepSeekModel,
-        messages,
-        temperature: 0.8,
-        max_tokens: 4096,
-        response_format: {
-          type: "json_object"
-        }
-      }),
+      body: requestBody,
       signal: AbortSignal.timeout(175_000)
     });
   } catch (error) {
+    timing.completedAt = new Date().toISOString();
+    timing.totalMs = Date.now() - requestStarted;
     throw new Error(
       `DeepSeek could not be reached. ${
         error instanceof Error ? error.message : "Network request failed."
@@ -83,7 +103,29 @@ async function requestDeepSeek(messages: DeepSeekMessage[]) {
     );
   }
 
-  const data = (await response.json().catch(() => ({}))) as DeepSeekChatResponse;
+  const headersReceived = Date.now();
+  timing.headersReceivedAt = new Date(headersReceived).toISOString();
+  timing.headersMs = headersReceived - requestStarted;
+  timing.status = response.status;
+  timing.ok = response.ok;
+
+  const responseText = await response.text().catch(() => "");
+  const bodyReceived = Date.now();
+  timing.bodyReceivedAt = new Date(bodyReceived).toISOString();
+  timing.bodyReadMs = bodyReceived - headersReceived;
+  timing.responseBytes = Buffer.byteLength(responseText, "utf8");
+
+  const jsonParseStarted = Date.now();
+  let data: DeepSeekChatResponse = {};
+  try {
+    data = JSON.parse(responseText) as DeepSeekChatResponse;
+  } catch {
+    data = {};
+  }
+  const completed = Date.now();
+  timing.jsonParseMs = completed - jsonParseStarted;
+  timing.completedAt = new Date(completed).toISOString();
+  timing.totalMs = completed - requestStarted;
 
   if (!response.ok) {
     throw new Error(
@@ -93,7 +135,7 @@ async function requestDeepSeek(messages: DeepSeekMessage[]) {
     );
   }
 
-  return data;
+  return { data, timing };
 }
 
 function emptyReplyDiagnostic(data: DeepSeekChatResponse) {
@@ -132,7 +174,9 @@ export async function askDungeonMasterProvider({
   ];
 
   let requestMessages = messages;
-  let data = await requestDeepSeek(requestMessages);
+  const timings: DeepSeekTiming[] = [];
+  let { data, timing } = await requestDeepSeek(requestMessages, 1);
+  timings.push(timing);
   let content = data.choices?.[0]?.message?.content?.trim();
 
   if (!content) {
@@ -144,7 +188,8 @@ export async function askDungeonMasterProvider({
           "Your previous response was empty. Return exactly one valid JSON object matching the requested AI Taverns DM contract now."
       }
     ];
-    data = await requestDeepSeek(requestMessages);
+    ({ data, timing } = await requestDeepSeek(requestMessages, 2));
+    timings.push(timing);
     content = data.choices?.[0]?.message?.content?.trim();
   }
 
@@ -161,7 +206,8 @@ export async function askDungeonMasterProvider({
       requestMessages,
       rawResponse: content,
       providerResponseId: data.id,
-      model: data.model ?? deepSeekModel
+      model: data.model ?? deepSeekModel,
+      providerTimings: timings
     }
   };
 }
