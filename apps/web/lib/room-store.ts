@@ -455,6 +455,18 @@ function eventPayload(payload: unknown) {
   return payload as Record<string, unknown>;
 }
 
+function campaignEventMessageKind(type: string): GameMessage["kind"] {
+  if (type === "dm_question") {
+    return "ask_dm_question";
+  }
+
+  if (type === "dm_answer") {
+    return "ask_dm_answer";
+  }
+
+  return "turn";
+}
+
 function aiDebugInfoFromPayload(value: unknown): AiDebugInfo | undefined {
   if (!value || typeof value !== "object") {
     return undefined;
@@ -1387,7 +1399,13 @@ async function getCampaignEventMessages(
         select id, type, payload, created_at
         from campaign_events
         where campaign_id = $1
-          and type in ('turn_submitted', 'turn_resolved', 'adventure_begun')
+          and type in (
+            'turn_submitted',
+            'turn_resolved',
+            'adventure_begun',
+            'dm_question',
+            'dm_answer'
+          )
         order by created_at desc
         limit $2
       ) recent_events
@@ -1408,6 +1426,7 @@ async function getCampaignEventMessages(
       return {
         id: String(payload.messageId || event.id),
         role: payload.role === "player" ? "player" : "dm",
+        kind: campaignEventMessageKind(event.type),
         content,
         createdAt: toIso(event.created_at)
       };
@@ -1533,6 +1552,134 @@ function formatSoloTurn(player: PlayerRow, content: string) {
     "Only treat concrete declared actions as actions. Quoted speech, questions, promises, plans, and corrections are dialogue or intent unless the player also says they move, travel, enter, search, attack, take something, cast a spell, or otherwise change the scene.",
     `${player.username} (${player.character_name}): ${content}`
   ].join("\n");
+}
+
+function askDmInstructions() {
+  return [
+    "You are the AI Taverns DnD Dungeon Master answering an out-of-turn table question.",
+    "Return exactly one valid JSON object and no Markdown.",
+    'Use this schema: {"answer":"Your player-facing answer."}',
+    "This is not a player action and must not advance game time.",
+    "Do not move the scene forward, resolve consequences, consume resources, request dice, change pending rolls, trigger NPC actions, or introduce new hidden facts as if discovered.",
+    "Use only already-established campaign context, visible character knowledge, rules reasoning, and reasonable table clarification.",
+    "If the player is asking to do something in the fiction, tell them to submit it as a turn/action instead of resolving it here.",
+    "If the answer depends on hidden information their character would not know, say what is apparent or what kind of action/check could reveal more.",
+    "Keep the answer concise and useful, normally 1-3 short paragraphs."
+  ].join("\n");
+}
+
+function formatAskDmQuestion(players: PlayerRow[], asker: PlayerRow, question: string) {
+  return [
+    formatCanonicalCharacterContext(players.length > 0 ? players : [asker]),
+    "",
+    "Out-of-turn Ask DM question:",
+    "The player is asking for clarification without advancing time. Answer as table guidance, not as a committed character action.",
+    `${asker.username} (${asker.character_name}): ${question}`
+  ].join("\n");
+}
+
+function answerFromAskDmProviderResponse(content: string) {
+  const parsed = parseJsonRecord(content);
+  const answer = typeof parsed.answer === "string" ? parsed.answer.trim() : "";
+
+  if (answer) {
+    return answer;
+  }
+
+  const trimmed = content.trim();
+
+  if (trimmed) {
+    return trimmed;
+  }
+
+  throw new Error("The DM provider returned an empty answer.");
+}
+
+export async function askDungeonMasterQuestion(
+  campaignId: string,
+  question: string,
+  userId: string,
+  clientMessageId?: string
+) {
+  const trimmedQuestion = question.trim();
+
+  if (!trimmedQuestion) {
+    throw new HttpError("A question is required.", 400);
+  }
+
+  const { campaign, player } = await withTransaction(async (client) => {
+    const campaignRow = (
+      await client.query<CampaignRow>(
+        `
+          select *
+          from campaigns
+          where id = $1 and status = 'active'
+          limit 1
+        `,
+        [campaignId]
+      )
+    ).rows[0];
+
+    if (!campaignRow) {
+      throw new HttpError("Campaign not found.", 404);
+    }
+
+    await assertCampaignAccessForUser(campaignRow, userId, client);
+
+    const activePlayer = await getActivePlayerForUser(campaignRow.id, userId, client);
+
+    if (!activePlayer) {
+      throw new HttpError("An active player profile is required.", 400);
+    }
+
+    await client.query("update players set last_seen_at = now() where id = $1", [
+      activePlayer.id
+    ]);
+
+    return { campaign: campaignRow, player: activePlayer };
+  });
+
+  const players = await getActivePlayers(campaign.id);
+  const currentAction = formatAskDmQuestion(players, player, trimmedQuestion);
+  const instructions = askDmInstructions();
+  const promptContext = await buildDungeonMasterPromptContext({
+    campaignId: campaign.id,
+    currentAction,
+    baseInstructions: instructions
+  });
+  const providerData = await askDungeonMasterProvider({
+    message: promptContext.message,
+    instructions: promptContext.instructions,
+    history: []
+  });
+  const answer = answerFromAskDmProviderResponse(providerData.content);
+  const questionMessageId = clientMessageId?.trim() || crypto.randomUUID();
+  const answerMessageId = providerData.id || crypto.randomUUID();
+
+  await withTransaction(async (client) => {
+    await logCampaignEvent(client, campaign.id, "dm_question", {
+      messageId: questionMessageId,
+      role: "player",
+      playerId: player.id,
+      clientId: player.client_id,
+      content: trimmedQuestion
+    });
+    await logCampaignEvent(client, campaign.id, "dm_answer", {
+      messageId: answerMessageId,
+      role: "dm",
+      playerId: player.id,
+      inReplyToMessageId: questionMessageId,
+      content: answer,
+      aiDebug: providerData.debug
+    });
+  });
+
+  const updatedCampaign = await resolveCampaign(
+    campaign.id,
+    campaign.hermes_session_id
+  );
+
+  return buildSnapshot(updatedCampaign ?? campaign);
 }
 
 async function askDungeonMaster(
@@ -1862,7 +2009,13 @@ async function buildSnapshot(campaign: CampaignRow): Promise<RoomSnapshot> {
         select id, type, payload, created_at
         from campaign_events
         where campaign_id = $1
-          and type in ('turn_submitted', 'turn_resolved', 'adventure_begun')
+          and type in (
+            'turn_submitted',
+            'turn_resolved',
+            'adventure_begun',
+            'dm_question',
+            'dm_answer'
+          )
         order by created_at desc
         limit 100
       ) recent_events
@@ -1884,6 +2037,7 @@ async function buildSnapshot(campaign: CampaignRow): Promise<RoomSnapshot> {
       return {
         id: String(payload.messageId || event.id),
         role,
+        kind: campaignEventMessageKind(event.type),
         content,
         createdAt: toIso(event.created_at),
         debug:

@@ -1,8 +1,10 @@
 export type GameMessageRole = "player" | "dm" | "system";
+export type GameMessageKind = "turn" | "ask_dm_question" | "ask_dm_answer";
 
 export type GameMessage = {
   id: string;
   role: GameMessageRole;
+  kind?: GameMessageKind;
   content: string;
   createdAt: string;
 };

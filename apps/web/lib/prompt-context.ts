@@ -283,12 +283,26 @@ function eventToMessage(event: EventRow): GameMessage | null {
   return {
     id: stringValue(payload.messageId) || event.id,
     role: payload.role === "player" ? "player" : "dm",
+    kind:
+      event.type === "dm_question"
+        ? "ask_dm_question"
+        : event.type === "dm_answer"
+          ? "ask_dm_answer"
+          : "turn",
     content,
     createdAt: toIso(event.created_at)
   };
 }
 
 function formatTranscriptMessage(message: GameMessage) {
+  if (message.kind === "ask_dm_question") {
+    return `Player out-of-turn question to DM: ${message.content}`;
+  }
+
+  if (message.kind === "ask_dm_answer") {
+    return `DM out-of-turn answer: ${message.content}`;
+  }
+
   return `${message.role === "player" ? "Player" : "DM"}: ${message.content}`;
 }
 
@@ -442,7 +456,13 @@ async function getRecentVisibleEvents(campaignId: string, turnId?: string) {
         select id, type, payload, created_at
         from campaign_events
         where campaign_id = $1
-          and type in ('turn_submitted', 'turn_resolved', 'adventure_begun')
+          and type in (
+            'turn_submitted',
+            'turn_resolved',
+            'adventure_begun',
+            'dm_question',
+            'dm_answer'
+          )
           and coalesce(payload->>'turnId', '') <> coalesce($2, '')
         order by created_at desc
         limit 40
@@ -646,7 +666,13 @@ async function sourceEventIdsForTurn(campaignId: string, turnId: string) {
       from campaign_events
       where campaign_id = $1
         and payload->>'turnId' = $2
-        and type in ('turn_submitted', 'turn_resolved', 'adventure_begun')
+        and type in (
+          'turn_submitted',
+          'turn_resolved',
+          'adventure_begun',
+          'dm_question',
+          'dm_answer'
+        )
       order by created_at asc
     `,
     [campaignId, turnId]

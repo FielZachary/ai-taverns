@@ -6,14 +6,16 @@ import {
   useRef,
   useState
 } from "react";
-import { Dice5, Send } from "lucide-react";
+import { Dice5, MessageCircleQuestion, Send, Swords } from "lucide-react";
 import type { DiceRollRequest } from "@/lib/game-types";
 
 export type DiceFace = "d4" | "d6" | "d8" | "d10" | "d12" | "d20";
 export type QueuedDice = Partial<Record<DiceFace, number>>;
+export type PlayerInputMode = "turn" | "ask_dm";
 
 type PlayerInputProps = {
   draft: string;
+  mode: PlayerInputMode;
   isSending: boolean;
   isSubmitted: boolean;
   lockMessage?: string;
@@ -23,6 +25,7 @@ type PlayerInputProps = {
   validationMessage?: string;
   validationPulse: number;
   onDraftChange: (value: string) => void;
+  onModeChange: (mode: PlayerInputMode) => void;
   onRollDice: (queuedDice: QueuedDice) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 };
@@ -37,6 +40,7 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
   function PlayerInput(
     {
       draft,
+      mode,
       isSending,
       isSubmitted,
       lockMessage,
@@ -46,6 +50,7 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
       validationMessage,
       validationPulse,
       onDraftChange,
+      onModeChange,
       onRollDice,
       onSubmit
     },
@@ -93,11 +98,14 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
       };
     }, [isDicePickerOpen]);
 
-    const overlayMessage = requiredRoll
+    const isAskMode = mode === "ask_dm";
+    const overlayMessage = !isAskMode && requiredRoll
       ? "Roll to continue"
-      : lockMessage || (isSubmitted ? "Submitted." : "");
-    const isLocked = Boolean(lockMessage) || isSubmitted;
-    const isRollRequired = Boolean(requiredRoll);
+      : !isAskMode
+        ? lockMessage || (isSubmitted ? "Submitted." : "")
+        : "";
+    const isLocked = !isAskMode && (Boolean(lockMessage) || isSubmitted);
+    const isRollRequired = !isAskMode && Boolean(requiredRoll);
     const queuedCount = useMemo(() => queuedDiceTotal(queuedDice), [queuedDice]);
 
     useEffect(() => {
@@ -143,6 +151,30 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
             {validationMessage}
           </p>
         ) : null}
+        <div className="input-mode-toggle" role="group" aria-label="Input mode">
+          <button
+            className={mode === "turn" ? "input-mode-button active" : "input-mode-button"}
+            type="button"
+            aria-pressed={mode === "turn"}
+            disabled={isSending}
+            onClick={() => onModeChange("turn")}
+          >
+            <Swords size={17} />
+            Turn
+          </button>
+          <button
+            className={
+              mode === "ask_dm" ? "input-mode-button active" : "input-mode-button"
+            }
+            type="button"
+            aria-pressed={mode === "ask_dm"}
+            disabled={isSending}
+            onClick={() => onModeChange("ask_dm")}
+          >
+            <MessageCircleQuestion size={17} />
+            Ask DM
+          </button>
+        </div>
         <div className="dice-roll-control" ref={diceRollControlRef}>
           <button
             className="dice-roll-button"
@@ -153,7 +185,7 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
                 : "Open dice roller"
             }
             aria-expanded={isDicePickerOpen}
-            disabled={(isLocked && !isRollRequired) || isSending}
+            disabled={isAskMode || (isLocked && !isRollRequired) || isSending}
             onClick={() => setIsDicePickerOpen((isOpen) => !isOpen)}
           >
             <Dice5 size={22} />
@@ -205,7 +237,11 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
             ref={ref}
             value={draft}
             onChange={(event) => onDraftChange(event.target.value)}
-            placeholder="Speak, search, attack, bargain..."
+            placeholder={
+              isAskMode
+                ? "Ask the DM a question without advancing time..."
+                : "Speak, search, attack, bargain..."
+            }
             readOnly={isLocked}
             rows={3}
           />
@@ -219,8 +255,8 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
           type="submit"
           disabled={isRollRequired || isLocked || isSending || !draft.trim()}
         >
-          <Send size={18} />
-          Send
+          {isAskMode ? <MessageCircleQuestion size={18} /> : <Send size={18} />}
+          {isAskMode ? "Ask" : "Send"}
         </button>
       </form>
     );

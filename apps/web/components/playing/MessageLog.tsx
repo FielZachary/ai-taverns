@@ -94,6 +94,22 @@ function MessageDebugModal({
   );
 }
 
+function messageLabel(message: GameMessage) {
+  if (message.kind === "ask_dm_question") {
+    return "Question to DM";
+  }
+
+  if (message.kind === "ask_dm_answer") {
+    return "DM Answer";
+  }
+
+  return message.role === "player"
+    ? "You"
+    : message.role === "dm"
+      ? "Dungeon Master"
+      : "Table";
+}
+
 export function MessageLog({
   messages,
   isSending,
@@ -127,7 +143,9 @@ export function MessageLog({
     <div className="message-log" aria-live="polite" ref={logRef}>
       {messages.map((message) => (
         <article
-          className={`message-card message-${message.role}`}
+          className={`message-card message-${message.role} ${
+            message.kind ? `message-${message.kind.replaceAll("_", "-")}` : ""
+          }`}
           key={message.id}
         >
           <div className="message-icon" aria-hidden="true">
@@ -145,13 +163,7 @@ export function MessageLog({
           </div>
           <div>
             <div className="message-heading">
-              <p className="message-label">
-                {message.role === "player"
-                  ? "You"
-                  : message.role === "dm"
-                    ? "Dungeon Master"
-                    : "Table"}
-              </p>
+              <p className="message-label">{messageLabel(message)}</p>
               {message.role === "dm" &&
               (message.debug || message.id === regeneratableMessageId) ? (
                 <div className="message-actions">

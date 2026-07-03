@@ -35,7 +35,12 @@ import {
   type PlayerProfile
 } from "./PlayerPanel";
 import { DiceRollReveal3D } from "./DiceRollReveal3D";
-import { PlayerInput, type DiceFace, type QueuedDice } from "./PlayerInput";
+import {
+  PlayerInput,
+  type DiceFace,
+  type PlayerInputMode,
+  type QueuedDice
+} from "./PlayerInput";
 
 const openingMessages: GameMessage[] = [];
 const playerIdStorageKey = "ai-dnd.playerId";
@@ -586,6 +591,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
   const [messages, setMessages] = useState<GameMessage[]>(openingMessages);
   const [availableCampaigns, setAvailableCampaigns] = useState<CampaignSummary[]>([]);
   const [draft, setDraft] = useState("");
+  const [inputMode, setInputMode] = useState<PlayerInputMode>("turn");
   const [isSending, setIsSending] = useState(false);
   const [regeneratingMessageId, setRegeneratingMessageId] = useState<
     string | null
@@ -720,7 +726,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
   const regeneratableMessageId = useMemo(() => {
     const latestDmMessage = [...visibleMessages]
       .reverse()
-      .find((message) => message.role === "dm");
+      .find((message) => message.role === "dm" && message.kind !== "ask_dm_answer");
 
     return latestDmMessage?.id ?? null;
   }, [visibleMessages]);
@@ -1515,8 +1521,90 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     }
   }
 
+  async function askDungeonMaster(messageText: string) {
+    const question = messageText.trim();
+
+    if (!question || isSending || !activeCampaign) {
+      return;
+    }
+
+    setInputValidationMessage("");
+    const playerMessage: GameMessage = {
+      id: createClientId(),
+      role: "player",
+      kind: "ask_dm_question",
+      content: question,
+      createdAt: new Date().toISOString()
+    };
+
+    setMessages((currentMessages) => [...currentMessages, playerMessage]);
+    setDraft("");
+    setIsSending(true);
+
+    try {
+      const response = await fetch(
+        `/api/campaigns/${encodeURIComponent(activeCampaign.id)}/ask-dm`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            question,
+            clientMessageId: playerMessage.id
+          })
+        }
+      );
+
+      if (!response.ok) {
+        const message = await getApiErrorMessage(
+          response,
+          "The DM could not answer that question."
+        );
+        throw new Error(message);
+      }
+
+      const room = (await response.json()) as RoomSnapshot;
+      applyRoomSnapshot(room);
+
+      if (isSinglePlayer) {
+        setMessages(room.messages.length > 0 ? room.messages : openingMessages);
+      }
+
+      const latestMessage = room.messages[room.messages.length - 1];
+      setAvailableCampaigns((currentCampaigns) =>
+        updateCampaignPreview(
+          currentCampaigns,
+          activeCampaign.id,
+          latestMessage?.content ?? question
+        )
+      );
+    } catch (error) {
+      setMessages((currentMessages) => [
+        ...currentMessages,
+        {
+          id: createClientId(),
+          role: "system",
+          content:
+            error instanceof Error
+              ? error.message
+              : "The DM could not answer that question.",
+          createdAt: new Date().toISOString()
+        }
+      ]);
+    } finally {
+      setIsSending(false);
+      inputRef.current?.focus();
+    }
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (inputMode === "ask_dm") {
+      void askDungeonMaster(draft);
+      return;
+    }
+
     void sendTurn(draft);
   }
 
@@ -1815,6 +1903,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
             <PlayerInput
               ref={inputRef}
               draft={draft}
+              mode={inputMode}
               isSending={isSending || Boolean(activeDiceReveal)}
               isSubmitted={
                 (isSinglePlayer && isSending) ||
@@ -1841,6 +1930,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
               validationMessage={inputValidationMessage}
               validationPulse={inputValidationPulse}
               onDraftChange={setDraft}
+              onModeChange={setInputMode}
               onRollDice={handleRollDice}
               onSubmit={handleSubmit}
             />
