@@ -104,6 +104,20 @@ async function getAuthenticatedSession(
   return AuthMeResponseSchema.parse(response);
 }
 
+export async function requireAuthenticatedUser(
+  fastify: FastifyInstance,
+  config: ApiConfig,
+  sessionToken: string | undefined
+) {
+  const authSession = await getAuthenticatedSession(fastify, config, sessionToken);
+
+  if (!authSession.authenticated) {
+    throw createHttpError(401, "Authentication required.");
+  }
+
+  return authSession.user;
+}
+
 export async function registerAuthRoutes(
   fastify: FastifyInstance,
   options: AuthRouteOptions
@@ -231,19 +245,15 @@ export async function registerAuthRoutes(
   });
 
   fastify.get("/auth/protected", async (request) => {
-    const authSession = await getAuthenticatedSession(
+    const user = await requireAuthenticatedUser(
       fastify,
       config,
       request.cookies[config.authCookieName]
     );
 
-    if (!authSession.authenticated) {
-      throw createHttpError(401, "Authentication required.");
-    }
-
     return AuthProtectedResponseSchema.parse({
       ok: true,
-      user: authSession.user
+      user
     });
   });
 }

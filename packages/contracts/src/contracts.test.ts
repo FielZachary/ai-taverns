@@ -8,6 +8,9 @@ import {
   AuthPasswordlessVerifyRequestSchema,
   AuthProtectedResponseSchema,
   AuthSignOutResponseSchema,
+  CampaignCreateRequestSchema,
+  CampaignJoinPreviewResponseSchema,
+  CampaignListResponseSchema,
   HealthResponseSchema
 } from "./index.js";
 
@@ -128,4 +131,40 @@ test("error envelope contract rejects unknown error codes", () => {
       }
     })
   );
+});
+
+test("campaign contracts accept list, create, and join preview payloads", () => {
+  const createRequest = CampaignCreateRequestSchema.parse({
+    mode: "multiplayer",
+    campaignGenreKind: "preset",
+    campaignGenrePresetId: "classic_fantasy",
+    ownerClientId: "client-1"
+  });
+
+  assert.equal(createRequest.mode, "multiplayer");
+
+  const listResponse = CampaignListResponseSchema.parse({
+    campaigns: [
+      {
+        id: "00000000-0000-4000-8000-000000000001",
+        hermesSessionId: "ai-dnd-session",
+        mode: "multiplayer",
+        title: "Table Owner",
+        preview: "Classic Fantasy",
+        messageCount: 0,
+        joinCode: "ABC234"
+      }
+    ]
+  });
+
+  assert.equal(listResponse.campaigns[0]?.joinCode, "ABC234");
+
+  const preview = CampaignJoinPreviewResponseSchema.parse({
+    code: "ABC234",
+    campaignTitle: "Table Owner",
+    availableSlots: 3,
+    hasBegun: false
+  });
+
+  assert.equal(preview.availableSlots, 3);
 });

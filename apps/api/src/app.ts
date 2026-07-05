@@ -5,6 +5,7 @@ import { loadConfig, type ApiConfig } from "./config.js";
 import { handleRouteError } from "./errors.js";
 import { postgresPlugin } from "./plugins/postgres.js";
 import { registerAuthRoutes } from "./routes/auth.js";
+import { registerCampaignRoutes } from "./routes/campaigns.js";
 import { registerHealthRoutes } from "./routes/health.js";
 
 export type BuildAppOptions = {
@@ -48,6 +49,10 @@ export async function buildApp(
 
   await registerHealthRoutes(fastify);
   await fastify.register(registerAuthRoutes, {
+    prefix: "/api",
+    config
+  });
+  await fastify.register(registerCampaignRoutes, {
     prefix: "/api",
     config
   });
