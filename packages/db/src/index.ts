@@ -4,6 +4,7 @@ import type { SessionId, UserId } from "@ai-dnd/domain";
 import {
   debugHermesDmContractFailure,
   dungeonMasterInstructions,
+  openingSceneRequest,
   parseHermesDmContract,
   type AiDebugInfo,
   type GameMessage,
@@ -426,13 +427,20 @@ type CampaignSettingSummary = {
   startingLocation?: string;
 };
 
+type CampaignOpeningStyle = {
+  campaignGenre?: string | undefined;
+  campaignGenrePromptBrief?: string | undefined;
+  customWorldName?: string | undefined;
+  customWorldDescription?: string | undefined;
+};
+
 type DungeonMasterProviderResponse = {
   id?: string;
   content: string;
   debug: AiDebugInfo;
 };
 
-type DungeonMasterRuntime = {
+export type DungeonMasterRuntime = {
   askProvider(input: {
     message: string;
     instructions: string;
@@ -770,6 +778,7 @@ export async function createCampaignForMode(
     characterName?: string | undefined;
     characterSheet?: string | undefined;
     userId: string;
+    runtime?: DungeonMasterRuntime | undefined;
   }
 ): Promise<CampaignSummary> {
   const sessionId = `ai-dnd-${randomUUID()}`;
@@ -784,7 +793,7 @@ export async function createCampaignForMode(
     }
   };
 
-  return withTransaction(db, async (client) => {
+  const createdState = await withTransaction(db, async (client) => {
     const inserted = await client.query<CampaignRow>(
       `
         insert into campaigns (
@@ -831,12 +840,15 @@ export async function createCampaignForMode(
         input.userId,
         input.playerName,
         input.characterName ?? (input.mode === "single_player" ? input.playerName : ""),
-        input.characterSheet ?? ""
+        input.characterSheet ??
+          (input.mode === "single_player"
+            ? "Quick fantasy adventurer template."
+            : "")
       ]
     );
     const playerRow = requireRow(player.rows[0], "Failed to create player.");
+    const turn = await ensureCollectingTurn(client, campaign.id);
 
-    await ensureCollectingTurn(client, campaign.id);
     await logCampaignEvent(client, campaign.id, "campaign_created", {
       hermesSessionId: sessionId,
       mode: input.mode,
@@ -856,15 +868,101 @@ export async function createCampaignForMode(
       input.mode === "multiplayer"
         ? await ensureCampaignJoinCode(client, campaign.id, input.userId)
         : undefined;
+    const openingTurn =
+      input.mode === "single_player" && input.runtime
+        ? (
+            await client.query<TurnRow>(
+              `
+                update turns
+                set status = 'resolving'
+                where id = $1 and status = 'collecting'
+                returning *
+              `,
+              [turn.id]
+            )
+          ).rows[0]
+        : undefined;
 
-    return mapCampaignSummaryRow({
+    if (openingTurn) {
+      await logCampaignEvent(client, campaign.id, "turn_resolving", {
+        turnId: openingTurn.id,
+        reason: "adventure_begun"
+      });
+    }
+
+    return {
+      campaign,
+      player: playerRow,
+      turn: openingTurn,
+      summary: mapCampaignSummaryRow({
       ...campaign,
       metadata: genreMetadata,
       display_character_name: playerRow.character_name,
       display_username: playerRow.username,
       join_code: joinCode ?? null
-    });
+      })
+    };
   });
+
+  if (input.mode !== "single_player" || !input.runtime || !createdState.turn) {
+    return createdState.summary;
+  }
+
+  const currentAction = formatOpeningSceneRequest({
+    mode: "single_player",
+    players: [createdState.player],
+    style: {
+      campaignGenre: input.campaignGenre,
+      campaignGenrePromptBrief: input.campaignGenrePromptBrief,
+      customWorldName: input.customWorldName,
+      customWorldDescription: input.customWorldDescription
+    }
+  });
+
+  try {
+    const opening = await askDungeonMaster(
+      db,
+      input.runtime,
+      createdState.campaign,
+      currentAction,
+      openingSceneInstructions("single_player"),
+      true,
+      createdState.turn.id
+    );
+    const resolvedTurn = await finishResolvedTurn(db, {
+      campaignId: createdState.campaign.id,
+      turnId: createdState.turn.id,
+      hermesMessageId: opening.id,
+      reply: opening.content,
+      eventType: "adventure_begun",
+      pendingRollRequests: opening.rollRequests,
+      inputTargets: opening.inputTargets,
+      inputPolicy: opening.inputPolicy,
+      setting: opening.setting,
+      aiDebug: opening.debug
+    });
+
+    await db.query("update campaigns set has_begun = true where id = $1", [
+      createdState.campaign.id
+    ]);
+
+    void input.runtime.runPostTurnContextJobs?.({
+      campaignId: createdState.campaign.id,
+      turnId: createdState.turn.id,
+      currentAction,
+      dmResponse: opening.content,
+      dmEventId: resolvedTurn.dmEventId,
+      rollRequests: opening.rollRequests
+    });
+
+    return getCampaignSummaryForUser(db, {
+      campaignId: createdState.campaign.id,
+      userId: input.userId
+    });
+  } catch (error) {
+    await markTurnFailed(db, createdState.turn.id, error);
+    throw error;
+  }
 }
 
 export async function previewCampaignJoinByCode(
@@ -1794,6 +1892,71 @@ function formatSoloTurn(player: PlayerRow, content: string) {
     "Only treat concrete declared actions as actions. Quoted speech, questions, promises, plans, and corrections are dialogue or intent unless the player also says they move, travel, enter, search, attack, take something, cast a spell, or otherwise change the scene.",
     `${player.username} (${player.character_name}): ${content}`
   ].join("\n");
+}
+
+function formatOpeningSceneRequest(input: {
+  mode: CampaignMode;
+  players: PlayerRow[];
+  style: CampaignOpeningStyle;
+}) {
+  const modeDirection =
+    input.mode === "single_player"
+      ? "This is a singleplayer campaign. Spotlight the solo character directly, tie the premise to their sheet or background when possible, and make the first choice immediately actionable for one player."
+      : "This is a multiplayer campaign. Establish why the party is together now with a shared job, summons, debt, journey, investigation, emergency, or mutual destination; do not make them feel like unrelated strangers standing near an encounter.";
+  const customWorldName = input.style.customWorldName
+    ? `World name: ${input.style.customWorldName}`
+    : "";
+  const customWorldDescription = input.style.customWorldDescription
+    ? `Custom world description: ${input.style.customWorldDescription}`
+    : "";
+
+  return [
+    formatCanonicalCharacterContext(input.players),
+    "",
+    "Current player action:",
+    openingSceneRequest,
+    "",
+    "Campaign opening setup:",
+    `Mode: ${input.mode}`,
+    `Party size: ${input.players.length}`,
+    input.style.campaignGenre ? `Campaign genre: ${input.style.campaignGenre}` : "",
+    input.style.campaignGenrePromptBrief
+      ? `Campaign genre guidance: ${input.style.campaignGenrePromptBrief}`
+      : "",
+    customWorldName,
+    customWorldDescription,
+    "",
+    "Campaign opener requirements:",
+    "Write a true campaign opener, not only a room description, road encounter, or local hazard.",
+    "Establish a named starting place and a named larger region, realm, frontier, city, or world. If the setup does not provide names, invent strong fantasy names.",
+    "Establish why the character or party is here now and what set them on this path.",
+    "Give the character a concrete first objective, destination, mystery, obligation, rescue, delivery, investigation, or promise that can drive the next several scenes.",
+    "Introduce an immediate obstacle, threat, discovery, or NPC demand that blocks or complicates that objective right now.",
+    "Make the campaign promise legible: what kind of adventure this is, what larger problem is stirring, and why the character should care.",
+    "Use character sheet details to personalize hooks, warnings, sensory cues, relationships, or stakes without rewriting character backstories.",
+    "",
+    "Opening scene quality bar:",
+    "Write 4-7 rich paragraphs with concrete sensory detail, spatial clarity, premise, purpose, an immediate tension, and clear interactable choices.",
+    "Begin in the fiction immediately; do not ask what kind of world the player wants.",
+    "Return no player-facing roll requests unless danger or uncertainty already requires dice before the player can act.",
+    "End with a direct player-facing prompt such as 'What do you do?'",
+    modeDirection
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function openingSceneInstructions(mode: CampaignMode) {
+  const modeDirection =
+    mode === "single_player"
+      ? "The website has provided the solo player's character setup."
+      : "The website has provided the full current party.";
+
+  return [
+    dungeonMasterInstructions,
+    modeDirection,
+    "Use the campaign setup and canonical character sheets to begin with a rich campaign opener: establish named place, larger context, shared purpose, first objective, and immediate obstacle. Do not mention implementation details."
+  ].join(" ");
 }
 
 function askDmInstructions() {

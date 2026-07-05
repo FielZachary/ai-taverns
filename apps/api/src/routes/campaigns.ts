@@ -13,16 +13,19 @@ import {
 } from "@ai-dnd/contracts";
 import {
   createCampaignForMode,
+  type DungeonMasterRuntime,
   getCampaignSummaryForUser,
   joinCampaignByCode,
   listCampaignSummariesForUser,
   previewCampaignJoinByCode
 } from "@ai-dnd/db";
 import type { ApiConfig } from "../config.js";
+import { askDungeonMasterProvider } from "../dm-provider.js";
 import { requireAuthenticatedUser } from "./auth.js";
 
 type CampaignRouteOptions = {
   config: ApiConfig;
+  dmRuntime?: DungeonMasterRuntime | undefined;
 };
 
 const campaignGenrePresets = [
@@ -67,6 +70,9 @@ export async function registerCampaignRoutes(
   options: CampaignRouteOptions
 ) {
   const { config } = options;
+  const runtime = options.dmRuntime ?? {
+    askProvider: askDungeonMasterProvider
+  };
 
   fastify.get("/campaigns", async (request) => {
     const user = await requireAuthenticatedUser(
@@ -150,7 +156,8 @@ export async function registerCampaignRoutes(
       playerName,
       characterName: body.characterName?.trim(),
       characterSheet: body.characterSheet?.trim(),
-      userId: user.id
+      userId: user.id,
+      runtime
     });
 
     reply.status(201);

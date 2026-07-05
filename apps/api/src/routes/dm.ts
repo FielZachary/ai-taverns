@@ -12,6 +12,7 @@ import {
 } from "@ai-dnd/contracts";
 import {
   askDungeonMasterQuestionForUser,
+  type DungeonMasterRuntime,
   listCampaignDebugTracesForUser,
   regenerateCampaignResponseForUser,
   submitSoloTurnForUser
@@ -22,6 +23,7 @@ import { requireAuthenticatedUser } from "./auth.js";
 
 type DmRouteOptions = {
   config: ApiConfig;
+  dmRuntime?: DungeonMasterRuntime | undefined;
 };
 
 function createHttpError(statusCode: number, message: string): Error {
@@ -35,7 +37,7 @@ export async function registerDmRoutes(
   options: DmRouteOptions
 ) {
   const { config } = options;
-  const runtime = {
+  const runtime = options.dmRuntime ?? {
     askProvider: askDungeonMasterProvider
   };
 

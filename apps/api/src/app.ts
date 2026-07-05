@@ -1,6 +1,7 @@
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import Fastify, { type FastifyInstance } from "fastify";
+import type { DungeonMasterRuntime } from "@ai-dnd/db";
 import { loadConfig, type ApiConfig } from "./config.js";
 import { handleRouteError } from "./errors.js";
 import { postgresPlugin } from "./plugins/postgres.js";
@@ -13,6 +14,7 @@ import { registerRoomRoutes } from "./routes/rooms.js";
 export type BuildAppOptions = {
   config?: ApiConfig;
   connectToDatabase?: boolean;
+  dmRuntime?: DungeonMasterRuntime;
 };
 
 export async function buildApp(
@@ -56,7 +58,8 @@ export async function buildApp(
   });
   await fastify.register(registerCampaignRoutes, {
     prefix: "/api",
-    config
+    config,
+    dmRuntime: options.dmRuntime
   });
   await fastify.register(registerRoomRoutes, {
     prefix: "/api",
@@ -64,7 +67,8 @@ export async function buildApp(
   });
   await fastify.register(registerDmRoutes, {
     prefix: "/api",
-    config
+    config,
+    dmRuntime: options.dmRuntime
   });
 
   return fastify;

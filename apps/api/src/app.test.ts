@@ -516,6 +516,34 @@ class FakeDatabase {
       return { rows: rows as T[] };
     }
 
+    if (normalizedSql.startsWith("update turns set status = 'resolving'")) {
+      const turnId = values[0] as string;
+      const turn = this.turns.find(
+        (candidate) =>
+          candidate.id === turnId && candidate.status === "collecting"
+      );
+
+      if (!turn) {
+        return { rows: [] as T[] };
+      }
+
+      turn.status = "resolving";
+      turn.updated_at = new Date();
+      return { rows: [turn as T] };
+    }
+
+    if (normalizedSql.startsWith("update turns set status = 'resolved'")) {
+      const turnId = values[0] as string;
+      const turn = this.turns.find((candidate) => candidate.id === turnId);
+
+      if (turn) {
+        turn.status = "resolved";
+        turn.updated_at = new Date();
+      }
+
+      return { rows: [] as T[] };
+    }
+
     if (normalizedSql.startsWith("insert into turns")) {
       const now = new Date();
       const record = {
@@ -542,6 +570,49 @@ class FakeDatabase {
       } satisfies CampaignEventRecord;
       this.campaignEvents.push(record);
       return { rows: [{ id: record.id } as T] };
+    }
+
+    if (normalizedSql.startsWith("update submissions set status = 'included_in_turn'")) {
+      const turnId = values[0] as string;
+
+      for (const submission of this.submissions) {
+        if (submission.turn_id === turnId && submission.status === "submitted") {
+          submission.status = "included_in_turn";
+        }
+      }
+
+      return { rows: [] as T[] };
+    }
+
+    if (normalizedSql.startsWith("update campaigns set metadata = metadata")) {
+      const campaignId = values[0] as string;
+      const patch = JSON.parse(values[1] as string) as Record<string, unknown>;
+      const campaign = this.campaigns.find(
+        (candidate) => candidate.id === campaignId
+      );
+
+      if (campaign) {
+        campaign.metadata = {
+          ...(campaign.metadata as Record<string, unknown>),
+          ...patch
+        };
+        campaign.updated_at = new Date();
+      }
+
+      return { rows: [] as T[] };
+    }
+
+    if (normalizedSql.startsWith("update campaigns set metadata = case")) {
+      const campaignId = values[0] as string;
+      const campaign = this.campaigns.find(
+        (candidate) => candidate.id === campaignId
+      );
+
+      if (campaign) {
+        campaign.updated_at = new Date();
+      }
+
+      return { rows: [] as T[] };
     }
 
     if (normalizedSql.startsWith("select code from campaign_join_codes")) {
@@ -833,7 +904,31 @@ before(async () => {
       DATABASE_URL: "postgres://postgres:postgres@localhost:5432/ai_taverns",
       AUTH_COOKIE_NAME: "test_session"
     }),
-    connectToDatabase: false
+    connectToDatabase: false,
+    dmRuntime: {
+      askProvider: async () => ({
+        id: "provider-message-1",
+        content: JSON.stringify({
+          public_narration:
+            "A lantern flickers over the old road as your adventure begins.\n\nA weathered sign points toward a ruined watchtower beyond the trees.\n\nWhat do you do?",
+          roll_requests: [],
+          next_input_needed: "player_actions",
+          input_targets: [],
+          input_policy: "all_players",
+          setting: {
+            display_location: "Old Road",
+            world_name: "Test Realm",
+            starting_location: "Old Road"
+          }
+        }),
+        debug: {
+          requestMessages: [],
+          rawResponse: "{}",
+          model: "test-model",
+          providerTimings: []
+        }
+      })
+    }
   });
 
   database = installFakeDatabase(app);
@@ -1120,6 +1215,18 @@ test("campaign read returns owned campaign summaries from Fastify", async () => 
     }
   });
   const created = CampaignCreateResponseSchema.parse(createResponse.json());
+  const createdCampaign = database.campaigns.find(
+    (campaign) => campaign.id === created.campaign.id
+  );
+
+  assert.equal(createdCampaign?.has_begun, true);
+  assert.ok(
+    database.campaignEvents.some(
+      (event) =>
+        event.campaign_id === created.campaign.id &&
+        event.type === "adventure_begun"
+    )
+  );
 
   const readResponse = await app.inject({
     method: "GET",
