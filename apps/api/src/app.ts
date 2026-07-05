@@ -48,7 +48,8 @@ export async function buildApp(
 
   await registerHealthRoutes(fastify);
   await fastify.register(registerAuthRoutes, {
-    prefix: "/api"
+    prefix: "/api",
+    config
   });
 
   return fastify;

@@ -3,6 +3,11 @@ import { test } from "node:test";
 import {
   ApiErrorResponseSchema,
   AuthMeResponseSchema,
+  AuthPasswordlessStartRequestSchema,
+  AuthPasswordlessStartResponseSchema,
+  AuthPasswordlessVerifyRequestSchema,
+  AuthProtectedResponseSchema,
+  AuthSignOutResponseSchema,
   HealthResponseSchema
 } from "./index.js";
 
@@ -68,6 +73,50 @@ test("auth/me contract rejects invalid authenticated users", () => {
       }
     })
   );
+});
+
+test("passwordless start contract normalizes email input", () => {
+  const parsed = AuthPasswordlessStartRequestSchema.parse({
+    email: " PLAYER@Example.COM ",
+    displayName: "Player"
+  });
+
+  assert.equal(parsed.email, "player@example.com");
+});
+
+test("passwordless start response can include a local login token", () => {
+  const parsed = AuthPasswordlessStartResponseSchema.parse({
+    ok: true,
+    expiresAt: "2026-07-05T00:00:00.000Z",
+    loginToken: "a".repeat(32)
+  });
+
+  assert.equal(parsed.ok, true);
+});
+
+test("passwordless verify rejects short tokens", () => {
+  assert.throws(() =>
+    AuthPasswordlessVerifyRequestSchema.parse({
+      token: "too-short"
+    })
+  );
+});
+
+test("sign out and protected endpoint contracts accept success responses", () => {
+  assert.deepEqual(AuthSignOutResponseSchema.parse({ ok: true }), {
+    ok: true
+  });
+
+  const protectedResponse = AuthProtectedResponseSchema.parse({
+    ok: true,
+    user: {
+      id: "user_123",
+      email: "player@example.com",
+      displayName: null
+    }
+  });
+
+  assert.equal(protectedResponse.user.email, "player@example.com");
 });
 
 test("error envelope contract rejects unknown error codes", () => {

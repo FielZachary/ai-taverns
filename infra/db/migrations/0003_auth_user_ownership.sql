@@ -1,5 +1,5 @@
 alter table campaigns
-  add column if not exists owner_user_id uuid references auth.users(id);
+  add column if not exists owner_user_id uuid;
 
 alter table campaigns
   add column if not exists mode text not null default 'multiplayer';
@@ -11,7 +11,7 @@ alter table campaigns
   add constraint campaigns_mode_check check (mode in ('single_player', 'multiplayer'));
 
 alter table players
-  add column if not exists user_id uuid references auth.users(id);
+  add column if not exists user_id uuid;
 
 create index if not exists campaigns_owner_user_id_idx
   on campaigns(owner_user_id)

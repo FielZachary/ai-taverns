@@ -10,7 +10,7 @@ begin
       and column_name = 'owner_user_id'
   ) then
     alter table campaigns
-      add column owner_user_id uuid references auth.users(id);
+      add column owner_user_id uuid;
   elsif exists (
     select 1
     from information_schema.columns
@@ -35,16 +35,8 @@ begin
       using owner_user_id::text::uuid;
   end if;
 
-  if not exists (
-    select 1
-    from pg_constraint
-    where conrelid = 'public.campaigns'::regclass
-      and conname = 'campaigns_owner_user_id_fkey'
-  ) then
-    alter table campaigns
-      add constraint campaigns_owner_user_id_fkey
-      foreign key (owner_user_id) references auth.users(id);
-  end if;
+  alter table campaigns
+    drop constraint if exists campaigns_owner_user_id_fkey;
 end $$;
 
 do $$
@@ -59,7 +51,7 @@ begin
       and column_name = 'user_id'
   ) then
     alter table players
-      add column user_id uuid references auth.users(id);
+      add column user_id uuid;
   elsif exists (
     select 1
     from information_schema.columns
@@ -84,16 +76,8 @@ begin
       using user_id::text::uuid;
   end if;
 
-  if not exists (
-    select 1
-    from pg_constraint
-    where conrelid = 'public.players'::regclass
-      and conname = 'players_user_id_fkey'
-  ) then
-    alter table players
-      add constraint players_user_id_fkey
-      foreign key (user_id) references auth.users(id);
-  end if;
+  alter table players
+    drop constraint if exists players_user_id_fkey;
 end $$;
 
 create index if not exists campaigns_owner_user_id_idx

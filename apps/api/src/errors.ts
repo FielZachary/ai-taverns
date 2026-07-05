@@ -1,5 +1,6 @@
 import type { FastifyError, FastifyReply, FastifyRequest } from "fastify";
 import type { ApiErrorCode, ApiErrorResponse } from "@ai-dnd/contracts";
+import { ZodError } from "zod";
 
 function statusToCode(statusCode: number): ApiErrorCode {
   if (statusCode === 401) {
@@ -26,12 +27,17 @@ export function handleRouteError(
   request: FastifyRequest,
   reply: FastifyReply
 ) {
-  const statusCode = error.statusCode ?? 500;
+  const isValidationError = error instanceof ZodError;
+  const statusCode = isValidationError ? 400 : error.statusCode ?? 500;
   const response: ApiErrorResponse = {
     error: {
       code: statusToCode(statusCode),
       message:
-        statusCode >= 500 ? "Internal server error" : error.message,
+        statusCode >= 500
+          ? "Internal server error"
+          : isValidationError
+            ? "Invalid request body."
+            : error.message,
       requestId: request.id
     }
   };
