@@ -3,7 +3,6 @@
 import { FormEvent, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Mail } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
 
 type FormState = "idle" | "sending" | "sent" | "error";
 
@@ -31,19 +30,51 @@ export function LoginForm() {
     setState("sending");
     setMessage("");
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOtp({
-      email: trimmedEmail,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/confirm?next=${encodeURIComponent(
-          nextPath
-        )}`
-      }
+    const startResponse = await fetch("/api/auth/passwordless/start", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        email: trimmedEmail
+      })
     });
+    const startBody = (await startResponse.json()) as {
+      loginToken?: string;
+      error?: {
+        message?: string;
+      };
+    };
 
-    if (error) {
+    if (!startResponse.ok) {
       setState("error");
-      setMessage(error.message);
+      setMessage(startBody.error?.message ?? "Could not start sign-in.");
+      return;
+    }
+
+    if (startBody.loginToken) {
+      const verifyResponse = await fetch("/api/auth/passwordless/verify", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          token: startBody.loginToken
+        })
+      });
+      const verifyBody = (await verifyResponse.json()) as {
+        error?: {
+          message?: string;
+        };
+      };
+
+      if (!verifyResponse.ok) {
+        setState("error");
+        setMessage(verifyBody.error?.message ?? "Could not complete sign-in.");
+        return;
+      }
+
+      window.location.assign(nextPath);
       return;
     }
 
@@ -52,23 +83,8 @@ export function LoginForm() {
   }
 
   async function handleGoogleSignIn() {
-    setState("sending");
-    setMessage("");
-
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/confirm?next=${encodeURIComponent(
-          nextPath
-        )}`
-      }
-    });
-
-    if (error) {
-      setState("error");
-      setMessage(error.message);
-    }
+    setState("error");
+    setMessage("Google sign-in will return after the owned auth migration.");
   }
 
   return (

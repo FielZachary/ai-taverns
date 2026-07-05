@@ -1,5 +1,8 @@
 import { query } from "@/lib/db";
-import { createClient } from "@/lib/supabase/server";
+import {
+  getFastifyApiBaseUrl,
+  getRequestCookieHeader
+} from "@/lib/fastify-api";
 
 export type AuthUser = {
   id: string;
@@ -16,19 +19,36 @@ export class HttpError extends Error {
 }
 
 export async function getOptionalUser(): Promise<AuthUser | null> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error
-  } = await supabase.auth.getUser();
+  const cookieHeader = await getRequestCookieHeader();
+  const response = await fetch(`${getFastifyApiBaseUrl()}/api/auth/me`, {
+    headers: cookieHeader ? { cookie: cookieHeader } : undefined,
+    cache: "no-store"
+  });
 
-  if (error || !user) {
+  if (!response.ok) {
+    return null;
+  }
+
+  const auth = (await response.json()) as
+    | {
+        authenticated: false;
+        user: null;
+      }
+    | {
+        authenticated: true;
+        user: {
+          id: string;
+          email: string;
+        };
+      };
+
+  if (!auth.authenticated) {
     return null;
   }
 
   return {
-    id: user.id,
-    email: user.email ?? undefined
+    id: auth.user.id,
+    email: auth.user.email
   };
 }
 

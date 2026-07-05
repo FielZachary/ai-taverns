@@ -3,7 +3,7 @@ create table if not exists campaign_join_codes (
   campaign_id uuid not null references campaigns(id) on delete cascade,
   code text not null unique,
   enabled boolean not null default true,
-  created_by_user_id uuid references auth.users(id),
+  created_by_user_id uuid,
   created_at timestamptz not null default now(),
   disabled_at timestamptz,
   constraint campaign_join_codes_code_format_check check (code ~ '^[A-Z0-9]{6}$')

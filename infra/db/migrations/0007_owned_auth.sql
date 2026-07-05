@@ -71,6 +71,15 @@ for each row execute function set_updated_at();
 alter table campaigns
   drop constraint if exists campaigns_owner_user_id_fkey;
 
+update campaigns
+set owner_user_id = null
+where owner_user_id is not null
+  and not exists (
+    select 1
+    from users
+    where users.id = campaigns.owner_user_id
+  );
+
 alter table campaigns
   add constraint campaigns_owner_user_id_fkey
   foreign key (owner_user_id) references users(id);
@@ -78,6 +87,31 @@ alter table campaigns
 alter table players
   drop constraint if exists players_user_id_fkey;
 
+update players
+set user_id = null
+where user_id is not null
+  and not exists (
+    select 1
+    from users
+    where users.id = players.user_id
+  );
+
 alter table players
   add constraint players_user_id_fkey
   foreign key (user_id) references users(id);
+
+alter table campaign_join_codes
+  drop constraint if exists campaign_join_codes_created_by_user_id_fkey;
+
+update campaign_join_codes
+set created_by_user_id = null
+where created_by_user_id is not null
+  and not exists (
+    select 1
+    from users
+    where users.id = campaign_join_codes.created_by_user_id
+  );
+
+alter table campaign_join_codes
+  add constraint campaign_join_codes_created_by_user_id_fkey
+  foreign key (created_by_user_id) references users(id);

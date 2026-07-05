@@ -1,38 +1,41 @@
 import { NextResponse } from "next/server";
-import type { EmailOtpType } from "@supabase/supabase-js";
-import { createClient } from "@/lib/supabase/server";
-
-function safeNextPath(value: string | null) {
-  return value?.startsWith("/") ? value : "/play";
-}
+import {
+  copySetCookieHeaders,
+  getFastifyApiBaseUrl,
+  safeNextPath
+} from "@/lib/fastify-api";
 
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
-  const code = requestUrl.searchParams.get("code");
-  const tokenHash = requestUrl.searchParams.get("token_hash");
-  const type = requestUrl.searchParams.get("type") as EmailOtpType | null;
+  const token = requestUrl.searchParams.get("token");
   const next = safeNextPath(requestUrl.searchParams.get("next"));
-  const supabase = await createClient();
-  let error: unknown = null;
 
-  if (code) {
-    const result = await supabase.auth.exchangeCodeForSession(code);
-    error = result.error;
-  } else if (tokenHash && type) {
-    const result = await supabase.auth.verifyOtp({
-      token_hash: tokenHash,
-      type
-    });
-    error = result.error;
-  } else {
-    error = new Error("Missing auth token.");
-  }
-
-  if (error) {
+  if (!token) {
     return NextResponse.redirect(
       new URL("/login?error=invalid-link", requestUrl.origin)
     );
   }
 
-  return NextResponse.redirect(new URL(next, requestUrl.origin));
+  const upstream = await fetch(
+    `${getFastifyApiBaseUrl()}/api/auth/passwordless/verify`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({ token }),
+      cache: "no-store"
+    }
+  );
+
+  if (!upstream.ok) {
+    return NextResponse.redirect(
+      new URL("/login?error=invalid-link", requestUrl.origin)
+    );
+  }
+
+  const response = NextResponse.redirect(new URL(next, requestUrl.origin));
+  copySetCookieHeaders(upstream, response);
+
+  return response;
 }

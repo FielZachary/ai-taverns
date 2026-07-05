@@ -1,11 +1,23 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import {
+  copySetCookieHeaders,
+  getFastifyApiBaseUrl,
+  getRequestCookieHeader
+} from "@/lib/fastify-api";
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  await supabase.auth.signOut();
+  const cookieHeader = await getRequestCookieHeader();
+  const upstream = await fetch(`${getFastifyApiBaseUrl()}/api/auth/sign-out`, {
+    method: "POST",
+    headers: cookieHeader ? { cookie: cookieHeader } : undefined,
+    cache: "no-store"
+  });
 
-  return NextResponse.redirect(new URL("/login", request.url), {
+  const response = NextResponse.redirect(new URL("/login", request.url), {
     status: 303
   });
+
+  copySetCookieHeaders(upstream, response);
+
+  return response;
 }
