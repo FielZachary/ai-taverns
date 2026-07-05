@@ -11,6 +11,8 @@ import {
   CampaignCreateRequestSchema,
   CampaignJoinPreviewResponseSchema,
   CampaignListResponseSchema,
+  CampaignReadParamsSchema,
+  CampaignReadResponseSchema,
   HealthResponseSchema
 } from "./index.js";
 
@@ -158,6 +160,15 @@ test("campaign contracts accept list, create, and join preview payloads", () => 
   });
 
   assert.equal(listResponse.campaigns[0]?.joinCode, "ABC234");
+
+  const readParams = CampaignReadParamsSchema.parse({
+    campaignId: "00000000-0000-4000-8000-000000000001"
+  });
+  const readResponse = CampaignReadResponseSchema.parse({
+    campaign: listResponse.campaigns[0]
+  });
+
+  assert.equal(readParams.campaignId, readResponse.campaign.id);
 
   const preview = CampaignJoinPreviewResponseSchema.parse({
     code: "ABC234",

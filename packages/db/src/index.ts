@@ -555,6 +555,75 @@ export async function listCampaignSummariesForUser(
   return result.rows.map(mapCampaignSummaryRow);
 }
 
+export async function getCampaignSummaryForUser(
+  db: Queryable,
+  input: {
+    campaignId: string;
+    userId: string;
+  }
+): Promise<CampaignSummary> {
+  const result = await db.query<CampaignRow>(
+    `
+      select
+        campaigns.*,
+        display_player.character_name as display_character_name,
+        display_player.username as display_username,
+        join_code.code as join_code
+      from campaigns
+      left join lateral (
+        select players.character_name, players.username
+        from players
+        where players.campaign_id = campaigns.id
+          and players.status = 'active'
+        order by
+          (players.user_id = $2) desc,
+          players.slot asc nulls last,
+          players.created_at asc
+        limit 1
+      ) display_player on true
+      left join lateral (
+        select campaign_join_codes.code
+        from campaign_join_codes
+        where campaign_join_codes.campaign_id = campaigns.id
+          and campaign_join_codes.enabled = true
+          and campaigns.owner_user_id = $3
+        order by campaign_join_codes.created_at desc
+        limit 1
+      ) join_code on true
+      where campaigns.id = $1
+        and campaigns.status <> 'deleted'
+      limit 1
+    `,
+    [input.campaignId, input.userId, input.userId]
+  );
+  const campaign = result.rows[0];
+
+  if (!campaign) {
+    throw createStatusError(404, "Campaign not found.");
+  }
+
+  if (campaign.owner_user_id !== input.userId) {
+    const player = await db.query<PlayerRow>(
+      `
+        select *
+        from players
+        where campaign_id = $1
+          and user_id = $2
+          and status = 'active'
+        order by created_at asc
+        limit 1
+      `,
+      [campaign.id, input.userId]
+    );
+
+    if (!player.rows[0]) {
+      throw createStatusError(403, "You do not have access to that campaign.");
+    }
+  }
+
+  return mapCampaignSummaryRow(campaign);
+}
+
 export async function createCampaignForMode(
   db: pg.Pool,
   input: {

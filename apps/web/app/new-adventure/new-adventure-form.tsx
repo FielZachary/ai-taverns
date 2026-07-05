@@ -14,6 +14,11 @@ import {
   campaignGenrePresets,
   customCampaignGenre
 } from "@/lib/campaign-genres";
+import {
+  createCampaign as createCampaignViaApi,
+  joinCampaign as joinCampaignViaApi,
+  previewCampaignJoin
+} from "@/lib/campaign-api";
 import { defaultCharacterSheet } from "@/components/playing/PlayerPanel";
 
 type CampaignMode = "single_player" | "multiplayer";
@@ -23,23 +28,11 @@ type NewAdventureFormProps = {
   userEmail?: string;
 };
 
-type CreateCampaignResponse = {
-  campaign?: {
-    id: string;
-    joinCode?: string;
-  };
-  error?: string;
-};
-
 type JoinPreview = {
   code: string;
   campaignTitle: string;
   availableSlots: number;
   hasBegun: boolean;
-};
-
-type JoinPreviewResponse = JoinPreview & {
-  error?: string;
 };
 
 type AbilityKey = "str" | "dex" | "con" | "int" | "wis" | "cha";
@@ -972,20 +965,9 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
   }
 
   async function previewJoinCode() {
-    const response = await fetch("/api/campaigns/join/preview", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        gameCode: normalizedGameCode
-      })
+    const data = await previewCampaignJoin({
+      gameCode: normalizedGameCode
     });
-    const data = (await response.json()) as JoinPreviewResponse;
-
-    if (!response.ok) {
-      throw new Error(data.error || "That game code could not be checked.");
-    }
 
     setJoinPreview(data);
   }
@@ -1062,38 +1044,27 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
     setIsCreating(true);
 
     try {
-      const response = await fetch("/api/campaigns", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          mode,
-          title: campaignDisplayName,
-          campaignGenre: selectedGenre.label,
-          campaignGenreKind: isCustomGenre ? "custom" : "preset",
-          campaignGenrePresetId: isCustomGenre ? undefined : selectedGenre.id,
-          customWorldName: isCustomGenre ? customWorldName.trim() : undefined,
-          customWorldDescription: isCustomGenre
-            ? customWorldDescription.trim()
-            : undefined,
-          ownerClientId,
-          playerName:
-            mode === "single_player"
-              ? characterName.trim() || "Solo Player"
-              : "Table Owner",
-          characterName,
-          characterSheet
-        })
+      const campaign = await createCampaignViaApi({
+        mode,
+        title: campaignDisplayName,
+        campaignGenre: selectedGenre.label,
+        campaignGenreKind: isCustomGenre ? "custom" : "preset",
+        campaignGenrePresetId: isCustomGenre ? undefined : selectedGenre.id,
+        customWorldName: isCustomGenre ? customWorldName.trim() : undefined,
+        customWorldDescription: isCustomGenre
+          ? customWorldDescription.trim()
+          : undefined,
+        ownerClientId,
+        playerName:
+          mode === "single_player"
+            ? characterName.trim() || "Solo Player"
+            : "Table Owner",
+        characterName,
+        characterSheet
       });
-      const data = (await response.json()) as CreateCampaignResponse;
-
-      if (!response.ok || !data.campaign?.id) {
-        throw new Error(data.error || "The campaign could not be created.");
-      }
 
       window.location.assign(
-        `/play?campaignId=${encodeURIComponent(data.campaign.id)}`
+        `/play?campaignId=${encodeURIComponent(campaign.id)}`
       );
     } catch (caught) {
       setError(
@@ -1113,27 +1084,16 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
     setIsCreating(true);
 
     try {
-      const response = await fetch("/api/campaigns/join", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          gameCode: normalizedGameCode,
-          clientId: ownerClientId,
-          username: playerName.trim(),
-          characterName: characterName.trim(),
-          characterSheet
-        })
+      const campaign = await joinCampaignViaApi({
+        gameCode: normalizedGameCode,
+        clientId: ownerClientId,
+        username: playerName.trim(),
+        characterName: characterName.trim(),
+        characterSheet
       });
-      const data = (await response.json()) as CreateCampaignResponse;
-
-      if (!response.ok || !data.campaign?.id) {
-        throw new Error(data.error || "The game could not be joined.");
-      }
 
       window.location.assign(
-        `/play?campaignId=${encodeURIComponent(data.campaign.id)}`
+        `/play?campaignId=${encodeURIComponent(campaign.id)}`
       );
     } catch (caught) {
       setError(

@@ -9,7 +9,8 @@ import {
   CampaignCreateResponseSchema,
   CampaignJoinPreviewResponseSchema,
   CampaignJoinResponseSchema,
-  CampaignListResponseSchema
+  CampaignListResponseSchema,
+  CampaignReadResponseSchema
 } from "@ai-dnd/contracts";
 import { buildApp } from "./app.js";
 import { loadConfig } from "./config.js";
@@ -250,6 +251,43 @@ class FakeDatabase {
     }
 
     if (normalizedSql.startsWith("select campaigns.*, display_player.character_name")) {
+      if (normalizedSql.includes("where campaigns.id = $1")) {
+        const campaignId = values[0] as string;
+        const userId = values[1] as string;
+        const campaign = this.campaigns.find(
+          (candidate) =>
+            candidate.id === campaignId && candidate.status !== "deleted"
+        );
+
+        if (!campaign) {
+          return { rows: [] as T[] };
+        }
+
+        const player = this.players.find(
+          (candidate) =>
+            candidate.campaign_id === campaign.id &&
+            candidate.status === "active"
+        );
+        const joinCode = this.joinCodes.find(
+          (candidate) =>
+            candidate.campaign_id === campaign.id &&
+            candidate.enabled &&
+            campaign.owner_user_id === values[2]
+        );
+
+        return {
+          rows: [
+            {
+              ...campaign,
+              display_character_name:
+                player?.user_id === userId ? player.character_name : null,
+              display_username: player?.user_id === userId ? player.username : null,
+              join_code: joinCode?.code ?? null
+            } as T
+          ]
+        };
+      }
+
       const userId = values[0] as string;
       const ownerUserId = values[1] as string;
       const accessible = this.campaigns
@@ -834,6 +872,74 @@ test("campaign creation stores a multiplayer campaign and list returns it", asyn
   const listBody = CampaignListResponseSchema.parse(listResponse.json());
   assert.equal(listBody.campaigns.length, 1);
   assert.equal(listBody.campaigns[0]?.id, createBody.campaign.id);
+});
+
+test("campaign read returns owned campaign summaries from Fastify", async () => {
+  const cookie = await signIn("campaign-reader@example.com");
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: {
+      cookie
+    },
+    payload: {
+      mode: "single_player",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "high_adventure",
+      ownerClientId: "reader-client",
+      playerName: "Reader",
+      characterName: "Astra"
+    }
+  });
+  const created = CampaignCreateResponseSchema.parse(createResponse.json());
+
+  const readResponse = await app.inject({
+    method: "GET",
+    url: `/api/campaigns/${created.campaign.id}`,
+    headers: {
+      cookie
+    }
+  });
+
+  assert.equal(readResponse.statusCode, 200);
+  const read = CampaignReadResponseSchema.parse(readResponse.json());
+  assert.equal(read.campaign.id, created.campaign.id);
+  assert.equal(read.campaign.title, "Astra");
+});
+
+test("campaign read forbids signed-in users without campaign access", async () => {
+  const ownerCookie = await signIn("private-owner@example.com");
+  const otherCookie = await signIn("private-other@example.com");
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: {
+      cookie: ownerCookie
+    },
+    payload: {
+      mode: "single_player",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "dark_fantasy",
+      ownerClientId: "private-owner-client",
+      playerName: "Owner",
+      characterName: "Nyx"
+    }
+  });
+  const created = CampaignCreateResponseSchema.parse(createResponse.json());
+
+  const readResponse = await app.inject({
+    method: "GET",
+    url: `/api/campaigns/${created.campaign.id}`,
+    headers: {
+      cookie: otherCookie
+    }
+  });
+
+  assert.equal(readResponse.statusCode, 403);
+  assert.equal(
+    ApiErrorResponseSchema.parse(readResponse.json()).error.code,
+    "FORBIDDEN"
+  );
 });
 
 test("campaign join preview and join use the Fastify campaign API", async () => {

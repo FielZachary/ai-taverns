@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { HttpError, requireUser } from "@/lib/auth";
+import { proxyJsonToFastify } from "@/lib/fastify-api";
 import { jsonError } from "@/lib/hermes";
 import {
   archiveCampaignById,
-  getCampaignById,
   renameCampaignById
 } from "@/lib/room-store";
 
@@ -24,18 +24,10 @@ type RenameBody = {
 export async function GET(_request: Request, context: RouteContext) {
   const { campaignId } = await context.params;
 
-  try {
-    const user = await requireUser();
-    return NextResponse.json({
-      campaign: await getCampaignById(campaignId, user.id)
-    });
-  } catch (error) {
-    console.error(error);
-    if (error instanceof HttpError) {
-      return jsonError(error.message, error.status);
-    }
-    return jsonError("Campaign could not be loaded.", 404);
-  }
+  return proxyJsonToFastify(
+    _request,
+    `/api/campaigns/${encodeURIComponent(campaignId)}`
+  );
 }
 
 export async function PATCH(request: Request, context: RouteContext) {

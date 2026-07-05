@@ -7,10 +7,13 @@ import {
   CampaignJoinRequestSchema,
   CampaignJoinResponseSchema,
   CampaignListResponseSchema,
+  CampaignReadParamsSchema,
+  CampaignReadResponseSchema,
   type CampaignMode
 } from "@ai-dnd/contracts";
 import {
   createCampaignForMode,
+  getCampaignSummaryForUser,
   joinCampaignByCode,
   listCampaignSummariesForUser,
   previewCampaignJoinByCode
@@ -152,6 +155,21 @@ export async function registerCampaignRoutes(
 
     reply.status(201);
     return CampaignCreateResponseSchema.parse({ campaign });
+  });
+
+  fastify.get("/campaigns/:campaignId", async (request) => {
+    const params = CampaignReadParamsSchema.parse(request.params);
+    const user = await requireAuthenticatedUser(
+      fastify,
+      config,
+      request.cookies[config.authCookieName]
+    );
+    const campaign = await getCampaignSummaryForUser(fastify.pg, {
+      campaignId: params.campaignId,
+      userId: user.id
+    });
+
+    return CampaignReadResponseSchema.parse({ campaign });
   });
 
   fastify.post("/campaigns/join/preview", async (request) => {

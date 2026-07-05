@@ -35,6 +35,14 @@ export const CampaignCreateResponseSchema = z.object({
   campaign: CampaignSummarySchema
 });
 
+export const CampaignReadParamsSchema = z.object({
+  campaignId: z.string().uuid()
+});
+
+export const CampaignReadResponseSchema = z.object({
+  campaign: CampaignSummarySchema
+});
+
 export const CampaignJoinPreviewRequestSchema = z.object({
   gameCode: z.string().optional()
 });
@@ -65,6 +73,8 @@ export type CampaignCreateRequest = z.infer<typeof CampaignCreateRequestSchema>;
 export type CampaignCreateResponse = z.infer<
   typeof CampaignCreateResponseSchema
 >;
+export type CampaignReadParams = z.infer<typeof CampaignReadParamsSchema>;
+export type CampaignReadResponse = z.infer<typeof CampaignReadResponseSchema>;
 export type CampaignJoinPreviewRequest = z.infer<
   typeof CampaignJoinPreviewRequestSchema
 >;

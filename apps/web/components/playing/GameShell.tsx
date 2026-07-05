@@ -24,6 +24,10 @@ import type {
   InputPolicy
 } from "@/lib/game-types";
 import {
+  listCampaigns,
+  type CampaignSummary as ApiCampaignSummary
+} from "@/lib/campaign-api";
+import {
   ChatHistorySidebar,
   type ChatSummary
 } from "./ChatHistorySidebar";
@@ -48,20 +52,12 @@ const roomRequestTimeoutMs = 8_000;
 
 type CampaignMode = "single_player" | "multiplayer";
 
-type CampaignSummary = ChatSummary & {
-  hermesSessionId: string;
-  mode: CampaignMode;
-  joinCode?: string;
-};
-
-type CampaignsApiResponse = {
-  campaigns?: CampaignSummary[];
-  campaign?: CampaignSummary;
-  error?: string;
-};
+type CampaignSummary = ApiCampaignSummary & ChatSummary;
 
 type ApiErrorResponse = {
-  error?: string;
+  error?: string | {
+    message?: string;
+  };
 };
 
 type RoomPlayer = {
@@ -547,7 +543,12 @@ function formatRollSubmission(
 async function getApiErrorMessage(response: Response, fallback: string) {
   try {
     const data = (await response.json()) as ApiErrorResponse;
-    return data.error?.trim() || fallback;
+
+    if (typeof data.error === "string") {
+      return data.error.trim() || fallback;
+    }
+
+    return data.error?.message?.trim() || fallback;
   } catch {
     return fallback;
   }
@@ -835,15 +836,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
   }, [applyRoomSnapshot]);
 
   const fetchCampaigns = useCallback(async () => {
-    const response = await fetch("/api/campaigns");
-
-    if (!response.ok) {
-      throw new Error("Campaigns could not be loaded.");
-    }
-
-    const data = (await response.json()) as CampaignsApiResponse;
-
-    return data.campaigns ?? [];
+    return listCampaigns();
   }, []);
 
   useEffect(() => {
