@@ -7,6 +7,7 @@ import { postgresPlugin } from "./plugins/postgres.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerCampaignRoutes } from "./routes/campaigns.js";
 import { registerHealthRoutes } from "./routes/health.js";
+import { registerRoomRoutes } from "./routes/rooms.js";
 
 export type BuildAppOptions = {
   config?: ApiConfig;
@@ -53,6 +54,10 @@ export async function buildApp(
     config
   });
   await fastify.register(registerCampaignRoutes, {
+    prefix: "/api",
+    config
+  });
+  await fastify.register(registerRoomRoutes, {
     prefix: "/api",
     config
   });

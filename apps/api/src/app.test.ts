@@ -10,7 +10,11 @@ import {
   CampaignJoinPreviewResponseSchema,
   CampaignJoinResponseSchema,
   CampaignListResponseSchema,
-  CampaignReadResponseSchema
+  CampaignReadResponseSchema,
+  RoomBeginResponseSchema,
+  RoomPlayerUpdateResponseSchema,
+  RoomReadResponseSchema,
+  RoomSubmitResponseSchema
 } from "@ai-dnd/contracts";
 import { buildApp } from "./app.js";
 import { loadConfig } from "./config.js";
@@ -102,6 +106,31 @@ type JoinCodeRecord = {
   disabled_at: Date | null;
 };
 
+type TurnRecord = {
+  id: string;
+  campaign_id: string;
+  status: "collecting" | "resolving" | "resolved" | "failed" | "cancelled";
+  created_at: Date;
+  updated_at: Date;
+};
+
+type SubmissionRecord = {
+  campaign_id: string;
+  turn_id: string;
+  player_id: string;
+  content: string;
+  status: "submitted" | "included_in_turn" | "cancelled";
+  created_at: Date;
+};
+
+type CampaignEventRecord = {
+  id: string;
+  campaign_id: string;
+  type: string;
+  payload: unknown;
+  created_at: Date;
+};
+
 class FakeDatabase {
   loginTokens: LoginTokenRecord[] = [];
   users: UserRecord[] = [];
@@ -109,8 +138,9 @@ class FakeDatabase {
   campaigns: CampaignRecord[] = [];
   players: PlayerRecord[] = [];
   joinCodes: JoinCodeRecord[] = [];
-  campaignEvents: unknown[] = [];
-  turns: unknown[] = [];
+  campaignEvents: CampaignEventRecord[] = [];
+  turns: TurnRecord[] = [];
+  submissions: SubmissionRecord[] = [];
   nextId = 1;
 
   query: QueryFn = async <T>(sql: string, values: unknown[] = []) => {
@@ -250,6 +280,84 @@ class FakeDatabase {
       return { rows: [] as T[] };
     }
 
+    if (normalizedSql.startsWith("select * from campaigns where (id = $1")) {
+      const roomId = values[0] as string;
+      const sessionId = values[1] as string;
+      const campaign = this.campaigns.find(
+        (candidate) =>
+          (candidate.id === roomId || candidate.hermes_session_id === sessionId) &&
+          candidate.status !== "deleted"
+      );
+
+      return { rows: campaign ? ([campaign] as T[]) : ([] as T[]) };
+    }
+
+    if (
+      normalizedSql.startsWith(
+        "select * from campaigns where (hermes_session_id = $1"
+      )
+    ) {
+      const roomId = values[0] as string;
+      const sessionId = values[1] as string;
+      const campaign = this.campaigns.find(
+        (candidate) =>
+          (candidate.hermes_session_id === roomId ||
+            candidate.hermes_session_id === sessionId) &&
+          candidate.status !== "deleted"
+      );
+
+      return { rows: campaign ? ([campaign] as T[]) : ([] as T[]) };
+    }
+
+    if (normalizedSql === "select * from campaigns where id = $1 for update") {
+      const campaign = this.campaigns.find(
+        (candidate) => candidate.id === values[0]
+      );
+
+      return { rows: campaign ? ([campaign] as T[]) : ([] as T[]) };
+    }
+
+    if (normalizedSql.startsWith("update campaigns set has_begun = true")) {
+      const campaign = this.campaigns.find(
+        (candidate) => candidate.id === values[0]
+      );
+
+      if (!campaign || campaign.has_begun) {
+        return { rows: [] as T[] };
+      }
+
+      campaign.has_begun = true;
+      campaign.updated_at = new Date();
+      return { rows: [campaign as T] };
+    }
+
+    if (normalizedSql.startsWith("update players set last_seen_at = now()")) {
+      if (normalizedSql.includes("where campaign_id = $1")) {
+        const campaignId = values[0] as string;
+        const userId = values[1] as string;
+        const updated = this.players.filter(
+          (player) =>
+            player.campaign_id === campaignId &&
+            player.user_id === userId &&
+            player.status === "active"
+        );
+
+        for (const player of updated) {
+          player.last_seen_at = new Date();
+        }
+
+        return { rows: updated as T[] };
+      }
+
+      const player = this.players.find((candidate) => candidate.id === values[0]);
+
+      if (player) {
+        player.last_seen_at = new Date();
+      }
+
+      return { rows: [] as T[] };
+    }
+
     if (normalizedSql.startsWith("select campaigns.*, display_player.character_name")) {
       if (normalizedSql.includes("where campaigns.id = $1")) {
         const campaignId = values[0] as string;
@@ -347,17 +455,31 @@ class FakeDatabase {
 
     if (normalizedSql.startsWith("insert into players")) {
       const now = new Date();
+      const profileFirst =
+        normalizedSql.includes("username, character_name, character_sheet, user_id") ||
+        normalizedSql.includes("client_id, username, character_name");
+      const userId = profileFirst
+        ? (values[5] as string | null)
+        : (values[2] as string | null);
+      const username = profileFirst ? (values[2] as string) : (values[3] as string);
+      const characterName = profileFirst
+        ? (values[3] as string)
+        : (values[4] as string);
+      const characterSheet = profileFirst
+        ? (values[4] as string)
+        : (values[5] as string);
+      const slot = values[6] as number;
       const existing = this.players.find(
         (player) =>
           player.campaign_id === values[0] && player.client_id === values[1]
       );
 
       if (existing) {
-        existing.user_id = values[2] as string;
-        existing.username = values[3] as string;
-        existing.character_name = values[4] as string;
-        existing.character_sheet = values[5] as string;
-        existing.slot = values[6] as number;
+        existing.user_id = userId;
+        existing.username = username;
+        existing.character_name = characterName;
+        existing.character_sheet = characterSheet;
+        existing.slot = slot;
         existing.status = "active";
         existing.kicked_at = null;
         existing.last_seen_at = now;
@@ -368,11 +490,11 @@ class FakeDatabase {
         id: `player-${this.nextId++}`,
         campaign_id: values[0] as string,
         client_id: values[1] as string,
-        user_id: values[2] as string | null,
-        username: values[3] as string,
-        character_name: values[4] as string,
-        character_sheet: values[5] as string,
-        slot: values[6] as number,
+        user_id: userId,
+        username,
+        character_name: characterName,
+        character_sheet: characterSheet,
+        slot,
         status: "active",
         last_seen_at: now,
         kicked_at: null,
@@ -384,28 +506,42 @@ class FakeDatabase {
     }
 
     if (normalizedSql.startsWith("select * from turns")) {
-      return { rows: [] as T[] };
+      const campaignId = values[0] as string;
+      const rows = this.turns.filter(
+        (turn) =>
+          turn.campaign_id === campaignId &&
+          (turn.status === "collecting" || turn.status === "resolving")
+      );
+
+      return { rows: rows as T[] };
     }
 
     if (normalizedSql.startsWith("insert into turns")) {
+      const now = new Date();
       const record = {
         id: `turn-${this.nextId++}`,
-        campaign_id: values[0],
+        campaign_id: values[0] as string,
         status: "collecting",
-        updated_at: new Date()
-      };
+        created_at: now,
+        updated_at: now
+      } satisfies TurnRecord;
       this.turns.push(record);
       return { rows: [record as T] };
     }
 
     if (normalizedSql.startsWith("insert into campaign_events")) {
-      this.campaignEvents.push({
+      const record = {
         id: `event-${this.nextId++}`,
-        campaign_id: values[0],
-        type: values[1],
-        payload: values[2]
-      });
-      return { rows: [{ id: `event-${this.nextId++}` } as T] };
+        campaign_id: values[0] as string,
+        type: values[1] as string,
+        payload:
+          typeof values[2] === "string"
+            ? (JSON.parse(values[2] as string) as unknown)
+            : values[2],
+        created_at: new Date()
+      } satisfies CampaignEventRecord;
+      this.campaignEvents.push(record);
+      return { rows: [{ id: record.id } as T] };
     }
 
     if (normalizedSql.startsWith("select code from campaign_join_codes")) {
@@ -493,6 +629,19 @@ class FakeDatabase {
     if (normalizedSql.startsWith("select * from players where campaign_id")) {
       const campaignId = values[0] as string;
 
+      if (normalizedSql.includes("and client_id = $2 and user_id = $3")) {
+        const clientId = values[1] as string;
+        const userId = values[2] as string;
+        const player = this.players.find(
+          (candidate) =>
+            candidate.campaign_id === campaignId &&
+            candidate.client_id === clientId &&
+            candidate.user_id === userId &&
+            candidate.status === "active"
+        );
+        return { rows: player ? ([player] as T[]) : ([] as T[]) };
+      }
+
       if (normalizedSql.includes("and user_id = $2")) {
         const userId = values[1] as string;
         const player = this.players.find(
@@ -502,12 +651,91 @@ class FakeDatabase {
         return { rows: player ? ([player] as T[]) : ([] as T[]) };
       }
 
+      if (normalizedSql.includes("where campaign_id = $1 and status = 'active'")) {
+        return {
+          rows: this.players.filter(
+            (player) =>
+              player.campaign_id === campaignId && player.status === "active"
+          ) as T[]
+        };
+      }
+
       const clientId = values[1] as string;
       const player = this.players.find(
         (candidate) =>
           candidate.campaign_id === campaignId && candidate.client_id === clientId
       );
       return { rows: player ? ([player] as T[]) : ([] as T[]) };
+    }
+
+    if (normalizedSql.startsWith("select submissions.player_id")) {
+      const turnId = values[0] as string;
+      const rows = this.submissions
+        .filter(
+          (submission) =>
+            submission.turn_id === turnId && submission.status === "submitted"
+        )
+        .map((submission) => {
+          const player = this.players.find(
+            (candidate) => candidate.id === submission.player_id
+          );
+          return {
+            player_id: submission.player_id,
+            client_id: player?.client_id ?? null,
+            username: player?.username ?? null,
+            character_name: player?.character_name ?? null,
+            content: submission.content,
+            created_at: submission.created_at
+          };
+        });
+
+      return { rows: rows as T[] };
+    }
+
+    if (normalizedSql.startsWith("select id, type, payload, created_at from")) {
+      const campaignId = values[0] as string;
+      return {
+        rows: this.campaignEvents.filter(
+          (event) =>
+            event.campaign_id === campaignId &&
+            [
+              "turn_submitted",
+              "turn_resolved",
+              "adventure_begun",
+              "dm_question",
+              "dm_answer"
+            ].includes(event.type)
+        ) as T[]
+      };
+    }
+
+    if (normalizedSql.startsWith("insert into submissions")) {
+      const campaignId = values[0] as string;
+      const turnId = values[1] as string;
+      const playerId = values[2] as string;
+      const content = values[3] as string;
+      const append = values[4] as boolean;
+      const existing = this.submissions.find(
+        (submission) =>
+          submission.turn_id === turnId && submission.player_id === playerId
+      );
+
+      if (existing) {
+        existing.content = append ? `${existing.content}\n${content}` : content;
+        existing.status = "submitted";
+        return { rows: [] as T[] };
+      }
+
+      this.submissions.push({
+        campaign_id: campaignId,
+        turn_id: turnId,
+        player_id: playerId,
+        content,
+        status: "submitted",
+        created_at: new Date()
+      });
+
+      return { rows: [] as T[] };
     }
 
     if (normalizedSql.startsWith("select slot from players")) {
@@ -1004,6 +1232,135 @@ test("campaign join preview and join use the Fastify campaign API", async () => 
       (player) => player.campaign_id === joined.campaign.id
     ).length,
     2
+  );
+});
+
+test("room routes read, update player, begin, and submit through Fastify", async () => {
+  const ownerCookie = await signIn("room-owner@example.com");
+  const joinerCookie = await signIn("room-joiner@example.com");
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: {
+      cookie: ownerCookie
+    },
+    payload: {
+      mode: "multiplayer",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "classic_fantasy",
+      ownerClientId: "room-owner-client",
+      playerName: "Owner",
+      characterName: "Captain",
+      characterSheet: "A steady leader."
+    }
+  });
+  const created = CampaignCreateResponseSchema.parse(createResponse.json());
+
+  assert.ok(created.campaign.joinCode);
+
+  const joinResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns/join",
+    headers: {
+      cookie: joinerCookie
+    },
+    payload: {
+      gameCode: created.campaign.joinCode,
+      clientId: "room-joiner-client",
+      username: "Joined Player",
+      characterName: "Mira",
+      characterSheet: "A brave scout."
+    }
+  });
+
+  assert.equal(joinResponse.statusCode, 200);
+
+  const readResponse = await app.inject({
+    method: "GET",
+    url: `/api/room?roomId=${created.campaign.id}`,
+    headers: {
+      cookie: ownerCookie
+    }
+  });
+
+  assert.equal(readResponse.statusCode, 200);
+  const readRoom = RoomReadResponseSchema.parse(readResponse.json());
+  assert.equal(readRoom.roomId, created.campaign.id);
+  assert.equal(readRoom.players.length, 2);
+
+  const profileResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/player",
+    headers: {
+      cookie: joinerCookie
+    },
+    payload: {
+      roomId: created.campaign.id,
+      playerId: "room-joiner-client",
+      username: "Joined Player",
+      characterName: "Mira",
+      characterSheet: "A brave scout with sharper instincts."
+    }
+  });
+
+  assert.equal(profileResponse.statusCode, 200);
+  const profileRoom = RoomPlayerUpdateResponseSchema.parse(
+    profileResponse.json()
+  );
+  assert.equal(
+    profileRoom.players.find((player) => player.id === "room-joiner-client")
+      ?.characterSheet,
+    "A brave scout with sharper instincts."
+  );
+
+  const beginResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/begin",
+    headers: {
+      cookie: ownerCookie
+    },
+    payload: {
+      roomId: created.campaign.id
+    }
+  });
+
+  assert.equal(beginResponse.statusCode, 200);
+  const begunRoom = RoomBeginResponseSchema.parse(beginResponse.json());
+  assert.equal(begunRoom.hasBegun, true);
+
+  const submitResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/submit",
+    headers: {
+      cookie: joinerCookie
+    },
+    payload: {
+      roomId: created.campaign.id,
+      playerId: "room-joiner-client",
+      message: "I inspect the tavern door."
+    }
+  });
+
+  assert.equal(submitResponse.statusCode, 200);
+  const submittedRoom = RoomSubmitResponseSchema.parse(submitResponse.json());
+  assert.equal(
+    submittedRoom.players.find((player) => player.id === "room-joiner-client")
+      ?.status,
+    "submitted"
+  );
+  assert.equal(submittedRoom.messages.at(-1)?.role, "player");
+});
+
+test("room routes require an owned session", async () => {
+  const response = await app.inject({
+    method: "GET",
+    url: "/api/room?roomId=00000000-0000-4000-8000-000000000001"
+  });
+
+  assert.equal(response.statusCode, 401);
+  assert.equal(
+    ApiErrorResponseSchema.parse(response.json()).error.code,
+    "UNAUTHORIZED"
   );
 });
 

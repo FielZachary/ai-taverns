@@ -13,7 +13,10 @@ import {
   CampaignListResponseSchema,
   CampaignReadParamsSchema,
   CampaignReadResponseSchema,
-  HealthResponseSchema
+  HealthResponseSchema,
+  RoomPlayerUpdateRequestSchema,
+  RoomSnapshotSchema,
+  RoomSubmitRequestSchema
 } from "./index.js";
 
 test("health contract accepts the API health response", () => {
@@ -178,4 +181,52 @@ test("campaign contracts accept list, create, and join preview payloads", () => 
   });
 
   assert.equal(preview.availableSlots, 3);
+});
+
+test("room contracts accept snapshots and mutation payloads", () => {
+  const profile = RoomPlayerUpdateRequestSchema.parse({
+    roomId: "00000000-0000-4000-8000-000000000001",
+    sessionId: "ai-dnd-session",
+    playerId: "client-1",
+    username: "Player",
+    characterName: "Stone",
+    characterSheet: "Fighter"
+  });
+
+  assert.equal(profile.characterName, "Stone");
+
+  const submit = RoomSubmitRequestSchema.parse({
+    roomId: profile.roomId,
+    playerId: profile.playerId,
+    message: "I check the old door."
+  });
+
+  assert.equal(submit.message, "I check the old door.");
+
+  const snapshot = RoomSnapshotSchema.parse({
+    roomId: "00000000-0000-4000-8000-000000000001",
+    mode: "multiplayer",
+    sessionId: "ai-dnd-session",
+    players: [
+      {
+        id: "client-1",
+        slot: 0,
+        username: "Player",
+        characterName: "Stone",
+        characterSheet: "Fighter",
+        status: "waiting",
+        lastSeenAt: "2026-07-05T00:00:00.000Z"
+      }
+    ],
+    messages: [],
+    isResolving: false,
+    hasBegun: true,
+    pendingRollRequest: null,
+    pendingRollRequests: [],
+    inputTargets: [],
+    inputPolicy: "all_players",
+    updatedAt: "2026-07-05T00:00:00.000Z"
+  });
+
+  assert.equal(snapshot.players[0]?.status, "waiting");
 });

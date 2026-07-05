@@ -1,7 +1,14 @@
 import { randomInt, randomUUID } from "node:crypto";
 import pg from "pg";
 import type { SessionId, UserId } from "@ai-dnd/domain";
-import type { CampaignMode, CampaignSummary } from "@ai-dnd/contracts";
+import type {
+  CampaignMode,
+  CampaignSummary,
+  DiceRollRequest,
+  DiceRollResult,
+  DiceRollSubmission,
+  RoomSnapshot
+} from "@ai-dnd/contracts";
 
 const { Pool } = pg;
 
@@ -101,6 +108,18 @@ function requireRow<TRow>(row: TRow | undefined, message: string): TRow {
   }
 
   return row;
+}
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function toIso(value: Date | string | null | undefined) {
+  if (!value) {
+    return nowIso();
+  }
+
+  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 }
 
 export function mapUserRow(row: UserRow): UserRecord {
@@ -305,6 +324,7 @@ export type CampaignRow = {
 
 type PlayerRow = {
   id: string;
+  campaign_id: string;
   client_id: string;
   user_id: string | null;
   username: string;
@@ -312,12 +332,30 @@ type PlayerRow = {
   character_sheet: string;
   slot: number | null;
   status: PlayerStatus;
+  last_seen_at: Date | string;
 };
 
 type TurnRow = {
   id: string;
   campaign_id: string;
   status: TurnStatus;
+  updated_at?: Date | string;
+};
+
+type SubmissionRow = {
+  player_id: string | null;
+  client_id: string | null;
+  username: string | null;
+  character_name: string | null;
+  content: string;
+  created_at: Date | string;
+};
+
+type EventRow = {
+  id: string;
+  type: string;
+  payload: unknown;
+  created_at: Date | string;
 };
 
 type JoinCodeRow = {
@@ -980,6 +1018,988 @@ export async function joinCampaignByCode(
     display_username: username,
     join_code: null
   });
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value
+  );
+}
+
+function isProfileComplete(player: PlayerRow) {
+  return Boolean(
+    player.username.trim() &&
+      player.character_name.trim() &&
+      player.character_sheet.trim()
+  );
+}
+
+function roomEventMessageKind(type: string) {
+  if (type === "dm_question") {
+    return "ask_dm_question";
+  }
+
+  if (type === "dm_answer") {
+    return "ask_dm_answer";
+  }
+
+  return "turn";
+}
+
+function metadataStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value
+        .map((item) => (typeof item === "string" ? item.trim() : ""))
+        .filter((item): item is string => Boolean(item))
+    : [];
+}
+
+function normalizeRollRequest(value: unknown): DiceRollRequest | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  const dice = typeof candidate.dice === "string" ? candidate.dice.trim() : "";
+  const label = typeof candidate.label === "string" ? candidate.label.trim() : "";
+
+  if (!dice || !label) {
+    return null;
+  }
+
+  const modifier = Number(candidate.modifier);
+  const advantageState =
+    candidate.advantageState === "advantage" ||
+    candidate.advantageState === "disadvantage" ||
+    candidate.advantageState === "normal"
+      ? candidate.advantageState
+      : candidate.advantage_state === "advantage" ||
+          candidate.advantage_state === "disadvantage" ||
+          candidate.advantage_state === "normal"
+        ? candidate.advantage_state
+        : undefined;
+
+  return {
+    id:
+      typeof candidate.id === "string" && candidate.id.trim()
+        ? candidate.id.trim()
+        : randomUUID(),
+    player:
+      typeof candidate.player === "string" ? candidate.player.trim() : undefined,
+    dice,
+    modifier: Number.isFinite(modifier) ? modifier : undefined,
+    label,
+    reason:
+      typeof candidate.reason === "string" ? candidate.reason.trim() : undefined,
+    advantageState
+  };
+}
+
+function normalizeRollRequests(value: unknown): DiceRollRequest[] {
+  return Array.isArray(value)
+    ? value
+        .map((request) => normalizeRollRequest(request))
+        .filter((request): request is DiceRollRequest => Boolean(request))
+    : [];
+}
+
+function pendingRollRequestsFromCampaign(campaign: CampaignRow) {
+  const metadata = eventPayload(campaign.metadata);
+  const requests = normalizeRollRequests(metadata.pendingRollRequests);
+
+  if (requests.length > 0) {
+    return requests;
+  }
+
+  const legacyRequest = normalizeRollRequest(metadata.pendingRollRequest);
+  return legacyRequest ? [legacyRequest] : [];
+}
+
+function inputTargetsFromCampaign(campaign: CampaignRow) {
+  return metadataStringArray(eventPayload(campaign.metadata).inputTargets);
+}
+
+function inputPolicyFromCampaign(
+  campaign: CampaignRow
+): "all_players" | "only_targeted_players" {
+  const metadata = eventPayload(campaign.metadata);
+  const inputTargets = inputTargetsFromCampaign(campaign);
+
+  return metadata.inputPolicy === "only_targeted_players" && inputTargets.length > 0
+    ? "only_targeted_players"
+    : "all_players";
+}
+
+function normalizeRollTarget(value: string | null | undefined) {
+  return value
+    ?.trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function rollRequestTargetsPlayer(request: DiceRollRequest, player: PlayerRow) {
+  const target = normalizeRollTarget(request.player);
+
+  if (!target) {
+    return true;
+  }
+
+  const playerNames = [player.username, player.character_name]
+    .map(normalizeRollTarget)
+    .filter((name): name is string => Boolean(name));
+
+  return playerNames.some(
+    (name) => target === name || target.includes(name) || name.includes(target)
+  );
+}
+
+function inputTargetMatchesPlayer(target: string, player: PlayerRow) {
+  const normalizedTarget = normalizeRollTarget(target);
+
+  if (!normalizedTarget) {
+    return false;
+  }
+
+  const playerNames = [player.username, player.character_name]
+    .map(normalizeRollTarget)
+    .filter((name): name is string => Boolean(name));
+
+  return playerNames.some(
+    (name) =>
+      normalizedTarget === name ||
+      normalizedTarget.includes(name) ||
+      name.includes(normalizedTarget)
+  );
+}
+
+function playerMatchesInputTargets(player: PlayerRow, inputTargets: string[]) {
+  return inputTargets.some((target) => inputTargetMatchesPlayer(target, player));
+}
+
+function normalizedAdvantageState(request: DiceRollRequest) {
+  const state =
+    request.advantageState?.trim().toLowerCase() ??
+    request.advantage_state?.trim().toLowerCase();
+
+  return state === "advantage" || state === "disadvantage" ? state : "normal";
+}
+
+function physicalRollCountForRequest(
+  request: DiceRollRequest,
+  count: number,
+  sides: number
+) {
+  return count === 1 &&
+    sides === 20 &&
+    normalizedAdvantageState(request) !== "normal"
+    ? 2
+    : count;
+}
+
+function scoredRollsForRequest(request: DiceRollRequest, rolls: number[]) {
+  const advantageState = normalizedAdvantageState(request);
+
+  if (rolls.length === 2 && advantageState === "advantage") {
+    return [Math.max(...rolls)];
+  }
+
+  if (rolls.length === 2 && advantageState === "disadvantage") {
+    return [Math.min(...rolls)];
+  }
+
+  return rolls;
+}
+
+function validateRollSubmissionResult(
+  request: DiceRollRequest,
+  result: DiceRollResult | undefined
+) {
+  const match = request.dice.trim().match(/^(\d*)d(\d+)$/i);
+
+  if (!match) {
+    throw createStatusError(400, "The DM requested an unsupported dice roll.");
+  }
+
+  const count = Number(match[1] || "1");
+  const sides = Number(match[2]);
+  const physicalCount = physicalRollCountForRequest(request, count, sides);
+
+  if (!result) {
+    const rolls = Array.from({ length: physicalCount }, () =>
+      randomInt(1, sides + 1)
+    );
+    const total = scoredRollsForRequest(request, rolls).reduce(
+      (sum, roll) => sum + roll,
+      request.modifier ?? 0
+    );
+
+    return { rolls, total };
+  }
+
+  if (
+    !Array.isArray(result.rolls) ||
+    result.rolls.length !== physicalCount ||
+    !result.rolls.every(
+      (roll) => Number.isInteger(roll) && roll >= 1 && roll <= sides
+    )
+  ) {
+    throw createStatusError(400, "The submitted roll result is invalid.");
+  }
+
+  const total = scoredRollsForRequest(request, result.rolls).reduce(
+    (sum, roll) => sum + roll,
+    request.modifier ?? 0
+  );
+
+  if (result.total !== total) {
+    throw createStatusError(
+      400,
+      "The submitted roll total does not match the dice."
+    );
+  }
+
+  return result;
+}
+
+function modifierText(modifier: number | undefined) {
+  if (!modifier) {
+    return "";
+  }
+
+  return modifier > 0 ? ` + ${modifier}` : ` - ${Math.abs(modifier)}`;
+}
+
+function formatRollSubmission(
+  request: DiceRollRequest,
+  submittedResult?: DiceRollResult
+) {
+  const result = validateRollSubmissionResult(request, submittedResult);
+  const rollText =
+    result.rolls.length === 1 ? String(result.rolls[0]) : result.rolls.join(", ");
+
+  return `I rolled ${request.dice}${modifierText(request.modifier)}: ${
+    result.total
+  } (${rollText}) for ${request.label}.`;
+}
+
+function rollSubmissionsFromPayload(
+  rollRequestId?: string,
+  rollResult?: DiceRollResult,
+  clientMessageId?: string,
+  rollSubmissions?: DiceRollSubmission[]
+) {
+  const submittedRolls: DiceRollSubmission[] = rollSubmissions?.length
+    ? rollSubmissions
+    : rollRequestId
+      ? [
+          {
+            rollRequestId,
+            ...(rollResult ? { rollResult } : {}),
+            ...(clientMessageId ? { clientMessageId } : {})
+          }
+        ]
+      : [];
+
+  return submittedRolls.map((submission) => ({
+    rollRequestId: submission.rollRequestId?.trim() ?? "",
+    ...(submission.rollResult ? { rollResult: submission.rollResult } : {}),
+    ...(submission.clientMessageId?.trim()
+      ? { clientMessageId: submission.clientMessageId.trim() }
+      : {})
+  }));
+}
+
+function validatePendingRollSubmissions(
+  pendingRollRequests: DiceRollRequest[],
+  submittedRolls: Array<{
+    rollRequestId: string;
+    rollResult?: DiceRollResult;
+    clientMessageId?: string;
+  }>,
+  player?: PlayerRow
+) {
+  if (submittedRolls.length === 0) {
+    return {
+      content: "",
+      remainingRollRequests: pendingRollRequests,
+      clientMessageId: undefined
+    };
+  }
+
+  if (pendingRollRequests.length === 0) {
+    throw createStatusError(400, "There is no pending roll to resolve.");
+  }
+
+  if (submittedRolls.length > pendingRollRequests.length) {
+    throw createStatusError(400, "Too many roll results were submitted.");
+  }
+
+  const content = submittedRolls
+    .map((submission, index) => {
+      const pendingRollRequest = pendingRollRequests[index];
+
+      if (!submission.rollRequestId) {
+        throw createStatusError(400, "A roll request id is required.");
+      }
+
+      if (!pendingRollRequest || submission.rollRequestId !== pendingRollRequest.id) {
+        throw createStatusError(409, "The DM is waiting for the required roll.");
+      }
+
+      if (player && !rollRequestTargetsPlayer(pendingRollRequest, player)) {
+        throw createStatusError(403, "That roll is waiting on another player.");
+      }
+
+      return formatRollSubmission(pendingRollRequest, submission.rollResult);
+    })
+    .join("\n");
+
+  return {
+    content,
+    remainingRollRequests: pendingRollRequests.slice(submittedRolls.length),
+    clientMessageId: submittedRolls[0]?.clientMessageId
+  };
+}
+
+async function setPendingRollRequests(
+  db: Queryable,
+  campaignId: string,
+  requests: DiceRollRequest[]
+) {
+  const currentRequest = requests[0] ?? null;
+
+  await db.query(
+    `
+      update campaigns
+      set metadata = case
+        when $2::jsonb = '[]'::jsonb then metadata - 'pendingRollRequest' - 'pendingRollRequests'
+        else jsonb_set(
+          jsonb_set(metadata, '{pendingRollRequest}', $3::jsonb, true),
+          '{pendingRollRequests}',
+          $2::jsonb,
+          true
+        )
+      end
+      where id = $1
+    `,
+    [campaignId, JSON.stringify(requests), JSON.stringify(currentRequest)]
+  );
+}
+
+async function resolveRoomCampaign(
+  db: Queryable,
+  roomId: string,
+  sessionId: string
+) {
+  const statement = isUuid(roomId)
+    ? `
+        select *
+        from campaigns
+        where (id = $1 or hermes_session_id = $2)
+          and status <> 'deleted'
+        order by created_at desc
+        limit 1
+      `
+    : `
+        select *
+        from campaigns
+        where (hermes_session_id = $1 or hermes_session_id = $2)
+          and status <> 'deleted'
+        order by created_at desc
+        limit 1
+      `;
+  const result = await db.query<CampaignRow>(statement, [roomId, sessionId]);
+
+  return result.rows[0] ?? null;
+}
+
+async function assertCampaignAccessForUser(
+  db: Queryable,
+  campaign: CampaignRow,
+  userId: string
+) {
+  if (campaign.owner_user_id === userId) {
+    return;
+  }
+
+  const player = await db.query<PlayerRow>(
+    `
+      select *
+      from players
+      where campaign_id = $1
+        and user_id = $2
+        and status = 'active'
+      order by created_at asc
+      limit 1
+    `,
+    [campaign.id, userId]
+  );
+
+  if (!player.rows[0]) {
+    throw createStatusError(403, "You do not have access to that campaign.");
+  }
+}
+
+function assertCampaignOwnerForUser(campaign: CampaignRow, userId: string) {
+  if (campaign.owner_user_id !== userId) {
+    throw createStatusError(403, "Only the campaign owner can do that.");
+  }
+}
+
+async function getActiveRoomPlayerForUser(
+  db: Queryable,
+  campaignId: string,
+  clientId: string,
+  userId: string
+) {
+  const result = await db.query<PlayerRow>(
+    `
+      select *
+      from players
+      where campaign_id = $1
+        and client_id = $2
+        and user_id = $3
+        and status = 'active'
+      limit 1
+    `,
+    [campaignId, clientId, userId]
+  );
+
+  return result.rows[0] ?? null;
+}
+
+async function getCurrentRoomTurn(db: Queryable, campaignId: string) {
+  const result = await db.query<TurnRow>(
+    `
+      select *
+      from turns
+      where campaign_id = $1 and status in ('collecting', 'resolving')
+      order by
+        case status when 'resolving' then 0 else 1 end,
+        created_at desc
+      limit 1
+    `,
+    [campaignId]
+  );
+
+  return result.rows[0] ?? null;
+}
+
+async function getTurnSubmissions(db: Queryable, turnId: string) {
+  const result = await db.query<SubmissionRow>(
+    `
+      select
+        submissions.player_id,
+        players.client_id,
+        players.username,
+        players.character_name,
+        submissions.content,
+        submissions.created_at
+      from submissions
+      left join players on players.id = submissions.player_id
+      where submissions.turn_id = $1 and submissions.status = 'submitted'
+      order by submissions.created_at asc
+    `,
+    [turnId]
+  );
+
+  return result.rows;
+}
+
+function rowToRoomPlayer(
+  player: PlayerRow,
+  submittedPlayerIds: Set<string>
+): RoomSnapshot["players"][number] {
+  return {
+    id: player.client_id,
+    slot: player.slot ?? 0,
+    username: player.username,
+    characterName: player.character_name,
+    characterSheet: player.character_sheet,
+    status: submittedPlayerIds.has(player.id) ? "submitted" : "waiting",
+    lastSeenAt: toIso(player.last_seen_at)
+  };
+}
+
+async function buildRoomSnapshot(
+  db: Queryable,
+  campaign: CampaignRow
+): Promise<RoomSnapshot> {
+  const currentTurn = await getCurrentRoomTurn(db, campaign.id);
+  const submissions = currentTurn ? await getTurnSubmissions(db, currentTurn.id) : [];
+  const submittedPlayerIds = new Set(
+    submissions
+      .map((submission) => submission.player_id)
+      .filter((playerId): playerId is string => Boolean(playerId))
+  );
+  const playersResult = await db.query<PlayerRow>(
+    `
+      select *
+      from players
+      where campaign_id = $1 and status = 'active'
+      order by slot asc nulls last, created_at asc
+    `,
+    [campaign.id]
+  );
+  const events = await db.query<EventRow>(
+    `
+      select id, type, payload, created_at
+      from (
+        select id, type, payload, created_at
+        from campaign_events
+        where campaign_id = $1
+          and type in (
+            'turn_submitted',
+            'turn_resolved',
+            'adventure_begun',
+            'dm_question',
+            'dm_answer'
+          )
+        order by created_at desc
+        limit 100
+      ) recent_events
+      order by created_at asc
+    `,
+    [campaign.id]
+  );
+  const messages = events.rows
+    .map((event): RoomSnapshot["messages"][number] | null => {
+      const payload = eventPayload(event.payload);
+      const content = typeof payload.content === "string" ? payload.content : "";
+
+      if (!content.trim()) {
+        return null;
+      }
+
+      return {
+        id: String(payload.messageId || event.id),
+        role: payload.role === "player" ? "player" : "dm",
+        kind: roomEventMessageKind(event.type),
+        content,
+        createdAt: toIso(event.created_at)
+      };
+    })
+    .filter((message): message is RoomSnapshot["messages"][number] =>
+      Boolean(message)
+    );
+  const pendingRollRequests = pendingRollRequestsFromCampaign(campaign);
+
+  return {
+    roomId: campaign.id,
+    mode: campaign.mode,
+    sessionId: campaign.hermes_session_id,
+    players: playersResult.rows.map((player) =>
+      rowToRoomPlayer(player, submittedPlayerIds)
+    ),
+    messages,
+    isResolving: currentTurn?.status === "resolving",
+    hasBegun: campaign.has_begun,
+    pendingRollRequest: pendingRollRequests[0] ?? null,
+    pendingRollRequests,
+    inputTargets: inputTargetsFromCampaign(campaign),
+    inputPolicy: inputPolicyFromCampaign(campaign),
+    updatedAt: toIso(campaign.updated_at)
+  };
+}
+
+export async function getRoomForUser(
+  db: pg.Pool,
+  input: {
+    roomId: string;
+    sessionId: string;
+    userId: string;
+  }
+): Promise<RoomSnapshot> {
+  const campaign = await resolveRoomCampaign(db, input.roomId, input.sessionId);
+
+  if (!campaign) {
+    throw createStatusError(404, "Campaign not found.");
+  }
+
+  await assertCampaignAccessForUser(db, campaign, input.userId);
+
+  const player = await db.query<PlayerRow>(
+    `
+      update players
+      set last_seen_at = now()
+      where campaign_id = $1
+        and user_id = $2
+        and status = 'active'
+      returning *
+    `,
+    [campaign.id, input.userId]
+  );
+
+  return buildRoomSnapshot(db, {
+    ...campaign,
+    updated_at: player.rows[0] ? new Date() : campaign.updated_at
+  });
+}
+
+export async function registerRoomPlayerForUser(
+  db: pg.Pool,
+  input: {
+    roomId: string;
+    sessionId: string;
+    playerId: string;
+    username: string;
+    characterName: string;
+    characterSheet: string;
+    userId: string;
+  }
+): Promise<RoomSnapshot> {
+  const campaign = await withTransaction(db, async (client) => {
+    const campaignRow = await resolveRoomCampaign(
+      client,
+      input.roomId,
+      input.sessionId
+    );
+
+    if (!campaignRow) {
+      throw createStatusError(404, "Campaign not found.");
+    }
+
+    await assertCampaignAccessForUser(client, campaignRow, input.userId);
+
+    const existing = await client.query<PlayerRow>(
+      `
+        select *
+        from players
+        where campaign_id = $1 and client_id = $2
+        limit 1
+      `,
+      [campaignRow.id, input.playerId]
+    );
+    const slotResult = await client.query<{ slot: number }>(
+      `
+        select slot
+        from players
+        where campaign_id = $1 and status <> 'kicked' and slot is not null
+        order by slot asc
+      `,
+      [campaignRow.id]
+    );
+    const usedSlots = new Set(slotResult.rows.map((row) => row.slot));
+    const firstOpenSlot = Array.from({ length: maxPlayers }, (_, slot) =>
+      slot
+    ).find((slot) => !usedSlots.has(slot));
+    const slot = existing.rows[0]?.slot ?? firstOpenSlot;
+
+    if (slot === undefined) {
+      throw createStatusError(409, "The room already has four active players.");
+    }
+
+    await client.query(
+      `
+        insert into players (
+          campaign_id,
+          client_id,
+          username,
+          character_name,
+          character_sheet,
+          user_id,
+          slot,
+          status,
+          last_seen_at
+        )
+        values ($1, $2, $3, $4, $5, $6, $7, 'active', now())
+        on conflict (campaign_id, client_id) do update
+        set username = excluded.username,
+            character_name = excluded.character_name,
+            character_sheet = excluded.character_sheet,
+            user_id = coalesce(players.user_id, excluded.user_id),
+            status = 'active',
+            kicked_at = null,
+            last_seen_at = now()
+      `,
+      [
+        campaignRow.id,
+        input.playerId,
+        input.username,
+        input.characterName,
+        input.characterSheet,
+        input.userId,
+        slot
+      ]
+    );
+    await logCampaignEvent(
+      client,
+      campaignRow.id,
+      existing.rows[0] ? "profile_updated" : "player_joined",
+      {
+        clientId: input.playerId,
+        username: input.username,
+        characterName: input.characterName,
+        slot
+      }
+    );
+
+    return campaignRow;
+  });
+
+  return buildRoomSnapshot(db, campaign);
+}
+
+export async function beginRoomForUser(
+  db: pg.Pool,
+  input: {
+    roomId: string;
+    sessionId: string;
+    userId: string;
+  }
+): Promise<RoomSnapshot> {
+  const campaign = await withTransaction(db, async (client) => {
+    const campaignRow = await resolveRoomCampaign(
+      client,
+      input.roomId,
+      input.sessionId
+    );
+
+    if (!campaignRow) {
+      throw createStatusError(404, "Campaign not found.");
+    }
+
+    assertCampaignOwnerForUser(campaignRow, input.userId);
+
+    const locked = await client.query<CampaignRow>(
+      "select * from campaigns where id = $1 for update",
+      [campaignRow.id]
+    );
+    const lockedCampaign = requireRow(locked.rows[0], "Campaign not found.");
+
+    if (!lockedCampaign.has_begun) {
+      const players = (
+        await client.query<PlayerRow>(
+          `
+            select *
+            from players
+            where campaign_id = $1 and status = 'active'
+            order by slot asc nulls last, created_at asc
+          `,
+          [lockedCampaign.id]
+        )
+      ).rows;
+
+      if (players.filter(isProfileComplete).length < 2) {
+        throw createStatusError(
+          400,
+          "At least two players are needed to begin the adventure."
+        );
+      }
+
+      await ensureCollectingTurn(client, lockedCampaign.id);
+      const begun = await client.query<CampaignRow>(
+        `
+          update campaigns
+          set has_begun = true, updated_at = now()
+          where id = $1 and has_begun = false
+          returning *
+        `,
+        [lockedCampaign.id]
+      );
+      await logCampaignEvent(client, lockedCampaign.id, "adventure_begun", {
+        messageId: randomUUID(),
+        role: "dm",
+        content: "The adventure begins."
+      });
+
+      return begun.rows[0] ?? lockedCampaign;
+    }
+
+    return lockedCampaign;
+  });
+
+  return buildRoomSnapshot(db, campaign);
+}
+
+async function allTargetedPlayersSubmitted(
+  db: Queryable,
+  campaignId: string,
+  turnId: string,
+  inputTargets: string[]
+) {
+  const activePlayers = (
+    await db.query<PlayerRow>(
+      `
+        select *
+        from players
+        where campaign_id = $1 and status = 'active'
+      `,
+      [campaignId]
+    )
+  ).rows.filter(isProfileComplete);
+  const targetedPlayers = activePlayers.filter((player) =>
+    playerMatchesInputTargets(player, inputTargets)
+  );
+
+  if (targetedPlayers.length === 0) {
+    return true;
+  }
+
+  const submissions = await db.query<{ player_id: string | null }>(
+    `
+      select player_id
+      from submissions
+      where turn_id = $1 and status = 'submitted'
+    `,
+    [turnId]
+  );
+  const submittedPlayerIds = new Set(
+    submissions.rows
+      .map((submission) => submission.player_id)
+      .filter((playerId): playerId is string => Boolean(playerId))
+  );
+
+  return targetedPlayers.every((player) => submittedPlayerIds.has(player.id));
+}
+
+export async function submitRoomTurnForUser(
+  db: pg.Pool,
+  input: {
+    roomId: string;
+    sessionId: string;
+    playerId: string;
+    message: string;
+    userId: string;
+    rollRequestId?: string;
+    rollResult?: DiceRollResult;
+    clientMessageId?: string;
+    rollSubmissions?: DiceRollSubmission[];
+  }
+): Promise<RoomSnapshot> {
+  const campaign = await withTransaction(db, async (client) => {
+    const campaignRow = await resolveRoomCampaign(
+      client,
+      input.roomId,
+      input.sessionId
+    );
+
+    if (!campaignRow) {
+      throw createStatusError(404, "Campaign not found.");
+    }
+
+    await assertCampaignAccessForUser(client, campaignRow, input.userId);
+
+    if (!campaignRow.has_begun) {
+      throw createStatusError(400, "Begin the adventure before sending turns.");
+    }
+
+    const player = await getActiveRoomPlayerForUser(
+      client,
+      campaignRow.id,
+      input.playerId,
+      input.userId
+    );
+
+    if (!player) {
+      throw createStatusError(400, "Join the room before submitting a turn.");
+    }
+
+    if (!isProfileComplete(player)) {
+      throw createStatusError(400, "Player profile is incomplete.");
+    }
+
+    const pendingRollRequests = pendingRollRequestsFromCampaign(campaignRow);
+    const inputTargets = inputTargetsFromCampaign(campaignRow);
+    const inputPolicy = inputPolicyFromCampaign(campaignRow);
+    const submittedRolls = rollSubmissionsFromPayload(
+      input.rollRequestId,
+      input.rollResult,
+      input.clientMessageId,
+      input.rollSubmissions
+    );
+    const isRollSubmission = submittedRolls.length > 0;
+    const rollSubmission = validatePendingRollSubmissions(
+      pendingRollRequests,
+      submittedRolls,
+      player
+    );
+
+    if (!isRollSubmission && pendingRollRequests.length > 0) {
+      throw createStatusError(409, "The DM is waiting for the required roll.");
+    }
+
+    if (
+      !isRollSubmission &&
+      inputPolicy === "only_targeted_players" &&
+      !playerMatchesInputTargets(player, inputTargets)
+    ) {
+      throw createStatusError(403, "The DM is waiting on another player.");
+    }
+
+    const turn = await ensureCollectingTurn(client, campaignRow.id);
+    const trimmedContent = isRollSubmission
+      ? rollSubmission.content
+      : input.message.trim();
+
+    if (!trimmedContent) {
+      throw createStatusError(400, "A player message is required.");
+    }
+
+    await client.query(
+      `
+        insert into submissions (campaign_id, turn_id, player_id, content)
+        values ($1, $2, $3, $4)
+        on conflict (turn_id, player_id) do update
+        set content = case
+              when $5 then submissions.content || E'\n' || excluded.content
+              else excluded.content
+            end,
+            status = 'submitted'
+      `,
+      [campaignRow.id, turn.id, player.id, trimmedContent, isRollSubmission]
+    );
+
+    if (isRollSubmission) {
+      await setPendingRollRequests(
+        client,
+        campaignRow.id,
+        rollSubmission.remainingRollRequests
+      );
+    }
+
+    await client.query("update players set last_seen_at = now() where id = $1", [
+      player.id
+    ]);
+    await logCampaignEvent(client, campaignRow.id, "turn_submitted", {
+      turnId: turn.id,
+      clientId: player.client_id,
+      role: "player",
+      messageId:
+        rollSubmission.clientMessageId ||
+        input.clientMessageId ||
+        randomUUID(),
+      content: `${player.username} (${player.character_name}): ${trimmedContent}`
+    });
+
+    if (
+      !isRollSubmission &&
+      inputPolicy === "only_targeted_players" &&
+      (await allTargetedPlayersSubmitted(
+        client,
+        campaignRow.id,
+        turn.id,
+        inputTargets
+      ))
+    ) {
+      await client.query(
+        "update campaigns set metadata = metadata - 'inputTargets' - 'inputPolicy' where id = $1",
+        [campaignRow.id]
+      );
+    }
+
+    return campaignRow;
+  });
+
+  const updatedCampaign = await resolveRoomCampaign(
+    db,
+    campaign.id,
+    campaign.hermes_session_id
+  );
+
+  return buildRoomSnapshot(db, updatedCampaign ?? campaign);
 }
 
 function createStatusError(statusCode: number, message: string): Error {
