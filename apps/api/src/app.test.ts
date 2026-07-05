@@ -1297,6 +1297,7 @@ test("campaign join preview and join use the Fastify campaign API", async () => 
   const created = CampaignCreateResponseSchema.parse(createResponse.json());
 
   assert.ok(created.campaign.joinCode);
+  const pastedGameCode = `Game code: ${created.campaign.joinCode}`;
 
   const previewResponse = await app.inject({
     method: "POST",
@@ -1305,7 +1306,7 @@ test("campaign join preview and join use the Fastify campaign API", async () => 
       cookie: joinerCookie
     },
     payload: {
-      gameCode: created.campaign.joinCode
+      gameCode: pastedGameCode
     }
   });
 
@@ -1313,6 +1314,7 @@ test("campaign join preview and join use the Fastify campaign API", async () => 
   const preview = CampaignJoinPreviewResponseSchema.parse(
     previewResponse.json()
   );
+  assert.equal(preview.code, created.campaign.joinCode);
   assert.equal(preview.availableSlots, 3);
 
   const joinResponse = await app.inject({
@@ -1322,7 +1324,7 @@ test("campaign join preview and join use the Fastify campaign API", async () => 
       cookie: joinerCookie
     },
     payload: {
-      gameCode: created.campaign.joinCode,
+      gameCode: pastedGameCode,
       clientId: "joiner-client",
       username: "Joined Player",
       characterName: "Lyra",

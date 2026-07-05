@@ -468,7 +468,16 @@ export type DungeonMasterRuntime = {
 };
 
 function normalizeJoinCode(code: string | undefined) {
-  return (code ?? "").replace(/[^a-z0-9]/gi, "").toUpperCase();
+  const rawCode = code ?? "";
+  const compactCode = rawCode.replace(/[^a-z0-9]/gi, "").toUpperCase();
+
+  if (compactCode.length <= 6) {
+    return compactCode;
+  }
+
+  return (
+    rawCode.toUpperCase().match(/[A-HJ-NP-Z2-9]{6}/)?.[0] ?? compactCode
+  );
 }
 
 function generateJoinCode() {

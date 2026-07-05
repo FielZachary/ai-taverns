@@ -46,6 +46,7 @@ const characterLevel = 5;
 const proficiencyBonus = 3;
 const createSteps = ["Mode", "Campaign", "Character", "Review"];
 const joinSteps = ["Mode", "Game Code", "Character", "Review"];
+const joinCodePattern = /[A-HJ-NP-Z2-9]{6}/;
 const customCharacterCreationSteps = [
   "Build",
   "Class",
@@ -579,6 +580,18 @@ function createClientId() {
     .slice(2, 10)}`;
 }
 
+function normalizeGameCodeInput(value: string) {
+  const compactValue = value.replace(/[^a-z0-9]/gi, "").toUpperCase();
+
+  if (compactValue.length <= 6) {
+    return compactValue;
+  }
+
+  return (
+    value.toUpperCase().match(joinCodePattern)?.[0] ?? compactValue.slice(0, 6)
+  );
+}
+
 export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
   const [stepIndex, setStepIndex] = useState(0);
   const [characterStepIndex, setCharacterStepIndex] = useState(0);
@@ -625,7 +638,7 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
   const isLastCharacterStep =
     characterStepIndex === characterCreationSteps.length - 1;
   const modeLabel = mode === "single_player" ? "Singleplayer" : "Multiplayer";
-  const normalizedGameCode = gameCode.replace(/[^a-z0-9]/gi, "").toUpperCase();
+  const normalizedGameCode = normalizeGameCodeInput(gameCode);
   const hasRequiredIdentity =
     Boolean(characterName.trim()) && (!isJoinFlow || Boolean(playerName.trim()));
   const selectedGenre = campaignGenres.find((genre) => genre.id === campaignGenre) ?? campaignGenres[0];
@@ -1213,7 +1226,9 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                   <span>Game code</span>
                   <input
                     value={gameCode}
-                    onChange={(event) => setGameCode(event.target.value)}
+                    onChange={(event) =>
+                      setGameCode(normalizeGameCodeInput(event.target.value))
+                    }
                     placeholder="K7M2QH"
                     autoCapitalize="characters"
                     autoFocus
