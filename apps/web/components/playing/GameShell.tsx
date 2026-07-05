@@ -1270,16 +1270,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
       });
 
       if (!response.ok) {
-        try {
-          const body = (await response.json()) as { error?: string };
-
-          if (body.error?.trim()) {
-            failureMessage = body.error;
-          }
-        } catch {
-          // Keep the default begin-adventure guidance when the server sends no JSON.
-        }
-
+        failureMessage = await getApiErrorMessage(response, failureMessage);
         throw new Error(failureMessage);
       }
 
