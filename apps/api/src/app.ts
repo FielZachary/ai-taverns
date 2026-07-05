@@ -6,6 +6,7 @@ import { handleRouteError } from "./errors.js";
 import { postgresPlugin } from "./plugins/postgres.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerCampaignRoutes } from "./routes/campaigns.js";
+import { registerDmRoutes } from "./routes/dm.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerRoomRoutes } from "./routes/rooms.js";
 
@@ -58,6 +59,10 @@ export async function buildApp(
     config
   });
   await fastify.register(registerRoomRoutes, {
+    prefix: "/api",
+    config
+  });
+  await fastify.register(registerDmRoutes, {
     prefix: "/api",
     config
   });

@@ -9,10 +9,17 @@ import {
   AuthProtectedResponseSchema,
   AuthSignOutResponseSchema,
   CampaignCreateRequestSchema,
+  CampaignAskDmRequestSchema,
+  CampaignAskDmResponseSchema,
+  CampaignDebugTracesQuerySchema,
+  CampaignDebugTracesResponseSchema,
   CampaignJoinPreviewResponseSchema,
   CampaignListResponseSchema,
   CampaignReadParamsSchema,
   CampaignReadResponseSchema,
+  CampaignRegenerateRequestSchema,
+  CampaignSoloTurnRequestSchema,
+  CampaignSoloTurnResponseSchema,
   HealthResponseSchema,
   RoomPlayerUpdateRequestSchema,
   RoomSnapshotSchema,
@@ -229,4 +236,62 @@ test("room contracts accept snapshots and mutation payloads", () => {
   });
 
   assert.equal(snapshot.players[0]?.status, "waiting");
+});
+
+test("DM route contracts accept solo, ask-DM, regenerate, and traces payloads", () => {
+  const solo = CampaignSoloTurnRequestSchema.parse({
+    message: "I listen at the cellar door.",
+    clientMessageId: "client-message-1"
+  });
+
+  assert.equal(solo.message, "I listen at the cellar door.");
+
+  const askDm = CampaignAskDmRequestSchema.parse({
+    question: "Do I know what this symbol means?"
+  });
+
+  assert.equal(askDm.question, "Do I know what this symbol means?");
+
+  const regenerate = CampaignRegenerateRequestSchema.parse({
+    messageId: "dm-message-1"
+  });
+
+  assert.equal(regenerate.messageId, "dm-message-1");
+
+  const query = CampaignDebugTracesQuerySchema.parse({
+    traceId: "trace-1",
+    limit: "5"
+  });
+
+  assert.equal(query.limit, 5);
+
+  const snapshot = RoomSnapshotSchema.parse({
+    roomId: "00000000-0000-4000-8000-000000000001",
+    mode: "single_player",
+    sessionId: "ai-dnd-session",
+    players: [],
+    messages: [],
+    isResolving: false,
+    hasBegun: true,
+    pendingRollRequest: null,
+    pendingRollRequests: [],
+    inputTargets: [],
+    inputPolicy: "all_players",
+    updatedAt: "2026-07-05T00:00:00.000Z"
+  });
+
+  assert.doesNotThrow(() => CampaignSoloTurnResponseSchema.parse(snapshot));
+  assert.doesNotThrow(() => CampaignAskDmResponseSchema.parse(snapshot));
+  assert.doesNotThrow(() =>
+    CampaignDebugTracesResponseSchema.parse({
+      traces: [
+        {
+          id: "trace-event-1",
+          createdAt: "2026-07-05T00:00:00.000Z",
+          traceId: "trace-1",
+          phase: "dm_turn_started"
+        }
+      ]
+    })
+  );
 });

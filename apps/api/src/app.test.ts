@@ -1364,6 +1364,45 @@ test("room routes require an owned session", async () => {
   );
 });
 
+test("DM runtime routes require an owned session", async () => {
+  const campaignId = "00000000-0000-4000-8000-000000000001";
+  const requests = [
+    app.inject({
+      method: "POST",
+      url: `/api/campaigns/${campaignId}/solo-turn`,
+      payload: {
+        message: "I step closer."
+      }
+    }),
+    app.inject({
+      method: "POST",
+      url: `/api/campaigns/${campaignId}/ask-dm`,
+      payload: {
+        question: "What can I see?"
+      }
+    }),
+    app.inject({
+      method: "POST",
+      url: `/api/campaigns/${campaignId}/regenerate`,
+      payload: {
+        messageId: "dm-message-1"
+      }
+    }),
+    app.inject({
+      method: "GET",
+      url: `/api/campaigns/${campaignId}/debug-traces`
+    })
+  ];
+
+  for (const response of await Promise.all(requests)) {
+    assert.equal(response.statusCode, 401);
+    assert.equal(
+      ApiErrorResponseSchema.parse(response.json()).error.code,
+      "UNAUTHORIZED"
+    );
+  }
+});
+
 test("missing routes use the standard error envelope", async () => {
   const response = await app.inject({
     method: "GET",

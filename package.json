@@ -9,7 +9,7 @@
     "dev": "npm run dev -w @ai-dnd/web",
     "dev:api": "npm run dev -w @ai-dnd/api",
     "build": "npm run build -w @ai-dnd/web",
-    "build:api": "npm run build -w @ai-dnd/domain && npm run build -w @ai-dnd/contracts && npm run build -w @ai-dnd/db && npm run build -w @ai-dnd/api",
+    "build:api": "npm run build -w @ai-dnd/domain && npm run build -w @ai-dnd/contracts && npm run build -w @ai-dnd/dm && npm run build -w @ai-dnd/db && npm run build -w @ai-dnd/api",
     "db:local:up": "docker compose -f infra/docker-compose.local.yml up -d postgres",
     "db:local:down": "docker compose -f infra/docker-compose.local.yml down",
     "db:migrate": "node scripts/run-db-migrations.mjs",

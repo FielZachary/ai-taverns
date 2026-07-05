@@ -1,6 +1,14 @@
 import { randomInt, randomUUID } from "node:crypto";
 import pg from "pg";
 import type { SessionId, UserId } from "@ai-dnd/domain";
+import {
+  debugHermesDmContractFailure,
+  dungeonMasterInstructions,
+  parseHermesDmContract,
+  type AiDebugInfo,
+  type GameMessage,
+  type InputPolicy
+} from "@ai-dnd/dm";
 import type {
   CampaignMode,
   CampaignSummary,
@@ -365,6 +373,45 @@ type JoinCodeRow = {
   status: CampaignStatus;
   mode: CampaignMode;
   has_begun: boolean;
+};
+
+type CampaignSettingSummary = {
+  displayLocation?: string;
+  worldName?: string;
+  startingLocation?: string;
+};
+
+type DungeonMasterProviderResponse = {
+  id?: string;
+  content: string;
+  debug: AiDebugInfo;
+};
+
+type DungeonMasterRuntime = {
+  askProvider(input: {
+    message: string;
+    instructions: string;
+    history?: GameMessage[];
+  }): Promise<DungeonMasterProviderResponse>;
+  buildPromptContext?(input: {
+    campaignId: string;
+    turnId?: string | undefined;
+    currentAction: string;
+    baseInstructions: string;
+  }): Promise<{
+    instructions: string;
+    message: string;
+    sections: unknown[];
+    budget: Record<string, unknown>;
+  }>;
+  runPostTurnContextJobs?(input: {
+    campaignId: string;
+    turnId: string;
+    currentAction: string;
+    dmResponse: string;
+    dmEventId?: string | undefined;
+    rollRequests?: DiceRollRequest[] | undefined;
+  }): Promise<void>;
 };
 
 function normalizeJoinCode(code: string | undefined) {
@@ -1034,6 +1081,10 @@ function isProfileComplete(player: PlayerRow) {
   );
 }
 
+function isPlayerRecentlySeen(player: Pick<PlayerRow, "last_seen_at">) {
+  return Date.now() - new Date(player.last_seen_at).getTime() <= 120_000;
+}
+
 function roomEventMessageKind(type: string) {
   if (type === "dm_question") {
     return "ask_dm_question";
@@ -1604,6 +1655,507 @@ async function buildRoomSnapshot(
   };
 }
 
+function previewText(value: string | undefined, maxLength = 1000) {
+  const text = value ?? "";
+  return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+}
+
+function textStats(value: string | undefined) {
+  const text = value ?? "";
+
+  return {
+    length: text.length,
+    preview: previewText(text)
+  };
+}
+
+function errorSummary(error: unknown) {
+  return {
+    name: error instanceof Error ? error.name : "UnknownError",
+    message: error instanceof Error ? error.message : String(error)
+  };
+}
+
+function providerDebugSummary(debug: AiDebugInfo | undefined) {
+  if (!debug) {
+    return undefined;
+  }
+
+  return {
+    providerResponseId: debug.providerResponseId,
+    model: debug.model,
+    requestMessageCount: debug.requestMessages.length,
+    requestMessages: debug.requestMessages.map((message, index) => ({
+      index,
+      role: message.role,
+      contentLength: message.content.length,
+      contentPreview: previewText(message.content)
+    })),
+    rawResponseLength: debug.rawResponse.length,
+    rawResponsePreview: previewText(debug.rawResponse),
+    providerTimings: debug.providerTimings
+  };
+}
+
+async function logTurnDebugTrace(
+  db: Queryable,
+  input: {
+    campaignId: string;
+    traceId: string;
+    phase: string;
+    turnId?: string | undefined;
+    elapsedMs?: number | undefined;
+    payload?: Record<string, unknown> | undefined;
+  }
+) {
+  const tracePayload = {
+    traceId: input.traceId,
+    phase: input.phase,
+    turnId: input.turnId,
+    elapsedMs: input.elapsedMs,
+    at: nowIso(),
+    ...(input.payload ?? {})
+  };
+
+  await logCampaignEvent(db, input.campaignId, "turn_debug_trace", tracePayload);
+}
+
+function formatCanonicalCharacterContext(players: PlayerRow[]) {
+  const playablePlayers = players.filter(isProfileComplete);
+
+  if (playablePlayers.length === 0) {
+    return "Canonical player characters:\nNo completed character sheets are available.";
+  }
+
+  return [
+    "Canonical player characters:",
+    "Use these website-owned character sheets when framing scenes, choosing checks and modifiers, judging character capabilities, and spotlighting class, species, background, or story hooks.",
+    "",
+    ...playablePlayers.map((player, index) =>
+      [
+        `${index + 1}. ${player.username} playing ${player.character_name}`,
+        "Character sheet:",
+        player.character_sheet
+      ].join("\n")
+    )
+  ].join("\n\n");
+}
+
+function formatSoloTurn(player: PlayerRow, content: string) {
+  return [
+    formatCanonicalCharacterContext([player]),
+    "",
+    "Current player action:",
+    "Only treat concrete declared actions as actions. Quoted speech, questions, promises, plans, and corrections are dialogue or intent unless the player also says they move, travel, enter, search, attack, take something, cast a spell, or otherwise change the scene.",
+    `${player.username} (${player.character_name}): ${content}`
+  ].join("\n");
+}
+
+function askDmInstructions() {
+  return [
+    "You are the AI Taverns DnD Dungeon Master answering an out-of-turn table question.",
+    "Return exactly one valid JSON object and no Markdown.",
+    "{\"answer\":\"Your player-facing answer.\"}",
+    "This is not a player action and must not advance game time.",
+    "Do not move the scene forward, resolve consequences, consume resources, request dice, change pending rolls, trigger NPC actions, or introduce new hidden facts as if discovered.",
+    "Use only already-established campaign context, visible character knowledge, rules reasoning, and reasonable table clarification.",
+    "If the player is asking to do something in the fiction, tell them to submit it as a turn/action instead of resolving it here.",
+    "Keep the answer concise and useful, normally 1-3 short paragraphs."
+  ].join("\n");
+}
+
+function parseJsonRecord(value: string) {
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    const firstBrace = value.indexOf("{");
+    const lastBrace = value.lastIndexOf("}");
+
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      try {
+        const parsed = JSON.parse(value.slice(firstBrace, lastBrace + 1));
+        return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+          ? (parsed as Record<string, unknown>)
+          : {};
+      } catch {
+        return {};
+      }
+    }
+
+    return {};
+  }
+}
+
+function answerFromAskDmProviderResponse(content: string) {
+  const parsed = parseJsonRecord(content);
+  const answer = typeof parsed.answer === "string" ? parsed.answer.trim() : "";
+
+  if (answer) {
+    return answer;
+  }
+
+  const trimmed = content.trim();
+
+  if (trimmed) {
+    return trimmed;
+  }
+
+  throw new Error("The DM provider returned an empty answer.");
+}
+
+async function getActivePlayers(db: Queryable, campaignId: string) {
+  const result = await db.query<PlayerRow>(
+    `
+      select *
+      from players
+      where campaign_id = $1 and status = 'active'
+      order by slot asc nulls last, created_at asc
+    `,
+    [campaignId]
+  );
+
+  return result.rows.filter(isPlayerRecentlySeen);
+}
+
+function formatAskDmQuestion(
+  players: PlayerRow[],
+  asker: PlayerRow,
+  question: string
+) {
+  return [
+    formatCanonicalCharacterContext(players.length > 0 ? players : [asker]),
+    "",
+    "Out-of-turn Ask DM question:",
+    "The player is asking for clarification without advancing time. Answer as table guidance, not as a committed character action.",
+    `${asker.username} (${asker.character_name}): ${question}`
+  ].join("\n");
+}
+
+async function getCampaignEventMessages(
+  db: Queryable,
+  campaignId: string,
+  limit = 30
+): Promise<GameMessage[]> {
+  const events = await db.query<EventRow>(
+    `
+      select id, type, payload, created_at
+      from (
+        select id, type, payload, created_at
+        from campaign_events
+        where campaign_id = $1
+          and type in (
+            'turn_submitted',
+            'turn_resolved',
+            'adventure_begun',
+            'dm_question',
+            'dm_answer'
+          )
+        order by created_at desc
+        limit $2
+      ) recent_events
+      order by created_at asc
+    `,
+    [campaignId, limit]
+  );
+
+  return events.rows
+    .map((event): GameMessage | null => {
+      const payload = eventPayload(event.payload);
+      const content = typeof payload.content === "string" ? payload.content : "";
+
+      if (!content.trim()) {
+        return null;
+      }
+
+      return {
+        id: String(payload.messageId || event.id),
+        role: payload.role === "player" ? "player" : "dm",
+        kind:
+          event.type === "dm_question"
+            ? "ask_dm_question"
+            : event.type === "dm_answer"
+              ? "ask_dm_answer"
+              : "turn",
+        content,
+        createdAt: toIso(event.created_at)
+      };
+    })
+    .filter((message): message is GameMessage => message !== null);
+}
+
+async function askDungeonMaster(
+  db: Queryable,
+  runtime: DungeonMasterRuntime,
+  campaign: Pick<CampaignRow, "id" | "hermes_session_id">,
+  message: string,
+  instructions: string,
+  includeHistory = true,
+  turnId?: string
+) {
+  const traceId = randomUUID();
+  const startedAt = Date.now();
+
+  await logTurnDebugTrace(db, {
+    campaignId: campaign.id,
+    traceId,
+    phase: "dm_turn_started",
+    turnId,
+    elapsedMs: 0,
+    payload: {
+      hermesSessionId: campaign.hermes_session_id,
+      includeHistory,
+      message: textStats(message),
+      instructions: textStats(instructions)
+    }
+  });
+
+  try {
+    const promptContext = runtime.buildPromptContext
+      ? await runtime.buildPromptContext({
+          campaignId: campaign.id,
+          turnId,
+          currentAction: message,
+          baseInstructions: instructions
+        })
+      : null;
+    const history =
+      includeHistory && !promptContext
+        ? await getCampaignEventMessages(db, campaign.id)
+        : [];
+    const providerStartedAt = Date.now();
+    const providerData = await runtime.askProvider({
+      message: promptContext?.message ?? message,
+      instructions: promptContext?.instructions ?? instructions,
+      history
+    });
+
+    await logTurnDebugTrace(db, {
+      campaignId: campaign.id,
+      traceId,
+      phase: "provider_response_received",
+      turnId,
+      elapsedMs: Date.now() - startedAt,
+      payload: {
+        durationMs: Date.now() - providerStartedAt,
+        historyCount: history.length,
+        provider: providerDebugSummary(providerData.debug)
+      }
+    });
+
+    const contract = parseHermesDmContract(providerData.content, {
+      currentAction: message
+    });
+    const rollRequests = normalizeRollRequests(contract.rollRequests);
+    const reply = contract.publicNarration;
+
+    if (!reply) {
+      throw new Error(`The DM provider returned an empty reply. Trace ID: ${traceId}`);
+    }
+
+    await logTurnDebugTrace(db, {
+      campaignId: campaign.id,
+      traceId,
+      phase: "dm_contract_parse_succeeded",
+      turnId,
+      elapsedMs: Date.now() - startedAt,
+      payload: {
+        rollRequestsCount: rollRequests.length,
+        rollRequestLabels: rollRequests.map((request) => request.label),
+        nextInputNeeded: contract.nextInputNeeded,
+        inputPolicy: contract.inputPolicy,
+        inputTargets: contract.inputTargets
+      }
+    });
+
+    await logTurnDebugTrace(db, {
+      campaignId: campaign.id,
+      traceId,
+      phase: "dm_turn_completed",
+      turnId,
+      elapsedMs: Date.now() - startedAt,
+      payload: {
+        reply: textStats(reply),
+        rollRequestsCount: rollRequests.length,
+        nextInputNeeded: contract.nextInputNeeded
+      }
+    });
+
+    return {
+      id: providerData.id,
+      content: reply,
+      debug: providerData.debug,
+      rollRequests,
+      inputTargets: contract.inputTargets,
+      inputPolicy: contract.inputPolicy,
+      setting: contract.setting
+    };
+  } catch (error) {
+    await logTurnDebugTrace(db, {
+      campaignId: campaign.id,
+      traceId,
+      phase: "dm_turn_failed",
+      turnId,
+      elapsedMs: Date.now() - startedAt,
+      payload: {
+        error: errorSummary(error),
+        diagnostics:
+          error instanceof Error
+            ? undefined
+            : debugHermesDmContractFailure(String(error), { currentAction: message })
+      }
+    });
+
+    if (error instanceof Error && error.message.includes("Trace ID:")) {
+      throw error;
+    }
+
+    throw new Error(
+      `${error instanceof Error ? error.message : "DM provider call failed."} Trace ID: ${traceId}`
+    );
+  }
+}
+
+function settingMetadata(setting: CampaignSettingSummary | undefined) {
+  const displayLocation = setting?.displayLocation?.trim();
+  const worldName = setting?.worldName?.trim();
+  const startingLocation = setting?.startingLocation?.trim();
+
+  if (!displayLocation && !worldName && !startingLocation) {
+    return {};
+  }
+
+  return {
+    setting: {
+      displayLocation: displayLocation || startingLocation || worldName || null,
+      worldName: worldName || null,
+      startingLocation: startingLocation || null
+    }
+  };
+}
+
+async function setPendingInputTargets(
+  db: Queryable,
+  campaignId: string,
+  inputTargets: string[],
+  inputPolicy: InputPolicy
+) {
+  const shouldTargetPlayers =
+    inputPolicy === "only_targeted_players" && inputTargets.length > 0;
+
+  await db.query(
+    `
+      update campaigns
+      set metadata = case
+        when $2::jsonb = '[]'::jsonb then metadata - 'inputTargets' - 'inputPolicy'
+        else jsonb_set(
+          jsonb_set(metadata, '{inputTargets}', $2::jsonb, true),
+          '{inputPolicy}',
+          $3::jsonb,
+          true
+        )
+      end
+      where id = $1
+    `,
+    [
+      campaignId,
+      JSON.stringify(shouldTargetPlayers ? inputTargets : []),
+      JSON.stringify(shouldTargetPlayers ? inputPolicy : "all_players")
+    ]
+  );
+}
+
+async function finishResolvedTurn(
+  db: pg.Pool,
+  input: {
+    campaignId: string;
+    turnId: string;
+    hermesMessageId: string | undefined;
+    reply: string;
+    eventType: "adventure_begun" | "turn_resolved";
+    pendingRollRequests?: DiceRollRequest[];
+    inputTargets?: string[];
+    inputPolicy?: InputPolicy;
+    setting?: CampaignSettingSummary | undefined;
+    aiDebug?: AiDebugInfo | undefined;
+  }
+) {
+  const pendingRollRequests = input.pendingRollRequests ?? [];
+  const currentPendingRollRequest = pendingRollRequests[0] ?? null;
+  const settingPatch = settingMetadata(input.setting);
+  let dmEventId: string | undefined;
+
+  await withTransaction(db, async (client) => {
+    await client.query(
+      `
+        update turns
+        set status = 'resolved', hermes_message_id = $2, resolved_at = now(), error = null
+        where id = $1
+      `,
+      [input.turnId, input.hermesMessageId ?? null]
+    );
+    await client.query(
+      `
+        update submissions
+        set status = 'included_in_turn'
+        where turn_id = $1 and status = 'submitted'
+      `,
+      [input.turnId]
+    );
+    dmEventId = await logCampaignEvent(client, input.campaignId, input.eventType, {
+      turnId: input.turnId,
+      hermesMessageId: input.hermesMessageId,
+      messageId: input.hermesMessageId ?? randomUUID(),
+      role: "dm",
+      content: input.reply,
+      ...settingPatch,
+      pendingRollRequest: currentPendingRollRequest,
+      pendingRollRequests,
+      inputTargets: input.inputTargets ?? [],
+      inputPolicy: input.inputPolicy ?? "all_players",
+      aiDebug: input.aiDebug
+    });
+
+    if (
+      input.eventType === "adventure_begun" &&
+      Object.keys(settingPatch).length > 0
+    ) {
+      await client.query(
+        `
+          update campaigns
+          set metadata = metadata || $2::jsonb
+          where id = $1
+        `,
+        [input.campaignId, JSON.stringify(settingPatch)]
+      );
+    }
+
+    await setPendingRollRequests(client, input.campaignId, pendingRollRequests);
+    await setPendingInputTargets(
+      client,
+      input.campaignId,
+      input.inputTargets ?? [],
+      input.inputPolicy ?? "all_players"
+    );
+    await ensureCollectingTurn(client, input.campaignId);
+  });
+
+  return { dmEventId };
+}
+
+async function markTurnFailed(db: Queryable, turnId: string, error: unknown) {
+  await db.query(
+    `
+      update turns
+      set status = 'failed', error = $2
+      where id = $1
+    `,
+    [turnId, error instanceof Error ? error.message : "DM provider call failed."]
+  );
+}
+
 export async function getRoomForUser(
   db: pg.Pool,
   input: {
@@ -2000,6 +2552,574 @@ export async function submitRoomTurnForUser(
   );
 
   return buildRoomSnapshot(db, updatedCampaign ?? campaign);
+}
+
+async function getActivePlayerForUser(
+  db: Queryable,
+  campaignId: string,
+  userId: string
+) {
+  const result = await db.query<PlayerRow>(
+    `
+      select *
+      from players
+      where campaign_id = $1
+        and user_id = $2
+        and status = 'active'
+      order by created_at asc
+      limit 1
+    `,
+    [campaignId, userId]
+  );
+
+  return result.rows[0] ?? null;
+}
+
+export async function askDungeonMasterQuestionForUser(
+  db: pg.Pool,
+  runtime: DungeonMasterRuntime,
+  input: {
+    campaignId: string;
+    question: string;
+    userId: string;
+    clientMessageId?: string;
+  }
+): Promise<RoomSnapshot> {
+  const trimmedQuestion = input.question.trim();
+
+  if (!trimmedQuestion) {
+    throw createStatusError(400, "A question is required.");
+  }
+
+  const { campaign, player } = await withTransaction(db, async (client) => {
+    const campaignRow = (
+      await client.query<CampaignRow>(
+        `
+          select *
+          from campaigns
+          where id = $1 and status = 'active'
+          limit 1
+        `,
+        [input.campaignId]
+      )
+    ).rows[0];
+
+    if (!campaignRow) {
+      throw createStatusError(404, "Campaign not found.");
+    }
+
+    await assertCampaignAccessForUser(client, campaignRow, input.userId);
+
+    const activePlayer = await getActivePlayerForUser(
+      client,
+      campaignRow.id,
+      input.userId
+    );
+
+    if (!activePlayer) {
+      throw createStatusError(400, "An active player profile is required.");
+    }
+
+    await client.query("update players set last_seen_at = now() where id = $1", [
+      activePlayer.id
+    ]);
+
+    return { campaign: campaignRow, player: activePlayer };
+  });
+
+  const players = await getActivePlayers(db, campaign.id);
+  const currentAction = formatAskDmQuestion(players, player, trimmedQuestion);
+  const promptContext = runtime.buildPromptContext
+    ? await runtime.buildPromptContext({
+        campaignId: campaign.id,
+        currentAction,
+        baseInstructions: askDmInstructions()
+      })
+    : null;
+  const history = promptContext
+    ? []
+    : await getCampaignEventMessages(db, campaign.id);
+  const providerData = await runtime.askProvider({
+    message: promptContext?.message ?? currentAction,
+    instructions: promptContext?.instructions ?? askDmInstructions(),
+    history
+  });
+  const answer = answerFromAskDmProviderResponse(providerData.content);
+  const questionMessageId = input.clientMessageId?.trim() || randomUUID();
+  const answerMessageId = providerData.id || randomUUID();
+
+  await withTransaction(db, async (client) => {
+    await logCampaignEvent(client, campaign.id, "dm_question", {
+      messageId: questionMessageId,
+      role: "player",
+      playerId: player.id,
+      clientId: player.client_id,
+      content: trimmedQuestion
+    });
+    await logCampaignEvent(client, campaign.id, "dm_answer", {
+      messageId: answerMessageId,
+      role: "dm",
+      playerId: player.id,
+      inReplyToMessageId: questionMessageId,
+      content: answer,
+      aiDebug: providerData.debug
+    });
+  });
+
+  const updatedCampaign = await resolveRoomCampaign(
+    db,
+    campaign.id,
+    campaign.hermes_session_id
+  );
+
+  return buildRoomSnapshot(db, updatedCampaign ?? campaign);
+}
+
+export async function submitSoloTurnForUser(
+  db: pg.Pool,
+  runtime: DungeonMasterRuntime,
+  input: {
+    campaignId: string;
+    message: string;
+    userId: string;
+    rollRequestId?: string;
+    rollResult?: DiceRollResult;
+    clientMessageId?: string;
+    rollSubmissions?: DiceRollSubmission[];
+  }
+): Promise<RoomSnapshot> {
+  const soloState = await withTransaction(db, async (client) => {
+    const campaign = (
+      await client.query<CampaignRow>(
+        `
+          select *
+          from campaigns
+          where id = $1 and status = 'active'
+          limit 1
+        `,
+        [input.campaignId]
+      )
+    ).rows[0];
+
+    if (!campaign) {
+      throw createStatusError(404, "Campaign not found.");
+    }
+
+    await assertCampaignAccessForUser(client, campaign, input.userId);
+
+    if (campaign.mode !== "single_player") {
+      throw createStatusError(
+        400,
+        "Solo turns are only available in singleplayer campaigns."
+      );
+    }
+
+    const player = await getActivePlayerForUser(client, campaign.id, input.userId);
+
+    if (!player) {
+      throw createStatusError(400, "A solo player profile is required.");
+    }
+
+    const pendingRollRequests = pendingRollRequestsFromCampaign(campaign);
+    const submittedRolls = rollSubmissionsFromPayload(
+      input.rollRequestId,
+      input.rollResult,
+      input.clientMessageId,
+      input.rollSubmissions
+    );
+    const isRollSubmission = submittedRolls.length > 0;
+    const rollSubmission = validatePendingRollSubmissions(
+      pendingRollRequests,
+      submittedRolls,
+      player
+    );
+
+    if (!isRollSubmission && pendingRollRequests.length > 0) {
+      throw createStatusError(409, "The DM is waiting for the required roll.");
+    }
+
+    const turn = await ensureCollectingTurn(client, campaign.id);
+    const trimmedContent = isRollSubmission
+      ? rollSubmission.content
+      : input.message.trim();
+
+    if (!trimmedContent) {
+      throw createStatusError(400, "A player message is required.");
+    }
+
+    const submissionResult = await client.query<{ content: string }>(
+      `
+        insert into submissions (campaign_id, turn_id, player_id, content)
+        values ($1, $2, $3, $4)
+        on conflict (turn_id, player_id) do update
+        set content = case
+              when $5 then submissions.content || E'\n' || excluded.content
+              else excluded.content
+            end,
+            status = 'submitted'
+        returning content
+      `,
+      [campaign.id, turn.id, player.id, trimmedContent, isRollSubmission]
+    );
+    const submittedContent = submissionResult.rows[0]?.content ?? trimmedContent;
+
+    if (isRollSubmission) {
+      await setPendingRollRequests(
+        client,
+        campaign.id,
+        rollSubmission.remainingRollRequests
+      );
+    }
+
+    await client.query("update players set last_seen_at = now() where id = $1", [
+      player.id
+    ]);
+    await logCampaignEvent(client, campaign.id, "turn_submitted", {
+      turnId: turn.id,
+      clientId: player.client_id,
+      role: "player",
+      messageId: rollSubmission.clientMessageId || input.clientMessageId || randomUUID(),
+      content: trimmedContent
+    });
+
+    if (isRollSubmission && rollSubmission.remainingRollRequests.length > 0) {
+      return { campaign, shouldResolve: false, turn, player, content: submittedContent };
+    }
+
+    const claimedTurn = await client.query<TurnRow>(
+      `
+        update turns
+        set status = 'resolving'
+        where id = $1 and status = 'collecting'
+        returning *
+      `,
+      [turn.id]
+    );
+
+    if (!claimedTurn.rows[0]) {
+      throw createStatusError(409, "That turn is already resolving.");
+    }
+
+    await logCampaignEvent(client, campaign.id, "turn_resolving", {
+      turnId: turn.id,
+      reason: "solo_turn"
+    });
+
+    return {
+      campaign,
+      shouldResolve: true,
+      turn: claimedTurn.rows[0],
+      player,
+      content: submittedContent
+    };
+  });
+
+  if (!soloState.shouldResolve) {
+    const updatedCampaign = await resolveRoomCampaign(
+      db,
+      soloState.campaign.id,
+      soloState.campaign.hermes_session_id
+    );
+
+    return buildRoomSnapshot(db, updatedCampaign ?? soloState.campaign);
+  }
+
+  try {
+    const currentAction = formatSoloTurn(soloState.player, soloState.content);
+    const reply = await askDungeonMaster(
+      db,
+      runtime,
+      soloState.campaign,
+      currentAction,
+      dungeonMasterInstructions,
+      true,
+      soloState.turn.id
+    );
+    const resolvedTurn = await finishResolvedTurn(db, {
+      campaignId: soloState.campaign.id,
+      turnId: soloState.turn.id,
+      hermesMessageId: reply.id,
+      reply: reply.content,
+      eventType: "turn_resolved",
+      pendingRollRequests: reply.rollRequests,
+      inputTargets: reply.inputTargets,
+      inputPolicy: reply.inputPolicy,
+      aiDebug: reply.debug
+    });
+
+    void runtime.runPostTurnContextJobs?.({
+      campaignId: soloState.campaign.id,
+      turnId: soloState.turn.id,
+      currentAction,
+      dmResponse: reply.content,
+      dmEventId: resolvedTurn.dmEventId,
+      rollRequests: reply.rollRequests
+    });
+  } catch (error) {
+    await markTurnFailed(db, soloState.turn.id, error);
+    await logCampaignEvent(db, soloState.campaign.id, "turn_failed", {
+      turnId: soloState.turn.id,
+      error: error instanceof Error ? error.message : "DM provider call failed."
+    });
+    throw error;
+  }
+
+  const updatedCampaign = await resolveRoomCampaign(
+    db,
+    soloState.campaign.id,
+    soloState.campaign.hermes_session_id
+  );
+
+  return buildRoomSnapshot(db, updatedCampaign ?? soloState.campaign);
+}
+
+function eventPayloadString(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+export async function regenerateCampaignResponseForUser(
+  db: pg.Pool,
+  runtime: DungeonMasterRuntime,
+  input: {
+    campaignId: string;
+    messageId: string;
+    userId: string;
+  }
+): Promise<RoomSnapshot> {
+  const regenerationState = await withTransaction(db, async (client) => {
+    const campaign = (
+      await client.query<CampaignRow>(
+        `
+          select *
+          from campaigns
+          where id = $1 and status = 'active'
+          limit 1
+        `,
+        [input.campaignId]
+      )
+    ).rows[0];
+
+    if (!campaign) {
+      throw createStatusError(404, "Campaign not found.");
+    }
+
+    await assertCampaignAccessForUser(client, campaign, input.userId);
+
+    const latestVisibleEvent = (
+      await client.query<EventRow>(
+        `
+          select id, type, payload, created_at
+          from campaign_events
+          where campaign_id = $1
+            and type in ('turn_submitted', 'turn_resolved', 'adventure_begun')
+          order by created_at desc
+          limit 1
+        `,
+        [campaign.id]
+      )
+    ).rows[0];
+    const latestPayload = eventPayload(latestVisibleEvent?.payload);
+
+    if (
+      !latestVisibleEvent ||
+      (latestVisibleEvent.type !== "turn_resolved" &&
+        latestVisibleEvent.type !== "adventure_begun") ||
+      latestPayload.role !== "dm" ||
+      latestPayload.messageId !== input.messageId
+    ) {
+      throw createStatusError(409, "Only the latest DM response can be regenerated.");
+    }
+
+    const turnId = eventPayloadString(latestPayload.turnId);
+
+    if (!turnId) {
+      throw createStatusError(409, "That response is missing turn information.");
+    }
+
+    const resolvingTurn = (
+      await client.query<TurnRow>(
+        `
+          update turns
+          set status = 'resolving', error = null, updated_at = now()
+          where id = $1
+            and campaign_id = $2
+            and status in ('resolved', 'failed')
+          returning *
+        `,
+        [turnId, campaign.id]
+      )
+    ).rows[0];
+
+    if (!resolvingTurn) {
+      throw createStatusError(409, "That response cannot be regenerated right now.");
+    }
+
+    await client.query(
+      `
+        update submissions
+        set status = 'submitted', updated_at = now()
+        where turn_id = $1 and status = 'included_in_turn'
+      `,
+      [turnId]
+    );
+    await client.query("delete from campaign_events where id = $1", [
+      latestVisibleEvent.id
+    ]);
+    await logCampaignEvent(client, campaign.id, "turn_resolving", {
+      turnId,
+      reason: "regenerate_response",
+      replacedMessageId: input.messageId
+    });
+    await setPendingRollRequests(client, campaign.id, []);
+    await setPendingInputTargets(client, campaign.id, [], "all_players");
+
+    const submissions = await client.query<
+      SubmissionRow & { character_sheet: string | null; slot: number | null }
+    >(
+      `
+        select
+          submissions.player_id,
+          players.client_id,
+          players.username,
+          players.character_name,
+          players.character_sheet,
+          players.slot,
+          submissions.content,
+          submissions.created_at
+        from submissions
+        left join players on players.id = submissions.player_id
+        where submissions.turn_id = $1
+          and submissions.status in ('submitted', 'included_in_turn')
+        order by submissions.created_at asc
+      `,
+      [resolvingTurn.id]
+    );
+    const first = submissions.rows[0];
+
+    if (!first?.player_id || !first.client_id || !first.username || !first.character_name) {
+      throw createStatusError(409, "That turn is missing player input.");
+    }
+
+    const player: PlayerRow = {
+      id: first.player_id,
+      client_id: first.client_id,
+      user_id: null,
+      username: first.username,
+      character_name: first.character_name,
+      character_sheet: first.character_sheet ?? "",
+      campaign_id: campaign.id,
+      slot: first.slot,
+      status: "active",
+      last_seen_at: new Date()
+    };
+
+    const eventType: "adventure_begun" | "turn_resolved" =
+      latestVisibleEvent.type === "adventure_begun"
+        ? "adventure_begun"
+        : "turn_resolved";
+
+    return {
+      campaign,
+      currentAction: formatSoloTurn(player, first.content),
+      eventType,
+      turn: resolvingTurn
+    };
+  });
+
+  try {
+    const reply = await askDungeonMaster(
+      db,
+      runtime,
+      regenerationState.campaign,
+      regenerationState.currentAction,
+      dungeonMasterInstructions,
+      true,
+      regenerationState.turn.id
+    );
+    const resolvedTurn = await finishResolvedTurn(db, {
+      campaignId: regenerationState.campaign.id,
+      turnId: regenerationState.turn.id,
+      hermesMessageId: reply.id,
+      reply: reply.content,
+      eventType: regenerationState.eventType,
+      pendingRollRequests: reply.rollRequests,
+      inputTargets: reply.inputTargets,
+      inputPolicy: reply.inputPolicy,
+      setting: reply.setting,
+      aiDebug: reply.debug
+    });
+
+    void runtime.runPostTurnContextJobs?.({
+      campaignId: regenerationState.campaign.id,
+      turnId: regenerationState.turn.id,
+      currentAction: regenerationState.currentAction,
+      dmResponse: reply.content,
+      dmEventId: resolvedTurn.dmEventId,
+      rollRequests: reply.rollRequests
+    });
+  } catch (error) {
+    await markTurnFailed(db, regenerationState.turn.id, error);
+    await logCampaignEvent(db, regenerationState.campaign.id, "turn_failed", {
+      turnId: regenerationState.turn.id,
+      error: error instanceof Error ? error.message : "DM provider call failed."
+    });
+    throw error;
+  }
+
+  const updatedCampaign = await resolveRoomCampaign(
+    db,
+    regenerationState.campaign.id,
+    regenerationState.campaign.hermes_session_id
+  );
+
+  return buildRoomSnapshot(db, updatedCampaign ?? regenerationState.campaign);
+}
+
+export async function listCampaignDebugTracesForUser(
+  db: Queryable,
+  input: {
+    campaignId: string;
+    userId: string;
+    traceId?: string;
+    limit?: number;
+  }
+) {
+  const result = await db.query<CampaignRow>(
+    `
+      select *
+      from campaigns
+      where id = $1 and status <> 'deleted'
+      limit 1
+    `,
+    [input.campaignId]
+  );
+  const campaign = result.rows[0];
+
+  if (!campaign) {
+    throw createStatusError(404, "Campaign not found.");
+  }
+
+  await assertCampaignAccessForUser(db, campaign, input.userId);
+
+  const limit = Math.max(1, Math.min(input.limit ?? 50, 200));
+  const traceResult = await db.query<EventRow>(
+    `
+      select id, type, payload, created_at
+      from campaign_events
+      where campaign_id = $1
+        and type = 'turn_debug_trace'
+        and ($2::text is null or payload->>'traceId' = $2)
+      order by created_at desc
+      limit $3
+    `,
+    [input.campaignId, input.traceId ?? null, limit]
+  );
+
+  return traceResult.rows.map((event) => ({
+    id: event.id,
+    createdAt: toIso(event.created_at),
+    ...eventPayload(event.payload)
+  }));
 }
 
 function createStatusError(statusCode: number, message: string): Error {
