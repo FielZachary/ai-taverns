@@ -45,6 +45,15 @@ export const AuthSignOutResponseSchema = z.object({
   ok: z.literal(true)
 });
 
+export const AuthClaimGuestStateRequestSchema = z.object({
+  clientId: z.string().trim().min(1)
+});
+
+export const AuthClaimGuestStateResponseSchema = z.object({
+  claimedCampaigns: z.number().int().nonnegative(),
+  claimedPlayers: z.number().int().nonnegative()
+});
+
 export const AuthProtectedResponseSchema = z.object({
   ok: z.literal(true),
   user: AuthUserSchema
@@ -63,4 +72,10 @@ export type AuthPasswordlessVerifyRequest = z.infer<
   typeof AuthPasswordlessVerifyRequestSchema
 >;
 export type AuthSignOutResponse = z.infer<typeof AuthSignOutResponseSchema>;
+export type AuthClaimGuestStateRequest = z.infer<
+  typeof AuthClaimGuestStateRequestSchema
+>;
+export type AuthClaimGuestStateResponse = z.infer<
+  typeof AuthClaimGuestStateResponseSchema
+>;
 export type AuthProtectedResponse = z.infer<typeof AuthProtectedResponseSchema>;

@@ -2,6 +2,8 @@ import { createHash, randomBytes } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import {
   AuthMeResponseSchema,
+  AuthClaimGuestStateRequestSchema,
+  AuthClaimGuestStateResponseSchema,
   AuthPasswordlessStartRequestSchema,
   AuthPasswordlessStartResponseSchema,
   AuthPasswordlessVerifyRequestSchema,
@@ -11,6 +13,7 @@ import {
   type AuthPasswordlessStartResponse
 } from "@ai-dnd/contracts";
 import {
+  claimGuestStateForUser,
   consumeLoginToken,
   createLoginToken,
   createSession,
@@ -234,6 +237,22 @@ export async function registerAuthRoutes(
     });
 
     return AuthSignOutResponseSchema.parse({ ok: true });
+  });
+
+  fastify.post("/auth/claim-guest-state", async (request) => {
+    const body = AuthClaimGuestStateRequestSchema.parse(request.body);
+    const user = await requireAuthenticatedUser(
+      fastify,
+      config,
+      request.cookies[config.authCookieName]
+    );
+
+    return AuthClaimGuestStateResponseSchema.parse(
+      await claimGuestStateForUser(fastify.pg, {
+        clientId: body.clientId,
+        userId: user.id
+      })
+    );
   });
 
   fastify.get("/auth/me", async (request): Promise<AuthMeResponse> => {

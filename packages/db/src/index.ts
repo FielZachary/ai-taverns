@@ -313,6 +313,51 @@ export async function revokeSessionByTokenHash(
   );
 }
 
+export async function claimGuestStateForUser(
+  db: pg.Pool,
+  input: {
+    clientId: string;
+    userId: string;
+  }
+) {
+  return withTransaction(db, async (client) => {
+    const claimedCampaigns = await client.query<CampaignRow>(
+      `
+        update campaigns
+        set owner_user_id = $2
+        where owner_client_id = $1
+          and owner_user_id is null
+          and status <> 'deleted'
+        returning *
+      `,
+      [input.clientId, input.userId]
+    );
+    const claimedPlayers = await client.query<{ id: string }>(
+      `
+        update players
+        set user_id = $2
+        where client_id = $1
+          and user_id is null
+          and status = 'active'
+        returning id
+      `,
+      [input.clientId, input.userId]
+    );
+
+    for (const campaign of claimedCampaigns.rows) {
+      await logCampaignEvent(client, campaign.id, "guest_state_claimed", {
+        clientId: input.clientId,
+        userId: input.userId
+      });
+    }
+
+    return {
+      claimedCampaigns: claimedCampaigns.rowCount ?? 0,
+      claimedPlayers: claimedPlayers.rowCount ?? 0
+    };
+  });
+}
+
 export type CampaignRow = {
   id: string;
   hermes_session_id: string;

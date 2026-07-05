@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   ApiErrorResponseSchema,
+  AuthClaimGuestStateRequestSchema,
+  AuthClaimGuestStateResponseSchema,
   AuthMeResponseSchema,
   AuthPasswordlessStartRequestSchema,
   AuthPasswordlessStartResponseSchema,
@@ -132,6 +134,19 @@ test("sign out and protected endpoint contracts accept success responses", () =>
   });
 
   assert.equal(protectedResponse.user.email, "player@example.com");
+});
+
+test("claim guest state contract accepts claim counts", () => {
+  const request = AuthClaimGuestStateRequestSchema.parse({
+    clientId: " guest-client-1 "
+  });
+  const response = AuthClaimGuestStateResponseSchema.parse({
+    claimedCampaigns: 1,
+    claimedPlayers: 2
+  });
+
+  assert.equal(request.clientId, "guest-client-1");
+  assert.equal(response.claimedPlayers, 2);
 });
 
 test("error envelope contract rejects unknown error codes", () => {
