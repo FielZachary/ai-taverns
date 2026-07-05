@@ -1,0 +1,31 @@
+{
+  "name": "@ai-dnd/api",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "predev": "npm run build -w @ai-dnd/domain && npm run build -w @ai-dnd/contracts && npm run build -w @ai-dnd/db",
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "build": "tsc -p tsconfig.build.json",
+    "test": "npm run build -w @ai-dnd/domain && npm run build -w @ai-dnd/contracts && npm run build -w @ai-dnd/db && tsx --test src/**/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-dnd/contracts": "0.0.1",
+    "@ai-dnd/db": "0.0.1",
+    "@fastify/cookie": "^11.0.0",
+    "@fastify/cors": "^11.0.0",
+    "fastify": "^5.0.0",
+    "fastify-plugin": "^5.0.0",
+    "pg": "^8.22.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@ai-dnd/tsconfig": "0.0.1",
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.20.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.6.0"
+  }
+}

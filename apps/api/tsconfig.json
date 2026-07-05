@@ -1,0 +1,9 @@
+{
+  "extends": "@ai-dnd/tsconfig/base",
+  "compilerOptions": {
+    "rootDir": "src",
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts"]
+}

@@ -7,11 +7,17 @@
   ],
   "scripts": {
     "dev": "npm run dev -w @ai-dnd/web",
+    "dev:api": "npm run dev -w @ai-dnd/api",
     "build": "npm run build -w @ai-dnd/web",
+    "build:api": "npm run build -w @ai-dnd/domain && npm run build -w @ai-dnd/contracts && npm run build -w @ai-dnd/db && npm run build -w @ai-dnd/api",
+    "db:local:up": "docker compose -f infra/docker-compose.local.yml up -d postgres",
+    "db:local:down": "docker compose -f infra/docker-compose.local.yml down",
     "db:migrate": "node scripts/run-db-migrations.mjs",
     "hermes:bridge": "bash scripts/start-hermes-bridge.sh",
     "hermes:secure-bridge": "bash scripts/start-hermes-secure-bridge.sh",
-    "lint": "npm run lint -w @ai-dnd/web"
+    "lint": "npm run lint -w @ai-dnd/web",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "overrides": {
     "postcss": "^8.5.10"
