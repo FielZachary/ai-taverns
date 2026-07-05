@@ -2101,7 +2101,8 @@ async function askDungeonMaster(
   message: string,
   instructions: string,
   includeHistory = true,
-  turnId?: string
+  turnId?: string,
+  currentPlayerAction?: string
 ) {
   const traceId = randomUUID();
   const startedAt = Date.now();
@@ -2154,7 +2155,8 @@ async function askDungeonMaster(
     });
 
     const contract = parseHermesDmContract(providerData.content, {
-      currentAction: message
+      currentAction: message,
+      ...(currentPlayerAction ? { currentPlayerAction } : {})
     });
     const rollRequests = normalizeRollRequests(contract.rollRequests);
     const reply = contract.publicNarration;
@@ -3041,7 +3043,8 @@ export async function submitSoloTurnForUser(
       currentAction,
       dungeonMasterInstructions,
       true,
-      soloState.turn.id
+      soloState.turn.id,
+      soloState.content
     );
     const resolvedTurn = await finishResolvedTurn(db, {
       campaignId: soloState.campaign.id,
@@ -3229,6 +3232,7 @@ export async function regenerateCampaignResponseForUser(
     return {
       campaign,
       currentAction: formatSoloTurn(player, first.content),
+      currentPlayerAction: first.content,
       eventType,
       turn: resolvingTurn
     };
@@ -3242,7 +3246,8 @@ export async function regenerateCampaignResponseForUser(
       regenerationState.currentAction,
       dungeonMasterInstructions,
       true,
-      regenerationState.turn.id
+      regenerationState.turn.id,
+      regenerationState.currentPlayerAction
     );
     const resolvedTurn = await finishResolvedTurn(db, {
       campaignId: regenerationState.campaign.id,

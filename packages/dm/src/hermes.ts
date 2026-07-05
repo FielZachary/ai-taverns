@@ -134,6 +134,7 @@ function parseJsonObject(text: string) {
 
 export type HermesDmContractParseOptions = {
   currentAction?: string;
+  currentPlayerAction?: string;
   allowResolvedCombatWithoutRolls?: boolean;
 };
 
@@ -164,7 +165,7 @@ export function debugHermesDmContractFailure(
     rollRequestLabels: rollRequests.map((request) => request.label),
     mentionsPlayerFacingRoll: mentionsPlayerFacingRoll(publicNarration),
     currentActionRequiresCombatRoll: currentActionRequiresCombatRoll(
-      options?.currentAction
+      combatRollActionText(options)
     ),
     resolvesCombatOutcome: resolvesCombatOutcome(publicNarration),
     resolvesRequiredCombatRollWithoutRolls:
@@ -192,6 +193,10 @@ function currentActionRequiresCombatRoll(currentAction: string | undefined) {
   );
 }
 
+function combatRollActionText(options: HermesDmContractParseOptions | undefined) {
+  return options?.currentPlayerAction ?? options?.currentAction;
+}
+
 function resolvesCombatOutcome(publicNarration: string) {
   return /\b(hit|hits|struck|stabbed|wound|wounds|wounded|damage|damages|damaged|detonate|detonates|detonated|engulf|engulfs|engulfed|burn|burns|burned|blackened|split|destroy|destroys|destroyed|kill|kills|killed|dead|dies|death|goes still|convulses)\b/i.test(
     publicNarration
@@ -205,7 +210,7 @@ function resolvesRequiredCombatRollWithoutRolls(
 ) {
   return (
     rollRequests.length === 0 &&
-    currentActionRequiresCombatRoll(options?.currentAction) &&
+    currentActionRequiresCombatRoll(combatRollActionText(options)) &&
     resolvesCombatOutcome(publicNarration)
   );
 }
