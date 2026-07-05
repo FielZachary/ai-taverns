@@ -519,6 +519,18 @@ function campaignWorldName(campaign: CampaignRow) {
   );
 }
 
+function campaignOpeningStyleFromMetadata(campaign: CampaignRow): CampaignOpeningStyle {
+  const metadata = eventPayload(campaign.metadata);
+  const genre = eventPayload(metadata.genre);
+
+  return {
+    campaignGenre: eventPayloadString(genre.label),
+    campaignGenrePromptBrief: eventPayloadString(genre.promptBrief),
+    customWorldName: eventPayloadString(genre.customWorldName),
+    customWorldDescription: eventPayloadString(genre.customWorldDescription)
+  };
+}
+
 function normalizeCampaignTitle(title: string | undefined, sessionId: string) {
   return title?.trim() || sessionId.replace(/^ai-dnd-/, "") || "New Adventure";
 }
@@ -2519,9 +2531,10 @@ export async function beginRoomForUser(
     roomId: string;
     sessionId: string;
     userId: string;
+    runtime?: DungeonMasterRuntime | undefined;
   }
 ): Promise<RoomSnapshot> {
-  const campaign = await withTransaction(db, async (client) => {
+  const beginState = await withTransaction(db, async (client) => {
     const campaignRow = await resolveRoomCampaign(
       client,
       input.roomId,
@@ -2560,7 +2573,38 @@ export async function beginRoomForUser(
         );
       }
 
-      await ensureCollectingTurn(client, lockedCampaign.id);
+      const turn = await ensureCollectingTurn(client, lockedCampaign.id);
+
+      if (input.runtime) {
+        const openingTurn = (
+          await client.query<TurnRow>(
+            `
+              update turns
+              set status = 'resolving'
+              where id = $1 and status = 'collecting'
+              returning *
+            `,
+            [turn.id]
+          )
+        ).rows[0];
+
+        if (!openingTurn) {
+          throw createStatusError(409, "That opening turn is already resolving.");
+        }
+
+        await logCampaignEvent(client, lockedCampaign.id, "turn_resolving", {
+          turnId: openingTurn.id,
+          reason: "adventure_begun"
+        });
+
+        return {
+          campaign: lockedCampaign,
+          players,
+          turn: openingTurn,
+          shouldAskDungeonMaster: true
+        };
+      }
+
       const begun = await client.query<CampaignRow>(
         `
           update campaigns
@@ -2576,13 +2620,81 @@ export async function beginRoomForUser(
         content: "The adventure begins."
       });
 
-      return begun.rows[0] ?? lockedCampaign;
+      return {
+        campaign: begun.rows[0] ?? lockedCampaign,
+        players,
+        shouldAskDungeonMaster: false
+      };
     }
 
-    return lockedCampaign;
+    return {
+      campaign: lockedCampaign,
+      players: [],
+      shouldAskDungeonMaster: false
+    };
   });
 
-  return buildRoomSnapshot(db, campaign);
+  if (!beginState.shouldAskDungeonMaster || !input.runtime || !beginState.turn) {
+    return buildRoomSnapshot(db, beginState.campaign);
+  }
+
+  const currentAction = formatOpeningSceneRequest({
+    mode: "multiplayer",
+    players: beginState.players,
+    style: campaignOpeningStyleFromMetadata(beginState.campaign)
+  });
+
+  try {
+    const opening = await askDungeonMaster(
+      db,
+      input.runtime,
+      beginState.campaign,
+      currentAction,
+      openingSceneInstructions("multiplayer"),
+      true,
+      beginState.turn.id
+    );
+    const resolvedTurn = await finishResolvedTurn(db, {
+      campaignId: beginState.campaign.id,
+      turnId: beginState.turn.id,
+      hermesMessageId: opening.id,
+      reply: opening.content,
+      eventType: "adventure_begun",
+      pendingRollRequests: opening.rollRequests,
+      inputTargets: opening.inputTargets,
+      inputPolicy: opening.inputPolicy,
+      setting: opening.setting,
+      aiDebug: opening.debug
+    });
+
+    await db.query("update campaigns set has_begun = true where id = $1", [
+      beginState.campaign.id
+    ]);
+
+    void input.runtime.runPostTurnContextJobs?.({
+      campaignId: beginState.campaign.id,
+      turnId: beginState.turn.id,
+      currentAction,
+      dmResponse: opening.content,
+      dmEventId: resolvedTurn.dmEventId,
+      rollRequests: opening.rollRequests
+    });
+  } catch (error) {
+    await markTurnFailed(db, beginState.turn.id, error);
+    await logCampaignEvent(db, beginState.campaign.id, "turn_failed", {
+      turnId: beginState.turn.id,
+      error: error instanceof Error ? error.message : "DM provider call failed."
+    });
+    throw error;
+  }
+
+  const updatedCampaign = await resolveRoomCampaign(
+    db,
+    beginState.campaign.id,
+    beginState.campaign.hermes_session_id
+  );
+
+  return buildRoomSnapshot(db, updatedCampaign ?? beginState.campaign);
 }
 
 async function allTargetedPlayersSubmitted(

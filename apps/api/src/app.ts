@@ -63,7 +63,8 @@ export async function buildApp(
   });
   await fastify.register(registerRoomRoutes, {
     prefix: "/api",
-    config
+    config,
+    dmRuntime: options.dmRuntime
   });
   await fastify.register(registerDmRoutes, {
     prefix: "/api",

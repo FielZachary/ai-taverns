@@ -11,15 +11,18 @@ import {
 } from "@ai-dnd/contracts";
 import {
   beginRoomForUser,
+  type DungeonMasterRuntime,
   getRoomForUser,
   registerRoomPlayerForUser,
   submitRoomTurnForUser
 } from "@ai-dnd/db";
 import type { ApiConfig } from "../config.js";
+import { askDungeonMasterProvider } from "../dm-provider.js";
 import { requireAuthenticatedUser } from "./auth.js";
 
 type RoomRouteOptions = {
   config: ApiConfig;
+  dmRuntime?: DungeonMasterRuntime | undefined;
 };
 
 function roomIdentity(roomId: string | undefined, sessionId: string | undefined) {
@@ -41,6 +44,9 @@ export async function registerRoomRoutes(
   options: RoomRouteOptions
 ) {
   const { config } = options;
+  const runtime = options.dmRuntime ?? {
+    askProvider: askDungeonMasterProvider
+  };
 
   fastify.get("/room", async (request) => {
     const query = RoomReadQuerySchema.parse(request.query);
@@ -100,7 +106,8 @@ export async function registerRoomRoutes(
     return RoomBeginResponseSchema.parse(
       await beginRoomForUser(fastify.pg, {
         ...identity,
-        userId: user.id
+        userId: user.id,
+        runtime
       })
     );
   });

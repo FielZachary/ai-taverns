@@ -1436,6 +1436,10 @@ test("room routes read, update player, begin, and submit through Fastify", async
   assert.equal(beginResponse.statusCode, 200);
   const begunRoom = RoomBeginResponseSchema.parse(beginResponse.json());
   assert.equal(begunRoom.hasBegun, true);
+  assert.equal(
+    begunRoom.messages.at(-1)?.content,
+    "A lantern flickers over the old road as your adventure begins.\n\nA weathered sign points toward a ruined watchtower beyond the trees.\n\nWhat do you do?"
+  );
 
   const submitResponse = await app.inject({
     method: "POST",
