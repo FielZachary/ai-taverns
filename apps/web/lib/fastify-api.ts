@@ -9,7 +9,7 @@ export function getFastifyApiBaseUrl() {
 }
 
 export function safeNextPath(value: string | null) {
-  return value?.startsWith("/") ? value : "/play";
+  return value?.startsWith("/") && !value.startsWith("//") ? value : "/play";
 }
 
 export async function getRequestCookieHeader() {

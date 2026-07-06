@@ -27,7 +27,10 @@ const ConfigSchema = z.object({
   AUTH_EXPOSE_LOCAL_LOGIN_TOKENS: z
     .enum(["true", "false"])
     .optional()
-    .transform((value) => (value === undefined ? undefined : value === "true"))
+    .transform((value) => (value === undefined ? undefined : value === "true")),
+  AUTH_PUBLIC_APP_ORIGIN: z.string().url().optional(),
+  AUTH_EMAIL_FROM: z.string().min(1).optional(),
+  RESEND_API_KEY: z.string().min(1).optional()
 });
 
 export type ApiConfig = {
@@ -44,6 +47,9 @@ export type ApiConfig = {
   authSessionTtlDays: number;
   authLoginTokenTtlMinutes: number;
   authExposeLocalLoginTokens: boolean;
+  authPublicAppOrigin: string;
+  authEmailFrom: string | undefined;
+  resendApiKey: string | undefined;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
@@ -67,6 +73,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     authLoginTokenTtlMinutes: parsed.AUTH_LOGIN_TOKEN_TTL_MINUTES,
     authExposeLocalLoginTokens:
       parsed.AUTH_EXPOSE_LOCAL_LOGIN_TOKENS ??
-      parsed.NODE_ENV !== "production"
+      parsed.NODE_ENV !== "production",
+    authPublicAppOrigin:
+      parsed.AUTH_PUBLIC_APP_ORIGIN ??
+      parsed.WEB_ORIGINS.split(",")
+        .map((origin) => origin.trim())
+        .filter(Boolean)[0] ??
+      "http://localhost:3000",
+    authEmailFrom: parsed.AUTH_EMAIL_FROM,
+    resendApiKey: parsed.RESEND_API_KEY
   };
 }

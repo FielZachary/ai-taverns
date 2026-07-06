@@ -28,13 +28,15 @@ export const AuthMeResponseSchema = z.discriminatedUnion("authenticated", [
 
 export const AuthPasswordlessStartRequestSchema = z.object({
   email: AuthEmailSchema,
-  displayName: z.string().trim().min(1).max(120).optional()
+  displayName: z.string().trim().min(1).max(120).optional(),
+  nextPath: z.string().trim().regex(/^\/(?!\/)/).max(200).optional()
 });
 
 export const AuthPasswordlessStartResponseSchema = z.object({
   ok: z.literal(true),
   expiresAt: z.string().datetime(),
-  loginToken: z.string().min(32).optional()
+  loginToken: z.string().min(32).optional(),
+  loginUrl: z.string().url().optional()
 });
 
 export const AuthPasswordlessVerifyRequestSchema = z.object({

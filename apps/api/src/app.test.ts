@@ -1082,7 +1082,8 @@ test("passwordless login creates a local session cookie and authenticates /auth/
     method: "POST",
     url: "/api/auth/passwordless/start",
     payload: {
-      email: " PLAYER@Example.COM "
+      email: " PLAYER@Example.COM ",
+      nextPath: "/new-adventure"
     }
   });
 
@@ -1091,6 +1092,10 @@ test("passwordless login creates a local session cookie and authenticates /auth/
     startResponse.json()
   );
   assert.ok(startBody.loginToken);
+  assert.equal(
+    startBody.loginUrl,
+    `http://localhost:3000/auth/confirm?token=${startBody.loginToken}&next=%2Fnew-adventure`
+  );
 
   const verifyResponse = await app.inject({
     method: "POST",

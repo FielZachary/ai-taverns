@@ -50,6 +50,72 @@ function createHttpError(statusCode: number, message: string): Error {
   return error;
 }
 
+function createMagicLink(config: ApiConfig, token: string, nextPath?: string): string {
+  const url = new URL(
+    "/auth/confirm",
+    config.authPublicAppOrigin.replace(/\/$/, "")
+  );
+  url.searchParams.set("token", token);
+
+  if (nextPath) {
+    url.searchParams.set("next", nextPath);
+  }
+
+  return url.toString();
+}
+
+async function sendMagicLinkEmail(input: {
+  config: ApiConfig;
+  email: string;
+  magicLink: string;
+  expiresAt: Date;
+}): Promise<void> {
+  const { config, email, magicLink, expiresAt } = input;
+
+  if (!config.resendApiKey) {
+    if (config.authExposeLocalLoginTokens) {
+      return;
+    }
+
+    throw createHttpError(500, "Email delivery is not configured.");
+  }
+
+  if (!config.authEmailFrom) {
+    throw createHttpError(500, "Auth email sender is not configured.");
+  }
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${config.resendApiKey}`,
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      from: config.authEmailFrom,
+      to: email,
+      subject: "Your AI Taverns sign-in link",
+      text: [
+        "Use this link to sign in to AI Taverns:",
+        "",
+        magicLink,
+        "",
+        `This link expires at ${expiresAt.toISOString()}.`,
+        "If you did not request this, you can ignore this email."
+      ].join("\n"),
+      html: [
+        "<p>Use this link to sign in to AI Taverns:</p>",
+        `<p><a href="${magicLink}">Sign in to AI Taverns</a></p>`,
+        `<p>This link expires at ${expiresAt.toISOString()}.</p>`,
+        "<p>If you did not request this, you can ignore this email.</p>"
+      ].join("")
+    })
+  });
+
+  if (!response.ok) {
+    throw createHttpError(502, "Email delivery failed.");
+  }
+}
+
 function sessionCookieOptions(config: ApiConfig, expiresAt: Date) {
   return {
     path: "/",
@@ -143,10 +209,21 @@ export async function registerAuthRoutes(
         expiresAt
       });
 
+      const magicLink = createMagicLink(config, token, body.nextPath);
+
+      await sendMagicLinkEmail({
+        config,
+        email: body.email,
+        magicLink,
+        expiresAt
+      });
+
       const response = {
         ok: true,
         expiresAt: expiresAt.toISOString(),
-        ...(config.authExposeLocalLoginTokens ? { loginToken: token } : {})
+        ...(config.authExposeLocalLoginTokens
+          ? { loginToken: token, loginUrl: magicLink }
+          : {})
       } satisfies AuthPasswordlessStartResponse;
 
       return AuthPasswordlessStartResponseSchema.parse(response);

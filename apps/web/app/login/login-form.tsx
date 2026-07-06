@@ -11,9 +11,10 @@ export function LoginForm() {
   const [email, setEmail] = useState("");
   const [state, setState] = useState<FormState>("idle");
   const [message, setMessage] = useState("");
+  const [localLoginUrl, setLocalLoginUrl] = useState("");
   const nextPath = useMemo(() => {
     const next = searchParams.get("next");
-    return next?.startsWith("/") ? next : "/play";
+    return next?.startsWith("/") && !next.startsWith("//") ? next : "/play";
   }, [searchParams]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -29,6 +30,7 @@ export function LoginForm() {
 
     setState("sending");
     setMessage("");
+    setLocalLoginUrl("");
 
     const startResponse = await fetch("/api/auth/passwordless/start", {
       method: "POST",
@@ -36,11 +38,12 @@ export function LoginForm() {
         "content-type": "application/json"
       },
       body: JSON.stringify({
-        email: trimmedEmail
+        email: trimmedEmail,
+        nextPath
       })
     });
     const startBody = (await startResponse.json()) as {
-      loginToken?: string;
+      loginUrl?: string;
       error?: {
         message?: string;
       };
@@ -52,29 +55,10 @@ export function LoginForm() {
       return;
     }
 
-    if (startBody.loginToken) {
-      const verifyResponse = await fetch("/api/auth/passwordless/verify", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json"
-        },
-        body: JSON.stringify({
-          token: startBody.loginToken
-        })
-      });
-      const verifyBody = (await verifyResponse.json()) as {
-        error?: {
-          message?: string;
-        };
-      };
-
-      if (!verifyResponse.ok) {
-        setState("error");
-        setMessage(verifyBody.error?.message ?? "Could not complete sign-in.");
-        return;
-      }
-
-      window.location.assign(nextPath);
+    if (startBody.loginUrl) {
+      setLocalLoginUrl(startBody.loginUrl);
+      setState("sent");
+      setMessage("Local sign-in link is ready.");
       return;
     }
 
@@ -115,6 +99,11 @@ export function LoginForm() {
       <button type="submit" disabled={state === "sending"}>
         {state === "sending" ? "Sending..." : "Send magic link"}
       </button>
+      {localLoginUrl ? (
+        <a className="auth-local-link" href={localLoginUrl}>
+          Open local sign-in link
+        </a>
+      ) : null}
       {message ? (
         <p className={state === "error" ? "auth-error" : "auth-note"}>{message}</p>
       ) : null}

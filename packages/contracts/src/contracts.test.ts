@@ -98,20 +98,33 @@ test("auth/me contract rejects invalid authenticated users", () => {
 test("passwordless start contract normalizes email input", () => {
   const parsed = AuthPasswordlessStartRequestSchema.parse({
     email: " PLAYER@Example.COM ",
-    displayName: "Player"
+    displayName: "Player",
+    nextPath: "/play?campaign=abc"
   });
 
   assert.equal(parsed.email, "player@example.com");
+  assert.equal(parsed.nextPath, "/play?campaign=abc");
+  assert.throws(() =>
+    AuthPasswordlessStartRequestSchema.parse({
+      email: "player@example.com",
+      nextPath: "//evil.example"
+    })
+  );
 });
 
-test("passwordless start response can include a local login token", () => {
+test("passwordless start response can include a local login token and url", () => {
   const parsed = AuthPasswordlessStartResponseSchema.parse({
     ok: true,
     expiresAt: "2026-07-05T00:00:00.000Z",
-    loginToken: "a".repeat(32)
+    loginToken: "a".repeat(32),
+    loginUrl: "http://localhost:3000/auth/confirm?token=abc"
   });
 
   assert.equal(parsed.ok, true);
+  assert.equal(
+    parsed.loginUrl,
+    "http://localhost:3000/auth/confirm?token=abc"
+  );
 });
 
 test("passwordless verify rejects short tokens", () => {

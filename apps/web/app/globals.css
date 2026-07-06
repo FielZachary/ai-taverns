@@ -534,6 +534,19 @@ h1 {
   background: rgba(17, 13, 10, 0.58);
 }
 
+.auth-local-link {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(244, 207, 122, 0.34);
+  border-radius: 8px;
+  color: var(--gold-bright);
+  background: rgba(17, 13, 10, 0.58);
+  font-weight: 800;
+  text-decoration: none;
+}
+
 .google-auth-button span {
   display: grid;
   width: 24px;
