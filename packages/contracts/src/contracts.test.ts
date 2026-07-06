@@ -23,6 +23,9 @@ import {
   CampaignSoloTurnRequestSchema,
   CampaignSoloTurnResponseSchema,
   HealthResponseSchema,
+  HermesPrepRequestSchema,
+  HermesTurnRequestSchema,
+  HermesTurnResponseSchema,
   RoomPlayerUpdateRequestSchema,
   RoomSnapshotSchema,
   RoomSubmitRequestSchema
@@ -309,4 +312,39 @@ test("DM route contracts accept solo, ask-DM, regenerate, and traces payloads", 
       ]
     })
   );
+});
+
+test("Hermes compatibility contracts accept turn and prep payloads", () => {
+  const request = HermesTurnRequestSchema.parse({
+    message: "I open the old gate.",
+    history: [
+      {
+        id: "message-1",
+        role: "player",
+        content: "I approach the gate.",
+        createdAt: "2026-07-05T00:00:00.000Z"
+      }
+    ],
+    sessionId: "ai-dnd-session"
+  });
+  const prep = HermesPrepRequestSchema.parse({
+    sessionId: "ai-dnd-session",
+    ownerClientId: "client-1"
+  });
+  const response = HermesTurnResponseSchema.parse({
+    message: {
+      id: "dm-message-1",
+      role: "dm",
+      content: "The old gate groans open.",
+      createdAt: "2026-07-05T00:00:00.000Z"
+    },
+    pendingRollRequest: null,
+    pendingRollRequests: [],
+    inputTargets: [],
+    inputPolicy: "all_players"
+  });
+
+  assert.equal(request.history?.[0]?.role, "player");
+  assert.equal(prep.ownerClientId, "client-1");
+  assert.equal(response.message.role, "dm");
 });

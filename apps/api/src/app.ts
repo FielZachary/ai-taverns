@@ -9,6 +9,7 @@ import { registerAuthRoutes } from "./routes/auth.js";
 import { registerCampaignRoutes } from "./routes/campaigns.js";
 import { registerDmRoutes } from "./routes/dm.js";
 import { registerHealthRoutes } from "./routes/health.js";
+import { registerHermesRoutes } from "./routes/hermes.js";
 import { registerRoomRoutes } from "./routes/rooms.js";
 
 export type BuildAppOptions = {
@@ -67,6 +68,11 @@ export async function buildApp(
     dmRuntime: options.dmRuntime
   });
   await fastify.register(registerDmRoutes, {
+    prefix: "/api",
+    config,
+    dmRuntime: options.dmRuntime
+  });
+  await fastify.register(registerHermesRoutes, {
     prefix: "/api",
     config,
     dmRuntime: options.dmRuntime

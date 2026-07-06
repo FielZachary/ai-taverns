@@ -986,6 +986,57 @@ export async function createCampaignForMode(
   }
 }
 
+export async function createCampaignForHermesSession(
+  db: pg.Pool,
+  input: {
+    sessionId: string;
+    title?: string | undefined;
+    ownerClientId?: string | undefined;
+    ownerUserId?: string | undefined;
+    mode?: CampaignMode | undefined;
+  }
+): Promise<CampaignRow> {
+  const mode = input.mode ?? "multiplayer";
+
+  return withTransaction(db, async (client) => {
+    const result = await client.query<CampaignRow>(
+      `
+        insert into campaigns (
+          hermes_session_id,
+          title,
+          owner_client_id,
+          owner_user_id,
+          mode
+        )
+        values ($1, $2, $3, $4, $5)
+        on conflict (hermes_session_id) do update
+        set title = excluded.title,
+            mode = excluded.mode,
+            status = 'active',
+            deleted_at = null,
+            owner_client_id = coalesce(campaigns.owner_client_id, excluded.owner_client_id),
+            owner_user_id = coalesce(campaigns.owner_user_id, excluded.owner_user_id)
+        returning *
+      `,
+      [
+        input.sessionId,
+        normalizeCampaignTitle(input.title, input.sessionId),
+        input.ownerClientId ?? null,
+        input.ownerUserId ?? null,
+        mode
+      ]
+    );
+    const campaign = requireRow(result.rows[0], "Failed to create campaign.");
+
+    await ensureCollectingTurn(client, campaign.id);
+    await logCampaignEvent(client, campaign.id, "campaign_created", {
+      hermesSessionId: input.sessionId
+    });
+
+    return campaign;
+  });
+}
+
 export async function previewCampaignJoinByCode(
   db: Queryable,
   gameCode: string

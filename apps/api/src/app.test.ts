@@ -11,6 +11,11 @@ import {
   CampaignJoinResponseSchema,
   CampaignListResponseSchema,
   CampaignReadResponseSchema,
+  CampaignAskDmResponseSchema,
+  CampaignDebugTracesResponseSchema,
+  CampaignRegenerateResponseSchema,
+  CampaignSoloTurnResponseSchema,
+  HermesTurnResponseSchema,
   RoomBeginResponseSchema,
   RoomPlayerUpdateResponseSchema,
   RoomReadResponseSchema,
@@ -317,6 +322,30 @@ class FakeDatabase {
       return { rows: campaign ? ([campaign] as T[]) : ([] as T[]) };
     }
 
+    if (
+      normalizedSql ===
+      "select * from campaigns where id = $1 and status = 'active' limit 1"
+    ) {
+      const campaign = this.campaigns.find(
+        (candidate) =>
+          candidate.id === values[0] && candidate.status === "active"
+      );
+
+      return { rows: campaign ? ([campaign] as T[]) : ([] as T[]) };
+    }
+
+    if (
+      normalizedSql ===
+      "select * from campaigns where id = $1 and status <> 'deleted' limit 1"
+    ) {
+      const campaign = this.campaigns.find(
+        (candidate) =>
+          candidate.id === values[0] && candidate.status !== "deleted"
+      );
+
+      return { rows: campaign ? ([campaign] as T[]) : ([] as T[]) };
+    }
+
     if (normalizedSql.startsWith("update campaigns set has_begun = true")) {
       const campaign = this.campaigns.find(
         (candidate) => candidate.id === values[0]
@@ -436,16 +465,25 @@ class FakeDatabase {
 
     if (normalizedSql.startsWith("insert into campaigns")) {
       const now = new Date();
+      const isHermesCompatibilityInsert = !normalizedSql.includes("metadata");
       const record: CampaignRecord = {
         id: `00000000-0000-4000-8000-${String(this.nextId++).padStart(12, "0")}`,
         hermes_session_id: values[0] as string,
         title: values[1] as string,
-        mode: values[2] as "single_player" | "multiplayer",
+        mode: (isHermesCompatibilityInsert ? values[4] : values[2]) as
+          | "single_player"
+          | "multiplayer",
         status: "active",
         has_begun: false,
-        owner_client_id: values[3] as string | null,
-        owner_user_id: values[4] as string | null,
-        metadata: JSON.parse(values[5] as string) as unknown,
+        owner_client_id: (isHermesCompatibilityInsert ? values[2] : values[3]) as
+          | string
+          | null,
+        owner_user_id: (isHermesCompatibilityInsert ? values[3] : values[4]) as
+          | string
+          | null,
+        metadata: isHermesCompatibilityInsert
+          ? {}
+          : (JSON.parse(values[5] as string) as unknown),
         created_at: now,
         updated_at: now
       };
@@ -520,7 +558,11 @@ class FakeDatabase {
       const turnId = values[0] as string;
       const turn = this.turns.find(
         (candidate) =>
-          candidate.id === turnId && candidate.status === "collecting"
+          candidate.id === turnId &&
+          (normalizedSql.includes("status in ('resolved', 'failed')")
+            ? candidate.campaign_id === values[1] &&
+              (candidate.status === "resolved" || candidate.status === "failed")
+            : candidate.status === "collecting")
       );
 
       if (!turn) {
@@ -581,6 +623,29 @@ class FakeDatabase {
         }
       }
 
+      return { rows: [] as T[] };
+    }
+
+    if (normalizedSql.startsWith("update submissions set status = 'submitted'")) {
+      const turnId = values[0] as string;
+
+      for (const submission of this.submissions) {
+        if (
+          submission.turn_id === turnId &&
+          submission.status === "included_in_turn"
+        ) {
+          submission.status = "submitted";
+        }
+      }
+
+      return { rows: [] as T[] };
+    }
+
+    if (normalizedSql.startsWith("delete from campaign_events where id = $1")) {
+      const eventId = values[0] as string;
+      this.campaignEvents = this.campaignEvents.filter(
+        (event) => event.id !== eventId
+      );
       return { rows: [] as T[] };
     }
 
@@ -744,7 +809,9 @@ class FakeDatabase {
       const rows = this.submissions
         .filter(
           (submission) =>
-            submission.turn_id === turnId && submission.status === "submitted"
+            submission.turn_id === turnId &&
+            (submission.status === "submitted" ||
+              submission.status === "included_in_turn")
         )
         .map((submission) => {
           const player = this.players.find(
@@ -755,6 +822,8 @@ class FakeDatabase {
             client_id: player?.client_id ?? null,
             username: player?.username ?? null,
             character_name: player?.character_name ?? null,
+            character_sheet: player?.character_sheet ?? null,
+            slot: player?.slot ?? null,
             content: submission.content,
             created_at: submission.created_at
           };
@@ -777,18 +846,48 @@ class FakeDatabase {
 
     if (normalizedSql.startsWith("select id, type, payload, created_at from")) {
       const campaignId = values[0] as string;
+      if (normalizedSql.includes("and type = 'turn_debug_trace'")) {
+        const traceId = values[1] as string | null;
+        const limit = values[2] as number;
+
+        return {
+          rows: this.campaignEvents
+            .filter((event) => {
+              if (
+                event.campaign_id !== campaignId ||
+                event.type !== "turn_debug_trace"
+              ) {
+                return false;
+              }
+
+              const payload = event.payload as Record<string, unknown>;
+              return !traceId || payload.traceId === traceId;
+            })
+            .slice(0, limit) as T[]
+        };
+      }
+
       return {
-        rows: this.campaignEvents.filter(
-          (event) =>
-            event.campaign_id === campaignId &&
-            [
-              "turn_submitted",
-              "turn_resolved",
-              "adventure_begun",
-              "dm_question",
-              "dm_answer"
-            ].includes(event.type)
-        ) as T[]
+        rows: this.campaignEvents
+          .filter((event) => {
+            const visibleTypes = normalizedSql.includes("limit 1")
+              ? ["turn_submitted", "turn_resolved", "adventure_begun"]
+              : [
+                "turn_submitted",
+                "turn_resolved",
+                "adventure_begun",
+                "dm_question",
+                "dm_answer"
+                ];
+
+            return (
+              event.campaign_id === campaignId &&
+              visibleTypes.includes(event.type)
+            );
+          })
+          .slice()
+          .reverse()
+          .slice(0, normalizedSql.includes("limit 1") ? 1 : undefined) as T[]
       };
     }
 
@@ -1515,6 +1614,135 @@ test("room routes require an owned session", async () => {
   );
 });
 
+test("DM runtime routes handle authorized solo, ask-DM, regenerate, and traces", async () => {
+  const cookie = await signIn("dm-runtime-owner@example.com");
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: {
+      cookie
+    },
+    payload: {
+      mode: "single_player",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "high_adventure",
+      ownerClientId: "dm-runtime-owner-client",
+      playerName: "Owner",
+      characterName: "Seren",
+      characterSheet: "A quick-thinking ranger."
+    }
+  });
+  const created = CampaignCreateResponseSchema.parse(createResponse.json());
+
+  const soloResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${created.campaign.id}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "I study the tracks beside the road.",
+      clientMessageId: "solo-client-message-1"
+    }
+  });
+
+  assert.equal(soloResponse.statusCode, 200, soloResponse.body);
+  const solo = CampaignSoloTurnResponseSchema.parse(soloResponse.json());
+  assert.equal(solo.messages.at(-1)?.role, "dm");
+  assert.equal(solo.isResolving, false);
+
+  const askResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${created.campaign.id}/ask-dm`,
+    headers: {
+      cookie
+    },
+    payload: {
+      question: "Would my ranger know what made these tracks?",
+      clientMessageId: "ask-client-message-1"
+    }
+  });
+
+  assert.equal(askResponse.statusCode, 200, askResponse.body);
+  const ask = CampaignAskDmResponseSchema.parse(askResponse.json());
+  assert.equal(ask.messages.at(-1)?.role, "dm");
+
+  const latestDmMessage = solo.messages
+    .filter((message) => message.role === "dm")
+    .at(-1);
+  assert.ok(latestDmMessage);
+
+  const regenerateResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${created.campaign.id}/regenerate`,
+    headers: {
+      cookie
+    },
+    payload: {
+      messageId: latestDmMessage.id
+    }
+  });
+
+  assert.equal(regenerateResponse.statusCode, 200, regenerateResponse.body);
+  const regenerated = CampaignRegenerateResponseSchema.parse(
+    regenerateResponse.json()
+  );
+  assert.equal(regenerated.messages.at(-1)?.role, "dm");
+
+  const tracesResponse = await app.inject({
+    method: "GET",
+    url: `/api/campaigns/${created.campaign.id}/debug-traces?limit=10`,
+    headers: {
+      cookie
+    }
+  });
+
+  assert.equal(tracesResponse.statusCode, 200, tracesResponse.body);
+  const traces = CampaignDebugTracesResponseSchema.parse(tracesResponse.json());
+  assert.ok(traces.traces.length > 0);
+  assert.ok(
+    traces.traces.some((trace) => trace.phase === "provider_response_received")
+  );
+});
+
+test("DM runtime routes forbid signed-in users without campaign access", async () => {
+  const ownerCookie = await signIn("dm-runtime-private-owner@example.com");
+  const otherCookie = await signIn("dm-runtime-private-other@example.com");
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: {
+      cookie: ownerCookie
+    },
+    payload: {
+      mode: "single_player",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "dark_fantasy",
+      ownerClientId: "dm-runtime-private-owner-client",
+      playerName: "Owner",
+      characterName: "Vale"
+    }
+  });
+  const created = CampaignCreateResponseSchema.parse(createResponse.json());
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${created.campaign.id}/ask-dm`,
+    headers: {
+      cookie: otherCookie
+    },
+    payload: {
+      question: "What is happening here?"
+    }
+  });
+
+  assert.equal(response.statusCode, 403);
+  assert.equal(
+    ApiErrorResponseSchema.parse(response.json()).error.code,
+    "FORBIDDEN"
+  );
+});
+
 test("DM runtime routes require an owned session", async () => {
   const campaignId = "00000000-0000-4000-8000-000000000001";
   const requests = [
@@ -1552,6 +1780,49 @@ test("DM runtime routes require an owned session", async () => {
       "UNAUTHORIZED"
     );
   }
+});
+
+test("Hermes compatibility provider routes are owned by Fastify", async () => {
+  const cookie = await signIn("hermes-compat@example.com");
+  const turnResponse = await app.inject({
+    method: "POST",
+    url: "/api/hermes",
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "I test the compatibility bridge.",
+      history: []
+    }
+  });
+
+  assert.equal(turnResponse.statusCode, 200, turnResponse.body);
+  const turn = HermesTurnResponseSchema.parse(turnResponse.json());
+  assert.equal(turn.message.role, "dm");
+  assert.equal(turn.pendingRollRequests?.length, 0);
+
+  const prepResponse = await app.inject({
+    method: "POST",
+    url: "/api/hermes/prep",
+    headers: {
+      cookie
+    },
+    payload: {
+      sessionId: "ai-dnd-legacy-session",
+      ownerClientId: "legacy-client"
+    }
+  });
+
+  assert.equal(prepResponse.statusCode, 200, prepResponse.body);
+  assert.equal(
+    HermesTurnResponseSchema.parse(prepResponse.json()).message.role,
+    "dm"
+  );
+  assert.ok(
+    database.campaigns.some(
+      (campaign) => campaign.hermes_session_id === "ai-dnd-legacy-session"
+    )
+  );
 });
 
 test("missing routes use the standard error envelope", async () => {
