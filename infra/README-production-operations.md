@@ -52,6 +52,35 @@ docker compose --env-file infra/production.env -f infra/docker-compose.productio
 docker compose --env-file infra/production.env -f infra/docker-compose.production.yml logs --tail=100 api web proxy backup
 ```
 
+## Monitoring And Alerts
+
+Run the production monitor from the droplet checkout:
+
+```bash
+cd /opt/ai-taverns
+npm run production:monitor
+```
+
+The monitor checks public health endpoints, Docker service status, container CPU/memory pressure, disk usage, backup recency, and Postgres connection pressure. It exits non-zero when a threshold is crossed. Set `ALERT_WEBHOOK_URL` in `infra/production.env` to post failures to a webhook, and tune these thresholds if the droplet size changes:
+
+```bash
+PRODUCTION_ORIGIN=https://aitaverns.com
+DISK_USAGE_WARN_PERCENT=85
+BACKUP_MAX_AGE_HOURS=26
+POSTGRES_CONNECTION_WARN_PERCENT=80
+CONTAINER_CPU_WARN_PERCENT=90
+CONTAINER_MEMORY_WARN_PERCENT=90
+ALERT_WEBHOOK_URL=
+```
+
+Install it as a five-minute cron check on the droplet:
+
+```bash
+*/5 * * * * cd /opt/ai-taverns && set -a && . infra/production.env && set +a && npm run production:monitor >> /var/log/ai-taverns-monitor.log 2>&1
+```
+
+Use the same command manually after deploys and during the rollback window. A passing run is the concrete proof point for the migration plan's disk, CPU/service-health, DB-connection, backup, and alerting requirement.
+
 ## Backups
 
 The `backup` service writes custom-format Postgres dumps into `/opt/ai-taverns/infra/backups`.
