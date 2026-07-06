@@ -56,7 +56,7 @@ const pool = new Pool({
 
 try {
   const migrationFiles = (await readdir(migrationsDir))
-    .filter((file) => file.endsWith(".sql"))
+    .filter((file) => /^\d+_.+\.sql$/.test(file))
     .sort();
 
   for (const migrationFile of migrationFiles) {
