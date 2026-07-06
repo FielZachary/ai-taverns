@@ -10,10 +10,16 @@ export type AuthUser = {
 
 export async function getOptionalUser(): Promise<AuthUser | null> {
   const cookieHeader = await getRequestCookieHeader();
-  const response = await fetch(`${getFastifyApiBaseUrl()}/api/auth/me`, {
-    headers: cookieHeader ? { cookie: cookieHeader } : undefined,
-    cache: "no-store"
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(`${getFastifyApiBaseUrl()}/api/auth/me`, {
+      headers: cookieHeader ? { cookie: cookieHeader } : undefined,
+      cache: "no-store"
+    });
+  } catch {
+    return null;
+  }
 
   if (!response.ok) {
     return null;
