@@ -8,6 +8,14 @@ export function getFastifyApiBaseUrl() {
   ).replace(/\/$/, "");
 }
 
+export function getPublicAppOrigin() {
+  return (
+    process.env.AUTH_PUBLIC_APP_ORIGIN ??
+    process.env.NEXT_PUBLIC_FASTIFY_API_ORIGIN ??
+    "http://localhost:3000"
+  ).replace(/\/$/, "");
+}
+
 export function safeNextPath(value: string | null) {
   return value?.startsWith("/") && !value.startsWith("//") ? value : "/play";
 }
