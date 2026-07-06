@@ -107,18 +107,34 @@ type PendingRollBatch = {
   }[];
 };
 
-function snapshotHasResponseAfterMessage(room: RoomSnapshot, messageId: string) {
+type PendingSubmission = {
+  messageId: string;
+  createdAt: string;
+};
+
+function snapshotHasResponseAfterMessage(
+  room: RoomSnapshot,
+  pendingSubmission: PendingSubmission
+) {
   const messageIndex = room.messages.findIndex(
-    (message) => message.id === messageId
+    (message) => message.id === pendingSubmission.messageId
   );
 
-  if (messageIndex < 0) {
-    return false;
+  if (messageIndex >= 0) {
+    return room.messages
+      .slice(messageIndex + 1)
+      .some((message) => message.role === "dm" || message.role === "system");
   }
 
-  return room.messages
-    .slice(messageIndex + 1)
-    .some((message) => message.role === "dm" || message.role === "system");
+  const pendingSubmittedAt = Date.parse(pendingSubmission.createdAt);
+
+  return room.messages.some((message) => {
+    if (message.role !== "dm" && message.role !== "system") {
+      return false;
+    }
+
+    return Date.parse(message.createdAt) >= pendingSubmittedAt;
+  });
 }
 
 function getMissingPlayerProfileFields(profile: PlayerProfile) {
@@ -611,7 +627,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
   const [roomPlayers, setRoomPlayers] = useState<RoomPlayer[]>([]);
   const [optimisticSubmittedPlayerId, setOptimisticSubmittedPlayerId] =
     useState<string | null>(null);
-  const pendingSubmissionMessageIdRef = useRef<string | null>(null);
+  const pendingSubmissionRef = useRef<PendingSubmission | null>(null);
   const [roomMessages, setRoomMessages] = useState<GameMessage[]>([]);
   const [isRoomResolving, setIsRoomResolving] = useState(false);
   const [hasAdventureBegun, setHasAdventureBegun] = useState(false);
@@ -776,18 +792,18 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
           setIsSending(false);
         }
       } else if (currentPlayer?.status === "waiting") {
-        const pendingSubmissionMessageId = pendingSubmissionMessageIdRef.current;
+        const pendingSubmission = pendingSubmissionRef.current;
 
         if (
-          pendingSubmissionMessageId &&
+          pendingSubmission &&
           optimisticSubmittedPlayerId === playerId &&
-          !snapshotHasResponseAfterMessage(room, pendingSubmissionMessageId)
+          !snapshotHasResponseAfterMessage(room, pendingSubmission)
         ) {
           setIsInputSubmitted(true);
           return;
         }
 
-        pendingSubmissionMessageIdRef.current = null;
+        pendingSubmissionRef.current = null;
         setOptimisticSubmittedPlayerId(null);
         setIsInputSubmitted(false);
         setIsSending(false);
@@ -1034,7 +1050,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
       setHasAdventureBegun(false);
       setIsRoomResolving(false);
       setIsInputSubmitted(false);
-      pendingSubmissionMessageIdRef.current = null;
+      pendingSubmissionRef.current = null;
       setOptimisticSubmittedPlayerId(null);
       setPendingRollRequests([]);
       setInputTargets([]);
@@ -1121,7 +1137,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     setInputValidationMessage("");
     setTableAlert("");
     setIsInputSubmitted(false);
-    pendingSubmissionMessageIdRef.current = null;
+    pendingSubmissionRef.current = null;
     setOptimisticSubmittedPlayerId(null);
     await loadCampaignMessages(campaign);
     inputRef.current?.focus();
@@ -1350,7 +1366,10 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     setIsSending(true);
     setIsInputSubmitted(!isSinglePlayer);
     if (!isSinglePlayer) {
-      pendingSubmissionMessageIdRef.current = playerMessage.id;
+      pendingSubmissionRef.current = {
+        messageId: playerMessage.id,
+        createdAt: playerMessage.createdAt
+      };
       setOptimisticSubmittedPlayerId(playerId);
       setRoomPlayers((currentPlayers) =>
         currentPlayers.map((roomPlayer) =>
@@ -1428,7 +1447,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
         }
       ]);
       if (!isSinglePlayer) {
-        pendingSubmissionMessageIdRef.current = null;
+        pendingSubmissionRef.current = null;
         setOptimisticSubmittedPlayerId(null);
         setIsInputSubmitted(false);
       }
