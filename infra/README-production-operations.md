@@ -38,8 +38,8 @@ scripts/check-production-health.sh https://aitaverns.com
 ## GitHub Actions Deploy
 
 The `Deploy production` workflow rebuilds production automatically when
-`development` or `production` is pushed, and it can also be started manually
-from GitHub Actions.
+`production` is pushed, and it can also be started manually from GitHub
+Actions.
 
 Required repository or environment secrets:
 
