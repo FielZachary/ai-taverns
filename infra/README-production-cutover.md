@@ -22,6 +22,26 @@ node scripts/verify-production-cutover.mjs
 
 Set `CUTOVER_STRICT_OWNERS=true` when every active migrated campaign must already be claimed by an owned user.
 
+## One-Time SSH Access
+
+Use the one-time access helper for production droplet maintenance so a temporary key exists only for the current session or command.
+
+```bash
+export DROPLET_SSH_HOST=your-production-droplet.example
+export DROPLET_SSH_USER=root
+export DROPLET_BOOTSTRAP_SSH_KEY="$HOME/.ssh/ai-taverns-production-bootstrap"
+
+npm run droplet:one-time-access
+```
+
+For a single production check:
+
+```bash
+npm run droplet:one-time-access -- docker compose --env-file /opt/ai-taverns/infra/production.env -f /opt/ai-taverns/infra/docker-compose.production.yml ps
+```
+
+The helper installs a temporary ed25519 public key with agent, X11, and port forwarding disabled, removes the remote key entry as soon as login succeeds, and deletes local key material on exit. Set `DROPLET_ACCESS_TTL_SECONDS` to cap the session lifetime when `timeout(1)` is available locally; it defaults to one hour.
+
 ## DNS Cutover
 
 After the production stack is healthy and the data checks pass, point the production domain at the droplet.

@@ -16,6 +16,26 @@ docker compose --env-file infra/staging.env -f infra/docker-compose.staging.yml 
 
 Caddy handles TLS automatically for `STAGING_DOMAIN`. The proxy routes `/api/*` and `/health` to `apps/api`, and all other traffic to `apps/web`.
 
+## One-Time SSH Access
+
+Use one-time access for routine droplet operations so day-to-day work does not depend on a reusable operator key being left active on the server.
+
+```bash
+export DROPLET_SSH_HOST=your-staging-droplet.example
+export DROPLET_SSH_USER=root
+export DROPLET_BOOTSTRAP_SSH_KEY="$HOME/.ssh/ai-taverns-bootstrap"
+
+npm run droplet:one-time-access
+```
+
+To run a single command and immediately clean up the temporary key:
+
+```bash
+npm run droplet:one-time-access -- docker compose --env-file /opt/ai-taverns/infra/staging.env -f /opt/ai-taverns/infra/docker-compose.staging.yml ps
+```
+
+The helper creates a temporary SSH key, installs it on the droplet through the bootstrap key, disables agent/X11/port forwarding for the temporary key, removes the remote key entry as soon as login succeeds, and deletes local key material when the SSH session exits. Set `DROPLET_ACCESS_TTL_SECONDS` to cap the session lifetime when `timeout(1)` is available locally; it defaults to one hour.
+
 ## Verification
 
 Run:

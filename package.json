@@ -17,6 +17,7 @@
     "db:local:seed": "node scripts/seed-local-db.mjs",
     "cutover:production:verify": "node scripts/verify-production-cutover.mjs",
     "cutover:production:health": "scripts/check-production-health.sh",
+    "droplet:one-time-access": "bash scripts/droplet-one-time-access.sh",
     "hermes:bridge": "bash scripts/start-hermes-bridge.sh",
     "hermes:secure-bridge": "bash scripts/start-hermes-secure-bridge.sh",
     "lint": "npm run lint -w @ai-dnd/web",
