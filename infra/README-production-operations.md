@@ -35,6 +35,33 @@ Then verify from outside the droplet:
 scripts/check-production-health.sh https://aitaverns.com
 ```
 
+## GitHub Actions Deploy
+
+The `Deploy production` workflow rebuilds production automatically when
+`development` or `production` is pushed, and it can also be started manually
+from GitHub Actions.
+
+Required repository or environment secrets:
+
+- `PRODUCTION_SSH_HOST`: production droplet host or IP.
+- `PRODUCTION_SSH_KEY`: private SSH key allowed to deploy to the droplet.
+
+Optional secrets:
+
+- `PRODUCTION_SSH_USER`: SSH user, defaults to `root`.
+- `PRODUCTION_SSH_PORT`: SSH port, defaults to `22`.
+
+Optional repository or environment variables:
+
+- `PRODUCTION_DEPLOY_PATH`: deploy directory, defaults to `/opt/ai-taverns`.
+- `PRODUCTION_ORIGIN`: public origin checked after deploy, defaults to `https://aitaverns.com`.
+
+The workflow packages the exact pushed commit, uploads it to the droplet,
+preserves `/opt/ai-taverns/infra/production.env` and
+`/opt/ai-taverns/infra/backups`, rebuilds
+`infra/docker-compose.production.yml`, runs production monitoring on the
+droplet, and then runs the public health check from the GitHub runner.
+
 ## Health Checks
 
 Check the public endpoints:
