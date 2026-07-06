@@ -73,6 +73,8 @@ Restore a production backup only during an approved maintenance or rollback wind
 scripts/restore-production-backup.sh infra/backups/ai-taverns-production-YYYYMMDDTHHMMSSZ.dump
 ```
 
+For ongoing deploy, backup, restore, monitoring, and incident work after the cutover window, use `infra/README-production-operations.md`.
+
 ## Rollback Window
 
 Keep Vercel and the previous database available for at least 1-2 weeks after DNS cutover. During that window, monitor login, campaign creation, joins, room turns, DM calls, disk usage, CPU, and Postgres connection count.

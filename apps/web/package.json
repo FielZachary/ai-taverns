@@ -14,13 +14,11 @@
     "@ai-dnd/contracts": "0.0.1",
     "lucide-react": "^0.468.0",
     "next": "^15.0.0",
-    "pg": "^8.22.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "@types/pg": "^8.20.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "eslint": "^9.0.0",

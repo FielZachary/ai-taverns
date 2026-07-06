@@ -1,12 +1,28 @@
 import { fileURLToPath } from "node:url";
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
-const isVercelBuild = process.env.VERCEL === "1";
+const fastifyApiOrigin = (
+  process.env.FASTIFY_API_INTERNAL_ORIGIN ??
+  process.env.NEXT_PUBLIC_FASTIFY_API_ORIGIN ??
+  "http://localhost:4000"
+).replace(/\/$/, "");
 
 /** @type {import("next").NextConfig} */
 const nextConfig = {
-  ...(isVercelBuild ? {} : { outputFileTracingRoot: repoRoot }),
-  ...(isVercelBuild ? {} : { turbopack: { root: repoRoot } })
+  outputFileTracingRoot: repoRoot,
+  turbopack: { root: repoRoot },
+  async rewrites() {
+    return [
+      {
+        source: "/api/:path*",
+        destination: `${fastifyApiOrigin}/api/:path*`
+      },
+      {
+        source: "/health",
+        destination: `${fastifyApiOrigin}/health`
+      }
+    ];
+  }
 };
 
 export default nextConfig;
