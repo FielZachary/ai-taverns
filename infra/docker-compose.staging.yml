@@ -1,0 +1,144 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file:
+      - ./staging.env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1g
+
+  api:
+    build:
+      context: ..
+      dockerfile: infra/docker/api.Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./staging.env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 4000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["sh", "-c", "npm run db:migrate && npm run start -w @ai-dnd/api"]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 768m
+
+  web:
+    build:
+      context: ..
+      dockerfile: infra/docker/web.Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./staging.env
+    environment:
+      HOSTNAME: 0.0.0.0
+      PORT: 3000
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 768m
+
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    env_file:
+      - ./staging.env
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    healthcheck:
+      test: ["CMD-SHELL", "caddy validate --config /etc/caddy/Caddyfile"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256m
+
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file:
+      - ./staging.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backups:/backups
+    command:
+      - sh
+      - -c
+      - |
+        set -eu
+        while true; do
+          timestamp="$$(date -u +%Y%m%dT%H%M%SZ)"
+          PGPASSWORD="$${POSTGRES_PASSWORD}" pg_dump \
+            --host=postgres \
+            --username="$${POSTGRES_USER}" \
+            --dbname="$${POSTGRES_DB}" \
+            --format=custom \
+            --file="/backups/ai-taverns-$${timestamp}.dump"
+          find /backups -name 'ai-taverns-*.dump' -type f -mtime +"$${BACKUP_RETENTION_DAYS:-14}" -delete
+          sleep "$${BACKUP_INTERVAL_SECONDS:-86400}"
+        done
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256m
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:

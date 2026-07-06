@@ -1,0 +1,19 @@
+{
+	email {$ACME_EMAIL}
+}
+
+{$STAGING_DOMAIN} {
+	encode zstd gzip
+
+	handle /health {
+		reverse_proxy api:4000
+	}
+
+	handle /api/* {
+		reverse_proxy api:4000
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}

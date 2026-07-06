@@ -6,6 +6,8 @@ dist/
 .vercel/
 .env
 .env*.local
+infra/staging.env
+infra/backups/
 *.tsbuildinfo
 npm-debug.log*
 .vercel
