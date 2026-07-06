@@ -763,6 +763,18 @@ class FakeDatabase {
       return { rows: rows as T[] };
     }
 
+    if (normalizedSql.startsWith("select player_id from submissions")) {
+      const turnId = values[0] as string;
+      const rows = this.submissions
+        .filter(
+          (submission) =>
+            submission.turn_id === turnId && submission.status === "submitted"
+        )
+        .map((submission) => ({ player_id: submission.player_id }) as T);
+
+      return { rows };
+    }
+
     if (normalizedSql.startsWith("select id, type, payload, created_at from")) {
       const campaignId = values[0] as string;
       return {
@@ -1454,7 +1466,7 @@ test("room routes read, update player, begin, and submit through Fastify", async
     }
   });
 
-  assert.equal(submitResponse.statusCode, 200);
+  assert.equal(submitResponse.statusCode, 200, submitResponse.body);
   const submittedRoom = RoomSubmitResponseSchema.parse(submitResponse.json());
   assert.equal(
     submittedRoom.players.find((player) => player.id === "room-joiner-client")
@@ -1462,6 +1474,32 @@ test("room routes read, update player, begin, and submit through Fastify", async
     "submitted"
   );
   assert.equal(submittedRoom.messages.at(-1)?.role, "player");
+
+  const resolvingSubmitResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/submit",
+    headers: {
+      cookie: ownerCookie
+    },
+    payload: {
+      roomId: created.campaign.id,
+      playerId: "room-owner-client",
+      message: "I watch Mira's back."
+    }
+  });
+
+  assert.equal(resolvingSubmitResponse.statusCode, 200, resolvingSubmitResponse.body);
+  const resolvedRoom = RoomSubmitResponseSchema.parse(
+    resolvingSubmitResponse.json()
+  );
+  assert.equal(resolvedRoom.isResolving, false);
+  assert.equal(resolvedRoom.messages.at(-1)?.role, "dm");
+  assert.equal(
+    database.turns.filter(
+      (turn) => turn.campaign_id === created.campaign.id && turn.status === "resolved"
+    ).length,
+    2
+  );
 });
 
 test("room routes require an owned session", async () => {

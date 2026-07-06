@@ -1915,6 +1915,23 @@ function formatSoloTurn(player: PlayerRow, content: string) {
   ].join("\n");
 }
 
+function formatMultiplayerTurn(players: PlayerRow[], submissions: SubmissionRow[]) {
+  const actionLines = submissions.map((submission) => {
+    const username = submission.username?.trim() || "Unknown player";
+    const characterName = submission.character_name?.trim() || "Unknown character";
+
+    return `${username} (${characterName}): ${submission.content}`;
+  });
+
+  return [
+    formatCanonicalCharacterContext(players),
+    "",
+    "Current party actions:",
+    "Resolve these submitted actions as one combined party turn. Account for timing, positioning, cooperation, conflict, and consequences across the whole party before asking what happens next.",
+    ...actionLines
+  ].join("\n");
+}
+
 function formatOpeningSceneRequest(input: {
   mode: CampaignMode;
   players: PlayerRow[];
@@ -2697,11 +2714,12 @@ export async function beginRoomForUser(
   return buildRoomSnapshot(db, updatedCampaign ?? beginState.campaign);
 }
 
-async function allTargetedPlayersSubmitted(
+async function allRequiredPlayersSubmitted(
   db: Queryable,
   campaignId: string,
   turnId: string,
-  inputTargets: string[]
+  inputTargets: string[],
+  inputPolicy: "all_players" | "only_targeted_players"
 ) {
   const activePlayers = (
     await db.query<PlayerRow>(
@@ -2713,11 +2731,14 @@ async function allTargetedPlayersSubmitted(
       [campaignId]
     )
   ).rows.filter(isProfileComplete);
-  const targetedPlayers = activePlayers.filter((player) =>
-    playerMatchesInputTargets(player, inputTargets)
-  );
+  const requiredPlayers =
+    inputPolicy === "only_targeted_players"
+      ? activePlayers.filter((player) =>
+          playerMatchesInputTargets(player, inputTargets)
+        )
+      : activePlayers;
 
-  if (targetedPlayers.length === 0) {
+  if (requiredPlayers.length === 0) {
     return true;
   }
 
@@ -2735,7 +2756,7 @@ async function allTargetedPlayersSubmitted(
       .filter((playerId): playerId is string => Boolean(playerId))
   );
 
-  return targetedPlayers.every((player) => submittedPlayerIds.has(player.id));
+  return requiredPlayers.every((player) => submittedPlayerIds.has(player.id));
 }
 
 export async function submitRoomTurnForUser(
@@ -2746,13 +2767,14 @@ export async function submitRoomTurnForUser(
     playerId: string;
     message: string;
     userId: string;
+    runtime: DungeonMasterRuntime;
     rollRequestId?: string;
     rollResult?: DiceRollResult;
     clientMessageId?: string;
     rollSubmissions?: DiceRollSubmission[];
   }
 ): Promise<RoomSnapshot> {
-  const campaign = await withTransaction(db, async (client) => {
+  const submitState = await withTransaction(db, async (client) => {
     const campaignRow = await resolveRoomCampaign(
       client,
       input.roomId,
@@ -2857,32 +2879,118 @@ export async function submitRoomTurnForUser(
       content: `${player.username} (${player.character_name}): ${trimmedContent}`
     });
 
-    if (
-      !isRollSubmission &&
-      inputPolicy === "only_targeted_players" &&
-      (await allTargetedPlayersSubmitted(
-        client,
-        campaignRow.id,
-        turn.id,
-        inputTargets
-      ))
-    ) {
-      await client.query(
-        "update campaigns set metadata = metadata - 'inputTargets' - 'inputPolicy' where id = $1",
-        [campaignRow.id]
-      );
+    if (isRollSubmission && rollSubmission.remainingRollRequests.length > 0) {
+      return { campaign: campaignRow, shouldResolve: false as const };
     }
 
-    return campaignRow;
+    const shouldResolve = isRollSubmission
+      ? true
+      : await allRequiredPlayersSubmitted(
+          client,
+          campaignRow.id,
+          turn.id,
+          inputTargets,
+          inputPolicy
+        );
+
+    if (!shouldResolve) {
+      return { campaign: campaignRow, shouldResolve: false as const };
+    }
+
+    const claimedTurn = await client.query<TurnRow>(
+      `
+        update turns
+        set status = 'resolving'
+        where id = $1 and status = 'collecting'
+        returning *
+      `,
+      [turn.id]
+    );
+
+    if (!claimedTurn.rows[0]) {
+      throw createStatusError(409, "That turn is already resolving.");
+    }
+
+    await logCampaignEvent(client, campaignRow.id, "turn_resolving", {
+      turnId: turn.id,
+      reason: isRollSubmission ? "rolls_submitted" : "all_players_submitted"
+    });
+
+    const players = (
+      await client.query<PlayerRow>(
+        `
+          select *
+          from players
+          where campaign_id = $1 and status = 'active'
+          order by slot asc nulls last, created_at asc
+        `,
+        [campaignRow.id]
+      )
+    ).rows.filter(isProfileComplete);
+    const submissions = await getTurnSubmissions(client, turn.id);
+
+    return {
+      campaign: campaignRow,
+      shouldResolve: true as const,
+      turn: claimedTurn.rows[0],
+      players,
+      submissions
+    };
   });
+
+  if (submitState.shouldResolve) {
+    try {
+      const currentAction = formatMultiplayerTurn(
+        submitState.players,
+        submitState.submissions
+      );
+      const reply = await askDungeonMaster(
+        db,
+        input.runtime,
+        submitState.campaign,
+        currentAction,
+        dungeonMasterInstructions,
+        true,
+        submitState.turn.id,
+        currentAction
+      );
+      const resolvedTurn = await finishResolvedTurn(db, {
+        campaignId: submitState.campaign.id,
+        turnId: submitState.turn.id,
+        hermesMessageId: reply.id,
+        reply: reply.content,
+        eventType: "turn_resolved",
+        pendingRollRequests: reply.rollRequests,
+        inputTargets: reply.inputTargets,
+        inputPolicy: reply.inputPolicy,
+        aiDebug: reply.debug
+      });
+
+      void input.runtime.runPostTurnContextJobs?.({
+        campaignId: submitState.campaign.id,
+        turnId: submitState.turn.id,
+        currentAction,
+        dmResponse: reply.content,
+        dmEventId: resolvedTurn.dmEventId,
+        rollRequests: reply.rollRequests
+      });
+    } catch (error) {
+      await markTurnFailed(db, submitState.turn.id, error);
+      await logCampaignEvent(db, submitState.campaign.id, "turn_failed", {
+        turnId: submitState.turn.id,
+        error: error instanceof Error ? error.message : "DM provider call failed."
+      });
+      throw error;
+    }
+  }
 
   const updatedCampaign = await resolveRoomCampaign(
     db,
-    campaign.id,
-    campaign.hermes_session_id
+    submitState.campaign.id,
+    submitState.campaign.hermes_session_id
   );
 
-  return buildRoomSnapshot(db, updatedCampaign ?? campaign);
+  return buildRoomSnapshot(db, updatedCampaign ?? submitState.campaign);
 }
 
 async function getActivePlayerForUser(

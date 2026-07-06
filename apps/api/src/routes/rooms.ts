@@ -136,6 +136,7 @@ export async function registerRoomRoutes(
         playerId,
         message: message ?? "",
         userId: user.id,
+        runtime,
         ...(rollRequestId ? { rollRequestId } : {}),
         ...(body.rollResult ? { rollResult: body.rollResult } : {}),
         ...(clientMessageId ? { clientMessageId } : {}),
