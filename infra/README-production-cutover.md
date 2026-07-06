@@ -24,6 +24,8 @@ Set `CUTOVER_STRICT_OWNERS=true` when every active migrated campaign must alread
 
 ## One-Time SSH Access
 
+See `infra/AGENT-DROPLET-ACCESS.md` for the full agent safety runbook.
+
 Use the one-time access helper for production droplet maintenance so a temporary key exists only for the current session or command.
 
 ```bash

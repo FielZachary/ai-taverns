@@ -18,6 +18,8 @@ Caddy handles TLS automatically for `STAGING_DOMAIN`. The proxy routes `/api/*` 
 
 ## One-Time SSH Access
 
+See `infra/AGENT-DROPLET-ACCESS.md` for the full agent safety runbook.
+
 Use one-time access for routine droplet operations so day-to-day work does not depend on a reusable operator key being left active on the server.
 
 ```bash
