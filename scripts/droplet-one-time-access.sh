@@ -117,7 +117,15 @@ else
 fi
 
 if (($# > 0)); then
-  "${TIMEOUT_PREFIX[@]}" ssh "${SSH_ARGS[@]}" "$SSH_USER@$SSH_HOST" "$@"
+  if ((${#TIMEOUT_PREFIX[@]} > 0)); then
+    "${TIMEOUT_PREFIX[@]}" ssh "${SSH_ARGS[@]}" "$SSH_USER@$SSH_HOST" "$@"
+  else
+    ssh "${SSH_ARGS[@]}" "$SSH_USER@$SSH_HOST" "$@"
+  fi
 else
-  "${TIMEOUT_PREFIX[@]}" ssh -tt "${SSH_ARGS[@]}" "$SSH_USER@$SSH_HOST"
+  if ((${#TIMEOUT_PREFIX[@]} > 0)); then
+    "${TIMEOUT_PREFIX[@]}" ssh -tt "${SSH_ARGS[@]}" "$SSH_USER@$SSH_HOST"
+  else
+    ssh -tt "${SSH_ARGS[@]}" "$SSH_USER@$SSH_HOST"
+  fi
 fi
