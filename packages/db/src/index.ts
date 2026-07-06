@@ -8,6 +8,7 @@ import {
   parseHermesDmContract,
   type AiDebugInfo,
   type GameMessage,
+  type HermesDmContractParseOptions,
   type InputPolicy
 } from "@ai-dnd/dm";
 import type {
@@ -948,7 +949,9 @@ export async function createCampaignForMode(
       currentAction,
       openingSceneInstructions("single_player"),
       true,
-      createdState.turn.id
+      createdState.turn.id,
+      undefined,
+      { allowResolvedCombatWithoutRolls: true }
     );
     const resolvedTurn = await finishResolvedTurn(db, {
       campaignId: createdState.campaign.id,
@@ -2191,7 +2194,8 @@ async function askDungeonMaster(
   instructions: string,
   includeHistory = true,
   turnId?: string,
-  currentPlayerAction?: string
+  currentPlayerAction?: string,
+  contractOptions?: HermesDmContractParseOptions
 ) {
   const traceId = randomUUID();
   const startedAt = Date.now();
@@ -2244,6 +2248,7 @@ async function askDungeonMaster(
     });
 
     const contract = parseHermesDmContract(providerData.content, {
+      ...contractOptions,
       currentAction: message,
       ...(currentPlayerAction ? { currentPlayerAction } : {})
     });
@@ -2720,7 +2725,9 @@ export async function beginRoomForUser(
       currentAction,
       openingSceneInstructions("multiplayer"),
       true,
-      beginState.turn.id
+      beginState.turn.id,
+      undefined,
+      { allowResolvedCombatWithoutRolls: true }
     );
     const resolvedTurn = await finishResolvedTurn(db, {
       campaignId: beginState.campaign.id,

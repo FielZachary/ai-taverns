@@ -58,4 +58,24 @@ describe("parseHermesDmContract combat roll guard", () => {
       /resolved a player combat action without structured roll_requests/
     );
   });
+
+  it("allows campaign openers to narrate danger without treating setup text as a player attack", () => {
+    const result = parseHermesDmContract(
+      contract(
+        "Smoke rises from the watchtower where the first attack has already left the gate blackened. The road ahead splits between a wounded courier and a blocked bridge. What do you do?"
+      ),
+      {
+        currentAction: [
+          "Current player action:",
+          "Begin the campaign with a strong opener.",
+          "Introduce an immediate obstacle, threat, discovery, or combat trigger.",
+          "Return no player-facing roll requests unless danger already requires dice."
+        ].join("\n"),
+        allowResolvedCombatWithoutRolls: true
+      }
+    );
+
+    assert.equal(result.nextInputNeeded, "player_actions");
+    assert.equal(result.rollRequests.length, 0);
+  });
 });
