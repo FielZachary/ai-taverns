@@ -49,6 +49,37 @@ docker compose --env-file infra/staging.env -f infra/docker-compose.staging.yml 
 
 The `api`, `web`, `postgres`, and `proxy` services should report healthy. The API container runs database migrations before starting.
 
+## GitHub Actions Deploy
+
+The `Deploy staging` workflow rebuilds staging automatically when
+`development` is pushed, and it can also be started manually from GitHub
+Actions.
+
+Required repository or environment secrets:
+
+- `STAGING_SSH_HOST`: staging droplet host or IP.
+- `STAGING_SSH_KEY`: private SSH key allowed to deploy to the staging droplet.
+
+Optional secrets:
+
+- `STAGING_SSH_USER`: SSH user, defaults to `root`.
+- `STAGING_SSH_PORT`: SSH port, defaults to `22`.
+
+Required repository or environment variables:
+
+- `STAGING_ORIGIN`: public staging origin checked after deploy, for example `https://staging.example.com`.
+
+Optional repository or environment variables:
+
+- `STAGING_DEPLOY_PATH`: deploy directory, defaults to `/opt/ai-taverns`.
+
+The workflow packages the exact pushed commit, uploads it to the staging
+droplet, preserves `/opt/ai-taverns/infra/staging.env` and
+`/opt/ai-taverns/infra/backups`, rebuilds
+`infra/docker-compose.staging.yml`, waits for `postgres`, `api`, `web`, and
+`proxy` to become healthy, and then runs the public staging health check from
+the GitHub runner.
+
 ## Backups
 
 The `backup` service writes custom-format Postgres dumps to `infra/backups` every `BACKUP_INTERVAL_SECONDS` seconds and deletes files older than `BACKUP_RETENTION_DAYS`.

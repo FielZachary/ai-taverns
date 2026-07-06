@@ -1,0 +1,129 @@
+name: Deploy staging
+
+on:
+  push:
+    branches:
+      - development
+  workflow_dispatch:
+
+concurrency:
+  group: staging-deploy
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  DEPLOY_PATH: ${{ vars.STAGING_DEPLOY_PATH || '/opt/ai-taverns' }}
+  STAGING_ORIGIN: ${{ vars.STAGING_ORIGIN }}
+  SSH_PORT: ${{ secrets.STAGING_SSH_PORT || '22' }}
+  SSH_USER: ${{ secrets.STAGING_SSH_USER || 'root' }}
+
+jobs:
+  deploy:
+    name: Build, ship, and restart staging
+    runs-on: ubuntu-latest
+    environment: staging
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build API
+        run: npm run build:api
+
+      - name: Build web
+        run: npm run build -w @ai-dnd/web
+
+      - name: Package deployment archive
+        run: git archive --format=tar.gz --output="/tmp/ai-taverns-${GITHUB_SHA}.tar.gz" HEAD
+
+      - name: Configure SSH
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.STAGING_SSH_KEY }}" > ~/.ssh/staging_deploy_key
+          chmod 600 ~/.ssh/staging_deploy_key
+          ssh-keyscan -p "$SSH_PORT" -H "${{ secrets.STAGING_SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Upload deployment archive
+        run: |
+          set -euo pipefail
+          scp -i ~/.ssh/staging_deploy_key -P "$SSH_PORT" \
+            "/tmp/ai-taverns-${GITHUB_SHA}.tar.gz" \
+            "$SSH_USER@${{ secrets.STAGING_SSH_HOST }}:/tmp/ai-taverns-${GITHUB_SHA}.tar.gz"
+
+      - name: Rebuild staging stack
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/staging_deploy_key -p "$SSH_PORT" "$SSH_USER@${{ secrets.STAGING_SSH_HOST }}" \
+            "SHA='$GITHUB_SHA' DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          archive="/tmp/ai-taverns-${SHA}.tar.gz"
+          release="/tmp/ai-taverns-staging-release-${SHA}"
+          compose="docker compose --env-file infra/staging.env -f infra/docker-compose.staging.yml"
+
+          rm -rf "$release"
+          mkdir -p "$release"
+          tar -xzf "$archive" -C "$release"
+
+          if [ ! -f "$DEPLOY_PATH/infra/staging.env" ]; then
+            echo "Missing $DEPLOY_PATH/infra/staging.env; refusing to deploy." >&2
+            exit 1
+          fi
+
+          mkdir -p "$DEPLOY_PATH/infra"
+          find "$DEPLOY_PATH" -mindepth 1 -maxdepth 1 ! -name infra ! -name .git -exec rm -rf -- {} +
+          find "$DEPLOY_PATH/infra" -mindepth 1 -maxdepth 1 ! -name staging.env ! -name backups -exec rm -rf -- {} +
+          cp -a "$release"/. "$DEPLOY_PATH"/
+
+          cd "$DEPLOY_PATH"
+          $compose up -d --build --remove-orphans
+          ready=0
+          for attempt in $(seq 1 60); do
+            ready=1
+            for service in postgres api web proxy; do
+              container_id="$($compose ps -q "$service")"
+              if [ -z "$container_id" ]; then
+                ready=0
+                continue
+              fi
+              status="$(docker inspect --format '{{ if .State.Health }}{{ .State.Health.Status }}{{ else }}{{ .State.Status }}{{ end }}' "$container_id")"
+              if [ "$status" != "healthy" ]; then
+                ready=0
+              fi
+            done
+            if [ "$ready" -eq 1 ]; then
+              break
+            fi
+            sleep 5
+          done
+          if [ "$ready" -ne 1 ]; then
+            $compose ps
+            echo "Staging services did not become healthy in time." >&2
+            exit 1
+          fi
+          $compose ps
+
+          rm -rf "$release" "$archive"
+          REMOTE
+
+      - name: Verify public staging health
+        run: scripts/check-staging-health.sh "$STAGING_ORIGIN"

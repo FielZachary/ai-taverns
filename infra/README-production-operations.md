@@ -23,8 +23,8 @@ From the droplet checkout:
 ```bash
 cd /opt/ai-taverns
 git fetch origin
-git checkout development
-git pull --ff-only origin development
+git checkout production
+git pull --ff-only origin production
 docker compose --env-file infra/production.env -f infra/docker-compose.production.yml up -d --build
 docker compose --env-file infra/production.env -f infra/docker-compose.production.yml ps
 ```
