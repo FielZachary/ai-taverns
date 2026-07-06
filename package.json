@@ -15,6 +15,8 @@
     "db:migrate": "node scripts/run-db-migrations.mjs",
     "db:local:reset": "node scripts/reset-local-db.mjs && npm run db:migrate",
     "db:local:seed": "node scripts/seed-local-db.mjs",
+    "cutover:production:verify": "node scripts/verify-production-cutover.mjs",
+    "cutover:production:health": "scripts/check-production-health.sh",
     "hermes:bridge": "bash scripts/start-hermes-bridge.sh",
     "hermes:secure-bridge": "bash scripts/start-hermes-secure-bridge.sh",
     "lint": "npm run lint -w @ai-dnd/web",
