@@ -128,7 +128,7 @@ const impossibleActionHighRollResultExample = JSON.stringify(
 const decisiveTravelPacingExample = JSON.stringify(
   {
     public_narration:
-      "Kyer raises the hooded lantern and keeps walking, with DDDD close enough behind that both of you stay inside its light. The last yellow windows of Thornwood vanish through the rain, and the cart track becomes a black ribbon of mud between alder trunks.\n\nYou do not stop at every bend. You follow Marta's directions past the mill, cut east through the alder stand, and push on until the ground rises beneath your boots. Only when the barrow itself appears does the journey become a choice again.\n\nThe mound is split open at its base. A low stone arch sags under a cracked lintel, and cold air breathes from the dark passage beyond. Sheep bones lie near the threshold, picked clean, and dragging footprints lead from the wet grass into the tomb.\n\nYou have reached the barrow entrance. The passage is wide enough for one person at a time, the lantern oil is still strong, and the tracks continue downward into darkness. What do you do?",
+      "You keep moving, with the lantern held low enough to catch the worst roots before they catch your boots. The last lights of the settlement fade behind you, and the road narrows into wet earth, leaning trees, and the hush before bad weather.\n\nYou do not stop at every bend. You follow the directions you were given, pass the final boundary marker, and push on until the land itself changes underfoot. Only when the destination rises ahead does the journey become a choice again.\n\nThe entrance is partly exposed where the hillside has broken open. Cold air moves from the dark gap, carrying the smell of stone, old water, and something recently disturbed. Tracks cross the mud near the threshold, but they do not all point the same way.\n\nYou have reached the site. The way in is narrow, the light will not reach far, and the trail continues into darkness. What do you do?",
     roll_requests: [],
     next_input_needed: "player_actions",
     input_targets: [],
@@ -141,7 +141,7 @@ const decisiveTravelPacingExample = JSON.stringify(
 const decisiveObjectPacingExample = JSON.stringify(
   {
     public_narration:
-      "Kyer breaks the brittle wax seal and opens the scroll instead of merely turning it over in his hands. The parchment exhales a cold, dry smell, and the ink brightens as the lantern catches it.\n\nThe first lines are old Open Hand temple-script: 'The hand that closes the gate must be severed from memory.' Beneath the koan, newer writing has been added in a cramped scholar's hand: 'Crimson shard moved through Thornwood. Barrow seal compromised. Warden awake.'\n\nMerlin recognizes the marginal sigil as shard-binding notation. Kyer recognizes the closing phrase as a corrupted version of an Open Hand meditation. The scroll gives you three immediate leads: the old barrow, the missing scholar Edrin Vale, and the phrase 'severed from memory.' What do you do?",
+      "You break the brittle seal and open the message instead of merely turning it over in your hands. The parchment has been folded so long that it resists you, then gives with a dry crackle.\n\nThe first lines are written in formal temple-script, but a newer hand has added urgent notes in the margin. The message names a compromised site, a missing witness, and a warning that something sealed has begun to stir again.\n\nThe object gives you three immediate leads: the marked location, the person who altered the message, and the repeated phrase written beneath the final line. What do you do?",
     roll_requests: [],
     next_input_needed: "player_actions",
     input_targets: [],
@@ -187,6 +187,8 @@ export const hardRuntimeContract = [
 
 export const gameRulesAndDesignDefaults = [
   "Always ask for a roll when the player attempts anything. Ask in this format: `Roll a {dice} for a {label}`. Example: `Roll a 1d20 Acrobatics check to see if you can climb the wall safely`.",
+  "The following examples demonstrate response shape, pacing, and roll structure only. Do not reuse their names, places, NPCs, clues, objects, monsters, destinations, or premises unless those details already appear in the current campaign state, player action, or campaign setup.",
+  "For new campaign openings, invent fresh names and premises from the current campaign setup or canonical world context. Do not draw proper nouns, locations, NPCs, quest objects, or adventure premises from formatting examples.",
   `Example decisive travel pacing that compresses repeated movement to the next meaningful choice:\n${decisiveTravelPacingExample}`,
   `Example decisive object pacing that completes opening and reading in one response:\n${decisiveObjectPacingExample}`,
   `Example requiring linked rolls in one batch:\n${chainedRollRequestResponseExample}`,
