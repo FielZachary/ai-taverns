@@ -27,6 +27,7 @@ import {
   HermesTurnRequestSchema,
   HermesTurnResponseSchema,
   RoomPlayerUpdateRequestSchema,
+  RoomRealtimeEventSchema,
   RoomSnapshotSchema,
   RoomSubmitRequestSchema
 } from "./index.js";
@@ -267,6 +268,29 @@ test("room contracts accept snapshots and mutation payloads", () => {
   });
 
   assert.equal(snapshot.players[0]?.status, "waiting");
+});
+
+test("room realtime contract accepts heartbeat and update events", () => {
+  const heartbeat = RoomRealtimeEventSchema.parse({
+    type: "heartbeat",
+    sentAt: "2026-07-05T00:00:00.000Z"
+  });
+  const update = RoomRealtimeEventSchema.parse({
+    type: "room_updated",
+    roomId: "00000000-0000-4000-8000-000000000001",
+    updatedAt: "2026-07-05T00:00:00.000Z",
+    eventId: "event-1"
+  });
+
+  assert.equal(heartbeat.type, "heartbeat");
+  assert.equal(update.type, "room_updated");
+  assert.equal(update.eventId, "event-1");
+  assert.throws(() =>
+    RoomRealtimeEventSchema.parse({
+      type: "heartbeat",
+      sentAt: "not-a-date"
+    })
+  );
 });
 
 test("DM route contracts accept solo, ask-DM, regenerate, and traces payloads", () => {

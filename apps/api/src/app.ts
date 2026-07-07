@@ -1,5 +1,6 @@
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
+import websocket from "@fastify/websocket";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { DungeonMasterRuntime } from "@ai-dnd/db";
 import { loadConfig, type ApiConfig } from "./config.js";
@@ -10,6 +11,7 @@ import { registerCampaignRoutes } from "./routes/campaigns.js";
 import { registerDmRoutes } from "./routes/dm.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerHermesRoutes } from "./routes/hermes.js";
+import { registerRealtimeRoutes } from "./routes/realtime.js";
 import { registerRoomRoutes } from "./routes/rooms.js";
 
 export type BuildAppOptions = {
@@ -47,6 +49,7 @@ export async function buildApp(
     credentials: true
   });
   await fastify.register(cookie);
+  await fastify.register(websocket);
   await fastify.register(postgresPlugin, {
     config,
     connectOnReady: options.connectToDatabase ?? true
@@ -66,6 +69,10 @@ export async function buildApp(
     prefix: "/api",
     config,
     dmRuntime: options.dmRuntime
+  });
+  await fastify.register(registerRealtimeRoutes, {
+    prefix: "/api",
+    config
   });
   await fastify.register(registerDmRoutes, {
     prefix: "/api",

@@ -95,6 +95,28 @@ export const RoomPlayerUpdateResponseSchema = RoomSnapshotSchema;
 export const RoomBeginResponseSchema = RoomSnapshotSchema;
 export const RoomSubmitResponseSchema = RoomSnapshotSchema;
 
+export const RoomRealtimeEventSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("room_updated"),
+    roomId: z.string().min(1),
+    updatedAt: z.string().datetime(),
+    eventId: z.string().min(1).optional()
+  }),
+  z.object({
+    type: z.literal("room_snapshot"),
+    roomId: z.string().min(1),
+    snapshot: RoomSnapshotSchema
+  }),
+  z.object({
+    type: z.literal("heartbeat"),
+    sentAt: z.string().datetime()
+  }),
+  z.object({
+    type: z.literal("error"),
+    message: z.string().min(1)
+  })
+]);
+
 export type DiceRollRequest = z.infer<typeof DiceRollRequestSchema>;
 export type DiceRollResult = z.infer<typeof DiceRollResultSchema>;
 export type DiceRollSubmission = z.infer<typeof DiceRollSubmissionSchema>;
@@ -105,3 +127,4 @@ export type RoomPlayerUpdateRequest = z.infer<
 >;
 export type RoomBeginRequest = z.infer<typeof RoomBeginRequestSchema>;
 export type RoomSubmitRequest = z.infer<typeof RoomSubmitRequestSchema>;
+export type RoomRealtimeEvent = z.infer<typeof RoomRealtimeEventSchema>;

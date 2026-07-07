@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { once } from "node:events";
 import { after, before, test } from "node:test";
 import type { FastifyInstance } from "fastify";
 import {
@@ -19,6 +20,7 @@ import {
   RoomBeginResponseSchema,
   RoomPlayerUpdateResponseSchema,
   RoomReadResponseSchema,
+  RoomRealtimeEventSchema,
   RoomSubmitResponseSchema
 } from "@ai-dnd/contracts";
 import { buildApp } from "./app.js";
@@ -1260,6 +1262,43 @@ test("sign out revokes the owned session", async () => {
   });
 
   assert.equal(protectedResponse.statusCode, 401);
+});
+
+test("room realtime websocket rejects unauthenticated upgrades", async () => {
+  await assert.rejects(
+    app.injectWS("/api/room/live"),
+    /Unexpected server response: 401/
+  );
+});
+
+test("room realtime websocket accepts session cookies and emits events", async () => {
+  const cookie = await signIn("realtime@example.com");
+  const socket = await app.injectWS("/api/room/live", {
+    headers: {
+      cookie
+    }
+  });
+
+  try {
+    const [heartbeatMessage] = await once(socket, "message");
+    const heartbeat = RoomRealtimeEventSchema.parse(
+      JSON.parse(heartbeatMessage.toString())
+    );
+
+    assert.equal(heartbeat.type, "heartbeat");
+
+    socket.send("hello");
+
+    const [errorMessage] = await once(socket, "message");
+    const error = RoomRealtimeEventSchema.parse(
+      JSON.parse(errorMessage.toString())
+    );
+
+    assert.equal(error.type, "error");
+    assert.match(error.message, /not supported/);
+  } finally {
+    socket.terminate();
+  }
 });
 
 test("campaign endpoints require an owned session", async () => {
