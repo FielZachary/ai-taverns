@@ -1335,6 +1335,16 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.ok(latestProviderInput);
   assert.match(latestProviderInput.message, /Flagship world context:/);
   assert.match(latestProviderInput.message, /setting\.world_name as "Eldermere"/);
+  assert.match(latestProviderInput.message, /Seven regions available for the opener:/);
+  assert.match(latestProviderInput.message, /Cael Ambrose:/);
+  assert.match(latestProviderInput.message, /Thornwake Vale:/);
+  assert.match(latestProviderInput.message, /The Ferrant Concord:/);
+  assert.match(latestProviderInput.message, /The Salt Concordat:/);
+  assert.match(latestProviderInput.message, /Ashfell Marches:/);
+  assert.match(latestProviderInput.message, /The Veiled Reach:/);
+  assert.match(latestProviderInput.message, /The Sundered Vale:/);
+  assert.match(latestProviderInput.message, /Wellglass is finite/);
+  assert.match(latestProviderInput.message, /choose one primary region/);
   assert.match(latestProviderInput.instructions, /World Context:/);
   assert.match(latestProviderInput.instructions, /World: Eldermere\./);
 });
