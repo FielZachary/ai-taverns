@@ -24,10 +24,6 @@ import { defaultCharacterSheet } from "@/components/playing/PlayerPanel";
 type CampaignMode = "single_player" | "multiplayer";
 type MultiplayerIntent = "create" | "join";
 
-type NewAdventureFormProps = {
-  userEmail?: string;
-};
-
 type JoinPreview = {
   code: string;
   campaignTitle: string;
@@ -598,7 +594,7 @@ function normalizeGameCodeInput(value: string) {
   );
 }
 
-export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
+export function NewAdventureForm() {
   const [stepIndex, setStepIndex] = useState(0);
   const [characterStepIndex, setCharacterStepIndex] = useState(0);
   const [mode, setMode] = useState<CampaignMode>("single_player");
@@ -1180,7 +1176,6 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
         <div className="new-adventure-heading">
           <p className="eyebrow">New Adventure</p>
           <h1>{stepTitle}</h1>
-          {userEmail ? <p>{userEmail}</p> : null}
         </div>
 
         <form className="new-adventure-form" onSubmit={handleSubmit}>
@@ -1196,7 +1191,6 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
                 key={step}
               >
                 <span>{index < stepIndex ? <Check size={13} /> : index + 1}</span>
-                <strong>{step}</strong>
               </li>
             ))}
           </ol>

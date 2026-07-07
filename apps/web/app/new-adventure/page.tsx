@@ -9,5 +9,5 @@ export default async function NewAdventurePage() {
     redirect("/login?next=/new-adventure");
   }
 
-  return <NewAdventureForm userEmail={user.email} />;
+  return <NewAdventureForm />;
 }

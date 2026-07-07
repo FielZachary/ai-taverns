@@ -627,17 +627,9 @@ h1 {
 
 .new-adventure-heading h1 {
   max-width: 18ch;
-  margin-bottom: 18px;
+  margin-bottom: 0;
   font-size: clamp(2rem, 4.5vw, 4rem);
   line-height: 0.98;
-}
-
-.new-adventure-heading p:not(.eyebrow) {
-  margin-bottom: 0;
-  color: var(--muted);
-  font-family: ui-sans-serif, system-ui, sans-serif;
-  font-size: 0.92rem;
-  font-weight: 800;
 }
 
 .new-adventure-form {
@@ -662,12 +654,8 @@ h1 {
 .creation-steps li {
   display: grid;
   justify-items: center;
-  gap: 7px;
   min-width: 0;
   color: rgba(249, 237, 214, 0.44);
-  font-size: 0.68rem;
-  font-weight: 900;
-  text-transform: uppercase;
 }
 
 .creation-steps li::after {
