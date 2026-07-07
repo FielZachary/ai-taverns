@@ -468,6 +468,12 @@ export function formatEldermereTurnPromptContext(
     "- Keep Wellglass rare, valuable, and politically meaningful.",
     "- Do not reveal hidden lore, faction secrets, god-fragment truths, or dungeon answers directly in player-facing narration.",
     "- Prefer region-specific institutions, gods, customs, and conflicts over generic fantasy equivalents.",
+    "",
+    "Player-Facing Lore Clarity:",
+    "- Do not overload opening scenes or ordinary turns with unexplained Eldermere proper nouns. Use at most 2-4 new setting-specific terms in a scene unless the player already knows them.",
+    "- When using an Eldermere-specific term for the first time in player-facing narration, gloss it naturally in plain language. Prefer 'Stakehold, the frontier camp where rival powers pretend to share authority' over 'Stakehold, headquarters of the Claim-Stake Accord.'",
+    "- Prefer concrete meaning before official names. If a term is not immediately useful to the player's next decision, save it for later.",
+    "- Introduce lore through action, stakes, NPC behavior, signs, objects, and consequences rather than encyclopedia exposition.",
   ].join("\n");
 }
 

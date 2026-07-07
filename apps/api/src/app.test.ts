@@ -1388,6 +1388,22 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
     new RegExp(`Starting settlement: ${startingLocation.name as string}`)
   );
   assert.match(latestProviderInput.instructions, /Keep Wellglass rare/);
+  assert.match(
+    latestProviderInput.instructions,
+    /Player-Facing Lore Clarity:/
+  );
+  assert.match(
+    latestProviderInput.instructions,
+    /at most 2-4 new setting-specific terms/
+  );
+  assert.match(
+    latestProviderInput.instructions,
+    /gloss it naturally in plain language/
+  );
+  assert.match(
+    latestProviderInput.instructions,
+    /If a term is not immediately useful to the player's next decision, save it for later/
+  );
 });
 
 test("room realtime websocket accepts session cookies and emits events", async () => {
