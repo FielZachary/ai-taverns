@@ -48,10 +48,9 @@ const createSteps = ["Mode", "Campaign", "Character", "Review"];
 const joinSteps = ["Mode", "Game Code", "Character", "Review"];
 const joinCodePattern = /[A-HJ-NP-Z2-9]{6}/;
 const campaignCreationLoadingSteps = [
-  "Choosing the opening region",
-  "Sketching the first trouble",
-  "Threading in your character",
-  "Writing the first scene",
+  "Choosing where the story begins",
+  "Finding the first spark",
+  "Writing your opening scene",
   "Setting the table"
 ];
 const customCharacterCreationSteps = [
@@ -669,9 +668,6 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
   const selectedQuickBuildFantasy =
     quickBuildFantasyOptions.find((option) => option.id === quickBuildFantasy) ??
     quickBuildFantasyOptions[0];
-  const creationLoadingProgress = Math.round(
-    ((creationLoadingStep + 1) / campaignCreationLoadingSteps.length) * 100
-  );
   const characterSheetPreview = useMemo(() => {
     const abilityLines = abilityDefinitions.map(({ key, label }) => {
       const modifier = getModifier(abilityScores[key]);
@@ -1151,6 +1147,21 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
     }
 
     void handleNext();
+  }
+
+  if (isCreating && !isJoinFlow) {
+    return (
+      <main className="campaign-creation-screen" aria-label="Creating campaign">
+        <section className="campaign-creation-center" aria-live="polite">
+          <div className="campaign-creation-loader" aria-hidden="true">
+            <Sparkles size={26} />
+          </div>
+          <p key={creationLoadingStep}>
+            {campaignCreationLoadingSteps[creationLoadingStep]}
+          </p>
+        </section>
+      </main>
+    );
   }
 
   return (
@@ -1788,58 +1799,6 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
               </div>
             ) : null}
           </div>
-
-          {isCreating && !isJoinFlow ? (
-            <section
-              className="campaign-creation-loading"
-              aria-live="polite"
-              aria-label="Campaign creation progress"
-            >
-              <div className="campaign-creation-orbit" aria-hidden="true">
-                <Sparkles size={22} />
-                <span />
-                <span />
-                <span />
-              </div>
-              <div className="campaign-creation-status">
-                <span>Building your campaign</span>
-                <strong>
-                  {campaignCreationLoadingSteps[creationLoadingStep]}
-                  <span className="loading-dots" aria-hidden="true">
-                    <span />
-                    <span />
-                    <span />
-                  </span>
-                </strong>
-              </div>
-              <div
-                className="campaign-creation-progress"
-                aria-label={`${creationLoadingProgress}% complete`}
-                role="progressbar"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={creationLoadingProgress}
-              >
-                <span style={{ width: `${creationLoadingProgress}%` }} />
-              </div>
-              <ol className="campaign-creation-checkpoints">
-                {campaignCreationLoadingSteps.map((step, index) => (
-                  <li
-                    className={[
-                      index < creationLoadingStep ? "complete" : "",
-                      index === creationLoadingStep ? "active" : ""
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                    key={step}
-                  >
-                    <span>{index < creationLoadingStep ? <Check size={12} /> : index + 1}</span>
-                    <strong>{step}</strong>
-                  </li>
-                ))}
-              </ol>
-            </section>
-          ) : null}
 
           {error ? (
             <p className="new-adventure-error" role="alert">
