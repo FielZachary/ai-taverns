@@ -1810,11 +1810,13 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
             ) : null}
           </div>
 
-          {error ? (
-            <p className="new-adventure-error" role="alert">
-              {error}
-            </p>
-          ) : null}
+          <div className="new-adventure-error-slot">
+            {error ? (
+              <p className="new-adventure-error" role="alert">
+                {error}
+              </p>
+            ) : null}
+          </div>
 
           <div className="creation-actions">
             <button

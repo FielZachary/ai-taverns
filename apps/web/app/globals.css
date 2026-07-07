@@ -605,9 +605,12 @@ h1 {
 
 .new-adventure-shell {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 24px;
+  height: min(860px, calc(100dvh - 56px));
   width: min(100%, 1040px);
   padding: clamp(22px, 4vw, 38px);
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 8px;
   background:
@@ -639,8 +642,9 @@ h1 {
 
 .new-adventure-form {
   display: grid;
-  align-content: start;
+  grid-template-rows: auto minmax(0, 1fr) 20px auto;
   gap: 20px;
+  min-height: 0;
   width: min(100%, 760px);
   margin: 0 auto;
   font-family: ui-sans-serif, system-ui, sans-serif;
@@ -697,8 +701,11 @@ h1 {
 
 .creation-stage {
   display: grid;
-  align-content: center;
+  align-content: start;
   gap: 18px;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
   padding: clamp(18px, 4vw, 34px);
   border-top: 1px solid rgba(226, 176, 93, 0.2);
   border-bottom: 1px solid rgba(226, 176, 93, 0.2);
@@ -708,7 +715,7 @@ h1 {
 }
 
 .creation-stage-roomy {
-  min-height: 360px;
+  align-content: center;
 }
 
 .mode-picker {
@@ -1186,6 +1193,10 @@ h1 {
   color: #ffb199;
   font-size: 0.86rem;
   font-weight: 800;
+}
+
+.new-adventure-error-slot {
+  min-height: 20px;
 }
 
 .campaign-creation-screen {
@@ -3132,7 +3143,8 @@ h1 {
   }
 
   .new-adventure-shell {
-    min-height: 100dvh;
+    height: 100dvh;
+    min-height: 0;
     border-width: 0;
     border-radius: 0;
   }
