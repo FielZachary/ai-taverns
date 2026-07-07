@@ -1150,13 +1150,23 @@ export function NewAdventureForm({ userEmail }: NewAdventureFormProps) {
   }
 
   if (isCreating && !isJoinFlow) {
+    const isFinalCreationLoadingStep =
+      creationLoadingStep === campaignCreationLoadingSteps.length - 1;
+
     return (
       <main className="campaign-creation-screen" aria-label="Creating campaign">
         <section className="campaign-creation-center" aria-live="polite">
           <div className="campaign-creation-loader" aria-hidden="true">
             <Sparkles size={26} />
           </div>
-          <p key={creationLoadingStep}>
+          <p
+            key={creationLoadingStep}
+            className={
+              isFinalCreationLoadingStep
+                ? "campaign-creation-message-hold"
+                : undefined
+            }
+          >
             {campaignCreationLoadingSteps[creationLoadingStep]}
           </p>
         </section>

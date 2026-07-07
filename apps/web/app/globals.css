@@ -1235,6 +1235,10 @@ h1 {
   animation: loading-text-slide 2.4s ease-in-out both;
 }
 
+.campaign-creation-center .campaign-creation-message-hold {
+  animation: loading-text-hold 0.45s ease-out both;
+}
+
 .creation-review {
   display: grid;
   gap: 18px;
@@ -1342,6 +1346,18 @@ h1 {
   100% {
     opacity: 0;
     transform: translateY(-8px);
+  }
+}
+
+@keyframes loading-text-hold {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
