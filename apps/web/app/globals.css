@@ -2009,30 +2009,40 @@ h1 {
   grid-template-columns: 38px minmax(0, 1fr);
   gap: 12px;
   width: 100%;
+}
+
+.message-content {
+  min-width: 0;
   padding: 15px;
   border: 1px solid rgba(226, 176, 93, 0.18);
   border-radius: 8px;
   background: rgba(20, 15, 12, 0.58);
 }
 
-.message-player {
+.message-player .message-content {
   background: rgba(95, 119, 81, 0.22);
 }
 
-.message-ask-dm-question,
-.message-ask-dm-answer {
+.message-ask-dm-question .message-content,
+.message-ask-dm-answer .message-content {
   border-color: rgba(129, 184, 166, 0.32);
   background: rgba(35, 74, 70, 0.2);
 }
 
 .message-system {
   color: var(--muted);
+}
+
+.message-system .message-content {
   background: rgba(217, 169, 74, 0.08);
 }
 
 .message-waiting {
-  border-style: dashed;
   color: var(--muted);
+}
+
+.message-waiting .message-content {
+  border-style: dashed;
   background: rgba(95, 119, 81, 0.12);
 }
 

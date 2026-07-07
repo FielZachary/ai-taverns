@@ -161,7 +161,7 @@ export function MessageLog({
               <Sparkles size={18} />
             )}
           </div>
-          <div>
+          <div className="message-content">
             <div className="message-heading">
               <p className="message-label">{messageLabel(message)}</p>
               {message.role === "dm" &&
@@ -206,7 +206,7 @@ export function MessageLog({
           <div className="message-icon" aria-hidden="true">
             <UserRound size={18} />
           </div>
-          <div>
+          <div className="message-content">
             <div className="message-heading">
               <p className="message-label">
                 {player.name}
@@ -236,7 +236,7 @@ export function MessageLog({
               src="/avatars/dungeon-master.jpg"
             />
           </div>
-          <div>
+          <div className="message-content">
             <p className="message-label">Dungeon Master</p>
             <p className="rune-loader">
               Reading the runes
