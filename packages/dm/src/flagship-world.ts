@@ -420,11 +420,55 @@ export function formatEldermereOpeningPromptContext(
 export const eldermereOpeningPromptContext =
   formatEldermereOpeningPromptContext();
 
-export const eldermereTurnPromptContext = [
-  "World Context:",
-  "World: Eldermere.",
-  "Genre: anchored high fantasy adventure.",
-  "Core truths: the Second Dominion fell in the Graywake; the gods are quiet; Wellglass is scarce and powers the strongest magic; ruins matter because they contain Second Dominion remnants.",
-  "Tone: wondrous, perilous, morally clear but not simple, wry when appropriate.",
-  "Use Eldermere as the campaign's canonical default world. Do not treat this as generic fantasy. Do not reveal DM-only secrets directly in player-facing narration.",
-].join("\n");
+export function formatEldermereTurnPromptContext(
+  start?: EldermereCampaignStart,
+) {
+  return [
+    "World Context:",
+    "World: Eldermere, AI Taverns' flagship anchored high-fantasy setting.",
+    "Core premise: Eldermere is built on the ruins of the fallen Second Dominion, an ancient empire whose works still shape roads, mines, cities, monsters, magic, and political borders. About 340 years ago, the Graywake cracked the Wellspring beneath the Dominion, shattered its empire, and began the long divine silence called the Hush. The current age is the Kindling: gods have begun speaking again only through omens, dreams, masks, miracles, and uncertain signs.",
+    "Tone: wondrous, perilous, morally clear but not simple, wry when appropriate.",
+    "",
+    "Magic:",
+    "Wellglass is refined godsblood from the broken Wellspring. It is rare, finite, politically dangerous, and powers the strongest magic, relics, engines, and rituals. Common magic exists, but major miracles, ancient machinery, dungeon phenomena, and empire-scale works should usually involve Wellglass or Second Dominion remnants.",
+    "",
+    "Religion:",
+    "The gods are real but not conversational. They should not give simple instructions or appear casually. Faith is interpreted through signs, priesthoods, masks, traditions, schisms, and competing readings of divine will.",
+    "",
+    "The Five Divine Forces:",
+    "- The Hearth-Warden: roads, shelter, hospitality, oaths of welcome, protection of the vulnerable.",
+    "- The Iron Judge: law, consequence, sworn judgment, punishment, justice, and hard order. Worship differs sharply between Sevrantine legalists and Baragh oath-clans.",
+    "- The Deep Currents: seas, tides, hidden truths, bargains, dreams, drownings, and things carried beneath the surface.",
+    "- The Verdant Choir: growth, decay, forests, beasts, harvest, old roots, and the living world's memory.",
+    "- The Ashen Scholar: memory, prophecy, records, forbidden knowledge, sacrifice, and the cost of knowing.",
+    "",
+    "Warlocks:",
+    "Warlock patrons are not the true gods. They are usually Unmasked god-fragments, broken divinities, drowned powers, ruin-intelligences, or other partial forces wearing divine shapes.",
+    "",
+    "Regions of Eldermere:",
+    ...eldermereRegions.map((region) => `- ${region.name}: ${region.summary}`),
+    "",
+    ...(start
+      ? [
+          "Current Campaign Anchor:",
+          `Selected starting region: ${start.region.name}.`,
+          `Starting settlement: ${start.settlement.name} (${start.settlement.type}).`,
+          "Use this region and settlement as the campaign's local default unless the players travel elsewhere. Ground NPCs, rumors, prices, dangers, customs, weather, faith, politics, and dungeon hooks in this location first.",
+          `Region identity: ${start.region.summary}`,
+          `Local settlement: ${start.settlement.draw}`,
+          `Local friction: ${start.settlement.friction}`,
+          "DM rule: do not relocate the party, change the starting region, or introduce another region as the main setting unless player action or established campaign events justify it.",
+          "",
+        ]
+      : []),
+    "Eldermere DM Rules:",
+    "- Treat Eldermere as the canonical campaign world, not a generic fantasy backdrop.",
+    "- Use the selected region first when present; use the other six regions as wider-world context, trade links, rumors, foreign NPC origins, religious tensions, and future travel options.",
+    "- Keep divine activity indirect unless the scene is explicitly miraculous.",
+    "- Keep Wellglass rare, valuable, and politically meaningful.",
+    "- Do not reveal hidden lore, faction secrets, god-fragment truths, or dungeon answers directly in player-facing narration.",
+    "- Prefer region-specific institutions, gods, customs, and conflicts over generic fantasy equivalents.",
+  ].join("\n");
+}
+
+export const eldermereTurnPromptContext = formatEldermereTurnPromptContext();

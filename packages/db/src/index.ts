@@ -6,8 +6,8 @@ import {
   dungeonMasterInstructions,
   eldermereMetadataProfile,
   eldermereRegions,
-  eldermereTurnPromptContext,
   formatEldermereOpeningPromptContext,
+  formatEldermereTurnPromptContext,
   openingSceneRequest,
   parseHermesDmContract,
   isEldermerePreset,
@@ -641,7 +641,13 @@ function withEldermereTurnContext(
     return instructions;
   }
 
-  return [instructions, "", eldermereTurnPromptContext].join("\n");
+  return [
+    instructions,
+    "",
+    formatEldermereTurnPromptContext(
+      eldermereCampaignStartFromMetadata(campaign)
+    )
+  ].join("\n");
 }
 
 function normalizeCampaignTitle(title: string | undefined, sessionId: string) {

@@ -1364,7 +1364,30 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
     new RegExp(`Starting settlement: ${startingLocation.name as string}`)
   );
   assert.match(latestProviderInput.instructions, /World Context:/);
-  assert.match(latestProviderInput.instructions, /World: Eldermere\./);
+  assert.match(latestProviderInput.instructions, /World: Eldermere,/);
+  assert.match(latestProviderInput.instructions, /The Five Divine Forces:/);
+  assert.match(latestProviderInput.instructions, /The Hearth-Warden:/);
+  assert.match(latestProviderInput.instructions, /The Iron Judge:/);
+  assert.match(latestProviderInput.instructions, /The Deep Currents:/);
+  assert.match(latestProviderInput.instructions, /The Verdant Choir:/);
+  assert.match(latestProviderInput.instructions, /The Ashen Scholar:/);
+  assert.match(latestProviderInput.instructions, /Regions of Eldermere:/);
+  assert.match(latestProviderInput.instructions, /Cael Ambrose:/);
+  assert.match(latestProviderInput.instructions, /Thornwake Vale:/);
+  assert.match(latestProviderInput.instructions, /The Ferrant Concord:/);
+  assert.match(latestProviderInput.instructions, /The Salt Concordat:/);
+  assert.match(latestProviderInput.instructions, /Ashfell Marches:/);
+  assert.match(latestProviderInput.instructions, /The Veiled Reach:/);
+  assert.match(latestProviderInput.instructions, /The Sundered Vale:/);
+  assert.match(
+    latestProviderInput.instructions,
+    new RegExp(`Selected starting region: ${selectedRegion.name as string}\\.`)
+  );
+  assert.match(
+    latestProviderInput.instructions,
+    new RegExp(`Starting settlement: ${startingLocation.name as string}`)
+  );
+  assert.match(latestProviderInput.instructions, /Keep Wellglass rare/);
 });
 
 test("room realtime websocket accepts session cookies and emits events", async () => {
