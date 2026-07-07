@@ -33,6 +33,52 @@ describe("parseHermesDmContract combat roll guard", () => {
     assert.equal(result.rollRequests.length, 0);
   });
 
+  it("does not treat multiplayer character sheet equipment as submitted combat", () => {
+    const result = parseHermesDmContract(
+      contract(
+        "The wounded courier goes still long enough to listen, then points toward the chapel door. What do you do?"
+      ),
+      {
+        currentAction: [
+          "Canonical player characters:",
+          "1. Arden playing Brann",
+          "Character sheet:",
+          "Class: Fighter",
+          "Equipment: longsword, shield, bow",
+          "",
+          "2. Mira playing Selene",
+          "Character sheet:",
+          "Spells: fire bolt, magic missile",
+          "",
+          "Current party actions:",
+          "Arden (Brann): I ask the courier who attacked the village.",
+          "Mira (Selene): I watch the chapel windows."
+        ].join("\n"),
+        currentPlayerAction: [
+          "Arden (Brann): I ask the courier who attacked the village.",
+          "Mira (Selene): I watch the chapel windows."
+        ].join("\n")
+      }
+    );
+
+    assert.equal(result.nextInputNeeded, "player_actions");
+    assert.equal(result.rollRequests.length, 0);
+  });
+
+  it("does not treat non-attacking weapon references as combat actions", () => {
+    const result = parseHermesDmContract(
+      contract(
+        "The wounded guard accepts the sword hilt-first and tells you the bridge is still held. What do you do?"
+      ),
+      {
+        currentPlayerAction: "I offer my sword to the wounded guard hilt-first."
+      }
+    );
+
+    assert.equal(result.nextInputNeeded, "player_actions");
+    assert.equal(result.rollRequests.length, 0);
+  });
+
   it("still rejects an unresolved attack narrated as a hit", () => {
     assert.throws(
       () =>

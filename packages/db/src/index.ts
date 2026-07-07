@@ -1996,12 +1996,7 @@ function formatSoloTurn(player: PlayerRow, content: string) {
 }
 
 function formatMultiplayerTurn(players: PlayerRow[], submissions: SubmissionRow[]) {
-  const actionLines = submissions.map((submission) => {
-    const username = submission.username?.trim() || "Unknown player";
-    const characterName = submission.character_name?.trim() || "Unknown character";
-
-    return `${username} (${characterName}): ${submission.content}`;
-  });
+  const actionLines = formatSubmissionActionLines(submissions);
 
   return [
     formatCanonicalCharacterContext(players),
@@ -2010,6 +2005,19 @@ function formatMultiplayerTurn(players: PlayerRow[], submissions: SubmissionRow[
     "Resolve these submitted actions as one combined party turn. Account for timing, positioning, cooperation, conflict, and consequences across the whole party before asking what happens next.",
     ...actionLines
   ].join("\n");
+}
+
+function formatSubmissionActionLines(submissions: SubmissionRow[]) {
+  return submissions.map((submission) => {
+    const username = submission.username?.trim() || "Unknown player";
+    const characterName = submission.character_name?.trim() || "Unknown character";
+
+    return `${username} (${characterName}): ${submission.content}`;
+  });
+}
+
+function formatSubmittedActionsForCombatGuard(submissions: SubmissionRow[]) {
+  return formatSubmissionActionLines(submissions).join("\n");
 }
 
 function formatOpeningSceneRequest(input: {
@@ -3087,7 +3095,7 @@ export async function submitRoomTurnForUser(
         dungeonMasterInstructions,
         true,
         submitState.turn.id,
-        currentAction
+        formatSubmittedActionsForCombatGuard(submitState.submissions)
       );
       const resolvedTurn = await finishResolvedTurn(db, {
         campaignId: submitState.campaign.id,

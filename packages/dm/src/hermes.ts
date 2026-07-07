@@ -188,7 +188,7 @@ function currentActionRequiresCombatRoll(currentAction: string | undefined) {
     return false;
   }
 
-  return /\b(attack|attacks|strike|strikes|stab|stabs|shoot|shoots|fireball|fire bolt|magic missile|cast|casts|spell|rapier|sword|bow|axe|dagger)\b/i.test(
+  return /\b(attack|attacks|strike|strikes|stab|stabs|shoot|shoots|slash|slashes|thrust|thrusts|swing|swings|loose|looses|fireball|fire bolt|magic missile|cast|casts)\b/i.test(
     currentAction
   );
 }
