@@ -5,11 +5,13 @@ import {
   debugHermesDmContractFailure,
   dungeonMasterInstructions,
   eldermereMetadataProfile,
-  eldermereOpeningPromptContext,
+  eldermereRegions,
   eldermereTurnPromptContext,
+  formatEldermereOpeningPromptContext,
   openingSceneRequest,
   parseHermesDmContract,
   isEldermerePreset,
+  type EldermereCampaignStart,
   type AiDebugInfo,
   type GameMessage,
   type HermesDmContractParseOptions,
@@ -520,6 +522,11 @@ function campaignWorldName(campaign: CampaignRow) {
     typeof worldProfile.worldName === "string"
       ? worldProfile.worldName.trim()
       : "";
+  const profileStartingLocation = eventPayload(worldProfile.startingLocation);
+  const profileStartingLocationName =
+    typeof profileStartingLocation.name === "string"
+      ? profileStartingLocation.name.trim()
+      : "";
   const customWorldName =
     typeof genre.customWorldName === "string" ? genre.customWorldName.trim() : "";
 
@@ -527,6 +534,7 @@ function campaignWorldName(campaign: CampaignRow) {
     displayLocation ||
     startingLocation ||
     worldName ||
+    profileStartingLocationName ||
     profileWorldName ||
     customWorldName ||
     campaign.title
@@ -547,10 +555,49 @@ function campaignOpeningStyleFromMetadata(campaign: CampaignRow): CampaignOpenin
 
 function campaignWorldProfileMetadata(input: {
   campaignGenrePresetId?: string | undefined;
+  eldermereStart?: EldermereCampaignStart | undefined;
 }) {
   return isEldermerePreset(input.campaignGenrePresetId)
-    ? { worldProfile: eldermereMetadataProfile() }
+    ? { worldProfile: eldermereMetadataProfile(input.eldermereStart) }
     : {};
+}
+
+function randomEldermereCampaignStart(): EldermereCampaignStart {
+  const region = eldermereRegions[randomInt(0, eldermereRegions.length)];
+
+  if (!region) {
+    throw new Error("Eldermere has no configured regions.");
+  }
+
+  const settlement =
+    region.settlements[randomInt(0, region.settlements.length)];
+
+  if (!settlement) {
+    throw new Error(`Eldermere region ${region.name} has no settlements.`);
+  }
+
+  return { region, settlement };
+}
+
+function eldermereCampaignStartFromMetadata(
+  campaign: Pick<CampaignRow, "metadata">
+): EldermereCampaignStart | undefined {
+  const metadata = eventPayload(campaign.metadata);
+  const worldProfile = eventPayload(metadata.worldProfile);
+  const selectedRegion = eventPayload(worldProfile.selectedRegion);
+  const startingLocation = eventPayload(worldProfile.startingLocation);
+  const regionName =
+    typeof selectedRegion.name === "string" ? selectedRegion.name.trim() : "";
+  const settlementName =
+    typeof startingLocation.name === "string"
+      ? startingLocation.name.trim()
+      : "";
+  const region = eldermereRegions.find((candidate) => candidate.name === regionName);
+  const settlement = region?.settlements.find(
+    (candidate) => candidate.name === settlementName
+  );
+
+  return region && settlement ? { region, settlement } : undefined;
 }
 
 function hasEldermereWorldProfile(campaign: Pick<CampaignRow, "metadata">) {
@@ -577,7 +624,13 @@ function withEldermereOpeningContext(message: string, campaign: CampaignRow) {
     return message;
   }
 
-  return [message, "", eldermereOpeningPromptContext].join("\n");
+  return [
+    message,
+    "",
+    formatEldermereOpeningPromptContext(
+      eldermereCampaignStartFromMetadata(campaign)
+    )
+  ].join("\n");
 }
 
 function withEldermereTurnContext(
@@ -996,6 +1049,9 @@ export async function createCampaignForMode(
   }
 ): Promise<CampaignSummary> {
   const sessionId = `ai-dnd-${randomUUID()}`;
+  const eldermereStart = isEldermerePreset(input.campaignGenrePresetId)
+    ? randomEldermereCampaignStart()
+    : undefined;
   const genreMetadata = {
     genre: {
       kind: input.campaignGenreKind ?? "preset",
@@ -1006,7 +1062,8 @@ export async function createCampaignForMode(
       customWorldDescription: input.customWorldDescription ?? null
     },
     ...campaignWorldProfileMetadata({
-      campaignGenrePresetId: input.campaignGenrePresetId
+      campaignGenrePresetId: input.campaignGenrePresetId,
+      eldermereStart
     })
   };
 

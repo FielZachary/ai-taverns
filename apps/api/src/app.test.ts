@@ -1328,10 +1328,18 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   );
   const metadata = campaign?.metadata as Record<string, unknown>;
   const worldProfile = metadata.worldProfile as Record<string, unknown>;
+  const selectedRegion = worldProfile.selectedRegion as Record<string, unknown>;
+  const startingLocation = worldProfile.startingLocation as Record<
+    string,
+    unknown
+  >;
   const latestProviderInput = providerInputs.at(-1);
 
   assert.equal(worldProfile.worldName, "Eldermere");
   assert.equal(worldProfile.source, "flagship_world");
+  assert.equal(typeof selectedRegion.name, "string");
+  assert.equal(typeof startingLocation.name, "string");
+  assert.equal(startingLocation.displayLocation, startingLocation.name);
   assert.ok(latestProviderInput);
   assert.match(latestProviderInput.message, /Flagship world context:/);
   assert.match(latestProviderInput.message, /setting\.world_name as "Eldermere"/);
@@ -1344,7 +1352,17 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(latestProviderInput.message, /The Veiled Reach:/);
   assert.match(latestProviderInput.message, /The Sundered Vale:/);
   assert.match(latestProviderInput.message, /Wellglass is finite/);
-  assert.match(latestProviderInput.message, /choose one primary region/);
+  assert.doesNotMatch(latestProviderInput.message, /Recurring live conflicts:/);
+  assert.match(latestProviderInput.message, /Selected opener region and settlement:/);
+  assert.match(latestProviderInput.message, /use this selected region and settlement/);
+  assert.match(
+    latestProviderInput.message,
+    new RegExp(`Region: ${selectedRegion.name as string}\\.`)
+  );
+  assert.match(
+    latestProviderInput.message,
+    new RegExp(`Starting settlement: ${startingLocation.name as string}`)
+  );
   assert.match(latestProviderInput.instructions, /World Context:/);
   assert.match(latestProviderInput.instructions, /World: Eldermere\./);
 });

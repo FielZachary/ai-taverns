@@ -36,21 +36,352 @@ export const eldermereWorldProfile = {
 
 export const eldermerePresetId = "eldermere";
 
+export type EldermereSettlement = {
+  name: string;
+  type: string;
+  draw: string;
+  rememberedDetail: string;
+  friction: string;
+};
+
+export type EldermereRegion = {
+  name: string;
+  summary: string;
+  internalConflict: string;
+  externalConflict: string;
+  goodFor: string;
+  settlements: EldermereSettlement[];
+};
+
+export type EldermereCampaignStart = {
+  region: EldermereRegion;
+  settlement: EldermereSettlement;
+};
+
+export const eldermereRegions: EldermereRegion[] = [
+  {
+    name: "Cael Ambrose",
+    summary:
+      "The largest human feudal kingdom, a breadbasket of farms, river towns, guest-right customs, Hearth-Warden hospitality, and still-glowing Old Roads.",
+    internalConflict:
+      "The Sevrantine schism between the Undying Charter and the Unbound Word.",
+    externalConflict: "Ashfell pressure over grazing land and old oaths.",
+    goodFor:
+      "haunted roads, knights in crisis, harvest villages, river towns, and Old Road mysteries",
+    settlements: [
+      {
+        name: "Suncross",
+        type: "capital",
+        draw:
+          "Built where five Old Roads physically converge; the seat of the crown and the Undying Charter's mother chapel.",
+        rememberedDetail:
+          "The crossing stones glow brightly enough to read by, and commoners gather there nightly to trade and gossip on crown ground.",
+        friction:
+          "The Charter's roster of suspected Unbound Word converts is compiled here, and quiet informing is fraying neighborly trust.",
+      },
+      {
+        name: "Thistlebridge",
+        type: "river town",
+        draw:
+          "A Sern bridge town where every barge of grain bound for the coast passes through.",
+        rememberedDetail:
+          "The miller's guild effectively runs the town and settles disputes faster than the crown's courts do.",
+        friction:
+          "A bad flood or harvest here ripples all the way to Salt Concordat bread prices.",
+      },
+      {
+        name: "Greyfold",
+        type: "border town",
+        draw:
+          "A garrison-market town on contested grazing land, half Cael Ambrose smallholders and half families with Ashfell in-laws.",
+        rememberedDetail:
+          "The town shrine has two altars, one to Sevrantine and one quietly to Baragh, with one priest serving both.",
+        friction:
+          "It is the likeliest flashpoint if the Ashfell border dispute goes hot, and everyone has a bag half-packed.",
+      },
+    ],
+  },
+  {
+    name: "Thornwake Vale",
+    summary:
+      "An old-growth forest confederation with no capital, governed by rotating grove-speakers and bound to the Verdant Choir.",
+    internalConflict: "Sylla-aligned openness versus Thornmother isolation.",
+    externalConflict:
+      "Cael Ambrose logging charters and Ferrant Concord prospectors keep testing the border.",
+    goodFor:
+      "living forests, Wellglass-sap visions, trade truces, taboo-breaking outsiders, and green twilight magic",
+    settlements: [
+      {
+        name: "Sallowholt",
+        type: "ancestral first grove",
+        draw:
+          "The one grove every Vale-dweller agrees matters, Sylla- and Thornmother-aligned alike.",
+        rememberedDetail:
+          "Its council chamber is a living dome of grown branches supposedly older than the Graywake.",
+        friction:
+          "Because it is neutral ground, it is where the Sylla/Thornmother argument gets loudest.",
+      },
+      {
+        name: "Bramblegate",
+        type: "border trade town",
+        draw:
+          "The only place the timber trade with Cael Ambrose actually gets negotiated face to face.",
+        rememberedDetail:
+          "The town gate is a living arch that visibly tightens when the Vale's mood toward outsiders sours.",
+        friction:
+          "Yearly skirmishes over cut timber are becoming normal, and Bramblegate absorbs it first.",
+      },
+      {
+        name: "Thorn's Hollow",
+        type: "isolationist grove",
+        draw: "Almost nobody goes there on purpose.",
+        rememberedDetail:
+          "The trail narrows to nothing as if the forest is actively discouraging the trip.",
+        friction:
+          "Ferrant Concord prospectors who have gone in have not all come back out.",
+      },
+    ],
+  },
+  {
+    name: "The Ferrant Concord",
+    summary:
+      "A dwarf-and-human guild-republic in reclaimed Second Dominion mine tunnels, driven by a 'we will out-build the ancients' ethos.",
+    internalConflict:
+      "Foundry politics and black-market Wellglass before the Foundry Moot.",
+    externalConflict: "Ashfell raids and Idle Wardens in the deep tunnels.",
+    goodFor:
+      "guild intrigue, construct problems, mine expeditions, and ambitious artificers",
+    settlements: [
+      {
+        name: "Ironhold",
+        type: "capital",
+        draw:
+          "The seat of the Foundry Moot and the deepest, oldest reclaimed mountain-hall.",
+        rememberedDetail:
+          "Brass servitors do dull and dangerous work while the Moot election turns the capital into a season-long guild brawl.",
+        friction:
+          "The Cinderhalt Foundry's black-market Wellglass scandal is about to blow the Moot wide open.",
+      },
+      {
+        name: "Cragfoot",
+        type: "foothill mining town",
+        draw: "Rich surface veins too shallow to be worth full Concord garrisoning.",
+        rememberedDetail:
+          "Watchfires burn on the ridgeline every night of raiding season.",
+        friction:
+          "It is the softest target on the Concord's border, and everyone there knows it.",
+      },
+      {
+        name: "Dredgehall",
+        type: "deep-tunnel outpost",
+        draw:
+          "The last supplied waypoint before sealed lower tunnels where Idle Wardens still hold ground.",
+        rememberedDetail:
+          "Its bounty board pays anyone willing to get a stand-down order acknowledged by a rogue construct.",
+        friction: "Crews go in more often than they come back out whole.",
+      },
+    ],
+  },
+  {
+    name: "The Salt Concordat",
+    summary:
+      "A league of independent port city-states bound by maritime law, tariffs, fleets, and worship of the Deep Currents.",
+    internalConflict:
+      "Corvane and Selwick rivalry over lighthouses and trade.",
+    externalConflict:
+      "The Drowned Choir cult preys from a sunken Second Dominion city.",
+    goodFor:
+      "harbor intrigue, shipwreck debts, lighthouse politics, piracy, fog, reefs, and drowned-city dives",
+    settlements: [
+      {
+        name: "Corvane",
+        type: "major port",
+        draw: "The deepest natural harbor and the dominant merchant fleet.",
+        rememberedDetail:
+          "The harbor is a forest of masts, and the lighthouse-fleet flagship is paraded on feast days.",
+        friction:
+          "The tariff war with Selwick is one bad season from open naval conflict.",
+      },
+      {
+        name: "Selwick",
+        type: "rival port",
+        draw: "A safer harbor and the Concordat's finest shipwrights.",
+        rememberedDetail:
+          "Half the town always seems to be building or repairing something, while dockhands quietly vet outsiders.",
+        friction:
+          "Selwick plays the wronged underdog while it quietly outbuilds Corvane's fleet.",
+      },
+      {
+        name: "Skerrywatch",
+        type: "isle-and-reef fishing village",
+        draw: "Rich fishing grounds and safe anchorage among the reefs.",
+        rememberedDetail:
+          "The village keeps its own tide-count, worships Kethuun rather than Nyxandra, and treats city politics as distant noise.",
+        friction:
+          "Drowned Choir raiders know these reefs as well as the locals, and the raids are worsening.",
+      },
+    ],
+  },
+  {
+    name: "Ashfell Marches",
+    summary:
+      "A proud horse-and-raid clan confederation on windswept high plains, organized around oath-rings and the Iron Judge's Baragh mask.",
+    internalConflict:
+      "A succession crisis after the Oath-Ring Warden died without a clear heir.",
+    externalConflict:
+      "Cael Ambrose settlement and Ferrant mining claims squeeze grazing land.",
+    goodFor:
+      "clan politics, hard hospitality, peace envoys, border raids, and bone-reading prophecy",
+    settlements: [
+      {
+        name: "Wardring",
+        type: "seat-camp",
+        draw:
+          "The traditional seat-camp of the Oath-Ring Warden, now contested by rival claimants.",
+        rememberedDetail:
+          "Two rival banners are visible from the same ridge, close enough to see each other's watchfires.",
+        friction:
+          "Whichever claimant blinks first, or does not, decides whether this becomes a real war.",
+      },
+      {
+        name: "Greyfold",
+        type: "border garrison-market town",
+        draw:
+          "The shared Cael Ambrose/Ashfell market town where both peoples still trade honestly.",
+        rememberedDetail:
+          "Its shrine keeps Sevrantine and Baragh altars side by side.",
+        friction:
+          "Every family has ties across the border, and every family knows a war would split them.",
+      },
+      {
+        name: "Bonehollow",
+        type: "shaman gathering place",
+        draw: "The only place to get prophecy this specific and this eerie.",
+        rememberedDetail:
+          "Old construct-bone fragments click faintly in strong wind, like something trying to speak.",
+        friction:
+          "Some shamans now wonder whether they are reading the bones, or the bones are reading them.",
+      },
+    ],
+  },
+  {
+    name: "The Veiled Reach",
+    summary:
+      "A small, magic-poor highland theocracy devoted to the Ashen Scholar, ruled by the Curia of Watchers and defined by Wellglass hoarding.",
+    internalConflict:
+      "Reformists who want to spend the hoard for defense versus orthodox Watchers who insist hoarding must continue.",
+    externalConflict:
+      "Cael Ambrose, the Ferrant Concord, and cult thieves all want the hoard.",
+    goodFor:
+      "austere monasteries, forbidden ledgers, negotiations, thefts, and visions from a Second Dominion observatory",
+    settlements: [
+      {
+        name: "Veiled Rest",
+        type: "capital observatory-settlement",
+        draw:
+          "The Curia's seat, built inside a still-partially-active Second Dominion observatory.",
+        rememberedDetail:
+          "Several Watchers have gone mad or vanished fasting before the observatory, and everyone knows exactly who and when.",
+        friction:
+          "The reform-versus-orthodox split over whether to spend the hoard is playing out inside these walls.",
+      },
+      {
+        name: "Thanewell",
+        type: "dependent farming village",
+        draw: "The village that actually feeds the Reach.",
+        rememberedDetail:
+          "Barley terraces cut into thin, cold soil, and a quiet resentment of feeding a theocracy that will not spend its hoard on defense.",
+        friction:
+          "Thanewell's people know they are necessary and still treated as secondary.",
+      },
+      {
+        name: "The Sisters' Gate",
+        type: "garrisoned pass",
+        draw: "The only legal way into the Reach.",
+        rememberedDetail:
+          "Watcher-sworn guards turn back most travelers without much explanation.",
+        friction:
+          "The guards do not seem to feel they owe outsiders a reason for refusal.",
+      },
+    ],
+  },
+  {
+    name: "The Sundered Vale",
+    summary:
+      "A lawless ruin-delving frontier on the worst-scarred ground of the Graywake, co-administered through the fragile Claim-Stake Accord.",
+    internalConflict:
+      "Rival Claim Warden companies backed by different powers clash over richer sites.",
+    externalConflict:
+      "Bleed Zones, Graywake-touched monsters, unstable ruins, and time-loop chambers.",
+    goodFor:
+      "claim disputes, boomtowns, dangerous delves, reality scars, and immediate adventure pressure",
+    settlements: [
+      {
+        name: "Stakehold",
+        type: "claim-camp",
+        draw:
+          "Accord headquarters and the only place with real law, banking, and neutral ground between rival Warden companies.",
+        rememberedDetail:
+          "The town is built from salvaged ruin-stone and camp timber under a rotating tri-power flag.",
+        friction:
+          "The Accord is fraying, and Stakehold's neutral-ground reputation is being tested.",
+      },
+      {
+        name: "Rimshaft",
+        type: "rush-camp",
+        draw:
+          "A rich Wellglass vein worth working despite sitting on an active Bleed Zone.",
+        rememberedDetail:
+          "A strict evacuation bell-schedule that everyone treats with total seriousness.",
+        friction: "It is overdue for a real venting, and everyone knows it.",
+      },
+      {
+        name: "Vail Choir",
+        type: "sealed vault claim",
+        draw:
+          "The original sealed vault, now the richest and most infamous claim in the Vale.",
+        rememberedDetail:
+          "Parts of it are still replaying the day the Wellspring cracked, on a loop.",
+        friction:
+          "Whoever holds Vail Choir holds the Vale's biggest bargaining chip, and no company keeps it for long.",
+      },
+    ],
+  },
+];
+
 export function isEldermerePreset(presetId: string | null | undefined) {
   return presetId === eldermerePresetId;
 }
 
-export function eldermereMetadataProfile() {
+export function eldermereMetadataProfile(start?: EldermereCampaignStart) {
   return {
     worldName: eldermereWorldProfile.worldName,
     genre: eldermereWorldProfile.genre,
     source: "flagship_world",
-    selectedRegion: null,
-    startingLocation: null,
+    selectedRegion: start
+      ? {
+          name: start.region.name,
+          identity: start.region.summary,
+          internalConflict: start.region.internalConflict,
+          externalConflict: start.region.externalConflict,
+          startingHooks: [start.region.goodFor],
+        }
+      : null,
+    startingLocation: start
+      ? {
+          name: start.settlement.name,
+          type: start.settlement.type,
+          displayLocation: start.settlement.name,
+          frictionPoint: start.settlement.friction,
+        }
+      : null,
   };
 }
 
-export const eldermereOpeningPromptContext = [
+export function formatEldermereOpeningPromptContext(
+  start?: EldermereCampaignStart,
+) {
+  return [
   "Flagship world context:",
   "World: Eldermere.",
   "Genre: anchored high fantasy adventure.",
@@ -59,21 +390,35 @@ export const eldermereOpeningPromptContext = [
   "History to preserve: the Age of Dawning Blood is the mythic origin of magic, when divine ichor became the Wellspring. The Second Dominion, also called the Sunfall Compact, was the god-touched magocratic empire that raised the Old Roads and built most ruins worth delving. The Graywake was the divine civil war that cracked the Wellspring and drove the gods into silence. The Hush was the long aftermath. The Kindling is the current age, marked by new Bleed Zones, ruin-delving industry, and escalating religious and political conflict.",
   "Magic rules: ordinary spellcraft is reproducible and teachable, but the strongest magic requires Wellglass: crystallized, refined godsblood scavenged from Second Dominion ruins. Wellglass is finite, expensive, and consumed when used. True resurrection, permanent teleportation circles, city-scale wards, artifact crafting, and major constructs should not be casual. Mundane travel, steel, skill, politics, debt, and courage still matter.",
   "Pantheon rules: Eldermere has five Divine Forces: the Hearth-Warden, the Iron Judge, the Deep Currents, the Verdant Choir, and the Ashen Scholar. The gods speak through omens, dreams, and masks, never through plain reliable instruction. Clerics and paladins receive revocable divine gifts. Warlocks do not pact with true Divine Forces; they pact with Unmasked god-fragments left by the Graywake.",
-  "Recurring live conflicts: the Iron Judge's Sevrantine mask is split between the Undying Charter's oath-upward feudal orthodoxy and the Unbound Word's claim that oaths should be freely sworn between equals. The Sundered Vale's Claim-Stake Accord is fraying. Every region should have both internal and external pressure.",
   "",
   "Seven regions available for the opener:",
-  "- Cael Ambrose: the largest human feudal kingdom, a breadbasket of farms, river towns, guest-right customs, Hearth-Warden hospitality, and still-glowing Old Roads. Internal conflict: the Sevrantine schism between the Undying Charter and the Unbound Word. External conflict: Ashfell pressure over grazing land and old oaths. Great for haunted roads, knights in crisis, harvest villages, river towns, and Old Road mysteries.",
-  "- Thornwake Vale: an old-growth forest confederation with no capital, governed by rotating grove-speakers and bound to the Verdant Choir. Internal conflict: Sylla-aligned openness versus Thornmother isolation. External conflict: Cael Ambrose logging charters and Ferrant Concord prospectors. Great for living forests, Wellglass-sap visions, trade truces, taboo-breaking outsiders, and green twilight magic.",
-  "- The Ferrant Concord: a dwarf-and-human guild-republic in reclaimed Second Dominion mine tunnels, driven by a 'we will out-build the ancients' ethos. Brass-and-Wellglass servitors work its streets. Internal conflict: Foundry politics and black-market Wellglass before the Foundry Moot. External conflict: Ashfell raids and Idle Wardens in the deep tunnels. Great for guild intrigue, construct problems, mine expeditions, and ambitious artificers.",
-  "- The Salt Concordat: a league of independent port city-states bound by maritime law, tariffs, fleets, and worship of the Deep Currents. Internal conflict: Corvane and Selwick rivalry over lighthouses and trade. External conflict: the Drowned Choir cult preying from a sunken Second Dominion city. Great for harbor intrigue, shipwreck debts, lighthouse politics, piracy, fog, reefs, and drowned-city dives.",
-  "- Ashfell Marches: a proud horse-and-raid clan confederation on windswept high plains, organized around oath-rings and the Iron Judge's Baragh mask. Internal conflict: succession crisis after the Oath-Ring Warden died without a clear heir. External conflict: Cael Ambrose settlement and Ferrant mining claims squeezing grazing land. Great for clan politics, hard hospitality, peace envoys, border raids, and bone-reading prophecy.",
-  "- The Veiled Reach: a small, magic-poor highland theocracy devoted to the Ashen Scholar, ruled by the Curia of Watchers. It hoards Wellglass by doctrine rather than spending it. Internal conflict: reformists who want to spend the hoard for defense versus orthodox Watchers who insist hoarding must continue. External conflict: Cael Ambrose, the Ferrant Concord, and cult thieves all want the hoard. Great for austere monasteries, forbidden ledgers, negotiations, thefts, and visions from a Second Dominion observatory.",
-  "- The Sundered Vale: not a nation, but a lawless ruin-delving frontier on the worst-scarred ground of the Graywake, co-administered by Cael Ambrose, the Ferrant Concord, and the Salt Concordat through the Claim-Stake Accord. Internal conflict: rival Claim Warden companies backed by different powers. External conflict: Bleed Zones, Graywake-touched monsters, unstable ruins, and time-loop chambers. Great for claim disputes, boomtowns, dangerous delves, reality scars, and immediate adventure pressure.",
+  ...eldermereRegions.map(
+    (region, index) =>
+      `${index + 1}. ${region.name}: ${region.summary} Internal conflict: ${region.internalConflict} External conflict: ${region.externalConflict} Great for ${region.goodFor}.`,
+  ),
   "",
-  "Opening region rule: choose one primary region for the campaign opener and make its local identity, conflict, and sensory details concrete. Do not mash all seven regions into the first scene. Mention other regions only if they are directly relevant as trade partners, rivals, rumors, or distant pressure.",
-  "Starting rule: there is no fixed canonical starting town. Choose a named starting place from a region, settlement, road, ruin, camp, city district, or landmark. Do not use a genre label as the location.",
+  ...(start
+    ? [
+        "Selected opener region and settlement:",
+        `Region: ${start.region.name}. ${start.region.summary}`,
+        `Region internal conflict: ${start.region.internalConflict}`,
+        `Region external conflict: ${start.region.externalConflict}`,
+        `Starting settlement: ${start.settlement.name} (${start.settlement.type}).`,
+        `What draws people: ${start.settlement.draw}`,
+        `What a visitor remembers: ${start.settlement.rememberedDetail}`,
+        `Settlement friction: ${start.settlement.friction}`,
+        "Opening region rule: use this selected region and settlement as the concrete start. Do not choose a different primary region or starting settlement. Mention other regions only if directly relevant as trade partners, rivals, rumors, or distant pressure.",
+      ]
+    : [
+        "Opening region rule: choose one primary region for the campaign opener and make its local identity, conflict, and sensory details concrete. Do not mash all seven regions into the first scene. Mention other regions only if directly relevant as trade partners, rivals, rumors, or distant pressure.",
+      ]),
+  "Starting rule: there is no fixed canonical starting town. Use a named starting place from a region, settlement, road, ruin, camp, city district, or landmark. Do not use a genre label as the location.",
   'Opening setting requirement: include setting.world_name as "Eldermere" and choose concrete values for setting.starting_location and setting.display_location.',
-].join("\n");
+  ].join("\n");
+}
+
+export const eldermereOpeningPromptContext =
+  formatEldermereOpeningPromptContext();
 
 export const eldermereTurnPromptContext = [
   "World Context:",
