@@ -686,6 +686,28 @@ class FakeDatabase {
       return { rows: [] as T[] };
     }
 
+    if (normalizedSql.startsWith("update campaigns set metadata = jsonb_set")) {
+      const campaignId = values[0] as string;
+      const openingPlan = JSON.parse(values[1] as string) as Record<
+        string,
+        unknown
+      >;
+      const campaign = this.campaigns.find(
+        (candidate) => candidate.id === campaignId
+      );
+
+      if (campaign) {
+        campaign.metadata = {
+          ...(campaign.metadata as Record<string, unknown>),
+          eldermereOpeningPlan: openingPlan,
+          eldermereOpeningPlanVersion: 1
+        };
+        campaign.updated_at = new Date();
+      }
+
+      return { rows: [] as T[] };
+    }
+
     if (normalizedSql.startsWith("update campaigns set metadata = case")) {
       const campaignId = values[0] as string;
       const campaign = this.campaigns.find(
@@ -1041,8 +1063,105 @@ before(async () => {
           message: input.message,
           instructions: input.instructions
         });
+        if (input.instructions.includes("campaign-opening planner")) {
+          const selectedRegion =
+            input.message.match(/Region: ([^.]+)\./)?.[1] ?? "Cael Ambrose";
+          const startingLocation =
+            input.message.match(/Starting settlement: ([^(.\n]+)/)?.[1]?.trim() ??
+            "Suncross";
+
+          return {
+            id: "provider-planner-1",
+            content: JSON.stringify({
+              campaign_title: "The Quiet Road",
+              region: {
+                name: selectedRegion,
+                why_this_region: "It gives the opener a concrete local conflict.",
+                plain_description: "A troubled Eldermere region with pressure close enough to touch."
+              },
+              starting_location: {
+                name: startingLocation,
+                type: "settlement",
+                why_this_location: "It is the selected campaign start.",
+                plain_description: "A specific place where the first problem is already visible."
+              },
+              opening_premise: {
+                why_the_party_is_here: "The party has come to answer a local summons.",
+                immediate_objective: "Find the person who sent for them.",
+                immediate_complication: "The locals are afraid to explain what happened.",
+                first_scene_location: "At the edge of the starting settlement.",
+                opening_mood: "watchful and tense",
+                campaign_promise: "A grounded mystery with old power underneath it."
+              },
+              player_facing_facts: [
+                "The party has a reason to be here now.",
+                "Someone local needs help and is afraid."
+              ],
+              allowed_player_facing_terms: [
+                {
+                  term: selectedRegion,
+                  plain_meaning: "the larger region where the campaign begins"
+                },
+                {
+                  term: startingLocation,
+                  plain_meaning: "the settlement where the first scene begins"
+                }
+              ],
+              npc_seed: [
+                {
+                  name: "Mara Vell",
+                  role: "a worried local messenger",
+                  wants: "help without drawing official attention",
+                  visible_behavior: "keeps watching the street behind her"
+                }
+              ],
+              first_interactable_choices: [
+                "question Mara Vell",
+                "inspect the marked doorway",
+                "ask nearby locals what frightened them"
+              ],
+              sensory_palette: {
+                sights: ["a marked doorway", "lanterns lit early"],
+                sounds: ["low voices", "boots on stone"],
+                smells: ["cold rain"],
+                textures_or_weather: ["damp air"]
+              },
+              dm_private_context: [
+                "Old world lore may matter later, but should not be named in the opening."
+              ],
+              forbidden_opening_terms: [
+                "Second Dominion",
+                "Graywake",
+                "Wellglass",
+                "Curia of Watchers",
+                "Ashen Scholar"
+              ],
+              narrator_instructions: [
+                "Use the allowed terms only.",
+                "Explain each allowed term plainly."
+              ],
+              opening_quality_checks: [
+                "No forbidden opening terms appear.",
+                "The first choices are clear."
+              ]
+            }),
+            debug: {
+              requestMessages: [],
+              rawResponse: "{}",
+              model: "test-model",
+              providerTimings: []
+            }
+          };
+        }
         const publicNarration =
           "A lantern flickers over the old road as your adventure begins.\n\nA weathered sign points toward a ruined watchtower beyond the trees.\n\nWhat do you do?";
+        const isEldermereNarrator = input.message.includes(
+          'Set setting.world_name to "Eldermere".'
+        );
+        const eldermereStartingLocation =
+          input.message.match(
+            /Set setting\.starting_location and setting\.display_location to "([^"]+)"/
+          )?.[1] ?? "Old Road";
 
         input.onPublicNarrationDelta?.(publicNarration.slice(0, 28));
         input.onPublicNarrationDelta?.(publicNarration.slice(28));
@@ -1056,9 +1175,13 @@ before(async () => {
             input_targets: [],
             input_policy: "all_players",
             setting: {
-              display_location: "Old Road",
-              world_name: "Test Realm",
-              starting_location: "Old Road"
+              display_location: isEldermereNarrator
+                ? eldermereStartingLocation
+                : "Old Road",
+              world_name: isEldermereNarrator ? "Eldermere" : "Test Realm",
+              starting_location: isEldermereNarrator
+                ? eldermereStartingLocation
+                : "Old Road"
             }
           }),
           debug: {
@@ -1333,89 +1456,82 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
     string,
     unknown
   >;
-  const latestProviderInput = providerInputs.at(-1);
+  const openingPlan = metadata.eldermereOpeningPlan as Record<string, unknown>;
+  const plannerInput = providerInputs.at(0);
+  const narratorInput = providerInputs.at(1);
 
   assert.equal(worldProfile.worldName, "Eldermere");
   assert.equal(worldProfile.source, "flagship_world");
   assert.equal(typeof selectedRegion.name, "string");
   assert.equal(typeof startingLocation.name, "string");
   assert.equal(startingLocation.displayLocation, startingLocation.name);
-  assert.ok(latestProviderInput);
-  assert.match(latestProviderInput.message, /Flagship world context:/);
-  assert.match(latestProviderInput.message, /setting\.world_name as "Eldermere"/);
-  assert.match(latestProviderInput.message, /Seven regions available for the opener:/);
-  assert.match(latestProviderInput.message, /Cael Ambrose:/);
-  assert.match(latestProviderInput.message, /Thornwake Vale:/);
-  assert.match(latestProviderInput.message, /The Ferrant Concord:/);
-  assert.match(latestProviderInput.message, /The Salt Concordat:/);
-  assert.match(latestProviderInput.message, /Ashfell Marches:/);
-  assert.match(latestProviderInput.message, /The Veiled Reach:/);
-  assert.match(latestProviderInput.message, /The Sundered Vale:/);
-  assert.match(latestProviderInput.message, /Wellglass is finite/);
-  assert.doesNotMatch(latestProviderInput.message, /Recurring live conflicts:/);
-  assert.match(latestProviderInput.message, /Selected opener region and settlement:/);
-  assert.match(latestProviderInput.message, /use this selected region and settlement/);
-  assert.match(latestProviderInput.message, /Opening lore clarity rule:/);
+  assert.equal(metadata.eldermereOpeningPlanVersion, 1);
+  assert.equal(openingPlan.campaign_title, "The Quiet Road");
+  assert.equal(providerInputs.length, 2);
+
+  assert.ok(plannerInput);
+  assert.match(plannerInput.instructions, /campaign-opening planner/);
+  assert.match(plannerInput.message, /Flagship world context:/);
+  assert.match(plannerInput.message, /setting\.world_name as "Eldermere"/);
+  assert.match(plannerInput.message, /Seven regions available for the opener:/);
+  assert.match(plannerInput.message, /Cael Ambrose:/);
+  assert.match(plannerInput.message, /Thornwake Vale:/);
+  assert.match(plannerInput.message, /The Ferrant Concord:/);
+  assert.match(plannerInput.message, /The Salt Concordat:/);
+  assert.match(plannerInput.message, /Ashfell Marches:/);
+  assert.match(plannerInput.message, /The Veiled Reach:/);
+  assert.match(plannerInput.message, /The Sundered Vale:/);
+  assert.match(plannerInput.message, /Wellglass is finite/);
+  assert.doesNotMatch(plannerInput.message, /Recurring live conflicts:/);
+  assert.match(plannerInput.message, /Selected opener region and settlement:/);
+  assert.match(plannerInput.message, /use this selected region and settlement/);
+  assert.match(plannerInput.message, /Opening lore clarity rule:/);
   assert.match(
-    latestProviderInput.message,
+    plannerInput.message,
     /use no more than 2-3 new Eldermere-specific proper nouns/
   );
   assert.match(
-    latestProviderInput.message,
+    plannerInput.message,
     /Do not mention faction names, religious schisms, ancient ages, distant regions, or extra institutions/
   );
   assert.match(
-    latestProviderInput.message,
+    plannerInput.message,
     /the strict temple faction/
   );
   assert.match(
-    latestProviderInput.message,
+    plannerInput.message,
     new RegExp(`Region: ${selectedRegion.name as string}\\.`)
   );
   assert.match(
-    latestProviderInput.message,
+    plannerInput.message,
     new RegExp(`Starting settlement: ${startingLocation.name as string}`)
   );
-  assert.match(latestProviderInput.instructions, /World Context:/);
-  assert.match(latestProviderInput.instructions, /World: Eldermere,/);
-  assert.match(latestProviderInput.instructions, /The Five Divine Forces:/);
-  assert.match(latestProviderInput.instructions, /The Hearth-Warden:/);
-  assert.match(latestProviderInput.instructions, /The Iron Judge:/);
-  assert.match(latestProviderInput.instructions, /The Deep Currents:/);
-  assert.match(latestProviderInput.instructions, /The Verdant Choir:/);
-  assert.match(latestProviderInput.instructions, /The Ashen Scholar:/);
-  assert.match(latestProviderInput.instructions, /Regions of Eldermere:/);
-  assert.match(latestProviderInput.instructions, /Cael Ambrose:/);
-  assert.match(latestProviderInput.instructions, /Thornwake Vale:/);
-  assert.match(latestProviderInput.instructions, /The Ferrant Concord:/);
-  assert.match(latestProviderInput.instructions, /The Salt Concordat:/);
-  assert.match(latestProviderInput.instructions, /Ashfell Marches:/);
-  assert.match(latestProviderInput.instructions, /The Veiled Reach:/);
-  assert.match(latestProviderInput.instructions, /The Sundered Vale:/);
+
+  assert.ok(narratorInput);
+  assert.match(narratorInput.message, /Eldermere opening plan:/);
+  assert.match(narratorInput.message, /Narrator boundary:/);
+  assert.match(narratorInput.message, /allowed_player_facing_terms/);
+  assert.match(narratorInput.message, /forbidden_opening_terms/);
+  assert.match(narratorInput.message, /Second Dominion/);
+  assert.doesNotMatch(narratorInput.message, /Flagship world context:/);
+  assert.doesNotMatch(narratorInput.message, /Seven regions available for the opener:/);
+  assert.doesNotMatch(narratorInput.instructions, /World Context:/);
+  assert.doesNotMatch(narratorInput.instructions, /Regions of Eldermere:/);
   assert.match(
-    latestProviderInput.instructions,
-    new RegExp(`Selected starting region: ${selectedRegion.name as string}\\.`)
+    narratorInput.message,
+    new RegExp(`"name": "${selectedRegion.name as string}"`)
   );
   assert.match(
-    latestProviderInput.instructions,
-    new RegExp(`Starting settlement: ${startingLocation.name as string}`)
-  );
-  assert.match(latestProviderInput.instructions, /Keep Wellglass rare/);
-  assert.match(
-    latestProviderInput.instructions,
-    /Player-Facing Lore Clarity:/
+    narratorInput.message,
+    new RegExp(`"name": "${startingLocation.name as string}"`)
   );
   assert.match(
-    latestProviderInput.instructions,
-    /at most 2-4 new setting-specific terms/
+    narratorInput.message,
+    /Forbidden opening terms must not appear in public_narration/
   );
   assert.match(
-    latestProviderInput.instructions,
-    /gloss it naturally in plain language/
-  );
-  assert.match(
-    latestProviderInput.instructions,
-    /If a term is not immediately useful to the player's next decision, save it for later/
+    narratorInput.message,
+    /Write the player-facing opener only from the Eldermere opening plan/
   );
 });
 

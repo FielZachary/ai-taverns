@@ -442,6 +442,50 @@ type CampaignOpeningStyle = {
   customWorldDescription?: string | undefined;
 };
 
+type OpeningTerm = {
+  term: string;
+  plainMeaning: string;
+};
+
+type OpeningNpcSeed = {
+  name: string;
+  role: string;
+  wants: string;
+  visibleBehavior: string;
+};
+
+type EldermereOpeningPlan = {
+  campaignTitle: string;
+  region: {
+    name: string;
+    whyThisRegion: string;
+    plainDescription: string;
+  };
+  startingLocation: {
+    name: string;
+    type: string;
+    whyThisLocation: string;
+    plainDescription: string;
+  };
+  openingPremise: {
+    whyThePartyIsHere: string;
+    immediateObjective: string;
+    immediateComplication: string;
+    firstSceneLocation: string;
+    openingMood: string;
+    campaignPromise: string;
+  };
+  playerFacingFacts: string[];
+  allowedPlayerFacingTerms: OpeningTerm[];
+  npcSeed: OpeningNpcSeed[];
+  firstInteractableChoices: string[];
+  sensoryPalette: Record<string, string[]>;
+  dmPrivateContext: string[];
+  forbiddenOpeningTerms: string[];
+  narratorInstructions: string[];
+  openingQualityChecks: string[];
+};
+
 type DungeonMasterProviderResponse = {
   id?: string;
   content: string;
@@ -617,20 +661,6 @@ function hasEldermereWorldProfile(campaign: Pick<CampaignRow, "metadata">) {
     isEldermerePreset(presetId) ||
     (worldName === "Eldermere" && source === "flagship_world")
   );
-}
-
-function withEldermereOpeningContext(message: string, campaign: CampaignRow) {
-  if (!hasEldermereWorldProfile(campaign)) {
-    return message;
-  }
-
-  return [
-    message,
-    "",
-    formatEldermereOpeningPromptContext(
-      eldermereCampaignStartFromMetadata(campaign)
-    )
-  ].join("\n");
 }
 
 function withEldermereTurnContext(
@@ -1196,35 +1226,56 @@ export async function createCampaignForMode(
     return createdState.summary;
   }
 
-  const currentAction = withEldermereOpeningContext(
-    formatOpeningSceneRequest({
-      mode: "single_player",
-      players: [createdState.player],
-      style: {
-        campaignGenre: input.campaignGenre,
-        campaignGenrePromptBrief: input.campaignGenrePromptBrief,
-        customWorldName: input.customWorldName,
-        customWorldDescription: input.customWorldDescription
-      }
-    }),
-    createdState.campaign
-  );
+  const runtime = input.runtime;
+  const openingTurn = createdState.turn;
+  const openingRequest = formatOpeningSceneRequest({
+    mode: "single_player",
+    players: [createdState.player],
+    style: {
+      campaignGenre: input.campaignGenre,
+      campaignGenrePromptBrief: input.campaignGenrePromptBrief,
+      customWorldName: input.customWorldName,
+      customWorldDescription: input.customWorldDescription
+    }
+  });
 
   try {
-    const opening = await askDungeonMaster(
-      db,
-      input.runtime,
-      createdState.campaign,
-      currentAction,
-      openingSceneInstructions("single_player"),
-      true,
-      createdState.turn.id,
-      undefined,
-      { allowResolvedCombatWithoutRolls: true }
-    );
+    const opening = hasEldermereWorldProfile(createdState.campaign)
+      ? await (async () => {
+          const plan = await askEldermereOpeningPlanner(
+            db,
+            runtime,
+            createdState.campaign,
+            openingRequest,
+            openingTurn.id
+          );
+          await persistEldermereOpeningPlan(db, createdState.campaign.id, plan);
+
+          return askEldermereOpeningNarrator(
+            db,
+            runtime,
+            createdState.campaign,
+            openingRequest,
+            openingSceneInstructions("single_player"),
+            plan,
+            openingTurn.id,
+            { allowResolvedCombatWithoutRolls: true }
+          );
+        })()
+      : await askDungeonMaster(
+          db,
+          runtime,
+          createdState.campaign,
+          openingRequest,
+          openingSceneInstructions("single_player"),
+          true,
+          openingTurn.id,
+          undefined,
+          { allowResolvedCombatWithoutRolls: true }
+        );
     const resolvedTurn = await finishResolvedTurn(db, {
       campaignId: createdState.campaign.id,
-      turnId: createdState.turn.id,
+      turnId: openingTurn.id,
       hermesMessageId: opening.id,
       reply: opening.content,
       eventType: "adventure_begun",
@@ -1239,10 +1290,10 @@ export async function createCampaignForMode(
       createdState.campaign.id
     ]);
 
-    void input.runtime.runPostTurnContextJobs?.({
+    void runtime.runPostTurnContextJobs?.({
       campaignId: createdState.campaign.id,
-      turnId: createdState.turn.id,
-      currentAction,
+      turnId: openingTurn.id,
+      currentAction: openingRequest,
       dmResponse: opening.content,
       dmEventId: resolvedTurn.dmEventId,
       rollRequests: opening.rollRequests
@@ -1253,7 +1304,7 @@ export async function createCampaignForMode(
       userId: input.userId
     });
   } catch (error) {
-    await markTurnFailed(db, createdState.turn.id, error);
+    await markTurnFailed(db, openingTurn.id, error);
     throw error;
   }
 }
@@ -2338,6 +2389,395 @@ function formatOpeningSceneRequest(input: {
     .join("\n");
 }
 
+function eldermereOpeningPlannerInstructions() {
+  return [
+    "You are the campaign-opening planner for AI Taverns, a D&D-style fantasy campaign app.",
+    "Your job is not to write player-facing narration.",
+    "Create a compact structured campaign opener seed that a separate narrator will turn into the opening scene.",
+    "The narrator will not receive the full world lore, so separate player-safe facts, private DM context, allowed opening terms, and forbidden opening terms.",
+    "Use the selected Eldermere region and settlement when provided. Do not choose a different primary region or starting settlement.",
+    "Make the opener specific, playable, and mysterious. Let the narrator start with a human-scale scene, not a history lecture.",
+    "The player-facing opening should use at most 3 Eldermere-specific setting proper nouns total, not counting ordinary NPC names. The chosen region and starting location count toward this limit.",
+    "Prefer plain descriptions over official names: use concrete meaning before setting terminology.",
+    "Return exactly one valid JSON object and no Markdown.",
+    "Use this exact JSON shape:",
+    JSON.stringify(
+      {
+        campaign_title: "short evocative title",
+        region: {
+          name: "chosen region name",
+          why_this_region: "why this region makes a strong opener",
+          plain_description: "one sentence the player could understand"
+        },
+        starting_location: {
+          name: "chosen town, ruin, road, tavern, settlement, camp, observatory, shrine, district, or landmark",
+          type: "short type label",
+          why_this_location: "why this is the right first location",
+          plain_description: "one sentence the player could understand"
+        },
+        opening_premise: {
+          why_the_party_is_here: "concrete reason the player or party came here",
+          immediate_objective: "what they are trying to do now",
+          immediate_complication: "what blocks, complicates, or pressures that objective",
+          first_scene_location: "where the narration should begin physically",
+          opening_mood: "short mood phrase",
+          campaign_promise: "what kind of adventure this opener promises"
+        },
+        player_facing_facts: [
+          "facts the narrator may safely reveal immediately"
+        ],
+        allowed_player_facing_terms: [
+          {
+            term: "setting term allowed in narration",
+            plain_meaning: "plain explanation the narrator should include on first use"
+          }
+        ],
+        npc_seed: [
+          {
+            name: "NPC name",
+            role: "what the player understands this person to be",
+            wants: "what this NPC wants in the opening",
+            visible_behavior: "how they come across"
+          }
+        ],
+        first_interactable_choices: [
+          "clear option the player could take",
+          "clear option the player could take",
+          "clear option the player could take"
+        ],
+        sensory_palette: {
+          sights: ["specific visible detail"],
+          sounds: ["specific sound"],
+          smells: ["specific smell"],
+          textures_or_weather: ["specific tactile or weather detail"]
+        },
+        dm_private_context: [
+          "facts the DM can use later but the narrator must not reveal directly in the opening"
+        ],
+        forbidden_opening_terms: [
+          "setting terms or lore names that should not appear in the first player-facing narration"
+        ],
+        narrator_instructions: ["instructions for the second narrator call"],
+        opening_quality_checks: [
+          "check the narrator should pass before output"
+        ]
+      },
+      null,
+      2
+    )
+  ].join("\n");
+}
+
+function formatEldermereOpeningPlannerRequest(input: {
+  openingRequest: string;
+  campaign: CampaignRow;
+}) {
+  return [
+    input.openingRequest,
+    "",
+    formatEldermereOpeningPromptContext(
+      eldermereCampaignStartFromMetadata(input.campaign)
+    )
+  ].join("\n");
+}
+
+function formatEldermereNarratorOpeningRequest(input: {
+  openingRequest: string;
+  plan: EldermereOpeningPlan;
+}) {
+  return [
+    input.openingRequest,
+    "",
+    "Eldermere opening plan:",
+    JSON.stringify(openingPlanToJson(input.plan), null, 2),
+    "",
+    "Narrator boundary:",
+    "Write the player-facing opener only from the Eldermere opening plan above, the canonical character sheets, and the website DM instructions.",
+    "Do not use the full Eldermere world bible. Do not introduce extra Eldermere lore, factions, institutions, ancient ages, regions, gods, magic resources, or historical terms beyond the allowed_player_facing_terms.",
+    "If a useful idea appears in dm_private_context, imply it only through concrete visible facts or pressure; do not reveal it as confirmed exposition.",
+    "Forbidden opening terms must not appear in public_narration.",
+    "Allowed player-facing terms must be explained plainly on first use.",
+    'Set setting.world_name to "Eldermere".',
+    `Set setting.starting_location and setting.display_location to "${input.plan.startingLocation.name}".`
+  ].join("\n");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function readString(
+  record: Record<string, unknown>,
+  key: string,
+  errors: string[]
+) {
+  const value = record[key];
+
+  if (typeof value !== "string" || value.trim().length === 0) {
+    errors.push(`${key} must be a non-empty string`);
+    return "";
+  }
+
+  return value.trim();
+}
+
+function readStringArray(
+  record: Record<string, unknown>,
+  key: string,
+  errors: string[]
+) {
+  const value = record[key];
+
+  if (!Array.isArray(value)) {
+    errors.push(`${key} must be an array`);
+    return [];
+  }
+
+  const strings = value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  if (strings.length !== value.length) {
+    errors.push(`${key} must contain only non-empty strings`);
+  }
+
+  return strings;
+}
+
+function readObject(
+  record: Record<string, unknown>,
+  key: string,
+  errors: string[]
+) {
+  const value = record[key];
+
+  if (!isRecord(value)) {
+    errors.push(`${key} must be an object`);
+    return {};
+  }
+
+  return value;
+}
+
+function readObjectArray(
+  record: Record<string, unknown>,
+  key: string,
+  errors: string[]
+) {
+  const value = record[key];
+
+  if (!Array.isArray(value)) {
+    errors.push(`${key} must be an array`);
+    return [];
+  }
+
+  const objects = value.filter(isRecord);
+
+  if (objects.length !== value.length) {
+    errors.push(`${key} must contain only objects`);
+  }
+
+  return objects;
+}
+
+function parseOpeningTerm(value: Record<string, unknown>, index: number) {
+  const errors: string[] = [];
+
+  return {
+    value: {
+      term: readString(value, "term", errors),
+      plainMeaning: readString(value, "plain_meaning", errors)
+    },
+    errors: errors.map((error) => `allowed_player_facing_terms[${index}].${error}`)
+  };
+}
+
+function parseOpeningNpcSeed(value: Record<string, unknown>, index: number) {
+  const errors: string[] = [];
+
+  return {
+    value: {
+      name: readString(value, "name", errors),
+      role: readString(value, "role", errors),
+      wants: readString(value, "wants", errors),
+      visibleBehavior: readString(value, "visible_behavior", errors)
+    },
+    errors: errors.map((error) => `npc_seed[${index}].${error}`)
+  };
+}
+
+function parseSensoryPalette(
+  value: Record<string, unknown>,
+  errors: string[]
+): Record<string, string[]> {
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => {
+      if (!Array.isArray(item)) {
+        errors.push(`sensory_palette.${key} must be an array`);
+        return [key, []];
+      }
+
+      const strings = item
+        .filter((entry): entry is string => typeof entry === "string")
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+
+      if (strings.length !== item.length) {
+        errors.push(`sensory_palette.${key} must contain only non-empty strings`);
+      }
+
+      return [key, strings];
+    })
+  );
+}
+
+function parseEldermereOpeningPlan(content: string) {
+  const parsed = parseJsonRecord(content);
+  const errors: string[] = [];
+  const region = readObject(parsed, "region", errors);
+  const startingLocation = readObject(parsed, "starting_location", errors);
+  const openingPremise = readObject(parsed, "opening_premise", errors);
+  const sensoryPalette = readObject(parsed, "sensory_palette", errors);
+  const allowedTermResults = readObjectArray(
+    parsed,
+    "allowed_player_facing_terms",
+    errors
+  ).map(parseOpeningTerm);
+  const npcSeedResults = readObjectArray(parsed, "npc_seed", errors).map(
+    parseOpeningNpcSeed
+  );
+
+  const plan: EldermereOpeningPlan = {
+    campaignTitle: readString(parsed, "campaign_title", errors),
+    region: {
+      name: readString(region, "name", errors),
+      whyThisRegion: readString(region, "why_this_region", errors),
+      plainDescription: readString(region, "plain_description", errors)
+    },
+    startingLocation: {
+      name: readString(startingLocation, "name", errors),
+      type: readString(startingLocation, "type", errors),
+      whyThisLocation: readString(startingLocation, "why_this_location", errors),
+      plainDescription: readString(
+        startingLocation,
+        "plain_description",
+        errors
+      )
+    },
+    openingPremise: {
+      whyThePartyIsHere: readString(
+        openingPremise,
+        "why_the_party_is_here",
+        errors
+      ),
+      immediateObjective: readString(
+        openingPremise,
+        "immediate_objective",
+        errors
+      ),
+      immediateComplication: readString(
+        openingPremise,
+        "immediate_complication",
+        errors
+      ),
+      firstSceneLocation: readString(
+        openingPremise,
+        "first_scene_location",
+        errors
+      ),
+      openingMood: readString(openingPremise, "opening_mood", errors),
+      campaignPromise: readString(openingPremise, "campaign_promise", errors)
+    },
+    playerFacingFacts: readStringArray(parsed, "player_facing_facts", errors),
+    allowedPlayerFacingTerms: allowedTermResults.map((result) => result.value),
+    npcSeed: npcSeedResults.map((result) => result.value),
+    firstInteractableChoices: readStringArray(
+      parsed,
+      "first_interactable_choices",
+      errors
+    ),
+    sensoryPalette: parseSensoryPalette(sensoryPalette, errors),
+    dmPrivateContext: readStringArray(parsed, "dm_private_context", errors),
+    forbiddenOpeningTerms: readStringArray(
+      parsed,
+      "forbidden_opening_terms",
+      errors
+    ),
+    narratorInstructions: readStringArray(
+      parsed,
+      "narrator_instructions",
+      errors
+    ),
+    openingQualityChecks: readStringArray(
+      parsed,
+      "opening_quality_checks",
+      errors
+    )
+  };
+
+  errors.push(
+    ...allowedTermResults.flatMap((result) => result.errors),
+    ...npcSeedResults.flatMap((result) => result.errors)
+  );
+
+  if (plan.allowedPlayerFacingTerms.length === 0) {
+    errors.push("allowed_player_facing_terms must include at least one term");
+  }
+
+  if (plan.firstInteractableChoices.length < 2) {
+    errors.push("first_interactable_choices must include at least two choices");
+  }
+
+  if (errors.length > 0) {
+    throw new Error(`Eldermere opening planner returned invalid JSON: ${errors.join("; ")}`);
+  }
+
+  return plan;
+}
+
+function openingPlanToJson(plan: EldermereOpeningPlan) {
+  return {
+    campaign_title: plan.campaignTitle,
+    region: {
+      name: plan.region.name,
+      why_this_region: plan.region.whyThisRegion,
+      plain_description: plan.region.plainDescription
+    },
+    starting_location: {
+      name: plan.startingLocation.name,
+      type: plan.startingLocation.type,
+      why_this_location: plan.startingLocation.whyThisLocation,
+      plain_description: plan.startingLocation.plainDescription
+    },
+    opening_premise: {
+      why_the_party_is_here: plan.openingPremise.whyThePartyIsHere,
+      immediate_objective: plan.openingPremise.immediateObjective,
+      immediate_complication: plan.openingPremise.immediateComplication,
+      first_scene_location: plan.openingPremise.firstSceneLocation,
+      opening_mood: plan.openingPremise.openingMood,
+      campaign_promise: plan.openingPremise.campaignPromise
+    },
+    player_facing_facts: plan.playerFacingFacts,
+    allowed_player_facing_terms: plan.allowedPlayerFacingTerms.map((term) => ({
+      term: term.term,
+      plain_meaning: term.plainMeaning
+    })),
+    npc_seed: plan.npcSeed.map((npc) => ({
+      name: npc.name,
+      role: npc.role,
+      wants: npc.wants,
+      visible_behavior: npc.visibleBehavior
+    })),
+    first_interactable_choices: plan.firstInteractableChoices,
+    sensory_palette: plan.sensoryPalette,
+    dm_private_context: plan.dmPrivateContext,
+    forbidden_opening_terms: plan.forbiddenOpeningTerms,
+    narrator_instructions: plan.narratorInstructions,
+    opening_quality_checks: plan.openingQualityChecks
+  };
+}
+
 function openingSceneInstructions(mode: CampaignMode) {
   const modeDirection =
     mode === "single_player"
@@ -2404,6 +2844,285 @@ function answerFromAskDmProviderResponse(content: string) {
   }
 
   throw new Error("The DM provider returned an empty answer.");
+}
+
+async function askEldermereOpeningPlanner(
+  db: Queryable,
+  runtime: DungeonMasterRuntime,
+  campaign: CampaignRow,
+  openingRequest: string,
+  turnId?: string
+) {
+  const traceId = randomUUID();
+  const startedAt = Date.now();
+  const instructions = eldermereOpeningPlannerInstructions();
+  const message = formatEldermereOpeningPlannerRequest({
+    openingRequest,
+    campaign
+  });
+
+  await logTurnDebugTrace(db, {
+    campaignId: campaign.id,
+    traceId,
+    phase: "eldermere_opening_planner_started",
+    turnId,
+    elapsedMs: 0,
+    payload: {
+      message: textStats(message),
+      instructions: textStats(instructions)
+    }
+  });
+
+  const callPlanner = async (attempt: "initial" | "repair") => {
+    const providerStartedAt = Date.now();
+    const providerData = await runtime.askProvider({
+      message:
+        attempt === "initial"
+          ? message
+          : [
+              "The previous Eldermere opening planner response failed validation.",
+              "Return a corrected response using exactly the required JSON shape.",
+              "Do not include Markdown or commentary.",
+              "",
+              "Original planner request:",
+              message
+            ].join("\n"),
+      instructions
+    });
+
+    await logTurnDebugTrace(db, {
+      campaignId: campaign.id,
+      traceId,
+      phase:
+        attempt === "initial"
+          ? "eldermere_opening_planner_response_received"
+          : "eldermere_opening_planner_repair_response_received",
+      turnId,
+      elapsedMs: Date.now() - startedAt,
+      payload: {
+        durationMs: Date.now() - providerStartedAt,
+        provider: providerDebugSummary(providerData.debug)
+      }
+    });
+
+    return providerData;
+  };
+
+  let initialData: DungeonMasterProviderResponse | undefined;
+
+  try {
+    initialData = await callPlanner("initial");
+    const plan = parseEldermereOpeningPlan(initialData.content);
+
+    await logTurnDebugTrace(db, {
+      campaignId: campaign.id,
+      traceId,
+      phase: "eldermere_opening_planner_completed",
+      turnId,
+      elapsedMs: Date.now() - startedAt,
+      payload: {
+        campaignTitle: plan.campaignTitle,
+        region: plan.region.name,
+        startingLocation: plan.startingLocation.name,
+        allowedTerms: plan.allowedPlayerFacingTerms.map((term) => term.term),
+        forbiddenTerms: plan.forbiddenOpeningTerms
+      }
+    });
+
+    return plan;
+  } catch (initialError) {
+    await logTurnDebugTrace(db, {
+      campaignId: campaign.id,
+      traceId,
+      phase: "eldermere_opening_planner_validation_failed",
+      turnId,
+      elapsedMs: Date.now() - startedAt,
+      payload: {
+        error: errorSummary(initialError),
+        rawResponse: initialData ? textStats(initialData.content) : undefined
+      }
+    });
+
+    try {
+      const repairData = await callPlanner("repair");
+      const plan = parseEldermereOpeningPlan(repairData.content);
+
+      await logTurnDebugTrace(db, {
+        campaignId: campaign.id,
+        traceId,
+        phase: "eldermere_opening_planner_repair_completed",
+        turnId,
+        elapsedMs: Date.now() - startedAt,
+        payload: {
+          campaignTitle: plan.campaignTitle,
+          region: plan.region.name,
+          startingLocation: plan.startingLocation.name,
+          allowedTerms: plan.allowedPlayerFacingTerms.map((term) => term.term),
+          forbiddenTerms: plan.forbiddenOpeningTerms
+        }
+      });
+
+      return plan;
+    } catch (repairError) {
+      await logTurnDebugTrace(db, {
+        campaignId: campaign.id,
+        traceId,
+        phase: "eldermere_opening_planner_failed",
+        turnId,
+        elapsedMs: Date.now() - startedAt,
+        payload: {
+          initialError: errorSummary(initialError),
+          repairError: errorSummary(repairError)
+        }
+      });
+
+      throw new Error(
+        `Eldermere opening planner failed validation. Trace ID: ${traceId}`
+      );
+    }
+  }
+}
+
+function findForbiddenOpeningTerms(
+  narration: string,
+  plan: EldermereOpeningPlan
+) {
+  const allowedTerms = new Set(
+    plan.allowedPlayerFacingTerms.map((term) => term.term.toLowerCase())
+  );
+  const lowerNarration = narration.toLowerCase();
+
+  return [...new Set(plan.forbiddenOpeningTerms)]
+    .map((term) => term.trim())
+    .filter(Boolean)
+    .filter((term) => !allowedTerms.has(term.toLowerCase()))
+    .filter((term) => lowerNarration.includes(term.toLowerCase()));
+}
+
+function eldermereOpeningSettingErrors(
+  setting: CampaignSettingSummary | undefined,
+  plan: EldermereOpeningPlan
+) {
+  const errors: string[] = [];
+
+  if (setting?.worldName !== "Eldermere") {
+    errors.push('setting.world_name must be "Eldermere"');
+  }
+
+  if (!setting?.startingLocation) {
+    errors.push("setting.starting_location must be present");
+  }
+
+  if (!setting?.displayLocation) {
+    errors.push("setting.display_location must be present");
+  }
+
+  if (
+    setting?.startingLocation &&
+    setting.startingLocation !== plan.startingLocation.name
+  ) {
+    errors.push(
+      `setting.starting_location must be "${plan.startingLocation.name}"`
+    );
+  }
+
+  return errors;
+}
+
+async function askEldermereOpeningNarrator(
+  db: Queryable,
+  runtime: DungeonMasterRuntime,
+  campaign: CampaignRow,
+  openingRequest: string,
+  instructions: string,
+  plan: EldermereOpeningPlan,
+  turnId?: string,
+  contractOptions?: HermesDmContractParseOptions
+) {
+  const narratorMessage = formatEldermereNarratorOpeningRequest({
+    openingRequest,
+    plan
+  });
+  const opening = await askDungeonMaster(
+    db,
+    runtime,
+    campaign,
+    narratorMessage,
+    instructions,
+    false,
+    turnId,
+    undefined,
+    contractOptions,
+    {
+      buildPromptContext: false,
+      includeEldermereTurnContext: false,
+      suppressStreaming: true
+    }
+  );
+  const forbiddenTerms = findForbiddenOpeningTerms(opening.content, plan);
+  const settingErrors = eldermereOpeningSettingErrors(opening.setting, plan);
+
+  if (forbiddenTerms.length === 0 && settingErrors.length === 0) {
+    return opening;
+  }
+
+  const repairMessage = [
+    narratorMessage,
+    "",
+    "Rewrite required:",
+    ...(forbiddenTerms.length > 0
+      ? [
+          `The previous public_narration used forbidden opening terms: ${forbiddenTerms.join(", ")}.`
+        ]
+      : []),
+    ...(settingErrors.length > 0
+      ? [`The previous setting metadata was invalid: ${settingErrors.join("; ")}.`]
+      : []),
+    "Return the same opening situation as valid AI Taverns DM JSON, but remove those terms from public_narration.",
+    "Use only allowed_player_facing_terms and plain descriptions. Preserve setting metadata."
+  ].join("\n");
+  const repairedOpening = await askDungeonMaster(
+    db,
+    runtime,
+    campaign,
+    repairMessage,
+    instructions,
+    false,
+    turnId,
+    undefined,
+    contractOptions,
+    {
+      buildPromptContext: false,
+      includeEldermereTurnContext: false,
+      suppressStreaming: true
+    }
+  );
+  const remainingForbiddenTerms = findForbiddenOpeningTerms(
+    repairedOpening.content,
+    plan
+  );
+  const remainingSettingErrors = eldermereOpeningSettingErrors(
+    repairedOpening.setting,
+    plan
+  );
+
+  if (remainingForbiddenTerms.length > 0 || remainingSettingErrors.length > 0) {
+    throw new Error(
+      [
+        "Eldermere opening narrator failed validation after repair.",
+        remainingForbiddenTerms.length > 0
+          ? `Forbidden terms: ${remainingForbiddenTerms.join(", ")}.`
+          : "",
+        remainingSettingErrors.length > 0
+          ? `Setting errors: ${remainingSettingErrors.join("; ")}.`
+          : ""
+      ]
+        .filter(Boolean)
+        .join(" ")
+    );
+  }
+
+  return repairedOpening;
 }
 
 async function getActivePlayers(db: Queryable, campaignId: string) {
@@ -2495,21 +3214,29 @@ async function askDungeonMaster(
   includeHistory = true,
   turnId?: string,
   currentPlayerAction?: string,
-  contractOptions?: HermesDmContractParseOptions
+  contractOptions?: HermesDmContractParseOptions,
+  options?: {
+    buildPromptContext?: boolean;
+    includeEldermereTurnContext?: boolean;
+    suppressStreaming?: boolean;
+  }
 ) {
   const traceId = randomUUID();
   const startedAt = Date.now();
-  const emitStreamEvent = runtime.emitDmStreamEvent;
-  const instructionsWithWorldContext = withEldermereTurnContext(
-    instructions,
-    campaign
-  );
+  const streamEmitter =
+    turnId && !options?.suppressStreaming ? runtime.emitDmStreamEvent : undefined;
+  const streamTurnId = streamEmitter ? turnId : undefined;
+  const shouldBuildPromptContext = options?.buildPromptContext !== false;
+  const instructionsWithWorldContext =
+    options?.includeEldermereTurnContext === false
+      ? instructions
+      : withEldermereTurnContext(instructions, campaign);
 
-  if (turnId && emitStreamEvent) {
-    emitStreamEvent({
+  if (streamEmitter && streamTurnId) {
+    streamEmitter({
       type: "dm_stream_started",
       roomId: campaign.id,
-      turnId
+      turnId: streamTurnId
     });
   }
 
@@ -2528,7 +3255,7 @@ async function askDungeonMaster(
   });
 
   try {
-    const promptContext = runtime.buildPromptContext
+    const promptContext = shouldBuildPromptContext && runtime.buildPromptContext
       ? await runtime.buildPromptContext({
           campaignId: campaign.id,
           turnId,
@@ -2545,17 +3272,17 @@ async function askDungeonMaster(
       message: promptContext?.message ?? message,
       instructions: promptContext?.instructions ?? instructionsWithWorldContext,
       history,
-      ...(turnId && emitStreamEvent
+      ...(streamEmitter && streamTurnId
         ? {
             onPublicNarrationDelta: (text: string) => {
               if (!text) {
                 return;
               }
 
-              emitStreamEvent({
+              streamEmitter({
                 type: "dm_stream_delta",
                 roomId: campaign.id,
-                turnId,
+                turnId: streamTurnId,
                 text
               });
             }
@@ -2642,11 +3369,11 @@ async function askDungeonMaster(
     });
 
     if (error instanceof Error && error.message.includes("Trace ID:")) {
-      if (turnId && emitStreamEvent) {
-        emitStreamEvent({
+      if (streamEmitter && streamTurnId) {
+        streamEmitter({
           type: "dm_stream_failed",
           roomId: campaign.id,
-          turnId,
+          turnId: streamTurnId,
           message: error.message
         });
       }
@@ -2657,11 +3384,11 @@ async function askDungeonMaster(
       `${error instanceof Error ? error.message : "DM provider call failed."} Trace ID: ${traceId}`
     );
 
-    if (turnId && emitStreamEvent) {
-      emitStreamEvent({
+    if (streamEmitter && streamTurnId) {
+      streamEmitter({
         type: "dm_stream_failed",
         roomId: campaign.id,
-        turnId,
+        turnId: streamTurnId,
         message: wrappedError.message
       });
     }
@@ -2686,6 +3413,26 @@ function settingMetadata(setting: CampaignSettingSummary | undefined) {
       startingLocation: startingLocation || null
     }
   };
+}
+
+async function persistEldermereOpeningPlan(
+  db: Queryable,
+  campaignId: string,
+  plan: EldermereOpeningPlan
+) {
+  await db.query(
+    `
+      update campaigns
+      set metadata = jsonb_set(
+        jsonb_set(metadata, '{eldermereOpeningPlan}', $2::jsonb, true),
+        '{eldermereOpeningPlanVersion}',
+        '1'::jsonb,
+        true
+      )
+      where id = $1
+    `,
+    [campaignId, JSON.stringify(openingPlanToJson(plan))]
+  );
 }
 
 async function setPendingInputTargets(
@@ -3059,30 +3806,51 @@ export async function beginRoomForUser(
     return buildRoomSnapshot(db, beginState.campaign);
   }
 
-  const currentAction = withEldermereOpeningContext(
-    formatOpeningSceneRequest({
-      mode: "multiplayer",
-      players: beginState.players,
-      style: campaignOpeningStyleFromMetadata(beginState.campaign)
-    }),
-    beginState.campaign
-  );
+  const runtime = input.runtime;
+  const openingTurn = beginState.turn;
+  const openingRequest = formatOpeningSceneRequest({
+    mode: "multiplayer",
+    players: beginState.players,
+    style: campaignOpeningStyleFromMetadata(beginState.campaign)
+  });
 
   try {
-    const opening = await askDungeonMaster(
-      db,
-      input.runtime,
-      beginState.campaign,
-      currentAction,
-      openingSceneInstructions("multiplayer"),
-      true,
-      beginState.turn.id,
-      undefined,
-      { allowResolvedCombatWithoutRolls: true }
-    );
+    const opening = hasEldermereWorldProfile(beginState.campaign)
+      ? await (async () => {
+          const plan = await askEldermereOpeningPlanner(
+            db,
+            runtime,
+            beginState.campaign,
+            openingRequest,
+            openingTurn.id
+          );
+          await persistEldermereOpeningPlan(db, beginState.campaign.id, plan);
+
+          return askEldermereOpeningNarrator(
+            db,
+            runtime,
+            beginState.campaign,
+            openingRequest,
+            openingSceneInstructions("multiplayer"),
+            plan,
+            openingTurn.id,
+            { allowResolvedCombatWithoutRolls: true }
+          );
+        })()
+      : await askDungeonMaster(
+          db,
+          runtime,
+          beginState.campaign,
+          openingRequest,
+          openingSceneInstructions("multiplayer"),
+          true,
+          openingTurn.id,
+          undefined,
+          { allowResolvedCombatWithoutRolls: true }
+        );
     const resolvedTurn = await finishResolvedTurn(db, {
       campaignId: beginState.campaign.id,
-      turnId: beginState.turn.id,
+      turnId: openingTurn.id,
       hermesMessageId: opening.id,
       reply: opening.content,
       eventType: "adventure_begun",
@@ -3093,10 +3861,10 @@ export async function beginRoomForUser(
       aiDebug: opening.debug
     });
 
-    input.runtime.emitDmStreamEvent?.({
+    runtime.emitDmStreamEvent?.({
       type: "dm_stream_done",
       roomId: beginState.campaign.id,
-      turnId: beginState.turn.id,
+      turnId: openingTurn.id,
       messageId: opening.id
     });
 
@@ -3104,18 +3872,18 @@ export async function beginRoomForUser(
       beginState.campaign.id
     ]);
 
-    void input.runtime.runPostTurnContextJobs?.({
+    void runtime.runPostTurnContextJobs?.({
       campaignId: beginState.campaign.id,
-      turnId: beginState.turn.id,
-      currentAction,
+      turnId: openingTurn.id,
+      currentAction: openingRequest,
       dmResponse: opening.content,
       dmEventId: resolvedTurn.dmEventId,
       rollRequests: opening.rollRequests
     });
   } catch (error) {
-    await markTurnFailed(db, beginState.turn.id, error);
+    await markTurnFailed(db, openingTurn.id, error);
     await logCampaignEvent(db, beginState.campaign.id, "turn_failed", {
-      turnId: beginState.turn.id,
+      turnId: openingTurn.id,
       error: error instanceof Error ? error.message : "DM provider call failed."
     });
     throw error;
