@@ -758,6 +758,10 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
         Date.parse(firstMessage.createdAt) - Date.parse(secondMessage.createdAt)
     );
   }, [messages, roomMessages, streamingDmMessages]);
+  const isShowingStreamingDmMessage = useMemo(
+    () => streamingDmMessages.some((message) => message.content.trim()),
+    [streamingDmMessages]
+  );
   const waitingPlayers = useMemo<ChatPlayerStatus[]>(() => {
     if (isSinglePlayer || !hasAdventureBegun) {
       return [];
@@ -2070,6 +2074,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
                 isRoomResolving ||
                 (isSinglePlayer && isSending)
               }
+              hideSendingIndicator={isShowingStreamingDmMessage}
               regeneratingMessageId={regeneratingMessageId}
               regeneratableMessageId={regeneratableMessageId}
               waitingPlayers={waitingPlayers}

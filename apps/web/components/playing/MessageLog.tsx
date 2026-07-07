@@ -14,6 +14,7 @@ export type ChatPlayerStatus = {
 type MessageLogProps = {
   messages: GameMessage[];
   isSending: boolean;
+  hideSendingIndicator?: boolean;
   waitingPlayers?: ChatPlayerStatus[];
   regeneratingMessageId?: string | null;
   regeneratableMessageId?: string | null;
@@ -113,6 +114,7 @@ function messageLabel(message: GameMessage) {
 export function MessageLog({
   messages,
   isSending,
+  hideSendingIndicator = false,
   waitingPlayers = [],
   regeneratingMessageId,
   regeneratableMessageId,
@@ -227,7 +229,7 @@ export function MessageLog({
         </article>
       ))}
 
-      {isSending ? (
+      {isSending && !hideSendingIndicator ? (
         <article className="message-card message-dm">
           <div className="message-icon" aria-hidden="true">
             <img
