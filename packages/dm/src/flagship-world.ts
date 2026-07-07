@@ -413,6 +413,7 @@ export function formatEldermereOpeningPromptContext(
         "Opening region rule: choose one primary region for the campaign opener and make its local identity, conflict, and sensory details concrete. Do not mash all seven regions into the first scene. Mention other regions only if directly relevant as trade partners, rivals, rumors, or distant pressure.",
       ]),
   "Starting rule: there is no fixed canonical starting town. Use a named starting place from a region, settlement, road, ruin, camp, city district, or landmark. Do not use a genre label as the location.",
+  "Opening lore clarity rule: in the player-facing opening narration, use no more than 2-3 new Eldermere-specific proper nouns besides the selected region and starting settlement. Explain every used setting term in plain language on first use. Do not mention faction names, religious schisms, ancient ages, distant regions, or extra institutions unless they matter to the player's immediate first choice. Prefer concrete meaning before official names, such as 'the strict temple faction' before 'the Undying Charter' unless the official name is immediately useful.",
   'Opening setting requirement: include setting.world_name as "Eldermere" and choose concrete values for setting.starting_location and setting.display_location.',
   ].join("\n");
 }

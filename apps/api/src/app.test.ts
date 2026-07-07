@@ -1355,6 +1355,19 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.doesNotMatch(latestProviderInput.message, /Recurring live conflicts:/);
   assert.match(latestProviderInput.message, /Selected opener region and settlement:/);
   assert.match(latestProviderInput.message, /use this selected region and settlement/);
+  assert.match(latestProviderInput.message, /Opening lore clarity rule:/);
+  assert.match(
+    latestProviderInput.message,
+    /use no more than 2-3 new Eldermere-specific proper nouns/
+  );
+  assert.match(
+    latestProviderInput.message,
+    /Do not mention faction names, religious schisms, ancient ages, distant regions, or extra institutions/
+  );
+  assert.match(
+    latestProviderInput.message,
+    /the strict temple faction/
+  );
   assert.match(
     latestProviderInput.message,
     new RegExp(`Region: ${selectedRegion.name as string}\\.`)
