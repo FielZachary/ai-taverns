@@ -1212,6 +1212,7 @@ h1 {
   border-radius: 999px;
   color: var(--gold-bright);
   background: rgba(18, 15, 13, 0.58);
+  animation: campaign-loader-idle 2.8s ease-in-out infinite;
 }
 
 .campaign-creation-loader::before {
@@ -1328,6 +1329,19 @@ h1 {
 @keyframes campaign-loader-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes campaign-loader-idle {
+  0%,
+  100% {
+    box-shadow: 0 0 0 rgba(244, 207, 122, 0);
+    transform: translateY(0) scale(1);
+  }
+
+  50% {
+    box-shadow: 0 10px 30px rgba(244, 207, 122, 0.16);
+    transform: translateY(-4px) scale(1.03);
   }
 }
 
