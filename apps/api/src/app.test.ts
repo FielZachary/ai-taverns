@@ -28,6 +28,7 @@ import { loadConfig } from "./config.js";
 
 let app: FastifyInstance;
 let database: FakeDatabase;
+let providerInputs: { message: string; instructions: string }[] = [];
 
 type QueryResult<T> = {
   rows: T[];
@@ -625,6 +626,13 @@ class FakeDatabase {
       return { rows: [{ id: record.id } as T] };
     }
 
+    if (
+      normalizedSql.startsWith("insert into campaign_current_state") ||
+      normalizedSql.startsWith("insert into campaign_memories")
+    ) {
+      return { rows: [] as T[] };
+    }
+
     if (normalizedSql.startsWith("update submissions set status = 'included_in_turn'")) {
       const turnId = values[0] as string;
 
@@ -1029,6 +1037,10 @@ before(async () => {
     connectToDatabase: false,
     dmRuntime: {
       askProvider: async (input) => {
+        providerInputs.push({
+          message: input.message,
+          instructions: input.instructions
+        });
         const publicNarration =
           "A lantern flickers over the old road as your adventure begins.\n\nA weathered sign points toward a ruined watchtower beyond the trees.\n\nWhat do you do?";
 
@@ -1285,6 +1297,46 @@ test("room realtime websocket rejects unauthenticated upgrades", async () => {
     app.injectWS("/api/room/live"),
     /Unexpected server response: 401/
   );
+});
+
+test("POST /api/campaigns seeds Eldermere world context for flagship campaigns", async () => {
+  const cookie = await signIn("eldermere@example.com");
+  providerInputs = [];
+
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: {
+      cookie
+    },
+    payload: {
+      mode: "single_player",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "eldermere",
+      ownerClientId: "eldermere-client",
+      playerName: "Eldermere Player",
+      characterName: "Mira",
+      characterSheet: "A ruin-delver who follows old glowing roads."
+    }
+  });
+
+  assert.equal(createResponse.statusCode, 201);
+
+  const created = CampaignCreateResponseSchema.parse(createResponse.json());
+  const campaign = database.campaigns.find(
+    (candidate) => candidate.id === created.campaign.id
+  );
+  const metadata = campaign?.metadata as Record<string, unknown>;
+  const worldProfile = metadata.worldProfile as Record<string, unknown>;
+  const latestProviderInput = providerInputs.at(-1);
+
+  assert.equal(worldProfile.worldName, "Eldermere");
+  assert.equal(worldProfile.source, "flagship_world");
+  assert.ok(latestProviderInput);
+  assert.match(latestProviderInput.message, /Flagship world context:/);
+  assert.match(latestProviderInput.message, /setting\.world_name as "Eldermere"/);
+  assert.match(latestProviderInput.instructions, /World Context:/);
+  assert.match(latestProviderInput.instructions, /World: Eldermere\./);
 });
 
 test("room realtime websocket accepts session cookies and emits events", async () => {

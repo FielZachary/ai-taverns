@@ -7,6 +7,14 @@ export type CampaignGenrePreset = {
 
 export const campaignGenrePresets: CampaignGenrePreset[] = [
   {
+    id: "eldermere",
+    label: "Eldermere",
+    uiDescription:
+      "AI Taverns' flagship world of fallen magocracy, quiet gods, and ruin-born power.",
+    promptBrief:
+      "Run this campaign in Eldermere, AI Taverns' flagship anchored-high-fantasy world: a world built on the bones of the fallen Second Dominion, where the gods have gone quiet, Wellglass makes the strongest magic scarce and costly, and every region is deciding what the Third Age should become.",
+  },
+  {
     id: "classic_fantasy",
     label: "Classic Fantasy",
     uiDescription: "Ancient ruins, strange magic, and mythic quests.",

@@ -4,8 +4,12 @@ import type { SessionId, UserId } from "@ai-dnd/domain";
 import {
   debugHermesDmContractFailure,
   dungeonMasterInstructions,
+  eldermereMetadataProfile,
+  eldermereOpeningPromptContext,
+  eldermereTurnPromptContext,
   openingSceneRequest,
   parseHermesDmContract,
+  isEldermerePreset,
   type AiDebugInfo,
   type GameMessage,
   type HermesDmContractParseOptions,
@@ -501,6 +505,7 @@ function campaignWorldName(campaign: CampaignRow) {
   const metadata = eventPayload(campaign.metadata);
   const setting = eventPayload(metadata.setting);
   const genre = eventPayload(metadata.genre);
+  const worldProfile = eventPayload(metadata.worldProfile);
   const displayLocation =
     typeof setting.displayLocation === "string"
       ? setting.displayLocation.trim()
@@ -511,6 +516,10 @@ function campaignWorldName(campaign: CampaignRow) {
       : "";
   const worldName =
     typeof setting.worldName === "string" ? setting.worldName.trim() : "";
+  const profileWorldName =
+    typeof worldProfile.worldName === "string"
+      ? worldProfile.worldName.trim()
+      : "";
   const customWorldName =
     typeof genre.customWorldName === "string" ? genre.customWorldName.trim() : "";
 
@@ -518,6 +527,7 @@ function campaignWorldName(campaign: CampaignRow) {
     displayLocation ||
     startingLocation ||
     worldName ||
+    profileWorldName ||
     customWorldName ||
     campaign.title
   );
@@ -533,6 +543,52 @@ function campaignOpeningStyleFromMetadata(campaign: CampaignRow): CampaignOpenin
     customWorldName: eventPayloadString(genre.customWorldName),
     customWorldDescription: eventPayloadString(genre.customWorldDescription)
   };
+}
+
+function campaignWorldProfileMetadata(input: {
+  campaignGenrePresetId?: string | undefined;
+}) {
+  return isEldermerePreset(input.campaignGenrePresetId)
+    ? { worldProfile: eldermereMetadataProfile() }
+    : {};
+}
+
+function hasEldermereWorldProfile(campaign: Pick<CampaignRow, "metadata">) {
+  const metadata = eventPayload(campaign.metadata);
+  const worldProfile = eventPayload(metadata.worldProfile);
+  const genre = eventPayload(metadata.genre);
+  const worldName =
+    typeof worldProfile.worldName === "string"
+      ? worldProfile.worldName.trim()
+      : "";
+  const source =
+    typeof worldProfile.source === "string" ? worldProfile.source.trim() : "";
+  const presetId =
+    typeof genre.presetId === "string" ? genre.presetId.trim() : "";
+
+  return (
+    isEldermerePreset(presetId) ||
+    (worldName === "Eldermere" && source === "flagship_world")
+  );
+}
+
+function withEldermereOpeningContext(message: string, campaign: CampaignRow) {
+  if (!hasEldermereWorldProfile(campaign)) {
+    return message;
+  }
+
+  return [message, "", eldermereOpeningPromptContext].join("\n");
+}
+
+function withEldermereTurnContext(
+  instructions: string,
+  campaign: Pick<CampaignRow, "metadata">
+) {
+  if (!hasEldermereWorldProfile(campaign)) {
+    return instructions;
+  }
+
+  return [instructions, "", eldermereTurnPromptContext].join("\n");
 }
 
 function normalizeCampaignTitle(title: string | undefined, sessionId: string) {
@@ -623,6 +679,139 @@ async function ensureCollectingTurn(
   });
 
   return requireRow(created.rows[0], "Failed to create campaign turn.");
+}
+
+async function seedEldermerePromptContextRecords(
+  db: Queryable,
+  campaignId: string,
+  sourceEventIds: string[] = []
+) {
+  const style = {
+    genre: "anchored high fantasy adventure",
+    tone: [
+      "wondrous",
+      "perilous",
+      "morally clear but not simple",
+      "wry when the moment allows it"
+    ],
+    pacing: "deliberate exploration punctuated by sharp, sudden danger",
+    themes: [
+      "inheritance and debt",
+      "the true cost of power",
+      "faith practiced under divine silence",
+      "what a generation chooses to build on other people's ruins"
+    ],
+    mysteryStyle:
+      "Clues are concrete and diegetic; answers unfold gradually across sessions rather than in one reveal.",
+    violenceLevel: "heroic-consequential",
+    narrationDensity: "rich",
+    contentBoundaries: [
+      "no sexual content involving minors",
+      "fade-to-black on torture and sexual content by default",
+      "avoid real-world political allegory",
+      "body horror and cosmic dread are permitted but should be earned, not gratuitous"
+    ]
+  };
+  const currentScene = {
+    location: "",
+    sceneSummary:
+      "The campaign has been initialized in Eldermere, but the opening scene has not chosen a concrete starting location yet.",
+    partyPosture: [],
+    presentCharacters: [],
+    offscreenRelevantCharacters: [],
+    activeThreats: [],
+    importantInteractables: [],
+    exitsOrPaths: [],
+    constraints: [],
+    pendingRolls: [],
+    unresolvedQuestions: [],
+    changedThisTurn: ["Eldermere world profile initialized"]
+  };
+  const memories = [
+    {
+      title: "Eldermere",
+      summary:
+        "Eldermere is AI Taverns' flagship anchored-high-fantasy world, built on the bones of the fallen Second Dominion after the Graywake drove the gods into silence.",
+      entities: ["Eldermere", "Second Dominion", "Graywake"],
+      importance: 5
+    },
+    {
+      title: "Wellglass",
+      summary:
+        "The strongest magic in Eldermere requires Wellglass: crystallized, refined godsblood scavenged from Second Dominion ruins. It is finite, costly, and consumed when used.",
+      entities: ["Wellglass", "Second Dominion"],
+      importance: 5
+    },
+    {
+      title: "Eldermere Divine Forces",
+      summary:
+        "Eldermere has five Divine Forces: the Hearth-Warden, the Iron Judge, the Deep Currents, the Verdant Choir, and the Ashen Scholar. They speak through omens, dreams, and masks rather than plain reliable instruction.",
+      entities: [
+        "Hearth-Warden",
+        "Iron Judge",
+        "Deep Currents",
+        "Verdant Choir",
+        "Ashen Scholar"
+      ],
+      importance: 4
+    }
+  ];
+
+  await db.query(
+    `
+      insert into campaign_current_state (
+        campaign_id,
+        style,
+        current_scene,
+        source_event_ids
+      )
+      values ($1, $2::jsonb, $3::jsonb, $4::uuid[])
+      on conflict (campaign_id) do update
+      set style = excluded.style,
+          current_scene = campaign_current_state.current_scene || excluded.current_scene,
+          source_event_ids = excluded.source_event_ids,
+          updated_at = now()
+    `,
+    [
+      campaignId,
+      JSON.stringify(style),
+      JSON.stringify(currentScene),
+      sourceEventIds
+    ]
+  );
+
+  for (const memory of memories) {
+    await db.query(
+      `
+        insert into campaign_memories (
+          campaign_id,
+          memory_type,
+          title,
+          summary,
+          entities,
+          status,
+          importance,
+          source_event_ids
+        )
+        values ($1, 'lore', $2, $3, $4::text[], 'active', $5, $6::uuid[])
+        on conflict (campaign_id, memory_type, lower(title)) do update
+        set summary = excluded.summary,
+            entities = excluded.entities,
+            status = 'active',
+            importance = excluded.importance,
+            source_event_ids = excluded.source_event_ids,
+            updated_at = now()
+      `,
+      [
+        campaignId,
+        memory.title,
+        memory.summary,
+        memory.entities,
+        memory.importance,
+        sourceEventIds
+      ]
+    );
+  }
 }
 
 async function ensureCampaignJoinCode(
@@ -815,7 +1004,10 @@ export async function createCampaignForMode(
       promptBrief: input.campaignGenrePromptBrief ?? null,
       customWorldName: input.customWorldName ?? null,
       customWorldDescription: input.customWorldDescription ?? null
-    }
+    },
+    ...campaignWorldProfileMetadata({
+      campaignGenrePresetId: input.campaignGenrePresetId
+    })
   };
 
   const createdState = await withTransaction(db, async (client) => {
@@ -874,7 +1066,7 @@ export async function createCampaignForMode(
     const playerRow = requireRow(player.rows[0], "Failed to create player.");
     const turn = await ensureCollectingTurn(client, campaign.id);
 
-    await logCampaignEvent(client, campaign.id, "campaign_created", {
+    const createdEventId = await logCampaignEvent(client, campaign.id, "campaign_created", {
       hermesSessionId: sessionId,
       mode: input.mode,
       genre: input.campaignGenre,
@@ -888,6 +1080,14 @@ export async function createCampaignForMode(
       genre: input.campaignGenre,
       genreKind: input.campaignGenreKind ?? "preset"
     });
+
+    if (hasEldermereWorldProfile(campaign)) {
+      await seedEldermerePromptContextRecords(
+        client,
+        campaign.id,
+        createdEventId ? [createdEventId] : []
+      );
+    }
 
     const joinCode =
       input.mode === "multiplayer"
@@ -933,16 +1133,19 @@ export async function createCampaignForMode(
     return createdState.summary;
   }
 
-  const currentAction = formatOpeningSceneRequest({
-    mode: "single_player",
-    players: [createdState.player],
-    style: {
-      campaignGenre: input.campaignGenre,
-      campaignGenrePromptBrief: input.campaignGenrePromptBrief,
-      customWorldName: input.customWorldName,
-      customWorldDescription: input.customWorldDescription
-    }
-  });
+  const currentAction = withEldermereOpeningContext(
+    formatOpeningSceneRequest({
+      mode: "single_player",
+      players: [createdState.player],
+      style: {
+        campaignGenre: input.campaignGenre,
+        campaignGenrePromptBrief: input.campaignGenrePromptBrief,
+        customWorldName: input.customWorldName,
+        customWorldDescription: input.customWorldDescription
+      }
+    }),
+    createdState.campaign
+  );
 
   try {
     const opening = await askDungeonMaster(
@@ -2223,7 +2426,7 @@ async function getCampaignEventMessages(
 async function askDungeonMaster(
   db: Queryable,
   runtime: DungeonMasterRuntime,
-  campaign: Pick<CampaignRow, "id" | "hermes_session_id">,
+  campaign: Pick<CampaignRow, "id" | "hermes_session_id" | "metadata">,
   message: string,
   instructions: string,
   includeHistory = true,
@@ -2234,6 +2437,10 @@ async function askDungeonMaster(
   const traceId = randomUUID();
   const startedAt = Date.now();
   const emitStreamEvent = runtime.emitDmStreamEvent;
+  const instructionsWithWorldContext = withEldermereTurnContext(
+    instructions,
+    campaign
+  );
 
   if (turnId && emitStreamEvent) {
     emitStreamEvent({
@@ -2253,7 +2460,7 @@ async function askDungeonMaster(
       hermesSessionId: campaign.hermes_session_id,
       includeHistory,
       message: textStats(message),
-      instructions: textStats(instructions)
+      instructions: textStats(instructionsWithWorldContext)
     }
   });
 
@@ -2263,7 +2470,7 @@ async function askDungeonMaster(
           campaignId: campaign.id,
           turnId,
           currentAction: message,
-          baseInstructions: instructions
+          baseInstructions: instructionsWithWorldContext
         })
       : null;
     const history =
@@ -2273,7 +2480,7 @@ async function askDungeonMaster(
     const providerStartedAt = Date.now();
     const providerData = await runtime.askProvider({
       message: promptContext?.message ?? message,
-      instructions: promptContext?.instructions ?? instructions,
+      instructions: promptContext?.instructions ?? instructionsWithWorldContext,
       history,
       ...(turnId && emitStreamEvent
         ? {
@@ -2789,11 +2996,14 @@ export async function beginRoomForUser(
     return buildRoomSnapshot(db, beginState.campaign);
   }
 
-  const currentAction = formatOpeningSceneRequest({
-    mode: "multiplayer",
-    players: beginState.players,
-    style: campaignOpeningStyleFromMetadata(beginState.campaign)
-  });
+  const currentAction = withEldermereOpeningContext(
+    formatOpeningSceneRequest({
+      mode: "multiplayer",
+      players: beginState.players,
+      style: campaignOpeningStyleFromMetadata(beginState.campaign)
+    }),
+    beginState.campaign
+  );
 
   try {
     const opening = await askDungeonMaster(
@@ -3218,11 +3428,12 @@ export async function askDungeonMasterQuestionForUser(
 
   const players = await getActivePlayers(db, campaign.id);
   const currentAction = formatAskDmQuestion(players, player, trimmedQuestion);
+  const instructions = withEldermereTurnContext(askDmInstructions(), campaign);
   const promptContext = runtime.buildPromptContext
     ? await runtime.buildPromptContext({
         campaignId: campaign.id,
         currentAction,
-        baseInstructions: askDmInstructions()
+        baseInstructions: instructions
       })
     : null;
   const history = promptContext
@@ -3230,7 +3441,7 @@ export async function askDungeonMasterQuestionForUser(
     : await getCampaignEventMessages(db, campaign.id);
   const providerData = await runtime.askProvider({
     message: promptContext?.message ?? currentAction,
-    instructions: promptContext?.instructions ?? askDmInstructions(),
+    instructions: promptContext?.instructions ?? instructions,
     history
   });
   const answer = answerFromAskDmProviderResponse(providerData.content);
