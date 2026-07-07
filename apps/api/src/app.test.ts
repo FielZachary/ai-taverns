@@ -1882,6 +1882,7 @@ test("DM runtime routes handle authorized solo, ask-DM, regenerate, and traces",
   assert.equal(soloResponse.statusCode, 200, soloResponse.body);
   const solo = CampaignSoloTurnResponseSchema.parse(soloResponse.json());
   assert.equal(solo.messages.at(-1)?.role, "dm");
+  assert.equal(solo.messages.at(-1)?.debug?.rawResponse, "{}");
   assert.equal(solo.isResolving, false);
 
   const askResponse = await app.inject({
@@ -1921,6 +1922,7 @@ test("DM runtime routes handle authorized solo, ask-DM, regenerate, and traces",
     regenerateResponse.json()
   );
   assert.equal(regenerated.messages.at(-1)?.role, "dm");
+  assert.equal(regenerated.messages.at(-1)?.debug?.model, "test-model");
 
   const tracesResponse = await app.inject({
     method: "GET",

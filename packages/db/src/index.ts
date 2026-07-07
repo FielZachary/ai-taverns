@@ -1795,6 +1795,25 @@ function rowToRoomPlayer(
   };
 }
 
+function eventAiDebug(payload: Record<string, unknown>, role: "player" | "dm") {
+  if (role !== "dm") {
+    return undefined;
+  }
+
+  const debug = payload.aiDebug;
+
+  if (
+    !debug ||
+    typeof debug !== "object" ||
+    !Array.isArray((debug as AiDebugInfo).requestMessages) ||
+    typeof (debug as AiDebugInfo).rawResponse !== "string"
+  ) {
+    return undefined;
+  }
+
+  return debug as AiDebugInfo;
+}
+
 async function buildRoomSnapshot(
   db: Queryable,
   campaign: CampaignRow
@@ -1845,12 +1864,16 @@ async function buildRoomSnapshot(
         return null;
       }
 
+      const role = payload.role === "player" ? "player" : "dm";
+      const debug = eventAiDebug(payload, role);
+
       return {
         id: String(payload.messageId || event.id),
-        role: payload.role === "player" ? "player" : "dm",
+        role,
         kind: roomEventMessageKind(event.type),
         content,
-        createdAt: toIso(event.created_at)
+        createdAt: toIso(event.created_at),
+        ...(debug ? { debug } : {})
       };
     })
     .filter((message): message is RoomSnapshot["messages"][number] =>
