@@ -38,6 +38,11 @@ type QueryFn = <T = unknown>(
   values?: unknown[]
 ) => Promise<QueryResult<T>>;
 
+type DebugFields = {
+  model?: unknown;
+  rawResponse?: unknown;
+};
+
 type ConnectFn = () => Promise<{
   query: QueryFn;
   release: () => void;
@@ -1721,7 +1726,7 @@ test("room routes read, update player, begin, and submit through Fastify", async
       gameCode: created.campaign.joinCode,
       clientId: "room-joiner-client",
       username: "Joined Player",
-      characterName: "Mira",
+      characterName: "Joined Character",
       characterSheet: "A brave scout."
     }
   });
@@ -1751,7 +1756,7 @@ test("room routes read, update player, begin, and submit through Fastify", async
       roomId: created.campaign.id,
       playerId: "room-joiner-client",
       username: "Joined Player",
-      characterName: "Mira",
+      characterName: "Joined Character",
       characterSheet: "A brave scout with sharper instincts."
     }
   });
@@ -1816,7 +1821,7 @@ test("room routes read, update player, begin, and submit through Fastify", async
     payload: {
       roomId: created.campaign.id,
       playerId: "room-owner-client",
-      message: "I watch Mira's back."
+      message: "I watch the scout's back."
     }
   });
 
@@ -1882,7 +1887,10 @@ test("DM runtime routes handle authorized solo, ask-DM, regenerate, and traces",
   assert.equal(soloResponse.statusCode, 200, soloResponse.body);
   const solo = CampaignSoloTurnResponseSchema.parse(soloResponse.json());
   assert.equal(solo.messages.at(-1)?.role, "dm");
-  assert.equal(solo.messages.at(-1)?.debug?.rawResponse, "{}");
+  assert.equal(
+    (solo.messages.at(-1)?.debug as DebugFields | undefined)?.rawResponse,
+    "{}"
+  );
   assert.equal(solo.isResolving, false);
 
   const askResponse = await app.inject({
@@ -1922,7 +1930,10 @@ test("DM runtime routes handle authorized solo, ask-DM, regenerate, and traces",
     regenerateResponse.json()
   );
   assert.equal(regenerated.messages.at(-1)?.role, "dm");
-  assert.equal(regenerated.messages.at(-1)?.debug?.model, "test-model");
+  assert.equal(
+    (regenerated.messages.at(-1)?.debug as DebugFields | undefined)?.model,
+    "test-model"
+  );
 
   const tracesResponse = await app.inject({
     method: "GET",

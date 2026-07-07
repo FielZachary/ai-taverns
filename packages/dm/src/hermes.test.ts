@@ -23,9 +23,9 @@ describe("parseHermesDmContract combat roll guard", () => {
           "Equipment: longsword, shield, bow",
           "",
           "Current player action:",
-          "Player: I go east out of town towards the barrow"
+          "Player: I go east out of town towards the marked destination"
         ].join("\n"),
-        currentPlayerAction: "I go east out of town towards the barrow"
+        currentPlayerAction: "I go east out of town towards the marked destination"
       }
     );
 
@@ -41,22 +41,22 @@ describe("parseHermesDmContract combat roll guard", () => {
       {
         currentAction: [
           "Canonical player characters:",
-          "1. Arden playing Brann",
+          "1. Player One playing Character One",
           "Character sheet:",
           "Class: Fighter",
           "Equipment: longsword, shield, bow",
           "",
-          "2. Mira playing Selene",
+          "2. Player Two playing Character Two",
           "Character sheet:",
           "Spells: fire bolt, magic missile",
           "",
           "Current party actions:",
-          "Arden (Brann): I ask the courier who attacked the village.",
-          "Mira (Selene): I watch the chapel windows."
+          "Player One (Character One): I ask the courier who attacked the village.",
+          "Player Two (Character Two): I watch the chapel windows."
         ].join("\n"),
         currentPlayerAction: [
-          "Arden (Brann): I ask the courier who attacked the village.",
-          "Mira (Selene): I watch the chapel windows."
+          "Player One (Character One): I ask the courier who attacked the village.",
+          "Player Two (Character Two): I watch the chapel windows."
         ].join("\n")
       }
     );

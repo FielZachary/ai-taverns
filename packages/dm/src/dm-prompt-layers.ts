@@ -18,7 +18,7 @@ const responseContractExample = JSON.stringify(
 const noRollResponseExample = JSON.stringify(
   {
     public_narration:
-      "Taric and Olaf step through the broken door, and the watchtower's main hall opens around them.\n\nThe room is cold and dim, about thirty feet across. Most of the ceiling has collapsed near the far wall, where grey daylight spills through broken stone and rotten beams. Dust hangs in that light like smoke that never finished leaving.\n\nThe fire that killed this place did not burn cleanly. Black streaks climb the walls in uneven lines, then vanish behind fallen roof beams charred so deeply they look more like old bone than wood. Those beams lie across the stone floor among ash, broken chairs, cracked pottery, and bits of rusted iron.\n\nThen the creak comes again.\n\nIt comes from above you. A frayed rope hangs from a scorched ceiling beam, swaying slowly even though the air inside is still. The lower end is tied in a tight knot, but nothing hangs from it now. Each movement makes the beam groan softly overhead.\n\nNear the rope, several sets of bootprints cross through the dust. Some lead left, toward a narrow stone staircase descending beneath the tower. The steps disappear into darkness after only a few feet, and the dust on them has been recently disturbed.\n\nOther tracks lead right, toward a half-open wooden door into a smaller side room. From where you stand, you can see a fallen shelf, a broken barrel, and something pale lying on the floor behind them.\n\nOne set of prints does not lead cleanly anywhere. It turns into a long drag mark across the middle of the hall, as if someone stopped walking and was pulled.\n\nRight now, you have the swaying rope above you, the dark stairs to the left, the side room to the right, and the tracks and drag mark across the floor. What do you do?",
+      "The party steps through the broken door, and the watchtower's main hall opens around them.\n\nThe room is cold and dim, about thirty feet across. Most of the ceiling has collapsed near the far wall, where grey daylight spills through broken stone and rotten beams. Dust hangs in that light like smoke that never finished leaving.\n\nThe fire that killed this place did not burn cleanly. Black streaks climb the walls in uneven lines, then vanish behind fallen roof beams charred so deeply they look more like old bone than wood. Those beams lie across the stone floor among ash, broken chairs, cracked pottery, and bits of rusted iron.\n\nThen the creak comes again.\n\nIt comes from above you. A frayed rope hangs from a scorched ceiling beam, swaying slowly even though the air inside is still. The lower end is tied in a tight knot, but nothing hangs from it now. Each movement makes the beam groan softly overhead.\n\nNear the rope, several sets of bootprints cross through the dust. Some lead left, toward a narrow stone staircase descending beneath the tower. The steps disappear into darkness after only a few feet, and the dust on them has been recently disturbed.\n\nOther tracks lead right, toward a half-open wooden door into a smaller side room. From where you stand, you can see a fallen shelf, a broken barrel, and something pale lying on the floor behind them.\n\nOne set of prints does not lead cleanly anywhere. It turns into a long drag mark across the middle of the hall, as if someone stopped walking and was pulled.\n\nRight now, you have the swaying rope above you, the dark stairs to the left, the side room to the right, and the tracks and drag mark across the floor. What do you do?",
     roll_requests: [],
     next_input_needed: "player_actions",
     input_targets: [],
@@ -34,7 +34,7 @@ const rollRequestResponseExample = JSON.stringify(
       "The lock is old, swollen by rain, and threaded with a faint blue ward. Your tools can reach the pins, but doing this quietly will take precision.\n\nRoll 1d20 + 5 for a thieves' tools check.",
     roll_requests: [
       {
-        player: "Zach",
+        player: "Acting player",
         dice: "1d20",
         modifier: 5,
         label: "Thieves' tools check",
@@ -43,7 +43,7 @@ const rollRequestResponseExample = JSON.stringify(
       },
     ],
     next_input_needed: "dice_results",
-    input_targets: ["Zach"],
+    input_targets: ["Acting player"],
     input_policy: "only_targeted_players",
   },
   null,
@@ -53,36 +53,36 @@ const rollRequestResponseExample = JSON.stringify(
 const chainedRollRequestResponseExample = JSON.stringify(
   {
     public_narration:
-      "The wiry guard's back is turned, and the campfire masks the scrape of loose stone underfoot. You can try to slip close and strike before he notices.\n\nRoll 1d20 + 6 for Stealth to determine whether you stay quiet. If you succeed, roll 1d20 + 7 at advantage for the rapier attack, then roll 1d8 + 4 for rapier damage so the strike can be resolved immediately if it hits.",
+      "The lookout's back is turned, and the campfire masks the scrape of loose stone underfoot. You can try to slip close and strike before you are noticed.\n\nRoll 1d20 + 6 for Stealth to determine whether you stay quiet. If you succeed, roll 1d20 + 7 at advantage for the rapier attack, then roll 1d8 + 4 for rapier damage so the strike can be resolved immediately if it hits.",
     roll_requests: [
       {
-        player: "Zach",
+        player: "Acting player",
         dice: "1d20",
         modifier: 6,
-        label: "Stealth to approach the wiry guard",
+        label: "Stealth to approach the lookout",
         advantage_state: "normal",
         reason:
           "Determine whether the approach stays unnoticed before the attack",
       },
       {
-        player: "Zach",
+        player: "Acting player",
         dice: "1d20",
         modifier: 7,
-        label: "Rapier attack against the wiry guard",
+        label: "Rapier attack against the lookout",
         advantage_state: "advantage",
         reason: "Resolve the declared attack if the stealth approach succeeds",
       },
       {
-        player: "Zach",
+        player: "Acting player",
         dice: "1d8",
         modifier: 4,
-        label: "Rapier damage against the wiry guard",
+        label: "Rapier damage against the lookout",
         advantage_state: "normal",
         reason: "Resolve damage only if the rapier attack hits",
       },
     ],
     next_input_needed: "dice_results",
-    input_targets: ["Zach"],
+    input_targets: ["Acting player"],
     input_policy: "only_targeted_players",
   },
   null,
@@ -92,20 +92,20 @@ const chainedRollRequestResponseExample = JSON.stringify(
 const impossibleActionRollExample = JSON.stringify(
   {
     public_narration:
-      "You cannot simply charm Lord Veyr into surrender through force of personality alone; his oath, pride, and command magic are stronger than a normal social opening. But your approach could still matter.\n\nIf you play this beautifully, you may make him hesitate, reveal what he wants, or create an opening for the party. Roll 1d20 + 7 for Persuasion.",
+      "You cannot simply charm an oathbound ruler into surrender through force of personality alone; the oath, pride, and command magic in the room are stronger than a normal social opening. But your approach could still matter.\n\nIf you play this beautifully, you may make the ruler hesitate, reveal what they want, or create an opening for the party. Roll 1d20 + 7 for Persuasion.",
     roll_requests: [
       {
-        player: "Mira",
+        player: "Acting player",
         dice: "1d20",
         modifier: 7,
-        label: "Persuasion attempt against Lord Veyr",
+        label: "Persuasion attempt against the oathbound ruler",
         advantage_state: "normal",
         reason:
           "Measure leverage, hesitation, or complication; this cannot force total surrender by itself",
       },
     ],
     next_input_needed: "dice_results",
-    input_targets: ["Mira"],
+    input_targets: ["Acting player"],
     input_policy: "only_targeted_players",
   },
   null,
@@ -115,7 +115,7 @@ const impossibleActionRollExample = JSON.stringify(
 const impossibleActionHighRollResultExample = JSON.stringify(
   {
     public_narration:
-      "Mira, your words land with unsettling precision. For one breath Lord Veyr's smile fades, and everyone in the hall sees that you found the crack in him: loneliness, vanity, and fear of being remembered as a butcher.\n\nBut the oath-brand at his throat burns black, and whatever surrender he might have chosen is strangled before it reaches his mouth. He does not yield.\n\nInstead, he lowers his blade a fraction and says, 'Ask for one life, not my throne.'\n\nWhat do you do?",
+      "Your words land with unsettling precision. For one breath the ruler's smile fades, and everyone in the hall sees that you found a crack: loneliness, vanity, and fear of being remembered as a butcher.\n\nBut the oath-brand burns black, and whatever surrender might have been chosen is strangled before it reaches the mouth. The ruler does not yield.\n\nInstead, the blade lowers a fraction, and the answer comes coldly: 'Ask for one life, not my throne.'\n\nWhat do you do?",
     roll_requests: [],
     next_input_needed: "player_actions",
     input_targets: [],
