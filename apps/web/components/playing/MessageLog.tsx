@@ -123,7 +123,10 @@ export function MessageLog({
   const logRef = useRef<HTMLDivElement>(null);
   const [openDebug, setOpenDebug] = useState<AiDebugInfo | null>(null);
   const scrollKey = useMemo(
-    () => messages.map((message) => message.id).join("|"),
+    () =>
+      messages
+        .map((message) => `${message.id}:${message.content.length}`)
+        .join("|"),
     [messages]
   );
 
