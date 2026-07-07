@@ -10,6 +10,7 @@ import {
   CampaignSoloTurnRequestSchema,
   CampaignSoloTurnResponseSchema
 } from "@ai-dnd/contracts";
+import type { RoomSnapshot } from "@ai-dnd/contracts";
 import {
   askDungeonMasterQuestionForUser,
   type DungeonMasterRuntime,
@@ -30,6 +31,16 @@ function createHttpError(statusCode: number, message: string): Error {
   const error = new Error(message) as Error & { statusCode: number };
   error.statusCode = statusCode;
   return error;
+}
+
+async function publishRoomSnapshotUpdate(
+  fastify: FastifyInstance,
+  snapshot: RoomSnapshot
+) {
+  await fastify.roomRealtime.publishRoomUpdated({
+    roomId: snapshot.roomId,
+    updatedAt: snapshot.updatedAt
+  });
 }
 
 export async function registerDmRoutes(
@@ -61,7 +72,7 @@ export async function registerDmRoutes(
       request.cookies[config.authCookieName]
     );
 
-    return CampaignSoloTurnResponseSchema.parse(
+    const snapshot = CampaignSoloTurnResponseSchema.parse(
       await submitSoloTurnForUser(fastify.pg, runtime, {
         campaignId: params.campaignId,
         message: message ?? "",
@@ -72,6 +83,10 @@ export async function registerDmRoutes(
         ...(rollSubmissions ? { rollSubmissions } : {})
       })
     );
+
+    await publishRoomSnapshotUpdate(fastify, snapshot);
+
+    return snapshot;
   });
 
   fastify.post("/campaigns/:campaignId/ask-dm", async (request) => {
@@ -90,7 +105,7 @@ export async function registerDmRoutes(
       request.cookies[config.authCookieName]
     );
 
-    return CampaignAskDmResponseSchema.parse(
+    const snapshot = CampaignAskDmResponseSchema.parse(
       await askDungeonMasterQuestionForUser(fastify.pg, runtime, {
         campaignId: params.campaignId,
         question,
@@ -98,6 +113,10 @@ export async function registerDmRoutes(
         ...(clientMessageId ? { clientMessageId } : {})
       })
     );
+
+    await publishRoomSnapshotUpdate(fastify, snapshot);
+
+    return snapshot;
   });
 
   fastify.post("/campaigns/:campaignId/regenerate", async (request) => {
@@ -115,13 +134,17 @@ export async function registerDmRoutes(
       request.cookies[config.authCookieName]
     );
 
-    return CampaignRegenerateResponseSchema.parse(
+    const snapshot = CampaignRegenerateResponseSchema.parse(
       await regenerateCampaignResponseForUser(fastify.pg, runtime, {
         campaignId: params.campaignId,
         messageId,
         userId: user.id
       })
     );
+
+    await publishRoomSnapshotUpdate(fastify, snapshot);
+
+    return snapshot;
   });
 
   fastify.get("/campaigns/:campaignId/debug-traces", async (request) => {

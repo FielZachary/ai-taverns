@@ -6,6 +6,7 @@ import type { DungeonMasterRuntime } from "@ai-dnd/db";
 import { loadConfig, type ApiConfig } from "./config.js";
 import { handleRouteError } from "./errors.js";
 import { postgresPlugin } from "./plugins/postgres.js";
+import { roomRealtimePlugin } from "./plugins/room-realtime.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerCampaignRoutes } from "./routes/campaigns.js";
 import { registerDmRoutes } from "./routes/dm.js";
@@ -53,6 +54,9 @@ export async function buildApp(
   await fastify.register(postgresPlugin, {
     config,
     connectOnReady: options.connectToDatabase ?? true
+  });
+  await fastify.register(roomRealtimePlugin, {
+    startPostgresListener: options.connectToDatabase ?? true
   });
 
   await registerHealthRoutes(fastify);

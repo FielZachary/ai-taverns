@@ -9,6 +9,7 @@ import {
   RoomSubmitRequestSchema,
   RoomSubmitResponseSchema
 } from "@ai-dnd/contracts";
+import type { RoomSnapshot } from "@ai-dnd/contracts";
 import {
   beginRoomForUser,
   type DungeonMasterRuntime,
@@ -37,6 +38,16 @@ function createHttpError(statusCode: number, message: string): Error {
   const error = new Error(message) as Error & { statusCode: number };
   error.statusCode = statusCode;
   return error;
+}
+
+async function publishRoomSnapshotUpdate(
+  fastify: FastifyInstance,
+  snapshot: RoomSnapshot
+) {
+  await fastify.roomRealtime.publishRoomUpdated({
+    roomId: snapshot.roomId,
+    updatedAt: snapshot.updatedAt
+  });
 }
 
 export async function registerRoomRoutes(
@@ -82,7 +93,7 @@ export async function registerRoomRoutes(
       throw createHttpError(400, "Player profile is incomplete.");
     }
 
-    return RoomPlayerUpdateResponseSchema.parse(
+    const snapshot = RoomPlayerUpdateResponseSchema.parse(
       await registerRoomPlayerForUser(fastify.pg, {
         ...identity,
         playerId,
@@ -92,6 +103,10 @@ export async function registerRoomRoutes(
         userId: user.id
       })
     );
+
+    await publishRoomSnapshotUpdate(fastify, snapshot);
+
+    return snapshot;
   });
 
   fastify.post("/room/begin", async (request) => {
@@ -103,13 +118,17 @@ export async function registerRoomRoutes(
       request.cookies[config.authCookieName]
     );
 
-    return RoomBeginResponseSchema.parse(
+    const snapshot = RoomBeginResponseSchema.parse(
       await beginRoomForUser(fastify.pg, {
         ...identity,
         userId: user.id,
         runtime
       })
     );
+
+    await publishRoomSnapshotUpdate(fastify, snapshot);
+
+    return snapshot;
   });
 
   fastify.post("/room/submit", async (request) => {
@@ -130,7 +149,7 @@ export async function registerRoomRoutes(
     const rollRequestId = body.rollRequestId?.trim();
     const clientMessageId = body.clientMessageId?.trim();
 
-    return RoomSubmitResponseSchema.parse(
+    const snapshot = RoomSubmitResponseSchema.parse(
       await submitRoomTurnForUser(fastify.pg, {
         ...identity,
         playerId,
@@ -143,5 +162,9 @@ export async function registerRoomRoutes(
         ...(body.rollSubmissions ? { rollSubmissions: body.rollSubmissions } : {})
       })
     );
+
+    await publishRoomSnapshotUpdate(fastify, snapshot);
+
+    return snapshot;
   });
 }

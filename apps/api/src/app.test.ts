@@ -161,6 +161,10 @@ class FakeDatabase {
       return { rows: [] as T[] };
     }
 
+    if (normalizedSql === "select pg_notify($1, $2)") {
+      return { rows: [] as T[] };
+    }
+
     if (normalizedSql.startsWith("insert into login_tokens")) {
       const record: LoginTokenRecord = {
         id: `login-token-${this.nextId++}`,
@@ -1273,7 +1277,24 @@ test("room realtime websocket rejects unauthenticated upgrades", async () => {
 
 test("room realtime websocket accepts session cookies and emits events", async () => {
   const cookie = await signIn("realtime@example.com");
-  const socket = await app.injectWS("/api/room/live", {
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: {
+      cookie
+    },
+    payload: {
+      mode: "single_player",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "classic_fantasy",
+      ownerClientId: "realtime-client",
+      playerName: "Realtime Player",
+      characterName: "Signal",
+      characterSheet: "A careful listener."
+    }
+  });
+  const created = CampaignCreateResponseSchema.parse(createResponse.json());
+  const socket = await app.injectWS(`/api/room/live?roomId=${created.campaign.id}`, {
     headers: {
       cookie
     }
@@ -1296,6 +1317,73 @@ test("room realtime websocket accepts session cookies and emits events", async (
 
     assert.equal(error.type, "error");
     assert.match(error.message, /not supported/);
+  } finally {
+    socket.terminate();
+  }
+});
+
+test("room realtime websocket publishes room updates after mutations", async () => {
+  const cookie = await signIn("realtime-mutation@example.com");
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: {
+      cookie
+    },
+    payload: {
+      mode: "single_player",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "classic_fantasy",
+      ownerClientId: "realtime-mutation-client",
+      playerName: "Realtime Mutation",
+      characterName: "Echo",
+      characterSheet: "A watcher of room changes."
+    }
+  });
+  const created = CampaignCreateResponseSchema.parse(createResponse.json());
+  const socket = await app.injectWS(
+    `/api/room/live?roomId=${created.campaign.id}`,
+    {
+      headers: {
+        cookie
+      }
+    }
+  );
+
+  try {
+    const [heartbeatMessage] = await once(socket, "message");
+    const heartbeat = RoomRealtimeEventSchema.parse(
+      JSON.parse(heartbeatMessage.toString())
+    );
+
+    assert.equal(heartbeat.type, "heartbeat");
+
+    const nextMessage = once(socket, "message");
+    const profileResponse = await app.inject({
+      method: "POST",
+      url: "/api/room/player",
+      headers: {
+        cookie
+      },
+      payload: {
+        roomId: created.campaign.id,
+        playerId: "realtime-mutation-client",
+        username: "Realtime Mutation",
+        characterName: "Echo",
+        characterSheet: "A watcher of room changes and fresh signals."
+      }
+    });
+
+    assert.equal(profileResponse.statusCode, 200);
+
+    const [updateMessage] = await nextMessage;
+    const update = RoomRealtimeEventSchema.parse(
+      JSON.parse(updateMessage.toString())
+    );
+
+    assert.equal(update.type, "room_updated");
+    assert.equal(update.roomId, created.campaign.id);
+    assert.ok(update.eventId);
   } finally {
     socket.terminate();
   }
