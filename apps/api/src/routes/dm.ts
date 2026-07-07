@@ -48,8 +48,15 @@ export async function registerDmRoutes(
   options: DmRouteOptions
 ) {
   const { config } = options;
-  const runtime = options.dmRuntime ?? {
+  const baseRuntime = options.dmRuntime ?? {
     askProvider: askDungeonMasterProvider
+  };
+  const runtime: DungeonMasterRuntime = {
+    ...baseRuntime,
+    emitDmStreamEvent(event) {
+      baseRuntime.emitDmStreamEvent?.(event);
+      fastify.roomRealtime.broadcast(event);
+    }
   };
 
   fastify.post("/campaigns/:campaignId/solo-turn", async (request) => {

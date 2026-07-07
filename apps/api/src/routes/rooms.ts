@@ -55,8 +55,15 @@ export async function registerRoomRoutes(
   options: RoomRouteOptions
 ) {
   const { config } = options;
-  const runtime = options.dmRuntime ?? {
+  const baseRuntime = options.dmRuntime ?? {
     askProvider: askDungeonMasterProvider
+  };
+  const runtime: DungeonMasterRuntime = {
+    ...baseRuntime,
+    emitDmStreamEvent(event) {
+      baseRuntime.emitDmStreamEvent?.(event);
+      fastify.roomRealtime.broadcast(event);
+    }
   };
 
   fastify.get("/room", async (request) => {

@@ -4,7 +4,9 @@ import type pg from "pg";
 import { z } from "zod";
 import {
   RoomRealtimeEventSchema,
-  type RoomRealtimeEvent
+  RoomSocketEventSchema,
+  type RoomRealtimeEvent,
+  type RoomSocketEvent
 } from "@ai-dnd/contracts";
 
 const roomUpdatesChannel = "room_updates";
@@ -22,7 +24,7 @@ type RoomRealtimeSocket = {
 
 export type RoomRealtimeBroadcaster = {
   subscribe: (roomId: string, socket: RoomRealtimeSocket) => () => void;
-  broadcast: (event: RoomRealtimeEvent) => void;
+  broadcast: (event: RoomSocketEvent) => void;
   publishRoomUpdated: (input: {
     roomId: string;
     updatedAt?: string;
@@ -74,14 +76,18 @@ export const roomRealtimePlugin = fp<RoomRealtimePluginOptions>(
       }
     };
 
-    const broadcast = (event: RoomRealtimeEvent) => {
-      const parsed = RoomRealtimeEventSchema.parse(event);
+    const broadcast = (event: RoomSocketEvent) => {
+      const parsed = RoomSocketEventSchema.parse(event);
 
-      if (parsed.type !== "room_updated") {
+      if (
+        parsed.type === "room_updated" &&
+        parsed.eventId &&
+        !rememberEvent(recentEventIds, parsed.eventId)
+      ) {
         return;
       }
 
-      if (parsed.eventId && !rememberEvent(recentEventIds, parsed.eventId)) {
+      if (parsed.type === "heartbeat" || parsed.type === "error") {
         return;
       }
 

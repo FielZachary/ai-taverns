@@ -26,8 +26,10 @@ import {
   HermesPrepRequestSchema,
   HermesTurnRequestSchema,
   HermesTurnResponseSchema,
+  DmStreamEventSchema,
   RoomPlayerUpdateRequestSchema,
   RoomRealtimeEventSchema,
+  RoomSocketEventSchema,
   RoomSnapshotSchema,
   RoomSubmitRequestSchema
 } from "./index.js";
@@ -289,6 +291,33 @@ test("room realtime contract accepts heartbeat and update events", () => {
     RoomRealtimeEventSchema.parse({
       type: "heartbeat",
       sentAt: "not-a-date"
+    })
+  );
+});
+
+test("DM stream contract accepts transient stream events", () => {
+  const delta = DmStreamEventSchema.parse({
+    type: "dm_stream_delta",
+    roomId: "00000000-0000-4000-8000-000000000001",
+    turnId: "turn-1",
+    text: "The door opens"
+  });
+  const socketEvent = RoomSocketEventSchema.parse({
+    type: "dm_stream_done",
+    roomId: "00000000-0000-4000-8000-000000000001",
+    turnId: "turn-1",
+    messageId: "message-1"
+  });
+
+  assert.equal(delta.type, "dm_stream_delta");
+  assert.equal(delta.text, "The door opens");
+  assert.equal(socketEvent.type, "dm_stream_done");
+  assert.throws(() =>
+    DmStreamEventSchema.parse({
+      type: "dm_stream_failed",
+      roomId: "00000000-0000-4000-8000-000000000001",
+      turnId: "turn-1",
+      message: ""
     })
   );
 });

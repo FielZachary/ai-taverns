@@ -117,6 +117,37 @@ export const RoomRealtimeEventSchema = z.discriminatedUnion("type", [
   })
 ]);
 
+export const DmStreamEventSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("dm_stream_started"),
+    roomId: z.string().min(1),
+    turnId: z.string().min(1)
+  }),
+  z.object({
+    type: z.literal("dm_stream_delta"),
+    roomId: z.string().min(1),
+    turnId: z.string().min(1),
+    text: z.string()
+  }),
+  z.object({
+    type: z.literal("dm_stream_done"),
+    roomId: z.string().min(1),
+    turnId: z.string().min(1),
+    messageId: z.string().min(1)
+  }),
+  z.object({
+    type: z.literal("dm_stream_failed"),
+    roomId: z.string().min(1),
+    turnId: z.string().min(1),
+    message: z.string().min(1)
+  })
+]);
+
+export const RoomSocketEventSchema = z.union([
+  RoomRealtimeEventSchema,
+  DmStreamEventSchema
+]);
+
 export type DiceRollRequest = z.infer<typeof DiceRollRequestSchema>;
 export type DiceRollResult = z.infer<typeof DiceRollResultSchema>;
 export type DiceRollSubmission = z.infer<typeof DiceRollSubmissionSchema>;
@@ -128,3 +159,5 @@ export type RoomPlayerUpdateRequest = z.infer<
 export type RoomBeginRequest = z.infer<typeof RoomBeginRequestSchema>;
 export type RoomSubmitRequest = z.infer<typeof RoomSubmitRequestSchema>;
 export type RoomRealtimeEvent = z.infer<typeof RoomRealtimeEventSchema>;
+export type DmStreamEvent = z.infer<typeof DmStreamEventSchema>;
+export type RoomSocketEvent = z.infer<typeof RoomSocketEventSchema>;

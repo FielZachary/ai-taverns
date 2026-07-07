@@ -14,6 +14,7 @@ import {
 import type {
   CampaignMode,
   CampaignSummary,
+  DmStreamEvent,
   DiceRollRequest,
   DiceRollResult,
   DiceRollSubmission,
@@ -446,7 +447,9 @@ export type DungeonMasterRuntime = {
     message: string;
     instructions: string;
     history?: GameMessage[];
+    onPublicNarrationDelta?: (text: string) => void;
   }): Promise<DungeonMasterProviderResponse>;
+  emitDmStreamEvent?(event: DmStreamEvent): void;
   buildPromptContext?(input: {
     campaignId: string;
     turnId?: string | undefined;
@@ -2199,6 +2202,15 @@ async function askDungeonMaster(
 ) {
   const traceId = randomUUID();
   const startedAt = Date.now();
+  const emitStreamEvent = runtime.emitDmStreamEvent;
+
+  if (turnId && emitStreamEvent) {
+    emitStreamEvent({
+      type: "dm_stream_started",
+      roomId: campaign.id,
+      turnId
+    });
+  }
 
   await logTurnDebugTrace(db, {
     campaignId: campaign.id,
@@ -2231,7 +2243,23 @@ async function askDungeonMaster(
     const providerData = await runtime.askProvider({
       message: promptContext?.message ?? message,
       instructions: promptContext?.instructions ?? instructions,
-      history
+      history,
+      ...(turnId && emitStreamEvent
+        ? {
+            onPublicNarrationDelta: (text: string) => {
+              if (!text) {
+                return;
+              }
+
+              emitStreamEvent({
+                type: "dm_stream_delta",
+                roomId: campaign.id,
+                turnId,
+                text
+              });
+            }
+          }
+        : {})
     });
 
     await logTurnDebugTrace(db, {
@@ -2288,7 +2316,7 @@ async function askDungeonMaster(
     });
 
     return {
-      id: providerData.id,
+      id: providerData.id ?? randomUUID(),
       content: reply,
       debug: providerData.debug,
       rollRequests,
@@ -2313,12 +2341,31 @@ async function askDungeonMaster(
     });
 
     if (error instanceof Error && error.message.includes("Trace ID:")) {
+      if (turnId && emitStreamEvent) {
+        emitStreamEvent({
+          type: "dm_stream_failed",
+          roomId: campaign.id,
+          turnId,
+          message: error.message
+        });
+      }
       throw error;
     }
 
-    throw new Error(
+    const wrappedError = new Error(
       `${error instanceof Error ? error.message : "DM provider call failed."} Trace ID: ${traceId}`
     );
+
+    if (turnId && emitStreamEvent) {
+      emitStreamEvent({
+        type: "dm_stream_failed",
+        roomId: campaign.id,
+        turnId,
+        message: wrappedError.message
+      });
+    }
+
+    throw wrappedError;
   }
 }
 
@@ -2742,6 +2789,13 @@ export async function beginRoomForUser(
       aiDebug: opening.debug
     });
 
+    input.runtime.emitDmStreamEvent?.({
+      type: "dm_stream_done",
+      roomId: beginState.campaign.id,
+      turnId: beginState.turn.id,
+      messageId: opening.id
+    });
+
     await db.query("update campaigns set has_begun = true where id = $1", [
       beginState.campaign.id
     ]);
@@ -3022,6 +3076,13 @@ export async function submitRoomTurnForUser(
         inputTargets: reply.inputTargets,
         inputPolicy: reply.inputPolicy,
         aiDebug: reply.debug
+      });
+
+      input.runtime.emitDmStreamEvent?.({
+        type: "dm_stream_done",
+        roomId: submitState.campaign.id,
+        turnId: submitState.turn.id,
+        messageId: reply.id
       });
 
       void input.runtime.runPostTurnContextJobs?.({
@@ -3345,6 +3406,13 @@ export async function submitSoloTurnForUser(
       aiDebug: reply.debug
     });
 
+    runtime.emitDmStreamEvent?.({
+      type: "dm_stream_done",
+      roomId: soloState.campaign.id,
+      turnId: soloState.turn.id,
+      messageId: reply.id
+    });
+
     void runtime.runPostTurnContextJobs?.({
       campaignId: soloState.campaign.id,
       turnId: soloState.turn.id,
@@ -3547,6 +3615,13 @@ export async function regenerateCampaignResponseForUser(
       inputPolicy: reply.inputPolicy,
       setting: reply.setting,
       aiDebug: reply.debug
+    });
+
+    runtime.emitDmStreamEvent?.({
+      type: "dm_stream_done",
+      roomId: regenerationState.campaign.id,
+      turnId: regenerationState.turn.id,
+      messageId: reply.id
     });
 
     void runtime.runPostTurnContextJobs?.({

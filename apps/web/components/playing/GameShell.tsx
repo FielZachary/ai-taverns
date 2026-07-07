@@ -49,6 +49,7 @@ import {
 const openingMessages: GameMessage[] = [];
 const playerIdStorageKey = "ai-dnd.playerId";
 const roomRequestTimeoutMs = 8_000;
+const fallbackRoomPollMs = 25_000;
 
 type CampaignMode = "single_player" | "multiplayer";
 
@@ -81,7 +82,18 @@ type RoomSnapshot = {
   pendingRollRequests?: DiceRollRequest[];
   inputTargets?: string[];
   inputPolicy?: InputPolicy;
+  updatedAt?: string;
 };
+
+type RoomRealtimeEvent =
+  | { type: "room_updated"; roomId: string; updatedAt: string; eventId?: string }
+  | { type: "room_snapshot"; roomId: string; snapshot: RoomSnapshot }
+  | { type: "heartbeat"; sentAt: string }
+  | { type: "error"; message: string }
+  | { type: "dm_stream_started"; roomId: string; turnId: string }
+  | { type: "dm_stream_delta"; roomId: string; turnId: string; text: string }
+  | { type: "dm_stream_done"; roomId: string; turnId: string; messageId: string }
+  | { type: "dm_stream_failed"; roomId: string; turnId: string; message: string };
 
 type GameShellProps = {
   initialCampaignId?: string;
@@ -110,6 +122,10 @@ type PendingRollBatch = {
 type PendingSubmission = {
   messageId: string;
   createdAt: string;
+};
+
+type StreamingDmMessage = GameMessage & {
+  turnId: string;
 };
 
 function snapshotHasResponseAfterMessage(
@@ -586,6 +602,29 @@ function updateCampaignPreview(
   );
 }
 
+function roomSocketUrl(campaign: CampaignSummary) {
+  const apiOrigin =
+    process.env.NEXT_PUBLIC_FASTIFY_API_ORIGIN?.replace(/\/$/, "") ||
+    window.location.origin;
+  const url = new URL("/api/room/live", apiOrigin);
+
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  url.searchParams.set("roomId", campaign.id);
+  url.searchParams.set("sessionId", campaign.hermesSessionId);
+
+  return url.toString();
+}
+
+function parseRoomRealtimeEvent(value: string): RoomRealtimeEvent | null {
+  try {
+    const event = JSON.parse(value) as Partial<RoomRealtimeEvent>;
+
+    return typeof event.type === "string" ? (event as RoomRealtimeEvent) : null;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchWithTimeout(
   input: RequestInfo | URL,
   init: RequestInit = {},
@@ -629,6 +668,9 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     useState<string | null>(null);
   const pendingSubmissionRef = useRef<PendingSubmission | null>(null);
   const [roomMessages, setRoomMessages] = useState<GameMessage[]>([]);
+  const [streamingDmMessages, setStreamingDmMessages] = useState<
+    StreamingDmMessage[]
+  >([]);
   const [isRoomResolving, setIsRoomResolving] = useState(false);
   const [hasAdventureBegun, setHasAdventureBegun] = useState(false);
   const [pendingRollRequests, setPendingRollRequests] = useState<
@@ -705,12 +747,17 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     roomMessages.forEach((message) => {
       mergedMessages.set(message.id, message);
     });
+    streamingDmMessages.forEach((message) => {
+      if (!roomMessages.some((roomMessage) => roomMessage.id === message.id)) {
+        mergedMessages.set(message.id, message);
+      }
+    });
 
     return Array.from(mergedMessages.values()).sort(
       (firstMessage, secondMessage) =>
         Date.parse(firstMessage.createdAt) - Date.parse(secondMessage.createdAt)
     );
-  }, [messages, roomMessages]);
+  }, [messages, roomMessages, streamingDmMessages]);
   const waitingPlayers = useMemo<ChatPlayerStatus[]>(() => {
     if (isSinglePlayer || !hasAdventureBegun) {
       return [];
@@ -1047,6 +1094,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     if (!activeCampaign) {
       setRoomPlayers([]);
       setRoomMessages([]);
+      setStreamingDmMessages([]);
       setHasAdventureBegun(false);
       setIsRoomResolving(false);
       setIsInputSubmitted(false);
@@ -1059,8 +1107,11 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     }
 
     let shouldIgnore = false;
+    let socket: WebSocket | null = null;
+    let reconnectTimeout: number | undefined;
+    let reconnectAttempts = 0;
 
-    async function pollRoom() {
+    async function refreshRoom() {
       if (roomPollInFlightRef.current) {
         return;
       }
@@ -1101,13 +1152,160 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
       }
     }
 
-    void pollRoom();
+    function scheduleReconnect() {
+      if (shouldIgnore) {
+        return;
+      }
+
+      const delay = Math.min(30_000, 1_000 * 2 ** reconnectAttempts);
+      reconnectAttempts += 1;
+      reconnectTimeout = window.setTimeout(connectSocket, delay);
+    }
+
+    function connectSocket() {
+      if (shouldIgnore) {
+        return;
+      }
+
+      try {
+        socket = new WebSocket(roomSocketUrl(activeCampaign));
+      } catch {
+        scheduleReconnect();
+        return;
+      }
+
+      socket.addEventListener("open", () => {
+        reconnectAttempts = 0;
+        void refreshRoom();
+      });
+      socket.addEventListener("message", (event) => {
+        if (typeof event.data !== "string") {
+          return;
+        }
+
+        const realtimeEvent = parseRoomRealtimeEvent(event.data);
+
+        if (!realtimeEvent) {
+          return;
+        }
+
+        if (
+          realtimeEvent.type === "room_updated" &&
+          realtimeEvent.roomId === activeCampaign.id
+        ) {
+          void refreshRoom();
+        }
+
+        if (
+          realtimeEvent.type === "room_snapshot" &&
+          realtimeEvent.roomId === activeCampaign.id
+        ) {
+          applyRoomSnapshot(realtimeEvent.snapshot);
+        }
+
+        if (
+          realtimeEvent.type === "dm_stream_started" &&
+          realtimeEvent.roomId === activeCampaign.id
+        ) {
+          setIsRoomResolving(true);
+          setStreamingDmMessages((currentMessages) => [
+            ...currentMessages.filter(
+              (message) => message.turnId !== realtimeEvent.turnId
+            ),
+            {
+              id: `dm-stream-${realtimeEvent.turnId}`,
+              turnId: realtimeEvent.turnId,
+              role: "dm",
+              content: "",
+              createdAt: new Date().toISOString()
+            }
+          ]);
+        }
+
+        if (
+          realtimeEvent.type === "dm_stream_delta" &&
+          realtimeEvent.roomId === activeCampaign.id
+        ) {
+          setStreamingDmMessages((currentMessages) => {
+            const existingMessage = currentMessages.find(
+              (message) => message.turnId === realtimeEvent.turnId
+            );
+
+            if (!existingMessage) {
+              return [
+                ...currentMessages,
+                {
+                  id: `dm-stream-${realtimeEvent.turnId}`,
+                  turnId: realtimeEvent.turnId,
+                  role: "dm",
+                  content: realtimeEvent.text,
+                  createdAt: new Date().toISOString()
+                }
+              ];
+            }
+
+            return currentMessages.map((message) =>
+              message.turnId === realtimeEvent.turnId
+                ? {
+                    ...message,
+                    content: `${message.content}${realtimeEvent.text}`
+                  }
+                : message
+            );
+          });
+        }
+
+        if (
+          realtimeEvent.type === "dm_stream_done" &&
+          realtimeEvent.roomId === activeCampaign.id
+        ) {
+          setStreamingDmMessages((currentMessages) =>
+            currentMessages.filter(
+              (message) => message.turnId !== realtimeEvent.turnId
+            )
+          );
+          void refreshRoom();
+        }
+
+        if (
+          realtimeEvent.type === "dm_stream_failed" &&
+          realtimeEvent.roomId === activeCampaign.id
+        ) {
+          setStreamingDmMessages((currentMessages) =>
+            currentMessages.filter(
+              (message) => message.turnId !== realtimeEvent.turnId
+            )
+          );
+          setMessages((currentMessages) => [
+            ...currentMessages,
+            {
+              id: createClientId(),
+              role: "system",
+              content: realtimeEvent.message,
+              createdAt: new Date().toISOString()
+            }
+          ]);
+          void refreshRoom();
+        }
+      });
+      socket.addEventListener("close", scheduleReconnect);
+      socket.addEventListener("error", () => {
+        socket?.close();
+      });
+    }
+
+    void refreshRoom();
+    connectSocket();
     const interval = window.setInterval(() => {
-      void pollRoom();
-    }, 1500);
+      void refreshRoom();
+    }, fallbackRoomPollMs);
 
     return () => {
       shouldIgnore = true;
+      if (reconnectTimeout !== undefined) {
+        window.clearTimeout(reconnectTimeout);
+      }
+      socket?.close();
       window.clearInterval(interval);
     };
   }, [activeCampaign, applyRoomSnapshot, isSinglePlayer]);
@@ -1130,6 +1328,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     setDraft("");
     setRoomMessages([]);
     setRoomPlayers([]);
+    setStreamingDmMessages([]);
     setHasAdventureBegun(campaign.mode === "single_player");
     setPendingRollRequests([]);
     setInputTargets([]);
