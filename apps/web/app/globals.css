@@ -1026,25 +1026,83 @@ h1 {
   gap: 10px;
 }
 
-.ability-score-grid label {
+.stat-roll-card {
   position: relative;
-  padding: 12px;
+  display: grid;
+  gap: 14px;
+  min-height: 148px;
+  padding: 16px;
   border: 1px solid rgba(244, 207, 122, 0.18);
   border-radius: 8px;
   background: rgba(17, 13, 10, 0.4);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.18);
+  transition:
+    transform 420ms cubic-bezier(0.19, 1, 0.22, 1),
+    border-color 420ms cubic-bezier(0.19, 1, 0.22, 1),
+    background-color 420ms cubic-bezier(0.19, 1, 0.22, 1),
+    box-shadow 420ms cubic-bezier(0.19, 1, 0.22, 1);
 }
 
-.ability-score-grid input {
-  min-height: 46px;
-  padding-right: 52px;
-  font-size: 1rem;
+.stat-roll-card:hover,
+.stat-roll-card:focus-within {
+  transform: translateY(-5px);
+  border-color: rgba(244, 207, 122, 0.48);
+  background-color: rgba(27, 20, 13, 0.62);
+  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.26);
+}
+
+.stat-roll-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--gold-bright);
+  font-size: 0.82rem;
   font-weight: 900;
+  text-transform: uppercase;
 }
 
-.ability-score-grid strong {
-  position: absolute;
-  right: 26px;
-  bottom: 25px;
+.stat-roll-button {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+  border: 1px solid rgba(244, 207, 122, 0.28);
+  border-radius: 999px;
+  background-color: rgba(244, 207, 122, 0.08);
+  color: var(--gold-bright);
+  box-shadow: none;
+  transition:
+    transform 420ms cubic-bezier(0.19, 1, 0.22, 1),
+    border-color 420ms cubic-bezier(0.19, 1, 0.22, 1),
+    background-color 420ms cubic-bezier(0.19, 1, 0.22, 1),
+    color 420ms cubic-bezier(0.19, 1, 0.22, 1);
+}
+
+.stat-roll-button:hover,
+.stat-roll-button:focus-visible {
+  transform: translateY(-2px) scale(1.04);
+  border-color: rgba(244, 207, 122, 0.74);
+  background-color: var(--gold);
+  color: var(--ink);
+}
+
+.stat-roll-button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+  transform: none;
+}
+
+.stat-roll-card strong {
+  color: var(--cream);
+  font-size: 2.2rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.stat-roll-card small {
   color: var(--gold-bright);
   font-size: 0.82rem;
   font-weight: 900;

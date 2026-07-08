@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
+  Dice5,
   ScrollText,
   Sparkles,
   Swords,
@@ -20,6 +21,7 @@ import {
   previewCampaignJoin
 } from "@/lib/campaign-api";
 import { defaultCharacterSheet } from "@/components/playing/PlayerPanel";
+import { DiceRollReveal3D } from "@/components/playing/DiceRollReveal3D";
 
 type CampaignMode = "single_player" | "multiplayer";
 type MultiplayerIntent = "create" | "join";
@@ -33,9 +35,15 @@ type JoinPreview = {
 };
 
 type AbilityKey = "str" | "dex" | "con" | "int" | "wis" | "cha";
-type AbilityScores = Record<AbilityKey, number>;
+type CompleteAbilityScores = Record<AbilityKey, number>;
+type AbilityScores = Record<AbilityKey, number | null>;
 type SkillName = (typeof skillDefinitions)[number]["name"];
 type CharacterBuildMode = "quick" | "custom";
+type ActiveStatRoll = {
+  key: AbilityKey;
+  rolls: number[];
+  total: number;
+};
 
 const playerIdStorageKey = "ai-dnd.playerId";
 const characterLevel = 5;
@@ -65,7 +73,7 @@ const customCharacterCreationSteps = [
   "Class",
   "Species",
   "Background",
-  "Abilities",
+  "Stats",
   "Class Choices",
   "Skills",
   "Proficiencies",
@@ -94,6 +102,14 @@ const abilityDefinitions = [
   { key: "wis", label: "Wisdom" },
   { key: "cha", label: "Charisma" }
 ] as const;
+const emptyAbilityScores: AbilityScores = {
+  str: null,
+  dex: null,
+  con: null,
+  int: null,
+  wis: null,
+  cha: null
+};
 const skillDefinitions = [
   { name: "Acrobatics", ability: "dex" },
   { name: "Animal Handling", ability: "wis" },
@@ -500,7 +516,7 @@ const alignmentOptions = [
   "Neutral Evil",
   "Chaotic Evil"
 ] as const;
-const defaultAbilityScoresByClass: Record<CharacterClass, AbilityScores> = {
+const defaultAbilityScoresByClass: Record<CharacterClass, CompleteAbilityScores> = {
   Barbarian: { str: 16, dex: 14, con: 16, int: 8, wis: 12, cha: 10 },
   Bard: { str: 8, dex: 14, con: 14, int: 10, wis: 12, cha: 17 },
   Cleric: { str: 12, dex: 10, con: 15, int: 10, wis: 17, cha: 13 },
@@ -550,6 +566,10 @@ function getAverageHp(hitDie: number, constitutionModifier: number) {
   return hitDie + constitutionModifier + (characterLevel - 1) * (Math.floor(hitDie / 2) + 1 + constitutionModifier);
 }
 
+function predeterminedDiceNotation(dice: string, rolls: number[]) {
+  return `${dice.replace(/\s+/g, "")}@${rolls.join(",")}`;
+}
+
 function hasSaveProficiency(
   saveProficiencies: readonly string[],
   ability: AbilityKey
@@ -597,7 +617,10 @@ export function NewAdventureForm() {
   const [characterClass, setCharacterClass] = useState<CharacterClass>("Fighter");
   const [characterSpecies, setCharacterSpecies] = useState<CharacterSpecies>("Human");
   const [characterBackground, setCharacterBackground] = useState<CharacterBackground>("Folk Hero");
-  const [abilityScores, setAbilityScores] = useState<AbilityScores>(defaultAbilityScoresByClass.Fighter);
+  const [abilityScores, setAbilityScores] = useState<AbilityScores>({
+    ...emptyAbilityScores
+  });
+  const [activeStatRoll, setActiveStatRoll] = useState<ActiveStatRoll | null>(null);
   const [subclass, setSubclass] = useState("Champion");
   const [classFeatureChoice, setClassFeatureChoice] = useState("Defense");
   const [selectedSkills, setSelectedSkills] = useState<SkillName[]>(["Athletics", "Perception"]);
@@ -654,31 +677,52 @@ export function NewAdventureForm() {
     ? customWorldName.trim() || "Custom World"
     : `${selectedGenre.label} Adventure`;
   const selectedClass = classOptions.find((option) => option.id === characterClass) ?? classOptions[4];
+  const defaultAbilityScores = defaultAbilityScoresByClass[characterClass];
+  const resolvedAbilityScores = useMemo<CompleteAbilityScores>(
+    () => ({
+      str: abilityScores.str ?? defaultAbilityScores.str,
+      dex: abilityScores.dex ?? defaultAbilityScores.dex,
+      con: abilityScores.con ?? defaultAbilityScores.con,
+      int: abilityScores.int ?? defaultAbilityScores.int,
+      wis: abilityScores.wis ?? defaultAbilityScores.wis,
+      cha: abilityScores.cha ?? defaultAbilityScores.cha
+    }),
+    [abilityScores, defaultAbilityScores]
+  );
+  const areAllStatsRolled = abilityDefinitions.every(
+    ({ key }) => abilityScores[key] !== null
+  );
   const selectedEquipmentKit = selectedClass.equipmentKits.find((kit) => kit.id === equipmentKitId) ?? selectedClass.equipmentKits[0];
   const backgroundSkillList = backgroundSkills[characterBackground] ?? [];
   const proficientSkills = Array.from(new Set([...selectedSkills, ...backgroundSkillList]));
-  const constitutionModifier = getModifier(abilityScores.con);
+  const constitutionModifier = getModifier(resolvedAbilityScores.con);
   const maxHp = getAverageHp(selectedClass.hitDie, constitutionModifier);
-  const passivePerception = 10 + getModifier(abilityScores.wis) + (proficientSkills.includes("Perception") ? proficiencyBonus : 0);
+  const passivePerception = 10 + getModifier(resolvedAbilityScores.wis) + (proficientSkills.includes("Perception") ? proficiencyBonus : 0);
   const spellcastingAbility = characterClass === "Wizard" ? "int" : characterClass === "Cleric" || characterClass === "Druid" || characterClass === "Ranger" ? "wis" : "cha";
-  const spellcastingModifier = getModifier(abilityScores[spellcastingAbility]);
+  const spellcastingModifier = getModifier(resolvedAbilityScores[spellcastingAbility]);
   const spellSaveDc = 8 + proficiencyBonus + spellcastingModifier;
   const spellAttackBonus = proficiencyBonus + spellcastingModifier;
   const hasSpells = selectedClass.spells.length > 0;
   const characterSheetPreview = useMemo(() => {
     const abilityLines = abilityDefinitions.map(({ key, label }) => {
-      const modifier = getModifier(abilityScores[key]);
-      return `${label}: ${abilityScores[key]} (${formatModifier(modifier)})`;
+      const score = abilityScores[key];
+
+      if (score === null) {
+        return `${label}: Roll`;
+      }
+
+      const modifier = getModifier(score);
+      return `${label}: ${score} (${formatModifier(modifier)})`;
     });
     const savingThrowLines = abilityDefinitions.map(({ key, label }) => {
       const isProficient = hasSaveProficiency(selectedClass.saveProficiencies, key);
-      const modifier = getModifier(abilityScores[key]) + (isProficient ? proficiencyBonus : 0);
+      const modifier = getModifier(resolvedAbilityScores[key]) + (isProficient ? proficiencyBonus : 0);
       const proficiencyText = isProficient ? ", proficient" : "";
       return `${label}: ${formatModifier(modifier)}${proficiencyText}`;
     });
     const skillLines = skillDefinitions.map((skill) => {
       const isProficient = proficientSkills.includes(skill.name);
-      const modifier = getModifier(abilityScores[skill.ability]) + (isProficient ? proficiencyBonus : 0);
+      const modifier = getModifier(resolvedAbilityScores[skill.ability]) + (isProficient ? proficiencyBonus : 0);
       return `${skill.name}: ${formatModifier(modifier)}${isProficient ? ", proficient" : ""}`;
     });
     const spells = hasSpells
@@ -711,7 +755,7 @@ export function NewAdventureForm() {
       "",
       "Core Stats",
       `Armor Class: ${selectedEquipmentKit.armorClass}`,
-      `Initiative: ${formatModifier(getModifier(abilityScores.dex))}`,
+      `Initiative: ${formatModifier(getModifier(resolvedAbilityScores.dex))}`,
       "Speed: 30 ft",
       `Proficiency Bonus: ${formatModifier(proficiencyBonus)}`,
       `Max HP: ${maxHp}`,
@@ -770,6 +814,7 @@ export function NewAdventureForm() {
     mode,
     passivePerception,
     proficientSkills,
+    resolvedAbilityScores,
     selectedClass,
     selectedEquipmentKit,
     selectedLanguage,
@@ -816,7 +861,7 @@ export function NewAdventureForm() {
       }
 
       if (!isQuickBuild && characterStepIndex === 4) {
-        return "Set your Level 5 abilities";
+        return "Roll your Level 5 stats";
       }
 
       return `Choose your ${characterCreationSteps[characterStepIndex].toLowerCase()}`;
@@ -875,7 +920,11 @@ export function NewAdventureForm() {
   function handleClassChange(nextClass: CharacterClass) {
     const nextClassData = classOptions.find((option) => option.id === nextClass) ?? classOptions[4];
     setCharacterClass(nextClass);
-    setAbilityScores(defaultAbilityScoresByClass[nextClass]);
+    setAbilityScores(
+      characterBuildMode === "quick"
+        ? { ...defaultAbilityScoresByClass[nextClass] }
+        : { ...emptyAbilityScores }
+    );
     setSubclass(nextClassData.subclassOptions[0]);
     setClassFeatureChoice(nextClassData.featureOptions[0]);
     setSelectedSkills([...nextClassData.defaultSkills] as SkillName[]);
@@ -894,6 +943,7 @@ export function NewAdventureForm() {
     ) as SkillName[];
 
     setCharacterBackground(quickBuildBackgroundByClass[characterClass]);
+    setAbilityScores({ ...defaultAbilityScoresByClass[characterClass] });
     setSubclass(selectedClass.subclassOptions[0]);
     setClassFeatureChoice(selectedClass.featureOptions[0]);
     setSelectedSkills(
@@ -909,13 +959,42 @@ export function NewAdventureForm() {
     );
   }
 
-  function updateAbilityScore(key: AbilityKey, value: string) {
-    const parsedValue = Number.parseInt(value, 10);
-    const nextValue = Number.isNaN(parsedValue) ? 8 : Math.min(20, Math.max(3, parsedValue));
+  function applyCustomBuildDefaults() {
+    setAbilityScores({ ...emptyAbilityScores });
+  }
+
+  function rollStat(key: AbilityKey) {
+    if (activeStatRoll) {
+      return;
+    }
+
+    const rolls = Array.from(
+      { length: 4 },
+      () => Math.floor(Math.random() * 6) + 1
+    );
+    const total = [...rolls]
+      .sort((left, right) => right - left)
+      .slice(0, 3)
+      .reduce((sum, roll) => sum + roll, 0);
+
+    setActiveStatRoll({
+      key,
+      rolls,
+      total
+    });
+  }
+
+  function completeStatRoll() {
+    if (!activeStatRoll) {
+      return;
+    }
+
+    const nextValue = activeStatRoll.total;
     setAbilityScores((currentScores) => ({
       ...currentScores,
-      [key]: nextValue
+      [activeStatRoll.key]: nextValue
     }));
+    setActiveStatRoll(null);
   }
 
   function toggleSkill(skill: SkillName) {
@@ -962,6 +1041,10 @@ export function NewAdventureForm() {
           !requiresCharacterName ||
           hasRequiredIdentity
         );
+      }
+
+      if (characterStepIndex === 4) {
+        return areAllStatsRolled;
       }
 
       if (characterStepIndex === 6) {
@@ -1026,6 +1109,8 @@ export function NewAdventureForm() {
             ? isJoinFlow
               ? "Add your player and character names before continuing."
               : "Add your character name before continuing."
+            : !isQuickBuild && characterStepIndex === 4
+              ? "Roll all six stats before continuing."
             : characterStepIndex === 9
               ? "Choose at least one spell before continuing."
               : "Choose at least one option before continuing."
@@ -1365,7 +1450,10 @@ export function NewAdventureForm() {
                         type="button"
                         className={characterBuildMode === "custom" ? "selected" : ""}
                         aria-pressed={characterBuildMode === "custom"}
-                        onClick={() => setCharacterBuildMode("custom")}
+                        onClick={() => {
+                          setCharacterBuildMode("custom");
+                          applyCustomBuildDefaults();
+                        }}
                       >
                         <strong>Custom Build</strong>
                         <small>Choose each Level 5 character detail step by step.</small>
@@ -1437,23 +1525,36 @@ export function NewAdventureForm() {
                 {!isQuickBuild && characterStepIndex === 4 ? (
                   <section className="ability-score-panel">
                     <div className="character-step-note">
-                      <strong>Level 5 scores</strong>
-                      <span>These are the final scores after your Level 4 improvement.</span>
+                      <strong>Level 5 stats</strong>
+                      <span>Roll 4d6, drop the lowest die, and keep the other three.</span>
                     </div>
                     <div className="ability-score-grid">
-                      {abilityDefinitions.map((ability) => (
-                        <label key={ability.key}>
-                          <span>{ability.label}</span>
-                          <input
-                            type="number"
-                            min={3}
-                            max={20}
-                            value={abilityScores[ability.key]}
-                            onChange={(event) => updateAbilityScore(ability.key, event.target.value)}
-                          />
-                          <strong>{formatModifier(getModifier(abilityScores[ability.key]))}</strong>
-                        </label>
-                      ))}
+                      {abilityDefinitions.map((ability) => {
+                        const score = abilityScores[ability.key];
+
+                        return (
+                          <div className="stat-roll-card" key={ability.key}>
+                            <div className="stat-roll-card-header">
+                              <span>{ability.label}</span>
+                              <button
+                                type="button"
+                                className="stat-roll-button"
+                                aria-label={`Roll ${ability.label}`}
+                                disabled={Boolean(activeStatRoll)}
+                                onClick={() => rollStat(ability.key)}
+                              >
+                                <Dice5 size={18} />
+                              </button>
+                            </div>
+                            <strong>{score ?? "Roll"}</strong>
+                            <small>
+                              {score === null
+                                ? "4d6 drop lowest"
+                                : formatModifier(getModifier(score))}
+                            </small>
+                          </div>
+                        );
+                      })}
                     </div>
                   </section>
                 ) : null}
@@ -1807,6 +1908,16 @@ export function NewAdventureForm() {
             </button>
           </div>
       </form>
+
+      {activeStatRoll ? (
+        <DiceRollReveal3D
+          key={`${activeStatRoll.key}-${activeStatRoll.rolls.join("-")}`}
+          notation={predeterminedDiceNotation("4d6", activeStatRoll.rolls)}
+          expression="4d6 drop lowest"
+          total={activeStatRoll.total}
+          onComplete={completeStatRoll}
+        />
+      ) : null}
     </main>
   );
 }
