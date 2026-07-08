@@ -1171,14 +1171,13 @@ export function NewAdventureForm() {
   }
 
   return (
-    <main className="new-adventure-page">
-      <section className="new-adventure-shell" aria-label="Create a new adventure">
-        <div className="new-adventure-heading">
-          <p className="eyebrow">New Adventure</p>
-          <h1>{stepTitle}</h1>
-        </div>
+    <main className="new-adventure-page" aria-label="Create a new adventure">
+      <div className="new-adventure-heading">
+        <p className="eyebrow">New Adventure</p>
+        <h1>{stepTitle}</h1>
+      </div>
 
-        <form className="new-adventure-form" onSubmit={handleSubmit}>
+      <form className="new-adventure-form" onSubmit={handleSubmit}>
           {stepIndex === 0 ? (
             <>
               <div className="mode-picker" role="radiogroup" aria-label="Campaign mode">
@@ -1816,8 +1815,7 @@ export function NewAdventureForm() {
               )}
             </button>
           </div>
-        </form>
-      </section>
+      </form>
     </main>
   );
 }

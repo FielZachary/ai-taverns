@@ -598,25 +598,15 @@ h1 {
 
 .new-adventure-page {
   display: grid;
-  min-height: 100dvh;
-  place-items: center;
-  padding: 28px;
-}
-
-.new-adventure-shell {
-  display: grid;
   grid-template-rows: auto minmax(0, 1fr);
+  align-content: start;
+  justify-items: center;
   gap: 24px;
-  height: min(860px, calc(100dvh - 56px));
+  min-height: 100dvh;
   width: min(100%, 1040px);
-  padding: clamp(22px, 4vw, 38px);
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background:
-    linear-gradient(180deg, rgba(255, 248, 220, 0.045), transparent 28%),
-    var(--panel);
-  box-shadow: 0 26px 80px var(--shadow);
+  margin: 0 auto;
+  padding: clamp(22px, 4vw, 38px) clamp(18px, 5vw, 44px)
+    calc(118px + env(safe-area-inset-bottom));
 }
 
 .new-adventure-heading {
@@ -639,8 +629,6 @@ h1 {
   min-height: 0;
   width: min(100%, 760px);
   margin: 0 auto;
-  overflow: auto;
-  overscroll-behavior: contain;
   font-family: ui-sans-serif, system-ui, sans-serif;
 }
 
@@ -1226,9 +1214,17 @@ h1 {
 }
 
 .creation-actions {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  z-index: 20;
   display: flex;
   justify-content: space-between;
   gap: 12px;
+  width: min(calc(100% - 32px), 760px);
+  padding: 14px 0 calc(14px + env(safe-area-inset-bottom));
+  background: linear-gradient(180deg, transparent, var(--bg) 34%);
+  transform: translateX(-50%);
 }
 
 .creation-actions button {
@@ -2996,10 +2992,6 @@ h1 {
     grid-template-columns: 252px minmax(0, 1fr);
   }
 
-  .new-adventure-shell {
-    grid-template-columns: 1fr;
-  }
-
   .new-adventure-heading h1 {
     max-width: 16ch;
   }
@@ -3065,14 +3057,7 @@ h1 {
   }
 
   .new-adventure-page {
-    padding: 0;
-  }
-
-  .new-adventure-shell {
-    height: 100dvh;
-    min-height: 0;
-    border-width: 0;
-    border-radius: 0;
+    padding: 20px 18px calc(108px + env(safe-area-inset-bottom));
   }
 
   .mode-picker {
