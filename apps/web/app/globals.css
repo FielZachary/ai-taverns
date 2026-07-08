@@ -1284,11 +1284,11 @@ h1 {
   background: rgba(17, 13, 10, 0.54);
   font-weight: 900;
   transition:
-    border-color 180ms ease,
-    color 180ms ease,
-    background 180ms ease,
-    box-shadow 180ms ease,
-    transform 180ms ease;
+    border-color 360ms ease,
+    color 360ms ease,
+    background 360ms ease,
+    box-shadow 360ms ease,
+    transform 360ms ease;
 }
 
 .creation-actions button:not(:disabled):hover,
