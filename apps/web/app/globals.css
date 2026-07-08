@@ -20,6 +20,7 @@ html,
 body {
   min-height: 100%;
   margin: 0;
+  background: var(--bg);
 }
 
 body {
@@ -32,6 +33,11 @@ body {
     Georgia,
     "Times New Roman",
     serif;
+}
+
+body:has(.new-adventure-page) {
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 button,
@@ -606,8 +612,30 @@ h1 {
   gap: 24px;
   height: auto;
   overflow: hidden;
+  overscroll-behavior: none;
   padding: clamp(22px, 4vw, 38px) clamp(18px, 5vw, 44px)
     calc(118px + env(safe-area-inset-bottom));
+}
+
+.new-adventure-page::before,
+.new-adventure-page::after {
+  position: fixed;
+  right: 0;
+  left: 0;
+  z-index: 10;
+  height: 2px;
+  pointer-events: none;
+  content: "";
+  background: linear-gradient(90deg, transparent, var(--gold-bright), transparent);
+  opacity: 0.62;
+}
+
+.new-adventure-page::before {
+  top: 0;
+}
+
+.new-adventure-page::after {
+  bottom: 0;
 }
 
 .new-adventure-heading {
@@ -631,7 +659,7 @@ h1 {
   width: min(100%, 760px);
   margin: 0 auto;
   overflow: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior: none;
   font-family: ui-sans-serif, system-ui, sans-serif;
 }
 
