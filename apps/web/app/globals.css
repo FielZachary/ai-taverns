@@ -605,6 +605,7 @@ h1 {
 .new-adventure-page {
   position: fixed;
   inset: 0;
+  isolation: isolate;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   align-content: start;
@@ -617,25 +618,34 @@ h1 {
     calc(38px + env(safe-area-inset-bottom));
 }
 
-.new-adventure-page::before,
-.new-adventure-page::after {
+.new-adventure-page::before {
   position: fixed;
-  right: 0;
-  left: 0;
-  z-index: 10;
-  height: 2px;
+  inset: 0;
+  z-index: -2;
   pointer-events: none;
   content: "";
-  background: linear-gradient(90deg, transparent, var(--gold-bright), transparent);
-  opacity: 0.62;
-}
-
-.new-adventure-page::before {
-  top: 0;
+  background-image: url("/new-adventure/flow-bg.png");
+  background-position: center;
+  background-size: cover;
+  opacity: 0.28;
 }
 
 .new-adventure-page::after {
-  bottom: 0;
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  content: "";
+  background:
+    radial-gradient(circle at 50% 48%, rgba(18, 15, 13, 0.08) 0 28%, rgba(18, 15, 13, 0.62) 70%, rgba(18, 15, 13, 0.92) 100%),
+    linear-gradient(90deg, rgba(18, 15, 13, 0.84), rgba(18, 15, 13, 0.2) 24%, rgba(18, 15, 13, 0.2) 76%, rgba(18, 15, 13, 0.84)),
+    linear-gradient(180deg, rgba(18, 15, 13, 0.82), transparent 26%, transparent 70%, rgba(18, 15, 13, 0.78));
+}
+
+.new-adventure-heading,
+.new-adventure-form {
+  position: relative;
+  z-index: 1;
 }
 
 .new-adventure-heading {
