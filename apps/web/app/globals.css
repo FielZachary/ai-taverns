@@ -627,7 +627,7 @@ h1 {
   background-image: url("/new-adventure/flow-bg.png");
   background-position: center;
   background-size: cover;
-  opacity: 0.18;
+  opacity: 0.1;
 }
 
 .new-adventure-page::after {
@@ -646,6 +646,27 @@ h1 {
 .new-adventure-form {
   position: relative;
   z-index: 1;
+}
+
+.new-adventure-heading::before,
+.new-adventure-form::after {
+  position: fixed;
+  right: 0;
+  left: 0;
+  z-index: 2;
+  height: 2px;
+  pointer-events: none;
+  content: "";
+  background: linear-gradient(90deg, transparent, var(--gold-bright), transparent);
+  opacity: 0.62;
+}
+
+.new-adventure-heading::before {
+  top: 0;
+}
+
+.new-adventure-form::after {
+  bottom: 0;
 }
 
 .new-adventure-heading {
