@@ -37,6 +37,7 @@ type JoinPreview = {
 type AbilityKey = "str" | "dex" | "con" | "int" | "wis" | "cha";
 type CompleteAbilityScores = Record<AbilityKey, number>;
 type AbilityScores = Record<AbilityKey, number | null>;
+type SpeciesAbilityBonuses = Partial<Record<AbilityKey, number>>;
 type SkillName = (typeof skillDefinitions)[number]["name"];
 type CharacterBuildMode = "quick" | "custom";
 type ActiveStatRoll = {
@@ -537,6 +538,18 @@ type CharacterSpecies = (typeof speciesOptions)[number];
 type CharacterBackground = (typeof backgroundOptions)[number];
 type Alignment = (typeof alignmentOptions)[number];
 
+const speciesAbilityBonuses: Record<CharacterSpecies, SpeciesAbilityBonuses> = {
+  Human: { str: 1, dex: 1, con: 1, int: 1, wis: 1, cha: 1 },
+  Elf: { dex: 2 },
+  Dwarf: { con: 2 },
+  Halfling: { dex: 2 },
+  Gnome: { int: 2 },
+  "Half-Elf": { cha: 2 },
+  "Half-Orc": { str: 2, con: 1 },
+  Tiefling: { int: 1, cha: 2 },
+  Dragonborn: { str: 2, cha: 1 }
+};
+
 const quickBuildBackgroundByClass: Record<CharacterClass, CharacterBackground> = {
   Barbarian: "Outlander",
   Bard: "Entertainer",
@@ -558,6 +571,19 @@ function formatList(items: readonly string[]) {
 
 function formatModifier(value: number) {
   return value >= 0 ? `+${value}` : `${value}`;
+}
+
+function formatSpeciesAbilityBonus(
+  species: CharacterSpecies,
+  ability: AbilityKey
+) {
+  const bonus = speciesAbilityBonuses[species][ability] ?? 0;
+
+  if (bonus === 0) {
+    return "+0";
+  }
+
+  return `${formatModifier(bonus)} (${species} bonus)`;
 }
 
 function getModifier(score: number) {
@@ -1602,9 +1628,10 @@ export function NewAdventureForm() {
                             </div>
                             <strong>{score ?? "Roll"}</strong>
                             <small>
-                              {score === null
-                                ? "4d6 drop lowest"
-                                : formatModifier(getModifier(score))}
+                              {formatSpeciesAbilityBonus(
+                                characterSpecies,
+                                ability.key
+                              )}
                             </small>
                           </div>
                         );
