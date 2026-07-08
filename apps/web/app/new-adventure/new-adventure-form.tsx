@@ -23,6 +23,7 @@ import { defaultCharacterSheet } from "@/components/playing/PlayerPanel";
 
 type CampaignMode = "single_player" | "multiplayer";
 type MultiplayerIntent = "create" | "join";
+type FlowTransitionState = "idle" | "exiting" | "entering";
 
 type JoinPreview = {
   code: string;
@@ -40,6 +41,7 @@ type QuickBuildFantasy = (typeof quickBuildFantasyOptions)[number]["id"];
 const playerIdStorageKey = "ai-dnd.playerId";
 const characterLevel = 5;
 const proficiencyBonus = 3;
+const flowTransitionDurationMs = 180;
 const createSteps = ["Mode", "Campaign", "Character", "Review"];
 const customCreateSteps = ["Mode", "Campaign", "Custom World", "Character", "Review"];
 const multiplayerCreateSteps = ["Mode", "Multiplayer", "Campaign", "Character", "Review"];
@@ -638,6 +640,9 @@ export function NewAdventureForm() {
   const [error, setError] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [creationLoadingStep, setCreationLoadingStep] = useState(0);
+  const [flowTransition, setFlowTransition] =
+    useState<FlowTransitionState>("idle");
+  const isFlowTransitioning = flowTransition !== "idle";
   const isJoinFlow = mode === "multiplayer" && multiplayerIntent === "join";
   const isCustomGenre = campaignGenre === "custom";
   const hasCustomWorldStep = !isJoinFlow && isCustomGenre;
@@ -1047,7 +1052,26 @@ export function NewAdventureForm() {
     setJoinPreview(data);
   }
 
+  function transitionFlow(updateFlow: () => void) {
+    if (isFlowTransitioning) {
+      return;
+    }
+
+    setFlowTransition("exiting");
+    window.setTimeout(() => {
+      updateFlow();
+      setFlowTransition("entering");
+      window.setTimeout(() => {
+        setFlowTransition("idle");
+      }, flowTransitionDurationMs);
+    }, flowTransitionDurationMs);
+  }
+
   async function handleNext() {
+    if (isFlowTransitioning) {
+      return;
+    }
+
     setError("");
 
     if (!canAdvance()) {
@@ -1087,28 +1111,40 @@ export function NewAdventureForm() {
     }
 
     if (isCharacterStep && !isLastCharacterStep) {
-      setCharacterStepIndex((currentStepIndex) =>
-        Math.min(currentStepIndex + 1, characterCreationSteps.length - 1)
+      transitionFlow(() =>
+        setCharacterStepIndex((currentStepIndex) =>
+          Math.min(currentStepIndex + 1, characterCreationSteps.length - 1)
+        )
       );
       return;
     }
 
-    setStepIndex((currentStepIndex) =>
-      Math.min(currentStepIndex + 1, steps.length - 1)
+    transitionFlow(() =>
+      setStepIndex((currentStepIndex) =>
+        Math.min(currentStepIndex + 1, steps.length - 1)
+      )
     );
   }
 
   function handleBack() {
+    if (isFlowTransitioning) {
+      return;
+    }
+
     setError("");
 
     if (isCharacterStep && characterStepIndex > 0) {
-      setCharacterStepIndex((currentStepIndex) =>
-        Math.max(currentStepIndex - 1, 0)
+      transitionFlow(() =>
+        setCharacterStepIndex((currentStepIndex) =>
+          Math.max(currentStepIndex - 1, 0)
+        )
       );
       return;
     }
 
-    setStepIndex((currentStepIndex) => Math.max(currentStepIndex - 1, 0));
+    transitionFlow(() =>
+      setStepIndex((currentStepIndex) => Math.max(currentStepIndex - 1, 0))
+    );
   }
 
   async function createCampaign() {
@@ -1222,6 +1258,7 @@ export function NewAdventureForm() {
       </div>
 
       <form className="new-adventure-form" onSubmit={handleSubmit}>
+        <div className={`new-adventure-flow new-adventure-flow-${flowTransition}`}>
           {stepIndex === 0 ? (
             <>
               <div className="mode-picker" role="radiogroup" aria-label="Campaign mode">
@@ -1815,6 +1852,7 @@ export function NewAdventureForm() {
                 </dl>
             </div>
           ) : null}
+        </div>
 
           <div className="new-adventure-error-slot">
             {error ? (
@@ -1828,13 +1866,13 @@ export function NewAdventureForm() {
             <button
               type="button"
               className="creation-secondary"
-              disabled={stepIndex === 0 || isCreating}
+              disabled={stepIndex === 0 || isCreating || isFlowTransitioning}
               onClick={handleBack}
             >
               <ArrowLeft size={16} />
               Back
             </button>
-            <button type="submit" disabled={isCreating}>
+            <button type="submit" disabled={isCreating || isFlowTransitioning}>
               {isCreating ? (
                 isJoinFlow ? "Joining..." : "Creating..."
               ) : isLastStep ? (

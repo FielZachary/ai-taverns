@@ -695,6 +695,23 @@ h1 {
   font-family: ui-sans-serif, system-ui, sans-serif;
 }
 
+.new-adventure-flow {
+  display: grid;
+  gap: 20px;
+  width: 100%;
+  will-change: opacity, transform;
+}
+
+.new-adventure-flow-exiting {
+  pointer-events: none;
+  animation: new-adventure-flow-exit 180ms ease-in forwards;
+}
+
+.new-adventure-flow-entering {
+  pointer-events: none;
+  animation: new-adventure-flow-enter 180ms ease-out both;
+}
+
 .new-adventure-form button {
   transition:
     border-color 320ms ease,
@@ -1385,6 +1402,25 @@ h1 {
 .creation-actions button:disabled {
   cursor: wait;
   opacity: 0.68;
+}
+
+@keyframes new-adventure-flow-exit {
+  to {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+}
+
+@keyframes new-adventure-flow-enter {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes campaign-loader-spin {
