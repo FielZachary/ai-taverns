@@ -41,7 +41,8 @@ const playerIdStorageKey = "ai-dnd.playerId";
 const characterLevel = 5;
 const proficiencyBonus = 3;
 const createSteps = ["Mode", "Campaign", "Character", "Review"];
-const joinSteps = ["Mode", "Game Code", "Character", "Review"];
+const multiplayerCreateSteps = ["Mode", "Multiplayer", "Campaign", "Character", "Review"];
+const joinSteps = ["Mode", "Multiplayer", "Game Code", "Character", "Review"];
 const joinCodePattern = /[A-HJ-NP-Z2-9]{6}/;
 const campaignCreationLoadingSteps = [
   "Choosing where the story begins",
@@ -629,9 +630,20 @@ export function NewAdventureForm() {
   const [isCreating, setIsCreating] = useState(false);
   const [creationLoadingStep, setCreationLoadingStep] = useState(0);
   const isJoinFlow = mode === "multiplayer" && multiplayerIntent === "join";
-  const steps = isJoinFlow ? joinSteps : createSteps;
+  const steps =
+    mode === "multiplayer"
+      ? isJoinFlow
+        ? joinSteps
+        : multiplayerCreateSteps
+      : createSteps;
   const isLastStep = stepIndex === steps.length - 1;
-  const isCharacterStep = stepIndex === 2;
+  const multiplayerIntentStepIndex = mode === "multiplayer" ? 1 : -1;
+  const campaignDetailsStepIndex = mode === "multiplayer" ? 2 : 1;
+  const characterStepIndexInFlow = mode === "multiplayer" ? 3 : 2;
+  const reviewStepIndex = mode === "multiplayer" ? 4 : 3;
+  const isMultiplayerIntentStep = stepIndex === multiplayerIntentStepIndex;
+  const isCampaignDetailsStep = stepIndex === campaignDetailsStepIndex;
+  const isCharacterStep = stepIndex === characterStepIndexInFlow;
   const requiresCharacterName = mode === "single_player" || isJoinFlow;
   const characterCreationSteps =
     characterBuildMode === "quick"
@@ -790,6 +802,14 @@ export function NewAdventureForm() {
     }
 
     if (stepIndex === 1) {
+      if (mode === "multiplayer") {
+        return "Choose multiplayer setup";
+      }
+
+      return "Choose the campaign genre";
+    }
+
+    if (isCampaignDetailsStep) {
       if (isJoinFlow) {
         return "Enter the game code";
       }
@@ -797,7 +817,7 @@ export function NewAdventureForm() {
       return "Choose the campaign genre";
     }
 
-    if (stepIndex === 2) {
+    if (isCharacterStep) {
       if (isLastCharacterStep) {
         return "Review your character";
       }
@@ -821,9 +841,12 @@ export function NewAdventureForm() {
   }, [
     characterCreationSteps,
     characterStepIndex,
+    isCampaignDetailsStep,
+    isCharacterStep,
     isJoinFlow,
     isLastCharacterStep,
     isQuickBuild,
+    mode,
     stepIndex
   ]);
 
@@ -952,7 +975,7 @@ export function NewAdventureForm() {
   }
 
   function canAdvance() {
-    if (stepIndex === 1) {
+    if (isCampaignDetailsStep) {
       if (isJoinFlow) {
         return normalizedGameCode.length === 6;
       }
@@ -964,7 +987,7 @@ export function NewAdventureForm() {
       );
     }
 
-    if (stepIndex === 2) {
+    if (isCharacterStep) {
       if (characterStepIndex === 0) {
         return true;
       }
@@ -1008,7 +1031,7 @@ export function NewAdventureForm() {
 
     if (!canAdvance()) {
       setError(
-        stepIndex === 1
+        isCampaignDetailsStep
           ? isJoinFlow
             ? "Enter the six-character game code before continuing."
             : isCustomGenre
@@ -1027,7 +1050,7 @@ export function NewAdventureForm() {
       return;
     }
 
-    if (isJoinFlow && stepIndex === 1) {
+    if (isJoinFlow && isCampaignDetailsStep) {
       try {
         await previewJoinCode();
       } catch (caught) {
@@ -1210,36 +1233,36 @@ export function NewAdventureForm() {
                   </span>
                 </button>
               </div>
-
-              {mode === "multiplayer" ? (
-                <fieldset className="option-picker multiplayer-intent-picker">
-                  <legend>Multiplayer</legend>
-                  <div>
-                    <button
-                      type="button"
-                      className={multiplayerIntent === "create" ? "selected" : ""}
-                      aria-pressed={multiplayerIntent === "create"}
-                      onClick={() => setMultiplayerIntent("create")}
-                    >
-                      <strong>Create Game</strong>
-                      <small>Start a new table and share its game code.</small>
-                    </button>
-                    <button
-                      type="button"
-                      className={multiplayerIntent === "join" ? "selected" : ""}
-                      aria-pressed={multiplayerIntent === "join"}
-                      onClick={() => setMultiplayerIntent("join")}
-                    >
-                      <strong>Join Game</strong>
-                      <small>Enter a code, build your character, and join the table.</small>
-                    </button>
-                  </div>
-                </fieldset>
-              ) : null}
             </>
           ) : null}
 
-          {stepIndex === 1 && isJoinFlow ? (
+          {isMultiplayerIntentStep ? (
+            <fieldset className="option-picker multiplayer-intent-picker">
+              <legend>Multiplayer</legend>
+              <div>
+                <button
+                  type="button"
+                  className={multiplayerIntent === "create" ? "selected" : ""}
+                  aria-pressed={multiplayerIntent === "create"}
+                  onClick={() => setMultiplayerIntent("create")}
+                >
+                  <strong>Create Game</strong>
+                  <small>Start a new table and share its game code.</small>
+                </button>
+                <button
+                  type="button"
+                  className={multiplayerIntent === "join" ? "selected" : ""}
+                  aria-pressed={multiplayerIntent === "join"}
+                  onClick={() => setMultiplayerIntent("join")}
+                >
+                  <strong>Join Game</strong>
+                  <small>Enter a code, build your character, and join the table.</small>
+                </button>
+              </div>
+            </fieldset>
+          ) : null}
+
+          {isCampaignDetailsStep && isJoinFlow ? (
             <div className="join-code-panel">
                 <label>
                   <span>Game code</span>
@@ -1266,7 +1289,7 @@ export function NewAdventureForm() {
               </div>
             ) : null}
 
-            {stepIndex === 1 && !isJoinFlow ? (
+            {isCampaignDetailsStep && !isJoinFlow ? (
               <>
                 <fieldset className="genre-picker">
                   <legend>Campaign genre</legend>
@@ -1317,7 +1340,7 @@ export function NewAdventureForm() {
               </>
             ) : null}
 
-            {stepIndex === 2 ? (
+            {isCharacterStep ? (
               <div className="character-builder">
                 <ol className="character-creation-steps" aria-label="Character creation progress">
                   {characterCreationSteps.map((step, index) => (
@@ -1713,7 +1736,7 @@ export function NewAdventureForm() {
               </div>
             ) : null}
 
-            {stepIndex === 3 ? (
+            {stepIndex === reviewStepIndex ? (
               <div className="creation-review">
                 <ScrollText size={28} />
                 <dl>
