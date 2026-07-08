@@ -1179,22 +1179,6 @@ export function NewAdventureForm() {
         </div>
 
         <form className="new-adventure-form" onSubmit={handleSubmit}>
-          <ol className="creation-steps" aria-label="Creation progress">
-            {steps.map((step, index) => (
-              <li
-                className={[
-                  index === stepIndex ? "active" : "",
-                  index < stepIndex ? "complete" : ""
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-                key={step}
-              >
-                <span>{index < stepIndex ? <Check size={13} /> : index + 1}</span>
-              </li>
-            ))}
-          </ol>
-
           <div
             className={`creation-stage ${
               stepIndex === 0 || isCustomGenre ? "creation-stage-roomy" : ""
