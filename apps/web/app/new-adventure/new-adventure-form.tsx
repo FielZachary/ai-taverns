@@ -1179,74 +1179,69 @@ export function NewAdventureForm() {
         </div>
 
         <form className="new-adventure-form" onSubmit={handleSubmit}>
-          <div
-            className={`creation-stage ${
-              stepIndex === 0 || isCustomGenre ? "creation-stage-roomy" : ""
-            }`}
-          >
-            {stepIndex === 0 ? (
-              <>
-                <div className="mode-picker" role="radiogroup" aria-label="Campaign mode">
-                  <button
-                    type="button"
-                    className={mode === "single_player" ? "selected" : ""}
-                    aria-pressed={mode === "single_player"}
-                    onClick={() => setMode("single_player")}
-                  >
-                    <span className="mode-medallion">
-                      <Swords size={34} />
-                    </span>
-                    <span>
-                      <strong>Singleplayer</strong>
-                      <small>Private play with AI Taverns as your DM.</small>
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    className={mode === "multiplayer" ? "selected" : ""}
-                    aria-pressed={mode === "multiplayer"}
-                    onClick={() => setMode("multiplayer")}
-                  >
-                    <span className="mode-medallion">
-                      <Users size={34} />
-                    </span>
-                    <span>
-                      <strong>Multiplayer</strong>
-                      <small>Invite players and resolve party turns together.</small>
-                    </span>
-                  </button>
-                </div>
+          {stepIndex === 0 ? (
+            <>
+              <div className="mode-picker" role="radiogroup" aria-label="Campaign mode">
+                <button
+                  type="button"
+                  className={mode === "single_player" ? "selected" : ""}
+                  aria-pressed={mode === "single_player"}
+                  onClick={() => setMode("single_player")}
+                >
+                  <span className="mode-medallion">
+                    <Swords size={34} />
+                  </span>
+                  <span>
+                    <strong>Singleplayer</strong>
+                    <small>Private play with AI Taverns as your DM.</small>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className={mode === "multiplayer" ? "selected" : ""}
+                  aria-pressed={mode === "multiplayer"}
+                  onClick={() => setMode("multiplayer")}
+                >
+                  <span className="mode-medallion">
+                    <Users size={34} />
+                  </span>
+                  <span>
+                    <strong>Multiplayer</strong>
+                    <small>Invite players and resolve party turns together.</small>
+                  </span>
+                </button>
+              </div>
 
-                {mode === "multiplayer" ? (
-                  <fieldset className="option-picker multiplayer-intent-picker">
-                    <legend>Multiplayer</legend>
-                    <div>
-                      <button
-                        type="button"
-                        className={multiplayerIntent === "create" ? "selected" : ""}
-                        aria-pressed={multiplayerIntent === "create"}
-                        onClick={() => setMultiplayerIntent("create")}
-                      >
-                        <strong>Create Game</strong>
-                        <small>Start a new table and share its game code.</small>
-                      </button>
-                      <button
-                        type="button"
-                        className={multiplayerIntent === "join" ? "selected" : ""}
-                        aria-pressed={multiplayerIntent === "join"}
-                        onClick={() => setMultiplayerIntent("join")}
-                      >
-                        <strong>Join Game</strong>
-                        <small>Enter a code, build your character, and join the table.</small>
-                      </button>
-                    </div>
-                  </fieldset>
-                ) : null}
-              </>
-            ) : null}
+              {mode === "multiplayer" ? (
+                <fieldset className="option-picker multiplayer-intent-picker">
+                  <legend>Multiplayer</legend>
+                  <div>
+                    <button
+                      type="button"
+                      className={multiplayerIntent === "create" ? "selected" : ""}
+                      aria-pressed={multiplayerIntent === "create"}
+                      onClick={() => setMultiplayerIntent("create")}
+                    >
+                      <strong>Create Game</strong>
+                      <small>Start a new table and share its game code.</small>
+                    </button>
+                    <button
+                      type="button"
+                      className={multiplayerIntent === "join" ? "selected" : ""}
+                      aria-pressed={multiplayerIntent === "join"}
+                      onClick={() => setMultiplayerIntent("join")}
+                    >
+                      <strong>Join Game</strong>
+                      <small>Enter a code, build your character, and join the table.</small>
+                    </button>
+                  </div>
+                </fieldset>
+              ) : null}
+            </>
+          ) : null}
 
-            {stepIndex === 1 && isJoinFlow ? (
-              <div className="join-code-panel">
+          {stepIndex === 1 && isJoinFlow ? (
+            <div className="join-code-panel">
                 <label>
                   <span>Game code</span>
                   <input
@@ -1784,9 +1779,8 @@ export function NewAdventureForm() {
                     <dd>{alignment}</dd>
                   </div>
                 </dl>
-              </div>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
 
           <div className="new-adventure-error-slot">
             {error ? (
