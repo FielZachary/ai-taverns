@@ -40,9 +40,11 @@ type AbilityScores = Record<AbilityKey, number | null>;
 type SkillName = (typeof skillDefinitions)[number]["name"];
 type CharacterBuildMode = "quick" | "custom";
 type ActiveStatRoll = {
-  key: AbilityKey;
+  id: string;
+  expression: string;
   rolls: number[];
   total: number;
+  scores: Partial<AbilityScores>;
 };
 
 const playerIdStorageKey = "ai-dnd.playerId";
@@ -570,6 +572,22 @@ function predeterminedDiceNotation(dice: string, rolls: number[]) {
   return `${dice.replace(/\s+/g, "")}@${rolls.join(",")}`;
 }
 
+function rollFourD6DropLowest() {
+  const rolls = Array.from(
+    { length: 4 },
+    () => Math.floor(Math.random() * 6) + 1
+  );
+  const total = [...rolls]
+    .sort((left, right) => right - left)
+    .slice(0, 3)
+    .reduce((sum, roll) => sum + roll, 0);
+
+  return {
+    rolls,
+    total
+  };
+}
+
 function hasSaveProficiency(
   saveProficiencies: readonly string[],
   ability: AbilityKey
@@ -968,19 +986,45 @@ export function NewAdventureForm() {
       return;
     }
 
-    const rolls = Array.from(
-      { length: 4 },
-      () => Math.floor(Math.random() * 6) + 1
-    );
-    const total = [...rolls]
-      .sort((left, right) => right - left)
-      .slice(0, 3)
-      .reduce((sum, roll) => sum + roll, 0);
+    const { rolls, total } = rollFourD6DropLowest();
+    const ability = abilityDefinitions.find((definition) => definition.key === key);
 
     setActiveStatRoll({
-      key,
+      id: key,
+      expression: `${ability?.label ?? "Stat"}: 4d6 drop lowest`,
       rolls,
-      total
+      total,
+      scores: {
+        [key]: total
+      }
+    });
+  }
+
+  function rollAllStats() {
+    if (activeStatRoll) {
+      return;
+    }
+
+    const statRolls = abilityDefinitions.map((ability) => ({
+      key: ability.key,
+      ...rollFourD6DropLowest()
+    }));
+    const scores = statRolls.reduce<Partial<AbilityScores>>(
+      (nextScores, statRoll) => ({
+        ...nextScores,
+        [statRoll.key]: statRoll.total
+      }),
+      {}
+    );
+    const animationRolls = statRolls.flatMap((statRoll) => statRoll.rolls).slice(0, 8);
+    const total = statRolls.reduce((sum, statRoll) => sum + statRoll.total, 0);
+
+    setActiveStatRoll({
+      id: `all-${Date.now().toString(36)}`,
+      expression: "Roll all stats",
+      rolls: animationRolls,
+      total,
+      scores
     });
   }
 
@@ -989,10 +1033,9 @@ export function NewAdventureForm() {
       return;
     }
 
-    const nextValue = activeStatRoll.total;
     setAbilityScores((currentScores) => ({
       ...currentScores,
-      [activeStatRoll.key]: nextValue
+      ...activeStatRoll.scores
     }));
     setActiveStatRoll(null);
   }
@@ -1524,9 +1567,20 @@ export function NewAdventureForm() {
 
                 {!isQuickBuild && characterStepIndex === 4 ? (
                   <section className="ability-score-panel">
-                    <div className="character-step-note">
-                      <strong>Level 5 stats</strong>
-                      <span>Roll 4d6, drop the lowest die, and keep the other three.</span>
+                    <div className="stat-roll-panel-header">
+                      <div className="character-step-note">
+                        <strong>Level 5 stats</strong>
+                        <span>Roll 4d6, drop the lowest die, and keep the other three.</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="roll-all-stats-button"
+                        disabled={Boolean(activeStatRoll)}
+                        onClick={rollAllStats}
+                      >
+                        <Dice5 size={18} />
+                        Roll All
+                      </button>
                     </div>
                     <div className="ability-score-grid">
                       {abilityDefinitions.map((ability) => {
@@ -1911,9 +1965,12 @@ export function NewAdventureForm() {
 
       {activeStatRoll ? (
         <DiceRollReveal3D
-          key={`${activeStatRoll.key}-${activeStatRoll.rolls.join("-")}`}
-          notation={predeterminedDiceNotation("4d6", activeStatRoll.rolls)}
-          expression="4d6 drop lowest"
+          key={`${activeStatRoll.id}-${activeStatRoll.rolls.join("-")}`}
+          notation={predeterminedDiceNotation(
+            `${activeStatRoll.rolls.length}d6`,
+            activeStatRoll.rolls
+          )}
+          expression={activeStatRoll.expression}
           total={activeStatRoll.total}
           onComplete={completeStatRoll}
         />

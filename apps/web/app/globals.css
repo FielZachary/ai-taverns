@@ -1026,6 +1026,51 @@ h1 {
   gap: 10px;
 }
 
+.stat-roll-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.roll-all-stats-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid rgba(244, 207, 122, 0.28);
+  border-radius: 8px;
+  background-color: rgba(17, 13, 10, 0.48);
+  color: var(--gold-bright);
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.18);
+  transition:
+    transform 420ms cubic-bezier(0.19, 1, 0.22, 1),
+    border-color 420ms cubic-bezier(0.19, 1, 0.22, 1),
+    background-color 420ms cubic-bezier(0.19, 1, 0.22, 1),
+    color 420ms cubic-bezier(0.19, 1, 0.22, 1),
+    box-shadow 420ms cubic-bezier(0.19, 1, 0.22, 1);
+}
+
+.roll-all-stats-button:hover,
+.roll-all-stats-button:focus-visible {
+  transform: translateY(-3px);
+  border-color: rgba(244, 207, 122, 0.74);
+  background-color: var(--gold);
+  color: var(--ink);
+  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.26);
+}
+
+.roll-all-stats-button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+  transform: none;
+}
+
 .stat-roll-card {
   position: relative;
   display: grid;
@@ -3318,6 +3363,11 @@ h1 {
   .ability-score-grid,
   .character-summary-grid {
     grid-template-columns: 1fr;
+  }
+
+  .stat-roll-panel-header {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .character-creation-steps {
