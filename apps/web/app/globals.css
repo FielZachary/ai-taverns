@@ -768,7 +768,8 @@ h1 {
   display: grid;
   justify-items: center;
   width: 100%;
-  margin: 0 auto;
+  margin: -6px auto 0;
+  padding-top: 6px;
 }
 
 .multiplayer-intent-picker > div {
