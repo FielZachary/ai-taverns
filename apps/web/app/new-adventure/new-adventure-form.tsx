@@ -41,7 +41,16 @@ const playerIdStorageKey = "ai-dnd.playerId";
 const characterLevel = 5;
 const proficiencyBonus = 3;
 const createSteps = ["Mode", "Campaign", "Character", "Review"];
+const customCreateSteps = ["Mode", "Campaign", "Custom World", "Character", "Review"];
 const multiplayerCreateSteps = ["Mode", "Multiplayer", "Campaign", "Character", "Review"];
+const multiplayerCustomCreateSteps = [
+  "Mode",
+  "Multiplayer",
+  "Campaign",
+  "Custom World",
+  "Character",
+  "Review"
+];
 const joinSteps = ["Mode", "Multiplayer", "Game Code", "Character", "Review"];
 const joinCodePattern = /[A-HJ-NP-Z2-9]{6}/;
 const campaignCreationLoadingSteps = [
@@ -630,19 +639,27 @@ export function NewAdventureForm() {
   const [isCreating, setIsCreating] = useState(false);
   const [creationLoadingStep, setCreationLoadingStep] = useState(0);
   const isJoinFlow = mode === "multiplayer" && multiplayerIntent === "join";
+  const isCustomGenre = campaignGenre === "custom";
+  const hasCustomWorldStep = !isJoinFlow && isCustomGenre;
   const steps =
     mode === "multiplayer"
       ? isJoinFlow
         ? joinSteps
+        : hasCustomWorldStep
+        ? multiplayerCustomCreateSteps
         : multiplayerCreateSteps
+      : hasCustomWorldStep
+      ? customCreateSteps
       : createSteps;
   const isLastStep = stepIndex === steps.length - 1;
   const multiplayerIntentStepIndex = mode === "multiplayer" ? 1 : -1;
   const campaignDetailsStepIndex = mode === "multiplayer" ? 2 : 1;
-  const characterStepIndexInFlow = mode === "multiplayer" ? 3 : 2;
-  const reviewStepIndex = mode === "multiplayer" ? 4 : 3;
+  const customWorldStepIndex = hasCustomWorldStep ? campaignDetailsStepIndex + 1 : -1;
+  const characterStepIndexInFlow = campaignDetailsStepIndex + (hasCustomWorldStep ? 2 : 1);
+  const reviewStepIndex = characterStepIndexInFlow + 1;
   const isMultiplayerIntentStep = stepIndex === multiplayerIntentStepIndex;
   const isCampaignDetailsStep = stepIndex === campaignDetailsStepIndex;
+  const isCustomWorldStep = stepIndex === customWorldStepIndex;
   const isCharacterStep = stepIndex === characterStepIndexInFlow;
   const requiresCharacterName = mode === "single_player" || isJoinFlow;
   const characterCreationSteps =
@@ -657,7 +674,6 @@ export function NewAdventureForm() {
   const hasRequiredIdentity =
     Boolean(characterName.trim()) && (!isJoinFlow || Boolean(playerName.trim()));
   const selectedGenre = campaignGenres.find((genre) => genre.id === campaignGenre) ?? campaignGenres[0];
-  const isCustomGenre = campaignGenre === "custom";
   const campaignDisplayName = isCustomGenre
     ? customWorldName.trim() || "Custom World"
     : `${selectedGenre.label} Adventure`;
@@ -817,6 +833,10 @@ export function NewAdventureForm() {
       return "Choose the campaign genre";
     }
 
+    if (isCustomWorldStep) {
+      return "Describe your custom world";
+    }
+
     if (isCharacterStep) {
       if (isLastCharacterStep) {
         return "Review your character";
@@ -843,6 +863,7 @@ export function NewAdventureForm() {
     characterStepIndex,
     isCampaignDetailsStep,
     isCharacterStep,
+    isCustomWorldStep,
     isJoinFlow,
     isLastCharacterStep,
     isQuickBuild,
@@ -980,11 +1001,11 @@ export function NewAdventureForm() {
         return normalizedGameCode.length === 6;
       }
 
-      return Boolean(
-        campaignGenre &&
-          (!isCustomGenre || customWorldName.trim()) &&
-          (!isCustomGenre || customWorldDescription.trim())
-      );
+      return Boolean(campaignGenre);
+    }
+
+    if (isCustomWorldStep) {
+      return Boolean(customWorldName.trim() && customWorldDescription.trim());
     }
 
     if (isCharacterStep) {
@@ -1031,11 +1052,11 @@ export function NewAdventureForm() {
 
     if (!canAdvance()) {
       setError(
-        isCampaignDetailsStep
+        isCustomWorldStep
+          ? "Name the world and describe it before continuing."
+          : isCampaignDetailsStep
           ? isJoinFlow
             ? "Enter the six-character game code before continuing."
-            : isCustomGenre
-            ? "Name the world and describe it before continuing."
             : "Choose a campaign genre before continuing."
           : requiresCharacterName &&
               ((isQuickBuild && characterStepIndex === 4) ||
@@ -1289,53 +1310,46 @@ export function NewAdventureForm() {
             ) : null}
 
             {isCampaignDetailsStep && !isJoinFlow ? (
-              <>
-                <fieldset className="genre-picker">
-                  <legend>Campaign genre</legend>
-                  <div>
-                    {campaignGenres.map((genre) => (
-                      <button
-                        type="button"
-                        className={campaignGenre === genre.id ? "selected" : ""}
-                        aria-pressed={campaignGenre === genre.id}
-                        key={genre.id}
-                        onClick={() => setCampaignGenre(genre.id)}
-                      >
-                        <strong>{genre.label}</strong>
-                        <small>{genre.uiDescription}</small>
-                      </button>
-                    ))}
-                  </div>
-                </fieldset>
-
-                <div
-                  className={`custom-world-field ${
-                    isCustomGenre ? "expanded" : ""
-                  }`}
-                  aria-hidden={!isCustomGenre}
-                >
-                  <label>
-                    <span>World name</span>
-                    <input
-                      value={customWorldName}
-                      onChange={(event) => setCustomWorldName(event.target.value)}
-                      placeholder="The Ashen Crownlands"
-                      tabIndex={isCustomGenre ? 0 : -1}
-                    />
-                  </label>
-                  <label>
-                    <span>World description</span>
-                    <textarea
-                      value={customWorldDescription}
-                      onChange={(event) =>
-                        setCustomWorldDescription(event.target.value)
-                      }
-                      rows={7}
-                      tabIndex={isCustomGenre ? 0 : -1}
-                    />
-                  </label>
+              <fieldset className="genre-picker">
+                <legend>Campaign genre</legend>
+                <div>
+                  {campaignGenres.map((genre) => (
+                    <button
+                      type="button"
+                      className={campaignGenre === genre.id ? "selected" : ""}
+                      aria-pressed={campaignGenre === genre.id}
+                      key={genre.id}
+                      onClick={() => setCampaignGenre(genre.id)}
+                    >
+                      <strong>{genre.label}</strong>
+                      <small>{genre.uiDescription}</small>
+                    </button>
+                  ))}
                 </div>
-              </>
+              </fieldset>
+            ) : null}
+
+            {isCustomWorldStep ? (
+              <div className="custom-world-field expanded">
+                <label>
+                  <span>World name</span>
+                  <input
+                    value={customWorldName}
+                    onChange={(event) => setCustomWorldName(event.target.value)}
+                    placeholder="The Ashen Crownlands"
+                  />
+                </label>
+                <label>
+                  <span>World description</span>
+                  <textarea
+                    value={customWorldDescription}
+                    onChange={(event) =>
+                      setCustomWorldDescription(event.target.value)
+                    }
+                    rows={7}
+                  />
+                </label>
+              </div>
             ) : null}
 
             {isCharacterStep ? (
