@@ -755,7 +755,13 @@ h1 {
 }
 
 .multiplayer-intent-picker button {
+  align-content: center;
   justify-items: center;
+  text-align: center;
+}
+
+.multiplayer-intent-picker small {
+  max-width: 24ch;
   text-align: center;
 }
 
@@ -1090,6 +1096,10 @@ h1 {
   font-weight: 900;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.join-code-panel label {
+  text-align: center;
 }
 
 .join-preview {
