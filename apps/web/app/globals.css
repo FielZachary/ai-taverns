@@ -663,6 +663,24 @@ h1 {
   font-family: ui-sans-serif, system-ui, sans-serif;
 }
 
+.new-adventure-form button {
+  transition:
+    border-color 320ms ease,
+    color 320ms ease,
+    background 320ms ease,
+    box-shadow 320ms ease,
+    transform 320ms ease;
+}
+
+.new-adventure-form button:not(:disabled):hover,
+.new-adventure-form button:not(:disabled):focus-visible {
+  transform: translateY(-2px);
+}
+
+.new-adventure-form button:not(:disabled):active {
+  transform: translateY(0);
+}
+
 .mode-picker {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -685,7 +703,8 @@ h1 {
 }
 
 .mode-picker button.selected,
-.mode-picker button:hover {
+.mode-picker button:hover,
+.mode-picker button:focus-visible {
   background: rgba(255, 255, 255, 0.035);
 }
 
@@ -701,10 +720,15 @@ h1 {
     radial-gradient(circle at 50% 40%, rgba(244, 207, 122, 0.22), transparent 48%),
     rgba(10, 8, 7, 0.72);
   box-shadow: inset 0 0 0 7px rgba(12, 9, 8, 0.82), 0 18px 42px rgba(0, 0, 0, 0.26);
+  transition:
+    border-color 320ms ease,
+    box-shadow 320ms ease,
+    transform 320ms ease;
 }
 
 .mode-picker button.selected .mode-medallion,
-.mode-picker button:hover .mode-medallion {
+.mode-picker button:hover .mode-medallion,
+.mode-picker button:focus-visible .mode-medallion {
   border-color: var(--gold-bright);
   box-shadow:
     inset 0 0 0 7px rgba(12, 9, 8, 0.82),
@@ -802,12 +826,15 @@ h1 {
 
 .genre-picker button.selected,
 .genre-picker button:hover,
+.genre-picker button:focus-visible,
 .option-picker button.selected,
-.option-picker button:hover {
+.option-picker button:hover,
+.option-picker button:focus-visible {
   border-color: rgba(244, 207, 122, 0.72);
   background:
     linear-gradient(90deg, rgba(173, 71, 43, 0.16), transparent),
     rgba(255, 255, 255, 0.05);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.2);
 }
 
 .genre-picker strong,
