@@ -627,7 +627,7 @@ h1 {
   background-image: url("/new-adventure/flow-bg.png");
   background-position: center;
   background-size: cover;
-  opacity: 0.28;
+  opacity: 0.18;
 }
 
 .new-adventure-page::after {
