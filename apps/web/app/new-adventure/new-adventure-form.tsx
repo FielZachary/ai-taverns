@@ -1237,8 +1237,7 @@ export function NewAdventureForm() {
           ) : null}
 
           {isMultiplayerIntentStep ? (
-            <fieldset className="option-picker multiplayer-intent-picker">
-              <legend>Multiplayer</legend>
+            <fieldset className="option-picker multiplayer-intent-picker" aria-label="Multiplayer setup">
               <div>
                 <button
                   type="button"
