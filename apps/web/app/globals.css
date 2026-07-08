@@ -614,7 +614,7 @@ h1 {
   overflow: hidden;
   overscroll-behavior: none;
   padding: clamp(82px, 12vh, 128px) clamp(18px, 5vw, 44px)
-    calc(118px + env(safe-area-inset-bottom));
+    calc(38px + env(safe-area-inset-bottom));
 }
 
 .new-adventure-page::before,
@@ -1263,16 +1263,11 @@ h1 {
 }
 
 .creation-actions {
-  position: fixed;
-  bottom: 0;
-  left: 50%;
-  z-index: 20;
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  width: min(calc(100% - 32px), 760px);
-  padding: 14px 0 calc(14px + env(safe-area-inset-bottom));
-  transform: translateX(-50%);
+  width: 100%;
+  padding-top: 4px;
 }
 
 .creation-actions button {
@@ -3105,7 +3100,7 @@ h1 {
   }
 
   .new-adventure-page {
-    padding: 66px 18px calc(108px + env(safe-area-inset-bottom));
+    padding: 66px 18px calc(32px + env(safe-area-inset-bottom));
   }
 
   .mode-picker {
