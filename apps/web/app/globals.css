@@ -613,7 +613,7 @@ h1 {
   height: auto;
   overflow: hidden;
   overscroll-behavior: none;
-  padding: clamp(54px, 8vh, 86px) clamp(18px, 5vw, 44px)
+  padding: clamp(82px, 12vh, 128px) clamp(18px, 5vw, 44px)
     calc(118px + env(safe-area-inset-bottom));
 }
 
@@ -3087,7 +3087,7 @@ h1 {
   }
 
   .new-adventure-page {
-    padding: 42px 18px calc(108px + env(safe-area-inset-bottom));
+    padding: 66px 18px calc(108px + env(safe-area-inset-bottom));
   }
 
   .mode-picker {
