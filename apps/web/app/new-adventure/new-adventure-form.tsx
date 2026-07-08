@@ -84,6 +84,10 @@ const quickCharacterCreationSteps = [
   "Sheet"
 ];
 const campaignGenres = [...campaignGenrePresets, customCampaignGenre];
+const campaignWorldOptions = [
+  campaignGenrePresets[0],
+  customCampaignGenre
+];
 const abilityDefinitions = [
   { key: "str", label: "Strength" },
   { key: "dex", label: "Dexterity" },
@@ -827,7 +831,7 @@ export function NewAdventureForm() {
         return "Choose multiplayer setup";
       }
 
-      return "Choose the campaign genre";
+      return "Choose the campaign world";
     }
 
     if (isCampaignDetailsStep) {
@@ -835,7 +839,7 @@ export function NewAdventureForm() {
         return "Enter the game code";
       }
 
-      return "Choose the campaign genre";
+      return "Choose the campaign world";
     }
 
     if (isCustomWorldStep) {
@@ -1081,7 +1085,7 @@ export function NewAdventureForm() {
           : isCampaignDetailsStep
           ? isJoinFlow
             ? "Enter the six-character game code before continuing."
-            : "Choose a campaign genre before continuing."
+            : "Choose a campaign world before continuing."
           : requiresCharacterName &&
               ((isQuickBuild && characterStepIndex === 4) ||
                 (!isQuickBuild && characterStepIndex === 10))
@@ -1348,13 +1352,14 @@ export function NewAdventureForm() {
 
             {isCampaignDetailsStep && !isJoinFlow ? (
               <fieldset className="genre-picker">
-                <legend>Campaign genre</legend>
+                <legend>Campaign world</legend>
                 <div>
-                  {campaignGenres.map((genre) => (
+                  {campaignWorldOptions.map((genre) => (
                     <button
                       type="button"
                       className={campaignGenre === genre.id ? "selected" : ""}
                       aria-pressed={campaignGenre === genre.id}
+                      disabled={genre.id === customCampaignGenre.id}
                       key={genre.id}
                       onClick={() => setCampaignGenre(genre.id)}
                     >
