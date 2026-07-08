@@ -580,10 +580,16 @@ function formatSpeciesAbilityBonus(
   const bonus = speciesAbilityBonuses[species][ability] ?? 0;
 
   if (bonus === 0) {
-    return "+0";
+    return {
+      bonusText: "+0",
+      sourceText: ""
+    };
   }
 
-  return `${formatModifier(bonus)} (${species} bonus)`;
+  return {
+    bonusText: formatModifier(bonus),
+    sourceText: `${species} bonus`
+  };
 }
 
 function getModifier(score: number) {
@@ -1611,6 +1617,10 @@ export function NewAdventureForm() {
                     <div className="ability-score-grid">
                       {abilityDefinitions.map((ability) => {
                         const score = abilityScores[ability.key];
+                        const speciesBonus = formatSpeciesAbilityBonus(
+                          characterSpecies,
+                          ability.key
+                        );
 
                         return (
                           <div className="stat-roll-card" key={ability.key}>
@@ -1628,10 +1638,12 @@ export function NewAdventureForm() {
                             </div>
                             <strong>{score ?? "Roll"}</strong>
                             <small>
-                              {formatSpeciesAbilityBonus(
-                                characterSpecies,
-                                ability.key
-                              )}
+                              <span>{speciesBonus.bonusText}</span>
+                              {speciesBonus.sourceText ? (
+                                <span className="stat-roll-bonus-source">
+                                  ({speciesBonus.sourceText})
+                                </span>
+                              ) : null}
                             </small>
                           </div>
                         );

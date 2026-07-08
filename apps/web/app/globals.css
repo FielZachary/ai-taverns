@@ -1148,9 +1148,19 @@ h1 {
 }
 
 .stat-roll-card small {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  flex-wrap: wrap;
   color: var(--gold-bright);
   font-size: 0.82rem;
   font-weight: 900;
+}
+
+.stat-roll-bonus-source {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 600;
 }
 
 .character-step-note {
