@@ -704,12 +704,12 @@ h1 {
 
 .new-adventure-flow-exiting {
   pointer-events: none;
-  animation: new-adventure-flow-exit 180ms ease-in forwards;
+  animation: new-adventure-flow-exit 240ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
 .new-adventure-flow-entering {
   pointer-events: none;
-  animation: new-adventure-flow-enter 180ms ease-out both;
+  animation: new-adventure-flow-enter 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .new-adventure-form button {
@@ -1407,14 +1407,14 @@ h1 {
 @keyframes new-adventure-flow-exit {
   to {
     opacity: 0;
-    transform: translateY(18px);
+    transform: translateY(14px) scale(0.99);
   }
 }
 
 @keyframes new-adventure-flow-enter {
   from {
     opacity: 0;
-    transform: translateY(18px);
+    transform: translateY(18px) scale(0.99);
   }
 
   to {
