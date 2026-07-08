@@ -1330,7 +1330,6 @@ export function NewAdventureForm() {
                       onChange={(event) =>
                         setCustomWorldDescription(event.target.value)
                       }
-                      placeholder="A sea of floating islands ruled by oathbound sky courts, where every spell costs a memory..."
                       rows={7}
                       tabIndex={isCustomGenre ? 0 : -1}
                     />
