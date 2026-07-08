@@ -840,6 +840,7 @@ h1 {
 
 .genre-picker {
   min-width: 0;
+  width: min(100%, 680px);
   margin: 0;
   padding: 0;
   border: 0;
@@ -857,7 +858,7 @@ h1 {
 .genre-picker > div {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 16px;
 }
 
 .genre-picker button,
@@ -871,6 +872,21 @@ h1 {
   color: var(--ink);
   background: rgba(17, 13, 10, 0.48);
   text-align: left;
+}
+
+.genre-picker button {
+  align-content: center;
+  min-height: 150px;
+  padding: 22px;
+}
+
+.genre-picker strong {
+  font-size: 1.12rem;
+}
+
+.genre-picker small {
+  font-size: 0.9rem;
+  line-height: 1.45;
 }
 
 .genre-picker button.selected,
