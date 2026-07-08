@@ -6,6 +6,8 @@ import {
   ArrowRight,
   Check,
   Dice5,
+  Minus,
+  Plus,
   ScrollText,
   Sparkles,
   Swords,
@@ -40,6 +42,7 @@ type AbilityScores = Record<AbilityKey, number | null>;
 type SpeciesAbilityBonuses = Partial<Record<AbilityKey, number>>;
 type SkillName = (typeof skillDefinitions)[number]["name"];
 type CharacterBuildMode = "quick" | "custom";
+type StatGenerationMode = "roll" | "point_buy";
 type ActiveStatRoll = {
   id: string;
   expression: string;
@@ -112,6 +115,25 @@ const emptyAbilityScores: AbilityScores = {
   int: null,
   wis: null,
   cha: null
+};
+const pointBuyDefaultScores: CompleteAbilityScores = {
+  str: 10,
+  dex: 10,
+  con: 10,
+  int: 10,
+  wis: 10,
+  cha: 10
+};
+const pointBuyBudget = 27;
+const pointBuyCosts: Record<number, number> = {
+  8: 0,
+  9: 1,
+  10: 2,
+  11: 3,
+  12: 4,
+  13: 5,
+  14: 7,
+  15: 9
 };
 const skillDefinitions = [
   { name: "Acrobatics", ability: "dex" },
@@ -592,6 +614,18 @@ function formatSpeciesAbilityBonus(
   };
 }
 
+function pointBuyScoreFor(scores: AbilityScores, ability: AbilityKey) {
+  return scores[ability] ?? pointBuyDefaultScores[ability];
+}
+
+function getPointBuyPointsSpent(scores: AbilityScores) {
+  return abilityDefinitions.reduce(
+    (total, ability) =>
+      total + pointBuyCosts[pointBuyScoreFor(scores, ability.key)],
+    0
+  );
+}
+
 function getModifier(score: number) {
   return Math.floor((score - 10) / 2);
 }
@@ -671,6 +705,8 @@ export function NewAdventureForm() {
     ...emptyAbilityScores
   });
   const [activeStatRoll, setActiveStatRoll] = useState<ActiveStatRoll | null>(null);
+  const [statGenerationMode, setStatGenerationMode] =
+    useState<StatGenerationMode>("roll");
   const [subclass, setSubclass] = useState("Champion");
   const [classFeatureChoice, setClassFeatureChoice] = useState("Defense");
   const [selectedSkills, setSelectedSkills] = useState<SkillName[]>(["Athletics", "Perception"]);
@@ -742,6 +778,8 @@ export function NewAdventureForm() {
   const areAllStatsRolled = abilityDefinitions.every(
     ({ key }) => abilityScores[key] !== null
   );
+  const pointBuyPointsRemaining =
+    pointBuyBudget - getPointBuyPointsSpent(abilityScores);
   const selectedEquipmentKit = selectedClass.equipmentKits.find((kit) => kit.id === equipmentKitId) ?? selectedClass.equipmentKits[0];
   const backgroundSkillList = backgroundSkills[characterBackground] ?? [];
   const proficientSkills = Array.from(new Set([...selectedSkills, ...backgroundSkillList]));
@@ -973,7 +1011,9 @@ export function NewAdventureForm() {
     setAbilityScores(
       characterBuildMode === "quick"
         ? { ...defaultAbilityScoresByClass[nextClass] }
-        : { ...emptyAbilityScores }
+        : statGenerationMode === "point_buy"
+          ? { ...pointBuyDefaultScores }
+          : { ...emptyAbilityScores }
     );
     setSubclass(nextClassData.subclassOptions[0]);
     setClassFeatureChoice(nextClassData.featureOptions[0]);
@@ -993,6 +1033,7 @@ export function NewAdventureForm() {
     ) as SkillName[];
 
     setCharacterBackground(quickBuildBackgroundByClass[characterClass]);
+    setStatGenerationMode("roll");
     setAbilityScores({ ...defaultAbilityScoresByClass[characterClass] });
     setSubclass(selectedClass.subclassOptions[0]);
     setClassFeatureChoice(selectedClass.featureOptions[0]);
@@ -1010,6 +1051,7 @@ export function NewAdventureForm() {
   }
 
   function applyCustomBuildDefaults() {
+    setStatGenerationMode("roll");
     setAbilityScores({ ...emptyAbilityScores });
   }
 
@@ -1018,6 +1060,7 @@ export function NewAdventureForm() {
       return;
     }
 
+    setStatGenerationMode("roll");
     const { rolls, total } = rollFourD6DropLowest();
     const ability = abilityDefinitions.find((definition) => definition.key === key);
 
@@ -1037,6 +1080,7 @@ export function NewAdventureForm() {
       return;
     }
 
+    setStatGenerationMode("roll");
     const statRolls = abilityDefinitions.map((ability) => ({
       key: ability.key,
       ...rollFourD6DropLowest()
@@ -1070,6 +1114,40 @@ export function NewAdventureForm() {
       ...activeStatRoll.scores
     }));
     setActiveStatRoll(null);
+  }
+
+  function switchToPointBuy() {
+    if (activeStatRoll) {
+      return;
+    }
+
+    setStatGenerationMode("point_buy");
+    setAbilityScores({ ...pointBuyDefaultScores });
+  }
+
+  function updatePointBuyScore(key: AbilityKey, change: -1 | 1) {
+    setAbilityScores((currentScores) => {
+      const currentScore = pointBuyScoreFor(currentScores, key);
+      const nextScore = Math.min(15, Math.max(8, currentScore + change));
+
+      if (nextScore === currentScore) {
+        return currentScores;
+      }
+
+      const currentCost = pointBuyCosts[currentScore];
+      const nextCost = pointBuyCosts[nextScore];
+      const nextPointsSpent =
+        getPointBuyPointsSpent(currentScores) - currentCost + nextCost;
+
+      if (nextPointsSpent > pointBuyBudget) {
+        return currentScores;
+      }
+
+      return {
+        ...currentScores,
+        [key]: nextScore
+      };
+    });
   }
 
   function toggleSkill(skill: SkillName) {
@@ -1602,39 +1680,93 @@ export function NewAdventureForm() {
                     <div className="stat-roll-panel-header">
                       <div className="character-step-note">
                         <strong>Level 5 stats</strong>
-                        <span>Roll 4d6, drop the lowest die, and keep the other three.</span>
+                        <span>
+                          {statGenerationMode === "point_buy"
+                            ? "Start at 10 and spend points to tune each stat."
+                            : "Roll 4d6, drop the lowest die, and keep the other three."}
+                        </span>
                       </div>
-                      <button
-                        type="button"
-                        className="roll-all-stats-button"
-                        disabled={Boolean(activeStatRoll)}
-                        onClick={rollAllStats}
-                      >
-                        <Dice5 size={18} />
-                        Roll All
-                      </button>
+                      <div className="stat-mode-actions">
+                        <button
+                          type="button"
+                          className={
+                            statGenerationMode === "point_buy"
+                              ? "stat-mode-button selected"
+                              : "stat-mode-button"
+                          }
+                          aria-pressed={statGenerationMode === "point_buy"}
+                          disabled={Boolean(activeStatRoll)}
+                          onClick={switchToPointBuy}
+                        >
+                          Point Buy
+                        </button>
+                        <button
+                          type="button"
+                          className="stat-mode-button"
+                          disabled={Boolean(activeStatRoll)}
+                          onClick={rollAllStats}
+                        >
+                          <Dice5 size={18} />
+                          Roll All
+                        </button>
+                      </div>
                     </div>
-                    <div className="ability-score-grid">
+                    <div className="ability-score-grid stat-generation-body" key={statGenerationMode}>
                       {abilityDefinitions.map((ability) => {
-                        const score = abilityScores[ability.key];
+                        const score =
+                          statGenerationMode === "point_buy"
+                            ? pointBuyScoreFor(abilityScores, ability.key)
+                            : abilityScores[ability.key];
                         const speciesBonus = formatSpeciesAbilityBonus(
                           characterSpecies,
                           ability.key
                         );
+                        const pointBuyScore = pointBuyScoreFor(
+                          abilityScores,
+                          ability.key
+                        );
+                        const currentCost = pointBuyCosts[pointBuyScore];
+                        const nextCost = pointBuyCosts[pointBuyScore + 1];
+                        const canIncreasePointBuyScore =
+                          pointBuyScore < 15 &&
+                          pointBuyPointsRemaining >= nextCost - currentCost;
 
                         return (
                           <div className="stat-roll-card" key={ability.key}>
                             <div className="stat-roll-card-header">
                               <span>{ability.label}</span>
-                              <button
-                                type="button"
-                                className="stat-roll-button"
-                                aria-label={`Roll ${ability.label}`}
-                                disabled={Boolean(activeStatRoll)}
-                                onClick={() => rollStat(ability.key)}
-                              >
-                                <Dice5 size={18} />
-                              </button>
+                              {statGenerationMode === "point_buy" ? (
+                                <div className="stat-adjust-controls">
+                                  <button
+                                    type="button"
+                                    className="stat-adjust-button"
+                                    aria-label={`Decrease ${ability.label}`}
+                                    disabled={pointBuyScore <= 8}
+                                    onClick={() => updatePointBuyScore(ability.key, -1)}
+                                  >
+                                    <Minus size={16} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="stat-adjust-button"
+                                    aria-label={`Increase ${ability.label}`}
+                                    disabled={!canIncreasePointBuyScore}
+                                    onClick={() => updatePointBuyScore(ability.key, 1)}
+                                  >
+                                    <Plus size={16} />
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="stat-roll-button"
+                                  aria-label={`Roll ${ability.label}`}
+                                  disabled={Boolean(activeStatRoll)}
+                                  onClick={() => rollStat(ability.key)}
+                                >
+                                  <Dice5 size={18} />
+                                </button>
+                              )}
                             </div>
                             <strong>{score ?? "Roll"}</strong>
                             <small>
@@ -1973,6 +2105,16 @@ export function NewAdventureForm() {
               </p>
             ) : null}
           </div>
+
+          {isCharacterStep &&
+          !isQuickBuild &&
+          characterStepIndex === 4 &&
+          statGenerationMode === "point_buy" ? (
+            <div className="point-buy-remaining" aria-live="polite">
+              <strong>{pointBuyPointsRemaining}</strong>
+              <span>points remaining</span>
+            </div>
+          ) : null}
 
           <div className="creation-actions">
             <button
