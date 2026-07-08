@@ -1098,6 +1098,7 @@ h1 {
 .custom-world-field {
   display: grid;
   grid-template-rows: 0fr;
+  margin-top: -20px;
   overflow: hidden;
   opacity: 0;
   transform: translateY(-6px);
@@ -1109,6 +1110,7 @@ h1 {
 
 .custom-world-field.expanded {
   grid-template-rows: 1fr;
+  margin-top: 0;
   opacity: 1;
   transform: translateY(0);
 }
@@ -1197,7 +1199,7 @@ h1 {
 }
 
 .new-adventure-error-slot {
-  min-height: 20px;
+  min-height: 0;
 }
 
 .campaign-creation-screen {
