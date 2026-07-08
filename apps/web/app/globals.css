@@ -1264,7 +1264,7 @@ h1 {
 
 .creation-actions {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   gap: 12px;
   width: 100%;
   padding-top: 4px;
