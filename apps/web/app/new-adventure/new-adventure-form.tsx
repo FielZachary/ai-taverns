@@ -157,6 +157,9 @@ const quickCharacterCreationSteps = [
   "Build",
   "Class",
   "Species",
+  "Stats",
+  "Spells",
+  "Equipment",
   "Identity",
   "Sheet"
 ];
@@ -1515,22 +1518,6 @@ function formatList(items: readonly string[]) {
   return items.length > 0 ? items.join(", ") : "None";
 }
 
-function defaultEquipmentSelections(characterClass: CharacterClass) {
-  const rule = classEquipmentRules[characterClass];
-
-  return Object.fromEntries(
-    rule.choices.map((choice) => [
-      choice.id,
-      {
-        optionId: choice.options[0].id,
-        customItem: choice.options[0].category
-          ? equipmentCategoryOptions[choice.options[0].category][0]
-          : undefined
-      }
-    ])
-  ) as EquipmentSelections;
-}
-
 function selectedEquipmentOption(
   choice: EquipmentChoiceGroup,
   selections: EquipmentSelections
@@ -2197,7 +2184,7 @@ export function NewAdventureForm() {
     characterBuildMode === "quick"
       ? quickCharacterCreationSteps
       : customCharacterCreationSteps;
-  const isQuickBuild = characterBuildMode === "quick";
+  const currentCharacterStep = characterCreationSteps[characterStepIndex];
   const isLastCharacterStep =
     characterStepIndex === characterCreationSteps.length - 1;
   const modeLabel = mode === "single_player" ? "Singleplayer" : "Multiplayer";
@@ -2210,7 +2197,7 @@ export function NewAdventureForm() {
     : `${selectedGenre.label} Adventure`;
   const selectedClass = classOptions.find((option) => option.id === characterClass) ?? classOptions[4];
   const equipmentChoices = classEquipmentRules[characterClass].choices;
-  const isEquipmentCharacterStep = isCharacterStep && !isQuickBuild && characterStepIndex === 9;
+  const isEquipmentCharacterStep = isCharacterStep && currentCharacterStep === "Equipment";
   const isEquipmentSummaryStep = equipmentChoiceStepIndex >= equipmentChoices.length;
   const defaultAbilityScores = defaultAbilityScoresByClass[characterClass];
   const resolvedAbilityScores = useMemo<CompleteAbilityScores>(
@@ -2464,11 +2451,11 @@ export function NewAdventureForm() {
         return "Choose your character build";
       }
 
-      if (!isQuickBuild && characterStepIndex === 4) {
+      if (currentCharacterStep === "Stats") {
         return "Roll your Level 5 stats";
       }
 
-      if (!isQuickBuild && characterStepIndex === 9) {
+      if (isEquipmentCharacterStep) {
         if (isEquipmentSummaryStep) {
           return "Review your starting gear";
         }
@@ -2483,12 +2470,12 @@ export function NewAdventureForm() {
   }, [
     characterCreationSteps,
     characterStepIndex,
+    currentCharacterStep,
     isCampaignDetailsStep,
     isCharacterStep,
     isCustomWorldStep,
     isJoinFlow,
     isLastCharacterStep,
-    isQuickBuild,
     equipmentChoiceStepIndex,
     equipmentChoices.length,
     isEquipmentSummaryStep,
@@ -2587,9 +2574,7 @@ export function NewAdventureForm() {
   function handleClassChange(nextClass: CharacterClass) {
     const nextClassData = classOptions.find((option) => option.id === nextClass) ?? classOptions[4];
     const nextAbilityScores =
-      characterBuildMode === "quick"
-        ? { ...defaultAbilityScoresByClass[nextClass] }
-        : statGenerationMode === "point_buy"
+      statGenerationMode === "point_buy"
           ? { ...pointBuyDefaultScores }
           : { ...emptyAbilityScores };
     const nextSpellLimits = spellSelectionLimitsFor(nextClass, {
@@ -2605,9 +2590,7 @@ export function NewAdventureForm() {
     setSubclass(nextClassData.subclassOptions[0]);
     setClassFeatureChoice(nextClassData.featureOptions[0]);
     setSelectedSkills([...nextClassData.defaultSkills] as SkillName[]);
-    setEquipmentSelections(
-      characterBuildMode === "quick" ? defaultEquipmentSelections(nextClass) : {}
-    );
+    setEquipmentSelections({});
     setEquipmentChoiceStepIndex(0);
     setActiveEquipmentModal(null);
     setDlcSpellVisibility({});
@@ -2626,7 +2609,7 @@ export function NewAdventureForm() {
 
     setCharacterBackground(quickBuildBackgroundByClass[characterClass]);
     setStatGenerationMode("roll");
-    setAbilityScores({ ...defaultAbilityScoresByClass[characterClass] });
+    setAbilityScores({ ...emptyAbilityScores });
     setSubclass(selectedClass.subclassOptions[0]);
     setClassFeatureChoice(selectedClass.featureOptions[0]);
     setSelectedSkills(
@@ -2634,7 +2617,7 @@ export function NewAdventureForm() {
         ? skillChoices
         : ([...selectedClass.defaultSkills] as SkillName[])
     );
-    setEquipmentSelections(defaultEquipmentSelections(characterClass));
+    setEquipmentSelections({});
     setEquipmentChoiceStepIndex(0);
     setActiveEquipmentModal(null);
     setSelectedTool("Dice set");
@@ -2820,19 +2803,11 @@ export function NewAdventureForm() {
         return true;
       }
 
-      if (isQuickBuild) {
-        return (
-          characterStepIndex !== 3 ||
-          !requiresCharacterName ||
-          hasRequiredIdentity
-        );
-      }
-
-      if (characterStepIndex === 4) {
+      if (currentCharacterStep === "Stats") {
         return areAllStatsRolled;
       }
 
-      if (characterStepIndex === 8) {
+      if (currentCharacterStep === "Skills") {
         return selectedSkills.length > 0;
       }
 
@@ -2841,12 +2816,12 @@ export function NewAdventureForm() {
         return Boolean(activeChoice && equipmentSelections[activeChoice.id]);
       }
 
-      if (characterStepIndex === 5 && hasSpells) {
+      if (currentCharacterStep === "Spells" && hasSpells) {
         return hasValidSpellSelection;
       }
 
       return (
-        characterStepIndex !== 10 ||
+        currentCharacterStep !== "Identity" ||
         !requiresCharacterName ||
         hasRequiredIdentity
       );
@@ -2893,17 +2868,15 @@ export function NewAdventureForm() {
           ? isJoinFlow
             ? "Enter the six-character game code before continuing."
             : "Choose a campaign world before continuing."
-          : requiresCharacterName &&
-              ((isQuickBuild && characterStepIndex === 3) ||
-                (!isQuickBuild && characterStepIndex === 10))
+          : requiresCharacterName && currentCharacterStep === "Identity"
             ? isJoinFlow
               ? "Add your player and character names before continuing."
               : "Add your character name before continuing."
-            : !isQuickBuild && characterStepIndex === 4
+            : currentCharacterStep === "Stats"
               ? "Roll all six stats before continuing."
             : isEquipmentCharacterStep && !isEquipmentSummaryStep
               ? "Choose equipment before continuing."
-            : characterStepIndex === 5
+            : currentCharacterStep === "Spells"
               ? "Choose at least one spell before continuing."
               : "Choose at least one option before continuing."
       );
@@ -3256,7 +3229,7 @@ export function NewAdventureForm() {
                         }}
                       >
                         <strong>Quick Build</strong>
-                        <small>Start fast with a ready-to-play Level 5 character.</small>
+                        <small>Auto-pick background and proficiencies, then choose the core play details.</small>
                       </button>
                       <button
                         type="button"
@@ -3274,7 +3247,7 @@ export function NewAdventureForm() {
                   </fieldset>
                 ) : null}
 
-                {characterStepIndex === 1 ? (
+                {currentCharacterStep === "Class" ? (
                   <fieldset className="option-picker class-picker">
                     <legend>Class</legend>
                     <div>
@@ -3294,8 +3267,7 @@ export function NewAdventureForm() {
                   </fieldset>
                 ) : null}
 
-                {(!isQuickBuild && characterStepIndex === 3) ||
-                (isQuickBuild && characterStepIndex === 2) ? (
+                {currentCharacterStep === "Species" ? (
                   <fieldset className="option-picker compact-option-picker">
                     <legend>Species</legend>
                     <div>
@@ -3314,7 +3286,7 @@ export function NewAdventureForm() {
                   </fieldset>
                 ) : null}
 
-                {!isQuickBuild && characterStepIndex === 7 ? (
+                {currentCharacterStep === "Background" ? (
                   <fieldset className="option-picker compact-option-picker">
                     <legend>Background</legend>
                     <div>
@@ -3334,7 +3306,7 @@ export function NewAdventureForm() {
                   </fieldset>
                 ) : null}
 
-                {!isQuickBuild && characterStepIndex === 4 ? (
+                {currentCharacterStep === "Stats" ? (
                   <section className="ability-score-panel">
                     <div className="stat-roll-panel-header">
                       <div className="character-step-note">
@@ -3454,7 +3426,7 @@ export function NewAdventureForm() {
                   </section>
                 ) : null}
 
-                {!isQuickBuild && characterStepIndex === 2 ? (
+                {currentCharacterStep === "Class Choices" ? (
                   <div className="character-builder-stack">
                     <fieldset className="option-picker compact-option-picker">
                       <legend>{selectedClass.subclassLabel}</legend>
@@ -3491,7 +3463,7 @@ export function NewAdventureForm() {
                   </div>
                 ) : null}
 
-                {!isQuickBuild && characterStepIndex === 8 ? (
+                {currentCharacterStep === "Skills" ? (
                   <fieldset className="option-picker compact-option-picker">
                     <legend>Skills</legend>
                     <div>
@@ -3513,7 +3485,7 @@ export function NewAdventureForm() {
                   </fieldset>
                 ) : null}
 
-                {!isQuickBuild && characterStepIndex === 6 ? (
+                {currentCharacterStep === "Proficiencies" ? (
                   <div className="character-builder-stack">
                     <fieldset className="option-picker compact-option-picker">
                       <legend>Tool proficiency</legend>
@@ -3550,7 +3522,7 @@ export function NewAdventureForm() {
                   </div>
                 ) : null}
 
-                {!isQuickBuild && characterStepIndex === 9 ? (
+                {currentCharacterStep === "Equipment" ? (
                   <fieldset className="option-picker equipment-picker">
                     <legend>{characterClass} starting equipment</legend>
                     {!isEquipmentSummaryStep && activeEquipmentChoice ? (
@@ -3602,7 +3574,7 @@ export function NewAdventureForm() {
                   </fieldset>
                 ) : null}
 
-                {!isQuickBuild && characterStepIndex === 5 ? (
+                {currentCharacterStep === "Spells" ? (
                   hasSpells ? (
                     <fieldset className="option-picker spell-picker">
                       <legend>Spells</legend>
@@ -3692,8 +3664,7 @@ export function NewAdventureForm() {
                   )
                 ) : null}
 
-                {(!isQuickBuild && characterStepIndex === 10) ||
-                (isQuickBuild && characterStepIndex === 3) ? (
+                {currentCharacterStep === "Identity" ? (
                   <div className="identity-panel">
                     <div className="character-identity-fields">
                       {isJoinFlow ? (
@@ -3766,8 +3737,7 @@ export function NewAdventureForm() {
                   </div>
                 ) : null}
 
-                {(!isQuickBuild && characterStepIndex === 11) ||
-                (isQuickBuild && characterStepIndex === 4) ? (
+                {currentCharacterStep === "Sheet" ? (
                   <>
                     <div className="character-summary-grid">
                       <div>
@@ -3891,8 +3861,7 @@ export function NewAdventureForm() {
           </div>
 
           {isCharacterStep &&
-          !isQuickBuild &&
-          characterStepIndex === 4 &&
+          currentCharacterStep === "Stats" &&
           statGenerationMode === "point_buy" ? (
             <div className="point-buy-remaining" aria-live="polite">
               <strong>{pointBuyPointsRemaining}</strong>
