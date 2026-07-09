@@ -73,6 +73,10 @@ const topFields = [
     value: (sheet: ParsedSheet) => fieldValue(sheet, ["Alignment"])
   },
   {
+    label: "Gender",
+    value: (sheet: ParsedSheet) => fieldValue(sheet, ["Gender"])
+  },
+  {
     label: "Experience Points",
     value: () => "-"
   }

@@ -920,6 +920,7 @@ const alignmentOptions = [
   "Neutral Evil",
   "Chaotic Evil"
 ] as const;
+const genderOptions = ["Male", "Female", "Non-binary"] as const;
 const defaultAbilityScoresByClass: Record<CharacterClass, CompleteAbilityScores> = {
   Barbarian: { str: 16, dex: 14, con: 16, int: 8, wis: 12, cha: 10 },
   Bard: { str: 8, dex: 14, con: 14, int: 10, wis: 12, cha: 17 },
@@ -938,6 +939,7 @@ type CharacterClass = (typeof classOptions)[number]["id"];
 type CharacterSpecies = (typeof speciesOptions)[number];
 type CharacterBackground = (typeof backgroundOptions)[number];
 type Alignment = (typeof alignmentOptions)[number];
+type Gender = (typeof genderOptions)[number];
 
 const equipmentCategoryOptions: Record<EquipmentCategory, string[]> = {
   simpleWeapon: [
@@ -2158,6 +2160,7 @@ export function NewAdventureForm() {
   const [selectedSpells, setSelectedSpells] = useState<string[]>([]);
   const [dlcSpellVisibility, setDlcSpellVisibility] = useState<DlcSpellVisibility>({});
   const [alignment, setAlignment] = useState<Alignment>("Neutral Good");
+  const [gender, setGender] = useState<Gender>("Non-binary");
   const [characterSheet, setCharacterSheet] = useState(defaultCharacterSheet);
   const [ownerClientId, setOwnerClientId] = useState("");
   const [error, setError] = useState("");
@@ -2342,6 +2345,7 @@ export function NewAdventureForm() {
       `Species: ${characterSpecies}`,
       `Background: ${characterBackground}`,
       `Alignment: ${alignment}`,
+      `Gender: ${gender}`,
       "",
       "Core Stats",
       `Armor Class: ${selectedEquipmentProfile.armorClass}`,
@@ -2393,7 +2397,7 @@ export function NewAdventureForm() {
       ...spells,
       "",
       "DM Brief",
-      `${name} is a Level ${characterLevel} ${alignment} ${characterSpecies} ${selectedClass.id} (${subclass}) with the ${characterBackground} background. Use their proficient skills (${formatList(proficientSkills)}) and key class choices to frame checks, spotlight moments, and opening-scene hooks.`
+      `${name} is a Level ${characterLevel} ${alignment} ${gender.toLowerCase()} ${characterSpecies} ${selectedClass.id} (${subclass}) with the ${characterBackground} background. Use their proficient skills (${formatList(proficientSkills)}) and key class choices to frame checks, spotlight moments, and opening-scene hooks.`
     ]
       .filter((line): line is string => line !== null)
       .join("\n");
@@ -2406,6 +2410,7 @@ export function NewAdventureForm() {
     characterName,
     characterSpecies,
     classFeatureChoice,
+    gender,
     hasSpells,
     maxHp,
     isJoinFlow,
@@ -3726,6 +3731,23 @@ export function NewAdventureForm() {
                     </div>
 
                     <fieldset className="option-picker compact-option-picker">
+                      <legend>Gender</legend>
+                      <div>
+                        {genderOptions.map((option) => (
+                          <button
+                            type="button"
+                            className={gender === option ? "selected" : ""}
+                            aria-pressed={gender === option}
+                            key={option}
+                            onClick={() => setGender(option)}
+                          >
+                            <strong>{option}</strong>
+                          </button>
+                        ))}
+                      </div>
+                    </fieldset>
+
+                    <fieldset className="option-picker compact-option-picker">
                       <legend>Alignment</legend>
                       <div>
                         {alignmentOptions.map((option) => (
@@ -3850,6 +3872,10 @@ export function NewAdventureForm() {
                   <div>
                     <dt>Alignment</dt>
                     <dd>{alignment}</dd>
+                  </div>
+                  <div>
+                    <dt>Gender</dt>
+                    <dd>{gender}</dd>
                   </div>
                 </dl>
             </div>
