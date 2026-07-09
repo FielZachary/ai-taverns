@@ -1707,7 +1707,9 @@ export function NewAdventureForm() {
                           onClick={rollAllStats}
                         >
                           <Dice5 size={18} />
-                          Roll All
+                          {statGenerationMode === "point_buy"
+                            ? "Roll Scores"
+                            : "Roll All"}
                         </button>
                       </div>
                     </div>
