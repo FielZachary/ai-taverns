@@ -101,14 +101,14 @@ const campaignCreationLoadingSteps = [
 const customCharacterCreationSteps = [
   "Build",
   "Class",
-  "Species",
-  "Background",
-  "Stats",
   "Class Choices",
+  "Species",
+  "Stats",
+  "Spells",
   "Skills",
   "Proficiencies",
+  "Background",
   "Equipment",
-  "Spells",
   "Identity",
   "Sheet"
 ];
@@ -1828,7 +1828,7 @@ export function NewAdventureForm() {
         return selectedSkills.length > 0;
       }
 
-      if (characterStepIndex === 9 && hasSpells) {
+      if (characterStepIndex === 5 && hasSpells) {
         return hasValidSpellSelection;
       }
 
@@ -1888,7 +1888,7 @@ export function NewAdventureForm() {
               : "Add your character name before continuing."
             : !isQuickBuild && characterStepIndex === 4
               ? "Roll all six stats before continuing."
-            : characterStepIndex === 9
+            : characterStepIndex === 5
               ? "Choose at least one spell before continuing."
               : "Choose at least one option before continuing."
       );
@@ -2259,7 +2259,7 @@ export function NewAdventureForm() {
                   </fieldset>
                 ) : null}
 
-                {(!isQuickBuild && characterStepIndex === 2) ||
+                {(!isQuickBuild && characterStepIndex === 3) ||
                 (isQuickBuild && characterStepIndex === 2) ? (
                   <fieldset className="option-picker compact-option-picker">
                     <legend>Species</legend>
@@ -2279,7 +2279,7 @@ export function NewAdventureForm() {
                   </fieldset>
                 ) : null}
 
-                {!isQuickBuild && characterStepIndex === 3 ? (
+                {!isQuickBuild && characterStepIndex === 8 ? (
                   <fieldset className="option-picker compact-option-picker">
                     <legend>Background</legend>
                     <div>
@@ -2417,8 +2417,8 @@ export function NewAdventureForm() {
                   </section>
                 ) : null}
 
-                {!isQuickBuild && characterStepIndex === 5 ? (
-                  <div className="character-builder-grid">
+                {!isQuickBuild && characterStepIndex === 2 ? (
+                  <div className="character-builder-stack">
                     <fieldset className="option-picker compact-option-picker">
                       <legend>{selectedClass.subclassLabel}</legend>
                       <div>
@@ -2477,7 +2477,7 @@ export function NewAdventureForm() {
                 ) : null}
 
                 {!isQuickBuild && characterStepIndex === 7 ? (
-                  <div className="character-builder-grid">
+                  <div className="character-builder-stack">
                     <fieldset className="option-picker compact-option-picker">
                       <legend>Tool proficiency</legend>
                       <div>
@@ -2513,7 +2513,7 @@ export function NewAdventureForm() {
                   </div>
                 ) : null}
 
-                {!isQuickBuild && characterStepIndex === 8 ? (
+                {!isQuickBuild && characterStepIndex === 9 ? (
                   <fieldset className="option-picker equipment-picker">
                     <legend>Equipment</legend>
                     <div>
@@ -2533,7 +2533,7 @@ export function NewAdventureForm() {
                   </fieldset>
                 ) : null}
 
-                {!isQuickBuild && characterStepIndex === 9 ? (
+                {!isQuickBuild && characterStepIndex === 5 ? (
                   hasSpells ? (
                     <fieldset className="option-picker spell-picker">
                       <legend>Spells</legend>

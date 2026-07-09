@@ -1398,6 +1398,11 @@ h1 {
   gap: 16px;
 }
 
+.character-builder-stack {
+  display: grid;
+  gap: 16px;
+}
+
 .identity-panel,
 .character-identity-fields {
   display: grid;
