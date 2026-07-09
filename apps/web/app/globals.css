@@ -1002,6 +1002,96 @@ h1 {
   min-height: 50px;
 }
 
+.spell-picker {
+  display: grid;
+  gap: 12px;
+}
+
+.spell-level-list {
+  display: grid;
+  gap: 16px;
+  max-height: min(54vh, 560px);
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.spell-level-group {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.spell-level-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(244, 207, 122, 0.16);
+}
+
+.spell-level-header h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.86rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.spell-dlc-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: max-content;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.spell-dlc-toggle input {
+  width: 16px;
+  height: 16px;
+  min-height: 16px;
+  padding: 0;
+  accent-color: var(--gold-bright);
+}
+
+.spell-dlc-toggle span {
+  color: inherit;
+  font-size: inherit;
+}
+
+.spell-option-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.spell-option-grid button {
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  min-height: 54px;
+  padding: 10px;
+}
+
+.spell-option-grid button small {
+  color: var(--muted);
+  font-size: 0.64rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.spell-option-grid button.dlc-spell-option {
+  border-color: rgba(137, 189, 183, 0.32);
+}
+
+.spell-option-grid button.dlc-spell-option.selected {
+  border-color: rgba(244, 207, 122, 0.74);
+}
+
 .build-mode-picker > div {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }

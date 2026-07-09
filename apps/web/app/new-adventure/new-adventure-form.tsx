@@ -43,6 +43,13 @@ type SpeciesAbilityBonuses = Partial<Record<AbilityKey, number>>;
 type SkillName = (typeof skillDefinitions)[number]["name"];
 type CharacterBuildMode = "quick" | "custom";
 type StatGenerationMode = "roll" | "point_buy";
+type SpellLevelLabel = "Cantrip" | "1st level" | "2nd level" | "3rd level";
+type SpellGroup = {
+  level: SpellLevelLabel;
+  base: string[];
+  dlc?: string[];
+};
+type DlcSpellVisibility = Partial<Record<SpellLevelLabel, boolean>>;
 type ActiveStatRoll = {
   id: string;
   expression: string;
@@ -155,6 +162,178 @@ const skillDefinitions = [
   { name: "Stealth", ability: "dex" },
   { name: "Survival", ability: "wis" }
 ] as const;
+const spellLevelOrder: SpellLevelLabel[] = [
+  "Cantrip",
+  "1st level",
+  "2nd level",
+  "3rd level"
+];
+const spellCatalog = {
+  Bard: [
+    {
+      level: "Cantrip",
+      base: ["Blade Ward", "Dancing Lights", "Friends", "Light", "Mage Hand", "Mending", "Message", "Minor Illusion", "Prestidigitation", "True Strike", "Vicious Mockery"],
+      dlc: ["Thunderclap"]
+    },
+    {
+      level: "1st level",
+      base: ["Animal Friendship", "Bane", "Charm Person", "Comprehend Languages", "Cure Wounds", "Detect Magic", "Disguise Self", "Dissonant Whispers", "Faerie Fire", "Feather Fall", "Healing Word", "Heroism", "Identify", "Illusory Script", "Longstrider", "Silent Image", "Sleep", "Speak with Animals", "Tasha's Hideous Laughter", "Thunderwave", "Unseen Servant"],
+      dlc: ["Distort Value", "Earth Tremor", "Silvery Barbs"]
+    },
+    {
+      level: "2nd level",
+      base: ["Animal Messenger", "Blindness/Deafness", "Calm Emotions", "Cloud of Daggers", "Crown of Madness", "Detect Thoughts", "Enhance Ability", "Enthrall", "Heat Metal", "Hold Person", "Invisibility", "Knock", "Lesser Restoration", "Locate Animals or Plants", "Locate Object", "Magic Mouth", "Phantasmal Force", "See Invisibility", "Shatter", "Silence", "Suggestion", "Zone of Truth"],
+      dlc: ["Borrowed Knowledge", "Gift of Gab", "Kinetic Jaunt", "Nathair's Mischief", "Pyrotechnics", "Skywrite", "Spray of Cards", "Warding Wind"]
+    },
+    {
+      level: "3rd level",
+      base: ["Bestow Curse", "Clairvoyance", "Dispel Magic", "Fear", "Feign Death", "Glyph of Warding", "Hypnotic Pattern", "Leomund's Tiny Hut", "Major Image", "Nondetection", "Plant Growth", "Sending", "Speak with Dead", "Speak with Plants", "Stinking Cloud", "Tongues"],
+      dlc: ["Antagonize", "Catnap", "Enemies Abound", "Fast Friends", "Motivational Speech"]
+    }
+  ],
+  Cleric: [
+    {
+      level: "Cantrip",
+      base: ["Guidance", "Light", "Mending", "Resistance", "Sacred Flame", "Spare the Dying", "Thaumaturgy"],
+      dlc: ["Toll the Dead", "Word of Radiance"]
+    },
+    {
+      level: "1st level",
+      base: ["Bane", "Bless", "Command", "Create or Destroy Water", "Cure Wounds", "Detect Evil and Good", "Detect Magic", "Detect Poison and Disease", "Guiding Bolt", "Healing Word", "Inflict Wounds", "Protection from Evil and Good", "Purify Food and Drink", "Sanctuary", "Shield of Faith"],
+      dlc: ["Ceremony"]
+    },
+    {
+      level: "2nd level",
+      base: ["Aid", "Augury", "Blindness/Deafness", "Calm Emotions", "Continual Flame", "Enhance Ability", "Find Traps", "Gentle Repose", "Hold Person", "Lesser Restoration", "Locate Object", "Prayer of Healing", "Protection from Poison", "Silence", "Spiritual Weapon", "Warding Bond", "Zone of Truth"],
+      dlc: ["Borrowed Knowledge"]
+    },
+    {
+      level: "3rd level",
+      base: ["Animate Dead", "Beacon of Hope", "Bestow Curse", "Clairvoyance", "Create Food and Water", "Daylight", "Dispel Magic", "Feign Death", "Glyph of Warding", "Magic Circle", "Mass Healing Word", "Meld into Stone", "Protection from Energy", "Remove Curse", "Revivify", "Sending", "Speak with Dead", "Spirit Guardians", "Tongues", "Water Walk"],
+      dlc: ["Fast Friends", "Incite Greed", "Life Transference", "Motivational Speech"]
+    }
+  ],
+  Druid: [
+    {
+      level: "Cantrip",
+      base: ["Druidcraft", "Guidance", "Mending", "Poison Spray", "Produce Flame", "Resistance", "Shillelagh", "Thorn Whip"],
+      dlc: ["Control Flames", "Create Bonfire", "Frostbite", "Gust", "Infestation", "Magic Stone", "Mold Earth", "Primal Savagery", "Shape Water", "Thunderclap"]
+    },
+    {
+      level: "1st level",
+      base: ["Animal Friendship", "Charm Person", "Create or Destroy Water", "Cure Wounds", "Detect Magic", "Detect Poison and Disease", "Entangle", "Faerie Fire", "Fog Cloud", "Goodberry", "Healing Word", "Jump", "Longstrider", "Purify Food and Drink", "Speak with Animals", "Thunderwave"],
+      dlc: ["Absorb Elements", "Beast Bond", "Earth Tremor", "Ice Knife", "Snare"]
+    },
+    {
+      level: "2nd level",
+      base: ["Animal Messenger", "Barkskin", "Beast Sense", "Darkvision", "Enhance Ability", "Find Traps", "Flame Blade", "Flaming Sphere", "Gust of Wind", "Heat Metal", "Hold Person", "Lesser Restoration", "Locate Animals or Plants", "Locate Object", "Moonbeam", "Pass without Trace", "Protection from Poison", "Spike Growth"],
+      dlc: ["Air Bubble", "Dust Devil", "Earthbind", "Healing Spirit", "Skywrite", "Warding Wind", "Wither and Bloom"]
+    },
+    {
+      level: "3rd level",
+      base: ["Call Lightning", "Conjure Animals", "Daylight", "Dispel Magic", "Feign Death", "Meld into Stone", "Plant Growth", "Protection from Energy", "Sleet Storm", "Speak with Plants", "Water Breathing", "Water Walk", "Wind Wall"],
+      dlc: ["Erupting Earth", "Flame Arrows", "Tidal Wave", "Wall of Water"]
+    }
+  ],
+  Paladin: [
+    {
+      level: "1st level",
+      base: ["Bless", "Command", "Compelled Duel", "Cure Wounds", "Detect Evil and Good", "Detect Magic", "Detect Poison and Disease", "Divine Favor", "Heroism", "Protection from Evil and Good", "Purify Food and Drink", "Searing Smite", "Shield of Faith", "Thunderous Smite", "Wrathful Smite"],
+      dlc: ["Ceremony"]
+    },
+    {
+      level: "2nd level",
+      base: ["Aid", "Branding Smite", "Find Steed", "Lesser Restoration", "Locate Object", "Magic Weapon", "Protection from Poison", "Zone of Truth"]
+    },
+    {
+      level: "3rd level",
+      base: ["Aura of Vitality", "Blinding Smite", "Create Food and Water", "Crusader's Mantle", "Daylight", "Dispel Magic", "Elemental Weapon", "Magic Circle", "Remove Curse", "Revivify"]
+    }
+  ],
+  Ranger: [
+    {
+      level: "1st level",
+      base: ["Alarm", "Animal Friendship", "Cure Wounds", "Detect Magic", "Detect Poison and Disease", "Ensnaring Strike", "Fog Cloud", "Goodberry", "Hail of Thorns", "Hunter's Mark", "Jump", "Longstrider", "Speak with Animals"],
+      dlc: ["Absorb Elements", "Beast Bond", "Snare", "Zephyr Strike"]
+    },
+    {
+      level: "2nd level",
+      base: ["Animal Messenger", "Barkskin", "Beast Sense", "Cordon of Arrows", "Darkvision", "Find Traps", "Lesser Restoration", "Locate Animals or Plants", "Locate Object", "Pass without Trace", "Protection from Poison", "Silence", "Spike Growth"],
+      dlc: ["Air Bubble", "Healing Spirit"]
+    },
+    {
+      level: "3rd level",
+      base: ["Conjure Animals", "Conjure Barrage", "Daylight", "Nondetection", "Plant Growth", "Protection from Energy", "Speak with Plants", "Water Breathing", "Water Walk", "Wind Wall"],
+      dlc: ["Ashardalon's Stride", "Flame Arrows", "Lightning Arrow"]
+    }
+  ],
+  Sorcerer: [
+    {
+      level: "Cantrip",
+      base: ["Acid Splash", "Blade Ward", "Chill Touch", "Dancing Lights", "Fire Bolt", "Friends", "Light", "Mage Hand", "Mending", "Message", "Minor Illusion", "Poison Spray", "Prestidigitation", "Ray of Frost", "Shocking Grasp", "True Strike"],
+      dlc: ["Control Flames", "Create Bonfire", "Frostbite", "Gust", "Infestation", "Mold Earth", "Shape Water", "Thunderclap"]
+    },
+    {
+      level: "1st level",
+      base: ["Burning Hands", "Charm Person", "Chromatic Orb", "Color Spray", "Comprehend Languages", "Detect Magic", "Disguise Self", "Expeditious Retreat", "False Life", "Feather Fall", "Fog Cloud", "Jump", "Mage Armor", "Magic Missile", "Ray of Sickness", "Shield", "Silent Image", "Sleep", "Thunderwave", "Witch Bolt"],
+      dlc: ["Absorb Elements", "Catapult", "Chaos Bolt", "Distort Value", "Earth Tremor", "Ice Knife", "Silvery Barbs"]
+    },
+    {
+      level: "2nd level",
+      base: ["Alter Self", "Blindness/Deafness", "Blur", "Cloud of Daggers", "Crown of Madness", "Darkness", "Darkvision", "Detect Thoughts", "Enhance Ability", "Enlarge/Reduce", "Gust of Wind", "Hold Person", "Invisibility", "Knock", "Levitate", "Mirror Image", "Misty Step", "Phantasmal Force", "Scorching Ray", "See Invisibility", "Shatter", "Spider Climb", "Suggestion", "Web"],
+      dlc: ["Aganazzar's Scorcher", "Air Bubble", "Dragon's Breath", "Dust Devil", "Earthbind", "Kinetic Jaunt", "Maximillian's Earthen Grasp", "Mind Spike", "Nathair's Mischief", "Pyrotechnics", "Rime's Binding Ice", "Shadow Blade", "Snilloc's Snowball Swarm", "Spray of Cards", "Vortex Warp", "Warding Wind", "Warp Sense", "Wither and Bloom"]
+    },
+    {
+      level: "3rd level",
+      base: ["Blink", "Clairvoyance", "Counterspell", "Daylight", "Dispel Magic", "Fear", "Fireball", "Fly", "Gaseous Form", "Haste", "Hypnotic Pattern", "Lightning Bolt", "Major Image", "Protection from Energy", "Sleet Storm", "Slow", "Stinking Cloud", "Tongues", "Water Breathing", "Water Walk"],
+      dlc: ["Antagonize", "Ashardalon's Stride", "Catnap", "Enemies Abound", "Erupting Earth", "Flame Arrows", "Incite Greed", "Melf's Minute Meteors", "Thunder Step", "Tidal Wave", "Wall of Water"]
+    }
+  ],
+  Warlock: [
+    {
+      level: "Cantrip",
+      base: ["Blade Ward", "Chill Touch", "Eldritch Blast", "Friends", "Mage Hand", "Minor Illusion", "Poison Spray", "Prestidigitation", "True Strike"],
+      dlc: ["Create Bonfire", "Frostbite", "Infestation", "Magic Stone", "Thunderclap", "Toll the Dead"]
+    },
+    {
+      level: "1st level",
+      base: ["Armor of Agathys", "Arms of Hadar", "Charm Person", "Comprehend Languages", "Expeditious Retreat", "Hellish Rebuke", "Hex", "Illusory Script", "Protection from Evil and Good", "Unseen Servant", "Witch Bolt"],
+      dlc: ["Cause Fear", "Distort Value"]
+    },
+    {
+      level: "2nd level",
+      base: ["Cloud of Daggers", "Crown of Madness", "Darkness", "Enthrall", "Hold Person", "Invisibility", "Mirror Image", "Misty Step", "Ray of Enfeeblement", "Shatter", "Spider Climb", "Suggestion"],
+      dlc: ["Borrowed Knowledge", "Earthbind", "Flock of Familiars", "Mind Spike", "Shadow Blade", "Spray of Cards", "Warp Sense"]
+    },
+    {
+      level: "3rd level",
+      base: ["Counterspell", "Dispel Magic", "Fear", "Fly", "Gaseous Form", "Hunger of Hadar", "Hypnotic Pattern", "Magic Circle", "Major Image", "Remove Curse", "Tongues", "Vampiric Touch"],
+      dlc: ["Antagonize", "Enemies Abound", "Incite Greed", "Summon Lesser Demons", "Thunder Step"]
+    }
+  ],
+  Wizard: [
+    {
+      level: "Cantrip",
+      base: ["Acid Splash", "Blade Ward", "Chill Touch", "Dancing Lights", "Fire Bolt", "Friends", "Light", "Mage Hand", "Mending", "Message", "Minor Illusion", "Poison Spray", "Prestidigitation", "Ray of Frost", "Shocking Grasp", "True Strike"],
+      dlc: ["Control Flames", "Create Bonfire", "Frostbite", "Gust", "Infestation", "Mold Earth", "Sapping Sting", "Shape Water", "Thunderclap", "Toll the Dead"]
+    },
+    {
+      level: "1st level",
+      base: ["Alarm", "Burning Hands", "Charm Person", "Chromatic Orb", "Color Spray", "Comprehend Languages", "Detect Magic", "Disguise Self", "Expeditious Retreat", "False Life", "Feather Fall", "Find Familiar", "Fog Cloud", "Grease", "Identify", "Illusory Script", "Jump", "Longstrider", "Mage Armor", "Magic Missile", "Protection from Evil and Good", "Ray of Sickness", "Shield", "Silent Image", "Sleep", "Tasha's Hideous Laughter", "Tenser's Floating Disk", "Thunderwave", "Unseen Servant", "Witch Bolt"],
+      dlc: ["Absorb Elements", "Catapult", "Cause Fear", "Distort Value", "Earth Tremor", "Frost Fingers", "Gift of Alacrity", "Ice Knife", "Jim's Magic Missile", "Magnify Gravity", "Silvery Barbs", "Snare"]
+    },
+    {
+      level: "2nd level",
+      base: ["Alter Self", "Arcane Lock", "Blindness/Deafness", "Blur", "Cloud of Daggers", "Continual Flame", "Crown of Madness", "Darkness", "Darkvision", "Detect Thoughts", "Enlarge/Reduce", "Flaming Sphere", "Gentle Repose", "Gust of Wind", "Hold Person", "Invisibility", "Knock", "Levitate", "Locate Object", "Magic Mouth", "Magic Weapon", "Melf's Acid Arrow", "Mirror Image", "Misty Step", "Nystul's Magic Aura", "Phantasmal Force", "Ray of Enfeeblement", "Rope Trick", "Scorching Ray", "See Invisibility", "Shatter", "Spider Climb", "Suggestion", "Web"],
+      dlc: ["Aganazzar's Scorcher", "Air Bubble", "Borrowed Knowledge", "Dragon's Breath", "Dust Devil", "Earthbind", "Flock of Familiars", "Fortune's Favor", "Gift of Gab", "Immovable Object", "Jim's Glowing Coin", "Kinetic Jaunt", "Maximillian's Earthen Grasp", "Mind Spike", "Nathair's Mischief", "Pyrotechnics", "Rime's Binding Ice", "Shadow Blade", "Skywrite", "Snilloc's Snowball Swarm", "Spray of Cards", "Vortex Warp", "Warding Wind", "Warp Sense", "Wither and Bloom", "Wristpocket"]
+    },
+    {
+      level: "3rd level",
+      base: ["Animate Dead", "Bestow Curse", "Blink", "Clairvoyance", "Counterspell", "Dispel Magic", "Fear", "Feign Death", "Fireball", "Fly", "Gaseous Form", "Glyph of Warding", "Haste", "Hypnotic Pattern", "Leomund's Tiny Hut", "Lightning Bolt", "Magic Circle", "Major Image", "Nondetection", "Phantom Steed", "Protection from Energy", "Remove Curse", "Sending", "Sleet Storm", "Slow", "Stinking Cloud", "Tongues", "Vampiric Touch", "Water Breathing"],
+      dlc: ["Antagonize", "Ashardalon's Stride", "Catnap", "Enemies Abound", "Erupting Earth", "Fast Friends", "Flame Arrows", "Galder's Tower", "Incite Greed", "Life Transference", "Melf's Minute Meteors", "Pulse Wave", "Summon Lesser Demons", "Thunder Step", "Tidal Wave", "Tiny Servant", "Wall of Sand", "Wall of Water"]
+    }
+  ]
+} satisfies Partial<Record<string, SpellGroup[]>>;
 const classOptions = [
   {
     id: "Barbarian",
@@ -185,7 +364,7 @@ const classOptions = [
         gear: ["Scale mail", "Battleaxe", "Shield", "4 javelins", "Explorer's pack", "10 GP"]
       }
     ],
-    spells: []
+    spellGroups: []
   },
   {
     id: "Bard",
@@ -210,7 +389,7 @@ const classOptions = [
         gear: ["Leather armor", "Rapier", "Dagger", "Lute", "Entertainer's pack", "15 GP"]
       }
     ],
-    spells: ["Vicious Mockery", "Prestidigitation", "Healing Word", "Charm Person", "Dissonant Whispers", "Faerie Fire", "Invisibility", "Suggestion", "Hypnotic Pattern"]
+    spellGroups: spellCatalog.Bard
   },
   {
     id: "Cleric",
@@ -235,7 +414,7 @@ const classOptions = [
         gear: ["Scale mail", "Shield", "Mace", "Holy symbol", "Priest's pack", "15 GP"]
       }
     ],
-    spells: ["Guidance", "Sacred Flame", "Cure Wounds", "Bless", "Guiding Bolt", "Healing Word", "Spiritual Weapon", "Lesser Restoration", "Revivify"]
+    spellGroups: spellCatalog.Cleric
   },
   {
     id: "Druid",
@@ -260,7 +439,7 @@ const classOptions = [
         gear: ["Leather armor", "Shield", "Quarterstaff", "Druidic focus", "Explorer's pack", "10 GP"]
       }
     ],
-    spells: ["Produce Flame", "Guidance", "Entangle", "Goodberry", "Healing Word", "Speak with Animals", "Moonbeam", "Pass without Trace", "Call Lightning"]
+    spellGroups: spellCatalog.Druid
   },
   {
     id: "Fighter",
@@ -291,7 +470,7 @@ const classOptions = [
         gear: ["Leather armor", "Longbow", "20 arrows", "2 shortswords", "Explorer's pack", "10 GP"]
       }
     ],
-    spells: []
+    spellGroups: []
   },
   {
     id: "Monk",
@@ -316,7 +495,7 @@ const classOptions = [
         gear: ["Shortsword", "10 darts", "Explorer's pack", "10 GP"]
       }
     ],
-    spells: []
+    spellGroups: []
   },
   {
     id: "Paladin",
@@ -341,7 +520,7 @@ const classOptions = [
         gear: ["Chain mail", "Shield", "Longsword", "5 javelins", "Holy symbol", "Priest's pack", "10 GP"]
       }
     ],
-    spells: ["Bless", "Cure Wounds", "Command", "Shield of Faith", "Wrathful Smite", "Lesser Restoration", "Aid"]
+    spellGroups: spellCatalog.Paladin
   },
   {
     id: "Ranger",
@@ -366,7 +545,7 @@ const classOptions = [
         gear: ["Scale mail", "Longbow", "20 arrows", "2 shortswords", "Explorer's pack", "10 GP"]
       }
     ],
-    spells: ["Hunter's Mark", "Goodberry", "Cure Wounds", "Absorb Elements", "Pass without Trace", "Spike Growth"]
+    spellGroups: spellCatalog.Ranger
   },
   {
     id: "Rogue",
@@ -391,7 +570,7 @@ const classOptions = [
         gear: ["Leather armor", "Rapier", "Shortbow", "20 arrows", "Thieves' tools", "Burglar's pack", "10 GP"]
       }
     ],
-    spells: []
+    spellGroups: []
   },
   {
     id: "Sorcerer",
@@ -416,7 +595,7 @@ const classOptions = [
         gear: ["Arcane focus", "2 daggers", "Explorer's pack", "15 GP"]
       }
     ],
-    spells: ["Fire Bolt", "Mage Hand", "Mage Armor", "Magic Missile", "Shield", "Burning Hands", "Misty Step", "Mirror Image", "Fireball"]
+    spellGroups: spellCatalog.Sorcerer
   },
   {
     id: "Warlock",
@@ -441,7 +620,7 @@ const classOptions = [
         gear: ["Leather armor", "Arcane focus", "Dagger", "Scholar's pack", "10 GP"]
       }
     ],
-    spells: ["Eldritch Blast", "Mage Hand", "Hex", "Armor of Agathys", "Hellish Rebuke", "Misty Step", "Invisibility", "Hunger of Hadar"]
+    spellGroups: spellCatalog.Warlock
   },
   {
     id: "Wizard",
@@ -466,7 +645,7 @@ const classOptions = [
         gear: ["Quarterstaff", "Spellbook", "Arcane focus", "Scholar's pack", "10 GP"]
       }
     ],
-    spells: ["Fire Bolt", "Prestidigitation", "Mage Armor", "Magic Missile", "Shield", "Detect Magic", "Misty Step", "Web", "Fireball"]
+    spellGroups: spellCatalog.Wizard
   }
 ] as const;
 const speciesOptions = [
@@ -589,6 +768,43 @@ const quickBuildBackgroundByClass: Record<CharacterClass, CharacterBackground> =
 
 function formatList(items: readonly string[]) {
   return items.length > 0 ? items.join(", ") : "None";
+}
+
+function spellOptionsFor(
+  spellGroups: readonly SpellGroup[],
+  dlcVisibility: DlcSpellVisibility = {}
+) {
+  return spellGroups.flatMap((group) => [
+    ...group.base,
+    ...(dlcVisibility[group.level] ? group.dlc ?? [] : [])
+  ]);
+}
+
+function baseSpellOptionsFor(spellGroups: readonly SpellGroup[]) {
+  return spellOptionsFor(spellGroups);
+}
+
+function formatSelectedSpellLines(
+  spellGroups: readonly SpellGroup[],
+  selectedSpells: readonly string[]
+) {
+  return spellLevelOrder
+    .map((level) => {
+      const group = spellGroups.find((spellGroup) => spellGroup.level === level);
+
+      if (!group) {
+        return null;
+      }
+
+      const selectedForLevel = [...group.base, ...(group.dlc ?? [])].filter((spell) =>
+        selectedSpells.includes(spell)
+      );
+
+      return selectedForLevel.length > 0
+        ? `${level === "Cantrip" ? "Cantrips" : level}: ${formatList(selectedForLevel)}`
+        : null;
+    })
+    .filter((line): line is string => Boolean(line));
 }
 
 function formatModifier(value: number) {
@@ -714,6 +930,7 @@ export function NewAdventureForm() {
   const [selectedLanguage, setSelectedLanguage] = useState<(typeof languageOptions)[number]>("Elvish");
   const [equipmentKitId, setEquipmentKitId] = useState("Sword and shield");
   const [selectedSpells, setSelectedSpells] = useState<string[]>([]);
+  const [dlcSpellVisibility, setDlcSpellVisibility] = useState<DlcSpellVisibility>({});
   const [alignment, setAlignment] = useState<Alignment>("Neutral Good");
   const [characterSheet, setCharacterSheet] = useState(defaultCharacterSheet);
   const [ownerClientId, setOwnerClientId] = useState("");
@@ -790,7 +1007,7 @@ export function NewAdventureForm() {
   const spellcastingModifier = getModifier(resolvedAbilityScores[spellcastingAbility]);
   const spellSaveDc = 8 + proficiencyBonus + spellcastingModifier;
   const spellAttackBonus = proficiencyBonus + spellcastingModifier;
-  const hasSpells = selectedClass.spells.length > 0;
+  const hasSpells = selectedClass.spellGroups.length > 0;
   const characterSheetPreview = useMemo(() => {
     const abilityLines = abilityDefinitions.map(({ key, label }) => {
       const score = abilityScores[key];
@@ -813,13 +1030,17 @@ export function NewAdventureForm() {
       const modifier = getModifier(resolvedAbilityScores[skill.ability]) + (isProficient ? proficiencyBonus : 0);
       return `${skill.name}: ${formatModifier(modifier)}${isProficient ? ", proficient" : ""}`;
     });
+    const selectedSpellLines = formatSelectedSpellLines(
+      selectedClass.spellGroups,
+      selectedSpells
+    );
     const spells = hasSpells
       ? [
           `Spellcasting Ability: ${abilityDefinitions.find((ability) => ability.key === spellcastingAbility)?.label}`,
           `Spell Save DC: ${spellSaveDc}`,
           `Spell Attack Bonus: ${formatModifier(spellAttackBonus)}`,
           "Spell Slots: 4 first-level, 3 second-level, 2 third-level",
-          `Known / Prepared: ${formatList(selectedSpells)}`
+          ...selectedSpellLines
         ]
       : ["None"];
     const name = characterName.trim() || "Unnamed adventurer";
@@ -1019,7 +1240,9 @@ export function NewAdventureForm() {
     setClassFeatureChoice(nextClassData.featureOptions[0]);
     setSelectedSkills([...nextClassData.defaultSkills] as SkillName[]);
     setEquipmentKitId(nextClassData.equipmentKits[0].id);
-    setSelectedSpells(nextClassData.spells.slice(0, Math.min(5, nextClassData.spells.length)));
+    setDlcSpellVisibility({});
+    const baseSpells = baseSpellOptionsFor(nextClassData.spellGroups);
+    setSelectedSpells(baseSpells.slice(0, Math.min(5, baseSpells.length)));
 
     if (characterBuildMode === "quick") {
       setCharacterBackground(quickBuildBackgroundByClass[nextClass]);
@@ -1045,9 +1268,9 @@ export function NewAdventureForm() {
     setEquipmentKitId(selectedClass.equipmentKits[0].id);
     setSelectedTool("Dice set");
     setSelectedLanguage("Elvish");
-    setSelectedSpells(
-      selectedClass.spells.slice(0, Math.min(5, selectedClass.spells.length))
-    );
+    setDlcSpellVisibility({});
+    const baseSpells = baseSpellOptionsFor(selectedClass.spellGroups);
+    setSelectedSpells(baseSpells.slice(0, Math.min(5, baseSpells.length)));
   }
 
   function applyCustomBuildDefaults() {
@@ -1177,6 +1400,22 @@ export function NewAdventureForm() {
 
       return [...currentSpells, spell];
     });
+  }
+
+  function toggleDlcSpells(level: SpellLevelLabel) {
+    const isCurrentlyVisible = Boolean(dlcSpellVisibility[level]);
+    setDlcSpellVisibility((currentVisibility) => ({
+      ...currentVisibility,
+      [level]: !isCurrentlyVisible
+    }));
+
+    if (isCurrentlyVisible) {
+      const group = selectedClass.spellGroups.find((spellGroup) => spellGroup.level === level);
+      const hiddenSpells = new Set(group?.dlc ?? []);
+      setSelectedSpells((currentSpells) =>
+        currentSpells.filter((spell) => !hiddenSpells.has(spell))
+      );
+    }
   }
 
   function canAdvance() {
@@ -1920,20 +2159,55 @@ export function NewAdventureForm() {
 
                 {!isQuickBuild && characterStepIndex === 9 ? (
                   hasSpells ? (
-                    <fieldset className="option-picker compact-option-picker">
+                    <fieldset className="option-picker spell-picker">
                       <legend>Spells</legend>
-                      <div>
-                        {selectedClass.spells.map((option) => (
-                          <button
-                            type="button"
-                            className={selectedSpells.includes(option) ? "selected" : ""}
-                            aria-pressed={selectedSpells.includes(option)}
-                            key={option}
-                            onClick={() => toggleSpell(option)}
-                          >
-                            <strong>{option}</strong>
-                          </button>
-                        ))}
+                      <div className="spell-level-list">
+                        {selectedClass.spellGroups.map((group) => {
+                          const showDlcSpells = Boolean(dlcSpellVisibility[group.level]);
+                          const visibleSpells = spellOptionsFor(
+                            [group],
+                            dlcSpellVisibility
+                          );
+
+                          return (
+                            <section className="spell-level-group" key={group.level}>
+                              <div className="spell-level-header">
+                                <h3>{group.level}</h3>
+                                {(group.dlc?.length ?? 0) > 0 ? (
+                                  <label className="spell-dlc-toggle">
+                                    <input
+                                      type="checkbox"
+                                      checked={showDlcSpells}
+                                      onChange={() => toggleDlcSpells(group.level)}
+                                    />
+                                    <span>DLC Spells</span>
+                                  </label>
+                                ) : null}
+                              </div>
+                              <div className="spell-option-grid">
+                                {visibleSpells.map((option) => {
+                                  const isDlcSpell = (group.dlc ?? []).includes(option);
+
+                                  return (
+                                    <button
+                                      type="button"
+                                      className={[
+                                        selectedSpells.includes(option) ? "selected" : "",
+                                        isDlcSpell ? "dlc-spell-option" : ""
+                                      ].filter(Boolean).join(" ")}
+                                      aria-pressed={selectedSpells.includes(option)}
+                                      key={option}
+                                      onClick={() => toggleSpell(option)}
+                                    >
+                                      <strong>{option}</strong>
+                                      {isDlcSpell ? <small>DLC</small> : null}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </section>
+                          );
+                        })}
                       </div>
                       <p className="character-step-note">
                         Spell slots and spell attack numbers are calculated for Level 5.
