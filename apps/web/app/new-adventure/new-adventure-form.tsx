@@ -2067,6 +2067,7 @@ export function NewAdventureForm() {
   const [equipmentSelections, setEquipmentSelections] = useState<EquipmentSelections>(
     () => defaultEquipmentSelections("Fighter")
   );
+  const [equipmentChoiceStepIndex, setEquipmentChoiceStepIndex] = useState(0);
   const [activeEquipmentModal, setActiveEquipmentModal] =
     useState<ActiveEquipmentModal>(null);
   const [selectedSpells, setSelectedSpells] = useState<string[]>([]);
@@ -2120,6 +2121,9 @@ export function NewAdventureForm() {
     ? customWorldName.trim() || "Custom World"
     : `${selectedGenre.label} Adventure`;
   const selectedClass = classOptions.find((option) => option.id === characterClass) ?? classOptions[4];
+  const equipmentChoices = classEquipmentRules[characterClass].choices;
+  const isEquipmentCharacterStep = isCharacterStep && !isQuickBuild && characterStepIndex === 9;
+  const isEquipmentSummaryStep = equipmentChoiceStepIndex >= equipmentChoices.length;
   const defaultAbilityScores = defaultAbilityScoresByClass[characterClass];
   const resolvedAbilityScores = useMemo<CompleteAbilityScores>(
     () => ({
@@ -2362,6 +2366,14 @@ export function NewAdventureForm() {
         return "Roll your Level 5 stats";
       }
 
+      if (!isQuickBuild && characterStepIndex === 9) {
+        if (isEquipmentSummaryStep) {
+          return "Review your starting gear";
+        }
+
+        return `Choose equipment ${equipmentChoiceStepIndex + 1} of ${equipmentChoices.length}`;
+      }
+
       return `Choose your ${characterCreationSteps[characterStepIndex].toLowerCase()}`;
     }
 
@@ -2375,6 +2387,9 @@ export function NewAdventureForm() {
     isJoinFlow,
     isLastCharacterStep,
     isQuickBuild,
+    equipmentChoiceStepIndex,
+    equipmentChoices.length,
+    isEquipmentSummaryStep,
     mode,
     stepIndex
   ]);
@@ -2489,6 +2504,7 @@ export function NewAdventureForm() {
     setClassFeatureChoice(nextClassData.featureOptions[0]);
     setSelectedSkills([...nextClassData.defaultSkills] as SkillName[]);
     setEquipmentSelections(defaultEquipmentSelections(nextClass));
+    setEquipmentChoiceStepIndex(0);
     setActiveEquipmentModal(null);
     setDlcSpellVisibility({});
     setSelectedSpells(defaultSpellSelectionFor(nextClassData.spellGroups, nextSpellLimits));
@@ -2515,6 +2531,7 @@ export function NewAdventureForm() {
         : ([...selectedClass.defaultSkills] as SkillName[])
     );
     setEquipmentSelections(defaultEquipmentSelections(characterClass));
+    setEquipmentChoiceStepIndex(0);
     setActiveEquipmentModal(null);
     setSelectedTool("Dice set");
     setSelectedLanguage("Elvish");
@@ -2790,6 +2807,15 @@ export function NewAdventureForm() {
       }
     }
 
+    if (isEquipmentCharacterStep && !isEquipmentSummaryStep) {
+      transitionFlow(() =>
+        setEquipmentChoiceStepIndex((currentStepIndex) =>
+          Math.min(currentStepIndex + 1, equipmentChoices.length)
+        )
+      );
+      return;
+    }
+
     if (isCharacterStep && !isLastCharacterStep) {
       transitionFlow(() =>
         setCharacterStepIndex((currentStepIndex) =>
@@ -2812,6 +2838,15 @@ export function NewAdventureForm() {
     }
 
     setError("");
+
+    if (isEquipmentCharacterStep && equipmentChoiceStepIndex > 0) {
+      transitionFlow(() =>
+        setEquipmentChoiceStepIndex((currentStepIndex) =>
+          Math.max(currentStepIndex - 1, 0)
+        )
+      );
+      return;
+    }
 
     if (isCharacterStep && characterStepIndex > 0) {
       transitionFlow(() =>
@@ -2929,6 +2964,8 @@ export function NewAdventureForm() {
       </main>
     );
   }
+
+  const activeEquipmentChoice = equipmentChoices[equipmentChoiceStepIndex];
 
   return (
     <main className="new-adventure-page" aria-label="Create a new adventure">
@@ -3402,49 +3439,53 @@ export function NewAdventureForm() {
                 {!isQuickBuild && characterStepIndex === 9 ? (
                   <fieldset className="option-picker equipment-picker">
                     <legend>{characterClass} starting equipment</legend>
-                    <div className="equipment-choice-list">
-                      {classEquipmentRules[characterClass].choices.map((choice) => (
-                        <section className="equipment-choice-group" key={choice.id}>
-                          <h3>{choice.label}</h3>
-                          <div>
-                            {choice.options.map((option) => {
-                              const selection = equipmentSelections[choice.id];
-                              const isSelected = selection?.optionId === option.id;
-                              const selectedCustomItem =
-                                option.category && isSelected
-                                  ? selection.customItem ??
-                                    equipmentCategoryOptions[option.category][0]
-                                  : null;
+                    {!isEquipmentSummaryStep && activeEquipmentChoice ? (
+                      <section className="equipment-choice-group">
+                        <div className="equipment-step-progress">
+                          <span>
+                            {equipmentChoiceStepIndex + 1} of {equipmentChoices.length}
+                          </span>
+                        </div>
+                        <h3>{activeEquipmentChoice.label}</h3>
+                        <div className="equipment-choice-options">
+                          {activeEquipmentChoice.options.map((option) => {
+                            const selection = equipmentSelections[activeEquipmentChoice.id];
+                            const isSelected = selection?.optionId === option.id;
+                            const selectedCustomItem =
+                              option.category && isSelected
+                                ? selection.customItem ??
+                                  equipmentCategoryOptions[option.category][0]
+                                : null;
 
-                              return (
-                                <button
-                                  type="button"
-                                  className={isSelected ? "selected" : ""}
-                                  aria-pressed={isSelected}
-                                  key={option.id}
-                                  onClick={() => chooseEquipmentOption(choice, option)}
-                                >
-                                  <strong>{option.label}</strong>
-                                  <small>
-                                    {selectedCustomItem
-                                      ? selectedCustomItem
-                                      : formatList(option.items ?? [])}
-                                  </small>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </section>
-                      ))}
-                    </div>
-                    <div className="equipment-fixed-list">
-                      <strong>Always included</strong>
-                      <span>{formatList(classEquipmentRules[characterClass].fixed)}</span>
-                    </div>
-                    <div className="equipment-fixed-list">
-                      <strong>{characterBackground} background</strong>
-                      <span>{formatList(backgroundEquipment[characterBackground])}</span>
-                    </div>
+                            return (
+                              <button
+                                type="button"
+                                className={isSelected ? "selected" : ""}
+                                aria-pressed={isSelected}
+                                key={option.id}
+                                onClick={() => chooseEquipmentOption(activeEquipmentChoice, option)}
+                              >
+                                <strong>{option.label}</strong>
+                                <small>
+                                  {selectedCustomItem
+                                    ? selectedCustomItem
+                                    : formatList(option.items ?? [])}
+                                </small>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </section>
+                    ) : (
+                      <section className="equipment-summary-panel">
+                        <h3>Your starting gear</h3>
+                        <ul>
+                          {selectedEquipmentProfile.gear.map((item, index) => (
+                            <li key={`${item}-${index}`}>{item}</li>
+                          ))}
+                        </ul>
+                      </section>
+                    )}
                   </fieldset>
                 ) : null}
 

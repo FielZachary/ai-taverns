@@ -1155,70 +1155,93 @@ h1 {
   align-content: center;
 }
 
-.equipment-picker > div:not(.equipment-fixed-list) {
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-}
-
-.equipment-choice-list {
-  display: grid;
-  gap: 14px;
-}
-
 .equipment-choice-group {
   display: grid;
-  gap: 8px;
+  gap: 12px;
 }
 
 .equipment-choice-group h3 {
   margin: 0;
   color: var(--gold-bright);
-  font-size: 0.78rem;
+  font-size: 1.05rem;
   font-weight: 900;
   letter-spacing: 0;
-  text-transform: uppercase;
 }
 
-.equipment-choice-group > div {
+.equipment-choice-options {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 8px;
 }
 
-.equipment-choice-group button {
+.equipment-choice-options button {
   display: grid;
   align-content: center;
   gap: 4px;
-  min-height: 72px;
-  padding: 10px;
+  min-height: 96px;
+  padding: 14px;
 }
 
-.equipment-choice-group button small {
+.equipment-choice-options button small {
   color: var(--muted);
   font-size: 0.68rem;
   font-weight: 850;
   line-height: 1.25;
 }
 
-.equipment-fixed-list {
+.equipment-step-progress {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.equipment-step-progress span {
+  display: inline-grid;
+  min-height: 28px;
+  place-items: center;
+  padding: 0 10px;
+  border: 1px solid rgba(244, 207, 122, 0.2);
+  border-radius: 999px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.025);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.equipment-summary-panel {
   display: grid;
-  gap: 4px;
-  padding: 12px;
+  gap: 12px;
+  padding: 14px;
   border: 1px solid rgba(244, 207, 122, 0.16);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.025);
 }
 
-.equipment-fixed-list strong {
+.equipment-summary-panel h3 {
+  margin: 0;
   color: var(--gold-bright);
-  font-size: 0.76rem;
+  font-size: 1.05rem;
   font-weight: 900;
-  text-transform: uppercase;
 }
 
-.equipment-fixed-list span {
+.equipment-summary-panel ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.equipment-summary-panel li {
+  min-height: 38px;
+  padding: 9px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
   color: var(--muted);
   font-size: 0.82rem;
   line-height: 1.35;
+  background: rgba(0, 0, 0, 0.12);
 }
 
 .equipment-modal-backdrop {
