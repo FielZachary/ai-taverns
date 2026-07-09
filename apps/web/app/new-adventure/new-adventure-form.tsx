@@ -50,6 +50,23 @@ type SpellGroup = {
   dlc?: string[];
 };
 type DlcSpellVisibility = Partial<Record<SpellLevelLabel, boolean>>;
+type SpellSelectionRule = {
+  cantrips: number;
+  fixedLeveledSpells?: number;
+  preparedAbility?: AbilityKey;
+  preparedLevelBonus?: number;
+  availableLevels: SpellLevelLabel[];
+  spellSlotsText: string;
+};
+type SpellSelectionLimits = {
+  cantrips: number;
+  leveledSpells: number;
+  availableLevels: SpellLevelLabel[];
+  spellSlotsText: string;
+};
+type SpellSelectionCounts = Record<SpellLevelLabel, number> & {
+  leveledSpells: number;
+};
 type ActiveStatRoll = {
   id: string;
   expression: string;
@@ -168,6 +185,70 @@ const spellLevelOrder: SpellLevelLabel[] = [
   "2nd level",
   "3rd level"
 ];
+const fullCasterSpellLevels: SpellLevelLabel[] = [
+  "Cantrip",
+  "1st level",
+  "2nd level",
+  "3rd level"
+];
+const halfCasterSpellLevels: SpellLevelLabel[] = [
+  "1st level",
+  "2nd level"
+];
+const spellSelectionRules: Record<string, SpellSelectionRule> = {
+  Bard: {
+    cantrips: 3,
+    fixedLeveledSpells: 8,
+    availableLevels: fullCasterSpellLevels,
+    spellSlotsText: "4 first-level, 3 second-level, 2 third-level"
+  },
+  Cleric: {
+    cantrips: 4,
+    preparedAbility: "wis",
+    preparedLevelBonus: characterLevel,
+    availableLevels: fullCasterSpellLevels,
+    spellSlotsText: "4 first-level, 3 second-level, 2 third-level"
+  },
+  Druid: {
+    cantrips: 3,
+    preparedAbility: "wis",
+    preparedLevelBonus: characterLevel,
+    availableLevels: fullCasterSpellLevels,
+    spellSlotsText: "4 first-level, 3 second-level, 2 third-level"
+  },
+  Paladin: {
+    cantrips: 0,
+    preparedAbility: "cha",
+    preparedLevelBonus: Math.floor(characterLevel / 2),
+    availableLevels: halfCasterSpellLevels,
+    spellSlotsText: "4 first-level, 2 second-level"
+  },
+  Ranger: {
+    cantrips: 0,
+    fixedLeveledSpells: 4,
+    availableLevels: halfCasterSpellLevels,
+    spellSlotsText: "4 first-level, 2 second-level"
+  },
+  Sorcerer: {
+    cantrips: 5,
+    fixedLeveledSpells: 6,
+    availableLevels: fullCasterSpellLevels,
+    spellSlotsText: "4 first-level, 3 second-level, 2 third-level"
+  },
+  Warlock: {
+    cantrips: 3,
+    fixedLeveledSpells: 6,
+    availableLevels: fullCasterSpellLevels,
+    spellSlotsText: "2 third-level pact slots"
+  },
+  Wizard: {
+    cantrips: 4,
+    preparedAbility: "int",
+    preparedLevelBonus: characterLevel,
+    availableLevels: fullCasterSpellLevels,
+    spellSlotsText: "4 first-level, 3 second-level, 2 third-level"
+  }
+};
 const spellCatalog = {
   Bard: [
     {
@@ -780,8 +861,173 @@ function spellOptionsFor(
   ]);
 }
 
-function baseSpellOptionsFor(spellGroups: readonly SpellGroup[]) {
-  return spellOptionsFor(spellGroups);
+function spellSelectionLimitsFor(
+  characterClass: string,
+  abilityScores: CompleteAbilityScores
+): SpellSelectionLimits {
+  const rule = spellSelectionRules[characterClass];
+
+  if (!rule) {
+    return {
+      cantrips: 0,
+      leveledSpells: 0,
+      availableLevels: [],
+      spellSlotsText: "None"
+    };
+  }
+
+  const leveledSpells =
+    rule.fixedLeveledSpells ??
+    Math.max(
+      1,
+      (rule.preparedLevelBonus ?? 0) +
+        getModifier(abilityScores[rule.preparedAbility ?? "int"])
+    );
+
+  return {
+    cantrips: rule.cantrips,
+    leveledSpells,
+    availableLevels: rule.availableLevels,
+    spellSlotsText: rule.spellSlotsText
+  };
+}
+
+function spellLevelFor(
+  spellGroups: readonly SpellGroup[],
+  spell: string
+): SpellLevelLabel | null {
+  return (
+    spellGroups.find(
+      (group) => group.base.includes(spell) || (group.dlc ?? []).includes(spell)
+    )?.level ?? null
+  );
+}
+
+function selectedSpellCountsFor(
+  spellGroups: readonly SpellGroup[],
+  selectedSpells: readonly string[]
+): SpellSelectionCounts {
+  const counts: SpellSelectionCounts = {
+    Cantrip: 0,
+    "1st level": 0,
+    "2nd level": 0,
+    "3rd level": 0,
+    leveledSpells: 0
+  };
+
+  selectedSpells.forEach((spell) => {
+    const level = spellLevelFor(spellGroups, spell);
+
+    if (!level) {
+      return;
+    }
+
+    counts[level] += 1;
+
+    if (level !== "Cantrip") {
+      counts.leveledSpells += 1;
+    }
+  });
+
+  return counts;
+}
+
+function isSpellLevelAvailable(
+  level: SpellLevelLabel,
+  limits: SpellSelectionLimits
+) {
+  return limits.availableLevels.includes(level);
+}
+
+function isSpellSelectionLimitReached(
+  spellGroups: readonly SpellGroup[],
+  selectedSpells: readonly string[],
+  spell: string,
+  limits: SpellSelectionLimits
+) {
+  if (selectedSpells.includes(spell)) {
+    return false;
+  }
+
+  const level = spellLevelFor(spellGroups, spell);
+
+  if (!level || !isSpellLevelAvailable(level, limits)) {
+    return true;
+  }
+
+  const counts = selectedSpellCountsFor(spellGroups, selectedSpells);
+
+  if (level === "Cantrip") {
+    return counts.Cantrip >= limits.cantrips;
+  }
+
+  return counts.leveledSpells >= limits.leveledSpells;
+}
+
+function defaultSpellSelectionFor(
+  spellGroups: readonly SpellGroup[],
+  limits: SpellSelectionLimits
+) {
+  const cantripGroup = spellGroups.find((group) => group.level === "Cantrip");
+  const cantripDefaults = cantripGroup
+    ? cantripGroup.base.slice(0, Math.min(2, limits.cantrips))
+    : [];
+  const defaultTotal = 5;
+  const leveledDefaults = spellGroups
+    .filter(
+      (group) =>
+        group.level !== "Cantrip" && isSpellLevelAvailable(group.level, limits)
+    )
+    .flatMap((group) => group.base)
+    .slice(
+      0,
+      Math.min(limits.leveledSpells, Math.max(0, defaultTotal - cantripDefaults.length))
+    );
+
+  return [...cantripDefaults, ...leveledDefaults];
+}
+
+function pruneSpellSelection(
+  spellGroups: readonly SpellGroup[],
+  selectedSpells: readonly string[],
+  limits: SpellSelectionLimits
+) {
+  const nextSpells: string[] = [];
+  const counts: SpellSelectionCounts = {
+    Cantrip: 0,
+    "1st level": 0,
+    "2nd level": 0,
+    "3rd level": 0,
+    leveledSpells: 0
+  };
+
+  selectedSpells.forEach((spell) => {
+    const level = spellLevelFor(spellGroups, spell);
+
+    if (!level || !isSpellLevelAvailable(level, limits)) {
+      return;
+    }
+
+    if (level === "Cantrip") {
+      if (counts.Cantrip >= limits.cantrips) {
+        return;
+      }
+
+      counts.Cantrip += 1;
+      nextSpells.push(spell);
+      return;
+    }
+
+    if (counts.leveledSpells >= limits.leveledSpells) {
+      return;
+    }
+
+    counts[level] += 1;
+    counts.leveledSpells += 1;
+    nextSpells.push(spell);
+  });
+
+  return nextSpells;
 }
 
 function formatSelectedSpellLines(
@@ -1008,6 +1254,25 @@ export function NewAdventureForm() {
   const spellSaveDc = 8 + proficiencyBonus + spellcastingModifier;
   const spellAttackBonus = proficiencyBonus + spellcastingModifier;
   const hasSpells = selectedClass.spellGroups.length > 0;
+  const spellSelectionLimits = useMemo(
+    () => spellSelectionLimitsFor(characterClass, resolvedAbilityScores),
+    [characterClass, resolvedAbilityScores]
+  );
+  const availableSpellGroups = useMemo(
+    () =>
+      selectedClass.spellGroups.filter((group) =>
+        isSpellLevelAvailable(group.level, spellSelectionLimits)
+      ),
+    [selectedClass.spellGroups, spellSelectionLimits]
+  );
+  const selectedSpellCounts = useMemo(
+    () => selectedSpellCountsFor(selectedClass.spellGroups, selectedSpells),
+    [selectedClass.spellGroups, selectedSpells]
+  );
+  const hasValidSpellSelection =
+    selectedSpells.length > 0 &&
+    selectedSpellCounts.Cantrip <= spellSelectionLimits.cantrips &&
+    selectedSpellCounts.leveledSpells <= spellSelectionLimits.leveledSpells;
   const characterSheetPreview = useMemo(() => {
     const abilityLines = abilityDefinitions.map(({ key, label }) => {
       const score = abilityScores[key];
@@ -1039,7 +1304,7 @@ export function NewAdventureForm() {
           `Spellcasting Ability: ${abilityDefinitions.find((ability) => ability.key === spellcastingAbility)?.label}`,
           `Spell Save DC: ${spellSaveDc}`,
           `Spell Attack Bonus: ${formatModifier(spellAttackBonus)}`,
-          "Spell Slots: 4 first-level, 3 second-level, 2 third-level",
+          `Spell Slots: ${spellSelectionLimits.spellSlotsText}`,
           ...selectedSpellLines
         ]
       : ["None"];
@@ -1132,6 +1397,7 @@ export function NewAdventureForm() {
     playerName,
     spellAttackBonus,
     spellSaveDc,
+    spellSelectionLimits,
     spellcastingAbility,
     subclass
   ]);
@@ -1226,23 +1492,45 @@ export function NewAdventureForm() {
     setJoinPreview(null);
   }, [normalizedGameCode]);
 
+  useEffect(() => {
+    setSelectedSpells((currentSpells) => {
+      const prunedSpells = pruneSpellSelection(
+        selectedClass.spellGroups,
+        currentSpells,
+        spellSelectionLimits
+      );
+
+      return prunedSpells.length === currentSpells.length &&
+        prunedSpells.every((spell, index) => spell === currentSpells[index])
+        ? currentSpells
+        : prunedSpells;
+    });
+  }, [selectedClass.spellGroups, spellSelectionLimits]);
+
   function handleClassChange(nextClass: CharacterClass) {
     const nextClassData = classOptions.find((option) => option.id === nextClass) ?? classOptions[4];
-    setCharacterClass(nextClass);
-    setAbilityScores(
+    const nextAbilityScores =
       characterBuildMode === "quick"
         ? { ...defaultAbilityScoresByClass[nextClass] }
         : statGenerationMode === "point_buy"
           ? { ...pointBuyDefaultScores }
-          : { ...emptyAbilityScores }
-    );
+          : { ...emptyAbilityScores };
+    const nextSpellLimits = spellSelectionLimitsFor(nextClass, {
+      str: nextAbilityScores.str ?? defaultAbilityScoresByClass[nextClass].str,
+      dex: nextAbilityScores.dex ?? defaultAbilityScoresByClass[nextClass].dex,
+      con: nextAbilityScores.con ?? defaultAbilityScoresByClass[nextClass].con,
+      int: nextAbilityScores.int ?? defaultAbilityScoresByClass[nextClass].int,
+      wis: nextAbilityScores.wis ?? defaultAbilityScoresByClass[nextClass].wis,
+      cha: nextAbilityScores.cha ?? defaultAbilityScoresByClass[nextClass].cha
+    });
+    setCharacterClass(nextClass);
+    setAbilityScores(nextAbilityScores);
     setSubclass(nextClassData.subclassOptions[0]);
     setClassFeatureChoice(nextClassData.featureOptions[0]);
     setSelectedSkills([...nextClassData.defaultSkills] as SkillName[]);
     setEquipmentKitId(nextClassData.equipmentKits[0].id);
     setDlcSpellVisibility({});
-    const baseSpells = baseSpellOptionsFor(nextClassData.spellGroups);
-    setSelectedSpells(baseSpells.slice(0, Math.min(5, baseSpells.length)));
+    setSelectedSpells(defaultSpellSelectionFor(nextClassData.spellGroups, nextSpellLimits));
 
     if (characterBuildMode === "quick") {
       setCharacterBackground(quickBuildBackgroundByClass[nextClass]);
@@ -1269,8 +1557,7 @@ export function NewAdventureForm() {
     setSelectedTool("Dice set");
     setSelectedLanguage("Elvish");
     setDlcSpellVisibility({});
-    const baseSpells = baseSpellOptionsFor(selectedClass.spellGroups);
-    setSelectedSpells(baseSpells.slice(0, Math.min(5, baseSpells.length)));
+    setSelectedSpells(defaultSpellSelectionFor(selectedClass.spellGroups, spellSelectionLimits));
   }
 
   function applyCustomBuildDefaults() {
@@ -1398,6 +1685,17 @@ export function NewAdventureForm() {
         return currentSpells.filter((currentSpell) => currentSpell !== spell);
       }
 
+      if (
+        isSpellSelectionLimitReached(
+          selectedClass.spellGroups,
+          currentSpells,
+          spell,
+          spellSelectionLimits
+        )
+      ) {
+        return currentSpells;
+      }
+
       return [...currentSpells, spell];
     });
   }
@@ -1453,7 +1751,7 @@ export function NewAdventureForm() {
       }
 
       if (characterStepIndex === 9 && hasSpells) {
-        return selectedSpells.length > 0;
+        return hasValidSpellSelection;
       }
 
       return (
@@ -2162,17 +2460,33 @@ export function NewAdventureForm() {
                     <fieldset className="option-picker spell-picker">
                       <legend>Spells</legend>
                       <div className="spell-level-list">
-                        {selectedClass.spellGroups.map((group) => {
+                        {availableSpellGroups.map((group) => {
                           const showDlcSpells = Boolean(dlcSpellVisibility[group.level]);
                           const visibleSpells = spellOptionsFor(
                             [group],
                             dlcSpellVisibility
                           );
+                          const selectedCount =
+                            group.level === "Cantrip"
+                              ? selectedSpellCounts.Cantrip
+                              : selectedSpellCounts.leveledSpells;
+                          const maxCount =
+                            group.level === "Cantrip"
+                              ? spellSelectionLimits.cantrips
+                              : spellSelectionLimits.leveledSpells;
 
                           return (
                             <section className="spell-level-group" key={group.level}>
                               <div className="spell-level-header">
-                                <h3>{group.level}</h3>
+                                <div>
+                                  <h3>{group.level}</h3>
+                                  <small>
+                                    {selectedCount} / {maxCount}
+                                    {group.level === "Cantrip"
+                                      ? " cantrips"
+                                      : " spells"}
+                                  </small>
+                                </div>
                                 {(group.dlc?.length ?? 0) > 0 ? (
                                   <label className="spell-dlc-toggle">
                                     <input
@@ -2187,15 +2501,23 @@ export function NewAdventureForm() {
                               <div className="spell-option-grid">
                                 {visibleSpells.map((option) => {
                                   const isDlcSpell = (group.dlc ?? []).includes(option);
+                                  const isSelected = selectedSpells.includes(option);
+                                  const isAtLimit = isSpellSelectionLimitReached(
+                                    selectedClass.spellGroups,
+                                    selectedSpells,
+                                    option,
+                                    spellSelectionLimits
+                                  );
 
                                   return (
                                     <button
                                       type="button"
                                       className={[
-                                        selectedSpells.includes(option) ? "selected" : "",
+                                        isSelected ? "selected" : "",
                                         isDlcSpell ? "dlc-spell-option" : ""
                                       ].filter(Boolean).join(" ")}
-                                      aria-pressed={selectedSpells.includes(option)}
+                                      aria-pressed={isSelected}
+                                      disabled={isAtLimit}
                                       key={option}
                                       onClick={() => toggleSpell(option)}
                                     >
