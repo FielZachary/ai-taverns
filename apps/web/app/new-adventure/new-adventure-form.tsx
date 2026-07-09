@@ -1125,6 +1125,15 @@ export function NewAdventureForm() {
     setAbilityScores({ ...pointBuyDefaultScores });
   }
 
+  function switchToRollScores() {
+    if (activeStatRoll) {
+      return;
+    }
+
+    setStatGenerationMode("roll");
+    setAbilityScores({ ...emptyAbilityScores });
+  }
+
   function updatePointBuyScore(key: AbilityKey, change: -1 | 1) {
     setAbilityScores((currentScores) => {
       const currentScore = pointBuyScoreFor(currentScores, key);
@@ -1696,9 +1705,15 @@ export function NewAdventureForm() {
                           }
                           aria-pressed={statGenerationMode === "point_buy"}
                           disabled={Boolean(activeStatRoll)}
-                          onClick={switchToPointBuy}
+                          onClick={
+                            statGenerationMode === "point_buy"
+                              ? switchToRollScores
+                              : switchToPointBuy
+                          }
                         >
-                          Point Buy
+                          {statGenerationMode === "point_buy"
+                            ? "Roll Scores"
+                            : "Point Buy"}
                         </button>
                         <button
                           type="button"
@@ -1707,9 +1722,7 @@ export function NewAdventureForm() {
                           onClick={rollAllStats}
                         >
                           <Dice5 size={18} />
-                          {statGenerationMode === "point_buy"
-                            ? "Roll Scores"
-                            : "Roll All"}
+                          Roll All
                         </button>
                       </div>
                     </div>
