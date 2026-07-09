@@ -1135,11 +1135,39 @@ function formatModifier(value: number) {
   return value >= 0 ? `+${value}` : `${value}`;
 }
 
-function formatSpeciesAbilityBonus(
+function classAbilityBonusesFor(
+  characterClass: CharacterClass,
+  classFeatureChoice: string
+) {
+  const bonuses: SpeciesAbilityBonuses = {};
+  const abilityNames = abilityDefinitions
+    .map((ability) => ability.label)
+    .join("|");
+  const bonusPattern = new RegExp(`\\+(\\d+)\\s+(${abilityNames})`, "g");
+
+  for (const match of classFeatureChoice.matchAll(bonusPattern)) {
+    const ability = abilityDefinitions.find(
+      (definition) => definition.label === match[2]
+    );
+
+    if (ability) {
+      bonuses[ability.key] = (bonuses[ability.key] ?? 0) + Number(match[1]);
+    }
+  }
+
+  return bonuses;
+}
+
+function formatAbilityBonusSources(
   species: CharacterSpecies,
+  characterClass: CharacterClass,
+  classFeatureChoice: string,
   ability: AbilityKey
 ) {
-  const bonus = speciesAbilityBonuses[species][ability] ?? 0;
+  const speciesBonus = speciesAbilityBonuses[species][ability] ?? 0;
+  const classBonus =
+    classAbilityBonusesFor(characterClass, classFeatureChoice)[ability] ?? 0;
+  const bonus = speciesBonus + classBonus;
 
   if (bonus === 0) {
     return {
@@ -1148,9 +1176,24 @@ function formatSpeciesAbilityBonus(
     };
   }
 
+  const sources: string[] = [];
+
+  if (speciesBonus > 0) {
+    sources.push(species);
+  }
+
+  if (classBonus > 0) {
+    sources.push(characterClass);
+  }
+
+  const sourceText =
+    sources.length === 1
+      ? `${sources[0]} bonus`
+      : `${sources.slice(0, -1).join(", ")} and ${sources[sources.length - 1]} bonus`;
+
   return {
     bonusText: formatModifier(bonus),
-    sourceText: `${species} bonus`
+    sourceText
   };
 }
 
@@ -2350,8 +2393,10 @@ export function NewAdventureForm() {
                           statGenerationMode === "point_buy"
                             ? pointBuyScoreFor(abilityScores, ability.key)
                             : abilityScores[ability.key];
-                        const speciesBonus = formatSpeciesAbilityBonus(
+                        const abilityBonus = formatAbilityBonusSources(
                           characterSpecies,
+                          characterClass,
+                          classFeatureChoice,
                           ability.key
                         );
                         const pointBuyScore = pointBuyScoreFor(
@@ -2403,10 +2448,10 @@ export function NewAdventureForm() {
                             </div>
                             <strong>{score ?? "Roll"}</strong>
                             <small>
-                              <span>{speciesBonus.bonusText}</span>
-                              {speciesBonus.sourceText ? (
+                              <span>{abilityBonus.bonusText}</span>
+                              {abilityBonus.sourceText ? (
                                 <span className="stat-roll-bonus-source">
-                                  ({speciesBonus.sourceText})
+                                  ({abilityBonus.sourceText})
                                 </span>
                               ) : null}
                             </small>
