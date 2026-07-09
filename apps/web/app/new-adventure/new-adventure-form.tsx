@@ -1532,7 +1532,7 @@ function selectedEquipmentOption(
   selections: EquipmentSelections
 ) {
   const selectedOptionId = selections[choice.id]?.optionId;
-  return choice.options.find((option) => option.id === selectedOptionId) ?? choice.options[0];
+  return choice.options.find((option) => option.id === selectedOptionId);
 }
 
 function equipmentItemsForOption(
@@ -1576,12 +1576,24 @@ function equipmentGearFor(
   characterBackground: CharacterBackground
 ) {
   const rule = classEquipmentRules[characterClass];
-  const classGear = rule.choices.flatMap((choice) => {
+  const chosenClassGear = equipmentChoiceGearFor(characterClass, selections);
+
+  return [...chosenClassGear, ...rule.fixed, ...backgroundEquipment[characterBackground]];
+}
+
+function equipmentChoiceGearFor(
+  characterClass: CharacterClass,
+  selections: EquipmentSelections
+) {
+  const rule = classEquipmentRules[characterClass];
+  return rule.choices.flatMap((choice) => {
     const option = selectedEquipmentOption(choice, selections);
+    if (!option) {
+      return [];
+    }
+
     return equipmentItemsForOption(option, selections[choice.id]);
   });
-
-  return [...classGear, ...rule.fixed, ...backgroundEquipment[characterBackground]];
 }
 
 function armorClassForEquipment(
@@ -2064,9 +2076,7 @@ export function NewAdventureForm() {
   const [selectedSkills, setSelectedSkills] = useState<SkillName[]>(["Athletics", "Perception"]);
   const [selectedTool, setSelectedTool] = useState<(typeof toolOptions)[number]>("Dice set");
   const [selectedLanguage, setSelectedLanguage] = useState<(typeof languageOptions)[number]>("Elvish");
-  const [equipmentSelections, setEquipmentSelections] = useState<EquipmentSelections>(
-    () => defaultEquipmentSelections("Fighter")
-  );
+  const [equipmentSelections, setEquipmentSelections] = useState<EquipmentSelections>({});
   const [equipmentChoiceStepIndex, setEquipmentChoiceStepIndex] = useState(0);
   const [activeEquipmentModal, setActiveEquipmentModal] =
     useState<ActiveEquipmentModal>(null);
@@ -2170,6 +2180,10 @@ export function NewAdventureForm() {
     selectedSpells.length > 0 &&
     selectedSpellCounts.Cantrip <= spellSelectionLimits.cantrips &&
     selectedSpellCounts.leveledSpells <= spellSelectionLimits.leveledSpells;
+  const chosenEquipmentGear = useMemo(
+    () => equipmentChoiceGearFor(characterClass, equipmentSelections),
+    [characterClass, equipmentSelections]
+  );
   const selectedEquipmentProfile = useMemo<EquipmentProfile>(() => {
     const gear = equipmentGearFor(
       characterClass,
@@ -2371,7 +2385,7 @@ export function NewAdventureForm() {
           return "Review your starting gear";
         }
 
-        return `Choose equipment ${equipmentChoiceStepIndex + 1} of ${equipmentChoices.length}`;
+        return "Choose equipment";
       }
 
       return `Choose your ${characterCreationSteps[characterStepIndex].toLowerCase()}`;
@@ -2503,7 +2517,9 @@ export function NewAdventureForm() {
     setSubclass(nextClassData.subclassOptions[0]);
     setClassFeatureChoice(nextClassData.featureOptions[0]);
     setSelectedSkills([...nextClassData.defaultSkills] as SkillName[]);
-    setEquipmentSelections(defaultEquipmentSelections(nextClass));
+    setEquipmentSelections(
+      characterBuildMode === "quick" ? defaultEquipmentSelections(nextClass) : {}
+    );
     setEquipmentChoiceStepIndex(0);
     setActiveEquipmentModal(null);
     setDlcSpellVisibility({});
@@ -2542,6 +2558,9 @@ export function NewAdventureForm() {
   function applyCustomBuildDefaults() {
     setStatGenerationMode("roll");
     setAbilityScores({ ...emptyAbilityScores });
+    setEquipmentSelections({});
+    setEquipmentChoiceStepIndex(0);
+    setActiveEquipmentModal(null);
   }
 
   function rollStat(key: AbilityKey) {
@@ -2729,6 +2748,11 @@ export function NewAdventureForm() {
         return selectedSkills.length > 0;
       }
 
+      if (isEquipmentCharacterStep && !isEquipmentSummaryStep) {
+        const activeChoice = equipmentChoices[equipmentChoiceStepIndex];
+        return Boolean(activeChoice && equipmentSelections[activeChoice.id]);
+      }
+
       if (characterStepIndex === 5 && hasSpells) {
         return hasValidSpellSelection;
       }
@@ -2789,6 +2813,8 @@ export function NewAdventureForm() {
               : "Add your character name before continuing."
             : !isQuickBuild && characterStepIndex === 4
               ? "Roll all six stats before continuing."
+            : isEquipmentCharacterStep && !isEquipmentSummaryStep
+              ? "Choose equipment before continuing."
             : characterStepIndex === 5
               ? "Choose at least one spell before continuing."
               : "Choose at least one option before continuing."
@@ -3446,7 +3472,6 @@ export function NewAdventureForm() {
                             {equipmentChoiceStepIndex + 1} of {equipmentChoices.length}
                           </span>
                         </div>
-                        <h3>{activeEquipmentChoice.label}</h3>
                         <div className="equipment-choice-options">
                           {activeEquipmentChoice.options.map((option) => {
                             const selection = equipmentSelections[activeEquipmentChoice.id];
@@ -3480,7 +3505,7 @@ export function NewAdventureForm() {
                       <section className="equipment-summary-panel">
                         <h3>Your starting gear</h3>
                         <ul>
-                          {selectedEquipmentProfile.gear.map((item, index) => (
+                          {chosenEquipmentGear.map((item, index) => (
                             <li key={`${item}-${index}`}>{item}</li>
                           ))}
                         </ul>

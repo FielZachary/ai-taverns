@@ -1160,14 +1160,6 @@ h1 {
   gap: 12px;
 }
 
-.equipment-choice-group h3 {
-  margin: 0;
-  color: var(--gold-bright);
-  font-size: 1.05rem;
-  font-weight: 900;
-  letter-spacing: 0;
-}
-
 .equipment-choice-options {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
