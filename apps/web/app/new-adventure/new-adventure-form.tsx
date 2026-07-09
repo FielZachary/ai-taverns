@@ -249,6 +249,84 @@ const spellSelectionRules: Record<string, SpellSelectionRule> = {
     spellSlotsText: "4 first-level, 3 second-level, 2 third-level"
   }
 };
+const spellSourceLabels: Record<string, string> = {
+  "Absorb Elements": "Xanathar's Guide to Everything",
+  "Aganazzar's Scorcher": "Xanathar's Guide to Everything",
+  "Air Bubble": "Spelljammer: Astral Adventurer's Guide",
+  Antagonize: "The Book of Many Things",
+  "Ashardalon's Stride": "Fizban's Treasury of Dragons",
+  "Beast Bond": "Xanathar's Guide to Everything",
+  "Borrowed Knowledge": "Strixhaven: A Curriculum of Chaos",
+  Catapult: "Xanathar's Guide to Everything",
+  Catnap: "Xanathar's Guide to Everything",
+  "Cause Fear": "Xanathar's Guide to Everything",
+  Ceremony: "Xanathar's Guide to Everything",
+  "Chaos Bolt": "Xanathar's Guide to Everything",
+  "Control Flames": "Xanathar's Guide to Everything",
+  "Create Bonfire": "Xanathar's Guide to Everything",
+  "Distort Value": "Acquisitions Incorporated",
+  "Dragon's Breath": "Xanathar's Guide to Everything",
+  "Dust Devil": "Xanathar's Guide to Everything",
+  "Earth Tremor": "Xanathar's Guide to Everything",
+  Earthbind: "Xanathar's Guide to Everything",
+  "Enemies Abound": "Xanathar's Guide to Everything",
+  "Erupting Earth": "Xanathar's Guide to Everything",
+  "Fast Friends": "Acquisitions Incorporated",
+  "Flame Arrows": "Xanathar's Guide to Everything",
+  "Flock of Familiars": "Lost Laboratory of Kwalish",
+  "Fortune's Favor": "Explorer's Guide to Wildemount",
+  "Frost Fingers": "Icewind Dale: Rime of the Frostmaiden",
+  Frostbite: "Xanathar's Guide to Everything",
+  "Galder's Tower": "Lost Laboratory of Kwalish",
+  "Gift of Alacrity": "Explorer's Guide to Wildemount",
+  "Gift of Gab": "Acquisitions Incorporated",
+  Gust: "Xanathar's Guide to Everything",
+  "Healing Spirit": "Xanathar's Guide to Everything",
+  "Ice Knife": "Xanathar's Guide to Everything",
+  "Immovable Object": "Explorer's Guide to Wildemount",
+  "Incite Greed": "Acquisitions Incorporated",
+  Infestation: "Xanathar's Guide to Everything",
+  "Jim's Glowing Coin": "Acquisitions Incorporated",
+  "Jim's Magic Missile": "Acquisitions Incorporated",
+  "Kinetic Jaunt": "Strixhaven: A Curriculum of Chaos",
+  "Life Transference": "Xanathar's Guide to Everything",
+  "Lightning Arrow": "Player's Handbook",
+  "Magic Stone": "Xanathar's Guide to Everything",
+  "Magnify Gravity": "Explorer's Guide to Wildemount",
+  "Maximillian's Earthen Grasp": "Xanathar's Guide to Everything",
+  "Melf's Minute Meteors": "Xanathar's Guide to Everything",
+  "Mind Spike": "Xanathar's Guide to Everything",
+  "Mold Earth": "Xanathar's Guide to Everything",
+  "Motivational Speech": "Acquisitions Incorporated",
+  "Nathair's Mischief": "Fizban's Treasury of Dragons",
+  "Primal Savagery": "Xanathar's Guide to Everything",
+  "Pulse Wave": "Explorer's Guide to Wildemount",
+  Pyrotechnics: "Xanathar's Guide to Everything",
+  "Rime's Binding Ice": "Fizban's Treasury of Dragons",
+  "Sapping Sting": "Explorer's Guide to Wildemount",
+  "Shadow Blade": "Xanathar's Guide to Everything",
+  "Shape Water": "Xanathar's Guide to Everything",
+  "Silvery Barbs": "Strixhaven: A Curriculum of Chaos",
+  Skywrite: "Xanathar's Guide to Everything",
+  Snare: "Xanathar's Guide to Everything",
+  "Snilloc's Snowball Swarm": "Xanathar's Guide to Everything",
+  "Spray of Cards": "The Book of Many Things",
+  "Summon Lesser Demons": "Xanathar's Guide to Everything",
+  "Thunder Step": "Xanathar's Guide to Everything",
+  Thunderclap: "Xanathar's Guide to Everything",
+  "Tidal Wave": "Xanathar's Guide to Everything",
+  "Tiny Servant": "Xanathar's Guide to Everything",
+  "Toll the Dead": "Xanathar's Guide to Everything",
+  "Vortex Warp": "Strixhaven: A Curriculum of Chaos",
+  "Wall of Sand": "Xanathar's Guide to Everything",
+  "Wall of Water": "Xanathar's Guide to Everything",
+  "Warding Wind": "Xanathar's Guide to Everything",
+  "Warp Sense": "Planescape: Adventures in the Multiverse",
+  "Wither and Bloom": "Strixhaven: A Curriculum of Chaos",
+  "Word of Radiance": "Xanathar's Guide to Everything",
+  Wristpocket: "Explorer's Guide to Wildemount",
+  "Zephyr Strike": "Xanathar's Guide to Everything"
+};
 const spellCatalog = {
   Bard: [
     {
@@ -2522,7 +2600,9 @@ export function NewAdventureForm() {
                                       onClick={() => toggleSpell(option)}
                                     >
                                       <strong>{option}</strong>
-                                      {isDlcSpell ? <small>DLC</small> : null}
+                                      {isDlcSpell ? (
+                                        <small>{spellSourceLabels[option] ?? "Expanded source"}</small>
+                                      ) : null}
                                     </button>
                                   );
                                 })}

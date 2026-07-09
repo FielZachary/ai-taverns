@@ -1106,7 +1106,7 @@ h1 {
 
 .spell-option-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 8px;
 }
 
@@ -1114,7 +1114,7 @@ h1 {
   display: grid;
   align-content: center;
   gap: 4px;
-  min-height: 54px;
+  min-height: 64px;
   padding: 10px;
 }
 
@@ -1122,6 +1122,7 @@ h1 {
   color: var(--muted);
   font-size: 0.64rem;
   font-weight: 900;
+  line-height: 1.18;
   text-transform: uppercase;
 }
 
