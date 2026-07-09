@@ -6,6 +6,7 @@ import {
   ArrowRight,
   Check,
   Dice5,
+  X,
   Minus,
   Plus,
   ScrollText,
@@ -73,6 +74,44 @@ type ActiveStatRoll = {
   rolls: number[];
   total: number;
   scores: Partial<AbilityScores>;
+};
+type EquipmentCategory =
+  | "simpleWeapon"
+  | "simpleMeleeWeapon"
+  | "martialWeapon"
+  | "martialMeleeWeapon"
+  | "musicalInstrument";
+type EquipmentChoiceOption = {
+  id: string;
+  label: string;
+  items?: string[];
+  category?: EquipmentCategory;
+  quantity?: number;
+};
+type EquipmentChoiceGroup = {
+  id: string;
+  label: string;
+  options: EquipmentChoiceOption[];
+};
+type EquipmentChoiceSelection = {
+  optionId: string;
+  customItem?: string;
+};
+type EquipmentSelections = Record<string, EquipmentChoiceSelection>;
+type ActiveEquipmentModal = {
+  groupId: string;
+  optionId: string;
+  title: string;
+  category: EquipmentCategory;
+} | null;
+type EquipmentRule = {
+  choices: EquipmentChoiceGroup[];
+  fixed: string[];
+};
+type EquipmentProfile = {
+  armorClass: number;
+  attacks: string[];
+  gear: string[];
 };
 
 const playerIdStorageKey = "ai-dnd.playerId";
@@ -898,6 +937,549 @@ type CharacterSpecies = (typeof speciesOptions)[number];
 type CharacterBackground = (typeof backgroundOptions)[number];
 type Alignment = (typeof alignmentOptions)[number];
 
+const equipmentCategoryOptions: Record<EquipmentCategory, string[]> = {
+  simpleWeapon: [
+    "Club",
+    "Dagger",
+    "Greatclub",
+    "Handaxe",
+    "Javelin",
+    "Light hammer",
+    "Mace",
+    "Quarterstaff",
+    "Sickle",
+    "Spear",
+    "Light crossbow",
+    "Dart",
+    "Shortbow",
+    "Sling"
+  ],
+  simpleMeleeWeapon: [
+    "Club",
+    "Dagger",
+    "Greatclub",
+    "Handaxe",
+    "Javelin",
+    "Light hammer",
+    "Mace",
+    "Quarterstaff",
+    "Sickle",
+    "Spear"
+  ],
+  martialWeapon: [
+    "Battleaxe",
+    "Flail",
+    "Glaive",
+    "Greataxe",
+    "Greatsword",
+    "Halberd",
+    "Lance",
+    "Longsword",
+    "Maul",
+    "Morningstar",
+    "Pike",
+    "Rapier",
+    "Scimitar",
+    "Shortsword",
+    "Trident",
+    "War pick",
+    "Warhammer",
+    "Whip",
+    "Blowgun",
+    "Hand crossbow",
+    "Heavy crossbow",
+    "Longbow",
+    "Net"
+  ],
+  martialMeleeWeapon: [
+    "Battleaxe",
+    "Flail",
+    "Glaive",
+    "Greataxe",
+    "Greatsword",
+    "Halberd",
+    "Lance",
+    "Longsword",
+    "Maul",
+    "Morningstar",
+    "Pike",
+    "Rapier",
+    "Scimitar",
+    "Shortsword",
+    "Trident",
+    "War pick",
+    "Warhammer",
+    "Whip"
+  ],
+  musicalInstrument: [
+    "Bagpipes",
+    "Drum",
+    "Dulcimer",
+    "Flute",
+    "Horn",
+    "Lute",
+    "Lyre",
+    "Pan flute",
+    "Shawm",
+    "Viol"
+  ]
+};
+
+const classEquipmentRules: Record<CharacterClass, EquipmentRule> = {
+  Barbarian: {
+    choices: [
+      {
+        id: "weapon-1",
+        label: "Choice 1",
+        options: [
+          { id: "greataxe", label: "Greataxe", items: ["Greataxe"] },
+          {
+            id: "any-martial-melee",
+            label: "Any martial melee weapon",
+            category: "martialMeleeWeapon"
+          }
+        ]
+      },
+      {
+        id: "weapon-2",
+        label: "Choice 2",
+        options: [
+          { id: "two-handaxes", label: "Two handaxes", items: ["2 handaxes"] },
+          {
+            id: "any-simple",
+            label: "Any simple weapon",
+            category: "simpleWeapon"
+          }
+        ]
+      }
+    ],
+    fixed: ["Explorer's pack", "4 javelins"]
+  },
+  Bard: {
+    choices: [
+      {
+        id: "weapon-1",
+        label: "Choice 1",
+        options: [
+          { id: "rapier", label: "Rapier", items: ["Rapier"] },
+          { id: "longsword", label: "Longsword", items: ["Longsword"] },
+          {
+            id: "any-simple",
+            label: "Any simple weapon",
+            category: "simpleWeapon"
+          }
+        ]
+      },
+      {
+        id: "pack",
+        label: "Choice 2",
+        options: [
+          { id: "diplomats-pack", label: "Diplomat's pack", items: ["Diplomat's pack"] },
+          { id: "entertainers-pack", label: "Entertainer's pack", items: ["Entertainer's pack"] }
+        ]
+      },
+      {
+        id: "instrument",
+        label: "Choice 3",
+        options: [
+          { id: "lute", label: "Lute", items: ["Lute"] },
+          {
+            id: "any-instrument",
+            label: "Any other musical instrument",
+            category: "musicalInstrument"
+          }
+        ]
+      }
+    ],
+    fixed: ["Leather armor", "Dagger"]
+  },
+  Cleric: {
+    choices: [
+      {
+        id: "weapon-1",
+        label: "Choice 1",
+        options: [
+          { id: "mace", label: "Mace", items: ["Mace"] },
+          { id: "warhammer", label: "Warhammer, if proficient", items: ["Warhammer"] }
+        ]
+      },
+      {
+        id: "armor",
+        label: "Choice 2",
+        options: [
+          { id: "scale-mail", label: "Scale mail", items: ["Scale mail"] },
+          { id: "leather-armor", label: "Leather armor", items: ["Leather armor"] },
+          { id: "chain-mail", label: "Chain mail, if proficient", items: ["Chain mail"] }
+        ]
+      },
+      {
+        id: "weapon-2",
+        label: "Choice 3",
+        options: [
+          {
+            id: "light-crossbow",
+            label: "Light crossbow and 20 bolts",
+            items: ["Light crossbow", "20 bolts"]
+          },
+          {
+            id: "any-simple",
+            label: "Any simple weapon",
+            category: "simpleWeapon"
+          }
+        ]
+      },
+      {
+        id: "pack",
+        label: "Choice 4",
+        options: [
+          { id: "priests-pack", label: "Priest's pack", items: ["Priest's pack"] },
+          { id: "explorers-pack", label: "Explorer's pack", items: ["Explorer's pack"] }
+        ]
+      }
+    ],
+    fixed: ["Shield", "Holy symbol"]
+  },
+  Druid: {
+    choices: [
+      {
+        id: "weapon-1",
+        label: "Choice 1",
+        options: [
+          { id: "wooden-shield", label: "Wooden shield", items: ["Shield"] },
+          {
+            id: "any-simple",
+            label: "Any simple weapon",
+            category: "simpleWeapon"
+          }
+        ]
+      },
+      {
+        id: "weapon-2",
+        label: "Choice 2",
+        options: [
+          { id: "scimitar", label: "Scimitar", items: ["Scimitar"] },
+          {
+            id: "any-simple-melee",
+            label: "Any simple melee weapon",
+            category: "simpleMeleeWeapon"
+          }
+        ]
+      }
+    ],
+    fixed: ["Leather armor", "Explorer's pack", "Druidic focus"]
+  },
+  Fighter: {
+    choices: [
+      {
+        id: "armor",
+        label: "Choice 1",
+        options: [
+          { id: "chain-mail", label: "Chain mail", items: ["Chain mail"] },
+          {
+            id: "leather-archer",
+            label: "Leather armor, longbow, and 20 arrows",
+            items: ["Leather armor", "Longbow", "20 arrows"]
+          }
+        ]
+      },
+      {
+        id: "weapon-1",
+        label: "Choice 2",
+        options: [
+          {
+            id: "martial-and-shield",
+            label: "One martial weapon and a shield",
+            category: "martialWeapon",
+            items: ["Shield"]
+          },
+          {
+            id: "two-martial",
+            label: "Two martial weapons",
+            category: "martialWeapon",
+            quantity: 2
+          }
+        ]
+      },
+      {
+        id: "weapon-2",
+        label: "Choice 3",
+        options: [
+          {
+            id: "light-crossbow",
+            label: "Light crossbow and 20 bolts",
+            items: ["Light crossbow", "20 bolts"]
+          },
+          { id: "two-handaxes", label: "Two handaxes", items: ["2 handaxes"] }
+        ]
+      },
+      {
+        id: "pack",
+        label: "Choice 4",
+        options: [
+          { id: "dungeoneers-pack", label: "Dungeoneer's pack", items: ["Dungeoneer's pack"] },
+          { id: "explorers-pack", label: "Explorer's pack", items: ["Explorer's pack"] }
+        ]
+      }
+    ],
+    fixed: []
+  },
+  Monk: {
+    choices: [
+      {
+        id: "weapon-1",
+        label: "Choice 1",
+        options: [
+          { id: "shortsword", label: "Shortsword", items: ["Shortsword"] },
+          {
+            id: "any-simple",
+            label: "Any simple weapon",
+            category: "simpleWeapon"
+          }
+        ]
+      },
+      {
+        id: "pack",
+        label: "Choice 2",
+        options: [
+          { id: "dungeoneers-pack", label: "Dungeoneer's pack", items: ["Dungeoneer's pack"] },
+          { id: "explorers-pack", label: "Explorer's pack", items: ["Explorer's pack"] }
+        ]
+      }
+    ],
+    fixed: ["10 darts"]
+  },
+  Paladin: {
+    choices: [
+      {
+        id: "weapon-1",
+        label: "Choice 1",
+        options: [
+          {
+            id: "martial-and-shield",
+            label: "One martial weapon and a shield",
+            category: "martialWeapon",
+            items: ["Shield"]
+          },
+          {
+            id: "two-martial",
+            label: "Two martial weapons",
+            category: "martialWeapon",
+            quantity: 2
+          }
+        ]
+      },
+      {
+        id: "weapon-2",
+        label: "Choice 2",
+        options: [
+          { id: "five-javelins", label: "Five javelins", items: ["5 javelins"] },
+          {
+            id: "any-simple-melee",
+            label: "Any simple melee weapon",
+            category: "simpleMeleeWeapon"
+          }
+        ]
+      },
+      {
+        id: "pack",
+        label: "Choice 3",
+        options: [
+          { id: "priests-pack", label: "Priest's pack", items: ["Priest's pack"] },
+          { id: "explorers-pack", label: "Explorer's pack", items: ["Explorer's pack"] }
+        ]
+      }
+    ],
+    fixed: ["Chain mail", "Holy symbol"]
+  },
+  Ranger: {
+    choices: [
+      {
+        id: "armor",
+        label: "Choice 1",
+        options: [
+          { id: "scale-mail", label: "Scale mail", items: ["Scale mail"] },
+          { id: "leather-armor", label: "Leather armor", items: ["Leather armor"] }
+        ]
+      },
+      {
+        id: "weapon-1",
+        label: "Choice 2",
+        options: [
+          { id: "two-shortswords", label: "Two shortswords", items: ["2 shortswords"] },
+          {
+            id: "two-simple-melee",
+            label: "Two simple melee weapons",
+            category: "simpleMeleeWeapon",
+            quantity: 2
+          }
+        ]
+      },
+      {
+        id: "pack",
+        label: "Choice 3",
+        options: [
+          { id: "dungeoneers-pack", label: "Dungeoneer's pack", items: ["Dungeoneer's pack"] },
+          { id: "explorers-pack", label: "Explorer's pack", items: ["Explorer's pack"] }
+        ]
+      }
+    ],
+    fixed: ["Longbow", "Quiver", "20 arrows"]
+  },
+  Rogue: {
+    choices: [
+      {
+        id: "weapon-1",
+        label: "Choice 1",
+        options: [
+          { id: "rapier", label: "Rapier", items: ["Rapier"] },
+          { id: "shortsword", label: "Shortsword", items: ["Shortsword"] }
+        ]
+      },
+      {
+        id: "weapon-2",
+        label: "Choice 2",
+        options: [
+          {
+            id: "shortbow",
+            label: "Shortbow, quiver, and 20 arrows",
+            items: ["Shortbow", "Quiver", "20 arrows"]
+          },
+          { id: "shortsword", label: "Shortsword", items: ["Shortsword"] }
+        ]
+      },
+      {
+        id: "pack",
+        label: "Choice 3",
+        options: [
+          { id: "burglars-pack", label: "Burglar's pack", items: ["Burglar's pack"] },
+          { id: "dungeoneers-pack", label: "Dungeoneer's pack", items: ["Dungeoneer's pack"] },
+          { id: "explorers-pack", label: "Explorer's pack", items: ["Explorer's pack"] }
+        ]
+      }
+    ],
+    fixed: ["Leather armor", "2 daggers", "Thieves' tools"]
+  },
+  Sorcerer: {
+    choices: [
+      {
+        id: "weapon-1",
+        label: "Choice 1",
+        options: [
+          {
+            id: "light-crossbow",
+            label: "Light crossbow and 20 bolts",
+            items: ["Light crossbow", "20 bolts"]
+          },
+          {
+            id: "any-simple",
+            label: "Any simple weapon",
+            category: "simpleWeapon"
+          }
+        ]
+      },
+      {
+        id: "focus",
+        label: "Choice 2",
+        options: [
+          { id: "component-pouch", label: "Component pouch", items: ["Component pouch"] },
+          { id: "arcane-focus", label: "Arcane focus", items: ["Arcane focus"] }
+        ]
+      },
+      {
+        id: "pack",
+        label: "Choice 3",
+        options: [
+          { id: "dungeoneers-pack", label: "Dungeoneer's pack", items: ["Dungeoneer's pack"] },
+          { id: "explorers-pack", label: "Explorer's pack", items: ["Explorer's pack"] }
+        ]
+      }
+    ],
+    fixed: ["2 daggers"]
+  },
+  Warlock: {
+    choices: [
+      {
+        id: "weapon-1",
+        label: "Choice 1",
+        options: [
+          {
+            id: "light-crossbow",
+            label: "Light crossbow and 20 bolts",
+            items: ["Light crossbow", "20 bolts"]
+          },
+          {
+            id: "any-simple",
+            label: "Any simple weapon",
+            category: "simpleWeapon"
+          }
+        ]
+      },
+      {
+        id: "focus",
+        label: "Choice 2",
+        options: [
+          { id: "component-pouch", label: "Component pouch", items: ["Component pouch"] },
+          { id: "arcane-focus", label: "Arcane focus", items: ["Arcane focus"] }
+        ]
+      },
+      {
+        id: "pack",
+        label: "Choice 3",
+        options: [
+          { id: "scholars-pack", label: "Scholar's pack", items: ["Scholar's pack"] },
+          { id: "dungeoneers-pack", label: "Dungeoneer's pack", items: ["Dungeoneer's pack"] }
+        ]
+      }
+    ],
+    fixed: ["Leather armor", "Dagger", "2 daggers"]
+  },
+  Wizard: {
+    choices: [
+      {
+        id: "weapon-1",
+        label: "Choice 1",
+        options: [
+          { id: "quarterstaff", label: "Quarterstaff", items: ["Quarterstaff"] },
+          { id: "dagger", label: "Dagger", items: ["Dagger"] }
+        ]
+      },
+      {
+        id: "focus",
+        label: "Choice 2",
+        options: [
+          { id: "component-pouch", label: "Component pouch", items: ["Component pouch"] },
+          { id: "arcane-focus", label: "Arcane focus", items: ["Arcane focus"] }
+        ]
+      },
+      {
+        id: "pack",
+        label: "Choice 3",
+        options: [
+          { id: "scholars-pack", label: "Scholar's pack", items: ["Scholar's pack"] },
+          { id: "explorers-pack", label: "Explorer's pack", items: ["Explorer's pack"] }
+        ]
+      }
+    ],
+    fixed: ["Spellbook"]
+  }
+};
+
+const backgroundEquipment: Record<CharacterBackground, string[]> = {
+  Acolyte: ["Holy symbol", "Prayer book", "5 sticks of incense", "Vestments", "Common clothes", "15 GP"],
+  Charlatan: ["Fine clothes", "Disguise kit", "Con prop", "15 GP"],
+  Criminal: ["Crowbar", "Dark common clothes with hood", "15 GP"],
+  Entertainer: ["Musical instrument", "Admirer's favor", "Costume", "15 GP"],
+  "Folk Hero": ["Artisan's tools", "Shovel", "Iron pot", "Common clothes", "10 GP"],
+  "Guild Artisan": ["Artisan's tools", "Guild introduction letter", "Traveler's clothes", "15 GP"],
+  Hermit: ["Scroll case of notes", "Winter blanket", "Common clothes", "Herbalism kit", "5 GP"],
+  Noble: ["Fine clothes", "Signet ring", "Pedigree scroll", "25 GP"],
+  Outlander: ["Staff", "Hunting trap", "Hunting trophy", "Traveler's clothes", "10 GP"],
+  Sage: ["Bottle of ink", "Quill", "Small knife", "Unanswered scholarly letter", "Common clothes", "10 GP"],
+  Sailor: ["Belaying pin", "50 feet silk rope", "Lucky charm", "Common clothes", "10 GP"],
+  Soldier: ["Rank insignia", "Trophy from a fallen enemy", "Gaming set", "Common clothes", "10 GP"],
+  Urchin: ["Small knife", "City map", "Pet mouse", "Parent token", "Common clothes", "10 GP"]
+};
+
 const speciesAbilityBonuses: Record<CharacterSpecies, SpeciesAbilityBonuses> = {
   Human: { str: 1, dex: 1, con: 1, int: 1, wis: 1, cha: 1 },
   Elf: { dex: 2 },
@@ -927,6 +1509,193 @@ const quickBuildBackgroundByClass: Record<CharacterClass, CharacterBackground> =
 
 function formatList(items: readonly string[]) {
   return items.length > 0 ? items.join(", ") : "None";
+}
+
+function defaultEquipmentSelections(characterClass: CharacterClass) {
+  const rule = classEquipmentRules[characterClass];
+
+  return Object.fromEntries(
+    rule.choices.map((choice) => [
+      choice.id,
+      {
+        optionId: choice.options[0].id,
+        customItem: choice.options[0].category
+          ? equipmentCategoryOptions[choice.options[0].category][0]
+          : undefined
+      }
+    ])
+  ) as EquipmentSelections;
+}
+
+function selectedEquipmentOption(
+  choice: EquipmentChoiceGroup,
+  selections: EquipmentSelections
+) {
+  const selectedOptionId = selections[choice.id]?.optionId;
+  return choice.options.find((option) => option.id === selectedOptionId) ?? choice.options[0];
+}
+
+function equipmentItemsForOption(
+  option: EquipmentChoiceOption,
+  selection?: EquipmentChoiceSelection
+) {
+  const customItem = option.category
+    ? selection?.customItem ?? equipmentCategoryOptions[option.category][0]
+    : null;
+  const customItems =
+    customItem && option.quantity && option.quantity > 1
+      ? [`${option.quantity} ${customItem}s`]
+      : customItem
+        ? [customItem]
+        : [];
+
+  return [...customItems, ...(option.items ?? [])];
+}
+
+function normalizeEquipmentName(item: string) {
+  return item
+    .replace(/^\d+\s+/, "")
+    .replace(/^two\s+/i, "")
+    .replace(/^five\s+/i, "")
+    .replace(/^four\s+/i, "")
+    .replace(/^10\s+/, "")
+    .replace(/^20\s+/, "")
+    .replace(/s$/i, "")
+    .trim()
+    .toLowerCase();
+}
+
+function hasEquipment(gear: readonly string[], name: string) {
+  const normalizedName = name.toLowerCase();
+  return gear.some((item) => normalizeEquipmentName(item) === normalizedName);
+}
+
+function equipmentGearFor(
+  characterClass: CharacterClass,
+  selections: EquipmentSelections,
+  characterBackground: CharacterBackground
+) {
+  const rule = classEquipmentRules[characterClass];
+  const classGear = rule.choices.flatMap((choice) => {
+    const option = selectedEquipmentOption(choice, selections);
+    return equipmentItemsForOption(option, selections[choice.id]);
+  });
+
+  return [...classGear, ...rule.fixed, ...backgroundEquipment[characterBackground]];
+}
+
+function armorClassForEquipment(
+  characterClass: CharacterClass,
+  gear: readonly string[],
+  abilityScores: CompleteAbilityScores
+) {
+  const dexModifier = getModifier(abilityScores.dex);
+  const shieldBonus = hasEquipment(gear, "shield") ? 2 : 0;
+
+  if (hasEquipment(gear, "chain mail")) {
+    return 16 + shieldBonus;
+  }
+
+  if (hasEquipment(gear, "scale mail")) {
+    return 14 + Math.min(2, dexModifier) + shieldBonus;
+  }
+
+  if (hasEquipment(gear, "leather armor")) {
+    return 11 + dexModifier + shieldBonus;
+  }
+
+  if (characterClass === "Monk") {
+    return 10 + dexModifier + getModifier(abilityScores.wis);
+  }
+
+  if (characterClass === "Barbarian") {
+    return 10 + dexModifier + getModifier(abilityScores.con) + shieldBonus;
+  }
+
+  return 10 + dexModifier + shieldBonus;
+}
+
+const weaponAttackDetails: Record<string, { damage: string; ability: AbilityKey; range?: string }> = {
+  battleaxe: { damage: "1d8 slashing", ability: "str" },
+  club: { damage: "1d4 bludgeoning", ability: "str" },
+  dagger: { damage: "1d4 piercing", ability: "dex", range: "thrown 20/60 ft" },
+  dart: { damage: "1d4 piercing", ability: "dex", range: "range 20/60 ft" },
+  flail: { damage: "1d8 bludgeoning", ability: "str" },
+  glaive: { damage: "1d10 slashing", ability: "str" },
+  greataxe: { damage: "1d12 slashing", ability: "str" },
+  greatclub: { damage: "1d8 bludgeoning", ability: "str" },
+  greatsword: { damage: "2d6 slashing", ability: "str" },
+  halberd: { damage: "1d10 slashing", ability: "str" },
+  handaxe: { damage: "1d6 slashing", ability: "str", range: "thrown 20/60 ft" },
+  "hand crossbow": { damage: "1d6 piercing", ability: "dex", range: "range 30/120 ft" },
+  "heavy crossbow": { damage: "1d10 piercing", ability: "dex", range: "range 100/400 ft" },
+  javelin: { damage: "1d6 piercing", ability: "str", range: "thrown 30/120 ft" },
+  lance: { damage: "1d12 piercing", ability: "str" },
+  "light crossbow": { damage: "1d8 piercing", ability: "dex", range: "range 80/320 ft" },
+  "light hammer": { damage: "1d4 bludgeoning", ability: "str", range: "thrown 20/60 ft" },
+  longbow: { damage: "1d8 piercing", ability: "dex", range: "range 150/600 ft" },
+  longsword: { damage: "1d8 slashing", ability: "str" },
+  mace: { damage: "1d6 bludgeoning", ability: "str" },
+  maul: { damage: "2d6 bludgeoning", ability: "str" },
+  morningstar: { damage: "1d8 piercing", ability: "str" },
+  pike: { damage: "1d10 piercing", ability: "str" },
+  quarterstaff: { damage: "1d6 bludgeoning", ability: "str" },
+  rapier: { damage: "1d8 piercing", ability: "dex" },
+  scimitar: { damage: "1d6 slashing", ability: "dex" },
+  shortbow: { damage: "1d6 piercing", ability: "dex", range: "range 80/320 ft" },
+  shortsword: { damage: "1d6 piercing", ability: "dex" },
+  sickle: { damage: "1d4 slashing", ability: "str" },
+  sling: { damage: "1d4 bludgeoning", ability: "dex", range: "range 30/120 ft" },
+  spear: { damage: "1d6 piercing", ability: "str", range: "thrown 20/60 ft" },
+  trident: { damage: "1d6 piercing", ability: "str", range: "thrown 20/60 ft" },
+  "war pick": { damage: "1d8 piercing", ability: "str" },
+  warhammer: { damage: "1d8 bludgeoning", ability: "str" },
+  whip: { damage: "1d4 slashing", ability: "dex" }
+};
+
+function attackLinesForEquipment(
+  gear: readonly string[],
+  abilityScores: CompleteAbilityScores
+) {
+  const attacks = gear.flatMap((item) => {
+    const normalizedName = normalizeEquipmentName(item);
+    const details = weaponAttackDetails[normalizedName];
+
+    if (!details) {
+      return [];
+    }
+
+    const modifier = getModifier(abilityScores[details.ability]);
+    const attackBonus = proficiencyBonus + modifier;
+    const modifierText = modifier === 0 ? "" : formatModifier(modifier);
+    const rangeText = details.range ? `, ${details.range}` : "";
+    const displayName = item.replace(/^\d+\s+/, "").replace(/^2\s+/, "");
+
+    return `${displayName}: ${formatModifier(attackBonus)} to hit, ${details.damage}${modifierText}${rangeText}`;
+  });
+
+  return Array.from(new Set(attacks));
+}
+
+function spellAttackLinesFor(
+  characterClass: CharacterClass,
+  spellAttackBonus: number,
+  spellSaveDc: number,
+  selectedSpells: readonly string[]
+) {
+  if (!selectedSpells.includes("Fire Bolt") && !selectedSpells.includes("Eldritch Blast")) {
+    return [];
+  }
+
+  if (characterClass === "Warlock" && selectedSpells.includes("Eldritch Blast")) {
+    return [`Eldritch Blast: ${formatModifier(spellAttackBonus)} to hit, 2 beams, 1d10 force each`];
+  }
+
+  if (selectedSpells.includes("Fire Bolt")) {
+    return [`Fire Bolt: ${formatModifier(spellAttackBonus)} to hit, 2d10 fire`];
+  }
+
+  return [`Spell Save: DC ${spellSaveDc}`];
 }
 
 function spellOptionsFor(
@@ -1295,7 +2064,11 @@ export function NewAdventureForm() {
   const [selectedSkills, setSelectedSkills] = useState<SkillName[]>(["Athletics", "Perception"]);
   const [selectedTool, setSelectedTool] = useState<(typeof toolOptions)[number]>("Dice set");
   const [selectedLanguage, setSelectedLanguage] = useState<(typeof languageOptions)[number]>("Elvish");
-  const [equipmentKitId, setEquipmentKitId] = useState("Sword and shield");
+  const [equipmentSelections, setEquipmentSelections] = useState<EquipmentSelections>(
+    () => defaultEquipmentSelections("Fighter")
+  );
+  const [activeEquipmentModal, setActiveEquipmentModal] =
+    useState<ActiveEquipmentModal>(null);
   const [selectedSpells, setSelectedSpells] = useState<string[]>([]);
   const [dlcSpellVisibility, setDlcSpellVisibility] = useState<DlcSpellVisibility>({});
   const [alignment, setAlignment] = useState<Alignment>("Neutral Good");
@@ -1364,7 +2137,6 @@ export function NewAdventureForm() {
   );
   const pointBuyPointsRemaining =
     pointBuyBudget - getPointBuyPointsSpent(abilityScores);
-  const selectedEquipmentKit = selectedClass.equipmentKits.find((kit) => kit.id === equipmentKitId) ?? selectedClass.equipmentKits[0];
   const backgroundSkillList = backgroundSkills[characterBackground] ?? [];
   const proficientSkills = Array.from(new Set([...selectedSkills, ...backgroundSkillList]));
   const constitutionModifier = getModifier(resolvedAbilityScores.con);
@@ -1394,6 +2166,34 @@ export function NewAdventureForm() {
     selectedSpells.length > 0 &&
     selectedSpellCounts.Cantrip <= spellSelectionLimits.cantrips &&
     selectedSpellCounts.leveledSpells <= spellSelectionLimits.leveledSpells;
+  const selectedEquipmentProfile = useMemo<EquipmentProfile>(() => {
+    const gear = equipmentGearFor(
+      characterClass,
+      equipmentSelections,
+      characterBackground
+    );
+    const weaponAttacks = attackLinesForEquipment(gear, resolvedAbilityScores);
+    const spellAttacks = spellAttackLinesFor(
+      characterClass,
+      spellAttackBonus,
+      spellSaveDc,
+      selectedSpells
+    );
+
+    return {
+      armorClass: armorClassForEquipment(characterClass, gear, resolvedAbilityScores),
+      attacks: [...spellAttacks, ...weaponAttacks],
+      gear
+    };
+  }, [
+    characterBackground,
+    characterClass,
+    equipmentSelections,
+    resolvedAbilityScores,
+    selectedSpells,
+    spellAttackBonus,
+    spellSaveDc
+  ]);
   const characterSheetPreview = useMemo(() => {
     const abilityLines = abilityDefinitions.map(({ key, label }) => {
       const score = abilityScores[key];
@@ -1449,7 +2249,7 @@ export function NewAdventureForm() {
       `Alignment: ${alignment}`,
       "",
       "Core Stats",
-      `Armor Class: ${selectedEquipmentKit.armorClass}`,
+      `Armor Class: ${selectedEquipmentProfile.armorClass}`,
       `Initiative: ${formatModifier(getModifier(resolvedAbilityScores.dex))}`,
       "Speed: 30 ft",
       `Proficiency Bonus: ${formatModifier(proficiencyBonus)}`,
@@ -1475,7 +2275,9 @@ export function NewAdventureForm() {
       `Languages: Common, ${selectedLanguage}`,
       "",
       "Attacks",
-      ...selectedEquipmentKit.weapons,
+      ...(selectedEquipmentProfile.attacks.length > 0
+        ? selectedEquipmentProfile.attacks
+        : ["None"]),
       "",
       "Features and Traits",
       `${selectedClass.subclassLabel}: ${subclass}`,
@@ -1484,7 +2286,7 @@ export function NewAdventureForm() {
       `${characterSpecies}: standard ${characterSpecies.toLowerCase()} traits, senses, and movement`,
       "",
       "Equipment",
-      ...selectedEquipmentKit.gear,
+      ...selectedEquipmentProfile.gear,
       "",
       "Spells",
       ...spells,
@@ -1511,7 +2313,7 @@ export function NewAdventureForm() {
     proficientSkills,
     resolvedAbilityScores,
     selectedClass,
-    selectedEquipmentKit,
+    selectedEquipmentProfile,
     selectedLanguage,
     selectedSpells,
     selectedTool,
@@ -1628,6 +2430,43 @@ export function NewAdventureForm() {
     });
   }, [selectedClass.spellGroups, spellSelectionLimits]);
 
+  function chooseEquipmentOption(
+    choice: EquipmentChoiceGroup,
+    option: EquipmentChoiceOption
+  ) {
+    if (option.category) {
+      setActiveEquipmentModal({
+        groupId: choice.id,
+        optionId: option.id,
+        title: option.label,
+        category: option.category
+      });
+      return;
+    }
+
+    setEquipmentSelections((currentSelections) => ({
+      ...currentSelections,
+      [choice.id]: {
+        optionId: option.id
+      }
+    }));
+  }
+
+  function chooseEquipmentModalItem(item: string) {
+    if (!activeEquipmentModal) {
+      return;
+    }
+
+    setEquipmentSelections((currentSelections) => ({
+      ...currentSelections,
+      [activeEquipmentModal.groupId]: {
+        optionId: activeEquipmentModal.optionId,
+        customItem: item
+      }
+    }));
+    setActiveEquipmentModal(null);
+  }
+
   function handleClassChange(nextClass: CharacterClass) {
     const nextClassData = classOptions.find((option) => option.id === nextClass) ?? classOptions[4];
     const nextAbilityScores =
@@ -1649,7 +2488,8 @@ export function NewAdventureForm() {
     setSubclass(nextClassData.subclassOptions[0]);
     setClassFeatureChoice(nextClassData.featureOptions[0]);
     setSelectedSkills([...nextClassData.defaultSkills] as SkillName[]);
-    setEquipmentKitId(nextClassData.equipmentKits[0].id);
+    setEquipmentSelections(defaultEquipmentSelections(nextClass));
+    setActiveEquipmentModal(null);
     setDlcSpellVisibility({});
     setSelectedSpells(defaultSpellSelectionFor(nextClassData.spellGroups, nextSpellLimits));
 
@@ -1674,7 +2514,8 @@ export function NewAdventureForm() {
         ? skillChoices
         : ([...selectedClass.defaultSkills] as SkillName[])
     );
-    setEquipmentKitId(selectedClass.equipmentKits[0].id);
+    setEquipmentSelections(defaultEquipmentSelections(characterClass));
+    setActiveEquipmentModal(null);
     setSelectedTool("Dice set");
     setSelectedLanguage("Elvish");
     setDlcSpellVisibility({});
@@ -2560,20 +3401,49 @@ export function NewAdventureForm() {
 
                 {!isQuickBuild && characterStepIndex === 9 ? (
                   <fieldset className="option-picker equipment-picker">
-                    <legend>Equipment</legend>
-                    <div>
-                      {selectedClass.equipmentKits.map((kit) => (
-                        <button
-                          type="button"
-                          className={equipmentKitId === kit.id ? "selected" : ""}
-                          aria-pressed={equipmentKitId === kit.id}
-                          key={kit.id}
-                          onClick={() => setEquipmentKitId(kit.id)}
-                        >
-                          <strong>{kit.id}</strong>
-                          <small>AC {kit.armorClass} | {formatList(kit.gear)}</small>
-                        </button>
+                    <legend>{characterClass} starting equipment</legend>
+                    <div className="equipment-choice-list">
+                      {classEquipmentRules[characterClass].choices.map((choice) => (
+                        <section className="equipment-choice-group" key={choice.id}>
+                          <h3>{choice.label}</h3>
+                          <div>
+                            {choice.options.map((option) => {
+                              const selection = equipmentSelections[choice.id];
+                              const isSelected = selection?.optionId === option.id;
+                              const selectedCustomItem =
+                                option.category && isSelected
+                                  ? selection.customItem ??
+                                    equipmentCategoryOptions[option.category][0]
+                                  : null;
+
+                              return (
+                                <button
+                                  type="button"
+                                  className={isSelected ? "selected" : ""}
+                                  aria-pressed={isSelected}
+                                  key={option.id}
+                                  onClick={() => chooseEquipmentOption(choice, option)}
+                                >
+                                  <strong>{option.label}</strong>
+                                  <small>
+                                    {selectedCustomItem
+                                      ? selectedCustomItem
+                                      : formatList(option.items ?? [])}
+                                  </small>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </section>
                       ))}
+                    </div>
+                    <div className="equipment-fixed-list">
+                      <strong>Always included</strong>
+                      <span>{formatList(classEquipmentRules[characterClass].fixed)}</span>
+                    </div>
+                    <div className="equipment-fixed-list">
+                      <strong>{characterBackground} background</strong>
+                      <span>{formatList(backgroundEquipment[characterBackground])}</span>
                     </div>
                   </fieldset>
                 ) : null}
@@ -2747,7 +3617,7 @@ export function NewAdventureForm() {
                       </div>
                       <div>
                         <span>Armor Class</span>
-                        <strong>{selectedEquipmentKit.armorClass}</strong>
+                        <strong>{selectedEquipmentProfile.armorClass}</strong>
                       </div>
                       <div>
                         <span>Hit Points</span>
@@ -2882,6 +3752,43 @@ export function NewAdventureForm() {
             </button>
           </div>
       </form>
+
+      {activeEquipmentModal ? (
+        <div
+          className="equipment-modal-backdrop"
+          role="presentation"
+          onClick={() => setActiveEquipmentModal(null)}
+        >
+          <section
+            aria-modal="true"
+            className="equipment-modal"
+            role="dialog"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="equipment-modal-header">
+              <h2>{activeEquipmentModal.title}</h2>
+              <button
+                type="button"
+                aria-label="Close equipment picker"
+                onClick={() => setActiveEquipmentModal(null)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="equipment-modal-options">
+              {equipmentCategoryOptions[activeEquipmentModal.category].map((item) => (
+                <button
+                  type="button"
+                  key={item}
+                  onClick={() => chooseEquipmentModalItem(item)}
+                >
+                  <strong>{item}</strong>
+                </button>
+              ))}
+            </div>
+          </section>
+        </div>
+      ) : null}
 
       {activeStatRoll ? (
         <DiceRollReveal3D
