@@ -105,9 +105,9 @@ const customCharacterCreationSteps = [
   "Species",
   "Stats",
   "Spells",
-  "Skills",
-  "Background",
   "Proficiencies",
+  "Background",
+  "Skills",
   "Equipment",
   "Identity",
   "Sheet"
@@ -1867,7 +1867,7 @@ export function NewAdventureForm() {
         return areAllStatsRolled;
       }
 
-      if (characterStepIndex === 6) {
+      if (characterStepIndex === 8) {
         return selectedSkills.length > 0;
       }
 
@@ -2499,7 +2499,7 @@ export function NewAdventureForm() {
                   </div>
                 ) : null}
 
-                {!isQuickBuild && characterStepIndex === 6 ? (
+                {!isQuickBuild && characterStepIndex === 8 ? (
                   <fieldset className="option-picker compact-option-picker">
                     <legend>Skills</legend>
                     <div>
@@ -2521,7 +2521,7 @@ export function NewAdventureForm() {
                   </fieldset>
                 ) : null}
 
-                {!isQuickBuild && characterStepIndex === 8 ? (
+                {!isQuickBuild && characterStepIndex === 6 ? (
                   <div className="character-builder-stack">
                     <fieldset className="option-picker compact-option-picker">
                       <legend>Tool proficiency</legend>
