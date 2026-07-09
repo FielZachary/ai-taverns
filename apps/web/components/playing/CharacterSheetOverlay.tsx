@@ -87,9 +87,10 @@ const knownSections = new Set([
   "Attacks",
   "Features and Traits",
   "Equipment",
+  "Inventory",
+  "Currency",
   "Spells",
   "Personality",
-  "Inventory",
   "Notes",
   "DM Brief"
 ]);
@@ -492,7 +493,9 @@ export function CharacterSheetOverlay({
     ) ?? [];
   const attackLines = sheet.sections.Attacks ?? [];
   const featureLines = sheet.sections["Features and Traits"] ?? [];
-  const equipmentLines = sheet.sections.Equipment ?? sheet.sections.Inventory ?? [];
+  const equipmentLines = sheet.sections.Equipment ?? [];
+  const inventoryLines = sheet.sections.Inventory ?? [];
+  const currencyLines = sheet.sections.Currency ?? [];
   const proficiencyLines = sheet.sections["Proficiencies and Languages"] ?? [];
   const spells = sheet.sections.Spells ?? [];
   const dmBrief = sheet.sections["DM Brief"] ?? [];
@@ -578,6 +581,8 @@ export function CharacterSheetOverlay({
             <AttackPanel lines={attackLines} />
             <SpellPanel lines={spells} />
             <LinedPanel title="Equipment" lines={equipmentLines} />
+            <LinedPanel title="Inventory" lines={inventoryLines} />
+            <LinedPanel title="Currency" lines={currencyLines} />
           </section>
 
           <section className="dnd-sheet-right">

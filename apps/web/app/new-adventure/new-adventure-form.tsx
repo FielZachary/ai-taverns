@@ -111,7 +111,9 @@ type EquipmentRule = {
 type EquipmentProfile = {
   armorClass: number;
   attacks: string[];
+  currency: string[];
   gear: string[];
+  inventory: string[];
 };
 
 const playerIdStorageKey = "ai-dnd.playerId";
@@ -1570,6 +1572,79 @@ function hasEquipment(gear: readonly string[], name: string) {
   return gear.some((item) => normalizeEquipmentName(item) === normalizedName);
 }
 
+function isCurrencyItem(item: string) {
+  return /^\d+\s+(?:CP|SP|EP|GP|PP)$/i.test(item.trim());
+}
+
+function equipmentLinesForGear(gear: readonly string[]) {
+  return gear.filter((item) => {
+    const normalizedName = normalizeEquipmentName(item);
+
+    return (
+      normalizedName in weaponAttackDetails ||
+      ["chain mail", "scale mail", "leather armor", "shield"].includes(normalizedName)
+    );
+  });
+}
+
+function inventoryCategoryForItem(item: string) {
+  if (
+    /\b(incense|rations?)\b/i.test(item)
+  ) {
+    return "Consumables";
+  }
+
+  if (
+    /\b(pack|rope|bedroll|blanket|trap|shovel|pot|crowbar|staff|knife|ink|quill)\b/i.test(item)
+  ) {
+    return "Gear";
+  }
+
+  if (/\b(kit|tools?|instrument|gaming set|dice set)\b/i.test(item)) {
+    return "Tools";
+  }
+
+  if (/\b(clothes|costume|vestments)\b/i.test(item)) {
+    return "Clothing";
+  }
+
+  if (/\b(letter|map|token|insignia|scroll|trophy|charm|favor|prop|symbol|book)\b/i.test(item)) {
+    return "Quest Items";
+  }
+
+  return "Miscellaneous";
+}
+
+function inventoryLinesForGear(gear: readonly string[]) {
+  const inventoryItems = gear.filter(
+    (item) => !isCurrencyItem(item) && !equipmentLinesForGear([item]).includes(item)
+  );
+  const groupedItems = inventoryItems.reduce<Record<string, string[]>>((groups, item) => {
+    const category = inventoryCategoryForItem(item);
+    groups[category] ??= [];
+    groups[category].push(item);
+    return groups;
+  }, {});
+  const categoryOrder = [
+    "Gear",
+    "Tools",
+    "Consumables",
+    "Clothing",
+    "Quest Items",
+    "Miscellaneous"
+  ];
+
+  return categoryOrder.flatMap((category) => {
+    const items = groupedItems[category] ?? [];
+    return items.length > 0 ? [`${category}: ${items.join(", ")}`] : [];
+  });
+}
+
+function currencyLinesForGear(gear: readonly string[]) {
+  const currencyItems = gear.filter(isCurrencyItem);
+  return currencyItems.length > 0 ? currencyItems : ["None"];
+}
+
 function equipmentGearFor(
   characterClass: CharacterClass,
   selections: EquipmentSelections,
@@ -2201,7 +2276,9 @@ export function NewAdventureForm() {
     return {
       armorClass: armorClassForEquipment(characterClass, gear, resolvedAbilityScores),
       attacks: [...spellAttacks, ...weaponAttacks],
-      gear
+      currency: currencyLinesForGear(gear),
+      gear: equipmentLinesForGear(gear),
+      inventory: inventoryLinesForGear(gear)
     };
   }, [
     characterBackground,
@@ -2305,6 +2382,12 @@ export function NewAdventureForm() {
       "",
       "Equipment",
       ...selectedEquipmentProfile.gear,
+      "",
+      "Inventory",
+      ...selectedEquipmentProfile.inventory,
+      "",
+      "Currency",
+      ...selectedEquipmentProfile.currency,
       "",
       "Spells",
       ...spells,
