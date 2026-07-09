@@ -2572,7 +2572,7 @@ export function NewAdventureForm() {
                                       checked={showDlcSpells}
                                       onChange={() => toggleDlcSpells(group.level)}
                                     />
-                                    <span>DLC Spells</span>
+                                    <span>Non PHB Spells</span>
                                   </label>
                                 ) : null}
                               </div>
