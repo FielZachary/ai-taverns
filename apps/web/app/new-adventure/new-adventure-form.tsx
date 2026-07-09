@@ -1718,7 +1718,10 @@ export function NewAdventureForm() {
                         <button
                           type="button"
                           className="stat-mode-button"
-                          disabled={Boolean(activeStatRoll)}
+                          disabled={
+                            Boolean(activeStatRoll) ||
+                            statGenerationMode === "point_buy"
+                          }
                           onClick={rollAllStats}
                         >
                           <Dice5 size={18} />
