@@ -2404,6 +2404,8 @@ function eldermereOpeningPlannerInstructions() {
     "Use the selected Eldermere region and settlement when provided. Do not choose a different primary region or starting settlement.",
     "Make the opener specific, playable, and mysterious. Let the narrator start with a human-scale scene, not a history lecture.",
     "The player-facing opening should use at most 3 Eldermere-specific setting proper nouns total, not counting ordinary NPC names. The chosen region and starting location count toward this limit.",
+    "When a selected region local name bank is provided, use it as inspiration for disposable place names and ordinary NPC names. Do not keep falling back to generic medieval default names.",
+    "NPC names must sound locally grounded and must not be names of gods, factions, offices, job titles, or roles unless the opening is explicitly about that office.",
     "Prefer plain descriptions over official names: use concrete meaning before setting terminology.",
     "Return exactly one valid JSON object and no Markdown.",
     "Use this exact JSON shape:",

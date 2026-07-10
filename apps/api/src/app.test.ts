@@ -1471,6 +1471,8 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
 
   assert.ok(plannerInput);
   assert.match(plannerInput.instructions, /campaign-opening planner/);
+  assert.match(plannerInput.instructions, /selected region local name bank/);
+  assert.match(plannerInput.instructions, /generic medieval default names/);
   assert.match(plannerInput.message, /Flagship world context:/);
   assert.match(plannerInput.message, /setting\.world_name as "Eldermere"/);
   assert.match(plannerInput.message, /Seven regions available for the opener:/);
@@ -1484,6 +1486,9 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(plannerInput.message, /Wellglass is finite/);
   assert.doesNotMatch(plannerInput.message, /Recurring live conflicts:/);
   assert.match(plannerInput.message, /Selected opener region and settlement:/);
+  assert.match(plannerInput.message, /Selected region local name bank:/);
+  assert.match(plannerInput.message, /Regional NPC given-name seeds:/);
+  assert.match(plannerInput.message, /Name bank rule:/);
   assert.match(plannerInput.message, /use this selected region and settlement/);
   assert.match(plannerInput.message, /Opening lore clarity rule:/);
   assert.match(

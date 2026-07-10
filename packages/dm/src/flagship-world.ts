@@ -51,6 +51,12 @@ export type EldermereRegion = {
   externalConflict: string;
   goodFor: string;
   settlements: EldermereSettlement[];
+  spareNames: {
+    settlements: string[];
+    waypoints: string[];
+    inns: string[];
+    npcGivenNames: string[];
+  };
 };
 
 export type EldermereCampaignStart = {
@@ -100,6 +106,44 @@ export const eldermereRegions: EldermereRegion[] = [
           "It is the likeliest flashpoint if the Ashfell border dispute goes hot, and everyone has a bag half-packed.",
       },
     ],
+    spareNames: {
+      settlements: [
+        "Hallowmere",
+        "Brackenreed",
+        "Oxfen",
+        "Millwater",
+        "Longacre",
+        "Applegarth",
+        "Fenwick Cross",
+        "Barrowfield",
+        "Cotter's Rest",
+        "Wheaton",
+        "Rushford",
+        "Damsgate",
+      ],
+      waypoints: ["Wardstone", "Roadwatch", "Ferrymoor", "Highstile"],
+      inns: [
+        "the Last Sheaf",
+        "the Guest-Bread",
+        "the Glowing Mile",
+        "the Harvest Bell",
+        "the Miller's Rest",
+      ],
+      npcGivenNames: [
+        "Elian",
+        "Roswin",
+        "Tamsin",
+        "Berrow",
+        "Nella",
+        "Osric",
+        "Maudren",
+        "Hessa",
+        "Corren",
+        "Ysabet",
+        "Lark",
+        "Tam",
+      ],
+    },
   },
   {
     name: "Thornwake Vale",
@@ -141,6 +185,41 @@ export const eldermereRegions: EldermereRegion[] = [
           "Ferrant Concord prospectors who have gone in have not all come back out.",
       },
     ],
+    spareNames: {
+      settlements: [
+        "Mossbrook",
+        "Fernwatch",
+        "Grayleaf",
+        "Willowmere",
+        "Nettlehollow",
+        "Duskroot",
+        "Foxglove Hollow",
+        "Bramblewick",
+        "Owlreach",
+        "Thistlemoss",
+      ],
+      waypoints: ["the Green Stair", "Elderwatch", "Rootcross"],
+      inns: [
+        "the Sap-Lantern",
+        "the Hollow Bough",
+        "the Twilight Root",
+        "the Wickerlight",
+      ],
+      npcGivenNames: [
+        "Sable",
+        "Iven",
+        "Miren",
+        "Tallow",
+        "Rowan",
+        "Elow",
+        "Neris",
+        "Bryn",
+        "Hazel",
+        "Keth",
+        "Rill",
+        "Sorrel",
+      ],
+    },
   },
   {
     name: "The Ferrant Concord",
@@ -181,6 +260,41 @@ export const eldermereRegions: EldermereRegion[] = [
         friction: "Crews go in more often than they come back out whole.",
       },
     ],
+    spareNames: {
+      settlements: [
+        "Slagmere",
+        "Rustwatch",
+        "Coalgate",
+        "Ashenford",
+        "Deepvein",
+        "Forgehollow",
+        "Cinderrow",
+        "Graniteholm",
+        "Emberdelve",
+        "Hollowforge",
+      ],
+      waypoints: ["the Under-Ledge", "Bellowswatch", "Shalegate"],
+      inns: [
+        "the Guttering Lamp",
+        "the Hammer & Coin",
+        "the Ashen Tap",
+        "the Bellows-Rest",
+      ],
+      npcGivenNames: [
+        "Brannik",
+        "Dagna",
+        "Tovin",
+        "Harl",
+        "Kessa",
+        "Malden",
+        "Orra",
+        "Rusk",
+        "Sella",
+        "Vond",
+        "Yarik",
+        "Zora",
+      ],
+    },
   },
   {
     name: "The Salt Concordat",
@@ -221,6 +335,41 @@ export const eldermereRegions: EldermereRegion[] = [
           "Drowned Choir raiders know these reefs as well as the locals, and the raids are worsening.",
       },
     ],
+    spareNames: {
+      settlements: [
+        "Tidewrack",
+        "Grayhaven",
+        "Saltmarsh",
+        "Herring Cross",
+        "Farrow Cove",
+        "Gullswatch",
+        "Netting Row",
+        "Barnacle Reach",
+        "Shellstrand",
+        "Brinehollow",
+      ],
+      waypoints: ["the Lighthouse Shoal", "Driftwood Landing", "Sparrow Reef"],
+      inns: [
+        "the Drowned Bell",
+        "the Salt Anchor",
+        "the Tideglass",
+        "the Herring Lamp",
+      ],
+      npcGivenNames: [
+        "Corda",
+        "Sel",
+        "Jory",
+        "Nessa",
+        "Perrin",
+        "Rook",
+        "Talla",
+        "Venn",
+        "Maris",
+        "Oren",
+        "Sive",
+        "Tide",
+      ],
+    },
   },
   {
     name: "Ashfell Marches",
@@ -263,6 +412,41 @@ export const eldermereRegions: EldermereRegion[] = [
           "Some shamans now wonder whether they are reading the bones, or the bones are reading them.",
       },
     ],
+    spareNames: {
+      settlements: [
+        "Windgather",
+        "Duskrun",
+        "Emberfield",
+        "Stonemane",
+        "Farrider's Camp",
+        "Longgrass Hollow",
+        "Wolfmark",
+        "Cinderwind",
+        "Ashenrun",
+        "Graymane Camp",
+      ],
+      waypoints: ["the Ring-Stone", "Herder's Rest", "Farwatch"],
+      inns: [
+        "the Broken Ring",
+        "the Windward Hearth",
+        "the Long Ride",
+        "the Herder's Fire",
+      ],
+      npcGivenNames: [
+        "Arven",
+        "Bera",
+        "Cairn",
+        "Daska",
+        "Eron",
+        "Fenn",
+        "Gara",
+        "Holl",
+        "Korr",
+        "Navi",
+        "Sarn",
+        "Vessa",
+      ],
+    },
   },
   {
     name: "The Veiled Reach",
@@ -304,6 +488,34 @@ export const eldermereRegions: EldermereRegion[] = [
           "The guards do not seem to feel they owe outsiders a reason for refusal.",
       },
     ],
+    spareNames: {
+      settlements: [
+        "Ashcairn",
+        "Stillwater",
+        "Graywell",
+        "Thinreed",
+        "Cairnholt",
+        "Faststead",
+        "Hollowscar",
+        "Grayfast",
+      ],
+      waypoints: ["the Watcher's Step", "Coldmere Rise"],
+      inns: ["the Fasting House", "the Quiet Ledger", "the Bare Table"],
+      npcGivenNames: [
+        "Aster",
+        "Calven",
+        "Doria",
+        "Edrin",
+        "Fara",
+        "Galen",
+        "Istra",
+        "Josen",
+        "Kelm",
+        "Lysa",
+        "Morn",
+        "Vey",
+      ],
+    },
   },
   {
     name: "The Sundered Vale",
@@ -346,8 +558,47 @@ export const eldermereRegions: EldermereRegion[] = [
           "Whoever holds Vail Choir holds the Vale's biggest bargaining chip, and no company keeps it for long.",
       },
     ],
+    spareNames: {
+      settlements: [
+        "Splitrock",
+        "Deadman's Cut",
+        "Ashclaim",
+        "Rustgulch",
+        "Widow's Stake",
+        "Backclaim",
+        "Ninefold Cut",
+        "Glasspan",
+        "Cinderclaim",
+        "Hollowstake",
+      ],
+      waypoints: ["the Warden's Line", "Bleedwatch", "Shatterline"],
+      inns: [
+        "the Last Ledger",
+        "the Cracked Lantern",
+        "the Salvage Room",
+        "the Loop-and-Lantern",
+      ],
+      npcGivenNames: [
+        "Bex",
+        "Cassor",
+        "Dain",
+        "Etta",
+        "Flint",
+        "Gris",
+        "Hale",
+        "Jessa",
+        "Korrin",
+        "Lio",
+        "Nix",
+        "Pella",
+      ],
+    },
   },
 ];
+
+function formatNameList(label: string, names: readonly string[]) {
+  return `${label}: ${names.join(", ")}.`;
+}
 
 export function isEldermerePreset(presetId: string | null | undefined) {
   return presetId === eldermerePresetId;
@@ -407,6 +658,21 @@ export function formatEldermereOpeningPromptContext(
         `What draws people: ${start.settlement.draw}`,
         `What a visitor remembers: ${start.settlement.rememberedDetail}`,
         `Settlement friction: ${start.settlement.friction}`,
+        "Selected region local name bank:",
+        formatNameList(
+          "Spare settlements, hamlets, camps, or districts",
+          start.region.spareNames.settlements,
+        ),
+        formatNameList(
+          "Spare waypoints, forts, passes, or landmarks",
+          start.region.spareNames.waypoints,
+        ),
+        formatNameList("Spare inns or taverns", start.region.spareNames.inns),
+        formatNameList(
+          "Regional NPC given-name seeds",
+          start.region.spareNames.npcGivenNames,
+        ),
+        "Name bank rule: use these local names as inspiration for disposable places and ordinary NPCs. Within one campaign, avoid reusing a local name once it has appeared.",
         "Opening region rule: use this selected region and settlement as the concrete start. Do not choose a different primary region or starting settlement. Mention other regions only if directly relevant as trade partners, rivals, rumors, or distant pressure.",
       ]
     : [
