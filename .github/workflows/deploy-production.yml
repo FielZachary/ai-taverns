@@ -98,7 +98,6 @@ jobs:
           cp -a "$release"/. "$DEPLOY_PATH"/
 
           cd "$DEPLOY_PATH"
-          docker network create ai_taverns_public >/dev/null 2>&1 || true
           $compose up -d --build --remove-orphans
           ready=0
           for attempt in $(seq 1 60); do

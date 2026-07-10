@@ -34,11 +34,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    networks:
-      default:
-      public_proxy:
-        aliases:
-          - staging-api
     command: ["sh", "-c", "npm run db:migrate && npm run start -w @ai-dnd/api"]
     healthcheck:
       test:
@@ -68,11 +63,6 @@ services:
     depends_on:
       api:
         condition: service_healthy
-    networks:
-      default:
-      public_proxy:
-        aliases:
-          - staging-web
     healthcheck:
       test:
         [
@@ -87,6 +77,34 @@ services:
         limits:
           cpus: "1.0"
           memory: 768m
+
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    env_file:
+      - ./staging.env
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    healthcheck:
+      test: ["CMD-SHELL", "caddy validate --config /etc/caddy/Caddyfile"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256m
 
   backup:
     image: postgres:16-alpine
@@ -122,8 +140,5 @@ services:
 
 volumes:
   postgres_data:
-
-networks:
-  public_proxy:
-    name: ai_taverns_public
-    external: true
+  caddy_data:
+  caddy_config:

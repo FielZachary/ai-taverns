@@ -81,7 +81,7 @@ jobs:
 
           archive="/tmp/ai-taverns-${SHA}.tar.gz"
           release="/tmp/ai-taverns-staging-release-${SHA}"
-          compose="docker compose -p ai_taverns_staging --env-file infra/staging.env -f infra/docker-compose.staging.yml"
+          compose="docker compose --env-file infra/staging.env -f infra/docker-compose.staging.yml"
 
           rm -rf "$release"
           mkdir -p "$release"
@@ -98,12 +98,11 @@ jobs:
           cp -a "$release"/. "$DEPLOY_PATH"/
 
           cd "$DEPLOY_PATH"
-          docker network create ai_taverns_public >/dev/null 2>&1 || true
           $compose up -d --build --remove-orphans
           ready=0
           for attempt in $(seq 1 60); do
             ready=1
-            for service in postgres api web; do
+            for service in postgres api web proxy; do
               container_id="$($compose ps -q "$service")"
               if [ -z "$container_id" ]; then
                 ready=0
