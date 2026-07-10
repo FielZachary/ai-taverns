@@ -8,6 +8,7 @@
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
     "build": "tsc -p tsconfig.build.json",
+    "coverage": "npm run build -w @ai-dnd/domain && npm run build -w @ai-dnd/contracts && npm run build -w @ai-dnd/dm && npm run build -w @ai-dnd/db && c8 --all --src src --include \"src/**/*.ts\" --exclude \"src/**/*.test.ts\" --reporter=text --reporter=lcov --reporter=json-summary tsx --test src/**/*.test.ts",
     "test": "npm run build -w @ai-dnd/domain && npm run build -w @ai-dnd/contracts && npm run build -w @ai-dnd/dm && npm run build -w @ai-dnd/db && tsx --test src/**/*.test.ts",
     "typecheck": "tsc --noEmit"
   },

@@ -4,6 +4,7 @@ node_modules/
 .next/
 out/
 dist/
+coverage/
 .vercel/
 .env
 .env*.local
