@@ -1,6 +1,6 @@
 # Droplet Staging
 
-Milestone 6 staging runs the web app, Fastify API, Postgres, Caddy reverse proxy, and automated database backups on a DigitalOcean droplet.
+Milestone 6 staging runs the web app, Fastify API, Postgres, and automated database backups on a DigitalOcean droplet. On the shared production droplet, production Caddy owns public ports 80/443 and routes `STAGING_DOMAIN` to the staging web/API containers through the shared `ai_taverns_public` Docker network.
 
 ## First Setup
 
@@ -14,7 +14,7 @@ Milestone 6 staging runs the web app, Fastify API, Postgres, Caddy reverse proxy
 docker compose --env-file infra/staging.env -f infra/docker-compose.staging.yml up -d --build
 ```
 
-Caddy handles TLS automatically for `STAGING_DOMAIN`. The proxy routes `/api/*` and `/health` to `apps/api`, and all other traffic to `apps/web`.
+Production Caddy handles TLS automatically for `STAGING_DOMAIN`. The proxy routes `/api/*` and `/health` to the staging API, and all other traffic to the staging web app.
 
 ## One-Time SSH Access
 
@@ -47,7 +47,7 @@ scripts/check-staging-health.sh https://your-staging-domain.example
 docker compose --env-file infra/staging.env -f infra/docker-compose.staging.yml ps
 ```
 
-The `api`, `web`, `postgres`, and `proxy` services should report healthy. The API container runs database migrations before starting.
+The `api`, `web`, and `postgres` services should report healthy. The API container runs database migrations before starting.
 
 ## GitHub Actions Deploy
 

@@ -95,6 +95,9 @@ services:
       - ./proxy/Caddyfile.production:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+    networks:
+      - default
+      - public_proxy
     healthcheck:
       test: ["CMD-SHELL", "caddy validate --config /etc/caddy/Caddyfile"]
       interval: 15s
@@ -142,3 +145,8 @@ volumes:
   postgres_data:
   caddy_data:
   caddy_config:
+
+networks:
+  public_proxy:
+    name: ai_taverns_public
+    external: true
