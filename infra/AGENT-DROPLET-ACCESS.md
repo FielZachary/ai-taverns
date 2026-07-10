@@ -66,7 +66,7 @@ Prefer single-command access when possible because it limits the maintenance win
 Staging status example:
 
 ```bash
-npm run droplet:one-time-access -- docker compose --env-file /opt/ai-taverns/infra/staging.env -f /opt/ai-taverns/infra/docker-compose.staging.yml ps
+npm run droplet:one-time-access -- docker compose -p ai_taverns_staging --env-file /home/hermes/ai-taverns-staging/infra/staging.env -f /home/hermes/ai-taverns-staging/infra/docker-compose.staging.yml ps
 ```
 
 Production status example:
