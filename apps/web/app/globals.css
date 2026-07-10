@@ -3215,6 +3215,18 @@ h1 {
   opacity: 0.5;
 }
 
+.turn-form-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.turn-form .turn-form-skip {
+  min-height: 32px;
+  color: var(--gold-bright);
+  background: rgba(217, 169, 74, 0.08);
+}
+
 .turn-form .dice-picker-clear {
   color: var(--gold-bright);
   background: rgba(217, 169, 74, 0.08);
@@ -3879,7 +3891,7 @@ h1 {
     grid-column: span 1;
   }
 
-  .turn-form button[type="submit"] {
+  .turn-form-actions {
     grid-column: 1 / -1;
   }
 }

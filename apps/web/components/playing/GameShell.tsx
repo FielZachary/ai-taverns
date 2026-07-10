@@ -1514,10 +1514,20 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     }
   }
 
-  async function sendTurn(messageText: string) {
-    const content = messageText.trim();
+  async function sendTurn(
+    messageText: string,
+    options: { skipTurn?: boolean } = {}
+  ) {
+    const skipTurn = Boolean(options.skipTurn);
+    const currentPlayerName =
+      currentRoomPlayer?.username || playerProfile.username || undefined;
+    const currentCharacterName =
+      currentRoomPlayer?.characterName || playerProfile.characterName || undefined;
+    const content = skipTurn
+      ? `${currentCharacterName || "Player"} skips their turn.`
+      : messageText.trim();
 
-    if (!content || isSending || !activeCampaign) {
+    if (!content || isSending || !activeCampaign || (skipTurn && isSinglePlayer)) {
       return;
     }
 
@@ -1560,6 +1570,8 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     const playerMessage: GameMessage = {
       id: createClientId(),
       role: "player",
+      playerName: currentPlayerName,
+      characterName: currentCharacterName,
       content,
       createdAt: new Date().toISOString()
     };
@@ -1607,6 +1619,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
                   sessionId: activeCampaign.hermesSessionId,
                   playerId,
                   message: content,
+                  skipTurn,
                   clientMessageId: playerMessage.id
                 }
           )
@@ -1739,6 +1752,9 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
       id: createClientId(),
       role: "player",
       kind: "ask_dm_question",
+      playerName: currentRoomPlayer?.username || playerProfile.username || undefined,
+      characterName:
+        currentRoomPlayer?.characterName || playerProfile.characterName || undefined,
       content: question,
       createdAt: new Date().toISOString()
     };
@@ -1812,6 +1828,10 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     }
 
     void sendTurn(draft);
+  }
+
+  function handleSkipTurn() {
+    void sendTurn("", { skipTurn: true });
   }
 
   async function completePendingRollBatch(
@@ -1936,6 +1956,9 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     const rollMessage: GameMessage = {
       id: clientMessageId,
       role: "player",
+      playerName: currentRoomPlayer?.username || playerProfile.username || undefined,
+      characterName:
+        currentRoomPlayer?.characterName || playerProfile.characterName || undefined,
       content: batchResult.content,
       createdAt: new Date().toISOString()
     };
@@ -2139,6 +2162,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
               onDraftChange={setDraft}
               onModeChange={setInputMode}
               onRollDice={handleRollDice}
+              onSkipTurn={!isSinglePlayer ? handleSkipTurn : undefined}
               onSubmit={handleSubmit}
             />
           </div>

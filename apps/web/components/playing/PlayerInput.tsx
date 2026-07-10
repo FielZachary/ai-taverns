@@ -6,7 +6,7 @@ import {
   useRef,
   useState
 } from "react";
-import { Dice5, MessageCircleQuestion, Send, Swords } from "lucide-react";
+import { Dice5, MessageCircleQuestion, Send, SkipForward, Swords } from "lucide-react";
 import type { DiceRollRequest } from "@/lib/game-types";
 
 export type DiceFace = "d4" | "d6" | "d8" | "d10" | "d12" | "d20";
@@ -27,6 +27,7 @@ type PlayerInputProps = {
   onDraftChange: (value: string) => void;
   onModeChange: (mode: PlayerInputMode) => void;
   onRollDice: (queuedDice: QueuedDice) => void;
+  onSkipTurn?: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 };
 
@@ -52,6 +53,7 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
       onDraftChange,
       onModeChange,
       onRollDice,
+      onSkipTurn,
       onSubmit
     },
     ref
@@ -106,6 +108,8 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
         : "";
     const isLocked = !isAskMode && (Boolean(lockMessage) || isSubmitted);
     const isRollRequired = !isAskMode && Boolean(requiredRoll);
+    const canSkipTurn =
+      !isAskMode && Boolean(onSkipTurn) && !isLocked && !isRollRequired && !isSending;
     const queuedCount = useMemo(() => queuedDiceTotal(queuedDice), [queuedDice]);
 
     useEffect(() => {
@@ -251,13 +255,26 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
             </div>
           ) : null}
         </div>
-        <button
-          type="submit"
-          disabled={isRollRequired || isLocked || isSending || !draft.trim()}
-        >
-          {isAskMode ? <MessageCircleQuestion size={18} /> : <Send size={18} />}
-          {isAskMode ? "Ask" : "Send"}
-        </button>
+        <div className="turn-form-actions">
+          {onSkipTurn ? (
+            <button
+              className="turn-form-skip"
+              type="button"
+              disabled={!canSkipTurn}
+              onClick={onSkipTurn}
+            >
+              <SkipForward size={18} />
+              Skip
+            </button>
+          ) : null}
+          <button
+            type="submit"
+            disabled={isRollRequired || isLocked || isSending || !draft.trim()}
+          >
+            {isAskMode ? <MessageCircleQuestion size={18} /> : <Send size={18} />}
+            {isAskMode ? "Ask" : "Send"}
+          </button>
+        </div>
       </form>
     );
   }

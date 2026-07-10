@@ -143,13 +143,17 @@ export async function registerRoomRoutes(
     const identity = roomIdentity(body.roomId, body.sessionId);
     const playerId = body.playerId?.trim();
     const message = body.message?.trim();
+    const skipTurn = Boolean(body.skipTurn);
     const user = await requireAuthenticatedUser(
       fastify,
       config,
       request.cookies[config.authCookieName]
     );
 
-    if (!playerId || (!message && !body.rollRequestId && !body.rollSubmissions?.length)) {
+    if (
+      !playerId ||
+      (!message && !skipTurn && !body.rollRequestId && !body.rollSubmissions?.length)
+    ) {
       throw createHttpError(400, "A player and message are required.");
     }
 
@@ -163,6 +167,7 @@ export async function registerRoomRoutes(
         message: message ?? "",
         userId: user.id,
         runtime,
+        skipTurn,
         ...(rollRequestId ? { rollRequestId } : {}),
         ...(body.rollResult ? { rollResult: body.rollResult } : {}),
         ...(clientMessageId ? { clientMessageId } : {}),

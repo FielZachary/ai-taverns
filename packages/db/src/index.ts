@@ -2190,6 +2190,12 @@ async function buildRoomSnapshot(
         kind: roomEventMessageKind(event.type),
         content,
         createdAt: toIso(event.created_at),
+        ...(typeof payload.username === "string"
+          ? { playerName: payload.username }
+          : {}),
+        ...(typeof payload.characterName === "string"
+          ? { characterName: payload.characterName }
+          : {}),
         ...(debug ? { debug } : {})
       };
     })
@@ -3199,7 +3205,13 @@ async function getCampaignEventMessages(
               ? "ask_dm_answer"
               : "turn",
         content,
-        createdAt: toIso(event.created_at)
+        createdAt: toIso(event.created_at),
+        ...(typeof payload.username === "string"
+          ? { playerName: payload.username }
+          : {}),
+        ...(typeof payload.characterName === "string"
+          ? { characterName: payload.characterName }
+          : {})
       };
     })
     .filter((message): message is GameMessage => message !== null);
@@ -3952,6 +3964,7 @@ export async function submitRoomTurnForUser(
     message: string;
     userId: string;
     runtime: DungeonMasterRuntime;
+    skipTurn?: boolean;
     rollRequestId?: string;
     rollResult?: DiceRollResult;
     clientMessageId?: string;
@@ -4021,6 +4034,8 @@ export async function submitRoomTurnForUser(
     const turn = await ensureCollectingTurn(client, campaignRow.id);
     const trimmedContent = isRollSubmission
       ? rollSubmission.content
+      : input.skipTurn
+        ? `${player.character_name} skips their turn.`
       : input.message.trim();
 
     if (!trimmedContent) {
@@ -4060,7 +4075,10 @@ export async function submitRoomTurnForUser(
         rollSubmission.clientMessageId ||
         input.clientMessageId ||
         randomUUID(),
-      content: `${player.username} (${player.character_name}): ${trimmedContent}`
+      username: player.username,
+      characterName: player.character_name,
+      skipped: Boolean(input.skipTurn),
+      content: trimmedContent
     });
 
     if (isRollSubmission && rollSubmission.remainingRollRequests.length > 0) {
@@ -4285,6 +4303,8 @@ export async function askDungeonMasterQuestionForUser(
       role: "player",
       playerId: player.id,
       clientId: player.client_id,
+      username: player.username,
+      characterName: player.character_name,
       content: trimmedQuestion
     });
     await logCampaignEvent(client, campaign.id, "dm_answer", {
@@ -4410,6 +4430,8 @@ export async function submitSoloTurnForUser(
       clientId: player.client_id,
       role: "player",
       messageId: rollSubmission.clientMessageId || input.clientMessageId || randomUUID(),
+      username: player.username,
+      characterName: player.character_name,
       content: trimmedContent
     });
 

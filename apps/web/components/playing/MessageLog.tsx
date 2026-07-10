@@ -96,8 +96,10 @@ function MessageDebugModal({
 }
 
 function messageLabel(message: GameMessage) {
+  const playerLabel = message.characterName?.trim() || message.playerName?.trim();
+
   if (message.kind === "ask_dm_question") {
-    return "Question to DM";
+    return playerLabel ? `${playerLabel} asks the DM` : "Question to DM";
   }
 
   if (message.kind === "ask_dm_answer") {
@@ -105,7 +107,7 @@ function messageLabel(message: GameMessage) {
   }
 
   return message.role === "player"
-    ? "You"
+    ? playerLabel || "Player"
     : message.role === "dm"
       ? "Dungeon Master"
       : "Table";
