@@ -6,9 +6,6 @@ on:
       - development
       - production
   push:
-    branches-ignore:
-      - development
-      - production
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
