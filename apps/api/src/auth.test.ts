@@ -274,6 +274,16 @@ test("sign out revokes the owned session", async () => {
   assert.equal(protectedResponse.statusCode, 401);
 });
 
+test("sign out succeeds without a session cookie", async () => {
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/auth/sign-out"
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.headers["set-cookie"]?.toString().includes("test_session="), true);
+});
+
 test("expired session cookies no longer authenticate protected endpoints", async () => {
   const cookie = await signIn("expired-session@example.com");
   const sessionRecord = database.sessions.at(-1);
