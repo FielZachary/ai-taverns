@@ -59,6 +59,9 @@ jobs:
             packages/*/coverage/
           if-no-files-found: error
 
+      - name: Check coverage thresholds
+        run: npm run coverage:check -- --enforce
+
       - name: Build API
         run: npm run build:api
 
