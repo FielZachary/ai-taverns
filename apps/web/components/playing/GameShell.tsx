@@ -9,9 +9,6 @@ import {
   useState
 } from "react";
 import {
-  Dice5,
-  Flame,
-  LogOut,
   Play,
   Send,
   X
@@ -643,7 +640,7 @@ async function fetchWithTimeout(
   }
 }
 
-export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
+export function GameShell({ initialCampaignId }: GameShellProps) {
   const [messages, setMessages] = useState<GameMessage[]>(openingMessages);
   const [availableCampaigns, setAvailableCampaigns] = useState<CampaignSummary[]>([]);
   const [draft, setDraft] = useState("");
@@ -2008,13 +2005,6 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     });
   }
 
-  async function handleSignOut() {
-    await fetch("/auth/sign-out", {
-      method: "POST"
-    });
-    window.location.assign("/login");
-  }
-
   if (!activeCampaign && isLoadingCampaigns) {
     return (
       <main className="table-page">
@@ -2038,32 +2028,6 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
       <div className="ambient ambient-two" />
 
       <section className="play-table" aria-label="AI Dungeons and Dragons table">
-        <header className="table-header">
-          <div className="brand-mark" aria-hidden="true">
-            <Dice5 size={30} />
-          </div>
-          <div>
-            <p className="eyebrow">
-              {isSinglePlayer ? "Solo Adventure" : "Party Table"}
-            </p>
-            <h1>{activeCampaign?.title ?? "New Adventure"}</h1>
-          </div>
-          <div className="status-pill">
-            <Flame size={16} />
-            {isSinglePlayer ? "Singleplayer" : "Multiplayer"}
-          </div>
-          <div className="account-pill">
-            <span>{userEmail ?? "Signed in"}</span>
-            <button
-              type="button"
-              aria-label="Sign out"
-              onClick={() => void handleSignOut()}
-            >
-              <LogOut size={16} />
-            </button>
-          </div>
-        </header>
-
         <div className="table-grid session-panel-collapsed">
           <ChatHistorySidebar
             chats={availableCampaigns}

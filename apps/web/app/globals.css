@@ -365,27 +365,12 @@ button {
   backdrop-filter: blur(20px);
 }
 
-.table-header {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 18px 22px;
-  border-bottom: 1px solid var(--line);
-}
-
-.brand-mark,
 .message-icon {
   display: grid;
   place-items: center;
   border: 1px solid var(--line);
   background: rgba(217, 169, 74, 0.1);
   color: var(--gold-bright);
-}
-
-.brand-mark {
-  width: 54px;
-  height: 54px;
-  border-radius: 8px;
 }
 
 .eyebrow {
@@ -409,60 +394,6 @@ h1 {
   margin-bottom: 0;
   font-size: clamp(1.7rem, 3vw, 2.8rem);
   line-height: 1;
-}
-
-.status-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 36px;
-  margin-left: auto;
-  padding: 0 14px;
-  border: 1px solid rgba(244, 207, 122, 0.32);
-  border-radius: 999px;
-  color: var(--gold-bright);
-  background: rgba(17, 13, 10, 0.48);
-  font-family: ui-sans-serif, system-ui, sans-serif;
-  font-size: 0.84rem;
-  font-weight: 700;
-}
-
-.account-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  min-height: 36px;
-  padding: 0 8px 0 13px;
-  border: 1px solid rgba(244, 207, 122, 0.24);
-  border-radius: 999px;
-  color: var(--muted);
-  background: rgba(17, 13, 10, 0.42);
-  font-family: ui-sans-serif, system-ui, sans-serif;
-  font-size: 0.78rem;
-  font-weight: 700;
-}
-
-.account-pill span {
-  max-width: 18ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.account-pill button {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border: 0;
-  border-radius: 999px;
-  color: var(--gold-bright);
-  background: rgba(244, 207, 122, 0.08);
-}
-
-.account-pill button:hover {
-  background: rgba(173, 71, 43, 0.24);
 }
 
 .auth-page {
@@ -3761,19 +3692,6 @@ h1 {
 
   .character-creation-steps {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .table-header {
-    padding: 14px;
-  }
-
-  .brand-mark {
-    width: 44px;
-    height: 44px;
-  }
-
-  .status-pill {
-    display: none;
   }
 
   .character-sheet-overlay {
