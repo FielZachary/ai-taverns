@@ -56,7 +56,10 @@ import {
   buildTurnSubmissionRequest
 } from "./game-shell-requests";
 import {
+  appendStreamingDmDelta,
   mergeVisibleGameMessages,
+  removeStreamingDmMessage,
+  startStreamingDmMessage,
   type StreamingDmMessage
 } from "./game-shell-messages";
 
@@ -1046,51 +1049,27 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
           realtimeEvent.roomId === activeCampaign.id
         ) {
           setIsRoomResolving(true);
-          setStreamingDmMessages((currentMessages) => [
-            ...currentMessages.filter(
-              (message) => message.turnId !== realtimeEvent.turnId
-            ),
-            {
-              id: `dm-stream-${realtimeEvent.turnId}`,
-              turnId: realtimeEvent.turnId,
-              role: "dm",
-              content: "",
-              createdAt: new Date().toISOString()
-            }
-          ]);
+          setStreamingDmMessages((currentMessages) =>
+            startStreamingDmMessage(
+              currentMessages,
+              realtimeEvent.turnId,
+              new Date().toISOString()
+            )
+          );
         }
 
         if (
           realtimeEvent.type === "dm_stream_delta" &&
           realtimeEvent.roomId === activeCampaign.id
         ) {
-          setStreamingDmMessages((currentMessages) => {
-            const existingMessage = currentMessages.find(
-              (message) => message.turnId === realtimeEvent.turnId
-            );
-
-            if (!existingMessage) {
-              return [
-                ...currentMessages,
-                {
-                  id: `dm-stream-${realtimeEvent.turnId}`,
-                  turnId: realtimeEvent.turnId,
-                  role: "dm",
-                  content: realtimeEvent.text,
-                  createdAt: new Date().toISOString()
-                }
-              ];
-            }
-
-            return currentMessages.map((message) =>
-              message.turnId === realtimeEvent.turnId
-                ? {
-                    ...message,
-                    content: `${message.content}${realtimeEvent.text}`
-                  }
-                : message
-            );
-          });
+          setStreamingDmMessages((currentMessages) =>
+            appendStreamingDmDelta(
+              currentMessages,
+              realtimeEvent.turnId,
+              realtimeEvent.text,
+              new Date().toISOString()
+            )
+          );
         }
 
         if (
@@ -1098,9 +1077,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
           realtimeEvent.roomId === activeCampaign.id
         ) {
           setStreamingDmMessages((currentMessages) =>
-            currentMessages.filter(
-              (message) => message.turnId !== realtimeEvent.turnId
-            )
+            removeStreamingDmMessage(currentMessages, realtimeEvent.turnId)
           );
           void refreshRoom();
         }
@@ -1110,9 +1087,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
           realtimeEvent.roomId === activeCampaign.id
         ) {
           setStreamingDmMessages((currentMessages) =>
-            currentMessages.filter(
-              (message) => message.turnId !== realtimeEvent.turnId
-            )
+            removeStreamingDmMessage(currentMessages, realtimeEvent.turnId)
           );
           setMessages((currentMessages) => [
             ...currentMessages,
