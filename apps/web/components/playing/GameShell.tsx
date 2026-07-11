@@ -31,7 +31,6 @@ import {
 import { CharacterSheetOverlay } from "./CharacterSheetOverlay";
 import { MessageLog, type ChatPlayerStatus } from "./MessageLog";
 import {
-  defaultCharacterSheet,
   emptyPlayerProfile,
   type PlayerProfile
 } from "./PlayerPanel";
@@ -42,13 +41,21 @@ import {
   type PlayerInputMode,
   type QueuedDice
 } from "./PlayerInput";
+import {
+  currentPlayerRollRequests,
+  getMissingPlayerProfileFields,
+  inputTargetsCurrentPlayer,
+  rollRequestsFromRoom,
+  snapshotHasResponseAfterMessage,
+  type PendingSubmission,
+  type RoomPlayer,
+  type RoomSnapshot
+} from "./game-shell-state";
 
 const openingMessages: GameMessage[] = [];
 const playerIdStorageKey = "ai-dnd.playerId";
 const roomRequestTimeoutMs = 8_000;
 const fallbackRoomPollMs = 25_000;
-
-type CampaignMode = "single_player" | "multiplayer";
 
 type CampaignSummary = ApiCampaignSummary & ChatSummary;
 
@@ -56,30 +63,6 @@ type ApiErrorResponse = {
   error?: string | {
     message?: string;
   };
-};
-
-type RoomPlayer = {
-  id: string;
-  slot: number;
-  username: string;
-  characterName: string;
-  characterSheet: string;
-  status: "waiting" | "submitted";
-};
-
-type RoomSnapshot = {
-  roomId: string;
-  mode: CampaignMode;
-  sessionId: string;
-  players: RoomPlayer[];
-  messages: GameMessage[];
-  isResolving: boolean;
-  hasBegun: boolean;
-  pendingRollRequest: DiceRollRequest | null;
-  pendingRollRequests?: DiceRollRequest[];
-  inputTargets?: string[];
-  inputPolicy?: InputPolicy;
-  updatedAt?: string;
 };
 
 type RoomRealtimeEvent =
@@ -116,148 +99,9 @@ type PendingRollBatch = {
   }[];
 };
 
-type PendingSubmission = {
-  messageId: string;
-  createdAt: string;
-};
-
 type StreamingDmMessage = GameMessage & {
   turnId: string;
 };
-
-function snapshotHasResponseAfterMessage(
-  room: RoomSnapshot,
-  pendingSubmission: PendingSubmission
-) {
-  const messageIndex = room.messages.findIndex(
-    (message) => message.id === pendingSubmission.messageId
-  );
-
-  if (messageIndex >= 0) {
-    return room.messages
-      .slice(messageIndex + 1)
-      .some((message) => message.role === "dm" || message.role === "system");
-  }
-
-  const pendingSubmittedAt = Date.parse(pendingSubmission.createdAt);
-
-  return room.messages.some((message) => {
-    if (message.role !== "dm" && message.role !== "system") {
-      return false;
-    }
-
-    return Date.parse(message.createdAt) >= pendingSubmittedAt;
-  });
-}
-
-function getMissingPlayerProfileFields(profile: PlayerProfile) {
-  const hasCharacterSheetContent =
-    profile.characterSheet.trim().length > 0 &&
-    profile.characterSheet.trim() !== defaultCharacterSheet.trim();
-
-  return [
-    profile.username.trim() ? null : "username",
-    profile.characterName.trim() ? null : "character name",
-    hasCharacterSheetContent ? null : "character sheet"
-  ].filter((field): field is string => field !== null);
-}
-
-function rollRequestsFromRoom(room: RoomSnapshot) {
-  return (
-    room.pendingRollRequests ??
-    (room.pendingRollRequest ? [room.pendingRollRequest] : [])
-  );
-}
-
-function normalizePlayerTarget(value: string | undefined) {
-  return value
-    ?.trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function rollRequestTargetsCurrentPlayer(
-  request: DiceRollRequest,
-  profile: PlayerProfile,
-  roomPlayer?: RoomPlayer
-) {
-  const target = normalizePlayerTarget(request.player);
-
-  if (!target) {
-    return true;
-  }
-
-  const playerNames = [
-    profile.username,
-    profile.characterName,
-    roomPlayer?.username,
-    roomPlayer?.characterName
-  ]
-    .map(normalizePlayerTarget)
-    .filter((name): name is string => Boolean(name));
-
-  return playerNames.some(
-    (name) =>
-      target === name ||
-      target.includes(name) ||
-      name.includes(target)
-  );
-}
-
-function inputTargetsCurrentPlayer(
-  inputTargets: string[],
-  profile: PlayerProfile,
-  roomPlayer?: RoomPlayer
-) {
-  if (inputTargets.length === 0) {
-    return true;
-  }
-
-  return inputTargets.some((target) =>
-    rollRequestTargetsCurrentPlayer(
-      {
-        id: "input-target",
-        dice: "1d20",
-        label: "Input target",
-        player: target
-      },
-      profile,
-      roomPlayer
-    )
-  );
-}
-
-function currentPlayerRollRequests(
-  pendingRequests: DiceRollRequest[],
-  profile: PlayerProfile,
-  roomPlayer: RoomPlayer | undefined,
-  isSinglePlayer: boolean
-) {
-  if (isSinglePlayer) {
-    return pendingRequests;
-  }
-
-  if (
-    pendingRequests.length === 0 ||
-    !rollRequestTargetsCurrentPlayer(pendingRequests[0], profile, roomPlayer)
-  ) {
-    return [];
-  }
-
-  const targetedRequests: DiceRollRequest[] = [];
-
-  for (const request of pendingRequests) {
-    if (!rollRequestTargetsCurrentPlayer(request, profile, roomPlayer)) {
-      break;
-    }
-
-    targetedRequests.push(request);
-  }
-
-  return targetedRequests;
-}
 
 function createClientId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
