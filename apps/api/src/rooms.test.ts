@@ -11,6 +11,55 @@ import {
 
 import { app, database, signIn } from "./test/app-test-harness.js";
 
+async function createMultiplayerRoom(label: string) {
+  const ownerCookie = await signIn(`${label}-owner@example.com`);
+  const joinerCookie = await signIn(`${label}-joiner@example.com`);
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: {
+      cookie: ownerCookie
+    },
+    payload: {
+      mode: "multiplayer",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "classic_fantasy",
+      ownerClientId: `${label}-owner-client`,
+      playerName: "Owner",
+      characterName: "Owner Character",
+      characterSheet: "A steady leader."
+    }
+  });
+  const created = CampaignCreateResponseSchema.parse(createResponse.json());
+
+  assert.ok(created.campaign.joinCode);
+
+  const joinResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns/join",
+    headers: {
+      cookie: joinerCookie
+    },
+    payload: {
+      gameCode: created.campaign.joinCode,
+      clientId: `${label}-joiner-client`,
+      username: "Joined Player",
+      characterName: "Joined Character",
+      characterSheet: "A brave scout."
+    }
+  });
+
+  assert.equal(joinResponse.statusCode, 200);
+
+  return {
+    ownerCookie,
+    joinerCookie,
+    campaignId: created.campaign.id,
+    ownerClientId: `${label}-owner-client`,
+    joinerClientId: `${label}-joiner-client`
+  };
+}
+
 test("room routes read, update player, begin, and submit through Fastify", async () => {
   const ownerCookie = await signIn("room-owner@example.com");
   const joinerCookie = await signIn("room-joiner@example.com");
@@ -157,6 +206,210 @@ test("room routes read, update player, begin, and submit through Fastify", async
   );
 });
 
+test("room read and player update reject missing or forbidden campaigns", async () => {
+  const { ownerCookie, campaignId, joinerClientId } =
+    await createMultiplayerRoom("room-forbidden");
+  const otherCookie = await signIn("room-forbidden-other@example.com");
+  const missingRoomId = "00000000-0000-4000-8000-000000000098";
+
+  const missingReadResponse = await app.inject({
+    method: "GET",
+    url: `/api/room?roomId=${missingRoomId}`,
+    headers: {
+      cookie: ownerCookie
+    }
+  });
+
+  assert.equal(missingReadResponse.statusCode, 404);
+  assert.equal(
+    ApiErrorResponseSchema.parse(missingReadResponse.json()).error.code,
+    "NOT_FOUND"
+  );
+
+  const forbiddenReadResponse = await app.inject({
+    method: "GET",
+    url: `/api/room?roomId=${campaignId}`,
+    headers: {
+      cookie: otherCookie
+    }
+  });
+
+  assert.equal(forbiddenReadResponse.statusCode, 403);
+  assert.equal(
+    ApiErrorResponseSchema.parse(forbiddenReadResponse.json()).error.code,
+    "FORBIDDEN"
+  );
+
+  const forbiddenUpdateResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/player",
+    headers: {
+      cookie: otherCookie
+    },
+    payload: {
+      roomId: campaignId,
+      playerId: joinerClientId,
+      username: "Other",
+      characterName: "Other Character",
+      characterSheet: "This user is not in the campaign."
+    }
+  });
+
+  assert.equal(forbiddenUpdateResponse.statusCode, 403);
+  assert.equal(
+    ApiErrorResponseSchema.parse(forbiddenUpdateResponse.json()).error.code,
+    "FORBIDDEN"
+  );
+});
+
+test("room begin rejects non-owners and rooms without enough complete players", async () => {
+  const { joinerCookie, campaignId } =
+    await createMultiplayerRoom("room-begin-forbidden");
+
+  const forbiddenBeginResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/begin",
+    headers: {
+      cookie: joinerCookie
+    },
+    payload: {
+      roomId: campaignId
+    }
+  });
+
+  assert.equal(forbiddenBeginResponse.statusCode, 403);
+  assert.equal(
+    ApiErrorResponseSchema.parse(forbiddenBeginResponse.json()).error.code,
+    "FORBIDDEN"
+  );
+
+  const ownerOnlyCookie = await signIn("room-begin-owner-only@example.com");
+  const ownerOnlyCreateResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: {
+      cookie: ownerOnlyCookie
+    },
+    payload: {
+      mode: "multiplayer",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "mystery",
+      ownerClientId: "room-begin-owner-only-client",
+      playerName: "Owner"
+    }
+  });
+  const ownerOnly = CampaignCreateResponseSchema.parse(
+    ownerOnlyCreateResponse.json()
+  );
+
+  const badStateBeginResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/begin",
+    headers: {
+      cookie: ownerOnlyCookie
+    },
+    payload: {
+      roomId: ownerOnly.campaign.id
+    }
+  });
+
+  assert.equal(badStateBeginResponse.statusCode, 400);
+  assert.equal(
+    ApiErrorResponseSchema.parse(badStateBeginResponse.json()).error.code,
+    "BAD_REQUEST"
+  );
+});
+
+test("room submit rejects unbegun rooms, wrong players, and untargeted players", async () => {
+  const {
+    ownerCookie,
+    joinerCookie,
+    campaignId,
+    ownerClientId,
+    joinerClientId
+  } = await createMultiplayerRoom("room-submit-negative");
+
+  const unbegunSubmitResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/submit",
+    headers: {
+      cookie: ownerCookie
+    },
+    payload: {
+      roomId: campaignId,
+      playerId: ownerClientId,
+      message: "I open the scene."
+    }
+  });
+
+  assert.equal(unbegunSubmitResponse.statusCode, 400);
+  assert.equal(
+    ApiErrorResponseSchema.parse(unbegunSubmitResponse.json()).error.code,
+    "BAD_REQUEST"
+  );
+
+  const beginResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/begin",
+    headers: {
+      cookie: ownerCookie
+    },
+    payload: {
+      roomId: campaignId
+    }
+  });
+
+  assert.equal(beginResponse.statusCode, 200);
+
+  const wrongPlayerResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/submit",
+    headers: {
+      cookie: ownerCookie
+    },
+    payload: {
+      roomId: campaignId,
+      playerId: joinerClientId,
+      message: "I try to act as someone else."
+    }
+  });
+
+  assert.equal(wrongPlayerResponse.statusCode, 400);
+  assert.equal(
+    ApiErrorResponseSchema.parse(wrongPlayerResponse.json()).error.code,
+    "BAD_REQUEST"
+  );
+
+  const campaign = database.campaigns.find(
+    (candidate) => candidate.id === campaignId
+  );
+  assert.ok(campaign);
+  campaign.metadata = {
+    ...(campaign.metadata as Record<string, unknown>),
+    inputTargets: ["Owner Character"],
+    inputPolicy: "only_targeted_players"
+  };
+
+  const untargetedPlayerResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/submit",
+    headers: {
+      cookie: joinerCookie
+    },
+    payload: {
+      roomId: campaignId,
+      playerId: joinerClientId,
+      message: "I speak out of turn."
+    }
+  });
+
+  assert.equal(untargetedPlayerResponse.statusCode, 403);
+  assert.equal(
+    ApiErrorResponseSchema.parse(untargetedPlayerResponse.json()).error.code,
+    "FORBIDDEN"
+  );
+});
+
 test("room routes require an owned session", async () => {
   const response = await app.inject({
     method: "GET",
@@ -169,4 +422,3 @@ test("room routes require an owned session", async () => {
     "UNAUTHORIZED"
   );
 });
-

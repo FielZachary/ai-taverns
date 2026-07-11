@@ -7,7 +7,12 @@ import {
   AuthProtectedResponseSchema
 } from "@ai-dnd/contracts";
 
-import { app, readCookie } from "./test/app-test-harness.js";
+import {
+  app,
+  database,
+  readCookie,
+  signIn
+} from "./test/app-test-harness.js";
 
 test("GET /api/auth/me returns unauthenticated without a session cookie", async () => {
   const response = await app.inject({
@@ -85,6 +90,67 @@ test("passwordless start rejects invalid email with the standard error envelope"
   assert.equal(
     ApiErrorResponseSchema.parse(response.json()).error.code,
     "BAD_REQUEST"
+  );
+});
+
+test("passwordless verify rejects short and malformed login tokens", async () => {
+  const shortTokenResponse = await app.inject({
+    method: "POST",
+    url: "/api/auth/passwordless/verify",
+    payload: {
+      token: "short"
+    }
+  });
+
+  assert.equal(shortTokenResponse.statusCode, 400);
+  assert.equal(
+    ApiErrorResponseSchema.parse(shortTokenResponse.json()).error.code,
+    "BAD_REQUEST"
+  );
+
+  const malformedTokenResponse = await app.inject({
+    method: "POST",
+    url: "/api/auth/passwordless/verify",
+    payload: {
+      token: "not-a-real-login-token-but-long-enough"
+    }
+  });
+
+  assert.equal(malformedTokenResponse.statusCode, 401);
+  assert.equal(
+    ApiErrorResponseSchema.parse(malformedTokenResponse.json()).error.code,
+    "UNAUTHORIZED"
+  );
+});
+
+test("passwordless verify rejects expired login tokens", async () => {
+  const startResponse = await app.inject({
+    method: "POST",
+    url: "/api/auth/passwordless/start",
+    payload: {
+      email: "expired-token@example.com"
+    }
+  });
+  const startBody = AuthPasswordlessStartResponseSchema.parse(
+    startResponse.json()
+  );
+  const tokenRecord = database.loginTokens.at(-1);
+
+  assert.ok(tokenRecord);
+  tokenRecord.expires_at = new Date(Date.now() - 60_000);
+
+  const verifyResponse = await app.inject({
+    method: "POST",
+    url: "/api/auth/passwordless/verify",
+    payload: {
+      token: startBody.loginToken
+    }
+  });
+
+  assert.equal(verifyResponse.statusCode, 401);
+  assert.equal(
+    ApiErrorResponseSchema.parse(verifyResponse.json()).error.code,
+    "UNAUTHORIZED"
   );
 });
 
@@ -208,3 +274,39 @@ test("sign out revokes the owned session", async () => {
   assert.equal(protectedResponse.statusCode, 401);
 });
 
+test("expired session cookies no longer authenticate protected endpoints", async () => {
+  const cookie = await signIn("expired-session@example.com");
+  const sessionRecord = database.sessions.at(-1);
+
+  assert.ok(sessionRecord);
+  sessionRecord.expires_at = new Date(Date.now() - 60_000);
+
+  const meResponse = await app.inject({
+    method: "GET",
+    url: "/api/auth/me",
+    headers: {
+      cookie
+    }
+  });
+
+  assert.equal(meResponse.statusCode, 200);
+  assert.deepEqual(AuthMeResponseSchema.parse(meResponse.json()), {
+    authenticated: false,
+    user: null,
+    session: null
+  });
+
+  const protectedResponse = await app.inject({
+    method: "GET",
+    url: "/api/auth/protected",
+    headers: {
+      cookie
+    }
+  });
+
+  assert.equal(protectedResponse.statusCode, 401);
+  assert.equal(
+    ApiErrorResponseSchema.parse(protectedResponse.json()).error.code,
+    "UNAUTHORIZED"
+  );
+});

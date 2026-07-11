@@ -262,6 +262,71 @@ test("campaign read forbids signed-in users without campaign access", async () =
   );
 });
 
+test("campaign read distinguishes invalid, missing, and inaccessible campaigns", async () => {
+  const ownerCookie = await signIn("missing-owner@example.com");
+  const otherCookie = await signIn("missing-other@example.com");
+  const missingCampaignId = "00000000-0000-4000-8000-000000000099";
+
+  const invalidIdResponse = await app.inject({
+    method: "GET",
+    url: "/api/campaigns/not-a-campaign-id",
+    headers: {
+      cookie: ownerCookie
+    }
+  });
+
+  assert.equal(invalidIdResponse.statusCode, 400);
+  assert.equal(
+    ApiErrorResponseSchema.parse(invalidIdResponse.json()).error.code,
+    "BAD_REQUEST"
+  );
+
+  const missingResponse = await app.inject({
+    method: "GET",
+    url: `/api/campaigns/${missingCampaignId}`,
+    headers: {
+      cookie: ownerCookie
+    }
+  });
+
+  assert.equal(missingResponse.statusCode, 404);
+  assert.equal(
+    ApiErrorResponseSchema.parse(missingResponse.json()).error.code,
+    "NOT_FOUND"
+  );
+
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: {
+      cookie: ownerCookie
+    },
+    payload: {
+      mode: "single_player",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "dark_fantasy",
+      ownerClientId: "missing-owner-client",
+      playerName: "Owner",
+      characterName: "Vey"
+    }
+  });
+  const created = CampaignCreateResponseSchema.parse(createResponse.json());
+
+  const forbiddenResponse = await app.inject({
+    method: "GET",
+    url: `/api/campaigns/${created.campaign.id}`,
+    headers: {
+      cookie: otherCookie
+    }
+  });
+
+  assert.equal(forbiddenResponse.statusCode, 403);
+  assert.equal(
+    ApiErrorResponseSchema.parse(forbiddenResponse.json()).error.code,
+    "FORBIDDEN"
+  );
+});
+
 test("campaign join preview and join use the Fastify campaign API", async () => {
   const ownerCookie = await signIn("join-owner@example.com");
   const joinerCookie = await signIn("joiner@example.com");
@@ -329,3 +394,97 @@ test("campaign join preview and join use the Fastify campaign API", async () => 
   );
 });
 
+test("campaign join rejects invalid and disabled game codes", async () => {
+  const ownerCookie = await signIn("disabled-code-owner@example.com");
+  const joinerCookie = await signIn("disabled-code-joiner@example.com");
+
+  const emptyPreviewResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns/join/preview",
+    headers: {
+      cookie: joinerCookie
+    },
+    payload: {
+      gameCode: ""
+    }
+  });
+
+  assert.equal(emptyPreviewResponse.statusCode, 400);
+  assert.equal(
+    ApiErrorResponseSchema.parse(emptyPreviewResponse.json()).error.code,
+    "BAD_REQUEST"
+  );
+
+  const invalidPreviewResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns/join/preview",
+    headers: {
+      cookie: joinerCookie
+    },
+    payload: {
+      gameCode: "NOPE99"
+    }
+  });
+
+  assert.equal(invalidPreviewResponse.statusCode, 404);
+  assert.equal(
+    ApiErrorResponseSchema.parse(invalidPreviewResponse.json()).error.code,
+    "NOT_FOUND"
+  );
+
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: {
+      cookie: ownerCookie
+    },
+    payload: {
+      mode: "multiplayer",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "classic_fantasy",
+      ownerClientId: "disabled-code-owner-client",
+      playerName: "Owner"
+    }
+  });
+  const created = CampaignCreateResponseSchema.parse(createResponse.json());
+  const joinCode = database.joinCodes.find(
+    (candidate) => candidate.campaign_id === created.campaign.id
+  );
+
+  assert.ok(joinCode);
+  joinCode.enabled = false;
+  joinCode.disabled_at = new Date();
+
+  for (const response of [
+    await app.inject({
+      method: "POST",
+      url: "/api/campaigns/join/preview",
+      headers: {
+        cookie: joinerCookie
+      },
+      payload: {
+        gameCode: joinCode.code
+      }
+    }),
+    await app.inject({
+      method: "POST",
+      url: "/api/campaigns/join",
+      headers: {
+        cookie: joinerCookie
+      },
+      payload: {
+        gameCode: joinCode.code,
+        clientId: "disabled-code-joiner-client",
+        username: "Joiner",
+        characterName: "Joiner",
+        characterSheet: "A ready adventurer."
+      }
+    })
+  ]) {
+    assert.equal(response.statusCode, 404);
+    assert.equal(
+      ApiErrorResponseSchema.parse(response.json()).error.code,
+      "NOT_FOUND"
+    );
+  }
+});
