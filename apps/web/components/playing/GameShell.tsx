@@ -51,6 +51,10 @@ import {
   type RoomPlayer,
   type RoomSnapshot
 } from "./game-shell-state";
+import {
+  buildRollSubmissionRequest,
+  buildTurnSubmissionRequest
+} from "./game-shell-requests";
 
 const openingMessages: GameMessage[] = [];
 const playerIdStorageKey = "ai-dnd.playerId";
@@ -1440,30 +1444,22 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     );
 
     try {
+      const request = buildTurnSubmissionRequest({
+        campaign: activeCampaign,
+        singlePlayer: isSinglePlayer,
+        playerId,
+        message: content,
+        skipTurn,
+        clientMessageId: playerMessage.id
+      });
       const response = await fetch(
-        isSinglePlayer
-          ? `/api/campaigns/${encodeURIComponent(activeCampaign.id)}/solo-turn`
-          : "/api/room/submit",
+        request.endpoint,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
           },
-          body: JSON.stringify(
-            isSinglePlayer
-              ? {
-                  message: content,
-                  clientMessageId: playerMessage.id
-                }
-              : {
-                  roomId: activeCampaign.id,
-                  sessionId: activeCampaign.hermesSessionId,
-                  playerId,
-                  message: content,
-                  skipTurn,
-                  clientMessageId: playerMessage.id
-                }
-          )
+          body: JSON.stringify(request.body)
         }
       );
 
@@ -1697,29 +1693,21 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     );
 
     try {
+      const request = buildRollSubmissionRequest({
+        campaign,
+        singlePlayer,
+        playerId,
+        rollSubmissions,
+        clientMessageId: rollMessage.id
+      });
       const response = await fetch(
-        singlePlayer
-          ? `/api/campaigns/${encodeURIComponent(campaign.id)}/solo-turn`
-          : "/api/room/submit",
+        request.endpoint,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
           },
-          body: JSON.stringify(
-            singlePlayer
-              ? {
-                  rollSubmissions,
-                  clientMessageId: rollMessage.id
-                }
-              : {
-                  roomId: campaign.id,
-                  sessionId: campaign.hermesSessionId,
-                  playerId,
-                  rollSubmissions,
-                  clientMessageId: rollMessage.id
-                }
-          )
+          body: JSON.stringify(request.body)
         }
       );
 
