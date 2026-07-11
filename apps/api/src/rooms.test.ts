@@ -410,6 +410,228 @@ test("room submit rejects unbegun rooms, wrong players, and untargeted players",
   );
 });
 
+test("room routes support session fallback and reject incomplete player profiles", async () => {
+  const { ownerCookie, campaignId } = await createMultiplayerRoom(
+    "room-session-fallback"
+  );
+  const campaign = database.campaigns.find(
+    (candidate) => candidate.id === campaignId
+  );
+
+  assert.ok(campaign);
+
+  const readBySessionResponse = await app.inject({
+    method: "GET",
+    url: `/api/room?sessionId=${campaign.hermes_session_id}`,
+    headers: {
+      cookie: ownerCookie
+    }
+  });
+
+  assert.equal(readBySessionResponse.statusCode, 200);
+  assert.equal(
+    RoomReadResponseSchema.parse(readBySessionResponse.json()).roomId,
+    campaignId
+  );
+
+  const incompleteProfileResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/player",
+    headers: {
+      cookie: ownerCookie
+    },
+    payload: {
+      roomId: campaignId,
+      playerId: "room-session-fallback-owner-client",
+      username: "Owner",
+      characterName: "Owner Character"
+    }
+  });
+
+  assert.equal(incompleteProfileResponse.statusCode, 400);
+  assert.equal(
+    ApiErrorResponseSchema.parse(incompleteProfileResponse.json()).error.code,
+    "BAD_REQUEST"
+  );
+});
+
+test("room begin is idempotent after start and submit supports skip turns", async () => {
+  const { ownerCookie, joinerCookie, campaignId, joinerClientId } =
+    await createMultiplayerRoom("room-skip-turn");
+
+  const beginResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/begin",
+    headers: {
+      cookie: ownerCookie
+    },
+    payload: {
+      roomId: campaignId
+    }
+  });
+
+  assert.equal(beginResponse.statusCode, 200, beginResponse.body);
+
+  const begunEvents = () =>
+    database.campaignEvents.filter(
+      (event) => event.campaign_id === campaignId && event.type === "adventure_begun"
+    );
+  const begunEventCount = begunEvents().length;
+
+  const duplicateBeginResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/begin",
+    headers: {
+      cookie: ownerCookie
+    },
+    payload: {
+      roomId: campaignId
+    }
+  });
+
+  assert.equal(duplicateBeginResponse.statusCode, 200, duplicateBeginResponse.body);
+  assert.equal(RoomBeginResponseSchema.parse(duplicateBeginResponse.json()).hasBegun, true);
+  assert.equal(begunEvents().length, begunEventCount);
+
+  const skipTurnResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/submit",
+    headers: {
+      cookie: joinerCookie
+    },
+    payload: {
+      roomId: campaignId,
+      playerId: joinerClientId,
+      skipTurn: true
+    }
+  });
+
+  assert.equal(skipTurnResponse.statusCode, 200, skipTurnResponse.body);
+  const skippedRoom = RoomSubmitResponseSchema.parse(skipTurnResponse.json());
+  assert.equal(
+    skippedRoom.players.find((player) => player.id === joinerClientId)?.status,
+    "submitted"
+  );
+  assert.match(skippedRoom.messages.at(-1)?.content ?? "", /skips their turn/);
+});
+
+test("room submit rejects pending roll mismatches", async () => {
+  const { ownerCookie, joinerCookie, campaignId, joinerClientId } =
+    await createMultiplayerRoom("room-pending-roll");
+
+  const beginResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/begin",
+    headers: {
+      cookie: ownerCookie
+    },
+    payload: {
+      roomId: campaignId
+    }
+  });
+
+  assert.equal(beginResponse.statusCode, 200, beginResponse.body);
+
+  const campaign = database.campaigns.find(
+    (candidate) => candidate.id === campaignId
+  );
+  assert.ok(campaign);
+  campaign.metadata = {
+    ...(campaign.metadata as Record<string, unknown>),
+    pendingRollRequests: [
+      {
+        id: "owner-save",
+        player: "Owner Character",
+        dice: "1d20",
+        label: "Wisdom save"
+      }
+    ]
+  };
+
+  const regularSubmitResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/submit",
+    headers: {
+      cookie: joinerCookie
+    },
+    payload: {
+      roomId: campaignId,
+      playerId: joinerClientId,
+      message: "I ignore the pending roll."
+    }
+  });
+
+  assert.equal(regularSubmitResponse.statusCode, 409);
+  assert.equal(
+    ApiErrorResponseSchema.parse(regularSubmitResponse.json()).error.code,
+    "BAD_REQUEST"
+  );
+
+  const wrongRollResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/submit",
+    headers: {
+      cookie: joinerCookie
+    },
+    payload: {
+      roomId: campaignId,
+      playerId: joinerClientId,
+      rollRequestId: "wrong-roll"
+    }
+  });
+
+  assert.equal(wrongRollResponse.statusCode, 409);
+  assert.equal(
+    ApiErrorResponseSchema.parse(wrongRollResponse.json()).error.code,
+    "BAD_REQUEST"
+  );
+
+  const tooManyRollsResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/submit",
+    headers: {
+      cookie: joinerCookie
+    },
+    payload: {
+      roomId: campaignId,
+      playerId: joinerClientId,
+      rollSubmissions: [
+        {
+          rollRequestId: "owner-save"
+        },
+        {
+          rollRequestId: "extra-roll"
+        }
+      ]
+    }
+  });
+
+  assert.equal(tooManyRollsResponse.statusCode, 400);
+  assert.equal(
+    ApiErrorResponseSchema.parse(tooManyRollsResponse.json()).error.code,
+    "BAD_REQUEST"
+  );
+
+  const wrongPlayerRollResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/submit",
+    headers: {
+      cookie: joinerCookie
+    },
+    payload: {
+      roomId: campaignId,
+      playerId: joinerClientId,
+      rollRequestId: "owner-save"
+    }
+  });
+
+  assert.equal(wrongPlayerRollResponse.statusCode, 403);
+  assert.equal(
+    ApiErrorResponseSchema.parse(wrongPlayerRollResponse.json()).error.code,
+    "FORBIDDEN"
+  );
+});
+
 test("room routes require an owned session", async () => {
   const response = await app.inject({
     method: "GET",
