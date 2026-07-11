@@ -263,6 +263,32 @@ test("campaign creation stores custom world metadata and title fallback", async 
   );
 });
 
+test("campaign creation applies default multiplayer owner and title fallbacks", async () => {
+  const cookie = await signIn("campaign-defaults@example.com");
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: {
+      cookie
+    },
+    payload: {
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "mystery"
+    }
+  });
+
+  assert.equal(createResponse.statusCode, 201, createResponse.body);
+  const created = CampaignCreateResponseSchema.parse(createResponse.json());
+  const player = database.players.find(
+    (candidate) => candidate.campaign_id === created.campaign.id
+  );
+
+  assert.equal(created.campaign.mode, "multiplayer");
+  assert.equal(created.campaign.title, "Table Owner");
+  assert.equal(created.campaign.preview, "Mystery Adventure");
+  assert.equal(player?.username, "Table Owner");
+});
+
 test("campaign read returns owned campaign summaries from Fastify", async () => {
   const cookie = await signIn("campaign-reader@example.com");
   const createResponse = await app.inject({

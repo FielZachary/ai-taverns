@@ -151,6 +151,55 @@ test("DeepSeek provider reports non-OK HTTP responses with provider error detail
   );
 });
 
+test("DeepSeek provider reports non-OK HTTP responses when the body is malformed", async () => {
+  globalThis.fetch = async () => new Response("{not-json", { status: 502 });
+
+  await assert.rejects(
+    askDungeonMasterProvider({
+      instructions: "Return a JSON DM response.",
+      message: "Begin."
+    }),
+    /DeepSeek turn failed with status 502\./
+  );
+});
+
+test("DeepSeek provider maps non-Error fetch failures to a stable reachability error", async () => {
+  globalThis.fetch = async () => {
+    throw "socket closed";
+  };
+
+  await assert.rejects(
+    askDungeonMasterProvider({
+      instructions: "Return a JSON DM response.",
+      message: "Begin."
+    }),
+    /DeepSeek could not be reached\. Network request failed\./
+  );
+});
+
+test("DeepSeek provider falls back to configured model when responses omit optional metadata", async () => {
+  globalThis.fetch = async () =>
+    jsonResponse({
+      choices: [
+        {
+          message: {
+            content:
+              '{"public_narration":"A quiet bell rings.","roll_requests":[],"next_input_needed":"player_actions","input_targets":[],"input_policy":"all_players"}'
+          }
+        }
+      ]
+    });
+
+  const response = await askDungeonMasterProvider({
+    instructions: "Return a JSON DM response.",
+    message: "Begin."
+  });
+
+  assert.equal(response.id, undefined);
+  assert.equal(response.debug.providerResponseId, undefined);
+  assert.equal(response.debug.model, "deepseek-chat");
+});
+
 test("DeepSeek provider reports successful streaming responses without a body", async () => {
   globalThis.fetch = async () => new Response(null, { status: 200 });
 
@@ -215,6 +264,57 @@ test("DeepSeek provider skips malformed stream chunks and keeps valid streamed c
   assert.deepEqual(narrationDeltas, ["Hello", " world"]);
 });
 
+test("DeepSeek provider streams escaped narration prefixes as chunks arrive", async () => {
+  const narrationDeltas: string[] = [];
+
+  globalThis.fetch = async () =>
+    streamResponse([
+      streamData({
+        choices: [
+          {
+            delta: {
+              content: '{"aside":"quiet",'
+            }
+          }
+        ]
+      }),
+      streamData({
+        choices: [
+          {
+            delta: {
+              content: '"public_narration":"Line one\\nTab\\tBell\\u263a'
+            }
+          }
+        ]
+      }),
+      streamData({
+        choices: [
+          {
+            delta: {
+              content:
+                ' mark\\q","roll_requests":[],"next_input_needed":"player_actions","input_targets":[],"input_policy":"all_players"}'
+            }
+          }
+        ]
+      })
+    ]);
+
+  const response = await askDungeonMasterProvider({
+    instructions: "Return a JSON DM response.",
+    message: "Begin.",
+    onPublicNarrationDelta: (delta) => narrationDeltas.push(delta)
+  });
+
+  assert.equal(
+    response.content,
+    '{"aside":"quiet","public_narration":"Line one\\nTab\\tBell\\u263a mark\\q","roll_requests":[],"next_input_needed":"player_actions","input_targets":[],"input_policy":"all_players"}'
+  );
+  assert.deepEqual(narrationDeltas, [
+    "Line one\nTab\tBell☺",
+    " markq"
+  ]);
+});
+
 test("DeepSeek provider retries an empty stream and reports an empty reply diagnostic", async () => {
   let requestCount = 0;
 
@@ -233,4 +333,27 @@ test("DeepSeek provider retries an empty stream and reports an empty reply diagn
   );
 
   assert.equal(requestCount, 2);
+});
+
+test("DeepSeek provider includes empty-response diagnostic details", async () => {
+  globalThis.fetch = async () =>
+    jsonResponse({
+      model: "diagnostic-model",
+      choices: [
+        {
+          finish_reason: "stop",
+          message: {
+            reasoning_content: "I thought about it."
+          }
+        }
+      ]
+    });
+
+  await assert.rejects(
+    askDungeonMasterProvider({
+      instructions: "Return a JSON DM response.",
+      message: "Begin."
+    }),
+    /finish_reason=stop; model=diagnostic-model; choices=1; message_keys=reasoning_content; has_reasoning=true/
+  );
 });

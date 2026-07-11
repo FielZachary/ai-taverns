@@ -455,6 +455,29 @@ test("room routes support session fallback and reject incomplete player profiles
   );
 });
 
+test("room submit rejects incomplete player turn payloads", async () => {
+  const { ownerCookie, campaignId } =
+    await createMultiplayerRoom("room-submit-incomplete");
+
+  const missingPlayerResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/submit",
+    headers: {
+      cookie: ownerCookie
+    },
+    payload: {
+      roomId: campaignId,
+      message: "I try to speak without a player id."
+    }
+  });
+
+  assert.equal(missingPlayerResponse.statusCode, 400);
+  assert.equal(
+    ApiErrorResponseSchema.parse(missingPlayerResponse.json()).error.code,
+    "BAD_REQUEST"
+  );
+});
+
 test("room begin is idempotent after start and submit supports skip turns", async () => {
   const { ownerCookie, joinerCookie, campaignId, joinerClientId } =
     await createMultiplayerRoom("room-skip-turn");

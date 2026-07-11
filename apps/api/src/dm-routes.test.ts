@@ -9,7 +9,12 @@ import {
   CampaignSoloTurnResponseSchema
 } from "@ai-dnd/contracts";
 
-import { app, signIn, type DebugFields } from "./test/app-test-harness.js";
+import {
+  app,
+  database,
+  signIn,
+  type DebugFields
+} from "./test/app-test-harness.js";
 
 async function createSinglePlayerCampaign(label: string) {
   const cookie = await signIn(`${label}@example.com`);
@@ -410,6 +415,57 @@ test("DM runtime routes reject bad-state solo turns and regenerations", async ()
   assert.equal(
     ApiErrorResponseSchema.parse(regenerateResponse.json()).error.code,
     "BAD_REQUEST"
+  );
+});
+
+test("DM runtime solo turns accept roll submissions without a message", async () => {
+  const { cookie, campaignId } = await createSinglePlayerCampaign(
+    "dm-runtime-roll-submission"
+  );
+  const campaign = database.campaigns.find(
+    (candidate) => candidate.id === campaignId
+  );
+
+  assert.ok(campaign);
+  campaign.metadata = {
+    ...(campaign.metadata as Record<string, unknown>),
+    pendingRollRequests: [
+      {
+        id: "seren-check",
+        player: "Seren",
+        dice: "1d20",
+        label: "Perception check"
+      }
+    ]
+  };
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      rollSubmissions: [
+        {
+          rollRequestId: "seren-check",
+          rollResult: {
+            rolls: [18],
+            total: 18
+          },
+          clientMessageId: "solo-roll-client-message"
+        }
+      ]
+    }
+  });
+
+  assert.equal(response.statusCode, 200, response.body);
+  CampaignSoloTurnResponseSchema.parse(response.json());
+  assert.match(
+    database.submissions.find(
+      (submission) => submission.campaign_id === campaignId
+    )?.content ?? "",
+    /I rolled 1d20: 18 \(18\) for Perception check\./
   );
 });
 
