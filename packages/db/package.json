@@ -13,6 +13,7 @@
   "types": "./src/index.ts",
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "coverage": "c8 --all --src src --include \"src/**/*.ts\" --exclude \"src/**/*.test.ts\" --reporter=text --reporter=lcov --reporter=json-summary node -e \"\"",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
