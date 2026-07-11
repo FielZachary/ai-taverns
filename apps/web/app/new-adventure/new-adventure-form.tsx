@@ -74,6 +74,7 @@ type ActiveStatRoll = {
   rolls: number[];
   total: number;
   values: number[];
+  targetRollIndex?: number;
 };
 type EquipmentCategory =
   | "simpleWeapon"
@@ -192,6 +193,10 @@ const emptyStatRollAssignments: Record<AbilityKey, number | null> = {
   wis: null,
   cha: null
 };
+const emptyStatRollValues = Array.from(
+  { length: abilityDefinitions.length },
+  () => null
+) as Array<number | null>;
 const pointBuyDefaultScores: CompleteAbilityScores = {
   str: 10,
   dex: 10,
@@ -2140,7 +2145,9 @@ export function NewAdventureForm() {
   const [abilityScores, setAbilityScores] = useState<AbilityScores>({
     ...emptyAbilityScores
   });
-  const [statRollValues, setStatRollValues] = useState<number[]>([]);
+  const [statRollValues, setStatRollValues] = useState<Array<number | null>>([
+    ...emptyStatRollValues
+  ]);
   const [statRollAssignments, setStatRollAssignments] = useState<
     Record<AbilityKey, number | null>
   >({
@@ -2610,7 +2617,7 @@ export function NewAdventureForm() {
     });
     setCharacterClass(nextClass);
     setAbilityScores(nextAbilityScores);
-    setStatRollValues([]);
+    setStatRollValues([...emptyStatRollValues]);
     setStatRollAssignments({ ...emptyStatRollAssignments });
     setSubclass(nextClassData.subclassOptions[0]);
     setClassFeatureChoice(nextClassData.featureOptions[0]);
@@ -2635,7 +2642,7 @@ export function NewAdventureForm() {
     setCharacterBackground(quickBuildBackgroundByClass[characterClass]);
     setStatGenerationMode("roll");
     setAbilityScores({ ...emptyAbilityScores });
-    setStatRollValues([]);
+    setStatRollValues([...emptyStatRollValues]);
     setStatRollAssignments({ ...emptyStatRollAssignments });
     setSubclass(selectedClass.subclassOptions[0]);
     setClassFeatureChoice(selectedClass.featureOptions[0]);
@@ -2656,7 +2663,7 @@ export function NewAdventureForm() {
   function applyCustomBuildDefaults() {
     setStatGenerationMode("roll");
     setAbilityScores({ ...emptyAbilityScores });
-    setStatRollValues([]);
+    setStatRollValues([...emptyStatRollValues]);
     setStatRollAssignments({ ...emptyStatRollAssignments });
     setEquipmentSelections({});
     setEquipmentChoiceStepIndex(0);
@@ -2683,19 +2690,75 @@ export function NewAdventureForm() {
     });
   }
 
+  function rollStatPoolValue(index: number) {
+    if (activeStatRoll) {
+      return;
+    }
+
+    setStatGenerationMode("roll");
+    const { rolls, total } = rollFourD6DropLowest();
+
+    setActiveStatRoll({
+      id: `pool-${index}-${Date.now().toString(36)}`,
+      expression: `Roll ${index + 1}: 4d6 drop lowest`,
+      rolls,
+      total,
+      values: [total],
+      targetRollIndex: index
+    });
+  }
+
   function completeStatRoll() {
     if (!activeStatRoll) {
       return;
     }
 
-    setStatRollValues(activeStatRoll.values);
-    setStatRollAssignments({ ...emptyStatRollAssignments });
-    setAbilityScores({ ...emptyAbilityScores });
+    if (activeStatRoll.targetRollIndex !== undefined) {
+      const targetRollIndex = activeStatRoll.targetRollIndex;
+
+      setStatRollValues((currentValues) => {
+        const nextValues =
+          currentValues.length === abilityDefinitions.length
+            ? [...currentValues]
+            : [...emptyStatRollValues];
+        nextValues[targetRollIndex] = activeStatRoll.values[0] ?? null;
+        return nextValues;
+      });
+      setStatRollAssignments((currentAssignments) => {
+        const nextAssignments = { ...currentAssignments };
+
+        abilityDefinitions.forEach(({ key }) => {
+          if (nextAssignments[key] === targetRollIndex) {
+            nextAssignments[key] = null;
+          }
+        });
+
+        return nextAssignments;
+      });
+      setAbilityScores((currentScores) => {
+        const nextScores = { ...currentScores };
+
+        abilityDefinitions.forEach(({ key }) => {
+          if (statRollAssignments[key] === targetRollIndex) {
+            nextScores[key] = null;
+          }
+        });
+
+        return nextScores;
+      });
+    } else {
+      setStatRollValues(activeStatRoll.values);
+      setStatRollAssignments({ ...emptyStatRollAssignments });
+      setAbilityScores({ ...emptyAbilityScores });
+    }
+
     setActiveStatRoll(null);
   }
 
   function assignStatRoll(key: AbilityKey, value: string) {
     const nextAssignment = value === "" ? null : Number(value);
+    const nextScore =
+      nextAssignment === null ? null : statRollValues[nextAssignment] ?? null;
 
     setStatRollAssignments((currentAssignments) => ({
       ...currentAssignments,
@@ -2703,7 +2766,7 @@ export function NewAdventureForm() {
     }));
     setAbilityScores((currentScores) => ({
       ...currentScores,
-      [key]: nextAssignment === null ? null : statRollValues[nextAssignment] ?? null
+      [key]: nextScore
     }));
   }
 
@@ -2714,7 +2777,7 @@ export function NewAdventureForm() {
 
     setStatGenerationMode("point_buy");
     setAbilityScores({ ...pointBuyDefaultScores });
-    setStatRollValues([]);
+    setStatRollValues([...emptyStatRollValues]);
     setStatRollAssignments({ ...emptyStatRollAssignments });
   }
 
@@ -2725,7 +2788,7 @@ export function NewAdventureForm() {
 
     setStatGenerationMode("roll");
     setAbilityScores({ ...emptyAbilityScores });
-    setStatRollValues([]);
+    setStatRollValues([...emptyStatRollValues]);
     setStatRollAssignments({ ...emptyStatRollAssignments });
   }
 
@@ -3378,6 +3441,15 @@ export function NewAdventureForm() {
                               className={isAssigned ? "stat-roll-pool-card assigned" : "stat-roll-pool-card"}
                               key={`stat-roll-${ability.key}`}
                             >
+                              <button
+                                type="button"
+                                className="stat-roll-pool-button"
+                                aria-label={`Roll score ${index + 1}`}
+                                disabled={Boolean(activeStatRoll)}
+                                onClick={() => rollStatPoolValue(index)}
+                              >
+                                <Dice5 size={16} />
+                              </button>
                               <span>Roll {index + 1}</span>
                               <strong>{value ?? "-"}</strong>
                               <small>{isAssigned ? "Assigned" : "Available"}</small>
@@ -3434,40 +3506,45 @@ export function NewAdventureForm() {
                                   </button>
                                 </div>
                               ) : (
-                                <select
-                                  aria-label={`Assign rolled score to ${ability.label}`}
-                                  className="stat-assignment-select"
-                                  disabled={
-                                    Boolean(activeStatRoll) ||
-                                    statRollValues.length < abilityDefinitions.length
-                                  }
-                                  value={statRollAssignments[ability.key] ?? ""}
-                                  onChange={(event) =>
-                                    assignStatRoll(ability.key, event.target.value)
-                                  }
-                                >
-                                  <option value="">Assign</option>
-                                  {statRollValues.map((value, index) => {
-                                    const isCurrentAssignment =
-                                      statRollAssignments[ability.key] === index;
-
-                                    if (
-                                      assignedStatRollIndexes.has(index) &&
-                                      !isCurrentAssignment
-                                    ) {
-                                      return null;
-                                    }
-
-                                    return (
-                                      <option value={index} key={`${value}-${index}`}>
-                                        {value}
-                                      </option>
-                                    );
-                                  })}
-                                </select>
+                                null
                               )}
                             </div>
-                            <strong>{score ?? "Roll"}</strong>
+                            {statGenerationMode === "point_buy" ? (
+                              <strong>{score}</strong>
+                            ) : (
+                              <select
+                                aria-label={`Assign rolled score to ${ability.label}`}
+                                className="stat-assignment-select"
+                                disabled={
+                                  Boolean(activeStatRoll) ||
+                                  statRollValues.some((value) => value === null)
+                                }
+                                value={statRollAssignments[ability.key] ?? ""}
+                                onChange={(event) =>
+                                  assignStatRoll(ability.key, event.target.value)
+                                }
+                              >
+                                <option value="">Assign</option>
+                                {statRollValues.map((value, index) => {
+                                  const isCurrentAssignment =
+                                    statRollAssignments[ability.key] === index;
+
+                                  if (
+                                    value === null ||
+                                    (assignedStatRollIndexes.has(index) &&
+                                      !isCurrentAssignment)
+                                  ) {
+                                    return null;
+                                  }
+
+                                  return (
+                                    <option value={index} key={`${value}-${index}`}>
+                                      {value}
+                                    </option>
+                                  );
+                                })}
+                              </select>
+                            )}
                             <small>
                               <span>{abilityBonus.bonusText}</span>
                               {abilityBonus.sourceText ? (
