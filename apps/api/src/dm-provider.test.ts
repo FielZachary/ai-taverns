@@ -37,6 +37,85 @@ function streamData(data: unknown) {
   return `data: ${JSON.stringify(data)}\n\n`;
 }
 
+function jsonResponse(data: unknown, status = 200) {
+  return new Response(JSON.stringify(data), { status });
+}
+
+test("DeepSeek provider sends filtered history and returns non-stream debug metadata", async () => {
+  let requestBody: {
+    messages: { role: string; content: string }[];
+    stream?: boolean;
+  } | undefined;
+
+  globalThis.fetch = async (_url, init) => {
+    requestBody = JSON.parse(String(init?.body)) as typeof requestBody;
+
+    return jsonResponse({
+      id: "chat-1",
+      model: "test-chat-model",
+      choices: [
+        {
+          finish_reason: "stop",
+          message: {
+            content:
+              '{"public_narration":"A door opens.","roll_requests":[],"next_input_needed":"player_actions","input_targets":[],"input_policy":"all_players"}'
+          }
+        }
+      ]
+    });
+  };
+
+  const response = await askDungeonMasterProvider({
+    instructions: "Return a JSON DM response.",
+    message: "What happens next?",
+    history: [
+      {
+        id: "message-1",
+        role: "dm",
+        content: "The room is quiet.",
+        createdAt: "2026-07-11T00:00:00.000Z"
+      },
+      {
+        id: "message-2",
+        role: "player",
+        content: "   ",
+        createdAt: "2026-07-11T00:00:01.000Z"
+      },
+      {
+        id: "message-3",
+        role: "player",
+        content: "I listen at the door.",
+        createdAt: "2026-07-11T00:00:02.000Z"
+      }
+    ]
+  });
+
+  assert.deepEqual(requestBody?.messages, [
+    {
+      role: "system",
+      content: "Return a JSON DM response."
+    },
+    {
+      role: "assistant",
+      content: "The room is quiet."
+    },
+    {
+      role: "user",
+      content: "I listen at the door."
+    },
+    {
+      role: "user",
+      content: "What happens next?"
+    }
+  ]);
+  assert.equal(requestBody?.stream, undefined);
+  assert.equal(response.id, "chat-1");
+  assert.equal(response.debug.providerResponseId, "chat-1");
+  assert.equal(response.debug.model, "test-chat-model");
+  assert.equal(response.debug.providerTimings?.[0]?.status, 200);
+  assert.equal(response.debug.providerTimings?.[0]?.ok, true);
+});
+
 test("DeepSeek provider maps fetch timeout failures to a stable reachability error", async () => {
   globalThis.fetch = async (_url, init) => {
     assert.ok(init?.signal instanceof AbortSignal);
@@ -49,6 +128,39 @@ test("DeepSeek provider maps fetch timeout failures to a stable reachability err
       message: "What happens next?"
     }),
     /DeepSeek could not be reached\. The operation was aborted\./
+  );
+});
+
+test("DeepSeek provider reports non-OK HTTP responses with provider error details", async () => {
+  globalThis.fetch = async () =>
+    jsonResponse(
+      {
+        error: {
+          message: "rate limit exceeded"
+        }
+      },
+      429
+    );
+
+  await assert.rejects(
+    askDungeonMasterProvider({
+      instructions: "Return a JSON DM response.",
+      message: "Begin."
+    }),
+    /DeepSeek turn failed with status 429\. rate limit exceeded/
+  );
+});
+
+test("DeepSeek provider reports successful streaming responses without a body", async () => {
+  globalThis.fetch = async () => new Response(null, { status: 200 });
+
+  await assert.rejects(
+    askDungeonMasterProvider({
+      instructions: "Return a JSON DM response.",
+      message: "Begin.",
+      onPublicNarrationDelta: () => undefined
+    }),
+    /DeepSeek streaming response was empty\./
   );
 });
 
@@ -82,7 +194,8 @@ test("DeepSeek provider skips malformed stream chunks and keeps valid streamed c
           }
         ]
       }),
-      "data: [DONE]\n\n"
+      "data: [DONE]\n\n",
+      "data: {\"choices\":[{\"delta\":{\"content\":\"\"}}]}"
     ]);
   };
 
