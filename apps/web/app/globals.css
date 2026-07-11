@@ -1300,6 +1300,42 @@ h1 {
   animation: new-adventure-flow-enter 360ms cubic-bezier(0.2, 0.86, 0.22, 1);
 }
 
+.stat-roll-pool {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.stat-roll-pool-card {
+  display: grid;
+  gap: 6px;
+  min-height: 96px;
+  padding: 12px;
+  border: 1px solid rgba(244, 207, 122, 0.18);
+  border-radius: 8px;
+  background: rgba(17, 13, 10, 0.34);
+}
+
+.stat-roll-pool-card.assigned {
+  border-color: rgba(112, 209, 132, 0.44);
+  background: rgba(71, 132, 84, 0.12);
+}
+
+.stat-roll-pool-card span,
+.stat-roll-pool-card small {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.stat-roll-pool-card strong {
+  color: var(--cream);
+  font-size: 1.8rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
 .stat-roll-card {
   position: relative;
   display: grid;
@@ -1367,6 +1403,29 @@ h1 {
   cursor: wait;
   opacity: 0.55;
   transform: none;
+}
+
+.stat-assignment-select {
+  min-width: 96px;
+  height: 40px;
+  border: 1px solid rgba(244, 207, 122, 0.28);
+  border-radius: 8px;
+  background-color: rgba(244, 207, 122, 0.08);
+  color: var(--gold-bright);
+  font-size: 0.76rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.stat-assignment-select:focus-visible {
+  border-color: rgba(244, 207, 122, 0.74);
+  outline: 2px solid rgba(244, 207, 122, 0.28);
+  outline-offset: 2px;
+}
+
+.stat-assignment-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
 }
 
 .stat-adjust-controls {
@@ -3672,6 +3731,7 @@ h1 {
   .class-picker > div,
   .build-mode-picker > div,
   .character-builder-grid,
+  .stat-roll-pool,
   .ability-score-grid,
   .character-summary-grid {
     grid-template-columns: 1fr;
