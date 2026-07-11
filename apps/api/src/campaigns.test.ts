@@ -182,6 +182,87 @@ test("campaign creation stores a multiplayer campaign and list returns it", asyn
   assert.equal(listBody.campaigns[0]?.id, createBody.campaign.id);
 });
 
+test("campaign creation validates preset, custom world, and single-player requirements", async () => {
+  const cookie = await signIn("campaign-validation@example.com");
+
+  for (const payload of [
+    {
+      mode: "multiplayer",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "missing-preset",
+      ownerClientId: "invalid-preset-client",
+      playerName: "Owner"
+    },
+    {
+      mode: "single_player",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "classic_fantasy",
+      ownerClientId: "missing-character-client",
+      playerName: "Owner"
+    },
+    {
+      mode: "multiplayer",
+      campaignGenreKind: "custom",
+      ownerClientId: "missing-custom-client",
+      playerName: "Owner",
+      customWorldName: "Glassmere"
+    }
+  ]) {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/campaigns",
+      headers: {
+        cookie
+      },
+      payload
+    });
+
+    assert.equal(response.statusCode, 400);
+    assert.equal(
+      ApiErrorResponseSchema.parse(response.json()).error.code,
+      "BAD_REQUEST"
+    );
+  }
+});
+
+test("campaign creation stores custom world metadata and title fallback", async () => {
+  const cookie = await signIn("campaign-custom-world@example.com");
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: {
+      cookie
+    },
+    payload: {
+      mode: "multiplayer",
+      campaignGenreKind: "custom",
+      campaignGenre: "Clockwork marsh expedition",
+      customWorldName: "Glassmere",
+      customWorldDescription: "A wetland of glass reeds and clockwork shrines.",
+      ownerClientId: "custom-world-owner-client",
+      playerName: "Worldwright"
+    }
+  });
+
+  assert.equal(createResponse.statusCode, 201);
+  const created = CampaignCreateResponseSchema.parse(createResponse.json());
+  const campaign = database.campaigns.find(
+    (candidate) => candidate.id === created.campaign.id
+  );
+  const metadata = campaign?.metadata as Record<string, unknown>;
+  const genre = metadata.genre as Record<string, unknown>;
+
+  assert.equal(created.campaign.title, "Worldwright");
+  assert.equal(created.campaign.preview, "Glassmere");
+  assert.equal(genre.kind, "custom");
+  assert.equal(genre.label, "Clockwork marsh expedition");
+  assert.equal(genre.customWorldName, "Glassmere");
+  assert.equal(
+    genre.customWorldDescription,
+    "A wetland of glass reeds and clockwork shrines."
+  );
+});
+
 test("campaign read returns owned campaign summaries from Fastify", async () => {
   const cookie = await signIn("campaign-reader@example.com");
   const createResponse = await app.inject({

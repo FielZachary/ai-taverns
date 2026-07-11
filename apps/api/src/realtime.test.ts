@@ -21,6 +21,52 @@ test("room realtime websocket rejects unauthenticated upgrades", async () => {
   assert.equal(response.statusCode, 401);
 });
 
+test("room realtime websocket rejects missing and forbidden rooms during upgrade", async () => {
+  const ownerCookie = await signIn("realtime-forbidden-owner@example.com");
+  const otherCookie = await signIn("realtime-forbidden-other@example.com");
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: {
+      cookie: ownerCookie
+    },
+    payload: {
+      mode: "single_player",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "classic_fantasy",
+      ownerClientId: "realtime-forbidden-client",
+      playerName: "Realtime Owner",
+      characterName: "Signal",
+      characterSheet: "A careful listener."
+    }
+  });
+  const created = CampaignCreateResponseSchema.parse(createResponse.json());
+
+  const missingResponse = await app.inject({
+    method: "GET",
+    url: "/api/room/live?roomId=00000000-0000-4000-8000-000000000096",
+    headers: {
+      connection: "Upgrade",
+      upgrade: "websocket",
+      cookie: ownerCookie
+    }
+  });
+
+  assert.equal(missingResponse.statusCode, 404);
+
+  const forbiddenResponse = await app.inject({
+    method: "GET",
+    url: `/api/room/live?roomId=${created.campaign.id}`,
+    headers: {
+      connection: "Upgrade",
+      upgrade: "websocket",
+      cookie: otherCookie
+    }
+  });
+
+  assert.equal(forbiddenResponse.statusCode, 403);
+});
+
 test("room realtime websocket accepts session cookies and emits events", async () => {
   const cookie = await signIn("realtime@example.com");
   const createResponse = await app.inject({
@@ -228,4 +274,3 @@ test("room realtime websocket streams DM turns without duplicating final message
     socket.terminate();
   }
 });
-
