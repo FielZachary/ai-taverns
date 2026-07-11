@@ -39,10 +39,10 @@ const packageThresholds = [
     name: "packages/db",
     summaryPath: "packages/db/coverage/coverage-summary.json",
     thresholds: {
-      statements: 0,
-      lines: 0,
-      functions: 0,
-      branches: 0
+      statements: 25,
+      lines: 25,
+      functions: 30,
+      branches: 35
     }
   },
   {

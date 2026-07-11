@@ -13,7 +13,8 @@
   "types": "./src/index.ts",
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "coverage": "c8 --all --src src --include \"src/**/*.ts\" --exclude \"src/**/*.test.ts\" --reporter=text --reporter=lcov --reporter=json-summary node -e \"\"",
+    "coverage": "npm run build -w @ai-dnd/domain && npm run build -w @ai-dnd/contracts && npm run build -w @ai-dnd/dm && c8 --all --src src --include \"src/**/*.ts\" --exclude \"src/**/*.test.ts\" --reporter=text --reporter=lcov --reporter=json-summary tsx --test src/**/*.test.ts",
+    "test": "npm run build -w @ai-dnd/domain && npm run build -w @ai-dnd/contracts && npm run build -w @ai-dnd/dm && tsx --test src/**/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -25,6 +26,7 @@
   "devDependencies": {
     "@ai-dnd/tsconfig": "0.0.1",
     "@types/pg": "^8.20.0",
+    "tsx": "^4.20.0",
     "typescript": "^5.6.0"
   }
 }

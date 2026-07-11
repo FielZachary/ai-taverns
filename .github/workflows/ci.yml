@@ -18,6 +18,23 @@ jobs:
   quality-gate:
     name: Typecheck, lint, test, and build
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: ai_taverns_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ai_taverns_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/ai_taverns_test
+      DATABASE_SSL_DISABLED: "true"
 
     steps:
       - name: Check out repository
