@@ -55,6 +55,10 @@ import {
   buildRollSubmissionRequest,
   buildTurnSubmissionRequest
 } from "./game-shell-requests";
+import {
+  mergeVisibleGameMessages,
+  type StreamingDmMessage
+} from "./game-shell-messages";
 
 const openingMessages: GameMessage[] = [];
 const playerIdStorageKey = "ai-dnd.playerId";
@@ -101,10 +105,6 @@ type PendingRollBatch = {
     count: number;
     sides: number;
   }[];
-};
-
-type StreamingDmMessage = GameMessage & {
-  turnId: string;
 };
 
 function createClientId() {
@@ -583,26 +583,15 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     (pendingRollRequests.length === 0 || Boolean(currentPendingRollRequest)) &&
     !isWaitingOnTargetedInput;
 
-  const visibleMessages = useMemo(() => {
-    const mergedMessages = new Map<string, GameMessage>();
-
-    messages.forEach((message) => {
-      mergedMessages.set(message.id, message);
-    });
-    roomMessages.forEach((message) => {
-      mergedMessages.set(message.id, message);
-    });
-    streamingDmMessages.forEach((message) => {
-      if (!roomMessages.some((roomMessage) => roomMessage.id === message.id)) {
-        mergedMessages.set(message.id, message);
-      }
-    });
-
-    return Array.from(mergedMessages.values()).sort(
-      (firstMessage, secondMessage) =>
-        Date.parse(firstMessage.createdAt) - Date.parse(secondMessage.createdAt)
-    );
-  }, [messages, roomMessages, streamingDmMessages]);
+  const visibleMessages = useMemo(
+    () =>
+      mergeVisibleGameMessages({
+        localMessages: messages,
+        roomMessages,
+        streamingDmMessages
+      }),
+    [messages, roomMessages, streamingDmMessages]
+  );
   const isShowingStreamingDmMessage = useMemo(
     () => streamingDmMessages.some((message) => message.content.trim()),
     [streamingDmMessages]
