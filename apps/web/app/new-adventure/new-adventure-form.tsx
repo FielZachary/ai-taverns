@@ -142,10 +142,10 @@ const campaignCreationLoadingSteps = [
 ];
 const customCharacterCreationSteps = [
   "Build",
+  "Stats",
   "Class",
   "Class Choices",
   "Species",
-  "Stats",
   "Spells",
   "Proficiencies",
   "Background",
@@ -156,9 +156,9 @@ const customCharacterCreationSteps = [
 ];
 const quickCharacterCreationSteps = [
   "Build",
+  "Stats",
   "Class",
   "Species",
-  "Stats",
   "Spells",
   "Equipment",
   "Identity",
@@ -2603,22 +2603,18 @@ export function NewAdventureForm() {
 
   function handleClassChange(nextClass: CharacterClass) {
     const nextClassData = classOptions.find((option) => option.id === nextClass) ?? classOptions[4];
-    const nextAbilityScores =
-      statGenerationMode === "point_buy"
-          ? { ...pointBuyDefaultScores }
-          : { ...emptyAbilityScores };
+    const nextResolvedAbilityScores = {
+      str: abilityScores.str ?? defaultAbilityScoresByClass[nextClass].str,
+      dex: abilityScores.dex ?? defaultAbilityScoresByClass[nextClass].dex,
+      con: abilityScores.con ?? defaultAbilityScoresByClass[nextClass].con,
+      int: abilityScores.int ?? defaultAbilityScoresByClass[nextClass].int,
+      wis: abilityScores.wis ?? defaultAbilityScoresByClass[nextClass].wis,
+      cha: abilityScores.cha ?? defaultAbilityScoresByClass[nextClass].cha
+    };
     const nextSpellLimits = spellSelectionLimitsFor(nextClass, {
-      str: nextAbilityScores.str ?? defaultAbilityScoresByClass[nextClass].str,
-      dex: nextAbilityScores.dex ?? defaultAbilityScoresByClass[nextClass].dex,
-      con: nextAbilityScores.con ?? defaultAbilityScoresByClass[nextClass].con,
-      int: nextAbilityScores.int ?? defaultAbilityScoresByClass[nextClass].int,
-      wis: nextAbilityScores.wis ?? defaultAbilityScoresByClass[nextClass].wis,
-      cha: nextAbilityScores.cha ?? defaultAbilityScoresByClass[nextClass].cha
+      ...nextResolvedAbilityScores
     });
     setCharacterClass(nextClass);
-    setAbilityScores(nextAbilityScores);
-    setStatRollValues([...emptyStatRollValues]);
-    setStatRollAssignments({ ...emptyStatRollAssignments });
     setSubclass(nextClassData.subclassOptions[0]);
     setClassFeatureChoice(nextClassData.featureOptions[0]);
     setSelectedSkills([...nextClassData.defaultSkills] as SkillName[]);
