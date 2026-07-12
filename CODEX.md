@@ -1,5 +1,25 @@
 # Codex Project Instructions
 
+## Git Workflow
+
+Use the PR-gated workflow for completed work when GitHub branch protection and
+auto-merge are available:
+
+```bash
+git switch -c codex/<short-change-slug>
+git add -A
+git commit -m "<descriptive message>"
+npm run pr:auto-merge
+```
+
+The helper pushes the current branch, opens a PR against `development` when one
+does not already exist, and requests squash auto-merge with branch deletion.
+
+Current repository caveat: GitHub branch protection/rulesets are unavailable
+while this private repository lacks the required GitHub plan features. Until
+that is resolved, keep using small verified changes and leave PRs open for
+manual merge if auto-merge cannot be enabled.
+
 ## Droplet Access
 
 When the user asks to access the AI Taverns DigitalOcean droplet, prefer the
