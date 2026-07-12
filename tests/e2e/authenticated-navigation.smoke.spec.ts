@@ -298,6 +298,134 @@ test.describe("authenticated navigation smoke", () => {
     }
   });
 
+  test("play regenerates the latest deterministic DM response through the real UI", async ({
+    browser,
+    page,
+    request
+  }) => {
+    await signInWithPasswordlessToken(page, request, {
+      email: "regenerate-room-smoke-host@example.com",
+      nextPath: "/new-adventure"
+    });
+    const campaign = await createMultiplayerCampaignThroughBrowser(page, {
+      title: "Regenerate Smoke Adventure",
+      ownerClientId: "playwright-regenerate-room-smoke-host",
+      campaignGenreKind: "custom",
+      customWorldName: "Playwright Test Realm",
+      customWorldDescription:
+        "A compact test realm for deterministic local smoke tests.",
+      ownerCharacterName: "Nia Tollwarden",
+      ownerCharacterSheet:
+        "Nia Tollwarden is a level 1 ranger with a rain-spotted field map, a careful bow, and a habit of checking road signs twice."
+    });
+
+    await signInWithPasswordlessToken(page, request, {
+      email: "regenerate-room-smoke-joiner@example.com",
+      nextPath: "/new-adventure"
+    });
+    await joinMultiplayerCampaignThroughBrowser(page, {
+      gameCode: campaign.joinCode!,
+      clientId: "playwright-regenerate-room-smoke-joiner",
+      username: "Regenerate Room Smoke Joiner",
+      characterName: "Oren Bridgebell",
+      characterSheet:
+        "Oren Bridgebell is a level 1 bard with a bright handbell, a mended cloak, and a knack for remembering who crossed a bridge last."
+    });
+    await page.evaluate(() => {
+      localStorage.setItem(
+        "ai-dnd.playerId",
+        "playwright-regenerate-room-smoke-joiner"
+      );
+    });
+    const joinerStorageState = await page.context().storageState();
+
+    await signInWithPasswordlessToken(page, request, {
+      email: "regenerate-room-smoke-host@example.com",
+      nextPath: "/new-adventure"
+    });
+    await page.evaluate(() => {
+      localStorage.setItem(
+        "ai-dnd.playerId",
+        "playwright-regenerate-room-smoke-host"
+      );
+    });
+    await page.goto(`/play?campaignId=${campaign.id}`);
+
+    await page.getByRole("button", { name: /begin adventure/i }).click();
+
+    await expect(
+      page.getByText("Lanternlight gathers around the Ashford Tollhouse")
+    ).toBeVisible();
+
+    const playerAction = "I compare the bridge map against the sealed charter.";
+    await page
+      .getByPlaceholder("Speak, search, attack, bargain...")
+      .fill(playerAction);
+    await expect(page.getByRole("button", { name: /^send$/i })).toBeEnabled();
+    const hostSubmitResponse = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/room/submit") && response.status() === 200
+    );
+    await page.getByRole("button", { name: /^send$/i }).click();
+    await hostSubmitResponse;
+
+    const joinerContext = await browser.newContext({
+      storageState: joinerStorageState
+    });
+
+    try {
+      const joinerPage = await joinerContext.newPage();
+      await joinerPage.goto(`/play?campaignId=${campaign.id}`);
+
+      await expect(
+        joinerPage.getByRole("button", { name: /^skip$/i })
+      ).toBeEnabled();
+      const joinerSubmitResponse = joinerPage.waitForResponse(
+        (response) =>
+          response.url().endsWith("/api/room/submit") && response.status() === 200
+      );
+      await joinerPage.getByRole("button", { name: /^skip$/i }).click();
+      await joinerSubmitResponse;
+    } finally {
+      await joinerContext.close();
+    }
+
+    await page.reload();
+    await expect(page.getByText(playerAction)).toBeVisible();
+    await expect(page.getByText("Oren Bridgebell skips their turn.")).toBeVisible();
+    await expect(
+      page.getByText("Lanternlight gathers around the Ashford Tollhouse")
+    ).toBeVisible();
+
+    await expect(
+      page.getByRole("button", { name: /regenerate ai response/i })
+    ).toBeEnabled();
+    const regenerateResponse = page.waitForResponse(
+      (response) =>
+        response
+          .url()
+          .includes(`/api/campaigns/${campaign.id}/regenerate`) &&
+        response.status() === 200
+    );
+    await page
+      .getByRole("button", { name: /regenerate ai response/i })
+      .click();
+    const regeneratedSnapshot = (await (await regenerateResponse).json()) as {
+      messages: { role: string; content: string }[];
+    };
+    const latestMessage =
+      regeneratedSnapshot.messages[regeneratedSnapshot.messages.length - 1];
+
+    expect(latestMessage).toMatchObject({ role: "dm" });
+    expect(latestMessage.content).toContain(
+      "Lanternlight gathers around the Ashford Tollhouse"
+    );
+    await expect(
+      page.getByText("Lanternlight gathers around the Ashford Tollhouse")
+    ).toBeVisible();
+    await expect(page.getByText("What do you do?")).toBeVisible();
+  });
+
   test("play answers an Ask DM question with the deterministic local DM provider", async ({
     page,
     request
