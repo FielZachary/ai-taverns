@@ -253,6 +253,13 @@ const halfCasterSpellLevels: SpellLevelLabel[] = [
   "2nd level"
 ];
 const spellSelectionRules: Record<string, SpellSelectionRule> = {
+  Artificer: {
+    cantrips: 2,
+    preparedAbility: "int",
+    preparedLevelBonus: Math.floor(characterLevel / 2),
+    availableLevels: halfCasterSpellLevels,
+    spellSlotsText: "4 first-level, 2 second-level"
+  },
   Bard: {
     cantrips: 3,
     fixedLeveledSpells: 8,
@@ -304,6 +311,12 @@ const spellSelectionRules: Record<string, SpellSelectionRule> = {
     preparedLevelBonus: characterLevel,
     availableLevels: fullCasterSpellLevels,
     spellSlotsText: "4 first-level, 3 second-level, 2 third-level"
+  },
+  Psion: {
+    cantrips: 2,
+    fixedLeveledSpells: 9,
+    availableLevels: fullCasterSpellLevels,
+    spellSlotsText: "4 first-level, 3 second-level, 2 third-level"
   }
 };
 const spellSourceLabels: Record<string, string> = {
@@ -313,6 +326,7 @@ const spellSourceLabels: Record<string, string> = {
   Antagonize: "The Book of Many Things",
   "Ashardalon's Stride": "Fizban's Treasury of Dragons",
   "Beast Bond": "Xanathar's Guide to Everything",
+  "Booming Blade": "Tasha's Cauldron of Everything",
   "Borrowed Knowledge": "Strixhaven: A Curriculum of Chaos",
   Catapult: "Xanathar's Guide to Everything",
   Catnap: "Xanathar's Guide to Everything",
@@ -337,20 +351,24 @@ const spellSourceLabels: Record<string, string> = {
   "Galder's Tower": "Lost Laboratory of Kwalish",
   "Gift of Alacrity": "Explorer's Guide to Wildemount",
   "Gift of Gab": "Acquisitions Incorporated",
+  "Green-Flame Blade": "Tasha's Cauldron of Everything",
   Gust: "Xanathar's Guide to Everything",
   "Healing Spirit": "Xanathar's Guide to Everything",
   "Ice Knife": "Xanathar's Guide to Everything",
   "Immovable Object": "Explorer's Guide to Wildemount",
   "Incite Greed": "Acquisitions Incorporated",
   Infestation: "Xanathar's Guide to Everything",
+  "Intellect Fortress": "Unearthed Arcana: The Psion",
   "Jim's Glowing Coin": "Acquisitions Incorporated",
   "Jim's Magic Missile": "Acquisitions Incorporated",
   "Kinetic Jaunt": "Strixhaven: A Curriculum of Chaos",
   "Life Transference": "Xanathar's Guide to Everything",
   "Lightning Arrow": "Player's Handbook",
+  "Lightning Lure": "Tasha's Cauldron of Everything",
   "Magic Stone": "Xanathar's Guide to Everything",
   "Magnify Gravity": "Explorer's Guide to Wildemount",
   "Maximillian's Earthen Grasp": "Xanathar's Guide to Everything",
+  "Mind Sliver": "Tasha's Cauldron of Everything",
   "Melf's Minute Meteors": "Xanathar's Guide to Everything",
   "Mind Spike": "Xanathar's Guide to Everything",
   "Mold Earth": "Xanathar's Guide to Everything",
@@ -368,7 +386,13 @@ const spellSourceLabels: Record<string, string> = {
   Snare: "Xanathar's Guide to Everything",
   "Snilloc's Snowball Swarm": "Xanathar's Guide to Everything",
   "Spray of Cards": "The Book of Many Things",
+  "Summon Astral Entity": "Unearthed Arcana: The Psion",
   "Summon Lesser Demons": "Xanathar's Guide to Everything",
+  "Sword Burst": "Tasha's Cauldron of Everything",
+  "Tasha's Caustic Brew": "Tasha's Cauldron of Everything",
+  "Tasha's Mind Whip": "Unearthed Arcana: The Psion",
+  "Telekinetic Crush": "Unearthed Arcana: The Psion",
+  "Telekinetic Fling": "Unearthed Arcana: The Psion",
   "Thunder Step": "Xanathar's Guide to Everything",
   Thunderclap: "Xanathar's Guide to Everything",
   "Tidal Wave": "Xanathar's Guide to Everything",
@@ -385,6 +409,23 @@ const spellSourceLabels: Record<string, string> = {
   "Zephyr Strike": "Xanathar's Guide to Everything"
 };
 const spellCatalog = {
+  Artificer: [
+    {
+      level: "Cantrip",
+      base: ["Fire Bolt", "Guidance", "Mending", "Acid Splash", "Dancing Lights", "Light", "Mage Hand", "Message", "Poison Spray", "Prestidigitation", "Ray of Frost", "Resistance", "Shocking Grasp", "Spare the Dying", "Thorn Whip"],
+      dlc: ["Booming Blade", "Create Bonfire", "Frostbite", "Green-Flame Blade", "Lightning Lure", "Magic Stone", "Sword Burst", "Thunderclap"]
+    },
+    {
+      level: "1st level",
+      base: ["Alarm", "Cure Wounds", "Detect Magic", "Disguise Self", "Expeditious Retreat", "Faerie Fire", "False Life", "Feather Fall", "Grease", "Identify", "Jump", "Longstrider", "Purify Food and Drink", "Sanctuary"],
+      dlc: ["Absorb Elements", "Catapult", "Snare", "Tasha's Caustic Brew"]
+    },
+    {
+      level: "2nd level",
+      base: ["Aid", "Alter Self", "Arcane Lock", "Blur", "Continual Flame", "Darkvision", "Enhance Ability", "Enlarge/Reduce", "Heat Metal", "Invisibility", "Lesser Restoration", "Levitate", "Magic Mouth", "Magic Weapon", "Protection from Poison", "Rope Trick", "See Invisibility", "Spider Climb", "Web"],
+      dlc: ["Air Bubble", "Kinetic Jaunt", "Pyrotechnics", "Skywrite", "Vortex Warp"]
+    }
+  ],
   Bard: [
     {
       level: "Cantrip",
@@ -464,6 +505,26 @@ const spellCatalog = {
     {
       level: "3rd level",
       base: ["Aura of Vitality", "Blinding Smite", "Create Food and Water", "Crusader's Mantle", "Daylight", "Dispel Magic", "Elemental Weapon", "Magic Circle", "Remove Curse", "Revivify"]
+    }
+  ],
+  Psion: [
+    {
+      level: "Cantrip",
+      base: ["Minor Illusion", "Telekinetic Fling", "Mind Sliver", "Mage Hand", "Blade Ward", "Dancing Lights", "Friends", "Light", "Mending", "Message", "Prestidigitation", "True Strike"]
+    },
+    {
+      level: "1st level",
+      base: ["Animal Friendship", "Charm Person", "Command", "Comprehend Languages", "Detect Magic", "Dissonant Whispers", "Feather Fall", "Identify", "Jump", "Longstrider", "Mage Armor", "Silent Image", "Sleep", "Speak with Animals", "Tasha's Hideous Laughter", "Tenser's Floating Disk"]
+    },
+    {
+      level: "2nd level",
+      base: ["Animal Messenger", "Blindness/Deafness", "Calm Emotions", "Crown of Madness", "Detect Thoughts", "Enhance Ability", "Enlarge/Reduce", "Enthrall", "Heat Metal", "Hold Person", "Invisibility", "Knock", "Locate Animals or Plants", "Locate Object", "Magic Mouth", "Mind Spike", "Mirror Image", "Phantasmal Force", "See Invisibility", "Shatter", "Silence", "Suggestion", "Zone of Truth"],
+      dlc: ["Tasha's Mind Whip"]
+    },
+    {
+      level: "3rd level",
+      base: ["Animate Dead", "Bestow Curse", "Clairvoyance", "Dispel Magic", "Fear", "Fly", "Hypnotic Pattern", "Major Image", "Nondetection", "Sending", "Tongues"],
+      dlc: ["Intellect Fortress", "Summon Astral Entity", "Telekinetic Crush"]
     }
   ],
   Ranger: [
@@ -862,6 +923,95 @@ const classOptions = [
       }
     ],
     spellGroups: spellCatalog.Wizard
+  },
+  {
+    id: "Artificer",
+    summary: "A magical inventor who turns tools, infusions, and clever craft into power.",
+    hitDie: 8,
+    saveProficiencies: ["con", "int"],
+    skillChoices: ["Arcana", "History", "Investigation", "Medicine", "Nature", "Perception", "Sleight of Hand"],
+    defaultSkills: ["Arcana", "Investigation"],
+    subclassLabel: "Artificer Specialist",
+    subclassOptions: ["Alchemist", "Armorer", "Artillerist", "Battle Smith"],
+    featureLabel: "Infusions Known",
+    featureOptions: ["Enhanced Defense and Enhanced Weapon", "Mind Sharpener and Replicate Magic Item", "Returning Weapon and Homunculus Servant"],
+    proficiencies: {
+      armor: "Light armor, medium armor, shields",
+      weapons: "Simple weapons, firearms where available",
+      tools: "Thieves' tools, tinker's tools, one type of artisan's tools"
+    },
+    equipmentKits: [
+      {
+        id: "Battlefield inventor",
+        armorClass: 17,
+        weapons: ["Light crossbow: +6 to hit, 1d8+3 piercing, range 80/320 ft", "Dagger: +6 to hit, 1d4+3 piercing, thrown 20/60 ft"],
+        gear: ["Scale mail", "Shield", "Light crossbow", "20 bolts", "Thieves' tools", "Tinker's tools", "Dungeoneer's pack", "10 GP"]
+      },
+      {
+        id: "Workshop alchemist",
+        armorClass: 15,
+        weapons: ["Fire Bolt: +7 to hit, 2d10 fire", "Dagger: +6 to hit, 1d4+3 piercing, thrown 20/60 ft"],
+        gear: ["Studded leather armor", "Dagger", "Alchemist's supplies", "Thieves' tools", "Dungeoneer's pack", "10 GP"]
+      }
+    ],
+    spellGroups: spellCatalog.Artificer
+  },
+  {
+    id: "Blood Hunter",
+    summary: "A grim monster hunter who turns blood rites and hard training against the dark.",
+    hitDie: 10,
+    saveProficiencies: ["dex", "int"],
+    skillChoices: ["Acrobatics", "Arcana", "Athletics", "History", "Insight", "Investigation", "Religion", "Survival"],
+    defaultSkills: ["Investigation", "Survival", "Arcana"],
+    subclassLabel: "Blood Hunter Order",
+    subclassOptions: ["Order of the Ghostslayer", "Order of the Lycan", "Order of the Mutant", "Order of the Profane Soul"],
+    featureLabel: "Crimson Rite focus",
+    featureOptions: ["Rite of the Flame", "Rite of the Frozen", "Rite of the Storm"],
+    proficiencies: {
+      armor: "Light armor, medium armor, shields",
+      weapons: "Simple weapons, martial weapons",
+      tools: "Alchemist's supplies"
+    },
+    equipmentKits: [
+      {
+        id: "Witch hunter",
+        armorClass: 17,
+        weapons: ["Longsword: +6 to hit, 1d8+3 slashing", "Light crossbow: +7 to hit, 1d8+4 piercing, range 80/320 ft"],
+        gear: ["Scale mail", "Longsword", "Light crossbow", "20 bolts", "Explorer's pack", "Alchemist's supplies", "10 GP"]
+      },
+      {
+        id: "Cursed duelist",
+        armorClass: 16,
+        weapons: ["Rapier: +7 to hit, 1d8+4 piercing", "Hand crossbow: +7 to hit, 1d6+4 piercing, range 30/120 ft"],
+        gear: ["Studded leather armor", "Rapier", "Hand crossbow", "20 bolts", "Explorer's pack", "Alchemist's supplies", "10 GP"]
+      }
+    ],
+    spellGroups: []
+  },
+  {
+    id: "Psion",
+    summary: "A psychic spellcaster who shapes magic through focus, telepathy, and force of mind.",
+    hitDie: 6,
+    saveProficiencies: ["int", "wis"],
+    skillChoices: ["Arcana", "Insight", "Intimidation", "Investigation", "Medicine", "Perception", "Persuasion"],
+    defaultSkills: ["Arcana", "Insight"],
+    subclassLabel: "Psion Subclass",
+    subclassOptions: ["Metamorph", "Psi Warper", "Psykinetic", "Telepath"],
+    featureLabel: "Psionic Discipline",
+    featureOptions: ["Expanded Awareness and Id Insinuation", "Inerrant Aim and Tactical Mind", "Biofeedback and Psionic Guards"],
+    proficiencies: {
+      armor: "None",
+      weapons: "Simple weapons"
+    },
+    equipmentKits: [
+      {
+        id: "Telekinetic traveler",
+        armorClass: 15,
+        weapons: ["Mind Sliver: DC 15 Intelligence save, 2d6 psychic", "Light crossbow: +5 to hit, 1d8+2 piercing, range 80/320 ft"],
+        gear: ["Spear", "2 daggers", "Light crossbow", "20 bolts", "Map case", "Dungeoneer's pack", "6 GP"]
+      }
+    ],
+    spellGroups: spellCatalog.Psion
   }
 ] as const;
 const speciesOptions = [
@@ -907,6 +1057,8 @@ const backgroundSkills: Record<(typeof backgroundOptions)[number], SkillName[]> 
 };
 const toolOptions = [
   "Thieves' tools",
+  "Alchemist's supplies",
+  "Tinker's tools",
   "Herbalism kit",
   "Disguise kit",
   "Forgery kit",
@@ -949,7 +1101,10 @@ const defaultAbilityScoresByClass: Record<CharacterClass, CompleteAbilityScores>
   Rogue: { str: 8, dex: 17, con: 14, int: 14, wis: 12, cha: 10 },
   Sorcerer: { str: 8, dex: 14, con: 15, int: 10, wis: 10, cha: 17 },
   Warlock: { str: 8, dex: 14, con: 15, int: 10, wis: 12, cha: 17 },
-  Wizard: { str: 8, dex: 14, con: 15, int: 17, wis: 12, cha: 10 }
+  Wizard: { str: 8, dex: 14, con: 15, int: 17, wis: 12, cha: 10 },
+  Artificer: { str: 8, dex: 14, con: 16, int: 17, wis: 10, cha: 10 },
+  "Blood Hunter": { str: 10, dex: 17, con: 14, int: 15, wis: 12, cha: 8 },
+  Psion: { str: 8, dex: 14, con: 15, int: 17, wis: 12, cha: 10 }
 };
 type CharacterClass = (typeof classOptions)[number]["id"];
 type CharacterSpecies = (typeof speciesOptions)[number];
@@ -1046,6 +1201,44 @@ const equipmentCategoryOptions: Record<EquipmentCategory, string[]> = {
 };
 
 const classEquipmentRules: Record<CharacterClass, EquipmentRule> = {
+  Artificer: {
+    choices: [
+      {
+        id: "armor",
+        label: "Choice 1",
+        options: [
+          { id: "scale-mail", label: "Scale mail and shield", items: ["Scale mail", "Shield"] },
+          { id: "studded-leather", label: "Studded leather armor", items: ["Studded leather armor"] }
+        ]
+      },
+      {
+        id: "weapon-1",
+        label: "Choice 2",
+        options: [
+          {
+            id: "light-crossbow",
+            label: "Light crossbow and 20 bolts",
+            items: ["Light crossbow", "20 bolts"]
+          },
+          {
+            id: "any-simple",
+            label: "Any simple weapon",
+            category: "simpleWeapon"
+          }
+        ]
+      },
+      {
+        id: "tool-1",
+        label: "Choice 3",
+        options: [
+          { id: "tinkers-tools", label: "Tinker's tools", items: ["Tinker's tools"] },
+          { id: "alchemists-supplies", label: "Alchemist's supplies", items: ["Alchemist's supplies"] },
+          { id: "smiths-tools", label: "Smith's tools", items: ["Smith's tools"] }
+        ]
+      }
+    ],
+    fixed: ["Thieves' tools", "Dungeoneer's pack"]
+  },
   Barbarian: {
     choices: [
       {
@@ -1379,6 +1572,52 @@ const classEquipmentRules: Record<CharacterClass, EquipmentRule> = {
     ],
     fixed: ["Leather armor", "2 daggers", "Thieves' tools"]
   },
+  "Blood Hunter": {
+    choices: [
+      {
+        id: "weapon-1",
+        label: "Choice 1",
+        options: [
+          {
+            id: "any-martial",
+            label: "One martial weapon",
+            category: "martialWeapon"
+          },
+          {
+            id: "two-simple",
+            label: "Two simple weapons",
+            category: "simpleWeapon",
+            quantity: 2
+          }
+        ]
+      },
+      {
+        id: "weapon-2",
+        label: "Choice 2",
+        options: [
+          {
+            id: "light-crossbow",
+            label: "Light crossbow and 20 bolts",
+            items: ["Light crossbow", "20 bolts"]
+          },
+          {
+            id: "hand-crossbow",
+            label: "Hand crossbow and 20 bolts",
+            items: ["Hand crossbow", "20 bolts"]
+          }
+        ]
+      },
+      {
+        id: "armor",
+        label: "Choice 3",
+        options: [
+          { id: "studded-leather", label: "Studded leather armor", items: ["Studded leather armor"] },
+          { id: "scale-mail", label: "Scale mail", items: ["Scale mail"] }
+        ]
+      }
+    ],
+    fixed: ["Explorer's pack", "Alchemist's supplies"]
+  },
   Sorcerer: {
     choices: [
       {
@@ -1481,6 +1720,35 @@ const classEquipmentRules: Record<CharacterClass, EquipmentRule> = {
       }
     ],
     fixed: ["Spellbook"]
+  },
+  Psion: {
+    choices: [
+      {
+        id: "weapon-1",
+        label: "Choice 1",
+        options: [
+          { id: "spear", label: "Spear", items: ["Spear"] },
+          {
+            id: "any-simple",
+            label: "Any simple weapon",
+            category: "simpleWeapon"
+          }
+        ]
+      },
+      {
+        id: "weapon-2",
+        label: "Choice 2",
+        options: [
+          {
+            id: "light-crossbow",
+            label: "Light crossbow and 20 bolts",
+            items: ["Light crossbow", "20 bolts"]
+          },
+          { id: "two-daggers", label: "Two daggers", items: ["2 daggers"] }
+        ]
+      }
+    ],
+    fixed: ["Map case", "Dungeoneer's pack", "6 GP"]
   }
 };
 
@@ -1513,6 +1781,7 @@ const speciesAbilityBonuses: Record<CharacterSpecies, SpeciesAbilityBonuses> = {
 };
 
 const quickBuildBackgroundByClass: Record<CharacterClass, CharacterBackground> = {
+  Artificer: "Guild Artisan",
   Barbarian: "Outlander",
   Bard: "Entertainer",
   Cleric: "Acolyte",
@@ -1522,9 +1791,11 @@ const quickBuildBackgroundByClass: Record<CharacterClass, CharacterBackground> =
   Paladin: "Noble",
   Ranger: "Outlander",
   Rogue: "Criminal",
+  "Blood Hunter": "Outlander",
   Sorcerer: "Hermit",
   Warlock: "Sage",
-  Wizard: "Sage"
+  Wizard: "Sage",
+  Psion: "Sage"
 };
 
 function formatList(items: readonly string[]) {
@@ -1584,7 +1855,7 @@ function equipmentLinesForGear(gear: readonly string[]) {
 
     return (
       normalizedName in weaponAttackDetails ||
-      ["chain mail", "scale mail", "leather armor", "shield"].includes(normalizedName)
+      ["chain mail", "scale mail", "studded leather armor", "leather armor", "shield"].includes(normalizedName)
     );
   });
 }
@@ -1689,6 +1960,10 @@ function armorClassForEquipment(
     return 14 + Math.min(2, dexModifier) + shieldBonus;
   }
 
+  if (hasEquipment(gear, "studded leather armor")) {
+    return 12 + dexModifier + shieldBonus;
+  }
+
   if (hasEquipment(gear, "leather armor")) {
     return 11 + dexModifier + shieldBonus;
   }
@@ -1772,12 +2047,25 @@ function spellAttackLinesFor(
   spellSaveDc: number,
   selectedSpells: readonly string[]
 ) {
-  if (!selectedSpells.includes("Fire Bolt") && !selectedSpells.includes("Eldritch Blast")) {
+  if (
+    !selectedSpells.includes("Fire Bolt") &&
+    !selectedSpells.includes("Eldritch Blast") &&
+    !selectedSpells.includes("Mind Sliver") &&
+    !selectedSpells.includes("Telekinetic Fling")
+  ) {
     return [];
   }
 
   if (characterClass === "Warlock" && selectedSpells.includes("Eldritch Blast")) {
     return [`Eldritch Blast: ${formatModifier(spellAttackBonus)} to hit, 2 beams, 1d10 force each`];
+  }
+
+  if (selectedSpells.includes("Telekinetic Fling")) {
+    return [`Telekinetic Fling: ${formatModifier(spellAttackBonus)} to hit, psychic force cantrip`];
+  }
+
+  if (selectedSpells.includes("Mind Sliver")) {
+    return [`Mind Sliver: DC ${spellSaveDc} Intelligence save, psychic damage`];
   }
 
   if (selectedSpells.includes("Fire Bolt")) {
@@ -2251,7 +2539,16 @@ export function NewAdventureForm() {
   const constitutionModifier = getModifier(resolvedAbilityScores.con);
   const maxHp = getAverageHp(selectedClass.hitDie, constitutionModifier);
   const passivePerception = 10 + getModifier(resolvedAbilityScores.wis) + (proficientSkills.includes("Perception") ? proficiencyBonus : 0);
-  const spellcastingAbility = characterClass === "Wizard" ? "int" : characterClass === "Cleric" || characterClass === "Druid" || characterClass === "Ranger" ? "wis" : "cha";
+  const spellcastingAbility =
+    characterClass === "Wizard" ||
+    characterClass === "Artificer" ||
+    characterClass === "Psion"
+      ? "int"
+      : characterClass === "Cleric" ||
+          characterClass === "Druid" ||
+          characterClass === "Ranger"
+        ? "wis"
+        : "cha";
   const spellcastingModifier = getModifier(resolvedAbilityScores[spellcastingAbility]);
   const spellSaveDc = 8 + proficiencyBonus + spellcastingModifier;
   const spellAttackBonus = proficiencyBonus + spellcastingModifier;
@@ -2387,7 +2684,12 @@ export function NewAdventureForm() {
       "Proficiencies and Languages",
       `Armor: ${selectedClass.proficiencies.armor}`,
       `Weapons: ${selectedClass.proficiencies.weapons}`,
-      `Tools: ${selectedTool}`,
+      `Tools: ${formatList([
+        ...("tools" in selectedClass.proficiencies
+          ? [selectedClass.proficiencies.tools]
+          : []),
+        selectedTool
+      ])}`,
       `Languages: Common, ${selectedLanguage}`,
       "",
       "Attacks",
@@ -2630,11 +2932,6 @@ export function NewAdventureForm() {
   }
 
   function applyQuickBuildDefaults() {
-    const skillChoices = selectedClass.skillChoices.slice(
-      0,
-      Math.max(2, Math.min(4, selectedClass.defaultSkills.length))
-    ) as SkillName[];
-
     setCharacterBackground(quickBuildBackgroundByClass[characterClass]);
     setStatGenerationMode("roll");
     setAbilityScores({ ...emptyAbilityScores });
@@ -2642,11 +2939,7 @@ export function NewAdventureForm() {
     setStatRollAssignments({ ...emptyStatRollAssignments });
     setSubclass(selectedClass.subclassOptions[0]);
     setClassFeatureChoice(selectedClass.featureOptions[0]);
-    setSelectedSkills(
-      skillChoices.length > 0
-        ? skillChoices
-        : ([...selectedClass.defaultSkills] as SkillName[])
-    );
+    setSelectedSkills([...selectedClass.defaultSkills] as SkillName[]);
     setEquipmentSelections({});
     setEquipmentChoiceStepIndex(0);
     setActiveEquipmentModal(null);
