@@ -159,6 +159,15 @@ const campaign = {
   preview: "A damp stone stairway waits."
 } satisfies CampaignSummary;
 
+const multiplayerCampaign = {
+  id: "22222222-2222-4222-8222-222222222222",
+  hermesSessionId: "hermes-session-2",
+  mode: "multiplayer",
+  title: "Candlekeep Circle",
+  preview: "Two players gather at the table.",
+  joinCode: "GLOW-42"
+} satisfies CampaignSummary;
+
 function roomSnapshot(overrides: Partial<RoomSnapshot> = {}): RoomSnapshot {
   return {
     roomId: campaign.id,
@@ -182,6 +191,38 @@ function roomSnapshot(overrides: Partial<RoomSnapshot> = {}): RoomSnapshot {
     updatedAt: "2026-07-12T00:00:00.000Z",
     ...overrides
   };
+}
+
+function multiplayerRoomSnapshot(
+  overrides: Partial<RoomSnapshot> = {}
+): RoomSnapshot {
+  return roomSnapshot({
+    roomId: multiplayerCampaign.id,
+    mode: "multiplayer",
+    sessionId: multiplayerCampaign.hermesSessionId,
+    players: [
+      {
+        id: "player-1",
+        slot: 0,
+        username: "Mira",
+        characterName: "Ash",
+        characterSheet: "Name: Ash\nClass: Ranger",
+        status: "waiting"
+      },
+      {
+        id: "player-2",
+        slot: 1,
+        username: "Theo",
+        characterName: "Bram",
+        characterSheet: "Name: Bram\nClass: Cleric",
+        status: "waiting"
+      }
+    ],
+    messages: [],
+    isResolving: false,
+    hasBegun: false,
+    ...overrides
+  });
 }
 
 class MockWebSocket {
@@ -334,6 +375,65 @@ describe("GameShell", () => {
 
     expect(
       screen.getByRole("button", { name: /regenerate ai response/i })
+    ).toBeEnabled();
+    expect(screen.getByLabelText("Message log")).toHaveAttribute(
+      "data-sending",
+      "false"
+    );
+  });
+
+  it("shows begin-adventure failures and re-enables the start control", async () => {
+    listCampaignsMock.mockResolvedValue([multiplayerCampaign]);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url.startsWith("/api/room?")) {
+        return responseJson(multiplayerRoomSnapshot());
+      }
+
+      if (url === "/api/auth/claim-guest-state") {
+        return responseJson({});
+      }
+
+      if (url === "/api/room/begin" && init?.method === "POST") {
+        return responseJson(
+          {
+            error: {
+              message: "The party needs one more oath before beginning."
+            }
+          },
+          { status: 409 }
+        );
+      }
+
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<GameShell initialCampaignId={multiplayerCampaign.id} />);
+
+    expect(
+      await screen.findByText("The party is gathered. Let the DM open the campaign.")
+    ).toBeInTheDocument();
+    expect(screen.getByText("GLOW-42")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /begin adventure/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("The party needs one more oath before beginning.")
+      ).toBeInTheDocument();
+    });
+
+    const beginCall = fetchMock.mock.calls.find(
+      ([input, init]) => String(input) === "/api/room/begin" && init?.method === "POST"
+    );
+    expect(JSON.parse(String(beginCall?.[1]?.body))).toEqual({
+      roomId: multiplayerCampaign.id,
+      sessionId: multiplayerCampaign.hermesSessionId
+    });
+    expect(
+      screen.getByRole("button", { name: /begin adventure/i })
     ).toBeEnabled();
     expect(screen.getByLabelText("Message log")).toHaveAttribute(
       "data-sending",
