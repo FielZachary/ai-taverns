@@ -104,6 +104,75 @@ export function activeCharacterSheetForRoom({
   );
 }
 
+export function isWaitingOnAnotherPlayerRoll({
+  isSinglePlayer,
+  pendingRollRequests,
+  currentPendingRollRequest
+}: {
+  isSinglePlayer: boolean;
+  pendingRollRequests: DiceRollRequest[];
+  currentPendingRollRequest: DiceRollRequest | null;
+}) {
+  return (
+    !isSinglePlayer &&
+    pendingRollRequests.length > 0 &&
+    !currentPendingRollRequest
+  );
+}
+
+export function isWaitingOnTargetedInput({
+  isSinglePlayer,
+  inputPolicy,
+  inputTargets,
+  playerProfile,
+  currentRoomPlayer
+}: {
+  isSinglePlayer: boolean;
+  inputPolicy: InputPolicy;
+  inputTargets: string[];
+  playerProfile: PlayerProfile;
+  currentRoomPlayer?: RoomPlayer;
+}) {
+  return (
+    !isSinglePlayer &&
+    inputPolicy === "only_targeted_players" &&
+    inputTargets.length > 0 &&
+    !inputTargetsCurrentPlayer(inputTargets, playerProfile, currentRoomPlayer)
+  );
+}
+
+export function hasOptimisticSubmissionForCurrentPlayer({
+  isSinglePlayer,
+  optimisticSubmittedPlayerId,
+  playerId
+}: {
+  isSinglePlayer: boolean;
+  optimisticSubmittedPlayerId: string | null;
+  playerId: string;
+}) {
+  return !isSinglePlayer && optimisticSubmittedPlayerId === playerId;
+}
+
+export function isInputSubmittedForCurrentRoomState({
+  isInputSubmitted,
+  hasOptimisticSubmission,
+  pendingRollRequests,
+  currentPendingRollRequest,
+  isWaitingOnTargetedInput
+}: {
+  isInputSubmitted: boolean;
+  hasOptimisticSubmission: boolean;
+  pendingRollRequests: DiceRollRequest[];
+  currentPendingRollRequest: DiceRollRequest | null;
+  isWaitingOnTargetedInput: boolean;
+}) {
+  return (
+    (isInputSubmitted || hasOptimisticSubmission) &&
+    (pendingRollRequests.length === 0 || Boolean(currentPendingRollRequest)) &&
+    !isWaitingOnTargetedInput
+  );
+}
+
 export function snapshotHasResponseAfterMessage(
   room: RoomSnapshot,
   pendingSubmission: PendingSubmission

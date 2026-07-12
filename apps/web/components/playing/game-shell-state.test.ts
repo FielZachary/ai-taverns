@@ -7,6 +7,10 @@ import {
   currentPlayerRollRequests,
   displayedRoomPlayersWithOptimisticSubmission,
   getMissingPlayerProfileFields,
+  hasOptimisticSubmissionForCurrentPlayer,
+  isInputSubmittedForCurrentRoomState,
+  isWaitingOnAnotherPlayerRoll,
+  isWaitingOnTargetedInput,
   inputTargetsCurrentPlayer,
   rollRequestTargetsCurrentPlayer,
   rollRequestsFromRoom,
@@ -397,5 +401,140 @@ describe("game shell state helpers", () => {
         playerProfile: fallbackProfile
       })
     ).toBe("Profile sheet");
+  });
+
+  it("detects when multiplayer input is waiting on another player's roll", () => {
+    expect(
+      isWaitingOnAnotherPlayerRoll({
+        isSinglePlayer: false,
+        pendingRollRequests: [rollRequest("other", "Bran")],
+        currentPendingRollRequest: null
+      })
+    ).toBe(true);
+    expect(
+      isWaitingOnAnotherPlayerRoll({
+        isSinglePlayer: false,
+        pendingRollRequests: [rollRequest("current", "Nyx")],
+        currentPendingRollRequest: rollRequest("current", "Nyx")
+      })
+    ).toBe(false);
+    expect(
+      isWaitingOnAnotherPlayerRoll({
+        isSinglePlayer: true,
+        pendingRollRequests: [rollRequest("solo")],
+        currentPendingRollRequest: null
+      })
+    ).toBe(false);
+  });
+
+  it("detects when targeted input excludes the current player", () => {
+    expect(
+      isWaitingOnTargetedInput({
+        isSinglePlayer: false,
+        inputPolicy: "only_targeted_players",
+        inputTargets: ["Bran"],
+        playerProfile: completeProfile,
+        currentRoomPlayer
+      })
+    ).toBe(true);
+    expect(
+      isWaitingOnTargetedInput({
+        isSinglePlayer: false,
+        inputPolicy: "only_targeted_players",
+        inputTargets: ["Nyx"],
+        playerProfile: completeProfile,
+        currentRoomPlayer
+      })
+    ).toBe(false);
+    expect(
+      isWaitingOnTargetedInput({
+        isSinglePlayer: false,
+        inputPolicy: "all_players",
+        inputTargets: ["Bran"],
+        playerProfile: completeProfile,
+        currentRoomPlayer
+      })
+    ).toBe(false);
+    expect(
+      isWaitingOnTargetedInput({
+        isSinglePlayer: true,
+        inputPolicy: "only_targeted_players",
+        inputTargets: ["Bran"],
+        playerProfile: completeProfile,
+        currentRoomPlayer
+      })
+    ).toBe(false);
+  });
+
+  it("treats optimistic submissions as current-player submitted state only in multiplayer", () => {
+    expect(
+      hasOptimisticSubmissionForCurrentPlayer({
+        isSinglePlayer: false,
+        optimisticSubmittedPlayerId: "player-1",
+        playerId: "player-1"
+      })
+    ).toBe(true);
+    expect(
+      hasOptimisticSubmissionForCurrentPlayer({
+        isSinglePlayer: false,
+        optimisticSubmittedPlayerId: "player-2",
+        playerId: "player-1"
+      })
+    ).toBe(false);
+    expect(
+      hasOptimisticSubmissionForCurrentPlayer({
+        isSinglePlayer: true,
+        optimisticSubmittedPlayerId: "player-1",
+        playerId: "player-1"
+      })
+    ).toBe(false);
+  });
+
+  it("keeps submitted input state only when the current room state still expects it", () => {
+    expect(
+      isInputSubmittedForCurrentRoomState({
+        isInputSubmitted: true,
+        hasOptimisticSubmission: false,
+        pendingRollRequests: [],
+        currentPendingRollRequest: null,
+        isWaitingOnTargetedInput: false
+      })
+    ).toBe(true);
+    expect(
+      isInputSubmittedForCurrentRoomState({
+        isInputSubmitted: false,
+        hasOptimisticSubmission: true,
+        pendingRollRequests: [],
+        currentPendingRollRequest: null,
+        isWaitingOnTargetedInput: false
+      })
+    ).toBe(true);
+    expect(
+      isInputSubmittedForCurrentRoomState({
+        isInputSubmitted: true,
+        hasOptimisticSubmission: false,
+        pendingRollRequests: [rollRequest("other", "Bran")],
+        currentPendingRollRequest: null,
+        isWaitingOnTargetedInput: false
+      })
+    ).toBe(false);
+    expect(
+      isInputSubmittedForCurrentRoomState({
+        isInputSubmitted: true,
+        hasOptimisticSubmission: false,
+        pendingRollRequests: [rollRequest("current", "Nyx")],
+        currentPendingRollRequest: rollRequest("current", "Nyx"),
+        isWaitingOnTargetedInput: false
+      })
+    ).toBe(true);
+    expect(
+      isInputSubmittedForCurrentRoomState({
+        isInputSubmitted: true,
+        hasOptimisticSubmission: false,
+        pendingRollRequests: [],
+        currentPendingRollRequest: null,
+        isWaitingOnTargetedInput: true
+      })
+    ).toBe(false);
   });
 });

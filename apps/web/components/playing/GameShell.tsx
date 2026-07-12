@@ -46,7 +46,10 @@ import {
   currentPlayerRollRequests,
   displayedRoomPlayersWithOptimisticSubmission,
   getMissingPlayerProfileFields,
-  inputTargetsCurrentPlayer,
+  hasOptimisticSubmissionForCurrentPlayer,
+  isInputSubmittedForCurrentRoomState,
+  isWaitingOnAnotherPlayerRoll,
+  isWaitingOnTargetedInput,
   rollRequestsFromRoom,
   snapshotHasResponseAfterMessage,
   waitingPlayerStatuses,
@@ -570,21 +573,30 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     () => requiredDiceQueueFromRequests(currentPendingRollRequests),
     [currentPendingRollRequests]
   );
-  const isWaitingOnAnotherPlayerRoll =
-    !isSinglePlayer &&
-    pendingRollRequests.length > 0 &&
-    !currentPendingRollRequest;
-  const isWaitingOnTargetedInput =
-    !isSinglePlayer &&
-    inputPolicy === "only_targeted_players" &&
-    inputTargets.length > 0 &&
-    !inputTargetsCurrentPlayer(inputTargets, playerProfile, currentRoomPlayer);
-  const hasOptimisticSubmission =
-    !isSinglePlayer && optimisticSubmittedPlayerId === playerId;
-  const isInputSubmittedForCurrentState =
-    (isInputSubmitted || hasOptimisticSubmission) &&
-    (pendingRollRequests.length === 0 || Boolean(currentPendingRollRequest)) &&
-    !isWaitingOnTargetedInput;
+  const isWaitingOnAnotherPlayerRollState = isWaitingOnAnotherPlayerRoll({
+    isSinglePlayer,
+    pendingRollRequests,
+    currentPendingRollRequest
+  });
+  const isWaitingOnTargetedInputState = isWaitingOnTargetedInput({
+    isSinglePlayer,
+    inputPolicy,
+    inputTargets,
+    playerProfile,
+    currentRoomPlayer
+  });
+  const hasOptimisticSubmission = hasOptimisticSubmissionForCurrentPlayer({
+    isSinglePlayer,
+    optimisticSubmittedPlayerId,
+    playerId
+  });
+  const isInputSubmittedForCurrentState = isInputSubmittedForCurrentRoomState({
+    isInputSubmitted,
+    hasOptimisticSubmission,
+    pendingRollRequests,
+    currentPendingRollRequest,
+    isWaitingOnTargetedInput: isWaitingOnTargetedInputState
+  });
 
   const visibleMessages = useMemo(
     () =>
@@ -1339,7 +1351,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
       return;
     }
 
-    if (isWaitingOnTargetedInput) {
+    if (isWaitingOnTargetedInputState) {
       setInputValidationMessage("The DM is waiting on another player.");
       setInputValidationPulse((currentPulse) => currentPulse + 1);
       return;
@@ -1895,9 +1907,9 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
                       currentRequiredRollDice?.expression ??
                       currentPendingRollRequest.label
                     }`
-                  : isWaitingOnAnotherPlayerRoll
+                  : isWaitingOnAnotherPlayerRollState
                     ? "Waiting on another player's roll"
-                    : isWaitingOnTargetedInput
+                    : isWaitingOnTargetedInputState
                       ? "Waiting on another player"
                   : !isSinglePlayer && !hasAdventureBegun
                   ? "You can only start once the adventure has begun"
@@ -1942,7 +1954,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
         aria-label="Send turn"
         disabled={
           pendingRollRequests.length > 0 ||
-          isWaitingOnTargetedInput ||
+          isWaitingOnTargetedInputState ||
           Boolean(activeDiceReveal) ||
           isSending ||
           !draft.trim()
