@@ -29,7 +29,7 @@ import {
   type ChatSummary
 } from "./ChatHistorySidebar";
 import { CharacterSheetOverlay } from "./CharacterSheetOverlay";
-import { MessageLog, type ChatPlayerStatus } from "./MessageLog";
+import { MessageLog } from "./MessageLog";
 import {
   emptyPlayerProfile,
   type PlayerProfile
@@ -42,11 +42,14 @@ import {
   type QueuedDice
 } from "./PlayerInput";
 import {
+  activeCharacterSheetForRoom,
   currentPlayerRollRequests,
+  displayedRoomPlayersWithOptimisticSubmission,
   getMissingPlayerProfileFields,
   inputTargetsCurrentPlayer,
   rollRequestsFromRoom,
   snapshotHasResponseAfterMessage,
+  waitingPlayerStatuses,
   type PendingSubmission,
   type RoomPlayer,
   type RoomSnapshot
@@ -542,13 +545,10 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
   const isSinglePlayer = activeCampaign?.mode === "single_player";
   const displayedRoomPlayers = useMemo(
     () =>
-      optimisticSubmittedPlayerId
-        ? roomPlayers.map((roomPlayer) =>
-            roomPlayer.id === optimisticSubmittedPlayerId
-              ? { ...roomPlayer, status: "submitted" as const }
-              : roomPlayer
-          )
-        : roomPlayers,
+      displayedRoomPlayersWithOptimisticSubmission(
+        roomPlayers,
+        optimisticSubmittedPlayerId
+      ),
     [optimisticSubmittedPlayerId, roomPlayers]
   );
   const currentRoomPlayer = useMemo(
@@ -599,35 +599,24 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     () => streamingDmMessages.some((message) => message.content.trim()),
     [streamingDmMessages]
   );
-  const waitingPlayers = useMemo<ChatPlayerStatus[]>(() => {
-    if (isSinglePlayer || !hasAdventureBegun) {
-      return [];
-    }
-
-    return displayedRoomPlayers
-      .filter((roomPlayer) => roomPlayer.status === "waiting")
-      .map((roomPlayer) => ({
-        id: roomPlayer.id,
-        status: roomPlayer.status,
-        name: roomPlayer.characterName || roomPlayer.username || "Player",
-        detail:
-          roomPlayer.characterName && roomPlayer.username
-            ? roomPlayer.username
-            : undefined
-      }));
-  }, [displayedRoomPlayers, hasAdventureBegun, isSinglePlayer]);
-  const activeCharacterSheet = useMemo(() => {
-    return (
-      currentRoomPlayer?.characterSheet ||
-      displayedRoomPlayers.find((roomPlayer) => roomPlayer.characterSheet.trim())
-        ?.characterSheet ||
-      playerProfile.characterSheet
-    );
-  }, [
-    currentRoomPlayer?.characterSheet,
-    displayedRoomPlayers,
-    playerProfile.characterSheet
-  ]);
+  const waitingPlayers = useMemo(
+    () =>
+      waitingPlayerStatuses({
+        roomPlayers: displayedRoomPlayers,
+        hasAdventureBegun,
+        isSinglePlayer
+      }),
+    [displayedRoomPlayers, hasAdventureBegun, isSinglePlayer]
+  );
+  const activeCharacterSheet = useMemo(
+    () =>
+      activeCharacterSheetForRoom({
+        currentRoomPlayer,
+        roomPlayers: displayedRoomPlayers,
+        playerProfile
+      }),
+    [currentRoomPlayer, displayedRoomPlayers, playerProfile]
+  );
   const regeneratableMessageId = useMemo(() => {
     const latestDmMessage = [...visibleMessages]
       .reverse()

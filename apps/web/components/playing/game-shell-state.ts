@@ -39,6 +39,71 @@ export type PendingSubmission = {
   createdAt: string;
 };
 
+export type WaitingPlayerStatus = {
+  id: string;
+  name: string;
+  detail?: string;
+  status: "waiting" | "submitted";
+};
+
+export function displayedRoomPlayersWithOptimisticSubmission(
+  roomPlayers: RoomPlayer[],
+  optimisticSubmittedPlayerId: string | null
+) {
+  if (!optimisticSubmittedPlayerId) {
+    return roomPlayers;
+  }
+
+  return roomPlayers.map((roomPlayer) =>
+    roomPlayer.id === optimisticSubmittedPlayerId
+      ? { ...roomPlayer, status: "submitted" as const }
+      : roomPlayer
+  );
+}
+
+export function waitingPlayerStatuses({
+  roomPlayers,
+  hasAdventureBegun,
+  isSinglePlayer
+}: {
+  roomPlayers: RoomPlayer[];
+  hasAdventureBegun: boolean;
+  isSinglePlayer: boolean;
+}): WaitingPlayerStatus[] {
+  if (isSinglePlayer || !hasAdventureBegun) {
+    return [];
+  }
+
+  return roomPlayers
+    .filter((roomPlayer) => roomPlayer.status === "waiting")
+    .map((roomPlayer) => ({
+      id: roomPlayer.id,
+      status: roomPlayer.status,
+      name: roomPlayer.characterName || roomPlayer.username || "Player",
+      detail:
+        roomPlayer.characterName && roomPlayer.username
+          ? roomPlayer.username
+          : undefined
+    }));
+}
+
+export function activeCharacterSheetForRoom({
+  currentRoomPlayer,
+  roomPlayers,
+  playerProfile
+}: {
+  currentRoomPlayer?: RoomPlayer;
+  roomPlayers: RoomPlayer[];
+  playerProfile: PlayerProfile;
+}) {
+  return (
+    currentRoomPlayer?.characterSheet ||
+    roomPlayers.find((roomPlayer) => roomPlayer.characterSheet.trim())
+      ?.characterSheet ||
+    playerProfile.characterSheet
+  );
+}
+
 export function snapshotHasResponseAfterMessage(
   room: RoomSnapshot,
   pendingSubmission: PendingSubmission

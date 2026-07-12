@@ -3,12 +3,15 @@ import { describe, expect, it } from "vitest";
 import type { DiceRollRequest, GameMessage } from "@/lib/game-types";
 import { defaultCharacterSheet, type PlayerProfile } from "./PlayerPanel";
 import {
+  activeCharacterSheetForRoom,
   currentPlayerRollRequests,
+  displayedRoomPlayersWithOptimisticSubmission,
   getMissingPlayerProfileFields,
   inputTargetsCurrentPlayer,
   rollRequestTargetsCurrentPlayer,
   rollRequestsFromRoom,
   snapshotHasResponseAfterMessage,
+  waitingPlayerStatuses,
   type RoomPlayer,
   type RoomSnapshot
 } from "./game-shell-state";
@@ -232,5 +235,167 @@ describe("game shell state helpers", () => {
         pendingSubmission
       )
     ).toBe(true);
+  });
+
+  it("marks the optimistic submitted player without changing other room players", () => {
+    const waitingPlayer: RoomPlayer = {
+      ...currentRoomPlayer,
+      status: "waiting"
+    };
+    const otherPlayer: RoomPlayer = {
+      id: "player-2",
+      slot: 2,
+      username: "Bran",
+      characterName: "Bran Oak",
+      characterSheet: "Name: Bran",
+      status: "waiting"
+    };
+
+    expect(
+      displayedRoomPlayersWithOptimisticSubmission(
+        [waitingPlayer, otherPlayer],
+        "player-1"
+      )
+    ).toEqual([
+      {
+        ...waitingPlayer,
+        status: "submitted"
+      },
+      otherPlayer
+    ]);
+    const unchangedPlayers = [waitingPlayer, otherPlayer];
+
+    expect(
+      displayedRoomPlayersWithOptimisticSubmission(unchangedPlayers, null)
+    ).toBe(unchangedPlayers);
+  });
+
+  it("shapes waiting player statuses only after multiplayer adventure start", () => {
+    const players: RoomPlayer[] = [
+      {
+        ...currentRoomPlayer,
+        username: "Ada",
+        characterName: "Nyx",
+        status: "waiting"
+      },
+      {
+        id: "player-2",
+        slot: 2,
+        username: "Bran",
+        characterName: "",
+        characterSheet: "Name: Bran",
+        status: "waiting"
+      },
+      {
+        id: "player-3",
+        slot: 3,
+        username: "",
+        characterName: "",
+        characterSheet: "",
+        status: "waiting"
+      },
+      {
+        id: "player-4",
+        slot: 4,
+        username: "Submitted",
+        characterName: "Done",
+        characterSheet: "Name: Done",
+        status: "submitted"
+      }
+    ];
+
+    expect(
+      waitingPlayerStatuses({
+        roomPlayers: players,
+        hasAdventureBegun: false,
+        isSinglePlayer: false
+      })
+    ).toEqual([]);
+    expect(
+      waitingPlayerStatuses({
+        roomPlayers: players,
+        hasAdventureBegun: true,
+        isSinglePlayer: true
+      })
+    ).toEqual([]);
+    expect(
+      waitingPlayerStatuses({
+        roomPlayers: players,
+        hasAdventureBegun: true,
+        isSinglePlayer: false
+      })
+    ).toEqual([
+      {
+        id: "player-1",
+        status: "waiting",
+        name: "Nyx",
+        detail: "Ada"
+      },
+      {
+        id: "player-2",
+        status: "waiting",
+        name: "Bran",
+        detail: undefined
+      },
+      {
+        id: "player-3",
+        status: "waiting",
+        name: "Player",
+        detail: undefined
+      }
+    ]);
+  });
+
+  it("selects the active character sheet from current player, room players, then profile", () => {
+    const fallbackProfile = {
+      ...completeProfile,
+      characterSheet: "Profile sheet"
+    };
+    const roomPlayers: RoomPlayer[] = [
+      {
+        ...currentRoomPlayer,
+        characterSheet: ""
+      },
+      {
+        id: "player-2",
+        slot: 2,
+        username: "Bran",
+        characterName: "Bran",
+        characterSheet: "Bran sheet",
+        status: "waiting"
+      }
+    ];
+
+    expect(
+      activeCharacterSheetForRoom({
+        currentRoomPlayer: {
+          ...currentRoomPlayer,
+          characterSheet: "Current sheet"
+        },
+        roomPlayers,
+        playerProfile: fallbackProfile
+      })
+    ).toBe("Current sheet");
+    expect(
+      activeCharacterSheetForRoom({
+        currentRoomPlayer: {
+          ...currentRoomPlayer,
+          characterSheet: ""
+        },
+        roomPlayers,
+        playerProfile: fallbackProfile
+      })
+    ).toBe("Bran sheet");
+    expect(
+      activeCharacterSheetForRoom({
+        roomPlayers: [
+          {
+            ...currentRoomPlayer,
+            characterSheet: " "
+          }
+        ],
+        playerProfile: fallbackProfile
+      })
+    ).toBe("Profile sheet");
   });
 });
