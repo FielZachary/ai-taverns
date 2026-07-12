@@ -46,6 +46,16 @@ describe("fastify API helpers", () => {
     expect(getPublicAppOrigin()).toBe("https://app.example");
   });
 
+  it("falls back to the public API origin and then localhost for public redirects", () => {
+    vi.stubEnv("NEXT_PUBLIC_FASTIFY_API_ORIGIN", "https://api.example/");
+
+    expect(getPublicAppOrigin()).toBe("https://api.example");
+
+    vi.unstubAllEnvs();
+
+    expect(getPublicAppOrigin()).toBe("http://localhost:3000");
+  });
+
   it("accepts only same-origin relative next paths", () => {
     expect(safeNextPath("/play?campaignId=abc")).toBe("/play?campaignId=abc");
     expect(safeNextPath("//evil.example/play")).toBe("/play");
@@ -92,5 +102,14 @@ describe("fastify API helpers", () => {
     copySetCookieHeaders(source, target);
 
     expect(target.headers.get("set-cookie")).toBe("sid=1; Path=/");
+  });
+
+  it("leaves the target unchanged when no set-cookie headers are present", () => {
+    const source = new Response(null);
+    const target = new Response(null);
+
+    copySetCookieHeaders(source, target);
+
+    expect(target.headers.has("set-cookie")).toBe(false);
   });
 });

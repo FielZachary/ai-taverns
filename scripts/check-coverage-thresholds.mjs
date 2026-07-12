@@ -22,7 +22,7 @@ const packageThresholds = [
       statements: 70,
       lines: 71,
       functions: 71,
-      branches: 65
+      branches: 66
     }
   },
   {
