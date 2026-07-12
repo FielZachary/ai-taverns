@@ -1780,6 +1780,31 @@ const speciesAbilityBonuses: Record<CharacterSpecies, SpeciesAbilityBonuses> = {
   Dragonborn: { str: 2, cha: 1 }
 };
 
+function formatSpeciesAbilityBonus(species: CharacterSpecies) {
+  const bonuses = speciesAbilityBonuses[species];
+  const bonusEntries = abilityDefinitions
+    .filter((ability) => bonuses[ability.key])
+    .map((ability) => ({
+      label: ability.label,
+      value: bonuses[ability.key] ?? 0
+    }));
+
+  if (bonusEntries.length === abilityDefinitions.length) {
+    const sharedBonus = bonusEntries[0]?.value ?? 0;
+    const allBonusesMatch = bonusEntries.every(
+      (entry) => entry.value === sharedBonus
+    );
+
+    if (allBonusesMatch) {
+      return `${formatModifier(sharedBonus)} all stats`;
+    }
+  }
+
+  return bonusEntries
+    .map((entry) => `${formatModifier(entry.value)} ${entry.label}`)
+    .join(", ");
+}
+
 const quickBuildBackgroundByClass: Record<CharacterClass, CharacterBackground> = {
   Artificer: "Guild Artisan",
   Barbarian: "Outlander",
@@ -3648,6 +3673,7 @@ export function NewAdventureForm() {
                           onClick={() => setCharacterSpecies(option)}
                         >
                           <strong>{option}</strong>
+                          <small>{formatSpeciesAbilityBonus(option)}</small>
                         </button>
                       ))}
                     </div>
