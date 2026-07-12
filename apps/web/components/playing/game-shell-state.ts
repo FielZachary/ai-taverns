@@ -46,6 +46,13 @@ export type WaitingPlayerStatus = {
   status: "waiting" | "submitted";
 };
 
+export type RoomSnapshotSubmissionUpdate = {
+  inputSubmitted: boolean;
+  stopSending: boolean;
+  clearPendingSubmission: boolean;
+  clearOptimisticSubmittedPlayerId: boolean;
+};
+
 export function displayedRoomPlayersWithOptimisticSubmission(
   roomPlayers: RoomPlayer[],
   optimisticSubmittedPlayerId: string | null
@@ -196,6 +203,53 @@ export function snapshotHasResponseAfterMessage(
 
     return Date.parse(message.createdAt) >= pendingSubmittedAt;
   });
+}
+
+export function roomSnapshotSubmissionUpdate({
+  room,
+  currentPlayer,
+  pendingSubmission,
+  optimisticSubmittedPlayerId,
+  playerId
+}: {
+  room: RoomSnapshot;
+  currentPlayer?: RoomPlayer;
+  pendingSubmission: PendingSubmission | null;
+  optimisticSubmittedPlayerId: string | null;
+  playerId: string;
+}): RoomSnapshotSubmissionUpdate | null {
+  if (currentPlayer?.status === "submitted" || room.isResolving) {
+    return {
+      inputSubmitted: true,
+      stopSending: currentPlayer?.status === "submitted",
+      clearPendingSubmission: false,
+      clearOptimisticSubmittedPlayerId: false
+    };
+  }
+
+  if (currentPlayer?.status !== "waiting") {
+    return null;
+  }
+
+  if (
+    pendingSubmission &&
+    optimisticSubmittedPlayerId === playerId &&
+    !snapshotHasResponseAfterMessage(room, pendingSubmission)
+  ) {
+    return {
+      inputSubmitted: true,
+      stopSending: false,
+      clearPendingSubmission: false,
+      clearOptimisticSubmittedPlayerId: false
+    };
+  }
+
+  return {
+    inputSubmitted: false,
+    stopSending: true,
+    clearPendingSubmission: true,
+    clearOptimisticSubmittedPlayerId: true
+  };
 }
 
 export function getMissingPlayerProfileFields(profile: PlayerProfile) {

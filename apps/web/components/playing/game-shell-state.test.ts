@@ -14,6 +14,7 @@ import {
   inputTargetsCurrentPlayer,
   rollRequestTargetsCurrentPlayer,
   rollRequestsFromRoom,
+  roomSnapshotSubmissionUpdate,
   snapshotHasResponseAfterMessage,
   waitingPlayerStatuses,
   type RoomPlayer,
@@ -239,6 +240,109 @@ describe("game shell state helpers", () => {
         pendingSubmission
       )
     ).toBe(true);
+  });
+
+  it("derives room snapshot submission updates for submitted and resolving rooms", () => {
+    expect(
+      roomSnapshotSubmissionUpdate({
+        room: roomSnapshot(),
+        currentPlayer: {
+          ...currentRoomPlayer,
+          status: "submitted"
+        },
+        pendingSubmission: null,
+        optimisticSubmittedPlayerId: null,
+        playerId: "player-1"
+      })
+    ).toEqual({
+      inputSubmitted: true,
+      stopSending: true,
+      clearPendingSubmission: false,
+      clearOptimisticSubmittedPlayerId: false
+    });
+
+    expect(
+      roomSnapshotSubmissionUpdate({
+        room: roomSnapshot({ isResolving: true }),
+        currentPlayer: {
+          ...currentRoomPlayer,
+          status: "waiting"
+        },
+        pendingSubmission: null,
+        optimisticSubmittedPlayerId: null,
+        playerId: "player-1"
+      })
+    ).toEqual({
+      inputSubmitted: true,
+      stopSending: false,
+      clearPendingSubmission: false,
+      clearOptimisticSubmittedPlayerId: false
+    });
+  });
+
+  it("keeps or clears optimistic submitted state from waiting room snapshots", () => {
+    const pendingSubmission = {
+      messageId: "player-turn",
+      createdAt: "2026-07-11T10:00:00.000Z"
+    };
+
+    expect(
+      roomSnapshotSubmissionUpdate({
+        room: roomSnapshot({
+          messages: [
+            message("player-turn", "player", "2026-07-11T10:00:00.000Z"),
+            message("other-player", "player", "2026-07-11T10:00:02.000Z")
+          ]
+        }),
+        currentPlayer: {
+          ...currentRoomPlayer,
+          status: "waiting"
+        },
+        pendingSubmission,
+        optimisticSubmittedPlayerId: "player-1",
+        playerId: "player-1"
+      })
+    ).toEqual({
+      inputSubmitted: true,
+      stopSending: false,
+      clearPendingSubmission: false,
+      clearOptimisticSubmittedPlayerId: false
+    });
+
+    expect(
+      roomSnapshotSubmissionUpdate({
+        room: roomSnapshot({
+          messages: [
+            message("player-turn", "player", "2026-07-11T10:00:00.000Z"),
+            message("dm-answer", "dm", "2026-07-11T10:00:03.000Z")
+          ]
+        }),
+        currentPlayer: {
+          ...currentRoomPlayer,
+          status: "waiting"
+        },
+        pendingSubmission,
+        optimisticSubmittedPlayerId: "player-1",
+        playerId: "player-1"
+      })
+    ).toEqual({
+      inputSubmitted: false,
+      stopSending: true,
+      clearPendingSubmission: true,
+      clearOptimisticSubmittedPlayerId: true
+    });
+  });
+
+  it("leaves submission state unchanged when the current player is absent", () => {
+    expect(
+      roomSnapshotSubmissionUpdate({
+        room: roomSnapshot(),
+        currentPlayer: undefined,
+        pendingSubmission: null,
+        optimisticSubmittedPlayerId: null,
+        playerId: "player-1"
+      })
+    ).toBeNull();
   });
 
   it("marks the optimistic submitted player without changing other room players", () => {

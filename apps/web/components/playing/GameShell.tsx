@@ -49,7 +49,7 @@ import {
   isWaitingOnAnotherPlayerRoll,
   isWaitingOnTargetedInput,
   rollRequestsFromRoom,
-  snapshotHasResponseAfterMessage,
+  roomSnapshotSubmissionUpdate,
   waitingPlayerStatuses,
   type PendingSubmission,
   type RoomPlayer,
@@ -370,27 +370,28 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
         );
       }
 
-      if (currentPlayer?.status === "submitted" || room.isResolving) {
-        setIsInputSubmitted(true);
-        if (currentPlayer?.status === "submitted") {
+      const submissionUpdate = roomSnapshotSubmissionUpdate({
+        room,
+        currentPlayer,
+        pendingSubmission: pendingSubmissionRef.current,
+        optimisticSubmittedPlayerId,
+        playerId
+      });
+
+      if (submissionUpdate) {
+        setIsInputSubmitted(submissionUpdate.inputSubmitted);
+
+        if (submissionUpdate.stopSending) {
           setIsSending(false);
         }
-      } else if (currentPlayer?.status === "waiting") {
-        const pendingSubmission = pendingSubmissionRef.current;
 
-        if (
-          pendingSubmission &&
-          optimisticSubmittedPlayerId === playerId &&
-          !snapshotHasResponseAfterMessage(room, pendingSubmission)
-        ) {
-          setIsInputSubmitted(true);
-          return;
+        if (submissionUpdate.clearPendingSubmission) {
+          pendingSubmissionRef.current = null;
         }
 
-        pendingSubmissionRef.current = null;
-        setOptimisticSubmittedPlayerId(null);
-        setIsInputSubmitted(false);
-        setIsSending(false);
+        if (submissionUpdate.clearOptimisticSubmittedPlayerId) {
+          setOptimisticSubmittedPlayerId(null);
+        }
       }
     },
     [optimisticSubmittedPlayerId, playerId]
