@@ -3,7 +3,8 @@ import { afterEach, before, test } from "node:test";
 
 process.env.DEEPSEEK_API_KEY = "test-deepseek-key";
 
-const { askDungeonMasterProvider } = await import("./dm-provider.js");
+const { askDungeonMasterProvider, assertDungeonMasterProviderConfigured } =
+  await import("./dm-provider.js");
 
 const originalFetch = globalThis.fetch;
 const originalNodeEnv = process.env.NODE_ENV;
@@ -155,9 +156,85 @@ test("test DM provider returns deterministic local contract JSON", async () => {
   assert.deepEqual(narrationDeltas, [parsed.public_narration]);
 });
 
+test("test DM provider returns deterministic campaign planner JSON without streaming narration", async () => {
+  process.env.AI_TAVERNS_TEST_DM_PROVIDER = "true";
+  delete process.env.NODE_ENV;
+  globalThis.fetch = async () => {
+    throw new Error("test provider should not call fetch");
+  };
+
+  const narrationDeltas: string[] = [];
+  const response = await askDungeonMasterProvider({
+    instructions: "You are a campaign-opening planner for AI Taverns.",
+    message: "Plan the opening.",
+    history: [
+      {
+        id: "message-1",
+        role: "dm",
+        content: "Previous table context.",
+        createdAt: "2026-07-12T00:00:00.000Z"
+      }
+    ],
+    onPublicNarrationDelta: (delta) => narrationDeltas.push(delta)
+  });
+  const parsed = JSON.parse(response.content) as {
+    campaign_title: string;
+    region: { name: string };
+    allowed_player_facing_terms: { term: string; plain_meaning: string }[];
+    first_interactable_choices: string[];
+  };
+
+  assert.equal(parsed.campaign_title, "Lanterns at Ashford Tollhouse");
+  assert.equal(parsed.region.name, "Ashford Vale");
+  assert.deepEqual(parsed.allowed_player_facing_terms, [
+    {
+      term: "Ashford Tollhouse",
+      plain_meaning: "a stone roadside checkpoint"
+    }
+  ]);
+  assert.ok(
+    parsed.first_interactable_choices.includes(
+      "Question Marra about the silent bridge watch."
+    )
+  );
+  assert.deepEqual(narrationDeltas, []);
+  assert.deepEqual(response.debug.requestMessages, [
+    {
+      role: "system",
+      content: "You are a campaign-opening planner for AI Taverns."
+    },
+    {
+      role: "assistant",
+      content: "Previous table context."
+    },
+    {
+      role: "user",
+      content: "Plan the opening."
+    }
+  ]);
+  assert.equal(response.debug.rawResponse, response.content);
+  assert.equal(
+    response.debug.providerTimings?.[0]?.completedAt,
+    new Date(0).toISOString()
+  );
+  assert.equal(response.debug.providerTimings?.[0]?.requestMessageCount, 0);
+});
+
+test("test DM provider configuration passes outside production", () => {
+  process.env.AI_TAVERNS_TEST_DM_PROVIDER = "true";
+  delete process.env.NODE_ENV;
+
+  assert.doesNotThrow(() => assertDungeonMasterProviderConfigured());
+});
+
 test("test DM provider is disabled in production", async () => {
   process.env.AI_TAVERNS_TEST_DM_PROVIDER = "true";
   process.env.NODE_ENV = "production";
+
+  assert.throws(
+    () => assertDungeonMasterProviderConfigured(),
+    /test DM provider is not available in production/
+  );
 
   await assert.rejects(
     askDungeonMasterProvider({

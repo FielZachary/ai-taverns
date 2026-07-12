@@ -190,7 +190,9 @@ async function askTestDungeonMasterProvider(
   );
   const content = isPlannerCall ? testOpeningPlanContent() : testDmContractContent();
 
-  input.onPublicNarrationDelta?.(isPlannerCall ? "" : testOpeningNarration);
+  if (!isPlannerCall) {
+    input.onPublicNarrationDelta?.(testOpeningNarration);
+  }
 
   return {
     id: "test-provider-response",
