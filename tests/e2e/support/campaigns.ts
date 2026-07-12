@@ -6,6 +6,11 @@ export async function createMultiplayerCampaignThroughBrowser(
   input: {
     title: string;
     ownerClientId: string;
+    campaignGenreKind?: "preset" | "custom";
+    customWorldName?: string;
+    customWorldDescription?: string;
+    ownerCharacterName?: string;
+    ownerCharacterSheet?: string;
   }
 ): Promise<CampaignSummary> {
   const campaign = await page.evaluate(async (payload) => {
@@ -17,10 +22,24 @@ export async function createMultiplayerCampaignThroughBrowser(
       body: JSON.stringify({
         mode: "multiplayer",
         title: payload.title,
-        campaignGenreKind: "preset",
-        campaignGenrePresetId: "classic_fantasy",
+        campaignGenreKind: payload.campaignGenreKind ?? "preset",
+        ...(payload.campaignGenreKind === "custom"
+          ? {
+              campaignGenre: payload.customWorldName,
+              customWorldName: payload.customWorldName,
+              customWorldDescription: payload.customWorldDescription
+            }
+          : {
+              campaignGenrePresetId: "classic_fantasy"
+            }),
         ownerClientId: payload.ownerClientId,
-        playerName: "Smoke Host"
+        playerName: "Smoke Host",
+        ...(payload.ownerCharacterName
+          ? { characterName: payload.ownerCharacterName }
+          : {}),
+        ...(payload.ownerCharacterSheet
+          ? { characterSheet: payload.ownerCharacterSheet }
+          : {})
       })
     });
 
