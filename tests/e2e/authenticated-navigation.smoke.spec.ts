@@ -199,6 +199,105 @@ test.describe("authenticated navigation smoke", () => {
     ).toBeHidden();
   });
 
+  test("play resolves a post-begin player turn with the deterministic local DM provider", async ({
+    browser,
+    page,
+    request
+  }) => {
+    await signInWithPasswordlessToken(page, request, {
+      email: "turn-room-smoke-host@example.com",
+      nextPath: "/new-adventure"
+    });
+    const campaign = await createMultiplayerCampaignThroughBrowser(page, {
+      title: "Turn Room Smoke Adventure",
+      ownerClientId: "playwright-turn-room-smoke-host",
+      campaignGenreKind: "custom",
+      customWorldName: "Playwright Test Realm",
+      customWorldDescription:
+        "A compact test realm for deterministic local smoke tests.",
+      ownerCharacterName: "Bryn Charterhand",
+      ownerCharacterSheet:
+        "Bryn Charterhand is a level 1 rogue with a rain-dark cloak, a careful lockpick kit, and a habit of checking seals before trusting documents."
+    });
+
+    await signInWithPasswordlessToken(page, request, {
+      email: "turn-room-smoke-joiner@example.com",
+      nextPath: "/new-adventure"
+    });
+    await joinMultiplayerCampaignThroughBrowser(page, {
+      gameCode: campaign.joinCode!,
+      clientId: "playwright-turn-room-smoke-joiner",
+      username: "Turn Room Smoke Joiner",
+      characterName: "Calder Rainwatch",
+      characterSheet:
+        "Calder Rainwatch is a level 1 cleric with a patched field satchel, a brass rain charm, and a patient eye for frightened witnesses."
+    });
+    await page.evaluate(() => {
+      localStorage.setItem("ai-dnd.playerId", "playwright-turn-room-smoke-joiner");
+    });
+    const joinerStorageState = await page.context().storageState();
+
+    await signInWithPasswordlessToken(page, request, {
+      email: "turn-room-smoke-host@example.com",
+      nextPath: "/new-adventure"
+    });
+    await page.evaluate(() => {
+      localStorage.setItem("ai-dnd.playerId", "playwright-turn-room-smoke-host");
+    });
+    await page.goto(`/play?campaignId=${campaign.id}`);
+
+    await page.getByRole("button", { name: /begin adventure/i }).click();
+
+    const deterministicOpener = page.getByText(
+      "Lanternlight gathers around the Ashford Tollhouse"
+    );
+    await expect(deterministicOpener).toHaveCount(1);
+
+    const playerAction = "I inspect the sealed road charter for a broken seal.";
+    await page
+      .getByPlaceholder("Speak, search, attack, bargain...")
+      .fill(playerAction);
+    await expect(page.getByRole("button", { name: /^send$/i })).toBeEnabled();
+    const hostSubmitResponse = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/room/submit") && response.status() === 200
+    );
+    await page.getByRole("button", { name: /^send$/i }).click();
+    await hostSubmitResponse;
+
+    await expect(page.getByText(playerAction)).toBeVisible();
+
+    const joinerContext = await browser.newContext({
+      storageState: joinerStorageState
+    });
+
+    try {
+      const joinerPage = await joinerContext.newPage();
+      await joinerPage.goto(`/play?campaignId=${campaign.id}`);
+
+      await expect(
+        joinerPage.getByRole("button", { name: /^skip$/i })
+      ).toBeEnabled();
+      const joinerSubmitResponse = joinerPage.waitForResponse(
+        (response) =>
+          response.url().endsWith("/api/room/submit") && response.status() === 200
+      );
+      await joinerPage.getByRole("button", { name: /^skip$/i }).click();
+      await joinerSubmitResponse;
+
+      await expect(joinerPage.getByText(playerAction)).toBeVisible();
+      await expect(
+        joinerPage.getByText("Calder Rainwatch skips their turn.")
+      ).toBeVisible();
+      await expect(
+        joinerPage.getByText("Lanternlight gathers around the Ashford Tollhouse")
+      ).toBeVisible();
+      await expect(joinerPage.getByText("What do you do?")).toBeVisible();
+    } finally {
+      await joinerContext.close();
+    }
+  });
+
   test("play preserves multiplayer pre-begin room state after page reload", async ({
     page,
     request
