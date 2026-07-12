@@ -193,4 +193,73 @@ test.describe("authenticated navigation smoke", () => {
       page.getByRole("button", { name: /begin adventure/i })
     ).toBeEnabled();
   });
+
+  test("play reconnects a complete multiplayer player in a fresh browser context", async ({
+    browser,
+    page,
+    request
+  }) => {
+    await signInWithPasswordlessToken(page, request, {
+      email: "reconnect-room-smoke-host@example.com",
+      nextPath: "/new-adventure"
+    });
+    const campaign = await createMultiplayerCampaignThroughBrowser(page, {
+      title: "Reconnect Room Smoke Adventure",
+      ownerClientId: "playwright-reconnect-room-smoke-host"
+    });
+
+    await signInWithPasswordlessToken(page, request, {
+      email: "reconnect-room-smoke-joiner@example.com",
+      nextPath: "/new-adventure"
+    });
+    await joinMultiplayerCampaignThroughBrowser(page, {
+      gameCode: campaign.joinCode!,
+      clientId: "playwright-reconnect-room-smoke-joiner",
+      username: "Reconnect Room Smoke Joiner",
+      characterName: "Nessa Brightvale",
+      characterSheet:
+        "Nessa Brightvale is a level 1 cleric with a brass sun pendant, a worn field journal, and a gentle instinct for frightened travelers."
+    });
+
+    await page.goto(`/play?campaignId=${campaign.id}`);
+    await expect(
+      page.getByText("The party is gathered. Let the DM open the campaign.")
+    ).toBeVisible();
+
+    const reconnectedContext = await browser.newContext({
+      storageState: await page.context().storageState()
+    });
+
+    try {
+      const reconnectedPage = await reconnectedContext.newPage();
+      await reconnectedPage.goto(`/play?campaignId=${campaign.id}`);
+
+      await expect(reconnectedPage).toHaveURL(
+        new RegExp(`/play\\?campaignId=${campaign.id}$`)
+      );
+      await expect(
+        reconnectedPage.getByRole("region", {
+          name: "AI Dungeons and Dragons table"
+        })
+      ).toBeVisible();
+      await expect(
+        reconnectedPage.getByRole("button", {
+          name: /open chat: nessa brightvale/i
+        })
+      ).toBeVisible();
+      await expect(
+        reconnectedPage.getByText("Reconnect Room Smoke Adventure")
+      ).toBeVisible();
+      await expect(
+        reconnectedPage.getByText(
+          "The party is gathered. Let the DM open the campaign."
+        )
+      ).toBeVisible();
+      await expect(
+        reconnectedPage.getByRole("button", { name: /begin adventure/i })
+      ).toBeEnabled();
+    } finally {
+      await reconnectedContext.close();
+    }
+  });
 });
