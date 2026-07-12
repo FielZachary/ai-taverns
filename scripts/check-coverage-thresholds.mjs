@@ -19,10 +19,10 @@ const packageThresholds = [
     name: "apps/web",
     summaryPath: "apps/web/coverage/coverage-summary.json",
     thresholds: {
-      statements: 13,
-      lines: 13,
-      functions: 17.5,
-      branches: 11.5
+      statements: 15,
+      lines: 15,
+      functions: 20,
+      branches: 16
     }
   },
   {
