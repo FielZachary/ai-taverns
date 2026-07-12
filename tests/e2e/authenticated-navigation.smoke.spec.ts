@@ -199,6 +199,68 @@ test.describe("authenticated navigation smoke", () => {
     ).toBeHidden();
   });
 
+  test("play shows AI debug details for a deterministic DM response", async ({
+    page,
+    request
+  }) => {
+    await signInWithPasswordlessToken(page, request, {
+      email: "debug-room-smoke-host@example.com",
+      nextPath: "/new-adventure"
+    });
+    const campaign = await createMultiplayerCampaignThroughBrowser(page, {
+      title: "Debug Trace Smoke Adventure",
+      ownerClientId: "playwright-debug-room-smoke-host",
+      campaignGenreKind: "custom",
+      customWorldName: "Playwright Test Realm",
+      customWorldDescription:
+        "A compact test realm for deterministic local smoke tests.",
+      ownerCharacterName: "Iris Lanternward",
+      ownerCharacterSheet:
+        "Iris Lanternward is a level 1 cleric with a soot-marked lantern, a careful travel ledger, and a habit of documenting strange road signs."
+    });
+
+    await signInWithPasswordlessToken(page, request, {
+      email: "debug-room-smoke-joiner@example.com",
+      nextPath: "/new-adventure"
+    });
+    await joinMultiplayerCampaignThroughBrowser(page, {
+      gameCode: campaign.joinCode!,
+      clientId: "playwright-debug-room-smoke-joiner",
+      username: "Debug Room Smoke Joiner",
+      characterName: "Perrin Stonecall",
+      characterSheet:
+        "Perrin Stonecall is a level 1 fighter with a chipped handaxe, a mud-stained cloak, and a steady habit of watching the road behind the party."
+    });
+
+    await signInWithPasswordlessToken(page, request, {
+      email: "debug-room-smoke-host@example.com",
+      nextPath: "/new-adventure"
+    });
+    await page.goto(`/play?campaignId=${campaign.id}`);
+
+    await page.getByRole("button", { name: /begin adventure/i }).click();
+
+    await expect(
+      page.getByText("Lanternlight gathers around the Ashford Tollhouse")
+    ).toBeVisible();
+
+    await page.getByRole("button", { name: /show ai debug details/i }).click();
+
+    const debugDialog = page.getByRole("dialog", { name: /ai debug/i });
+    await expect(debugDialog).toBeVisible();
+    await expect(debugDialog.getByText("Prompt Sent")).toBeVisible();
+    await expect(debugDialog.getByText("AI Output")).toBeVisible();
+    await expect(debugDialog.getByText("ai-taverns-test-provider")).toBeVisible();
+    await expect(debugDialog.getByText("test-provider-response")).toBeVisible();
+    await expect(debugDialog.getByText('{"public_narration":')).toBeVisible();
+    await expect(
+      debugDialog.getByText("Lanternlight gathers around the Ashford Tollhouse")
+    ).toBeVisible();
+
+    await page.getByRole("button", { name: /close debug details/i }).click();
+    await expect(debugDialog).toBeHidden();
+  });
+
   test("play resolves a post-begin player turn with the deterministic local DM provider", async ({
     browser,
     page,
