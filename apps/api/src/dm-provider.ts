@@ -52,7 +52,178 @@ export type DungeonMasterProviderInput = {
   onPublicNarrationDelta?: (text: string) => void;
 };
 
+const testOpeningNarration = [
+  "Lanternlight gathers around the Ashford Tollhouse as rain ticks against the shutters.",
+  "A sealed road charter waits on the table while a worried courier points toward the fogbound bridge.",
+  "What do you do?"
+].join("\n\n");
+
+function testProviderDebug(
+  input: DungeonMasterProviderInput,
+  content: string
+): AiDebugInfo {
+  return {
+    requestMessages: [
+      {
+        role: "system",
+        content: input.instructions
+      },
+      ...(input.history ?? []).map(mapHistoryMessage),
+      {
+        role: "user",
+        content: input.message
+      }
+    ],
+    rawResponse: content,
+    model: "ai-taverns-test-provider",
+    providerTimings: [
+      {
+        attempt: 1,
+        requestStartedAt: new Date(0).toISOString(),
+        completedAt: new Date(0).toISOString(),
+        totalMs: 0,
+        requestBytes: 0,
+        requestMessageCount: 0,
+        requestContentChars: 0,
+        responseFormat: "json_object",
+        status: 200,
+        ok: true
+      }
+    ],
+    providerResponseId: "test-provider-response"
+  };
+}
+
+function testOpeningPlanContent() {
+  return JSON.stringify({
+    campaign_title: "Lanterns at Ashford Tollhouse",
+    region: {
+      name: "Ashford Vale",
+      why_this_region: "It gives the party a grounded road mystery.",
+      plain_description: "A rain-washed valley crossed by old trade roads."
+    },
+    starting_location: {
+      name: "Ashford Tollhouse",
+      type: "roadside tollhouse",
+      why_this_location: "It puts the party at the first obstacle immediately.",
+      plain_description: "A stone tollhouse beside a fogbound bridge."
+    },
+    opening_premise: {
+      why_the_party_is_here: "They were hired to escort a sealed road charter.",
+      immediate_objective: "Find out why the bridge watch has gone silent.",
+      immediate_complication: "The courier is frightened and the bridge is hidden by fog.",
+      first_scene_location: "Inside the Ashford Tollhouse common room.",
+      opening_mood: "rainy, watchful, and urgent",
+      campaign_promise: "A road mystery with practical choices and hidden danger."
+    },
+    player_facing_facts: [
+      "The courier needs help before nightfall.",
+      "The fogbound bridge blocks the road ahead."
+    ],
+    allowed_player_facing_terms: [
+      {
+        term: "Ashford Tollhouse",
+        plain_meaning: "a stone roadside checkpoint"
+      }
+    ],
+    npc_seed: [
+      {
+        name: "Marra Vale",
+        role: "worried courier",
+        wants: "safe passage across the bridge",
+        visible_behavior: "keeps checking the rain-dark windows"
+      }
+    ],
+    first_interactable_choices: [
+      "Question Marra about the silent bridge watch.",
+      "Inspect the sealed road charter.",
+      "Step outside and study the fogbound bridge."
+    ],
+    sensory_palette: {
+      sights: ["lanternlight on wet stone"],
+      sounds: ["rain tapping shutters"],
+      smells: ["damp wool and woodsmoke"],
+      textures_or_weather: ["cold rain in the doorway"]
+    },
+    dm_private_context: [
+      "The bridge watch discovered something under the road."
+    ],
+    forbidden_opening_terms: ["Second Dominion"],
+    narrator_instructions: [
+      "Open inside the tollhouse and end by asking what the players do."
+    ],
+    opening_quality_checks: [
+      "No forbidden terms appear.",
+      "The opener gives the party at least two clear options."
+    ]
+  });
+}
+
+function testDmContractContent() {
+  return JSON.stringify({
+    public_narration: testOpeningNarration,
+    roll_requests: [],
+    next_input_needed: "player_actions",
+    input_targets: [],
+    input_policy: "all_players",
+    setting: {
+      display_location: "Ashford Tollhouse",
+      world_name: "Playwright Test Realm",
+      starting_location: "Ashford Tollhouse"
+    }
+  });
+}
+
+function testAskDmAnswerContent() {
+  return JSON.stringify({
+    answer:
+      "The sealed road charter looks official enough to matter at the tollhouse, but the broken seal means someone may already have read or tampered with it. Treat it as a clue, not proof."
+  });
+}
+
+function shouldUseTestProvider() {
+  return process.env.AI_TAVERNS_TEST_DM_PROVIDER === "true";
+}
+
+async function askTestDungeonMasterProvider(
+  input: DungeonMasterProviderInput
+): Promise<DungeonMasterProviderResponse> {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("AI Taverns test DM provider is not available in production.");
+  }
+
+  const isPlannerCall = input.instructions.includes(
+    "campaign-opening planner for AI Taverns"
+  );
+  const isAskDmCall = input.instructions.includes(
+    "out-of-turn table question"
+  );
+  const content = isPlannerCall
+    ? testOpeningPlanContent()
+    : isAskDmCall
+      ? testAskDmAnswerContent()
+      : testDmContractContent();
+
+  if (!isPlannerCall && !isAskDmCall) {
+    input.onPublicNarrationDelta?.(testOpeningNarration);
+  }
+
+  return {
+    id: "test-provider-response",
+    content,
+    debug: testProviderDebug(input, content)
+  };
+}
+
 export function assertDungeonMasterProviderConfigured() {
+  if (shouldUseTestProvider()) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("AI Taverns test DM provider is not available in production.");
+    }
+
+    return;
+  }
+
   if (!deepSeekApiKey) {
     throw new Error("DeepSeek is not configured. Set DEEPSEEK_API_KEY.");
   }
@@ -376,6 +547,15 @@ export async function askDungeonMasterProvider({
   history = [],
   onPublicNarrationDelta
 }: DungeonMasterProviderInput): Promise<DungeonMasterProviderResponse> {
+  if (shouldUseTestProvider()) {
+    return askTestDungeonMasterProvider({
+      message,
+      instructions,
+      history,
+      ...(onPublicNarrationDelta ? { onPublicNarrationDelta } : {})
+    });
+  }
+
   assertDungeonMasterProviderConfigured();
 
   const messages: DeepSeekMessage[] = [

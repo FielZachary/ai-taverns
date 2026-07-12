@@ -145,6 +145,417 @@ test.describe("authenticated navigation smoke", () => {
     ).toBeEnabled();
   });
 
+  test("play begins a multiplayer adventure with the deterministic local DM provider", async ({
+    page,
+    request
+  }) => {
+    await signInWithPasswordlessToken(page, request, {
+      email: "begin-room-smoke-host@example.com",
+      nextPath: "/new-adventure"
+    });
+    const campaign = await createMultiplayerCampaignThroughBrowser(page, {
+      title: "Begin Room Smoke Adventure",
+      ownerClientId: "playwright-begin-room-smoke-host",
+      campaignGenreKind: "custom",
+      customWorldName: "Playwright Test Realm",
+      customWorldDescription:
+        "A compact test realm for deterministic local smoke tests.",
+      ownerCharacterName: "Orin Hearthguard",
+      ownerCharacterSheet:
+        "Orin Hearthguard is a level 1 fighter with a dented helm, a travel cloak, and a habit of keeping the road behind the party in view."
+    });
+
+    await signInWithPasswordlessToken(page, request, {
+      email: "begin-room-smoke-joiner@example.com",
+      nextPath: "/new-adventure"
+    });
+    await joinMultiplayerCampaignThroughBrowser(page, {
+      gameCode: campaign.joinCode!,
+      clientId: "playwright-begin-room-smoke-joiner",
+      username: "Begin Room Smoke Joiner",
+      characterName: "Sera Dawnmark",
+      characterSheet:
+        "Sera Dawnmark is a level 1 paladin with a travel-worn shield, a small oathbook, and a steady habit of standing near the door."
+    });
+
+    await signInWithPasswordlessToken(page, request, {
+      email: "begin-room-smoke-host@example.com",
+      nextPath: "/new-adventure"
+    });
+    await page.goto(`/play?campaignId=${campaign.id}`);
+
+    await expect(
+      page.getByText("The party is gathered. Let the DM open the campaign.")
+    ).toBeVisible();
+
+    await page.getByRole("button", { name: /begin adventure/i }).click();
+
+    await expect(
+      page.getByText("Lanternlight gathers around the Ashford Tollhouse")
+    ).toBeVisible();
+    await expect(page.getByText("What do you do?")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /begin adventure/i })
+    ).toBeHidden();
+  });
+
+  test("play shows AI debug details for a deterministic DM response", async ({
+    page,
+    request
+  }) => {
+    await signInWithPasswordlessToken(page, request, {
+      email: "debug-room-smoke-host@example.com",
+      nextPath: "/new-adventure"
+    });
+    const campaign = await createMultiplayerCampaignThroughBrowser(page, {
+      title: "Debug Trace Smoke Adventure",
+      ownerClientId: "playwright-debug-room-smoke-host",
+      campaignGenreKind: "custom",
+      customWorldName: "Playwright Test Realm",
+      customWorldDescription:
+        "A compact test realm for deterministic local smoke tests.",
+      ownerCharacterName: "Iris Lanternward",
+      ownerCharacterSheet:
+        "Iris Lanternward is a level 1 cleric with a soot-marked lantern, a careful travel ledger, and a habit of documenting strange road signs."
+    });
+
+    await signInWithPasswordlessToken(page, request, {
+      email: "debug-room-smoke-joiner@example.com",
+      nextPath: "/new-adventure"
+    });
+    await joinMultiplayerCampaignThroughBrowser(page, {
+      gameCode: campaign.joinCode!,
+      clientId: "playwright-debug-room-smoke-joiner",
+      username: "Debug Room Smoke Joiner",
+      characterName: "Perrin Stonecall",
+      characterSheet:
+        "Perrin Stonecall is a level 1 fighter with a chipped handaxe, a mud-stained cloak, and a steady habit of watching the road behind the party."
+    });
+
+    await signInWithPasswordlessToken(page, request, {
+      email: "debug-room-smoke-host@example.com",
+      nextPath: "/new-adventure"
+    });
+    await page.goto(`/play?campaignId=${campaign.id}`);
+
+    await page.getByRole("button", { name: /begin adventure/i }).click();
+
+    await expect(
+      page.getByText("Lanternlight gathers around the Ashford Tollhouse")
+    ).toBeVisible();
+
+    await page.getByRole("button", { name: /show ai debug details/i }).click();
+
+    const debugDialog = page.getByRole("dialog", { name: /ai debug/i });
+    await expect(debugDialog).toBeVisible();
+    await expect(debugDialog.getByText("Prompt Sent")).toBeVisible();
+    await expect(debugDialog.getByText("AI Output")).toBeVisible();
+    await expect(debugDialog.getByText("ai-taverns-test-provider")).toBeVisible();
+    await expect(debugDialog.getByText("test-provider-response")).toBeVisible();
+    await expect(debugDialog.getByText('{"public_narration":')).toBeVisible();
+    await expect(
+      debugDialog.getByText("Lanternlight gathers around the Ashford Tollhouse")
+    ).toBeVisible();
+
+    await page.getByRole("button", { name: /close debug details/i }).click();
+    await expect(debugDialog).toBeHidden();
+  });
+
+  test("play resolves a post-begin player turn with the deterministic local DM provider", async ({
+    browser,
+    page,
+    request
+  }) => {
+    await signInWithPasswordlessToken(page, request, {
+      email: "turn-room-smoke-host@example.com",
+      nextPath: "/new-adventure"
+    });
+    const campaign = await createMultiplayerCampaignThroughBrowser(page, {
+      title: "Turn Room Smoke Adventure",
+      ownerClientId: "playwright-turn-room-smoke-host",
+      campaignGenreKind: "custom",
+      customWorldName: "Playwright Test Realm",
+      customWorldDescription:
+        "A compact test realm for deterministic local smoke tests.",
+      ownerCharacterName: "Bryn Charterhand",
+      ownerCharacterSheet:
+        "Bryn Charterhand is a level 1 rogue with a rain-dark cloak, a careful lockpick kit, and a habit of checking seals before trusting documents."
+    });
+
+    await signInWithPasswordlessToken(page, request, {
+      email: "turn-room-smoke-joiner@example.com",
+      nextPath: "/new-adventure"
+    });
+    await joinMultiplayerCampaignThroughBrowser(page, {
+      gameCode: campaign.joinCode!,
+      clientId: "playwright-turn-room-smoke-joiner",
+      username: "Turn Room Smoke Joiner",
+      characterName: "Calder Rainwatch",
+      characterSheet:
+        "Calder Rainwatch is a level 1 cleric with a patched field satchel, a brass rain charm, and a patient eye for frightened witnesses."
+    });
+    await page.evaluate(() => {
+      localStorage.setItem("ai-dnd.playerId", "playwright-turn-room-smoke-joiner");
+    });
+    const joinerStorageState = await page.context().storageState();
+
+    await signInWithPasswordlessToken(page, request, {
+      email: "turn-room-smoke-host@example.com",
+      nextPath: "/new-adventure"
+    });
+    await page.evaluate(() => {
+      localStorage.setItem("ai-dnd.playerId", "playwright-turn-room-smoke-host");
+    });
+    await page.goto(`/play?campaignId=${campaign.id}`);
+
+    await page.getByRole("button", { name: /begin adventure/i }).click();
+
+    const deterministicOpener = page.getByText(
+      "Lanternlight gathers around the Ashford Tollhouse"
+    );
+    await expect(deterministicOpener).toHaveCount(1);
+
+    const playerAction = "I inspect the sealed road charter for a broken seal.";
+    await page
+      .getByPlaceholder("Speak, search, attack, bargain...")
+      .fill(playerAction);
+    await expect(page.getByRole("button", { name: /^send$/i })).toBeEnabled();
+    const hostSubmitResponse = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/room/submit") && response.status() === 200
+    );
+    await page.getByRole("button", { name: /^send$/i }).click();
+    await hostSubmitResponse;
+
+    await expect(page.getByText(playerAction)).toBeVisible();
+
+    const joinerContext = await browser.newContext({
+      storageState: joinerStorageState
+    });
+
+    try {
+      const joinerPage = await joinerContext.newPage();
+      await joinerPage.goto(`/play?campaignId=${campaign.id}`);
+
+      await expect(
+        joinerPage.getByRole("button", { name: /^skip$/i })
+      ).toBeEnabled();
+      const joinerSubmitResponse = joinerPage.waitForResponse(
+        (response) =>
+          response.url().endsWith("/api/room/submit") && response.status() === 200
+      );
+      await joinerPage.getByRole("button", { name: /^skip$/i }).click();
+      await joinerSubmitResponse;
+
+      await expect(joinerPage.getByText(playerAction)).toBeVisible();
+      await expect(
+        joinerPage.getByText("Calder Rainwatch skips their turn.")
+      ).toBeVisible();
+      await expect(
+        joinerPage.getByText("Lanternlight gathers around the Ashford Tollhouse")
+      ).toBeVisible();
+      await expect(joinerPage.getByText("What do you do?")).toBeVisible();
+    } finally {
+      await joinerContext.close();
+    }
+  });
+
+  test("play regenerates the latest deterministic DM response through the real UI", async ({
+    browser,
+    page,
+    request
+  }) => {
+    await signInWithPasswordlessToken(page, request, {
+      email: "regenerate-room-smoke-host@example.com",
+      nextPath: "/new-adventure"
+    });
+    const campaign = await createMultiplayerCampaignThroughBrowser(page, {
+      title: "Regenerate Smoke Adventure",
+      ownerClientId: "playwright-regenerate-room-smoke-host",
+      campaignGenreKind: "custom",
+      customWorldName: "Playwright Test Realm",
+      customWorldDescription:
+        "A compact test realm for deterministic local smoke tests.",
+      ownerCharacterName: "Nia Tollwarden",
+      ownerCharacterSheet:
+        "Nia Tollwarden is a level 1 ranger with a rain-spotted field map, a careful bow, and a habit of checking road signs twice."
+    });
+
+    await signInWithPasswordlessToken(page, request, {
+      email: "regenerate-room-smoke-joiner@example.com",
+      nextPath: "/new-adventure"
+    });
+    await joinMultiplayerCampaignThroughBrowser(page, {
+      gameCode: campaign.joinCode!,
+      clientId: "playwright-regenerate-room-smoke-joiner",
+      username: "Regenerate Room Smoke Joiner",
+      characterName: "Oren Bridgebell",
+      characterSheet:
+        "Oren Bridgebell is a level 1 bard with a bright handbell, a mended cloak, and a knack for remembering who crossed a bridge last."
+    });
+    await page.evaluate(() => {
+      localStorage.setItem(
+        "ai-dnd.playerId",
+        "playwright-regenerate-room-smoke-joiner"
+      );
+    });
+    const joinerStorageState = await page.context().storageState();
+
+    await signInWithPasswordlessToken(page, request, {
+      email: "regenerate-room-smoke-host@example.com",
+      nextPath: "/new-adventure"
+    });
+    await page.evaluate(() => {
+      localStorage.setItem(
+        "ai-dnd.playerId",
+        "playwright-regenerate-room-smoke-host"
+      );
+    });
+    await page.goto(`/play?campaignId=${campaign.id}`);
+
+    await page.getByRole("button", { name: /begin adventure/i }).click();
+
+    await expect(
+      page.getByText("Lanternlight gathers around the Ashford Tollhouse")
+    ).toBeVisible();
+
+    const playerAction = "I compare the bridge map against the sealed charter.";
+    await page
+      .getByPlaceholder("Speak, search, attack, bargain...")
+      .fill(playerAction);
+    await expect(page.getByRole("button", { name: /^send$/i })).toBeEnabled();
+    const hostSubmitResponse = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/room/submit") && response.status() === 200
+    );
+    await page.getByRole("button", { name: /^send$/i }).click();
+    await hostSubmitResponse;
+
+    const joinerContext = await browser.newContext({
+      storageState: joinerStorageState
+    });
+
+    try {
+      const joinerPage = await joinerContext.newPage();
+      await joinerPage.goto(`/play?campaignId=${campaign.id}`);
+
+      await expect(
+        joinerPage.getByRole("button", { name: /^skip$/i })
+      ).toBeEnabled();
+      const joinerSubmitResponse = joinerPage.waitForResponse(
+        (response) =>
+          response.url().endsWith("/api/room/submit") && response.status() === 200
+      );
+      await joinerPage.getByRole("button", { name: /^skip$/i }).click();
+      await joinerSubmitResponse;
+    } finally {
+      await joinerContext.close();
+    }
+
+    await page.reload();
+    await expect(page.getByText(playerAction)).toBeVisible();
+    await expect(page.getByText("Oren Bridgebell skips their turn.")).toBeVisible();
+    await expect(
+      page.getByText("Lanternlight gathers around the Ashford Tollhouse")
+    ).toBeVisible();
+
+    await expect(
+      page.getByRole("button", { name: /regenerate ai response/i })
+    ).toBeEnabled();
+    const regenerateResponse = page.waitForResponse(
+      (response) =>
+        response
+          .url()
+          .includes(`/api/campaigns/${campaign.id}/regenerate`) &&
+        response.status() === 200
+    );
+    await page
+      .getByRole("button", { name: /regenerate ai response/i })
+      .click();
+    const regeneratedSnapshot = (await (await regenerateResponse).json()) as {
+      messages: { role: string; content: string }[];
+    };
+    const latestMessage =
+      regeneratedSnapshot.messages[regeneratedSnapshot.messages.length - 1];
+
+    expect(latestMessage).toMatchObject({ role: "dm" });
+    expect(latestMessage.content).toContain(
+      "Lanternlight gathers around the Ashford Tollhouse"
+    );
+    await expect(
+      page.getByText("Lanternlight gathers around the Ashford Tollhouse")
+    ).toBeVisible();
+    await expect(page.getByText("What do you do?")).toBeVisible();
+  });
+
+  test("play answers an Ask DM question with the deterministic local DM provider", async ({
+    page,
+    request
+  }) => {
+    await signInWithPasswordlessToken(page, request, {
+      email: "ask-dm-smoke-host@example.com",
+      nextPath: "/new-adventure"
+    });
+    const campaign = await createMultiplayerCampaignThroughBrowser(page, {
+      title: "Ask DM Smoke Adventure",
+      ownerClientId: "playwright-ask-dm-smoke-host",
+      campaignGenreKind: "custom",
+      customWorldName: "Playwright Test Realm",
+      customWorldDescription:
+        "A compact test realm for deterministic local smoke tests.",
+      ownerCharacterName: "Elian Charterwise",
+      ownerCharacterSheet:
+        "Elian Charterwise is a level 1 wizard with a wax-stained satchel, a careful eye for legal seals, and a habit of asking clarifying questions before acting."
+    });
+
+    await signInWithPasswordlessToken(page, request, {
+      email: "ask-dm-smoke-joiner@example.com",
+      nextPath: "/new-adventure"
+    });
+    await joinMultiplayerCampaignThroughBrowser(page, {
+      gameCode: campaign.joinCode!,
+      clientId: "playwright-ask-dm-smoke-joiner",
+      username: "Ask DM Smoke Joiner",
+      characterName: "Maren Bridgekeep",
+      characterSheet:
+        "Maren Bridgekeep is a level 1 fighter with a river-marked shield, a practical pack, and a steady sense for when roads feel wrong."
+    });
+
+    await signInWithPasswordlessToken(page, request, {
+      email: "ask-dm-smoke-host@example.com",
+      nextPath: "/new-adventure"
+    });
+    await page.evaluate(() => {
+      localStorage.setItem("ai-dnd.playerId", "playwright-ask-dm-smoke-host");
+    });
+    await page.goto(`/play?campaignId=${campaign.id}`);
+
+    await page.getByRole("button", { name: /begin adventure/i }).click();
+
+    await expect(
+      page.getByText("Lanternlight gathers around the Ashford Tollhouse")
+    ).toBeVisible();
+
+    const question = "What can I tell about the sealed road charter?";
+    await page.getByRole("button", { name: /^ask dm$/i }).click();
+    await page
+      .getByPlaceholder("Ask the DM a question without advancing time...")
+      .fill(question);
+    await expect(page.getByRole("button", { name: /^ask$/i })).toBeEnabled();
+    const askDmResponse = page.waitForResponse(
+      (response) =>
+        response.url().includes(`/api/campaigns/${campaign.id}/ask-dm`) &&
+        response.status() === 200
+    );
+    await page.getByRole("button", { name: /^ask$/i }).click();
+    await askDmResponse;
+
+    await expect(page.getByText(question)).toBeVisible();
+    await expect(page.getByText("Elian Charterwise asks the DM")).toBeVisible();
+    await expect(page.getByText("DM Answer")).toBeVisible();
+    await expect(page.getByText(/broken seal/)).toBeVisible();
+  });
+
   test("play preserves multiplayer pre-begin room state after page reload", async ({
     page,
     request
@@ -192,5 +603,74 @@ test.describe("authenticated navigation smoke", () => {
     await expect(
       page.getByRole("button", { name: /begin adventure/i })
     ).toBeEnabled();
+  });
+
+  test("play reconnects a complete multiplayer player in a fresh browser context", async ({
+    browser,
+    page,
+    request
+  }) => {
+    await signInWithPasswordlessToken(page, request, {
+      email: "reconnect-room-smoke-host@example.com",
+      nextPath: "/new-adventure"
+    });
+    const campaign = await createMultiplayerCampaignThroughBrowser(page, {
+      title: "Reconnect Room Smoke Adventure",
+      ownerClientId: "playwright-reconnect-room-smoke-host"
+    });
+
+    await signInWithPasswordlessToken(page, request, {
+      email: "reconnect-room-smoke-joiner@example.com",
+      nextPath: "/new-adventure"
+    });
+    await joinMultiplayerCampaignThroughBrowser(page, {
+      gameCode: campaign.joinCode!,
+      clientId: "playwright-reconnect-room-smoke-joiner",
+      username: "Reconnect Room Smoke Joiner",
+      characterName: "Nessa Brightvale",
+      characterSheet:
+        "Nessa Brightvale is a level 1 cleric with a brass sun pendant, a worn field journal, and a gentle instinct for frightened travelers."
+    });
+
+    await page.goto(`/play?campaignId=${campaign.id}`);
+    await expect(
+      page.getByText("The party is gathered. Let the DM open the campaign.")
+    ).toBeVisible();
+
+    const reconnectedContext = await browser.newContext({
+      storageState: await page.context().storageState()
+    });
+
+    try {
+      const reconnectedPage = await reconnectedContext.newPage();
+      await reconnectedPage.goto(`/play?campaignId=${campaign.id}`);
+
+      await expect(reconnectedPage).toHaveURL(
+        new RegExp(`/play\\?campaignId=${campaign.id}$`)
+      );
+      await expect(
+        reconnectedPage.getByRole("region", {
+          name: "AI Dungeons and Dragons table"
+        })
+      ).toBeVisible();
+      await expect(
+        reconnectedPage.getByRole("button", {
+          name: /open chat: nessa brightvale/i
+        })
+      ).toBeVisible();
+      await expect(
+        reconnectedPage.getByText("Reconnect Room Smoke Adventure")
+      ).toBeVisible();
+      await expect(
+        reconnectedPage.getByText(
+          "The party is gathered. Let the DM open the campaign."
+        )
+      ).toBeVisible();
+      await expect(
+        reconnectedPage.getByRole("button", { name: /begin adventure/i })
+      ).toBeEnabled();
+    } finally {
+      await reconnectedContext.close();
+    }
   });
 });
