@@ -35,6 +35,47 @@ async function nextCharacterStep() {
   await finishFlowTransition();
 }
 
+async function choosePointBuyStats() {
+  await nextCharacterStep();
+
+  fireEvent.click(screen.getByRole("button", { name: "Point Buy" }));
+}
+
+async function advanceThroughFighterEquipment() {
+  fireEvent.click(screen.getByRole("button", { name: /chain mail/i }));
+  await nextCharacterStep();
+
+  fireEvent.click(
+    screen.getByRole("button", { name: /one martial weapon and a shield/i })
+  );
+  fireEvent.click(screen.getByRole("button", { name: /battleaxe/i }));
+  await nextCharacterStep();
+
+  fireEvent.click(
+    screen.getByRole("button", { name: /light crossbow and 20 bolts/i })
+  );
+  await nextCharacterStep();
+
+  fireEvent.click(screen.getByRole("button", { name: /dungeoneer's pack/i }));
+  await nextCharacterStep();
+}
+
+async function advanceSingleplayerToIdentity() {
+  await continueFlow();
+  await continueFlow();
+  await choosePointBuyStats();
+  await nextCharacterStep();
+  await nextCharacterStep();
+  await nextCharacterStep();
+  await nextCharacterStep();
+  await nextCharacterStep();
+  await nextCharacterStep();
+  await nextCharacterStep();
+  await nextCharacterStep();
+  await advanceThroughFighterEquipment();
+  await nextCharacterStep();
+}
+
 function statCardFor(label: string) {
   const decreaseButton = screen.getByRole("button", {
     name: new RegExp(`decrease ${label}`, "i")
@@ -187,5 +228,64 @@ describe("NewAdventureForm", () => {
     expect(
       screen.getByRole("heading", { name: /choose your class/i })
     ).toBeInTheDocument();
+  });
+
+  it("validates identity and recovers when campaign creation fails", async () => {
+    createCampaignMock.mockRejectedValue(new Error("The tavern doors jammed."));
+
+    render(<NewAdventureForm />);
+
+    await advanceSingleplayerToIdentity();
+
+    expect(
+      screen.getByRole("heading", { name: /choose your identity/i })
+    ).toBeInTheDocument();
+
+    const form = document.querySelector("form");
+
+    if (!form) {
+      throw new Error("Unable to find new adventure form");
+    }
+
+    fireEvent.submit(form);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Add your character name before continuing."
+    );
+    expect(createCampaignMock).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText("Character name"), {
+      target: { value: "Mira Vale" }
+    });
+
+    await nextCharacterStep();
+
+    expect(
+      screen.getByRole("heading", { name: /review your character/i })
+    ).toBeInTheDocument();
+
+    await nextCharacterStep();
+
+    expect(
+      screen.getByRole("heading", { name: /ready the first page/i })
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /create campaign/i }));
+
+    await act(async () => {});
+
+    expect(createCampaignMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: "single_player",
+        playerName: "Mira Vale",
+        characterName: "Mira Vale"
+      })
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "The tavern doors jammed."
+    );
+    expect(
+      screen.getByRole("button", { name: /create campaign/i })
+    ).toBeEnabled();
   });
 });
