@@ -1,0 +1,148 @@
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import type { ComponentProps } from "react";
+import { describe, expect, it, vi } from "vitest";
+
+import { CharacterSheetOverlay } from "./CharacterSheetOverlay";
+
+const fullCharacterSheet = `
+Character Name: Lyra
+Class: Rogue
+Level: 3
+Background: Urchin
+Player Name: Maya
+Species: Elf
+Alignment: Chaotic Good
+Gender: Woman
+Passive Perception: 14
+
+Core Stats
+Armor Class: 15
+Initiative: +3
+Speed: 30 ft
+Current HP: 18
+Max HP: 24
+Hit Dice: 3d8
+Proficiency Bonus: +2
+
+Ability Scores
+Strength: 8 (-1)
+Dexterity: 16 (+3)
+Constitution: 12 (+1)
+Intelligence: 14 (+2)
+Wisdom: 13 (+1)
+Charisma: 10 (+0)
+
+Saving Throws
+Dexterity: +5
+Intelligence: +4
+
+Skills
+Stealth: +7
+Perception: +4
+Cartography: +2
+
+Proficiencies and Languages
+Thieves' Tools
+Common, Elvish
+
+Attacks
+Shortbow: range 80/320 ft, +5 to hit, 1d6+3 piercing
+Dagger: thrown 20/60 ft, +5 to hit, 1d4+3 piercing
+
+Spells
+Cantrips: Mage Hand, Fire Bolt
+Known / Prepared: Shield, Misty Step
+Spell save DC: 13
+
+Equipment
+Leather armor
+Shortbow
+
+Inventory
+Brass key
+
+Currency
+12 gp
+
+Personality
+Trait: Always maps the exits.
+
+Features and Traits
+Sneak Attack
+
+DM Brief
+Secret heir to the moon court.
+`;
+
+function renderCharacterSheetOverlay(
+  overrides: Partial<ComponentProps<typeof CharacterSheetOverlay>> = {}
+) {
+  const props = {
+    characterSheet: fullCharacterSheet,
+    onClose: vi.fn(),
+    ...overrides
+  } satisfies ComponentProps<typeof CharacterSheetOverlay>;
+
+  render(<CharacterSheetOverlay {...props} />);
+
+  return props;
+}
+
+describe("CharacterSheetOverlay", () => {
+  it("renders parsed character fields, sections, tables, and closes from the header", () => {
+    const props = renderCharacterSheetOverlay();
+    const dialog = screen.getByRole("dialog", { name: /lyra/i });
+
+    expect(within(dialog).getByRole("heading", { name: "Lyra" })).toBeInTheDocument();
+    expect(within(dialog).getByText("Rogue / 3")).toBeInTheDocument();
+    expect(within(dialog).getByText("Urchin")).toBeInTheDocument();
+    expect(within(dialog).getByText("Maya")).toBeInTheDocument();
+    expect(within(dialog).getByText("Elf")).toBeInTheDocument();
+    expect(within(dialog).getByText("Chaotic Good")).toBeInTheDocument();
+    expect(within(dialog).getByText("+2")).toBeInTheDocument();
+    expect(within(dialog).getByText("18 / 24")).toBeInTheDocument();
+    expect(within(dialog).getByText("Dexterity: +5")).toBeInTheDocument();
+    expect(within(dialog).getByText("Stealth: +7")).toBeInTheDocument();
+    expect(within(dialog).queryByText("Cartography: +2")).not.toBeInTheDocument();
+    expect(within(dialog).getAllByText("Shortbow")).toHaveLength(2);
+    expect(within(dialog).getByText("range 80/320 ft")).toBeInTheDocument();
+    expect(within(dialog).getAllByText("+5 to hit")).toHaveLength(2);
+    expect(within(dialog).getByText("1d6+3 piercing")).toBeInTheDocument();
+    expect(within(dialog).getByRole("heading", { name: "Cantrips" })).toBeInTheDocument();
+    expect(within(dialog).getByText("Mage Hand")).toBeInTheDocument();
+    expect(within(dialog).getByRole("heading", { name: "Level 1" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("heading", { name: "Level 2" })).toBeInTheDocument();
+    expect(within(dialog).getByText("Spell save DC: 13")).toBeInTheDocument();
+    expect(within(dialog).getByText("Brass key")).toBeInTheDocument();
+    expect(within(dialog).getByText("Always maps the exits.")).toBeInTheDocument();
+    expect(within(dialog).getByText("Secret heir to the moon court.")).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /close character sheet/i }));
+
+    expect(props.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back for unnamed sparse sheets and displays empty spell content", () => {
+    renderCharacterSheetOverlay({
+      characterSheet: `
+Name:
+Race: Dwarf
+Core Stats
+Armor Class: 12
+Spells
+None
+`
+    });
+
+    const dialog = screen.getByRole("dialog", { name: /unnamed adventurer/i });
+
+    expect(
+      within(dialog).getByRole("heading", { name: "Unnamed Adventurer" })
+    ).toBeInTheDocument();
+    expect(within(dialog).getByText("Dwarf")).toBeInTheDocument();
+    expect(within(dialog).getByText("12")).toBeInTheDocument();
+    expect(within(dialog).getAllByText("-").length).toBeGreaterThan(0);
+    expect(within(dialog).getByText("None")).toBeInTheDocument();
+    expect(within(dialog).getByText("Strength:")).toBeInTheDocument();
+  });
+});
