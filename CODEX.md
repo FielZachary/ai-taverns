@@ -15,6 +15,19 @@ npm run pr:auto-merge
 The helper pushes the current branch, opens a PR against `development` when one
 does not already exist, and requests squash auto-merge with branch deletion.
 
+When the user explicitly asks to promote `development` to `production`, create a
+short-lived promotion branch from `production`, merge `origin/development` into
+it, resolve conflicts, run the relevant checks, and then use:
+
+```bash
+npm run pr:promote-production
+```
+
+The production helper opens the PR against `production` and requests squash
+auto-merge with an explicit clean squash title/body so the resulting production
+push still triggers the deploy workflow. Never include GitHub Actions skip
+directives in production promotion PR titles or bodies.
+
 Current repository caveat: GitHub branch protection/rulesets are unavailable
 while this private repository lacks the required GitHub plan features. Until
 that is resolved, keep using small verified changes and leave PRs open for
