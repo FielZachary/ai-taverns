@@ -3,12 +3,25 @@ import { afterEach, before, test } from "node:test";
 
 process.env.DEEPSEEK_API_KEY = "test-deepseek-key";
 
-const { askDungeonMasterProvider } = await import("./dm-provider.js");
+const { askDungeonMasterProvider, assertDungeonMasterProviderConfigured } =
+  await import("./dm-provider.js");
 
 const originalFetch = globalThis.fetch;
+const originalNodeEnv = process.env.NODE_ENV;
+const originalTestProvider = process.env.AI_TAVERNS_TEST_DM_PROVIDER;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  if (originalNodeEnv === undefined) {
+    delete process.env.NODE_ENV;
+  } else {
+    process.env.NODE_ENV = originalNodeEnv;
+  }
+  if (originalTestProvider === undefined) {
+    delete process.env.AI_TAVERNS_TEST_DM_PROVIDER;
+  } else {
+    process.env.AI_TAVERNS_TEST_DM_PROVIDER = originalTestProvider;
+  }
 });
 
 before(() => {
@@ -114,6 +127,122 @@ test("DeepSeek provider sends filtered history and returns non-stream debug meta
   assert.equal(response.debug.model, "test-chat-model");
   assert.equal(response.debug.providerTimings?.[0]?.status, 200);
   assert.equal(response.debug.providerTimings?.[0]?.ok, true);
+});
+
+test("test DM provider returns deterministic local contract JSON", async () => {
+  process.env.AI_TAVERNS_TEST_DM_PROVIDER = "true";
+  delete process.env.NODE_ENV;
+  globalThis.fetch = async () => {
+    throw new Error("test provider should not call fetch");
+  };
+
+  const narrationDeltas: string[] = [];
+  const response = await askDungeonMasterProvider({
+    instructions: "Return a JSON DM response.",
+    message: "Begin.",
+    onPublicNarrationDelta: (delta) => narrationDeltas.push(delta)
+  });
+  const parsed = JSON.parse(response.content) as {
+    public_narration: string;
+    next_input_needed: string;
+    roll_requests: unknown[];
+  };
+
+  assert.equal(response.id, "test-provider-response");
+  assert.equal(response.debug.model, "ai-taverns-test-provider");
+  assert.match(parsed.public_narration, /Ashford Tollhouse/);
+  assert.equal(parsed.next_input_needed, "player_actions");
+  assert.deepEqual(parsed.roll_requests, []);
+  assert.deepEqual(narrationDeltas, [parsed.public_narration]);
+});
+
+test("test DM provider returns deterministic campaign planner JSON without streaming narration", async () => {
+  process.env.AI_TAVERNS_TEST_DM_PROVIDER = "true";
+  delete process.env.NODE_ENV;
+  globalThis.fetch = async () => {
+    throw new Error("test provider should not call fetch");
+  };
+
+  const narrationDeltas: string[] = [];
+  const response = await askDungeonMasterProvider({
+    instructions: "You are a campaign-opening planner for AI Taverns.",
+    message: "Plan the opening.",
+    history: [
+      {
+        id: "message-1",
+        role: "dm",
+        content: "Previous table context.",
+        createdAt: "2026-07-12T00:00:00.000Z"
+      }
+    ],
+    onPublicNarrationDelta: (delta) => narrationDeltas.push(delta)
+  });
+  const parsed = JSON.parse(response.content) as {
+    campaign_title: string;
+    region: { name: string };
+    allowed_player_facing_terms: { term: string; plain_meaning: string }[];
+    first_interactable_choices: string[];
+  };
+
+  assert.equal(parsed.campaign_title, "Lanterns at Ashford Tollhouse");
+  assert.equal(parsed.region.name, "Ashford Vale");
+  assert.deepEqual(parsed.allowed_player_facing_terms, [
+    {
+      term: "Ashford Tollhouse",
+      plain_meaning: "a stone roadside checkpoint"
+    }
+  ]);
+  assert.ok(
+    parsed.first_interactable_choices.includes(
+      "Question Marra about the silent bridge watch."
+    )
+  );
+  assert.deepEqual(narrationDeltas, []);
+  assert.deepEqual(response.debug.requestMessages, [
+    {
+      role: "system",
+      content: "You are a campaign-opening planner for AI Taverns."
+    },
+    {
+      role: "assistant",
+      content: "Previous table context."
+    },
+    {
+      role: "user",
+      content: "Plan the opening."
+    }
+  ]);
+  assert.equal(response.debug.rawResponse, response.content);
+  assert.equal(
+    response.debug.providerTimings?.[0]?.completedAt,
+    new Date(0).toISOString()
+  );
+  assert.equal(response.debug.providerTimings?.[0]?.requestMessageCount, 0);
+});
+
+test("test DM provider configuration passes outside production", () => {
+  process.env.AI_TAVERNS_TEST_DM_PROVIDER = "true";
+  delete process.env.NODE_ENV;
+
+  assert.doesNotThrow(() => assertDungeonMasterProviderConfigured());
+});
+
+test("test DM provider is disabled in production", async () => {
+  process.env.AI_TAVERNS_TEST_DM_PROVIDER = "true";
+  process.env.NODE_ENV = "production";
+
+  assert.throws(
+    () => assertDungeonMasterProviderConfigured(),
+    /test DM provider is not available in production/
+  );
+
+  await assert.rejects(
+    askDungeonMasterProvider({
+      instructions: "Return a JSON DM response.",
+      message: "Begin."
+    }),
+    /test DM provider is not available in production/
+  );
 });
 
 test("DeepSeek provider maps fetch timeout failures to a stable reachability error", async () => {
