@@ -14,6 +14,9 @@ export default defineConfig({
   },
   webServer: {
     command: "npm run dev -w @ai-dnd/web",
+    env: {
+      PLAYWRIGHT_AUTH_BYPASS: "true"
+    },
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     stdout: "pipe",

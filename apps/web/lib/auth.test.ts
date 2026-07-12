@@ -43,6 +43,44 @@ describe("getOptionalUser", () => {
     );
   });
 
+  it("returns a Playwright-only user when the local auth bypass is explicitly enabled", async () => {
+    vi.stubEnv("PLAYWRIGHT_AUTH_BYPASS", "true");
+    cookiesMock.mockResolvedValue({
+      getAll: () => [
+        { name: "ai_taverns_playwright_user", value: "smoke@example.com" }
+      ]
+    });
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+
+    await expect(getOptionalUser()).resolves.toEqual({
+      id: "playwright-user",
+      email: "smoke@example.com"
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("does not honor the Playwright auth bypass in production", async () => {
+    vi.stubEnv("PLAYWRIGHT_AUTH_BYPASS", "true");
+    vi.stubEnv("NODE_ENV", "production");
+    cookiesMock.mockResolvedValue({
+      getAll: () => [
+        { name: "ai_taverns_playwright_user", value: "smoke@example.com" }
+      ]
+    });
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({
+        authenticated: false,
+        user: null
+      })
+    );
+
+    await expect(getOptionalUser()).resolves.toBeNull();
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:4000/api/auth/me", {
+      headers: { cookie: "ai_taverns_playwright_user=smoke%40example.com" },
+      cache: "no-store"
+    });
+  });
+
   it("omits the cookie header when the request has no cookies", async () => {
     cookiesMock.mockResolvedValue({
       getAll: () => []
