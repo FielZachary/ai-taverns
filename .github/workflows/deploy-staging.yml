@@ -130,7 +130,7 @@ jobs:
           cp -a "$release"/. "$DEPLOY_PATH"/
 
           cd "$DEPLOY_PATH"
-          $compose up -d --build --remove-orphans
+          COMPOSE_BAKE=false $compose up -d --build --remove-orphans
           ready=0
           for attempt in $(seq 1 60); do
             ready=1
