@@ -1,5 +1,8 @@
 import { expect, test } from "@playwright/test";
-import { createMultiplayerCampaignThroughBrowser } from "./support/campaigns";
+import {
+  createMultiplayerCampaignThroughBrowser,
+  joinMultiplayerCampaignThroughBrowser
+} from "./support/campaigns";
 import { signInWithPasswordlessToken } from "./support/passwordless-auth";
 
 test.describe("authenticated navigation smoke", () => {
@@ -47,5 +50,48 @@ test.describe("authenticated navigation smoke", () => {
     await expect(
       page.getByText("Gather at least two players to begin the adventure.")
     ).toBeVisible();
+  });
+
+  test("play shows provider-free multiplayer pre-begin room state with two complete players", async ({
+    page,
+    request
+  }) => {
+    await signInWithPasswordlessToken(page, request, {
+      email: "room-smoke-host@example.com",
+      nextPath: "/new-adventure"
+    });
+    const campaign = await createMultiplayerCampaignThroughBrowser(page, {
+      title: "Room Smoke Adventure",
+      ownerClientId: "playwright-room-smoke-host"
+    });
+
+    await signInWithPasswordlessToken(page, request, {
+      email: "room-smoke-joiner@example.com",
+      nextPath: "/new-adventure"
+    });
+    await joinMultiplayerCampaignThroughBrowser(page, {
+      gameCode: campaign.joinCode!,
+      clientId: "playwright-room-smoke-joiner",
+      username: "Room Smoke Joiner",
+      characterName: "Mira Emberquill",
+      characterSheet:
+        "Mira Emberquill is a level 1 bard with a steady voice, a travel lute, and a habit of asking careful questions."
+    });
+
+    await page.goto(`/play?campaignId=${campaign.id}`);
+
+    await expect(page).toHaveURL(new RegExp(`/play\\?campaignId=${campaign.id}$`));
+    await expect(
+      page.getByRole("region", { name: "AI Dungeons and Dragons table" })
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /open chat: mira emberquill/i })
+    ).toBeVisible();
+    await expect(
+      page.getByText("The party is gathered. Let the DM open the campaign.")
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /begin adventure/i })
+    ).toBeEnabled();
   });
 });
