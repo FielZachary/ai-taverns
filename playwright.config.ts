@@ -29,6 +29,7 @@ export default defineConfig({
           `env DATABASE_URL=${playwrightDatabaseURL}`,
           "DATABASE_SSL_DISABLED=true",
           "AUTH_EXPOSE_LOCAL_LOGIN_TOKENS=true",
+          "AI_TAVERNS_TEST_DM_PROVIDER=true",
           `AUTH_PUBLIC_APP_ORIGIN=${baseURL}`,
           `WEB_ORIGINS=${baseURL}`,
           `PORT=${apiPort}`,

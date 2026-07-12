@@ -145,6 +145,60 @@ test.describe("authenticated navigation smoke", () => {
     ).toBeEnabled();
   });
 
+  test("play begins a multiplayer adventure with the deterministic local DM provider", async ({
+    page,
+    request
+  }) => {
+    await signInWithPasswordlessToken(page, request, {
+      email: "begin-room-smoke-host@example.com",
+      nextPath: "/new-adventure"
+    });
+    const campaign = await createMultiplayerCampaignThroughBrowser(page, {
+      title: "Begin Room Smoke Adventure",
+      ownerClientId: "playwright-begin-room-smoke-host",
+      campaignGenreKind: "custom",
+      customWorldName: "Playwright Test Realm",
+      customWorldDescription:
+        "A compact test realm for deterministic local smoke tests.",
+      ownerCharacterName: "Orin Hearthguard",
+      ownerCharacterSheet:
+        "Orin Hearthguard is a level 1 fighter with a dented helm, a travel cloak, and a habit of keeping the road behind the party in view."
+    });
+
+    await signInWithPasswordlessToken(page, request, {
+      email: "begin-room-smoke-joiner@example.com",
+      nextPath: "/new-adventure"
+    });
+    await joinMultiplayerCampaignThroughBrowser(page, {
+      gameCode: campaign.joinCode!,
+      clientId: "playwright-begin-room-smoke-joiner",
+      username: "Begin Room Smoke Joiner",
+      characterName: "Sera Dawnmark",
+      characterSheet:
+        "Sera Dawnmark is a level 1 paladin with a travel-worn shield, a small oathbook, and a steady habit of standing near the door."
+    });
+
+    await signInWithPasswordlessToken(page, request, {
+      email: "begin-room-smoke-host@example.com",
+      nextPath: "/new-adventure"
+    });
+    await page.goto(`/play?campaignId=${campaign.id}`);
+
+    await expect(
+      page.getByText("The party is gathered. Let the DM open the campaign.")
+    ).toBeVisible();
+
+    await page.getByRole("button", { name: /begin adventure/i }).click();
+
+    await expect(
+      page.getByText("Lanternlight gathers around the Ashford Tollhouse")
+    ).toBeVisible();
+    await expect(page.getByText("What do you do?")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /begin adventure/i })
+    ).toBeHidden();
+  });
+
   test("play preserves multiplayer pre-begin room state after page reload", async ({
     page,
     request
