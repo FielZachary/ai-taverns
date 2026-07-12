@@ -13,6 +13,7 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   quality-gate:
@@ -39,6 +40,24 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Guard production PR deploy triggers
+        if: github.event_name == 'pull_request' && github.base_ref == 'production'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          pr_text="$(gh pr view "$PR_NUMBER" --repo "$REPOSITORY" --json title,body --jq '[.title, (.body // "")] | join("\n")')"
+
+          if printf '%s\n' "$pr_text" | grep -Eiq '\[(skip ci|ci skip|no ci|skip actions|actions skip)\]|skip-checks:[[:space:]]*true'; then
+            echo "Production PR title/body contains a GitHub Actions skip directive." >&2
+            echo "That would prevent the production push from running the deploy workflow after merge." >&2
+            echo "Use a clean production promotion title and body." >&2
+            exit 1
+          fi
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
