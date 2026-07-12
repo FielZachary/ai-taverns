@@ -25,6 +25,7 @@
     "lint": "npm run lint -w @ai-dnd/web",
     "coverage": "npm run coverage --workspaces --if-present",
     "coverage:check": "node scripts/check-coverage-thresholds.mjs",
+    "test:e2e:db:reset": "node scripts/reset-playwright-db.mjs",
     "test:e2e": "playwright test",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"
