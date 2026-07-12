@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BASE_BRANCH="${1:-development}"
+CURRENT_BRANCH="$(git branch --show-current)"
+
+if [ -z "$CURRENT_BRANCH" ]; then
+  echo "No current branch found. Check out a feature branch first." >&2
+  exit 1
+fi
+
+if [ "$CURRENT_BRANCH" = "$BASE_BRANCH" ] || [ "$CURRENT_BRANCH" = "production" ]; then
+  echo "Refusing to open an auto-merge PR from protected/shared branch: $CURRENT_BRANCH" >&2
+  exit 1
+fi
+
+if ! gh auth status >/dev/null 2>&1; then
+  echo "GitHub CLI is not authenticated. Run gh auth login or provide GH_TOKEN." >&2
+  exit 1
+fi
+
+git push -u origin "$CURRENT_BRANCH"
+
+PR_URL="$(gh pr view "$CURRENT_BRANCH" --json url --jq .url 2>/dev/null || true)"
+if [ -z "$PR_URL" ]; then
+  PR_URL="$(gh pr create --fill --base "$BASE_BRANCH" --head "$CURRENT_BRANCH")"
+fi
+
+echo "PR: $PR_URL"
+
+if ! gh pr merge "$CURRENT_BRANCH" --auto --squash --delete-branch; then
+  cat >&2 <<'EOF'
+Unable to enable auto-merge. Confirm the repository allows auto-merge and the
+base branch has required status checks. Leave the PR open, fix any CI failures,
+then rerun this command or merge manually after CI passes.
+EOF
+  exit 1
+fi
