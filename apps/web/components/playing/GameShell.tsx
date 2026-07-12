@@ -50,6 +50,7 @@ import {
   isWaitingOnTargetedInput,
   rollRequestsFromRoom,
   roomSnapshotSubmissionUpdate,
+  turnSubmissionValidationMessage,
   waitingPlayerStatuses,
   type PendingSubmission,
   type RoomPlayer,
@@ -1037,39 +1038,22 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
       return;
     }
 
-    if (pendingRollRequests.length > 0) {
-      setInputValidationMessage(
-        currentPendingRollRequest
-          ? "The DM is waiting for the required roll."
-          : "The DM is waiting on another player's roll."
-      );
+    const validationMessage = turnSubmissionValidationMessage({
+      pendingRollRequests,
+      currentPendingRollRequest,
+      isWaitingOnTargetedInput: isWaitingOnTargetedInputState,
+      isSinglePlayer,
+      hasAdventureBegun,
+      playerProfile
+    });
+
+    if (validationMessage) {
+      setInputValidationMessage(validationMessage);
       setInputValidationPulse((currentPulse) => currentPulse + 1);
-      return;
-    }
-
-    if (isWaitingOnTargetedInputState) {
-      setInputValidationMessage("The DM is waiting on another player.");
-      setInputValidationPulse((currentPulse) => currentPulse + 1);
-      return;
-    }
-
-    if (!isSinglePlayer && !hasAdventureBegun) {
-      setInputValidationMessage("Begin the adventure before sending turns.");
-      setInputValidationPulse((currentPulse) => currentPulse + 1);
-      return;
-    }
-
-    if (!isSinglePlayer) {
-      const missingProfileFields = getMissingPlayerProfileFields(playerProfile);
-
-      if (missingProfileFields.length > 0) {
-        setInputValidationMessage(
-          `Finish your ${missingProfileFields.join(", ")} before sending.`
-        );
-        setInputValidationPulse((currentPulse) => currentPulse + 1);
+      if (!isSinglePlayer && validationMessage.startsWith("Finish your ")) {
         inputRef.current?.focus();
-        return;
       }
+      return;
     }
 
     setInputValidationMessage("");

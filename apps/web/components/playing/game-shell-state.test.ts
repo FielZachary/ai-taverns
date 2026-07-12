@@ -16,6 +16,7 @@ import {
   rollRequestsFromRoom,
   roomSnapshotSubmissionUpdate,
   snapshotHasResponseAfterMessage,
+  turnSubmissionValidationMessage,
   waitingPlayerStatuses,
   type RoomPlayer,
   type RoomSnapshot
@@ -102,6 +103,93 @@ describe("game shell state helpers", () => {
         characterSheet: `  ${defaultCharacterSheet}  `
       })
     ).toEqual(["character sheet"]);
+  });
+
+  it("returns turn submission validation messages for blocking room states", () => {
+    expect(
+      turnSubmissionValidationMessage({
+        pendingRollRequests: [rollRequest("current", "Nyx")],
+        currentPendingRollRequest: rollRequest("current", "Nyx"),
+        isWaitingOnTargetedInput: false,
+        isSinglePlayer: false,
+        hasAdventureBegun: true,
+        playerProfile: completeProfile
+      })
+    ).toBe("The DM is waiting for the required roll.");
+
+    expect(
+      turnSubmissionValidationMessage({
+        pendingRollRequests: [rollRequest("other", "Bran")],
+        currentPendingRollRequest: null,
+        isWaitingOnTargetedInput: false,
+        isSinglePlayer: false,
+        hasAdventureBegun: true,
+        playerProfile: completeProfile
+      })
+    ).toBe("The DM is waiting on another player's roll.");
+
+    expect(
+      turnSubmissionValidationMessage({
+        pendingRollRequests: [],
+        currentPendingRollRequest: null,
+        isWaitingOnTargetedInput: true,
+        isSinglePlayer: false,
+        hasAdventureBegun: true,
+        playerProfile: completeProfile
+      })
+    ).toBe("The DM is waiting on another player.");
+
+    expect(
+      turnSubmissionValidationMessage({
+        pendingRollRequests: [],
+        currentPendingRollRequest: null,
+        isWaitingOnTargetedInput: false,
+        isSinglePlayer: false,
+        hasAdventureBegun: false,
+        playerProfile: completeProfile
+      })
+    ).toBe("Begin the adventure before sending turns.");
+  });
+
+  it("requires complete multiplayer profiles before turn submission but allows solo play", () => {
+    const incompleteProfile = {
+      username: "",
+      characterName: " ",
+      characterSheet: defaultCharacterSheet
+    };
+
+    expect(
+      turnSubmissionValidationMessage({
+        pendingRollRequests: [],
+        currentPendingRollRequest: null,
+        isWaitingOnTargetedInput: false,
+        isSinglePlayer: false,
+        hasAdventureBegun: true,
+        playerProfile: incompleteProfile
+      })
+    ).toBe("Finish your username, character name, character sheet before sending.");
+
+    expect(
+      turnSubmissionValidationMessage({
+        pendingRollRequests: [],
+        currentPendingRollRequest: null,
+        isWaitingOnTargetedInput: false,
+        isSinglePlayer: true,
+        hasAdventureBegun: false,
+        playerProfile: incompleteProfile
+      })
+    ).toBeNull();
+
+    expect(
+      turnSubmissionValidationMessage({
+        pendingRollRequests: [],
+        currentPendingRollRequest: null,
+        isWaitingOnTargetedInput: false,
+        isSinglePlayer: false,
+        hasAdventureBegun: true,
+        playerProfile: completeProfile
+      })
+    ).toBeNull();
   });
 
   it("normalizes roll request targets against profile and room player names", () => {

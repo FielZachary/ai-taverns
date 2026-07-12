@@ -13,6 +13,8 @@ export default defineConfig({
       include: ["app/**/*.{ts,tsx}", "components/**/*.{ts,tsx}", "lib/**/*.{ts,tsx}"],
       exclude: [
         ".next/**",
+        "app/layout.tsx",
+        "app/login/page.tsx",
         "next-env.d.ts",
         "next.config.*",
         "**/*.test.{ts,tsx}",

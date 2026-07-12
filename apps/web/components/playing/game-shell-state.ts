@@ -53,6 +53,46 @@ export type RoomSnapshotSubmissionUpdate = {
   clearOptimisticSubmittedPlayerId: boolean;
 };
 
+export function turnSubmissionValidationMessage({
+  pendingRollRequests,
+  currentPendingRollRequest,
+  isWaitingOnTargetedInput,
+  isSinglePlayer,
+  hasAdventureBegun,
+  playerProfile
+}: {
+  pendingRollRequests: DiceRollRequest[];
+  currentPendingRollRequest: DiceRollRequest | null;
+  isWaitingOnTargetedInput: boolean;
+  isSinglePlayer: boolean;
+  hasAdventureBegun: boolean;
+  playerProfile: PlayerProfile;
+}) {
+  if (pendingRollRequests.length > 0) {
+    return currentPendingRollRequest
+      ? "The DM is waiting for the required roll."
+      : "The DM is waiting on another player's roll.";
+  }
+
+  if (isWaitingOnTargetedInput) {
+    return "The DM is waiting on another player.";
+  }
+
+  if (!isSinglePlayer && !hasAdventureBegun) {
+    return "Begin the adventure before sending turns.";
+  }
+
+  if (!isSinglePlayer) {
+    const missingProfileFields = getMissingPlayerProfileFields(playerProfile);
+
+    if (missingProfileFields.length > 0) {
+      return `Finish your ${missingProfileFields.join(", ")} before sending.`;
+    }
+  }
+
+  return null;
+}
+
 export function displayedRoomPlayersWithOptimisticSubmission(
   roomPlayers: RoomPlayer[],
   optimisticSubmittedPlayerId: string | null
