@@ -94,4 +94,54 @@ test.describe("authenticated navigation smoke", () => {
       page.getByRole("button", { name: /begin adventure/i })
     ).toBeEnabled();
   });
+
+  test("play shows owner-visible multiplayer room state after a second complete player joins", async ({
+    page,
+    request
+  }) => {
+    await signInWithPasswordlessToken(page, request, {
+      email: "owner-room-smoke-host@example.com",
+      nextPath: "/new-adventure"
+    });
+    const campaign = await createMultiplayerCampaignThroughBrowser(page, {
+      title: "Owner Room Smoke Adventure",
+      ownerClientId: "playwright-owner-room-smoke-host"
+    });
+
+    await signInWithPasswordlessToken(page, request, {
+      email: "owner-room-smoke-joiner@example.com",
+      nextPath: "/new-adventure"
+    });
+    await joinMultiplayerCampaignThroughBrowser(page, {
+      gameCode: campaign.joinCode!,
+      clientId: "playwright-owner-room-smoke-joiner",
+      username: "Owner Room Smoke Joiner",
+      characterName: "Tarin Mosswake",
+      characterSheet:
+        "Tarin Mosswake is a level 1 ranger with a careful map, a weathered bow, and a calm eye for hidden paths."
+    });
+
+    await signInWithPasswordlessToken(page, request, {
+      email: "owner-room-smoke-host@example.com",
+      nextPath: "/new-adventure"
+    });
+    await page.goto(`/play?campaignId=${campaign.id}`);
+
+    await expect(page).toHaveURL(new RegExp(`/play\\?campaignId=${campaign.id}$`));
+    await expect(
+      page.getByRole("region", { name: "AI Dungeons and Dragons table" })
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /open chat: smoke host/i })
+    ).toBeVisible();
+    await expect(page.getByText("Owner Room Smoke Adventure")).toBeVisible();
+    await expect(
+      page.getByText("The party is gathered. Let the DM open the campaign.")
+    ).toBeVisible();
+    await expect(page.getByText("Game Code")).toBeVisible();
+    await expect(page.getByText(campaign.joinCode!)).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /begin adventure/i })
+    ).toBeEnabled();
+  });
 });
