@@ -298,6 +298,74 @@ test.describe("authenticated navigation smoke", () => {
     }
   });
 
+  test("play answers an Ask DM question with the deterministic local DM provider", async ({
+    page,
+    request
+  }) => {
+    await signInWithPasswordlessToken(page, request, {
+      email: "ask-dm-smoke-host@example.com",
+      nextPath: "/new-adventure"
+    });
+    const campaign = await createMultiplayerCampaignThroughBrowser(page, {
+      title: "Ask DM Smoke Adventure",
+      ownerClientId: "playwright-ask-dm-smoke-host",
+      campaignGenreKind: "custom",
+      customWorldName: "Playwright Test Realm",
+      customWorldDescription:
+        "A compact test realm for deterministic local smoke tests.",
+      ownerCharacterName: "Elian Charterwise",
+      ownerCharacterSheet:
+        "Elian Charterwise is a level 1 wizard with a wax-stained satchel, a careful eye for legal seals, and a habit of asking clarifying questions before acting."
+    });
+
+    await signInWithPasswordlessToken(page, request, {
+      email: "ask-dm-smoke-joiner@example.com",
+      nextPath: "/new-adventure"
+    });
+    await joinMultiplayerCampaignThroughBrowser(page, {
+      gameCode: campaign.joinCode!,
+      clientId: "playwright-ask-dm-smoke-joiner",
+      username: "Ask DM Smoke Joiner",
+      characterName: "Maren Bridgekeep",
+      characterSheet:
+        "Maren Bridgekeep is a level 1 fighter with a river-marked shield, a practical pack, and a steady sense for when roads feel wrong."
+    });
+
+    await signInWithPasswordlessToken(page, request, {
+      email: "ask-dm-smoke-host@example.com",
+      nextPath: "/new-adventure"
+    });
+    await page.evaluate(() => {
+      localStorage.setItem("ai-dnd.playerId", "playwright-ask-dm-smoke-host");
+    });
+    await page.goto(`/play?campaignId=${campaign.id}`);
+
+    await page.getByRole("button", { name: /begin adventure/i }).click();
+
+    await expect(
+      page.getByText("Lanternlight gathers around the Ashford Tollhouse")
+    ).toBeVisible();
+
+    const question = "What can I tell about the sealed road charter?";
+    await page.getByRole("button", { name: /^ask dm$/i }).click();
+    await page
+      .getByPlaceholder("Ask the DM a question without advancing time...")
+      .fill(question);
+    await expect(page.getByRole("button", { name: /^ask$/i })).toBeEnabled();
+    const askDmResponse = page.waitForResponse(
+      (response) =>
+        response.url().includes(`/api/campaigns/${campaign.id}/ask-dm`) &&
+        response.status() === 200
+    );
+    await page.getByRole("button", { name: /^ask$/i }).click();
+    await askDmResponse;
+
+    await expect(page.getByText(question)).toBeVisible();
+    await expect(page.getByText("Elian Charterwise asks the DM")).toBeVisible();
+    await expect(page.getByText("DM Answer")).toBeVisible();
+    await expect(page.getByText(/broken seal/)).toBeVisible();
+  });
+
   test("play preserves multiplayer pre-begin room state after page reload", async ({
     page,
     request

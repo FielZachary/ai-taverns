@@ -174,6 +174,13 @@ function testDmContractContent() {
   });
 }
 
+function testAskDmAnswerContent() {
+  return JSON.stringify({
+    answer:
+      "The sealed road charter looks official enough to matter at the tollhouse, but the broken seal means someone may already have read or tampered with it. Treat it as a clue, not proof."
+  });
+}
+
 function shouldUseTestProvider() {
   return process.env.AI_TAVERNS_TEST_DM_PROVIDER === "true";
 }
@@ -188,9 +195,16 @@ async function askTestDungeonMasterProvider(
   const isPlannerCall = input.instructions.includes(
     "campaign-opening planner for AI Taverns"
   );
-  const content = isPlannerCall ? testOpeningPlanContent() : testDmContractContent();
+  const isAskDmCall = input.instructions.includes(
+    "out-of-turn table question"
+  );
+  const content = isPlannerCall
+    ? testOpeningPlanContent()
+    : isAskDmCall
+      ? testAskDmAnswerContent()
+      : testDmContractContent();
 
-  if (!isPlannerCall) {
+  if (!isPlannerCall && !isAskDmCall) {
     input.onPublicNarrationDelta?.(testOpeningNarration);
   }
 
