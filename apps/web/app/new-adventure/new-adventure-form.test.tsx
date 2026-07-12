@@ -30,6 +30,30 @@ async function continueFlow() {
   await finishFlowTransition();
 }
 
+async function nextCharacterStep() {
+  fireEvent.click(screen.getByRole("button", { name: /next/i }));
+  await finishFlowTransition();
+}
+
+function statCardFor(label: string) {
+  const decreaseButton = screen.getByRole("button", {
+    name: new RegExp(`decrease ${label}`, "i")
+  });
+  const card = decreaseButton.closest(".stat-roll-card");
+
+  if (!card) {
+    throw new Error(`Unable to find stat card for ${label}`);
+  }
+
+  return card;
+}
+
+function expectPointBuyRemaining(points: number) {
+  const remainingCounter = document.querySelector(".point-buy-remaining");
+
+  expect(remainingCounter).toHaveTextContent(`${points}points remaining`);
+}
+
 describe("NewAdventureForm", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -92,6 +116,76 @@ describe("NewAdventureForm", () => {
 
     expect(
       screen.getByRole("heading", { name: /choose your character build/i })
+    ).toBeInTheDocument();
+  });
+
+  it("lets point-buy stats spend points and advance from valid stats", async () => {
+    render(<NewAdventureForm />);
+
+    await continueFlow();
+    await continueFlow();
+
+    expect(
+      screen.getByRole("heading", { name: /choose your character build/i })
+    ).toBeInTheDocument();
+
+    await nextCharacterStep();
+
+    expect(
+      screen.getByRole("heading", { name: /roll your level 5 stats/i })
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Point Buy" }));
+
+    expectPointBuyRemaining(15);
+
+    const strengthCard = statCardFor("Strength");
+    const decreaseStrength = screen.getByRole("button", {
+      name: /decrease strength/i
+    });
+    const increaseStrength = screen.getByRole("button", {
+      name: /increase strength/i
+    });
+
+    fireEvent.click(decreaseStrength);
+
+    expect(strengthCard).toHaveTextContent("9");
+    expectPointBuyRemaining(16);
+
+    fireEvent.click(decreaseStrength);
+
+    expect(strengthCard).toHaveTextContent("8");
+    expect(decreaseStrength).toBeDisabled();
+    expectPointBuyRemaining(17);
+
+    fireEvent.click(increaseStrength);
+
+    expect(strengthCard).toHaveTextContent("9");
+    expectPointBuyRemaining(16);
+
+    for (let index = 0; index < 6; index += 1) {
+      fireEvent.click(increaseStrength);
+    }
+
+    expect(strengthCard).toHaveTextContent("15");
+    expect(increaseStrength).toBeDisabled();
+    expectPointBuyRemaining(8);
+
+    const increaseDexterity = screen.getByRole("button", {
+      name: /increase dexterity/i
+    });
+
+    for (let index = 0; index < 5; index += 1) {
+      fireEvent.click(increaseDexterity);
+    }
+
+    expectPointBuyRemaining(1);
+    expect(increaseDexterity).toBeDisabled();
+
+    await nextCharacterStep();
+
+    expect(
+      screen.getByRole("heading", { name: /choose your class/i })
     ).toBeInTheDocument();
   });
 });
