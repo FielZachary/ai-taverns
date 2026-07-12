@@ -15,6 +15,7 @@ export default defineConfig({
         ".next/**",
         "app/layout.tsx",
         "app/login/page.tsx",
+        "lib/game-types.ts",
         "next-env.d.ts",
         "next.config.*",
         "**/*.test.{ts,tsx}",
