@@ -144,4 +144,53 @@ test.describe("authenticated navigation smoke", () => {
       page.getByRole("button", { name: /begin adventure/i })
     ).toBeEnabled();
   });
+
+  test("play preserves multiplayer pre-begin room state after page reload", async ({
+    page,
+    request
+  }) => {
+    await signInWithPasswordlessToken(page, request, {
+      email: "refresh-room-smoke-host@example.com",
+      nextPath: "/new-adventure"
+    });
+    const campaign = await createMultiplayerCampaignThroughBrowser(page, {
+      title: "Refresh Room Smoke Adventure",
+      ownerClientId: "playwright-refresh-room-smoke-host"
+    });
+
+    await signInWithPasswordlessToken(page, request, {
+      email: "refresh-room-smoke-joiner@example.com",
+      nextPath: "/new-adventure"
+    });
+    await joinMultiplayerCampaignThroughBrowser(page, {
+      gameCode: campaign.joinCode!,
+      clientId: "playwright-refresh-room-smoke-joiner",
+      username: "Refresh Room Smoke Joiner",
+      characterName: "Lio Starfen",
+      characterSheet:
+        "Lio Starfen is a level 1 wizard with a lantern staff, ink-stained notes, and a patient curiosity for old doors."
+    });
+
+    await page.goto(`/play?campaignId=${campaign.id}`);
+    await expect(
+      page.getByText("The party is gathered. Let the DM open the campaign.")
+    ).toBeVisible();
+
+    await page.reload();
+
+    await expect(page).toHaveURL(new RegExp(`/play\\?campaignId=${campaign.id}$`));
+    await expect(
+      page.getByRole("region", { name: "AI Dungeons and Dragons table" })
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /open chat: lio starfen/i })
+    ).toBeVisible();
+    await expect(page.getByText("Refresh Room Smoke Adventure")).toBeVisible();
+    await expect(
+      page.getByText("The party is gathered. Let the DM open the campaign.")
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /begin adventure/i })
+    ).toBeEnabled();
+  });
 });
