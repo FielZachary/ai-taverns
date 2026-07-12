@@ -3,6 +3,7 @@ set -euo pipefail
 
 BASE_BRANCH="${1:-development}"
 CURRENT_BRANCH="$(git branch --show-current)"
+REQUIRED_CHECK="${REQUIRED_CHECK:-Typecheck, lint, test, and build}"
 
 if [ -z "$CURRENT_BRANCH" ]; then
   echo "No current branch found. Check out a feature branch first." >&2
@@ -27,6 +28,37 @@ if [ -z "$PR_URL" ]; then
 fi
 
 echo "PR: $PR_URL"
+
+REPO="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
+ALLOW_AUTO_MERGE="$(gh api "repos/$REPO" --jq .allow_auto_merge)"
+
+if [ "$ALLOW_AUTO_MERGE" != "true" ]; then
+  cat >&2 <<EOF
+Repository auto-merge is not enabled for $REPO. Refusing to merge immediately,
+because this workflow is only safe when GitHub can hold the PR until required
+checks pass.
+EOF
+  exit 1
+fi
+
+if ! REQUIRED_CHECKS="$(gh api "repos/$REPO/branches/$BASE_BRANCH/protection/required_status_checks" --jq '.contexts[]?' 2>/dev/null)"; then
+  cat >&2 <<EOF
+Could not read required status checks for $BASE_BRANCH. Refusing to merge,
+because branch protection is what turns this PR into a CI gate.
+EOF
+  exit 1
+fi
+
+if ! printf '%s\n' "$REQUIRED_CHECKS" | grep -Fxq "$REQUIRED_CHECK"; then
+  cat >&2 <<EOF
+Required check "$REQUIRED_CHECK" is not configured on $BASE_BRANCH.
+Configured checks:
+$REQUIRED_CHECKS
+
+Refusing to merge until the CI gate is actually required.
+EOF
+  exit 1
+fi
 
 if ! gh pr merge "$CURRENT_BRANCH" --auto --squash --delete-branch; then
   cat >&2 <<'EOF'
