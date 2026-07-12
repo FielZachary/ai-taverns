@@ -220,6 +220,28 @@ test("test DM provider returns deterministic campaign planner JSON without strea
   assert.equal(response.debug.providerTimings?.[0]?.requestMessageCount, 0);
 });
 
+test("test DM provider returns deterministic Ask DM answer JSON without streaming narration", async () => {
+  process.env.AI_TAVERNS_TEST_DM_PROVIDER = "true";
+  delete process.env.NODE_ENV;
+  globalThis.fetch = async () => {
+    throw new Error("test provider should not call fetch");
+  };
+
+  const narrationDeltas: string[] = [];
+  const response = await askDungeonMasterProvider({
+    instructions:
+      "You are the AI Taverns DnD Dungeon Master answering an out-of-turn table question.",
+    message: "What can I tell about the charter?",
+    onPublicNarrationDelta: (delta) => narrationDeltas.push(delta)
+  });
+  const parsed = JSON.parse(response.content) as { answer: string };
+
+  assert.match(parsed.answer, /sealed road charter/);
+  assert.match(parsed.answer, /broken seal/);
+  assert.deepEqual(narrationDeltas, []);
+  assert.equal(response.debug.rawResponse, response.content);
+});
+
 test("test DM provider configuration passes outside production", () => {
   process.env.AI_TAVERNS_TEST_DM_PROVIDER = "true";
   delete process.env.NODE_ENV;
