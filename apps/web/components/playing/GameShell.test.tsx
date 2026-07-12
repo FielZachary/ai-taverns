@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -238,6 +239,12 @@ class MockWebSocket {
     this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]);
   }
 
+  emitMessage(data: unknown) {
+    for (const listener of this.listeners.get("message") ?? []) {
+      listener({ data: JSON.stringify(data) } as MessageEvent);
+    }
+  }
+
   close() {
     return undefined;
   }
@@ -435,6 +442,59 @@ describe("GameShell", () => {
     expect(
       screen.getByRole("button", { name: /begin adventure/i })
     ).toBeEnabled();
+    expect(screen.getByLabelText("Message log")).toHaveAttribute(
+      "data-sending",
+      "false"
+    );
+  });
+
+  it("shows realtime DM stream failures and refreshes the room state", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.startsWith("/api/room?")) {
+        return responseJson(roomSnapshot());
+      }
+
+      if (url === "/api/auth/claim-guest-state") {
+        return responseJson({});
+      }
+
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<GameShell initialCampaignId={campaign.id} />);
+
+    expect(
+      await screen.findByText("The lantern guttered beside the sealed door.")
+    ).toBeInTheDocument();
+    expect(MockWebSocket.instances).toHaveLength(1);
+    const roomFetchCountBeforeFailure = fetchMock.mock.calls.filter(([input]) =>
+      String(input).startsWith("/api/room?")
+    ).length;
+
+    act(() => {
+      MockWebSocket.instances[0].emitMessage({
+        type: "dm_stream_failed",
+        roomId: campaign.id,
+        turnId: "turn-1",
+        message: "The DM stream collapsed into static."
+      });
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("The DM stream collapsed into static.")
+      ).toBeInTheDocument();
+    });
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.filter(([input]) => String(input).startsWith("/api/room?"))
+          .length
+      ).toBeGreaterThan(roomFetchCountBeforeFailure);
+    });
     expect(screen.getByLabelText("Message log")).toHaveAttribute(
       "data-sending",
       "false"
