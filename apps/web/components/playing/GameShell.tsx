@@ -9,16 +9,12 @@ import {
   useState
 } from "react";
 import {
-  Dice5,
-  Flame,
-  LogOut,
   Play,
   Send,
   X
 } from "lucide-react";
 import type {
   DiceRollRequest,
-  DiceRollResult,
   DiceRollSubmission,
   GameMessage,
   InputPolicy
@@ -32,26 +28,58 @@ import {
   type ChatSummary
 } from "./ChatHistorySidebar";
 import { CharacterSheetOverlay } from "./CharacterSheetOverlay";
-import { MessageLog, type ChatPlayerStatus } from "./MessageLog";
+import { MessageLog } from "./MessageLog";
 import {
-  defaultCharacterSheet,
   emptyPlayerProfile,
   type PlayerProfile
 } from "./PlayerPanel";
 import { DiceRollReveal3D } from "./DiceRollReveal3D";
 import {
   PlayerInput,
-  type DiceFace,
   type PlayerInputMode,
   type QueuedDice
 } from "./PlayerInput";
+import {
+  activeCharacterSheetForRoom,
+  currentPlayerRollRequests,
+  displayedRoomPlayersWithOptimisticSubmission,
+  getMissingPlayerProfileFields,
+  hasOptimisticSubmissionForCurrentPlayer,
+  isInputSubmittedForCurrentRoomState,
+  isWaitingOnAnotherPlayerRoll,
+  isWaitingOnTargetedInput,
+  rollRequestsFromRoom,
+  roomSnapshotSubmissionUpdate,
+  turnSubmissionValidationMessage,
+  waitingPlayerStatuses,
+  type PendingSubmission,
+  type RoomPlayer,
+  type RoomSnapshot
+} from "./game-shell-state";
+import {
+  buildRollSubmissionRequest,
+  buildTurnSubmissionRequest
+} from "./game-shell-requests";
+import {
+  expectedPendingRollExpression,
+  pendingRollBatchFromQueue,
+  predeterminedDiceNotation,
+  requiredDiceQueueFromRequests,
+  rollPendingBatch,
+  rollQueuedDice
+} from "./game-shell-dice";
+import {
+  appendStreamingDmDelta,
+  mergeVisibleGameMessages,
+  removeStreamingDmMessage,
+  startStreamingDmMessage,
+  type StreamingDmMessage
+} from "./game-shell-messages";
 
 const openingMessages: GameMessage[] = [];
 const playerIdStorageKey = "ai-dnd.playerId";
 const roomRequestTimeoutMs = 8_000;
 const fallbackRoomPollMs = 25_000;
-
-type CampaignMode = "single_player" | "multiplayer";
 
 type CampaignSummary = ApiCampaignSummary & ChatSummary;
 
@@ -59,30 +87,6 @@ type ApiErrorResponse = {
   error?: string | {
     message?: string;
   };
-};
-
-type RoomPlayer = {
-  id: string;
-  slot: number;
-  username: string;
-  characterName: string;
-  characterSheet: string;
-  status: "waiting" | "submitted";
-};
-
-type RoomSnapshot = {
-  roomId: string;
-  mode: CampaignMode;
-  sessionId: string;
-  players: RoomPlayer[];
-  messages: GameMessage[];
-  isResolving: boolean;
-  hasBegun: boolean;
-  pendingRollRequest: DiceRollRequest | null;
-  pendingRollRequests?: DiceRollRequest[];
-  inputTargets?: string[];
-  inputPolicy?: InputPolicy;
-  updatedAt?: string;
 };
 
 type RoomRealtimeEvent =
@@ -108,160 +112,6 @@ type ActiveDiceReveal = {
   onComplete: () => void;
 };
 
-type PendingRollBatch = {
-  requests: DiceRollRequest[];
-  expression: string;
-  notation: string;
-  entries: {
-    request: DiceRollRequest;
-    count: number;
-    sides: number;
-  }[];
-};
-
-type PendingSubmission = {
-  messageId: string;
-  createdAt: string;
-};
-
-type StreamingDmMessage = GameMessage & {
-  turnId: string;
-};
-
-function snapshotHasResponseAfterMessage(
-  room: RoomSnapshot,
-  pendingSubmission: PendingSubmission
-) {
-  const messageIndex = room.messages.findIndex(
-    (message) => message.id === pendingSubmission.messageId
-  );
-
-  if (messageIndex >= 0) {
-    return room.messages
-      .slice(messageIndex + 1)
-      .some((message) => message.role === "dm" || message.role === "system");
-  }
-
-  const pendingSubmittedAt = Date.parse(pendingSubmission.createdAt);
-
-  return room.messages.some((message) => {
-    if (message.role !== "dm" && message.role !== "system") {
-      return false;
-    }
-
-    return Date.parse(message.createdAt) >= pendingSubmittedAt;
-  });
-}
-
-function getMissingPlayerProfileFields(profile: PlayerProfile) {
-  const hasCharacterSheetContent =
-    profile.characterSheet.trim().length > 0 &&
-    profile.characterSheet.trim() !== defaultCharacterSheet.trim();
-
-  return [
-    profile.username.trim() ? null : "username",
-    profile.characterName.trim() ? null : "character name",
-    hasCharacterSheetContent ? null : "character sheet"
-  ].filter((field): field is string => field !== null);
-}
-
-function rollRequestsFromRoom(room: RoomSnapshot) {
-  return (
-    room.pendingRollRequests ??
-    (room.pendingRollRequest ? [room.pendingRollRequest] : [])
-  );
-}
-
-function normalizePlayerTarget(value: string | undefined) {
-  return value
-    ?.trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function rollRequestTargetsCurrentPlayer(
-  request: DiceRollRequest,
-  profile: PlayerProfile,
-  roomPlayer?: RoomPlayer
-) {
-  const target = normalizePlayerTarget(request.player);
-
-  if (!target) {
-    return true;
-  }
-
-  const playerNames = [
-    profile.username,
-    profile.characterName,
-    roomPlayer?.username,
-    roomPlayer?.characterName
-  ]
-    .map(normalizePlayerTarget)
-    .filter((name): name is string => Boolean(name));
-
-  return playerNames.some(
-    (name) =>
-      target === name ||
-      target.includes(name) ||
-      name.includes(target)
-  );
-}
-
-function inputTargetsCurrentPlayer(
-  inputTargets: string[],
-  profile: PlayerProfile,
-  roomPlayer?: RoomPlayer
-) {
-  if (inputTargets.length === 0) {
-    return true;
-  }
-
-  return inputTargets.some((target) =>
-    rollRequestTargetsCurrentPlayer(
-      {
-        id: "input-target",
-        dice: "1d20",
-        label: "Input target",
-        player: target
-      },
-      profile,
-      roomPlayer
-    )
-  );
-}
-
-function currentPlayerRollRequests(
-  pendingRequests: DiceRollRequest[],
-  profile: PlayerProfile,
-  roomPlayer: RoomPlayer | undefined,
-  isSinglePlayer: boolean
-) {
-  if (isSinglePlayer) {
-    return pendingRequests;
-  }
-
-  if (
-    pendingRequests.length === 0 ||
-    !rollRequestTargetsCurrentPlayer(pendingRequests[0], profile, roomPlayer)
-  ) {
-    return [];
-  }
-
-  const targetedRequests: DiceRollRequest[] = [];
-
-  for (const request of pendingRequests) {
-    if (!rollRequestTargetsCurrentPlayer(request, profile, roomPlayer)) {
-      break;
-    }
-
-    targetedRequests.push(request);
-  }
-
-  return targetedRequests;
-}
-
 function createClientId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID();
@@ -270,306 +120,6 @@ function createClientId() {
   return `id-${Date.now().toString(36)}-${Math.random()
     .toString(36)
     .slice(2, 10)}`;
-}
-
-function modifierText(modifier: number | undefined) {
-  if (!modifier) {
-    return "";
-  }
-
-  return modifier > 0 ? ` + ${modifier}` : ` - ${Math.abs(modifier)}`;
-}
-
-function rollDiceExpression(dice: string, modifier: number | undefined) {
-  const match = dice.trim().match(/^(\d*)d(\d+)$/i);
-
-  if (!match) {
-    throw new Error("The DM requested an unsupported dice roll.");
-  }
-
-  const count = Number(match[1] || "1");
-  const sides = Number(match[2]);
-
-  if (
-    !Number.isInteger(count) ||
-    !Number.isInteger(sides) ||
-    count < 1 ||
-    count > 20 ||
-    sides < 2 ||
-    sides > 1000
-  ) {
-    throw new Error("The DM requested an unsupported dice roll.");
-  }
-
-  const rolls = Array.from(
-    { length: count },
-    () => Math.floor(Math.random() * sides) + 1
-  );
-  const total = rolls.reduce((sum, roll) => sum + roll, modifier ?? 0);
-
-  return {
-    rolls,
-    total
-  };
-}
-
-function parseSimpleDiceExpression(dice: string) {
-  const match = dice.trim().match(/^(\d*)d(4|6|8|10|12|20)$/i);
-
-  if (!match) {
-    return null;
-  }
-
-  return {
-    count: Number(match[1] || "1"),
-    sides: Number(match[2])
-  };
-}
-
-function diceExpression(count: number, sides: number) {
-  return `${count}d${sides}`;
-}
-
-function normalizedAdvantageState(request: DiceRollRequest) {
-  const state = request.advantageState?.trim().toLowerCase();
-
-  return state === "advantage" || state === "disadvantage" ? state : "normal";
-}
-
-function physicalRollCountForRequest(request: DiceRollRequest, count: number, sides: number) {
-  return count === 1 &&
-    sides === 20 &&
-    normalizedAdvantageState(request) !== "normal"
-    ? 2
-    : count;
-}
-
-function scoredRollsForRequest(request: DiceRollRequest, rolls: number[]) {
-  const advantageState = normalizedAdvantageState(request);
-
-  if (rolls.length === 2 && advantageState === "advantage") {
-    return [Math.max(...rolls)];
-  }
-
-  if (rolls.length === 2 && advantageState === "disadvantage") {
-    return [Math.min(...rolls)];
-  }
-
-  return rolls;
-}
-
-function queuedDiceEntries(queuedDice: QueuedDice) {
-  const faceOrder: DiceFace[] = ["d4", "d6", "d8", "d10", "d12", "d20"];
-
-  return faceOrder
-    .map((face) => ({
-      face,
-      count: queuedDice[face] ?? 0
-    }))
-    .filter((entry) => entry.count > 0);
-}
-
-function diceExpressionFromQueue(queuedDice: QueuedDice) {
-  return queuedDiceEntries(queuedDice)
-    .map(({ face, count }) => `${count}${face}`)
-    .join(" + ");
-}
-
-function diceNotationFromQueue(queuedDice: QueuedDice) {
-  return queuedDiceEntries(queuedDice)
-    .map(({ face, count }) => `${count}${face}`)
-    .join("+");
-}
-
-function diceFaceFromSides(sides: number): DiceFace | null {
-  const face = `d${sides}` as DiceFace;
-
-  return ["d4", "d6", "d8", "d10", "d12", "d20"].includes(face)
-    ? face
-    : null;
-}
-
-function diceExpressionFromBatchEntries(
-  entries: PendingRollBatch["entries"],
-  separator = " + "
-) {
-  const groups: { count: number; sides: number }[] = [];
-
-  entries.forEach((entry) => {
-    const previousGroup = groups[groups.length - 1];
-
-    if (previousGroup?.sides === entry.sides) {
-      previousGroup.count += entry.count;
-      return;
-    }
-
-    groups.push({
-      count: entry.count,
-      sides: entry.sides
-    });
-  });
-
-  return groups
-    .map((group) => diceExpression(group.count, group.sides))
-    .join(separator);
-}
-
-function requiredDiceQueueFromRequests(pendingRequests: DiceRollRequest[]) {
-  const queuedDice: QueuedDice = {};
-  const entries: PendingRollBatch["entries"] = [];
-
-  for (const request of pendingRequests) {
-    const parsed = parseSimpleDiceExpression(request.dice);
-    const face = parsed ? diceFaceFromSides(parsed.sides) : null;
-
-    if (!parsed || !face) {
-      return null;
-    }
-
-    const physicalCount = physicalRollCountForRequest(
-      request,
-      parsed.count,
-      parsed.sides
-    );
-
-    queuedDice[face] = (queuedDice[face] ?? 0) + physicalCount;
-    entries.push({
-      request,
-      count: physicalCount,
-      sides: parsed.sides
-    });
-  }
-
-  return {
-    queuedDice,
-    entries,
-    expression: diceExpressionFromBatchEntries(entries),
-    notation: diceExpressionFromBatchEntries(entries, "+")
-  };
-}
-
-function diceQueuesMatch(left: QueuedDice, right: QueuedDice) {
-  const faces: DiceFace[] = ["d4", "d6", "d8", "d10", "d12", "d20"];
-
-  return faces.every((face) => (left[face] ?? 0) === (right[face] ?? 0));
-}
-
-function predeterminedDiceNotation(dice: string, rolls: number[]) {
-  return `${dice.replace(/\s+/g, "")}@${rolls.join(",")}`;
-}
-
-function rollQueuedDice(queuedDice: QueuedDice) {
-  const entries = queuedDiceEntries(queuedDice);
-  const rollsByFace = entries.map(({ face, count }) => {
-    const sides = Number(face.slice(1));
-    const rolls = Array.from(
-      { length: count },
-      () => Math.floor(Math.random() * sides) + 1
-    );
-
-    return {
-      face,
-      rolls
-    };
-  });
-  const total = rollsByFace.reduce(
-    (sum, group) => sum + group.rolls.reduce((groupSum, roll) => groupSum + roll, 0),
-    0
-  );
-  const details = rollsByFace
-    .map(({ face, rolls }) => `${face}: ${rolls.join(", ")}`)
-    .join("; ");
-  const rolls = rollsByFace.flatMap((group) => group.rolls);
-  const notation = predeterminedDiceNotation(
-    diceNotationFromQueue(queuedDice),
-    rolls
-  );
-
-  return {
-    expression: diceExpressionFromQueue(queuedDice),
-    notation,
-    rolls,
-    total,
-    content: `I rolled ${diceExpressionFromQueue(queuedDice)}: ${total} (${details}).`
-  };
-}
-
-function pendingRollBatchFromQueue(
-  queuedDice: QueuedDice,
-  pendingRequests: DiceRollRequest[]
-): PendingRollBatch | null {
-  const requiredDice = requiredDiceQueueFromRequests(pendingRequests);
-
-  if (!requiredDice || !diceQueuesMatch(queuedDice, requiredDice.queuedDice)) {
-    return null;
-  }
-
-  return {
-    requests: pendingRequests,
-    expression: requiredDice.expression,
-    notation: requiredDice.notation,
-    entries: requiredDice.entries
-  };
-}
-
-function expectedPendingRollExpression(pendingRequests: DiceRollRequest[]) {
-  const requiredDice = requiredDiceQueueFromRequests(pendingRequests);
-
-  return requiredDice?.expression ?? pendingRequests[0]?.dice ?? "the required dice";
-}
-
-function rollPendingBatch(batch: PendingRollBatch, clientMessageId: string) {
-  const rolls: number[] = [];
-  const rollSubmissions: DiceRollSubmission[] = batch.entries.map((entry) => {
-    const requestRolls = Array.from(
-      { length: entry.count },
-      () => Math.floor(Math.random() * entry.sides) + 1
-    );
-
-    rolls.push(...requestRolls);
-
-    return {
-      rollRequestId: entry.request.id,
-      rollResult: {
-        rolls: requestRolls,
-        total: scoredRollsForRequest(entry.request, requestRolls).reduce(
-          (sum, roll) => sum + roll,
-          entry.request.modifier ?? 0
-        )
-      },
-      clientMessageId
-    };
-  });
-  const total = rollSubmissions.reduce(
-    (sum, submission) => sum + submission.rollResult.total,
-    0
-  );
-  const content = rollSubmissions
-    .map((submission, index) =>
-      formatRollSubmission(batch.requests[index], submission.rollResult)
-    )
-    .join("\n");
-
-  return {
-    rolls,
-    total,
-    content,
-    rollSubmissions
-  };
-}
-
-function formatRollSubmission(
-  request: DiceRollRequest,
-  result: DiceRollResult
-) {
-  const rollText =
-    result.rolls.length === 1
-      ? String(result.rolls[0])
-      : result.rolls.join(", ");
-
-  return `I rolled ${request.dice}${modifierText(request.modifier)}: ${
-    result.total
-  } (${rollText}) for ${request.label}.`;
 }
 
 async function getApiErrorMessage(response: Response, fallback: string) {
@@ -643,7 +193,7 @@ async function fetchWithTimeout(
   }
 }
 
-export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
+export function GameShell({ initialCampaignId }: GameShellProps) {
   const [messages, setMessages] = useState<GameMessage[]>(openingMessages);
   const [availableCampaigns, setAvailableCampaigns] = useState<CampaignSummary[]>([]);
   const [draft, setDraft] = useState("");
@@ -694,13 +244,10 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
   const isSinglePlayer = activeCampaign?.mode === "single_player";
   const displayedRoomPlayers = useMemo(
     () =>
-      optimisticSubmittedPlayerId
-        ? roomPlayers.map((roomPlayer) =>
-            roomPlayer.id === optimisticSubmittedPlayerId
-              ? { ...roomPlayer, status: "submitted" as const }
-              : roomPlayer
-          )
-        : roomPlayers,
+      displayedRoomPlayersWithOptimisticSubmission(
+        roomPlayers,
+        optimisticSubmittedPlayerId
+      ),
     [optimisticSubmittedPlayerId, roomPlayers]
   );
   const currentRoomPlayer = useMemo(
@@ -722,75 +269,62 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     () => requiredDiceQueueFromRequests(currentPendingRollRequests),
     [currentPendingRollRequests]
   );
-  const isWaitingOnAnotherPlayerRoll =
-    !isSinglePlayer &&
-    pendingRollRequests.length > 0 &&
-    !currentPendingRollRequest;
-  const isWaitingOnTargetedInput =
-    !isSinglePlayer &&
-    inputPolicy === "only_targeted_players" &&
-    inputTargets.length > 0 &&
-    !inputTargetsCurrentPlayer(inputTargets, playerProfile, currentRoomPlayer);
-  const hasOptimisticSubmission =
-    !isSinglePlayer && optimisticSubmittedPlayerId === playerId;
-  const isInputSubmittedForCurrentState =
-    (isInputSubmitted || hasOptimisticSubmission) &&
-    (pendingRollRequests.length === 0 || Boolean(currentPendingRollRequest)) &&
-    !isWaitingOnTargetedInput;
+  const isWaitingOnAnotherPlayerRollState = isWaitingOnAnotherPlayerRoll({
+    isSinglePlayer,
+    pendingRollRequests,
+    currentPendingRollRequest
+  });
+  const isWaitingOnTargetedInputState = isWaitingOnTargetedInput({
+    isSinglePlayer,
+    inputPolicy,
+    inputTargets,
+    playerProfile,
+    currentRoomPlayer
+  });
+  const hasOptimisticSubmission = hasOptimisticSubmissionForCurrentPlayer({
+    isSinglePlayer,
+    optimisticSubmittedPlayerId,
+    playerId
+  });
+  const isInputSubmittedForCurrentState = isInputSubmittedForCurrentRoomState({
+    isInputSubmitted,
+    hasOptimisticSubmission,
+    pendingRollRequests,
+    currentPendingRollRequest,
+    isWaitingOnTargetedInput: isWaitingOnTargetedInputState
+  });
 
-  const visibleMessages = useMemo(() => {
-    const mergedMessages = new Map<string, GameMessage>();
-
-    messages.forEach((message) => {
-      mergedMessages.set(message.id, message);
-    });
-    roomMessages.forEach((message) => {
-      mergedMessages.set(message.id, message);
-    });
-    streamingDmMessages.forEach((message) => {
-      if (!roomMessages.some((roomMessage) => roomMessage.id === message.id)) {
-        mergedMessages.set(message.id, message);
-      }
-    });
-
-    return Array.from(mergedMessages.values()).sort(
-      (firstMessage, secondMessage) =>
-        Date.parse(firstMessage.createdAt) - Date.parse(secondMessage.createdAt)
-    );
-  }, [messages, roomMessages, streamingDmMessages]);
+  const visibleMessages = useMemo(
+    () =>
+      mergeVisibleGameMessages({
+        localMessages: messages,
+        roomMessages,
+        streamingDmMessages
+      }),
+    [messages, roomMessages, streamingDmMessages]
+  );
   const isShowingStreamingDmMessage = useMemo(
     () => streamingDmMessages.some((message) => message.content.trim()),
     [streamingDmMessages]
   );
-  const waitingPlayers = useMemo<ChatPlayerStatus[]>(() => {
-    if (isSinglePlayer || !hasAdventureBegun) {
-      return [];
-    }
-
-    return displayedRoomPlayers
-      .filter((roomPlayer) => roomPlayer.status === "waiting")
-      .map((roomPlayer) => ({
-        id: roomPlayer.id,
-        status: roomPlayer.status,
-        name: roomPlayer.characterName || roomPlayer.username || "Player",
-        detail:
-          roomPlayer.characterName && roomPlayer.username
-            ? roomPlayer.username
-            : undefined
-      }));
-  }, [displayedRoomPlayers, hasAdventureBegun, isSinglePlayer]);
-  const activeCharacterSheet = useMemo(() => {
-    return (
-      currentRoomPlayer?.characterSheet ||
-      displayedRoomPlayers.find((roomPlayer) => roomPlayer.characterSheet.trim())
-        ?.characterSheet ||
-      playerProfile.characterSheet
-    );
-  }, [
-    currentRoomPlayer?.characterSheet,
-    displayedRoomPlayers,
-    playerProfile.characterSheet
-  ]);
+  const waitingPlayers = useMemo(
+    () =>
+      waitingPlayerStatuses({
+        roomPlayers: displayedRoomPlayers,
+        hasAdventureBegun,
+        isSinglePlayer
+      }),
+    [displayedRoomPlayers, hasAdventureBegun, isSinglePlayer]
+  );
+  const activeCharacterSheet = useMemo(
+    () =>
+      activeCharacterSheetForRoom({
+        currentRoomPlayer,
+        roomPlayers: displayedRoomPlayers,
+        playerProfile
+      }),
+    [currentRoomPlayer, displayedRoomPlayers, playerProfile]
+  );
   const regeneratableMessageId = useMemo(() => {
     const latestDmMessage = [...visibleMessages]
       .reverse()
@@ -837,27 +371,28 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
         );
       }
 
-      if (currentPlayer?.status === "submitted" || room.isResolving) {
-        setIsInputSubmitted(true);
-        if (currentPlayer?.status === "submitted") {
+      const submissionUpdate = roomSnapshotSubmissionUpdate({
+        room,
+        currentPlayer,
+        pendingSubmission: pendingSubmissionRef.current,
+        optimisticSubmittedPlayerId,
+        playerId
+      });
+
+      if (submissionUpdate) {
+        setIsInputSubmitted(submissionUpdate.inputSubmitted);
+
+        if (submissionUpdate.stopSending) {
           setIsSending(false);
         }
-      } else if (currentPlayer?.status === "waiting") {
-        const pendingSubmission = pendingSubmissionRef.current;
 
-        if (
-          pendingSubmission &&
-          optimisticSubmittedPlayerId === playerId &&
-          !snapshotHasResponseAfterMessage(room, pendingSubmission)
-        ) {
-          setIsInputSubmitted(true);
-          return;
+        if (submissionUpdate.clearPendingSubmission) {
+          pendingSubmissionRef.current = null;
         }
 
-        pendingSubmissionRef.current = null;
-        setOptimisticSubmittedPlayerId(null);
-        setIsInputSubmitted(false);
-        setIsSending(false);
+        if (submissionUpdate.clearOptimisticSubmittedPlayerId) {
+          setOptimisticSubmittedPlayerId(null);
+        }
       }
     },
     [optimisticSubmittedPlayerId, playerId]
@@ -1212,51 +747,27 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
           realtimeEvent.roomId === activeCampaign.id
         ) {
           setIsRoomResolving(true);
-          setStreamingDmMessages((currentMessages) => [
-            ...currentMessages.filter(
-              (message) => message.turnId !== realtimeEvent.turnId
-            ),
-            {
-              id: `dm-stream-${realtimeEvent.turnId}`,
-              turnId: realtimeEvent.turnId,
-              role: "dm",
-              content: "",
-              createdAt: new Date().toISOString()
-            }
-          ]);
+          setStreamingDmMessages((currentMessages) =>
+            startStreamingDmMessage(
+              currentMessages,
+              realtimeEvent.turnId,
+              new Date().toISOString()
+            )
+          );
         }
 
         if (
           realtimeEvent.type === "dm_stream_delta" &&
           realtimeEvent.roomId === activeCampaign.id
         ) {
-          setStreamingDmMessages((currentMessages) => {
-            const existingMessage = currentMessages.find(
-              (message) => message.turnId === realtimeEvent.turnId
-            );
-
-            if (!existingMessage) {
-              return [
-                ...currentMessages,
-                {
-                  id: `dm-stream-${realtimeEvent.turnId}`,
-                  turnId: realtimeEvent.turnId,
-                  role: "dm",
-                  content: realtimeEvent.text,
-                  createdAt: new Date().toISOString()
-                }
-              ];
-            }
-
-            return currentMessages.map((message) =>
-              message.turnId === realtimeEvent.turnId
-                ? {
-                    ...message,
-                    content: `${message.content}${realtimeEvent.text}`
-                  }
-                : message
-            );
-          });
+          setStreamingDmMessages((currentMessages) =>
+            appendStreamingDmDelta(
+              currentMessages,
+              realtimeEvent.turnId,
+              realtimeEvent.text,
+              new Date().toISOString()
+            )
+          );
         }
 
         if (
@@ -1264,9 +775,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
           realtimeEvent.roomId === activeCampaign.id
         ) {
           setStreamingDmMessages((currentMessages) =>
-            currentMessages.filter(
-              (message) => message.turnId !== realtimeEvent.turnId
-            )
+            removeStreamingDmMessage(currentMessages, realtimeEvent.turnId)
           );
           void refreshRoom();
         }
@@ -1276,9 +785,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
           realtimeEvent.roomId === activeCampaign.id
         ) {
           setStreamingDmMessages((currentMessages) =>
-            currentMessages.filter(
-              (message) => message.turnId !== realtimeEvent.turnId
-            )
+            removeStreamingDmMessage(currentMessages, realtimeEvent.turnId)
           );
           setMessages((currentMessages) => [
             ...currentMessages,
@@ -1514,52 +1021,47 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     }
   }
 
-  async function sendTurn(messageText: string) {
-    const content = messageText.trim();
+  async function sendTurn(
+    messageText: string,
+    options: { skipTurn?: boolean } = {}
+  ) {
+    const skipTurn = Boolean(options.skipTurn);
+    const currentPlayerName =
+      currentRoomPlayer?.username || playerProfile.username || undefined;
+    const currentCharacterName =
+      currentRoomPlayer?.characterName || playerProfile.characterName || undefined;
+    const content = skipTurn
+      ? `${currentCharacterName || "Player"} skips their turn.`
+      : messageText.trim();
 
-    if (!content || isSending || !activeCampaign) {
+    if (!content || isSending || !activeCampaign || (skipTurn && isSinglePlayer)) {
       return;
     }
 
-    if (pendingRollRequests.length > 0) {
-      setInputValidationMessage(
-        currentPendingRollRequest
-          ? "The DM is waiting for the required roll."
-          : "The DM is waiting on another player's roll."
-      );
+    const validationMessage = turnSubmissionValidationMessage({
+      pendingRollRequests,
+      currentPendingRollRequest,
+      isWaitingOnTargetedInput: isWaitingOnTargetedInputState,
+      isSinglePlayer,
+      hasAdventureBegun,
+      playerProfile
+    });
+
+    if (validationMessage) {
+      setInputValidationMessage(validationMessage);
       setInputValidationPulse((currentPulse) => currentPulse + 1);
-      return;
-    }
-
-    if (isWaitingOnTargetedInput) {
-      setInputValidationMessage("The DM is waiting on another player.");
-      setInputValidationPulse((currentPulse) => currentPulse + 1);
-      return;
-    }
-
-    if (!isSinglePlayer && !hasAdventureBegun) {
-      setInputValidationMessage("Begin the adventure before sending turns.");
-      setInputValidationPulse((currentPulse) => currentPulse + 1);
-      return;
-    }
-
-    if (!isSinglePlayer) {
-      const missingProfileFields = getMissingPlayerProfileFields(playerProfile);
-
-      if (missingProfileFields.length > 0) {
-        setInputValidationMessage(
-          `Finish your ${missingProfileFields.join(", ")} before sending.`
-        );
-        setInputValidationPulse((currentPulse) => currentPulse + 1);
+      if (!isSinglePlayer && validationMessage.startsWith("Finish your ")) {
         inputRef.current?.focus();
-        return;
       }
+      return;
     }
 
     setInputValidationMessage("");
     const playerMessage: GameMessage = {
       id: createClientId(),
       role: "player",
+      playerName: currentPlayerName,
+      characterName: currentCharacterName,
       content,
       createdAt: new Date().toISOString()
     };
@@ -1587,29 +1089,22 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     );
 
     try {
+      const request = buildTurnSubmissionRequest({
+        campaign: activeCampaign,
+        singlePlayer: isSinglePlayer,
+        playerId,
+        message: content,
+        skipTurn,
+        clientMessageId: playerMessage.id
+      });
       const response = await fetch(
-        isSinglePlayer
-          ? `/api/campaigns/${encodeURIComponent(activeCampaign.id)}/solo-turn`
-          : "/api/room/submit",
+        request.endpoint,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
           },
-          body: JSON.stringify(
-            isSinglePlayer
-              ? {
-                  message: content,
-                  clientMessageId: playerMessage.id
-                }
-              : {
-                  roomId: activeCampaign.id,
-                  sessionId: activeCampaign.hermesSessionId,
-                  playerId,
-                  message: content,
-                  clientMessageId: playerMessage.id
-                }
-          )
+          body: JSON.stringify(request.body)
         }
       );
 
@@ -1739,6 +1234,9 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
       id: createClientId(),
       role: "player",
       kind: "ask_dm_question",
+      playerName: currentRoomPlayer?.username || playerProfile.username || undefined,
+      characterName:
+        currentRoomPlayer?.characterName || playerProfile.characterName || undefined,
       content: question,
       createdAt: new Date().toISOString()
     };
@@ -1814,6 +1312,10 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     void sendTurn(draft);
   }
 
+  function handleSkipTurn() {
+    void sendTurn("", { skipTurn: true });
+  }
+
   async function completePendingRollBatch(
     rollSubmissions: DiceRollSubmission[],
     rollMessage: GameMessage,
@@ -1836,29 +1338,21 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     );
 
     try {
+      const request = buildRollSubmissionRequest({
+        campaign,
+        singlePlayer,
+        playerId,
+        rollSubmissions,
+        clientMessageId: rollMessage.id
+      });
       const response = await fetch(
-        singlePlayer
-          ? `/api/campaigns/${encodeURIComponent(campaign.id)}/solo-turn`
-          : "/api/room/submit",
+        request.endpoint,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
           },
-          body: JSON.stringify(
-            singlePlayer
-              ? {
-                  rollSubmissions,
-                  clientMessageId: rollMessage.id
-                }
-              : {
-                  roomId: campaign.id,
-                  sessionId: campaign.hermesSessionId,
-                  playerId,
-                  rollSubmissions,
-                  clientMessageId: rollMessage.id
-                }
-          )
+          body: JSON.stringify(request.body)
         }
       );
 
@@ -1936,6 +1430,9 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     const rollMessage: GameMessage = {
       id: clientMessageId,
       role: "player",
+      playerName: currentRoomPlayer?.username || playerProfile.username || undefined,
+      characterName:
+        currentRoomPlayer?.characterName || playerProfile.characterName || undefined,
       content: batchResult.content,
       createdAt: new Date().toISOString()
     };
@@ -1985,13 +1482,6 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
     });
   }
 
-  async function handleSignOut() {
-    await fetch("/auth/sign-out", {
-      method: "POST"
-    });
-    window.location.assign("/login");
-  }
-
   if (!activeCampaign && isLoadingCampaigns) {
     return (
       <main className="table-page">
@@ -2015,32 +1505,6 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
       <div className="ambient ambient-two" />
 
       <section className="play-table" aria-label="AI Dungeons and Dragons table">
-        <header className="table-header">
-          <div className="brand-mark" aria-hidden="true">
-            <Dice5 size={30} />
-          </div>
-          <div>
-            <p className="eyebrow">
-              {isSinglePlayer ? "Solo Adventure" : "Party Table"}
-            </p>
-            <h1>{activeCampaign?.title ?? "New Adventure"}</h1>
-          </div>
-          <div className="status-pill">
-            <Flame size={16} />
-            {isSinglePlayer ? "Singleplayer" : "Multiplayer"}
-          </div>
-          <div className="account-pill">
-            <span>{userEmail ?? "Signed in"}</span>
-            <button
-              type="button"
-              aria-label="Sign out"
-              onClick={() => void handleSignOut()}
-            >
-              <LogOut size={16} />
-            </button>
-          </div>
-        </header>
-
         <div className="table-grid session-panel-collapsed">
           <ChatHistorySidebar
             chats={availableCampaigns}
@@ -2123,9 +1587,9 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
                       currentRequiredRollDice?.expression ??
                       currentPendingRollRequest.label
                     }`
-                  : isWaitingOnAnotherPlayerRoll
+                  : isWaitingOnAnotherPlayerRollState
                     ? "Waiting on another player's roll"
-                    : isWaitingOnTargetedInput
+                    : isWaitingOnTargetedInputState
                       ? "Waiting on another player"
                   : !isSinglePlayer && !hasAdventureBegun
                   ? "You can only start once the adventure has begun"
@@ -2139,6 +1603,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
               onDraftChange={setDraft}
               onModeChange={setInputMode}
               onRollDice={handleRollDice}
+              onSkipTurn={!isSinglePlayer ? handleSkipTurn : undefined}
               onSubmit={handleSubmit}
             />
           </div>
@@ -2169,7 +1634,7 @@ export function GameShell({ initialCampaignId, userEmail }: GameShellProps) {
         aria-label="Send turn"
         disabled={
           pendingRollRequests.length > 0 ||
-          isWaitingOnTargetedInput ||
+          isWaitingOnTargetedInputState ||
           Boolean(activeDiceReveal) ||
           isSending ||
           !draft.trim()

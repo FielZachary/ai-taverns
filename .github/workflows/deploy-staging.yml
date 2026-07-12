@@ -24,6 +24,23 @@ jobs:
     name: Build, ship, and restart staging
     runs-on: ubuntu-latest
     environment: staging
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: ai_taverns_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ai_taverns_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/ai_taverns_test
+      DATABASE_SSL_DISABLED: "true"
 
     steps:
       - name: Check out repository
@@ -41,8 +58,26 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Lint
+        run: npm run lint
+
       - name: Test
         run: npm test
+
+      - name: Measure coverage
+        run: npm run coverage
+
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-coverage-reports
+          path: |
+            apps/*/coverage/
+            packages/*/coverage/
+          if-no-files-found: error
+
+      - name: Check coverage thresholds
+        run: npm run coverage:check -- --enforce
 
       - name: Build API
         run: npm run build:api

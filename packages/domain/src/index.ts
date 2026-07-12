@@ -37,6 +37,9 @@ export type GameMessage = {
   id: MessageId;
   campaignId: CampaignId;
   role: "player" | "dm" | "system";
+  kind?: "turn" | "ask_dm_question" | "ask_dm_answer";
+  playerName?: string;
+  characterName?: string;
   content: string;
   createdAt: Date;
 };

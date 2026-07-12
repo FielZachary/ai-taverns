@@ -35,6 +35,8 @@ export type GameMessage = {
   id: string;
   role: GameMessageRole;
   kind?: GameMessageKind;
+  playerName?: string;
+  characterName?: string;
   content: string;
   createdAt: string;
   debug?: AiDebugInfo;

@@ -40,6 +40,8 @@ export const RoomMessageSchema = z
     id: z.string().min(1),
     role: z.enum(["player", "dm"]),
     kind: z.string().optional(),
+    playerName: z.string().optional(),
+    characterName: z.string().optional(),
     content: z.string(),
     createdAt: z.string().datetime()
   })
@@ -84,6 +86,7 @@ export const RoomSubmitRequestSchema = z.object({
   sessionId: z.string().optional(),
   playerId: z.string().optional(),
   message: z.string().optional(),
+  skipTurn: z.boolean().optional(),
   rollRequestId: z.string().optional(),
   rollResult: DiceRollResultSchema.optional(),
   clientMessageId: z.string().optional(),

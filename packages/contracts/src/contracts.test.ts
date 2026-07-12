@@ -239,10 +239,12 @@ test("room contracts accept snapshots and mutation payloads", () => {
   const submit = RoomSubmitRequestSchema.parse({
     roomId: profile.roomId,
     playerId: profile.playerId,
-    message: "I check the old door."
+    message: "I check the old door.",
+    skipTurn: true
   });
 
   assert.equal(submit.message, "I check the old door.");
+  assert.equal(submit.skipTurn, true);
 
   const snapshot = RoomSnapshotSchema.parse({
     roomId: "00000000-0000-4000-8000-000000000001",
@@ -259,7 +261,17 @@ test("room contracts accept snapshots and mutation payloads", () => {
         lastSeenAt: "2026-07-05T00:00:00.000Z"
       }
     ],
-    messages: [],
+    messages: [
+      {
+        id: "message-1",
+        role: "player",
+        kind: "turn",
+        playerName: "Player",
+        characterName: "Stone",
+        content: "I check the old door.",
+        createdAt: "2026-07-05T00:00:00.000Z"
+      }
+    ],
     isResolving: false,
     hasBegun: true,
     pendingRollRequest: null,
