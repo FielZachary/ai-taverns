@@ -95,7 +95,7 @@ function testProviderDebug(
         requestBytes: 0,
         requestMessageCount: 0,
         requestContentChars: 0,
-        responseFormat: "json_object",
+        responseFormat: "json_contract_prompt",
         status: 200,
         ok: true
       }
@@ -372,10 +372,7 @@ async function requestDeepSeek(
     messages,
     temperature: 0.8,
     max_tokens: 4096,
-    ...(onPublicNarrationDelta ? { stream: true } : {}),
-    response_format: {
-      type: "json_object"
-    }
+    ...(onPublicNarrationDelta ? { stream: true } : {})
   });
   const requestStarted = Date.now();
   const timing: DeepSeekTiming = {
@@ -386,7 +383,7 @@ async function requestDeepSeek(
     requestBytes: Buffer.byteLength(requestBody, "utf8"),
     requestMessageCount: messages.length,
     requestContentChars: requestContentChars(messages),
-    responseFormat: "json_object"
+    responseFormat: "json_contract_prompt"
   };
 
   try {

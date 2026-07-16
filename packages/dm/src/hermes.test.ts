@@ -11,6 +11,38 @@ function contract(publicNarration: string) {
 }
 
 describe("parseHermesDmContract combat roll guard", () => {
+  it("accepts valid DM JSON wrapped in surrounding text", () => {
+    const result = parseHermesDmContract(
+      [
+        "Here is the response:",
+        contract("The red banner snaps in the wind. What do you do?"),
+        "Done."
+      ].join("\n")
+    );
+
+    assert.equal(
+      result.publicNarration,
+      "The red banner snaps in the wind.\n\nWhat do you do?"
+    );
+    assert.equal(result.nextInputNeeded, "player_actions");
+  });
+
+  it("accepts valid DM JSON inside a fenced code block", () => {
+    const result = parseHermesDmContract(
+      [
+        "```json",
+        contract("The campfire pops as Yenna gestures you inside. What do you do?"),
+        "```"
+      ].join("\n")
+    );
+
+    assert.equal(
+      result.publicNarration,
+      "The campfire pops as Yenna gestures you inside.\n\nWhat do you do?"
+    );
+    assert.equal(result.nextInputNeeded, "player_actions");
+  });
+
   it("does not treat character sheet combat terms as the submitted action", () => {
     const result = parseHermesDmContract(
       contract(

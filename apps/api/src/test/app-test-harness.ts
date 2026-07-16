@@ -1075,7 +1075,7 @@ before(async () => {
                 responseBytes: 0,
                 requestMessageCount: 2,
                 requestContentChars: input.instructions.length + input.message.length,
-                responseFormat: "json_object",
+                responseFormat: "json_contract_prompt",
                 status: 200,
                 ok: true
               }
