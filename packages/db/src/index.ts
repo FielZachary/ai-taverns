@@ -2264,6 +2264,19 @@ function providerDebugSummary(debug: AiDebugInfo | undefined) {
   };
 }
 
+function providerDebugFromError(error: unknown) {
+  if (
+    error instanceof Error &&
+    "debug" in error &&
+    typeof error.debug === "object" &&
+    error.debug !== null
+  ) {
+    return error.debug as AiDebugInfo;
+  }
+
+  return undefined;
+}
+
 async function logTurnDebugTrace(
   db: Queryable,
   input: {
@@ -3365,6 +3378,8 @@ async function askDungeonMaster(
       setting: contract.setting
     };
   } catch (error) {
+    const providerDebug = providerDebugFromError(error);
+
     await logTurnDebugTrace(db, {
       campaignId: campaign.id,
       traceId,
@@ -3373,6 +3388,7 @@ async function askDungeonMaster(
       elapsedMs: Date.now() - startedAt,
       payload: {
         error: errorSummary(error),
+        provider: providerDebugSummary(providerDebug),
         diagnostics:
           error instanceof Error
             ? undefined

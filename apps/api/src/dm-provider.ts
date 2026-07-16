@@ -52,6 +52,16 @@ export type DungeonMasterProviderInput = {
   onPublicNarrationDelta?: (text: string) => void;
 };
 
+class DeepSeekEmptyReplyError extends Error {
+  debug: AiDebugInfo;
+
+  constructor(message: string, debug: AiDebugInfo) {
+    super(message);
+    this.name = "DeepSeekEmptyReplyError";
+    this.debug = debug;
+  }
+}
+
 const testOpeningNarration = [
   "Lanternlight gathers around the Ashford Tollhouse as rain ticks against the shutters.",
   "A sealed road charter waits on the table while a worried courier points toward the fogbound bridge.",
@@ -552,25 +562,6 @@ function fullEmptyReplyRetryMessages(messages: DeepSeekMessage[]): DeepSeekMessa
   ];
 }
 
-function compactEmptyReplyRetryMessages(messages: DeepSeekMessage[]): DeepSeekMessage[] {
-  const [systemMessage, ...conversation] = messages;
-  const recentConversation = conversation.slice(-8);
-
-  if (!systemMessage) {
-    return fullEmptyReplyRetryMessages(messages);
-  }
-
-  return [
-    systemMessage,
-    ...recentConversation,
-    {
-      role: "user",
-      content:
-        "The provider returned empty content twice. Continue from the latest player action using the recent context above. Return exactly one valid JSON object and no prose outside JSON."
-    }
-  ];
-}
-
 export async function askDungeonMasterProvider({
   message,
   instructions,
@@ -626,19 +617,15 @@ export async function askDungeonMasterProvider({
   }
 
   if (!content) {
-    requestMessages = compactEmptyReplyRetryMessages(messages);
-    ({ data, timing } = await requestDeepSeek(
-      requestMessages,
-      3,
-      undefined
-    ));
-    timings.push(timing);
-    content = data.choices?.[0]?.message?.content?.trim();
-  }
-
-  if (!content) {
-    throw new Error(
-      `DeepSeek returned an empty reply. ${emptyReplyDiagnostic(data)}`
+    throw new DeepSeekEmptyReplyError(
+      `DeepSeek returned an empty reply. ${emptyReplyDiagnostic(data)}`,
+      {
+        requestMessages,
+        rawResponse: data.choices?.[0]?.message?.content ?? "",
+        model: data.model ?? deepSeekModel,
+        providerTimings: timings,
+        ...(data.id ? { providerResponseId: data.id } : {})
+      }
     );
   }
 
