@@ -58,6 +58,7 @@ test("DeepSeek provider sends filtered history and returns non-stream debug meta
   let requestBody: {
     messages: { role: string; content: string }[];
     stream?: boolean;
+    response_format?: unknown;
   } | undefined;
 
   globalThis.fetch = async (_url, init) => {
@@ -122,11 +123,16 @@ test("DeepSeek provider sends filtered history and returns non-stream debug meta
     }
   ]);
   assert.equal(requestBody?.stream, undefined);
+  assert.equal(requestBody?.response_format, undefined);
   assert.equal(response.id, "chat-1");
   assert.equal(response.debug.providerResponseId, "chat-1");
   assert.equal(response.debug.model, "test-chat-model");
   assert.equal(response.debug.providerTimings?.[0]?.status, 200);
   assert.equal(response.debug.providerTimings?.[0]?.ok, true);
+  assert.equal(
+    response.debug.providerTimings?.[0]?.responseFormat,
+    "json_contract_prompt"
+  );
 });
 
 test("test DM provider returns deterministic local contract JSON", async () => {
@@ -472,8 +478,12 @@ test("DeepSeek provider retries an empty stream and reports an empty reply diagn
 
   globalThis.fetch = async (_url, init) => {
     requestCount += 1;
-    const requestBody = JSON.parse(String(init?.body)) as { stream?: boolean };
+    const requestBody = JSON.parse(String(init?.body)) as {
+      stream?: boolean;
+      response_format?: unknown;
+    };
     streams.push(requestBody.stream);
+    assert.equal(requestBody.response_format, undefined);
     return streamResponse(["data: [DONE]\n\n"]);
   };
 
@@ -497,8 +507,12 @@ test("DeepSeek provider falls back to buffered retry after an empty stream", asy
 
   globalThis.fetch = async (_url, init) => {
     requestCount += 1;
-    const requestBody = JSON.parse(String(init?.body)) as { stream?: boolean };
+    const requestBody = JSON.parse(String(init?.body)) as {
+      stream?: boolean;
+      response_format?: unknown;
+    };
     streams.push(requestBody.stream);
+    assert.equal(requestBody.response_format, undefined);
 
     if (requestCount === 1) {
       return streamResponse(["data: [DONE]\n\n"]);
@@ -539,8 +553,10 @@ test("DeepSeek provider attaches debug details to repeated empty reply errors", 
     requestCount += 1;
     const requestBody = JSON.parse(String(init?.body)) as {
       stream?: boolean;
+      response_format?: unknown;
     };
     assert.equal(requestBody.stream, requestCount === 1 ? true : undefined);
+    assert.equal(requestBody.response_format, undefined);
 
     return jsonResponse({
       model: "test-model",

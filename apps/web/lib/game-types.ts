@@ -27,7 +27,7 @@ export type AiDebugInfo = {
     responseBytes?: number;
     requestMessageCount: number;
     requestContentChars: number;
-    responseFormat: "json_object";
+    responseFormat: "json_contract_prompt";
   }[];
 };
 
