@@ -486,8 +486,8 @@ test("DeepSeek provider retries an empty stream and reports an empty reply diagn
     /DeepSeek returned an empty reply\./
   );
 
-  assert.equal(requestCount, 2);
-  assert.deepEqual(streams, [true, undefined]);
+  assert.equal(requestCount, 3);
+  assert.deepEqual(streams, [true, undefined, undefined]);
 });
 
 test("DeepSeek provider falls back to buffered retry after an empty stream", async () => {
@@ -530,6 +530,86 @@ test("DeepSeek provider falls back to buffered retry after an empty stream", asy
   assert.equal(response.id, "buffered-retry");
   assert.deepEqual(narrationDeltas, ["The tunnel breathes warm air."]);
   assert.equal(response.debug.providerTimings?.length, 2);
+});
+
+test("DeepSeek provider uses compact buffered retry after repeated empty replies", async () => {
+  let requestCount = 0;
+  const requestBodies: Array<{
+    messages: { role: string; content: string }[];
+    stream?: boolean;
+  }> = [];
+
+  globalThis.fetch = async (_url, init) => {
+    requestCount += 1;
+    const requestBody = JSON.parse(String(init?.body)) as {
+      messages: { role: string; content: string }[];
+      stream?: boolean;
+    };
+    requestBodies.push(requestBody);
+
+    if (requestCount < 3) {
+      return jsonResponse({
+        model: "test-model",
+        choices: [
+          {
+            finish_reason: "stop",
+            message: {
+              role: "assistant",
+              content: ""
+            }
+          }
+        ]
+      });
+    }
+
+    return jsonResponse({
+      id: "compact-retry",
+      model: "test-model",
+      choices: [
+        {
+          finish_reason: "stop",
+          message: {
+            role: "assistant",
+            content:
+              '{"public_narration":"You cross the open field toward the red banner.","roll_requests":[],"next_input_needed":"player_actions","input_targets":[],"input_policy":"all_players"}'
+          }
+        }
+      ]
+    });
+  };
+
+  const response = await askDungeonMasterProvider({
+    instructions: "Return a JSON DM response.",
+    message: "I follow what she says and go straight.",
+    history: Array.from({ length: 12 }, (_, index) => ({
+      id: `history-${index}`,
+      role: index % 2 === 0 ? "dm" : "player",
+      content: `History message ${index}`,
+      createdAt: "2026-07-11T00:00:00.000Z"
+    }))
+  });
+
+  assert.equal(response.id, "compact-retry");
+  assert.equal(requestCount, 3);
+  assert.equal(requestBodies[1]?.messages.length, 15);
+  assert.equal(requestBodies[2]?.messages.length, 10);
+  assert.deepEqual(
+    requestBodies[2]?.messages.map((requestMessage) => requestMessage.content),
+    [
+      "Return a JSON DM response.",
+      "History message 5",
+      "History message 6",
+      "History message 7",
+      "History message 8",
+      "History message 9",
+      "History message 10",
+      "History message 11",
+      "I follow what she says and go straight.",
+      "The provider returned empty content twice. Continue from the latest player action using the recent context above. Return exactly one valid JSON object and no prose outside JSON."
+    ]
+  );
+  assert.equal(response.debug.providerTimings?.length, 3);
+  assert.equal(response.debug.requestMessages.length, 10);
 });
 
 test("DeepSeek provider includes empty-response diagnostic details", async () => {

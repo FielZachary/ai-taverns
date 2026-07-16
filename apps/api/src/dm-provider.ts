@@ -541,6 +541,36 @@ function emptyReplyDiagnostic(data: DeepSeekChatResponse) {
   ].join("; ");
 }
 
+function fullEmptyReplyRetryMessages(messages: DeepSeekMessage[]): DeepSeekMessage[] {
+  return [
+    ...messages,
+    {
+      role: "user",
+      content:
+        "Your previous response was empty. Return exactly one valid JSON object matching the requested AI Taverns DM contract now."
+    }
+  ];
+}
+
+function compactEmptyReplyRetryMessages(messages: DeepSeekMessage[]): DeepSeekMessage[] {
+  const [systemMessage, ...conversation] = messages;
+  const recentConversation = conversation.slice(-8);
+
+  if (!systemMessage) {
+    return fullEmptyReplyRetryMessages(messages);
+  }
+
+  return [
+    systemMessage,
+    ...recentConversation,
+    {
+      role: "user",
+      content:
+        "The provider returned empty content twice. Continue from the latest player action using the recent context above. Return exactly one valid JSON object and no prose outside JSON."
+    }
+  ];
+}
+
 export async function askDungeonMasterProvider({
   message,
   instructions,
@@ -584,20 +614,24 @@ export async function askDungeonMasterProvider({
   let content = data.choices?.[0]?.message?.content?.trim();
 
   if (!content) {
-    requestMessages = [
-      ...messages,
-      {
-        role: "user",
-        content:
-          "Your previous response was empty. Return exactly one valid JSON object matching the requested AI Taverns DM contract now."
-      }
-    ];
+    requestMessages = fullEmptyReplyRetryMessages(messages);
     ({ data, timing } = await requestDeepSeek(
       requestMessages,
       2,
       undefined
     ));
     fallbackBufferedAfterEmptyStream = Boolean(onPublicNarrationDelta);
+    timings.push(timing);
+    content = data.choices?.[0]?.message?.content?.trim();
+  }
+
+  if (!content) {
+    requestMessages = compactEmptyReplyRetryMessages(messages);
+    ({ data, timing } = await requestDeepSeek(
+      requestMessages,
+      3,
+      undefined
+    ));
     timings.push(timing);
     content = data.choices?.[0]?.message?.content?.trim();
   }
