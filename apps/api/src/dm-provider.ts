@@ -52,6 +52,16 @@ export type DungeonMasterProviderInput = {
   onPublicNarrationDelta?: (text: string) => void;
 };
 
+class DeepSeekEmptyReplyError extends Error {
+  debug: AiDebugInfo;
+
+  constructor(message: string, debug: AiDebugInfo) {
+    super(message);
+    this.name = "DeepSeekEmptyReplyError";
+    this.debug = debug;
+  }
+}
+
 const testOpeningNarration = [
   "Lanternlight gathers around the Ashford Tollhouse as rain ticks against the shutters.",
   "A sealed road charter waits on the table while a worried courier points toward the fogbound bridge.",
@@ -603,8 +613,15 @@ export async function askDungeonMasterProvider({
   }
 
   if (!content) {
-    throw new Error(
-      `DeepSeek returned an empty reply. ${emptyReplyDiagnostic(data)}`
+    throw new DeepSeekEmptyReplyError(
+      `DeepSeek returned an empty reply. ${emptyReplyDiagnostic(data)}`,
+      {
+        requestMessages,
+        rawResponse: data.choices?.[0]?.message?.content ?? "",
+        model: data.model ?? deepSeekModel,
+        providerTimings: timings,
+        ...(data.id ? { providerResponseId: data.id } : {})
+      }
     );
   }
 

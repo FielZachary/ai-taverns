@@ -138,6 +138,54 @@ test("DM runtime routes handle authorized solo, ask-DM, regenerate, and traces",
   );
 });
 
+test("DM runtime failure traces include provider debug diagnostics", async () => {
+  const { cookie, campaignId } = await createSinglePlayerCampaign(
+    "dm-runtime-provider-debug"
+  );
+
+  const soloResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "TRIGGER_PROVIDER_DEBUG_FAILURE"
+    }
+  });
+
+  assert.equal(soloResponse.statusCode, 500);
+
+  const tracesResponse = await app.inject({
+    method: "GET",
+    url: `/api/campaigns/${campaignId}/debug-traces?limit=10`,
+    headers: {
+      cookie
+    }
+  });
+
+  assert.equal(tracesResponse.statusCode, 200, tracesResponse.body);
+  const traces = CampaignDebugTracesResponseSchema.parse(tracesResponse.json());
+  const failedTrace = traces.traces.find(
+    (trace) => trace.phase === "dm_turn_failed"
+  );
+
+  assert.ok(failedTrace);
+  const provider = failedTrace.provider as
+    | {
+        model?: string;
+        rawResponseLength?: number;
+        providerTimings?: { responseBytes?: number }[];
+        requestMessages?: { role?: string }[];
+      }
+    | undefined;
+  assert.equal(provider?.model, "test-model");
+  assert.equal(provider?.rawResponseLength, 0);
+  assert.equal(provider?.providerTimings?.[0]?.responseBytes, 0);
+  assert.equal(provider?.requestMessages?.length, 2);
+  assert.equal(provider?.requestMessages?.[0]?.role, "system");
+});
+
 test("DM runtime routes reject invalid params and incomplete payloads", async () => {
   const { cookie, campaignId } = await createSinglePlayerCampaign(
     "dm-runtime-invalid"

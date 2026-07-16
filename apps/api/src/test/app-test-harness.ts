@@ -1042,6 +1042,40 @@ before(async () => {
           message: input.message,
           instructions: input.instructions
         });
+        if (input.message.includes("TRIGGER_PROVIDER_DEBUG_FAILURE")) {
+          const error = new Error("DeepSeek returned an empty reply.");
+          (error as { debug?: unknown }).debug = {
+            requestMessages: [
+              {
+                role: "system",
+                content: input.instructions
+              },
+              {
+                role: "user",
+                content: input.message
+              }
+            ],
+            rawResponse: "",
+            model: "test-model",
+            providerTimings: [
+              {
+                attempt: 1,
+                requestStartedAt: new Date(0).toISOString(),
+                completedAt: new Date(0).toISOString(),
+                totalMs: 12,
+                requestBytes: 123,
+                responseBytes: 0,
+                requestMessageCount: 2,
+                requestContentChars: input.instructions.length + input.message.length,
+                responseFormat: "json_object",
+                status: 200,
+                ok: true
+              }
+            ]
+          };
+          throw error;
+        }
+
         if (input.instructions.includes("campaign-opening planner")) {
           const selectedRegion =
             input.message.match(/Region: ([^.]+)\./)?.[1] ?? "Cael Ambrose";
