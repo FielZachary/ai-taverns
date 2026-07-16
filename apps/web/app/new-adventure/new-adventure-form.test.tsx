@@ -230,6 +230,23 @@ describe("NewAdventureForm", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows species stat bonuses as muted subtitles", async () => {
+    render(<NewAdventureForm />);
+
+    await continueFlow();
+    await continueFlow();
+    await choosePointBuyStats();
+    await nextCharacterStep();
+    await nextCharacterStep();
+    await nextCharacterStep();
+
+    expect(
+      screen.getByRole("heading", { name: /choose your species/i })
+    ).toBeInTheDocument();
+    expect(screen.getByText("+1 all stats")).toBeInTheDocument();
+    expect(screen.getByText("+2 Strength, +1 Constitution")).toBeInTheDocument();
+  });
+
   it("validates identity and recovers when campaign creation fails", async () => {
     createCampaignMock.mockRejectedValue(new Error("The tavern doors jammed."));
 

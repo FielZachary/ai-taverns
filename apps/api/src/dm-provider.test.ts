@@ -468,9 +468,12 @@ test("DeepSeek provider streams escaped narration prefixes as chunks arrive", as
 
 test("DeepSeek provider retries an empty stream and reports an empty reply diagnostic", async () => {
   let requestCount = 0;
+  const streams: Array<boolean | undefined> = [];
 
-  globalThis.fetch = async () => {
+  globalThis.fetch = async (_url, init) => {
     requestCount += 1;
+    const requestBody = JSON.parse(String(init?.body)) as { stream?: boolean };
+    streams.push(requestBody.stream);
     return streamResponse(["data: [DONE]\n\n"]);
   };
 
@@ -484,6 +487,49 @@ test("DeepSeek provider retries an empty stream and reports an empty reply diagn
   );
 
   assert.equal(requestCount, 2);
+  assert.deepEqual(streams, [true, undefined]);
+});
+
+test("DeepSeek provider falls back to buffered retry after an empty stream", async () => {
+  let requestCount = 0;
+  const streams: Array<boolean | undefined> = [];
+  const narrationDeltas: string[] = [];
+
+  globalThis.fetch = async (_url, init) => {
+    requestCount += 1;
+    const requestBody = JSON.parse(String(init?.body)) as { stream?: boolean };
+    streams.push(requestBody.stream);
+
+    if (requestCount === 1) {
+      return streamResponse(["data: [DONE]\n\n"]);
+    }
+
+    return jsonResponse({
+      id: "buffered-retry",
+      model: "test-model",
+      choices: [
+        {
+          finish_reason: "stop",
+          message: {
+            content:
+              '{"public_narration":"The tunnel breathes warm air.","roll_requests":[],"next_input_needed":"player_actions","input_targets":[],"input_policy":"all_players"}'
+          }
+        }
+      ]
+    });
+  };
+
+  const response = await askDungeonMasterProvider({
+    instructions: "Return a JSON DM response.",
+    message: "Proceed.",
+    onPublicNarrationDelta: (delta) => narrationDeltas.push(delta)
+  });
+
+  assert.equal(requestCount, 2);
+  assert.deepEqual(streams, [true, undefined]);
+  assert.equal(response.id, "buffered-retry");
+  assert.deepEqual(narrationDeltas, ["The tunnel breathes warm air."]);
+  assert.equal(response.debug.providerTimings?.length, 2);
 });
 
 test("DeepSeek provider includes empty-response diagnostic details", async () => {
