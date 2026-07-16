@@ -574,6 +574,7 @@ export async function askDungeonMasterProvider({
 
   let requestMessages = messages;
   const timings: DeepSeekTiming[] = [];
+  let fallbackBufferedAfterEmptyStream = false;
   let { data, timing } = await requestDeepSeek(
     requestMessages,
     1,
@@ -594,8 +595,9 @@ export async function askDungeonMasterProvider({
     ({ data, timing } = await requestDeepSeek(
       requestMessages,
       2,
-      onPublicNarrationDelta
+      undefined
     ));
+    fallbackBufferedAfterEmptyStream = Boolean(onPublicNarrationDelta);
     timings.push(timing);
     content = data.choices?.[0]?.message?.content?.trim();
   }
@@ -604,6 +606,14 @@ export async function askDungeonMasterProvider({
     throw new Error(
       `DeepSeek returned an empty reply. ${emptyReplyDiagnostic(data)}`
     );
+  }
+
+  if (fallbackBufferedAfterEmptyStream && onPublicNarrationDelta) {
+    const narration = publicNarrationPrefix(content);
+
+    if (narration) {
+      onPublicNarrationDelta(narration);
+    }
   }
 
   return {
