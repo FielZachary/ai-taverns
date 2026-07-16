@@ -532,6 +532,63 @@ test("DeepSeek provider falls back to buffered retry after an empty stream", asy
   assert.equal(response.debug.providerTimings?.length, 2);
 });
 
+test("DeepSeek provider attaches debug details to repeated empty reply errors", async () => {
+  let requestCount = 0;
+
+  globalThis.fetch = async (_url, init) => {
+    requestCount += 1;
+    const requestBody = JSON.parse(String(init?.body)) as {
+      stream?: boolean;
+    };
+    assert.equal(requestBody.stream, requestCount === 1 ? true : undefined);
+
+    return jsonResponse({
+      model: "test-model",
+      choices: [
+        {
+          finish_reason: "stop",
+          message: {
+            role: "assistant",
+            content: ""
+          }
+        }
+      ]
+    });
+  };
+
+  await assert.rejects(
+    async () => {
+      try {
+        await askDungeonMasterProvider({
+          instructions: "Return a JSON DM response.",
+          message: "Begin.",
+          onPublicNarrationDelta: () => undefined
+        });
+      } catch (error) {
+        assert.ok(error instanceof Error);
+        assert.equal(error.name, "DeepSeekEmptyReplyError");
+        assert.equal(
+          (error as { debug?: { model?: string } }).debug?.model,
+          "test-model"
+        );
+        assert.equal(
+          (error as { debug?: { providerTimings?: unknown[] } }).debug
+            ?.providerTimings?.length,
+          2
+        );
+        assert.equal(
+          (error as { debug?: { requestMessages?: unknown[] } }).debug
+            ?.requestMessages?.length,
+          3
+        );
+        throw error;
+      }
+    },
+    /DeepSeek returned an empty reply\./
+  );
+  assert.equal(requestCount, 2);
+});
+
 test("DeepSeek provider includes empty-response diagnostic details", async () => {
   globalThis.fetch = async () =>
     jsonResponse({
