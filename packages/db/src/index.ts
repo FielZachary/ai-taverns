@@ -2823,6 +2823,46 @@ function askDmInstructions() {
   ].join("\n");
 }
 
+function dmContractRepairInstructions() {
+  return [
+    "You are an AI Taverns response formatter.",
+    "Convert the provided Dungeon Master response into exactly one valid JSON object.",
+    "Do not continue the scene, add new facts, remove meaningful details, or rewrite the narration except to preserve valid JSON string escaping.",
+    "Use this exact JSON shape:",
+    JSON.stringify({
+      public_narration: "The original player-facing Dungeon Master narration.",
+      roll_requests: [],
+      next_input_needed: "player_actions",
+      input_targets: [],
+      input_policy: "all_players",
+      setting: {
+        display_location: "Known current display location, if clear.",
+        world_name: "Known world name, if clear.",
+        starting_location: "Known starting location, if clear."
+      }
+    }),
+    "If the original response does not explicitly ask for dice, use an empty roll_requests array.",
+    "If a setting field is not clear from the original response, omit that field or use an empty string.",
+    "Return only the JSON object. No Markdown. No commentary."
+  ].join("\n");
+}
+
+function formatDmContractRepairRequest(input: {
+  currentAction: string;
+  providerResponse: string;
+}) {
+  return [
+    "The previous Dungeon Master provider response failed the AI Taverns JSON contract.",
+    "Convert it into the required contract without changing the scene outcome.",
+    "",
+    "Current player action:",
+    input.currentAction,
+    "",
+    "Original provider response to convert:",
+    input.providerResponse
+  ].join("\n");
+}
+
 function parseJsonRecord(value: string) {
   try {
     const parsed = JSON.parse(value);
@@ -3313,7 +3353,7 @@ async function askDungeonMaster(
         ? await getCampaignEventMessages(db, campaign.id, 30, turnId)
         : [];
     const providerStartedAt = Date.now();
-    const providerData = await runtime.askProvider({
+    let providerData = await runtime.askProvider({
       message: promptContext?.message ?? message,
       instructions: promptContext?.instructions ?? instructionsWithWorldContext,
       history,
@@ -3348,11 +3388,46 @@ async function askDungeonMaster(
       }
     });
 
-    const contract = parseHermesDmContract(providerData.content, {
-      ...contractOptions,
-      currentAction: message,
-      ...(currentPlayerAction ? { currentPlayerAction } : {})
-    });
+    let contract: ReturnType<typeof parseHermesDmContract>;
+
+    try {
+      contract = parseHermesDmContract(providerData.content, {
+        ...contractOptions,
+        currentAction: message,
+        ...(currentPlayerAction ? { currentPlayerAction } : {})
+      });
+    } catch (parseError) {
+      const repairStartedAt = Date.now();
+      const repairData = await runtime.askProvider({
+        message: formatDmContractRepairRequest({
+          currentAction: message,
+          providerResponse: providerData.content
+        }),
+        instructions: dmContractRepairInstructions()
+      });
+
+      await logTurnDebugTrace(db, {
+        campaignId: campaign.id,
+        traceId,
+        phase: "dm_contract_repair_response_received",
+        turnId,
+        elapsedMs: Date.now() - startedAt,
+        payload: {
+          durationMs: Date.now() - repairStartedAt,
+          originalError: errorSummary(parseError),
+          originalResponse: textStats(providerData.content),
+          provider: providerDebugSummary(repairData.debug)
+        }
+      });
+
+      providerData = repairData;
+      contract = parseHermesDmContract(providerData.content, {
+        ...contractOptions,
+        currentAction: message,
+        ...(currentPlayerAction ? { currentPlayerAction } : {})
+      });
+    }
+
     const rollRequests = normalizeRollRequests(contract.rollRequests);
     const reply = contract.publicNarration;
 
