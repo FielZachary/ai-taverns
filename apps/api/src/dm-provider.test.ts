@@ -86,6 +86,7 @@ test("DeepSeek provider sends filtered history and returns non-stream debug meta
       {
         id: "message-1",
         role: "dm",
+        kind: "turn",
         content: "The room is quiet.",
         createdAt: "2026-07-11T00:00:00.000Z"
       },
@@ -111,7 +112,13 @@ test("DeepSeek provider sends filtered history and returns non-stream debug meta
     },
     {
       role: "assistant",
-      content: "The room is quiet."
+      content: JSON.stringify({
+        public_narration: "The room is quiet.",
+        roll_requests: [],
+        next_input_needed: "player_actions",
+        input_targets: [],
+        input_policy: "all_players"
+      })
     },
     {
       role: "user",
@@ -211,7 +218,13 @@ test("test DM provider returns deterministic campaign planner JSON without strea
     },
     {
       role: "assistant",
-      content: "Previous table context."
+      content: JSON.stringify({
+        public_narration: "Previous table context.",
+        roll_requests: [],
+        next_input_needed: "player_actions",
+        input_targets: [],
+        input_policy: "all_players"
+      })
     },
     {
       role: "user",

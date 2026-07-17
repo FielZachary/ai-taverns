@@ -246,8 +246,21 @@ export function assertDungeonMasterProviderConfigured() {
 }
 
 function mapHistoryMessage(message: GameMessage): DeepSeekMessage {
+  if (message.role === "dm") {
+    return {
+      role: "assistant",
+      content: JSON.stringify({
+        public_narration: message.content,
+        roll_requests: [],
+        next_input_needed: "player_actions",
+        input_targets: [],
+        input_policy: "all_players"
+      })
+    };
+  }
+
   return {
-    role: message.role === "player" ? "user" : "assistant",
+    role: "user",
     content: message.content
   };
 }
