@@ -7,7 +7,11 @@ import { loadConfig } from "../config.js";
 
 export let app: FastifyInstance;
 export let database: FakeDatabase;
-let providerInputs: { message: string; instructions: string }[] = [];
+let providerInputs: {
+  message: string;
+  instructions: string;
+  history: { role: string; content: string }[];
+}[] = [];
 
 type QueryResult<T> = {
   rows: T[];
@@ -1040,7 +1044,11 @@ before(async () => {
       askProvider: async (input) => {
         providerInputs.push({
           message: input.message,
-          instructions: input.instructions
+          instructions: input.instructions,
+          history: (input.history ?? []).map((message) => ({
+            role: message.role,
+            content: message.content
+          }))
         });
         if (input.message.includes("TRIGGER_PROVIDER_DEBUG_FAILURE")) {
           const error = new Error("DeepSeek returned an empty reply.");
@@ -1067,7 +1075,7 @@ before(async () => {
                 responseBytes: 0,
                 requestMessageCount: 2,
                 requestContentChars: input.instructions.length + input.message.length,
-                responseFormat: "json_object",
+                responseFormat: "json_contract_prompt",
                 status: 200,
                 ok: true
               }

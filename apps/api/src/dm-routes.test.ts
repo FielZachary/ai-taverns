@@ -12,6 +12,8 @@ import {
 import {
   app,
   database,
+  getProviderInputs,
+  resetProviderInputs,
   signIn,
   type DebugFields
 } from "./test/app-test-harness.js";
@@ -184,6 +186,56 @@ test("DM runtime failure traces include provider debug diagnostics", async () =>
   assert.equal(provider?.providerTimings?.[0]?.responseBytes, 0);
   assert.equal(provider?.requestMessages?.length, 2);
   assert.equal(provider?.requestMessages?.[0]?.role, "system");
+});
+
+test("solo turns send the current action once outside provider history", async () => {
+  const { cookie, campaignId } = await createSinglePlayerCampaign(
+    "dm-runtime-current-action-history"
+  );
+  resetProviderInputs();
+
+  const firstResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "I check the old road for tracks.",
+      clientMessageId: "history-first-action"
+    }
+  });
+
+  assert.equal(firstResponse.statusCode, 200, firstResponse.body);
+
+  const secondResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "I follow the clearest trail.",
+      clientMessageId: "history-second-action"
+    }
+  });
+
+  assert.equal(secondResponse.statusCode, 200, secondResponse.body);
+
+  const secondProviderInput = getProviderInputs().at(-1);
+  assert.ok(secondProviderInput);
+  assert.match(secondProviderInput.message, /I follow the clearest trail\./);
+  assert.doesNotMatch(
+    secondProviderInput.history.map((message) => message.content).join("\n"),
+    /I follow the clearest trail\./
+  );
+  assert.ok(
+    secondProviderInput.history.some(
+      (message) =>
+        message.role === "player" &&
+        message.content === "I check the old road for tracks."
+    )
+  );
 });
 
 test("DM runtime routes reject invalid params and incomplete payloads", async () => {
