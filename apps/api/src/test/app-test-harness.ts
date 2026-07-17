@@ -1084,40 +1084,6 @@ before(async () => {
           throw error;
         }
 
-        if (input.instructions.includes("AI Taverns response formatter")) {
-          return {
-            id: "provider-repair-1",
-            content: JSON.stringify({
-              public_narration:
-                "Plain prose from the provider becomes contract JSON.\n\nWhat do you do?",
-              roll_requests: [],
-              next_input_needed: "player_actions",
-              input_targets: [],
-              input_policy: "all_players"
-            }),
-            debug: {
-              requestMessages: [],
-              rawResponse: "{}",
-              model: "test-model",
-              providerTimings: []
-            }
-          };
-        }
-
-        if (input.message.includes("TRIGGER_PROSE_DM_RESPONSE")) {
-          return {
-            id: "provider-prose-1",
-            content:
-              "Plain prose from the provider becomes contract JSON.\n\nWhat do you do?",
-            debug: {
-              requestMessages: [],
-              rawResponse: "Plain prose from the provider becomes contract JSON.",
-              model: "test-model",
-              providerTimings: []
-            }
-          };
-        }
-
         if (input.instructions.includes("campaign-opening planner")) {
           const selectedRegion =
             input.message.match(/Region: ([^.]+)\./)?.[1] ?? "Cael Ambrose";
