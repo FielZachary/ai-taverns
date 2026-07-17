@@ -3175,7 +3175,8 @@ function formatAskDmQuestion(
 async function getCampaignEventMessages(
   db: Queryable,
   campaignId: string,
-  limit = 30
+  limit = 30,
+  excludeTurnId?: string
 ): Promise<GameMessage[]> {
   const events = await db.query<EventRow>(
     `
@@ -3198,13 +3199,32 @@ async function getCampaignEventMessages(
     `,
     [campaignId, limit]
   );
+  const resolvedTurnIds = new Set(
+    events.rows
+      .filter((event) => event.type === "turn_resolved")
+      .map((event) => {
+        const payload = eventPayload(event.payload);
+        return typeof payload.turnId === "string" ? payload.turnId : "";
+      })
+      .filter(Boolean)
+  );
 
   return events.rows
     .map((event): GameMessage | null => {
       const payload = eventPayload(event.payload);
       const content = typeof payload.content === "string" ? payload.content : "";
+      const eventTurnId = typeof payload.turnId === "string" ? payload.turnId : "";
 
       if (!content.trim()) {
+        return null;
+      }
+
+      if (
+        event.type === "turn_submitted" &&
+        (!eventTurnId ||
+          eventTurnId === excludeTurnId ||
+          !resolvedTurnIds.has(eventTurnId))
+      ) {
         return null;
       }
 
@@ -3290,10 +3310,10 @@ async function askDungeonMaster(
       : null;
     const history =
       includeHistory && !promptContext
-        ? await getCampaignEventMessages(db, campaign.id)
+        ? await getCampaignEventMessages(db, campaign.id, 30, turnId)
         : [];
     const providerStartedAt = Date.now();
-    const providerData = await runtime.askProvider({
+    let providerData = await runtime.askProvider({
       message: promptContext?.message ?? message,
       instructions: promptContext?.instructions ?? instructionsWithWorldContext,
       history,

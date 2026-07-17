@@ -95,7 +95,7 @@ function testProviderDebug(
         requestBytes: 0,
         requestMessageCount: 0,
         requestContentChars: 0,
-        responseFormat: "json_object",
+        responseFormat: "json_contract_prompt",
         status: 200,
         ok: true
       }
@@ -246,8 +246,21 @@ export function assertDungeonMasterProviderConfigured() {
 }
 
 function mapHistoryMessage(message: GameMessage): DeepSeekMessage {
+  if (message.role === "dm") {
+    return {
+      role: "assistant",
+      content: JSON.stringify({
+        public_narration: message.content,
+        roll_requests: [],
+        next_input_needed: "player_actions",
+        input_targets: [],
+        input_policy: "all_players"
+      })
+    };
+  }
+
   return {
-    role: message.role === "player" ? "user" : "assistant",
+    role: "user",
     content: message.content
   };
 }
@@ -372,10 +385,7 @@ async function requestDeepSeek(
     messages,
     temperature: 0.8,
     max_tokens: 4096,
-    ...(onPublicNarrationDelta ? { stream: true } : {}),
-    response_format: {
-      type: "json_object"
-    }
+    ...(onPublicNarrationDelta ? { stream: true } : {})
   });
   const requestStarted = Date.now();
   const timing: DeepSeekTiming = {
@@ -386,7 +396,7 @@ async function requestDeepSeek(
     requestBytes: Buffer.byteLength(requestBody, "utf8"),
     requestMessageCount: messages.length,
     requestContentChars: requestContentChars(messages),
-    responseFormat: "json_object"
+    responseFormat: "json_contract_prompt"
   };
 
   try {
@@ -551,6 +561,17 @@ function emptyReplyDiagnostic(data: DeepSeekChatResponse) {
   ].join("; ");
 }
 
+function fullEmptyReplyRetryMessages(messages: DeepSeekMessage[]): DeepSeekMessage[] {
+  return [
+    ...messages,
+    {
+      role: "user",
+      content:
+        "Your previous response was empty. Return exactly one valid JSON object matching the requested AI Taverns DM contract now."
+    }
+  ];
+}
+
 export async function askDungeonMasterProvider({
   message,
   instructions,
@@ -594,14 +615,7 @@ export async function askDungeonMasterProvider({
   let content = data.choices?.[0]?.message?.content?.trim();
 
   if (!content) {
-    requestMessages = [
-      ...messages,
-      {
-        role: "user",
-        content:
-          "Your previous response was empty. Return exactly one valid JSON object matching the requested AI Taverns DM contract now."
-      }
-    ];
+    requestMessages = fullEmptyReplyRetryMessages(messages);
     ({ data, timing } = await requestDeepSeek(
       requestMessages,
       2,
