@@ -1084,6 +1084,39 @@ before(async () => {
           throw error;
         }
 
+        if (
+          input.message.includes("TRIGGER_RESOLVED_COMBAT_WITHOUT_ROLLS")
+        ) {
+          const content = JSON.stringify({
+            public_narration:
+              "Seren lunges with her blade. The strike hits the bandit squarely, opening a deep wound before he staggers back.",
+            roll_requests: [],
+            next_input_needed: "player_actions",
+            input_targets: [],
+            input_policy: "all_players"
+          });
+
+          return {
+            id: "provider-combat-parse-failure",
+            content,
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: content,
+              model: "test-model",
+              providerTimings: []
+            }
+          };
+        }
+
         if (input.instructions.includes("campaign-opening planner")) {
           const selectedRegion =
             input.message.match(/Region: ([^.]+)\./)?.[1] ?? "Cael Ambrose";
