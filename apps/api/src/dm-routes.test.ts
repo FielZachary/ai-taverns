@@ -123,6 +123,16 @@ test("DM runtime routes handle authorized solo, ask-DM, regenerate, and traces",
     (regenerated.messages.at(-1)?.debug as DebugFields | undefined)?.model,
     "test-model"
   );
+  assert.equal(
+    regenerated.messages.some((message) =>
+      message.content.includes("Would my ranger know")
+    ),
+    false
+  );
+  assert.equal(
+    regenerated.messages.some((message) => message.kind === "ask_dm_answer"),
+    false
+  );
 
   const tracesResponse = await app.inject({
     method: "GET",

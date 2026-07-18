@@ -4612,36 +4612,67 @@ export async function regenerateCampaignResponseForUser(
 
     await assertCampaignAccessForUser(client, campaign, input.userId);
 
-    const latestVisibleEvent = (
+    const targetEvent = (
       await client.query<EventRow>(
         `
           select id, type, payload, created_at
           from campaign_events
           where campaign_id = $1
             and type in ('turn_submitted', 'turn_resolved', 'adventure_begun')
+            and payload->>'messageId' = $2
+            and payload->>'role' = 'dm'
           order by created_at desc
           limit 1
         `,
-        [campaign.id]
+        [campaign.id, input.messageId]
       )
     ).rows[0];
-    const latestPayload = eventPayload(latestVisibleEvent?.payload);
+    const targetPayload = eventPayload(targetEvent?.payload);
 
     if (
-      !latestVisibleEvent ||
-      (latestVisibleEvent.type !== "turn_resolved" &&
-        latestVisibleEvent.type !== "adventure_begun") ||
-      latestPayload.role !== "dm" ||
-      latestPayload.messageId !== input.messageId
+      !targetEvent ||
+      (targetEvent.type !== "turn_resolved" &&
+        targetEvent.type !== "adventure_begun")
     ) {
-      throw createStatusError(409, "Only the latest DM response can be regenerated.");
+      throw createStatusError(409, "That DM response cannot be regenerated.");
     }
 
-    const turnId = eventPayloadString(latestPayload.turnId);
+    const turnId = eventPayloadString(targetPayload.turnId);
 
     if (!turnId) {
       throw createStatusError(409, "That response is missing turn information.");
     }
+
+    await client.query(
+      `
+        update turns
+        set status = 'cancelled', updated_at = now()
+        where campaign_id = $1
+          and id <> $2
+          and created_at > $3
+          and status in ('collecting', 'resolving', 'resolved', 'failed')
+      `,
+      [campaign.id, turnId, targetEvent.created_at]
+    );
+    await client.query(
+      `
+        update submissions
+        set status = 'cancelled', updated_at = now()
+        where campaign_id = $1
+          and turn_id <> $2
+          and created_at > $3
+          and status in ('submitted', 'included_in_turn')
+      `,
+      [campaign.id, turnId, targetEvent.created_at]
+    );
+    await client.query(
+      `
+        delete from campaign_events
+        where campaign_id = $1
+          and created_at > $2
+      `,
+      [campaign.id, targetEvent.created_at]
+    );
 
     const resolvingTurn = (
       await client.query<TurnRow>(
@@ -4670,7 +4701,7 @@ export async function regenerateCampaignResponseForUser(
       [turnId]
     );
     await client.query("delete from campaign_events where id = $1", [
-      latestVisibleEvent.id
+      targetEvent.id
     ]);
     await logCampaignEvent(client, campaign.id, "turn_resolving", {
       turnId,
@@ -4721,7 +4752,7 @@ export async function regenerateCampaignResponseForUser(
     };
 
     const eventType: "adventure_begun" | "turn_resolved" =
-      latestVisibleEvent.type === "adventure_begun"
+      targetEvent.type === "adventure_begun"
         ? "adventure_begun"
         : "turn_resolved";
 

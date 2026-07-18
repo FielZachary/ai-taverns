@@ -198,6 +198,50 @@ describe("MessageLog", () => {
     ).toBeDisabled();
   });
 
+  it("calls rewind regeneration for older DM turn messages", () => {
+    const onRegenerateResponse = vi.fn();
+
+    renderMessageLog({
+      messages: [
+        gameMessage({
+          id: "dm-1",
+          role: "dm",
+          content: "The first answer."
+        }),
+        gameMessage({
+          id: "ask-answer",
+          role: "dm",
+          kind: "ask_dm_answer",
+          content: "A side answer."
+        }),
+        gameMessage({
+          id: "dm-2",
+          role: "dm",
+          content: "The second answer."
+        })
+      ],
+      isSending: false,
+      regeneratableMessageId: "dm-2",
+      onRegenerateResponse
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /go back to this response/i
+      })
+    );
+
+    expect(onRegenerateResponse).toHaveBeenCalledWith("dm-1");
+    expect(
+      screen.queryByRole("button", {
+        name: /go back to this response/i
+      })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /regenerate ai response/i })
+    ).toBeInTheDocument();
+  });
+
   it("opens and closes AI debug details for debugged DM messages", () => {
     const debug: AiDebugInfo = {
       model: "deepseek-chat",
