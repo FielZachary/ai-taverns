@@ -2243,7 +2243,10 @@ function errorSummary(error: unknown) {
   };
 }
 
-function providerDebugSummary(debug: AiDebugInfo | undefined) {
+function providerDebugSummary(
+  debug: AiDebugInfo | undefined,
+  options: { includeRawResponse?: boolean } = {}
+) {
   if (!debug) {
     return undefined;
   }
@@ -2260,6 +2263,7 @@ function providerDebugSummary(debug: AiDebugInfo | undefined) {
     })),
     rawResponseLength: debug.rawResponse.length,
     rawResponsePreview: previewText(debug.rawResponse),
+    ...(options.includeRawResponse ? { rawResponse: debug.rawResponse } : {}),
     providerTimings: debug.providerTimings
   };
 }
@@ -3276,6 +3280,7 @@ async function askDungeonMaster(
     options?.includeEldermereTurnContext === false
       ? instructions
       : withEldermereTurnContext(instructions, campaign);
+  let providerDebug: AiDebugInfo | undefined;
 
   if (streamEmitter && streamTurnId) {
     streamEmitter({
@@ -3334,6 +3339,7 @@ async function askDungeonMaster(
           }
         : {})
     });
+    providerDebug = providerData.debug;
 
     await logTurnDebugTrace(db, {
       campaignId: campaign.id,
@@ -3344,7 +3350,9 @@ async function askDungeonMaster(
       payload: {
         durationMs: Date.now() - providerStartedAt,
         historyCount: history.length,
-        provider: providerDebugSummary(providerData.debug)
+        provider: providerDebugSummary(providerData.debug, {
+          includeRawResponse: true
+        })
       }
     });
 
@@ -3398,7 +3406,7 @@ async function askDungeonMaster(
       setting: contract.setting
     };
   } catch (error) {
-    const providerDebug = providerDebugFromError(error);
+    providerDebug ??= providerDebugFromError(error);
 
     await logTurnDebugTrace(db, {
       campaignId: campaign.id,
@@ -3408,7 +3416,9 @@ async function askDungeonMaster(
       elapsedMs: Date.now() - startedAt,
       payload: {
         error: errorSummary(error),
-        provider: providerDebugSummary(providerDebug),
+        provider: providerDebugSummary(providerDebug, {
+          includeRawResponse: true
+        }),
         diagnostics:
           error instanceof Error
             ? undefined

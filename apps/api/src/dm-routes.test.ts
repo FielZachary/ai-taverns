@@ -188,6 +188,62 @@ test("DM runtime failure traces include provider debug diagnostics", async () =>
   assert.equal(provider?.requestMessages?.[0]?.role, "system");
 });
 
+test("DM parser failure traces keep the exact provider response", async () => {
+  const { cookie, campaignId } = await createSinglePlayerCampaign(
+    "dm-runtime-parser-debug"
+  );
+
+  const soloResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "I attack. TRIGGER_RESOLVED_COMBAT_WITHOUT_ROLLS"
+    }
+  });
+
+  assert.equal(soloResponse.statusCode, 500);
+
+  const tracesResponse = await app.inject({
+    method: "GET",
+    url: `/api/campaigns/${campaignId}/debug-traces?limit=10`,
+    headers: {
+      cookie
+    }
+  });
+
+  assert.equal(tracesResponse.statusCode, 200, tracesResponse.body);
+  const traces = CampaignDebugTracesResponseSchema.parse(tracesResponse.json());
+  const failedTrace = traces.traces.find(
+    (trace) => trace.phase === "dm_turn_failed"
+  );
+  const providerTrace = traces.traces.find(
+    (trace) =>
+      trace.phase === "provider_response_received" &&
+      trace.traceId === failedTrace?.traceId
+  );
+  const provider = providerTrace?.provider as
+    | {
+        rawResponse?: string;
+        rawResponseLength?: number;
+      }
+    | undefined;
+  const failedProvider = failedTrace?.provider as
+    | {
+        rawResponse?: string;
+        rawResponseLength?: number;
+      }
+    | undefined;
+
+  assert.ok(providerTrace);
+  assert.ok(failedTrace);
+  assert.equal(provider?.rawResponse, failedProvider?.rawResponse);
+  assert.equal(provider?.rawResponseLength, provider?.rawResponse?.length);
+  assert.match(provider?.rawResponse ?? "", /Seren lunges with her blade/);
+});
+
 test("solo turns send the current action once outside provider history", async () => {
   const { cookie, campaignId } = await createSinglePlayerCampaign(
     "dm-runtime-current-action-history"
