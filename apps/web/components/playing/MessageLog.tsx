@@ -1,7 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Bug, RefreshCcw, Sparkles, UserRound, X } from "lucide-react";
+import { Bug, RefreshCcw, Sparkles, Undo2, UserRound, X } from "lucide-react";
 import type { AiDebugInfo, GameMessage } from "@/lib/game-types";
 
 export type ChatPlayerStatus = {
@@ -148,62 +148,85 @@ export function MessageLog({
 
   return (
     <div className="message-log" aria-live="polite" ref={logRef}>
-      {messages.map((message) => (
-        <article
-          className={`message-card message-${message.role} ${
-            message.kind ? `message-${message.kind.replaceAll("_", "-")}` : ""
-          }`}
-          key={message.id}
-        >
-          <div className="message-icon" aria-hidden="true">
-            {message.role === "player" ? (
-              <UserRound size={18} />
-            ) : message.role === "dm" ? (
-              <img
-                alt=""
-                className="message-avatar-image"
-                src="/avatars/dungeon-master.jpg"
-              />
-            ) : (
-              <Sparkles size={18} />
-            )}
-          </div>
-          <div className="message-content">
-            <div className="message-heading">
-              <p className="message-label">{messageLabel(message)}</p>
-              {message.role === "dm" &&
-              (message.debug || message.id === regeneratableMessageId) ? (
-                <div className="message-actions">
-                  {message.debug ? (
-                    <button
-                      type="button"
-                      className="message-action-button"
-                      onClick={() => setOpenDebug(message.debug ?? null)}
-                      aria-label="Show AI debug details"
-                      title="Show AI debug details"
-                    >
-                      <Bug size={15} />
-                    </button>
-                  ) : null}
-                  {message.id === regeneratableMessageId ? (
-                    <button
-                      type="button"
-                      className="message-action-button"
-                      onClick={() => onRegenerateResponse?.(message.id)}
-                      disabled={isSending || regeneratingMessageId === message.id}
-                      aria-label="Regenerate AI response"
-                      title="Regenerate AI response"
-                    >
-                      <RefreshCcw size={15} />
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
+      {messages.map((message) => {
+        const canRegenerateMessage =
+          message.role === "dm" &&
+          message.kind !== "ask_dm_answer" &&
+          Boolean(onRegenerateResponse);
+        const isLatestRegeneratableMessage =
+          message.id === regeneratableMessageId;
+        const canRewindToMessage =
+          canRegenerateMessage && !isLatestRegeneratableMessage;
+
+        return (
+          <article
+            className={`message-card message-${message.role} ${
+              message.kind ? `message-${message.kind.replaceAll("_", "-")}` : ""
+            }`}
+            key={message.id}
+          >
+            <div className="message-icon" aria-hidden="true">
+              {message.role === "player" ? (
+                <UserRound size={18} />
+              ) : message.role === "dm" ? (
+                <img
+                  alt=""
+                  className="message-avatar-image"
+                  src="/avatars/dungeon-master.jpg"
+                />
+              ) : (
+                <Sparkles size={18} />
+              )}
             </div>
-            <MessageBody content={message.content} />
-          </div>
-        </article>
-      ))}
+            <div className="message-content">
+              <div className="message-heading">
+                <p className="message-label">{messageLabel(message)}</p>
+                {message.role === "dm" &&
+                (message.debug || canRegenerateMessage) ? (
+                  <div className="message-actions">
+                    {message.debug ? (
+                      <button
+                        type="button"
+                        className="message-action-button"
+                        onClick={() => setOpenDebug(message.debug ?? null)}
+                        aria-label="Show AI debug details"
+                        title="Show AI debug details"
+                      >
+                        <Bug size={15} />
+                      </button>
+                    ) : null}
+                    {canRewindToMessage ? (
+                      <button
+                        type="button"
+                        className="message-action-button"
+                        onClick={() => onRegenerateResponse?.(message.id)}
+                        disabled={isSending || regeneratingMessageId === message.id}
+                        aria-label="Go back to this response"
+                        title="Go back to this response"
+                      >
+                        <Undo2 size={15} />
+                      </button>
+                    ) : null}
+                    {isLatestRegeneratableMessage ? (
+                      <button
+                        type="button"
+                        className="message-action-button"
+                        onClick={() => onRegenerateResponse?.(message.id)}
+                        disabled={isSending || regeneratingMessageId === message.id}
+                        aria-label="Regenerate AI response"
+                        title="Regenerate AI response"
+                      >
+                        <RefreshCcw size={15} />
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+              <MessageBody content={message.content} />
+            </div>
+          </article>
+        );
+      })}
 
       {waitingPlayers.map((player) => (
         <article

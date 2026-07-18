@@ -569,6 +569,29 @@ class FakeDatabase {
       return { rows: [turn as T] };
     }
 
+    if (normalizedSql.startsWith("update turns set status = 'cancelled'")) {
+      const campaignId = values[0] as string;
+      const turnId = values[1] as string;
+      const createdAt = values[2] as Date;
+
+      for (const turn of this.turns) {
+        if (
+          turn.campaign_id === campaignId &&
+          turn.id !== turnId &&
+          turn.created_at > createdAt &&
+          (turn.status === "collecting" ||
+            turn.status === "resolving" ||
+            turn.status === "resolved" ||
+            turn.status === "failed")
+        ) {
+          turn.status = "cancelled";
+          turn.updated_at = new Date();
+        }
+      }
+
+      return { rows: [] as T[] };
+    }
+
     if (normalizedSql.startsWith("update turns set status = 'resolved'")) {
       const turnId = values[0] as string;
       const turn = this.turns.find((candidate) => candidate.id === turnId);
@@ -643,10 +666,39 @@ class FakeDatabase {
       return { rows: [] as T[] };
     }
 
+    if (normalizedSql.startsWith("update submissions set status = 'cancelled'")) {
+      const campaignId = values[0] as string;
+      const turnId = values[1] as string;
+      const createdAt = values[2] as Date;
+
+      for (const submission of this.submissions) {
+        if (
+          submission.campaign_id === campaignId &&
+          submission.turn_id !== turnId &&
+          submission.created_at > createdAt &&
+          (submission.status === "submitted" ||
+            submission.status === "included_in_turn")
+        ) {
+          submission.status = "cancelled";
+        }
+      }
+
+      return { rows: [] as T[] };
+    }
+
     if (normalizedSql.startsWith("delete from campaign_events where id = $1")) {
       const eventId = values[0] as string;
       this.campaignEvents = this.campaignEvents.filter(
         (event) => event.id !== eventId
+      );
+      return { rows: [] as T[] };
+    }
+
+    if (normalizedSql.startsWith("delete from campaign_events where campaign_id = $1")) {
+      const campaignId = values[0] as string;
+      const createdAt = values[1] as Date;
+      this.campaignEvents = this.campaignEvents.filter(
+        (event) => event.campaign_id !== campaignId || event.created_at <= createdAt
       );
       return { rows: [] as T[] };
     }
@@ -888,6 +940,29 @@ class FakeDatabase {
               return !traceId || payload.traceId === traceId;
             })
             .slice(0, limit) as T[]
+        };
+      }
+
+      if (normalizedSql.includes("payload->>'messageId' = $2")) {
+        const messageId = values[1] as string;
+
+        return {
+          rows: this.campaignEvents
+            .filter((event) => {
+              const payload = event.payload as Record<string, unknown>;
+
+              return (
+                event.campaign_id === campaignId &&
+                ["turn_submitted", "turn_resolved", "adventure_begun"].includes(
+                  event.type
+                ) &&
+                payload.messageId === messageId &&
+                payload.role === "dm"
+              );
+            })
+            .slice()
+            .reverse()
+            .slice(0, 1) as T[]
         };
       }
 
