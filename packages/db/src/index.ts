@@ -3184,6 +3184,8 @@ function dmContractRepairInstructions() {
     }),
     "If the original response does not explicitly ask for dice, use an empty roll_requests array.",
     "If a setting field is not clear from the original response, omit that field or use an empty string.",
+    "Fix mechanical contradictions before returning JSON. If an attack roll total is greater than or equal to AC, the attack hits; if it is lower than AC, the attack misses.",
+    "For NPC attacks, preserve DM-side attack and damage rolls in public_narration and do not put those DM-side rolls in roll_requests.",
     "Return only the JSON object. No Markdown. No commentary."
   ].join("\n");
 }
@@ -3780,8 +3782,16 @@ async function askDungeonMaster(
       const shouldRepairMissingStructuredRoll =
         parseError instanceof Error &&
         parseError.message === missingStructuredRollMessage;
+      const shouldRepairAttackRollContradiction =
+        parseError instanceof Error &&
+        parseError.message ===
+          "The DM provider contradicted an attack roll and AC comparison.";
 
-      if (!shouldRepairInvalidJson && !shouldRepairMissingStructuredRoll) {
+      if (
+        !shouldRepairInvalidJson &&
+        !shouldRepairMissingStructuredRoll &&
+        !shouldRepairAttackRollContradiction
+      ) {
         throw parseError;
       }
 

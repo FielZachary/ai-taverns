@@ -1227,6 +1227,48 @@ before(async () => {
           }))
         });
         if (input.instructions.includes("AI Taverns response formatter")) {
+          if (input.message.includes("Attack roll: 13 vs AC 10 - miss")) {
+            const content = JSON.stringify({
+              public_narration:
+                "The crossbow raider fires from behind the overturned boat. Attack roll: 13 vs AC 10 - hit. Damage roll: 1d8 + 1 = 6 piercing damage.\n\nThe bolt catches Seren in the side, dropping her from 20 HP to 14 HP.\n\nWhat do you do?",
+              roll_requests: [],
+              next_input_needed: "player_actions",
+              input_targets: [],
+              input_policy: "all_players",
+              mechanics_state_update: {
+                actors: {
+                  "player:dm-runtime-attack-roll-contradiction-client": {
+                    characterName: "Seren",
+                    currentHp: 14,
+                    maxHp: 20,
+                    conditions: []
+                  }
+                }
+              }
+            });
+
+            return {
+              id: "provider-attack-roll-contradiction-repair",
+              content,
+              debug: {
+                requestMessages: [
+                  {
+                    role: "system",
+                    content: input.instructions
+                  },
+                  {
+                    role: "user",
+                    content: input.message
+                  }
+                ],
+                rawResponse: content,
+                model: "test-model",
+                temperature: 0.8,
+                providerTimings: []
+              }
+            };
+          }
+
           return {
             id: "provider-repair-1",
             content: JSON.stringify({
@@ -1329,6 +1371,39 @@ before(async () => {
 
           return {
             id: "provider-missing-roll-request",
+            content,
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: content,
+              model: "test-model",
+              temperature: 0.8,
+              providerTimings: []
+            }
+          };
+        }
+
+        if (input.message.includes("TRIGGER_ATTACK_ROLL_CONTRADICTION")) {
+          const content = JSON.stringify({
+            public_narration:
+              "The crossbow raider fires from behind the overturned boat. Attack roll: 13 vs AC 10 - miss. The bolt skips off the stone at Seren's feet.\n\nWhat do you do?",
+            roll_requests: [],
+            next_input_needed: "player_actions",
+            input_targets: [],
+            input_policy: "all_players",
+            mechanics_state_update: {}
+          });
+
+          return {
+            id: "provider-attack-roll-contradiction",
             content,
             debug: {
               requestMessages: [

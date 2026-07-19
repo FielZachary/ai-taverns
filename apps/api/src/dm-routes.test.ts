@@ -387,6 +387,74 @@ test("DM runtime repairs player-facing roll prose into structured roll requests"
   );
 });
 
+test("DM runtime repairs contradictory attack roll and AC math", async () => {
+  const { cookie, campaignId } = await createSinglePlayerCampaign(
+    "dm-runtime-attack-roll-contradiction"
+  );
+  resetProviderInputs();
+
+  const soloResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "TRIGGER_ATTACK_ROLL_CONTRADICTION",
+      clientMessageId: "attack-roll-contradiction-action"
+    }
+  });
+
+  assert.equal(soloResponse.statusCode, 200, soloResponse.body);
+  const solo = CampaignSoloTurnResponseSchema.parse(soloResponse.json());
+  const latestDmMessage = solo.messages.at(-1);
+  const debug = latestDmMessage?.debug as DebugFields | undefined;
+  const combatState = debug?.combatState as
+    | {
+        actors?: Record<string, { currentHp?: number }>;
+      }
+    | undefined;
+
+  assert.equal(latestDmMessage?.role, "dm");
+  assert.match(latestDmMessage?.content ?? "", /Attack roll: 13 vs AC 10 - hit/);
+  assert.match(latestDmMessage?.content ?? "", /Damage roll: 1d8 \+ 1 = 6/);
+  assert.doesNotMatch(latestDmMessage?.content ?? "", /13 vs AC 10 - miss/);
+  assert.equal(
+    combatState?.actors?.["player:dm-runtime-attack-roll-contradiction-client"]
+      ?.currentHp,
+    14
+  );
+
+  const tracesResponse = await app.inject({
+    method: "GET",
+    url: `/api/campaigns/${campaignId}/debug-traces?limit=20`,
+    headers: {
+      cookie
+    }
+  });
+
+  assert.equal(tracesResponse.statusCode, 200, tracesResponse.body);
+  const traces = CampaignDebugTracesResponseSchema.parse(tracesResponse.json());
+  assert.ok(
+    traces.traces.some((trace) => trace.phase === "dm_contract_parse_failed")
+  );
+  assert.ok(
+    traces.traces.some(
+      (trace) => trace.phase === "dm_contract_repair_response_received"
+    )
+  );
+  assert.ok(traces.traces.some((trace) => trace.phase === "dm_turn_completed"));
+  assert.equal(getProviderInputs().length, 2);
+  assert.match(
+    getProviderInputs()[1]?.message ?? "",
+    /13 vs AC 10 - miss/
+  );
+  assert.match(
+    getProviderInputs()[1]?.instructions ?? "",
+    /greater than or equal to AC/
+  );
+});
+
 test("solo combat turn can start initiative through mechanics state update", async () => {
   const cookie = await signIn("dm-runtime-initiative@example.com");
   const createResponse = await app.inject({

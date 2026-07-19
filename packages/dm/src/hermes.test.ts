@@ -38,6 +38,58 @@ describe("parseHermesDmContract", () => {
     assert.equal(result.nextInputNeeded, "player_actions");
   });
 
+  it("rejects attack roll and AC contradictions", () => {
+    assert.throws(
+      () =>
+        parseHermesDmContract(
+          contract(
+            "The raider fires. Attack roll: 13 vs AC 10 - miss. The bolt skips off the stone. What do you do?"
+          )
+        ),
+      /contradicted an attack roll and AC comparison/
+    );
+
+    assert.throws(
+      () =>
+        parseHermesDmContract(
+          contract(
+            "The arcanist hurls fire. Spell attack roll: 9 vs AC 15 - hit. Damage roll: 2d10 = 11 fire damage."
+          )
+        ),
+      /contradicted an attack roll and AC comparison/
+    );
+
+    assert.throws(
+      () =>
+        parseHermesDmContract(
+          contract(
+            "The arcanist hurls fire. Spell attack roll: d20 + 7 = 10 vs AC 15 - hit. Damage roll: 2d10 = 11 fire damage."
+          )
+        ),
+      /contradicted an attack roll and AC comparison/
+    );
+  });
+
+  it("accepts correct attack roll and AC comparisons", () => {
+    const hit = parseHermesDmContract(
+      contract(
+        "The raider fires. Attack roll: 13 vs AC 10 - hit. Damage roll: 1d8 + 2 = 7 piercing damage."
+      )
+    );
+    const miss = parseHermesDmContract(
+      contract("The archer fires. Attack roll: 9 vs AC 15 - miss.")
+    );
+    const spellHit = parseHermesDmContract(
+      contract(
+        "The arcanist hurls fire. Spell attack roll: d20 + 7 = 18 vs AC 15 - hit. Damage roll: 2d10 = 11 fire damage."
+      )
+    );
+
+    assert.match(hit.publicNarration, /13 vs AC 10 - hit/);
+    assert.match(miss.publicNarration, /9 vs AC 15 - miss/);
+    assert.match(spellHit.publicNarration, /18 vs AC 15 - hit/);
+  });
+
   it("normalizes settings, input targeting, roll narration, and legacy field names", () => {
     const result = parseHermesDmContract(
       JSON.stringify({
