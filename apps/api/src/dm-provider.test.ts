@@ -57,6 +57,7 @@ function jsonResponse(data: unknown, status = 200) {
 test("DeepSeek provider sends filtered history and returns non-stream debug metadata", async () => {
   let requestBody: {
     messages: { role: string; content: string }[];
+    temperature?: number;
     stream?: boolean;
     response_format?: unknown;
   } | undefined;
@@ -131,9 +132,11 @@ test("DeepSeek provider sends filtered history and returns non-stream debug meta
   ]);
   assert.equal(requestBody?.stream, undefined);
   assert.equal(requestBody?.response_format, undefined);
+  assert.equal(requestBody?.temperature, 0.8);
   assert.equal(response.id, "chat-1");
   assert.equal(response.debug.providerResponseId, "chat-1");
   assert.equal(response.debug.model, "test-chat-model");
+  assert.equal(response.debug.temperature, requestBody?.temperature);
   assert.equal(response.debug.providerTimings?.[0]?.status, 200);
   assert.equal(response.debug.providerTimings?.[0]?.ok, true);
   assert.equal(

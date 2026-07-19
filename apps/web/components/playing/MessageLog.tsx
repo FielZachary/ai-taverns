@@ -50,6 +50,10 @@ function formatDebugPrompt(debug: AiDebugInfo) {
     .join("\n\n");
 }
 
+function formatDebugJson(value: unknown) {
+  return value === undefined ? "Not recorded" : JSON.stringify(value, null, 2);
+}
+
 function MessageDebugModal({
   debug,
   onClose
@@ -81,6 +85,14 @@ function MessageDebugModal({
           </button>
         </header>
         <div className="debug-modal-content">
+          <section>
+            <h3>Temperature</h3>
+            <pre>{debug.temperature ?? "Not recorded"}</pre>
+          </section>
+          <section>
+            <h3>Combat State</h3>
+            <pre>{formatDebugJson(debug.combatState)}</pre>
+          </section>
           <section>
             <h3>Prompt Sent</h3>
             <pre>{formatDebugPrompt(debug)}</pre>

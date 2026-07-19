@@ -246,6 +246,23 @@ describe("MessageLog", () => {
     const debug: AiDebugInfo = {
       model: "deepseek-chat",
       providerResponseId: "response-1",
+      temperature: 0.8,
+      combatState: {
+        combat: {
+          active: true,
+          round: 2,
+          turnOwner: "npc:mara",
+          initiativeOrder: ["player:vayne", "npc:mara"]
+        },
+        actors: {
+          "npc:mara": {
+            characterName: "Mara",
+            currentHp: 33,
+            maxHp: 45,
+            conditions: []
+          }
+        }
+      },
       requestMessages: [
         {
           role: "system",
@@ -276,6 +293,11 @@ describe("MessageLog", () => {
       screen.getByRole("dialog", { name: /ai debug/i })
     ).toBeInTheDocument();
     expect(screen.getByText("deepseek-chat / response-1")).toBeInTheDocument();
+    expect(screen.getByText("Temperature")).toBeInTheDocument();
+    expect(screen.getByText("0.8")).toBeInTheDocument();
+    expect(screen.getByText("Combat State")).toBeInTheDocument();
+    expect(screen.getByText(/"turnOwner": "npc:mara"/)).toBeInTheDocument();
+    expect(screen.getByText(/"currentHp": 33/)).toBeInTheDocument();
     expect(screen.getByText(/# 1\. SYSTEM/)).toBeInTheDocument();
     expect(screen.getByText(debug.rawResponse)).toBeInTheDocument();
 

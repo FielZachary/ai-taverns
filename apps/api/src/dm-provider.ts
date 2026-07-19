@@ -9,6 +9,7 @@ const deepSeekBaseUrl = (
   process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com"
 ).replace(/\/+$/, "");
 const deepSeekModel = process.env.DEEPSEEK_MODEL || "deepseek-chat";
+const deepSeekTemperature = 0.8;
 
 type DeepSeekMessage = AiDebugMessage;
 
@@ -86,6 +87,7 @@ function testProviderDebug(
     ],
     rawResponse: content,
     model: "ai-taverns-test-provider",
+    temperature: deepSeekTemperature,
     providerTimings: [
       {
         attempt: 1,
@@ -383,7 +385,7 @@ async function requestDeepSeek(
   const requestBody = JSON.stringify({
     model: deepSeekModel,
     messages,
-    temperature: 0.8,
+    temperature: deepSeekTemperature,
     max_tokens: 4096,
     ...(onPublicNarrationDelta ? { stream: true } : {})
   });
@@ -633,6 +635,7 @@ export async function askDungeonMasterProvider({
         requestMessages,
         rawResponse: data.choices?.[0]?.message?.content ?? "",
         model: data.model ?? deepSeekModel,
+        temperature: deepSeekTemperature,
         providerTimings: timings,
         ...(data.id ? { providerResponseId: data.id } : {})
       }
@@ -654,6 +657,7 @@ export async function askDungeonMasterProvider({
       requestMessages,
       rawResponse: content,
       model: data.model ?? deepSeekModel,
+      temperature: deepSeekTemperature,
       providerTimings: timings,
       ...(data.id ? { providerResponseId: data.id } : {})
     }

@@ -25,6 +25,8 @@ type QueryFn = <T = unknown>(
 export type DebugFields = {
   model?: unknown;
   rawResponse?: unknown;
+  temperature?: unknown;
+  combatState?: unknown;
 };
 
 type ConnectFn = () => Promise<{
@@ -1174,6 +1176,7 @@ before(async () => {
               ],
               rawResponse: "{}",
               model: "test-model",
+              temperature: 0.8,
               providerTimings: []
             }
           };
@@ -1199,6 +1202,7 @@ before(async () => {
               ],
               rawResponse: content,
               model: "test-model",
+              temperature: 0.8,
               providerTimings: []
             }
           };
@@ -1219,6 +1223,7 @@ before(async () => {
             ],
             rawResponse: "",
             model: "test-model",
+            temperature: 0.8,
             providerTimings: [
               {
                 attempt: 1,
@@ -1266,6 +1271,7 @@ before(async () => {
               ],
               rawResponse: content,
               model: "test-model",
+              temperature: 0.8,
               providerTimings: []
             }
           };
@@ -1357,6 +1363,7 @@ before(async () => {
               requestMessages: [],
               rawResponse: "{}",
               model: "test-model",
+              temperature: 0.8,
               providerTimings: []
             }
           };
@@ -1396,6 +1403,7 @@ before(async () => {
             requestMessages: [],
             rawResponse: "{}",
             model: "test-model",
+            temperature: 0.8,
             providerTimings: []
           }
         };

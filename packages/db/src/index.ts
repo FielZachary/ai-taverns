@@ -2445,6 +2445,8 @@ function providerDebugSummary(
   return {
     providerResponseId: debug.providerResponseId,
     model: debug.model,
+    temperature: debug.temperature,
+    combatState: debug.combatState,
     requestMessageCount: debug.requestMessages.length,
     requestMessages: debug.requestMessages.map((message, index) => ({
       index,
@@ -3748,6 +3750,13 @@ async function askDungeonMaster(
         nextMechanicsState
       );
     }
+    const debugWithCombatState: AiDebugInfo = {
+      ...providerData.debug,
+      combatState: {
+        combat: nextMechanicsState.combat,
+        actors: nextMechanicsState.actors
+      }
+    };
 
     if (!reply) {
       throw new Error(`The DM provider returned an empty reply. Trace ID: ${traceId}`);
@@ -3784,7 +3793,7 @@ async function askDungeonMaster(
     return {
       id: providerData.id ?? randomUUID(),
       content: reply,
-      debug: providerData.debug,
+      debug: debugWithCombatState,
       rollRequests,
       inputTargets: contract.inputTargets,
       inputPolicy: contract.inputPolicy,
