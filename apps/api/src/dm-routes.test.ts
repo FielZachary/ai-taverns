@@ -453,8 +453,10 @@ test("solo combat turn can start initiative through mechanics state update", asy
     | undefined;
 
   assert.equal(latestDmMessage?.role, "dm");
-  assert.match(latestDmMessage?.content ?? "", /Roll 8d6 for Fireball damage/);
-  assert.equal(solo.pendingRollRequest?.dice, "8d6");
+  assert.match(latestDmMessage?.content ?? "", /Roll 1d20 \+ 2 for initiative/);
+  assert.equal(solo.pendingRollRequest?.dice, "1d20");
+  assert.equal(solo.pendingRollRequest?.modifier, 2);
+  assert.equal(solo.pendingRollRequest?.label, "Initiative");
   assert.equal(combatState?.combat?.active, true);
   assert.equal(combatState?.combat?.round, 1);
   assert.equal(combatState?.combat?.turnOwner?.startsWith("player:"), true);
@@ -468,11 +470,11 @@ test("solo combat turn can start initiative through mechanics state update", asy
   const providerInput = getProviderInputs().at(-1);
   assert.ok(providerInput);
   assert.match(providerInput.instructions, /When hostilities start/);
-  assert.match(providerInput.instructions, /build `initiativeOrder`/);
+  assert.match(providerInput.instructions, /roll initiative/);
   assert.match(providerInput.instructions, /advance `turnOwner`/);
   assert.match(
     providerInput.message,
-    /include non-empty mechanics_state_update\.combat/
+    /ask the acting player for initiative/
   );
   assert.match(providerInput.message, /never copy example NPC names/);
   assert.match(providerInput.message, /include active combatants only/);

@@ -1432,16 +1432,15 @@ before(async () => {
               : undefined;
           const content = JSON.stringify({
             public_narration:
-              "Seren casts Fireball. Mara and two Drowned Choir raiders are inside the spell radius.\n\nMara rolls 15 and succeeds. The first raider rolls 9 and fails. The second raider rolls 11 and fails.\n\nRoll 8d6 for Fireball damage.",
+              "Seren starts to cast Fireball, and Mara and the Drowned Choir raiders snap into motion.\n\nCombat begins. Roll 1d20 + 2 for initiative before the spell is resolved.",
             roll_requests: [
               {
                 player: "Owner",
-                dice: "8d6",
-                modifier: 0,
-                label: "Fireball damage",
+                dice: "1d20",
+                modifier: 2,
+                label: "Initiative",
                 advantage_state: "normal",
-                reason:
-                  "Resolve Fireball damage after NPC Dexterity saving throws"
+                reason: "Determine turn order as combat begins"
               }
             ],
             next_input_needed: "dice_results",

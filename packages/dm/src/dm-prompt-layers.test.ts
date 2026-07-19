@@ -47,10 +47,11 @@ describe("DM prompt spell saving throw guidance", () => {
 
   it("instructs the DM to start and advance initiative during combat", () => {
     assert.match(hardRuntimeContract, /When hostilities start/);
-    assert.match(hardRuntimeContract, /set `mechanics_state_update\.combat\.active` to true/);
-    assert.match(hardRuntimeContract, /build `initiativeOrder`/);
-    assert.match(hardRuntimeContract, /paused for player dice/);
-    assert.match(hardRuntimeContract, /set `turnOwner` to the actor whose turn is next/);
+    assert.match(hardRuntimeContract, /ask the acting player to roll initiative/);
+    assert.match(hardRuntimeContract, /include the same initiative roll in `roll_requests`/);
+    assert.match(hardRuntimeContract, /include `mechanics_state_update\.combat`/);
+    assert.match(hardRuntimeContract, /provisional `initiativeOrder` as an array of actor-key strings/);
+    assert.match(hardRuntimeContract, /`turnOwner` to the acting player/);
     assert.match(hardRuntimeContract, /advance `turnOwner` to the next actor/);
     assert.match(hardRuntimeContract, /Combat-capable enemies should act on their turns/);
   });

@@ -3169,7 +3169,8 @@ const gameplayTurnOutputContractReminder = [
   "Output contract reminder:",
   "Return only one valid JSON object. Do not include prose, Markdown, or commentary outside JSON.",
   "Required top-level keys: public_narration, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update.",
-  "If hostilities start, include non-empty mechanics_state_update.combat with active, round, turnOwner, and initiativeOrder even when roll_requests pauses resolution.",
+  "If hostilities start while combat is inactive, ask the acting player for initiative in public_narration and roll_requests before resolving the attack or damage.",
+  "Also include non-empty mechanics_state_update.combat with active, round, turnOwner, and provisional initiativeOrder as actor-key strings when initiative roll_requests pauses resolution.",
   "Build combat actor names and keys only from the current scene and character sheets; never copy example NPC names into initiativeOrder.",
   "initiativeOrder should include active combatants only; exclude captives, bystanders, and noncombatants unless they can act in the fight."
 ].join("\n");
