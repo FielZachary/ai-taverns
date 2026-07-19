@@ -762,6 +762,94 @@ async function writeMechanicsStateForLockedCampaign(
   );
 }
 
+function numberField(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  return Number.isInteger(value) && Number(value) >= 0 ? Number(value) : undefined;
+}
+
+function stringListField(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : undefined;
+}
+
+function applyMechanicsStateUpdate(
+  state: MechanicsState,
+  update: Record<string, unknown> | undefined,
+  updatedAt?: string
+): MechanicsState {
+  if (!update || Object.keys(update).length === 0) {
+    return state;
+  }
+
+  const rawActors = isRecord(update.actors) ? update.actors : update;
+  const nextActors = { ...state.actors };
+  let changed = false;
+
+  for (const [actorKey, rawActor] of Object.entries(rawActors)) {
+    if (actorKey === "combat" || actorKey === "updatedAt" || !isRecord(rawActor)) {
+      continue;
+    }
+
+    const existing = nextActors[actorKey];
+    const characterName =
+      typeof rawActor.characterName === "string" && rawActor.characterName.trim()
+        ? rawActor.characterName
+        : existing?.characterName;
+
+    if (!existing && !characterName) {
+      continue;
+    }
+
+    nextActors[actorKey] = {
+      ...(existing ?? { characterName: characterName ?? actorKey }),
+      ...(characterName ? { characterName } : {}),
+      ...(numberField(rawActor, "currentHp") !== undefined
+        ? { currentHp: numberField(rawActor, "currentHp") }
+        : {}),
+      ...(numberField(rawActor, "maxHp") !== undefined
+        ? { maxHp: numberField(rawActor, "maxHp") }
+        : {}),
+      ...(stringListField(rawActor, "conditions") !== undefined
+        ? { conditions: stringListField(rawActor, "conditions") }
+        : {}),
+      ...(rawActor.concentration === null || isRecord(rawActor.concentration)
+        ? { concentration: rawActor.concentration as MechanicsState["actors"][string]["concentration"] }
+        : {})
+    };
+    changed = true;
+  }
+
+  const rawCombat = isRecord(update.combat) ? update.combat : undefined;
+  const nextCombat = rawCombat
+    ? {
+        ...state.combat,
+        ...(typeof rawCombat.active === "boolean" ? { active: rawCombat.active } : {}),
+        ...(numberField(rawCombat, "round") !== undefined
+          ? { round: numberField(rawCombat, "round") ?? state.combat.round }
+          : {}),
+        ...(typeof rawCombat.turnOwner === "string" || rawCombat.turnOwner === null
+          ? { turnOwner: rawCombat.turnOwner }
+          : {}),
+        ...(stringListField(rawCombat, "initiativeOrder") !== undefined
+          ? { initiativeOrder: stringListField(rawCombat, "initiativeOrder") ?? [] }
+          : {})
+      }
+    : state.combat;
+
+  changed ||= nextCombat !== state.combat;
+
+  return changed
+    ? {
+        ...state,
+        updatedAt,
+        combat: nextCombat,
+        actors: nextActors
+      }
+    : state;
+}
+
 async function addOrReplacePlayerMechanicsActor(
   db: Queryable,
   input: {
@@ -2357,6 +2445,8 @@ function providerDebugSummary(
   return {
     providerResponseId: debug.providerResponseId,
     model: debug.model,
+    temperature: debug.temperature,
+    combatState: debug.combatState,
     requestMessageCount: debug.requestMessages.length,
     requestMessages: debug.requestMessages.map((message, index) => ({
       index,
@@ -3036,6 +3126,7 @@ function dmContractRepairInstructions() {
       next_input_needed: "player_actions",
       input_targets: [],
       input_policy: "all_players",
+      mechanics_state_update: {},
       setting: {
         display_location: "",
         world_name: "",
@@ -3051,7 +3142,7 @@ function dmContractRepairInstructions() {
 const gameplayTurnOutputContractReminder = [
   "Output contract reminder:",
   "Return only one valid JSON object. Do not include prose, Markdown, or commentary outside JSON.",
-  "Required top-level keys: public_narration, roll_requests, next_input_needed, input_targets, input_policy."
+  "Required top-level keys: public_narration, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update."
 ].join("\n");
 
 function appendGameplayTurnOutputContractReminder(message: string) {
@@ -3645,6 +3736,27 @@ async function askDungeonMaster(
 
     const rollRequests = normalizeRollRequests(contract.rollRequests);
     const reply = contract.publicNarration;
+    const mechanicsState = resolveMechanicsState(campaign, []);
+    const nextMechanicsState = applyMechanicsStateUpdate(
+      mechanicsState,
+      contract.mechanicsStateUpdate,
+      nowIso()
+    );
+
+    if (nextMechanicsState !== mechanicsState) {
+      await writeMechanicsStateForLockedCampaign(
+        db,
+        campaign.id,
+        nextMechanicsState
+      );
+    }
+    const debugWithCombatState: AiDebugInfo = {
+      ...providerData.debug,
+      combatState: {
+        combat: nextMechanicsState.combat,
+        actors: nextMechanicsState.actors
+      }
+    };
 
     if (!reply) {
       throw new Error(`The DM provider returned an empty reply. Trace ID: ${traceId}`);
@@ -3681,7 +3793,7 @@ async function askDungeonMaster(
     return {
       id: providerData.id ?? randomUUID(),
       content: reply,
-      debug: providerData.debug,
+      debug: debugWithCombatState,
       rollRequests,
       inputTargets: contract.inputTargets,
       inputPolicy: contract.inputPolicy,

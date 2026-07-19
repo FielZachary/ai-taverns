@@ -11,6 +11,8 @@ export type AiDebugInfo = {
   rawResponse: string;
   providerResponseId?: string;
   model?: string;
+  temperature?: number;
+  combatState?: unknown;
   providerTimings?: {
     attempt: number;
     requestStartedAt: string;

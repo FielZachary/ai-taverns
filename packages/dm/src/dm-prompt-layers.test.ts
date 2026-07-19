@@ -37,4 +37,11 @@ describe("DM prompt spell saving throw guidance", () => {
     assert.match(gameRulesAndDesignDefaults, /"dice": "8d6"/);
     assert.match(gameRulesAndDesignDefaults, /"label": "Fireball damage"/);
   });
+
+  it("requires mechanics state updates for tracked combat HP and conditions", () => {
+    assert.match(hardRuntimeContract, /Always include top-level `mechanics_state_update`/);
+    assert.match(hardRuntimeContract, /every affected tracked actor/);
+    assert.match(hardRuntimeContract, /even if they remain above 0 HP/);
+    assert.match(hardRuntimeContract, /`currentHp` above 0/);
+  });
 });

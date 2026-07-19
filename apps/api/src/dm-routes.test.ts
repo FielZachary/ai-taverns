@@ -80,6 +80,28 @@ test("DM runtime routes handle authorized solo, ask-DM, regenerate, and traces",
     (solo.messages.at(-1)?.debug as DebugFields | undefined)?.rawResponse,
     "{}"
   );
+  assert.equal(
+    (solo.messages.at(-1)?.debug as DebugFields | undefined)?.temperature,
+    0.8
+  );
+  const combatState = (solo.messages.at(-1)?.debug as DebugFields | undefined)
+    ?.combatState as
+    | {
+        combat?: unknown;
+        actors?: Record<string, { characterName?: unknown }>;
+      }
+    | undefined;
+  assert.deepEqual(combatState?.combat, {
+    active: false,
+    round: 0,
+    turnOwner: null,
+    initiativeOrder: []
+  });
+  assert.ok(
+    Object.values(combatState?.actors ?? {}).some(
+      (actor) => actor.characterName === "Seren"
+    )
+  );
   assert.equal(solo.isResolving, false);
 
   const askResponse = await app.inject({
