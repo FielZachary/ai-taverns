@@ -3139,6 +3139,32 @@ function dmContractRepairInstructions() {
   ].join("\n");
 }
 
+function dmRollRequestRepairInstructions() {
+  return [
+    "You are an AI Taverns roll request formatter.",
+    "Convert the provided player-facing Dungeon Master prose into exactly one valid JSON object.",
+    "Preserve the prose exactly as public_narration.",
+    "Create roll_requests for every player-facing roll explicitly requested in the prose.",
+    "Use dice 1d20 unless the prose names different dice.",
+    "Set next_input_needed to dice_results.",
+    "Use this exact JSON shape:",
+    JSON.stringify({
+      public_narration: "The original player-facing Dungeon Master prose.",
+      roll_requests: [
+        {
+          dice: "1d20",
+          label: "Short roll label"
+        }
+      ],
+      next_input_needed: "dice_results",
+      input_targets: [],
+      input_policy: "all_players",
+      mechanics_state_update: {}
+    }),
+    "Return only the JSON object. No Markdown. No commentary."
+  ].join("\n");
+}
+
 const gameplayTurnOutputContractReminder = [
   "Output contract reminder:",
   "Return only one valid JSON object. Do not include prose, Markdown, or commentary outside JSON.",
@@ -3163,6 +3189,18 @@ function formatDmContractRepairRequest(input: {
     "Previous provider response:",
     input.providerResponse
   ].join("\n");
+}
+
+function publicNarrationFromProviderResponse(providerResponse: string) {
+  const parsed = parseJsonRecord(providerResponse);
+  const publicNarration =
+    typeof parsed.public_narration === "string" ? parsed.public_narration.trim() : "";
+
+  return publicNarration || providerResponse.trim();
+}
+
+function formatDmRollRequestRepairRequest(input: { publicNarration: string }) {
+  return ["Player-facing prose:", input.publicNarration].join("\n");
 }
 
 async function askEldermereOpeningPlanner(
@@ -3672,12 +3710,17 @@ async function askDungeonMaster(
         ...(currentPlayerAction ? { currentPlayerAction } : {})
       });
     } catch (parseError) {
+      const missingStructuredRollMessage =
+        "The DM provider mentioned a player-facing roll without structured roll_requests.";
       const shouldRepairInvalidJson =
         parseError instanceof Error &&
         parseError.message ===
           "The DM provider returned invalid JSON for a website turn.";
+      const shouldRepairMissingStructuredRoll =
+        parseError instanceof Error &&
+        parseError.message === missingStructuredRollMessage;
 
-      if (!shouldRepairInvalidJson) {
+      if (!shouldRepairInvalidJson && !shouldRepairMissingStructuredRoll) {
         throw parseError;
       }
 
@@ -3700,19 +3743,28 @@ async function askDungeonMaster(
       });
 
       const repairStartedAt = Date.now();
-      const repairData = await runtime.askProvider({
-        message: formatDmContractRepairRequest({
-          currentAction: providerMessage,
-          providerResponse: providerData.content
-        }),
-        instructions: dmContractRepairInstructions(),
-        history
-      });
+      const repairData = shouldRepairMissingStructuredRoll
+        ? await runtime.askProvider({
+            message: formatDmRollRequestRepairRequest({
+              publicNarration: publicNarrationFromProviderResponse(providerData.content)
+            }),
+            instructions: dmRollRequestRepairInstructions()
+          })
+        : await runtime.askProvider({
+            message: formatDmContractRepairRequest({
+              currentAction: providerMessage,
+              providerResponse: providerData.content
+            }),
+            instructions: dmContractRepairInstructions(),
+            history
+          });
 
       await logTurnDebugTrace(db, {
         campaignId: campaign.id,
         traceId,
-        phase: "dm_contract_repair_response_received",
+        phase: shouldRepairMissingStructuredRoll
+          ? "dm_roll_request_repair_response_received"
+          : "dm_contract_repair_response_received",
         turnId,
         elapsedMs: Date.now() - startedAt,
         payload: {
