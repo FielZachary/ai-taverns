@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { CampaignModeSchema } from "./campaigns.js";
+import { MechanicsSeedSchema } from "./mechanics.js";
 
 export const DiceRollResultSchema = z.object({
   rolls: z.array(z.number().int().positive()),
@@ -73,7 +74,8 @@ export const RoomPlayerUpdateRequestSchema = z.object({
   playerId: z.string().optional(),
   username: z.string().optional(),
   characterName: z.string().optional(),
-  characterSheet: z.string().optional()
+  characterSheet: z.string().optional(),
+  mechanicsSeed: MechanicsSeedSchema.optional()
 });
 
 export const RoomBeginRequestSchema = z.object({

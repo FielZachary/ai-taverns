@@ -721,6 +721,31 @@ class FakeDatabase {
       return { rows: [] as T[] };
     }
 
+    if (
+      normalizedSql.startsWith(
+        "update campaigns set metadata = jsonb_set(metadata, '{mechanicsState}'"
+      )
+    ) {
+      const campaignId = values[0] as string;
+      const mechanicsState = JSON.parse(values[1] as string) as Record<
+        string,
+        unknown
+      >;
+      const campaign = this.campaigns.find(
+        (candidate) => candidate.id === campaignId
+      );
+
+      if (campaign) {
+        campaign.metadata = {
+          ...(campaign.metadata as Record<string, unknown>),
+          mechanicsState
+        };
+        campaign.updated_at = new Date();
+      }
+
+      return { rows: [] as T[] };
+    }
+
     if (normalizedSql.startsWith("update campaigns set metadata = jsonb_set")) {
       const campaignId = values[0] as string;
       const openingPlan = JSON.parse(values[1] as string) as Record<

@@ -22,6 +22,7 @@ import {
   CampaignRegenerateRequestSchema,
   CampaignSoloTurnRequestSchema,
   CampaignSoloTurnResponseSchema,
+  MechanicsSeedSchema,
   HealthResponseSchema,
   HermesPrepRequestSchema,
   HermesTurnRequestSchema,
@@ -222,6 +223,33 @@ test("campaign contracts accept list, create, and join preview payloads", () => 
   });
 
   assert.equal(preview.availableSlots, 3);
+});
+
+test("mechanics seed contract accepts structured character mechanics", () => {
+  const seed = MechanicsSeedSchema.parse({
+    characterClass: "Sorcerer",
+    level: 5,
+    maxHp: 32,
+    currentHp: 32,
+    spellSlots: {
+      "1": { max: 4, used: 0 },
+      "2": { max: 3, used: 0 },
+      "3": { max: 2, used: 0 }
+    }
+  });
+
+  assert.equal(seed.spellSlots?.["3"]?.max, 2);
+  assert.throws(() =>
+    MechanicsSeedSchema.parse({
+      characterClass: "Sorcerer",
+      level: 5,
+      maxHp: 32,
+      currentHp: 32,
+      spellSlots: {
+        cantrip: { max: 1, used: 0 }
+      }
+    })
+  );
 });
 
 test("room contracts accept snapshots and mutation payloads", () => {

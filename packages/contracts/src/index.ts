@@ -4,4 +4,5 @@ export * from "./dm.js";
 export * from "./errors.js";
 export * from "./health.js";
 export * from "./hermes.js";
+export * from "./mechanics.js";
 export * from "./rooms.js";

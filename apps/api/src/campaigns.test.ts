@@ -6,7 +6,8 @@ import {
   CampaignJoinPreviewResponseSchema,
   CampaignJoinResponseSchema,
   CampaignListResponseSchema,
-  CampaignReadResponseSchema
+  CampaignReadResponseSchema,
+  CampaignSoloTurnResponseSchema
 } from "@ai-dnd/contracts";
 
 import {
@@ -180,6 +181,189 @@ test("campaign creation stores a multiplayer campaign and list returns it", asyn
   const listBody = CampaignListResponseSchema.parse(listResponse.json());
   assert.equal(listBody.campaigns.length, 1);
   assert.equal(listBody.campaigns[0]?.id, createBody.campaign.id);
+});
+
+test("mechanics state initializes and projects spell slot lifecycle", async () => {
+  const cookie = await signIn("kair-mechanics@example.com");
+  const mechanicsSeed = {
+    characterClass: "Sorcerer",
+    level: 5,
+    maxHp: 32,
+    currentHp: 32,
+    spellSlots: {
+      "1": { max: 4, used: 0 },
+      "2": { max: 3, used: 0 },
+      "3": { max: 2, used: 0 }
+    }
+  };
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: { cookie },
+    payload: {
+      mode: "single_player",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "classic_fantasy",
+      ownerClientId: "kair-client",
+      playerName: "Kair",
+      characterName: "Kair",
+      characterSheet: [
+        "Character Name: Kair",
+        "Level: 5",
+        "Class: Sorcerer",
+        "",
+        "Core Stats",
+        "Max HP: 32",
+        "Current HP: 32",
+        "",
+        "Spells",
+        "Spell Slots",
+        "1st-level slots: 4 total, 0 used, 4 remaining",
+        "2nd-level slots: 3 total, 0 used, 3 remaining",
+        "3rd-level slots: 2 total, 0 used, 2 remaining",
+        "Fireball",
+        "Lightning Bolt"
+      ].join("\n"),
+      mechanicsSeed
+    }
+  });
+
+  assert.equal(createResponse.statusCode, 201, createResponse.body);
+  const created = CampaignCreateResponseSchema.parse(createResponse.json());
+  const campaign = database.campaigns.find(
+    (candidate) => candidate.id === created.campaign.id
+  );
+  const player = database.players.find(
+    (candidate) => candidate.campaign_id === created.campaign.id
+  );
+  const mechanicsState = (campaign?.metadata as Record<string, unknown>)
+    .mechanicsState as Record<string, unknown>;
+  const actors = mechanicsState.actors as Record<string, Record<string, unknown>>;
+
+  assert.ok(player);
+  assert.deepEqual(
+    (actors[`player:${player.id}`]?.spellSlots as Record<string, unknown>)?.["3"],
+    { max: 2, used: 0 }
+  );
+  assert.deepEqual(mechanicsState.combat, {
+    active: false,
+    round: 0,
+    turnOwner: null,
+    initiativeOrder: []
+  });
+
+  const firstCastResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${created.campaign.id}/solo-turn`,
+    headers: { cookie },
+    payload: {
+      message: "I cast Fireball at the clustered skeletons."
+    }
+  });
+
+  assert.equal(firstCastResponse.statusCode, 200, firstCastResponse.body);
+  const firstCast = CampaignSoloTurnResponseSchema.parse(
+    firstCastResponse.json()
+  );
+  const projectedFirstSheet = firstCast.players[0]?.characterSheet ?? "";
+  assert.match(
+    projectedFirstSheet,
+    /3rd-level slots: 2 total, 1 used, 1 remaining/
+  );
+
+  const mentionResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${created.campaign.id}/solo-turn`,
+    headers: { cookie },
+    payload: {
+      message: "I dodge the fireball and keep moving."
+    }
+  });
+
+  assert.equal(mentionResponse.statusCode, 200, mentionResponse.body);
+  const mention = CampaignSoloTurnResponseSchema.parse(mentionResponse.json());
+  assert.match(
+    mention.players[0]?.characterSheet ?? "",
+    /3rd-level slots: 2 total, 1 used, 1 remaining/
+  );
+
+  const secondCastResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${created.campaign.id}/solo-turn`,
+    headers: { cookie },
+    payload: {
+      message: "I cast Lightning Bolt down the hallway."
+    }
+  });
+
+  assert.equal(secondCastResponse.statusCode, 200, secondCastResponse.body);
+  const secondCast = CampaignSoloTurnResponseSchema.parse(
+    secondCastResponse.json()
+  );
+  assert.match(
+    secondCast.players[0]?.characterSheet ?? "",
+    /3rd-level slots: 2 total, 2 used, 0 remaining/
+  );
+
+  const blockedResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${created.campaign.id}/solo-turn`,
+    headers: { cookie },
+    payload: {
+      message: "I cast Fireball again."
+    }
+  });
+
+  assert.equal(blockedResponse.statusCode, 400, blockedResponse.body);
+  assert.match(
+    ApiErrorResponseSchema.parse(blockedResponse.json()).error.message,
+    /No 3rd-level spell slots left/
+  );
+});
+
+test("mechanics state initializes Warlock pact slots", async () => {
+  const cookie = await signIn("warlock-mechanics@example.com");
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: { cookie },
+    payload: {
+      mode: "single_player",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "classic_fantasy",
+      ownerClientId: "warlock-client",
+      playerName: "Vey",
+      characterName: "Vey",
+      characterSheet: "Character Name: Vey\nClass: Warlock\nMax HP: 38\nCurrent HP: 38",
+      mechanicsSeed: {
+        characterClass: "Warlock",
+        level: 5,
+        maxHp: 38,
+        currentHp: 38,
+        spellSlots: {
+          "3": { max: 2, used: 0 }
+        }
+      }
+    }
+  });
+
+  assert.equal(createResponse.statusCode, 201, createResponse.body);
+  const created = CampaignCreateResponseSchema.parse(createResponse.json());
+  const campaign = database.campaigns.find(
+    (candidate) => candidate.id === created.campaign.id
+  );
+  const player = database.players.find(
+    (candidate) => candidate.campaign_id === created.campaign.id
+  );
+  const mechanicsState = (campaign?.metadata as Record<string, unknown>)
+    .mechanicsState as Record<string, unknown>;
+  const actors = mechanicsState.actors as Record<string, Record<string, unknown>>;
+
+  assert.ok(player);
+  assert.deepEqual(
+    (actors[`player:${player.id}`]?.spellSlots as Record<string, unknown>)?.["3"],
+    { max: 2, used: 0 }
+  );
 });
 
 test("campaign creation validates preset, custom world, and single-player requirements", async () => {
@@ -372,7 +556,7 @@ test("campaign read forbids signed-in users without campaign access", async () =
 test("campaign read distinguishes invalid, missing, and inaccessible campaigns", async () => {
   const ownerCookie = await signIn("missing-owner@example.com");
   const otherCookie = await signIn("missing-other@example.com");
-  const missingCampaignId = "00000000-0000-4000-8000-000000000099";
+  const missingCampaignId = "00000000-0000-4000-8000-999999999999";
 
   const invalidIdResponse = await app.inject({
     method: "GET",

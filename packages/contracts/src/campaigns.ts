@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MechanicsSeedSchema } from "./mechanics.js";
 
 export const CampaignModeSchema = z.enum(["single_player", "multiplayer"]);
 
@@ -28,7 +29,8 @@ export const CampaignCreateRequestSchema = z.object({
   ownerClientId: z.string().optional(),
   playerName: z.string().optional(),
   characterName: z.string().optional(),
-  characterSheet: z.string().optional()
+  characterSheet: z.string().optional(),
+  mechanicsSeed: MechanicsSeedSchema.optional()
 });
 
 export const CampaignCreateResponseSchema = z.object({
@@ -59,7 +61,8 @@ export const CampaignJoinRequestSchema = z.object({
   clientId: z.string().optional(),
   username: z.string().optional(),
   characterName: z.string().optional(),
-  characterSheet: z.string().optional()
+  characterSheet: z.string().optional(),
+  mechanicsSeed: MechanicsSeedSchema.optional()
 });
 
 export const CampaignJoinResponseSchema = z.object({

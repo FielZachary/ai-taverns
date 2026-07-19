@@ -107,6 +107,7 @@ export async function registerRoomRoutes(
         username,
         characterName,
         characterSheet,
+        mechanicsSeed: body.mechanicsSeed,
         userId: user.id
       })
     );

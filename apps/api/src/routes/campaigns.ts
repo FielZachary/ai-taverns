@@ -162,6 +162,7 @@ export async function registerCampaignRoutes(
       playerName,
       characterName: body.characterName?.trim(),
       characterSheet: body.characterSheet?.trim(),
+      mechanicsSeed: body.mechanicsSeed,
       userId: user.id,
       runtime
     });
@@ -212,6 +213,7 @@ export async function registerCampaignRoutes(
       username: body.username ?? "",
       characterName: body.characterName ?? "",
       characterSheet: body.characterSheet ?? "",
+      mechanicsSeed: body.mechanicsSeed,
       userId: user.id
     });
 
