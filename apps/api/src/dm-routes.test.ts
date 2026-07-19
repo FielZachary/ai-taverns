@@ -732,6 +732,10 @@ test("solo combat catches up NPC turns instead of rejecting the player", async (
   assert.ok(providerInput);
   assert.match(providerInput.instructions, /resolve that NPC turn immediately/);
   assert.match(providerInput.message, /turnOwner is or becomes npc:\*/);
+  assert.match(providerInput.message, /Off-turn player combat declarations are only stated intent/);
+  assert.match(providerInput.message, /not actions already in motion/);
+  assert.match(providerInput.message, /mid-swing, following immediately/);
+  assert.match(providerInput.message, /if the next actor is an enemy resolve that enemy turn/);
 
   const updatedCampaign = database.campaigns.find(
     (candidate) => candidate.id === campaignId

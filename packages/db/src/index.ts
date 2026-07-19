@@ -3264,12 +3264,15 @@ const gameplayTurnOutputContractReminder = [
   "If the acting player clearly surprises unaware enemies, resolve the opening action's required rolls first, then ask initiative before enemy counteraction.",
   "Also include non-empty mechanics_state_update.combat with active, round, turnOwner, and provisional initiativeOrder as actor-key strings when initiative roll_requests pauses resolution.",
   "If combat turnOwner is or becomes npc:*, resolve NPC turns before returning control to players.",
+  "Off-turn player combat declarations are only stated intent, not actions already in motion; never say they are mid-swing, following immediately, or resolving before the next initiative actor.",
+  "When multiple player submissions arrive in active combat, resolve the current turn owner's valid action first, keep other submissions as pending intent, and if the next actor is an enemy resolve that enemy turn before later player intent.",
   "Do not end with next_input_needed player_actions while turnOwner is npc:*; set turnOwner to a player actor, or null for a multiplayer all-player prompt.",
   "If the stored turnOwner is an NPC key or NPC character name, do not let submitted player attacks or spells preempt that NPC turn.",
   "In singleplayer active combat, return control with turnOwner set to the player actor key, not null.",
   "Resolve NPC attacks fully using explicit wording: 'attack roll: X vs AC Y - hit/miss'; on a hit, immediately state 'damage roll: dice = total damage', update player HP, then return control.",
   "For NPC hits, public_narration must include the words attack roll, vs AC, and damage roll before injury narration.",
   "Do not end an NPC turn with only a wind-up like lunges, swings, aims, starts casting, or bears down unless a player-facing roll or reaction is required first.",
+  "When the final active enemy is defeated, set combat active false, turnOwner null, and initiativeOrder empty; do not say a specific combatant is up next after combat ends.",
   "Build combat actor names and keys only from the current scene and character sheets; never copy example NPC names into initiativeOrder.",
   "initiativeOrder should include active combatants only; exclude captives, bystanders, and noncombatants unless they can act in the fight."
 ].join("\n");

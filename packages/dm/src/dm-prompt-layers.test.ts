@@ -57,6 +57,12 @@ describe("DM prompt spell saving throw guidance", () => {
     assert.match(hardRuntimeContract, /`turnOwner` to the acting player/);
     assert.match(hardRuntimeContract, /advance `turnOwner` to the next actor/);
     assert.match(hardRuntimeContract, /Combat-capable enemies should act on their turns/);
+    assert.match(hardRuntimeContract, /do not currently own the turn are only stated intent/);
+    assert.match(hardRuntimeContract, /not actions already in motion/);
+    assert.match(hardRuntimeContract, /following immediately/);
+    assert.match(hardRuntimeContract, /resolve the current turn owner's valid action first/);
+    assert.match(hardRuntimeContract, /preserve other player submissions only as pending intent/);
+    assert.match(hardRuntimeContract, /If the next actor is an enemy, resolve that enemy turn/);
     assert.match(hardRuntimeContract, /resolve that NPC turn immediately/);
     assert.match(hardRuntimeContract, /Do not end a response with `next_input_needed: "player_actions"`/);
     assert.match(hardRuntimeContract, /turnOwner` set to an `npc:\*` actor/);
@@ -68,5 +74,8 @@ describe("DM prompt spell saving throw guidance", () => {
     assert.match(hardRuntimeContract, /damage roll: <dice expression> = <total>/);
     assert.match(hardRuntimeContract, /The words 'attack roll', 'vs AC', and 'damage roll'/);
     assert.match(hardRuntimeContract, /Never end an NPC weapon or spell attack with only a wind-up/);
+    assert.match(hardRuntimeContract, /When the final active enemy is defeated/);
+    assert.match(hardRuntimeContract, /set `mechanics_state_update\.combat\.active` to false/);
+    assert.match(hardRuntimeContract, /Do not say a specific combatant is up next after combat has ended/);
   });
 });
