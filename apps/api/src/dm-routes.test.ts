@@ -387,6 +387,97 @@ test("DM runtime repairs player-facing roll prose into structured roll requests"
   );
 });
 
+test("solo combat turn can start initiative through mechanics state update", async () => {
+  const cookie = await signIn("dm-runtime-initiative@example.com");
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: {
+      cookie
+    },
+    payload: {
+      mode: "single_player",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "high_adventure",
+      ownerClientId: "dm-runtime-initiative-client",
+      playerName: "Owner",
+      characterName: "Seren",
+      characterSheet: [
+        "Class: Sorcerer",
+        "Max HP: 32",
+        "Current HP: 32",
+        "Spell Slots",
+        "3rd-level slots: 2 total, 0 used, 2 remaining"
+      ].join("\n"),
+      mechanicsSeed: {
+        characterClass: "Sorcerer",
+        level: 5,
+        maxHp: 32,
+        currentHp: 32,
+        spellSlots: {
+          "3": { max: 2, used: 0 }
+        }
+      }
+    }
+  });
+  const created = CampaignCreateResponseSchema.parse(createResponse.json());
+  const campaignId = created.campaign.id;
+  resetProviderInputs();
+
+  const soloResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "I cast fireball on Mara",
+      clientMessageId: "initiative-fireball-action"
+    }
+  });
+
+  assert.equal(soloResponse.statusCode, 200, soloResponse.body);
+  const solo = CampaignSoloTurnResponseSchema.parse(soloResponse.json());
+  const latestDmMessage = solo.messages.at(-1);
+  const debug = latestDmMessage?.debug as DebugFields | undefined;
+  const combatState = debug?.combatState as
+    | {
+        combat?: {
+          active?: boolean;
+          round?: number;
+          turnOwner?: string | null;
+          initiativeOrder?: string[];
+        };
+        actors?: Record<string, { characterName?: string; currentHp?: number }>;
+      }
+    | undefined;
+
+  assert.equal(latestDmMessage?.role, "dm");
+  assert.match(latestDmMessage?.content ?? "", /Roll 8d6 for Fireball damage/);
+  assert.equal(solo.pendingRollRequest?.dice, "8d6");
+  assert.equal(combatState?.combat?.active, true);
+  assert.equal(combatState?.combat?.round, 1);
+  assert.equal(combatState?.combat?.turnOwner?.startsWith("player:"), true);
+  assert.deepEqual(combatState?.combat?.initiativeOrder?.slice(1), [
+    "npc:mara",
+    "npc:drowned-choir-raider-1",
+    "npc:drowned-choir-raider-2"
+  ]);
+  assert.equal(combatState?.actors?.["npc:mara"]?.characterName, "Mara");
+
+  const providerInput = getProviderInputs().at(-1);
+  assert.ok(providerInput);
+  assert.match(providerInput.instructions, /When hostilities start/);
+  assert.match(providerInput.instructions, /build `initiativeOrder`/);
+  assert.match(providerInput.instructions, /advance `turnOwner`/);
+  assert.match(
+    providerInput.message,
+    /include non-empty mechanics_state_update\.combat/
+  );
+  assert.match(providerInput.message, /never copy example NPC names/);
+  assert.match(providerInput.message, /include active combatants only/);
+});
+
 test("solo turns send the current action once outside provider history", async () => {
   const { cookie, campaignId } = await createSinglePlayerCampaign(
     "dm-runtime-current-action-history"
