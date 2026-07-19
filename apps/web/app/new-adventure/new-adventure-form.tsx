@@ -25,6 +25,7 @@ import {
 } from "@/lib/campaign-api";
 import { defaultCharacterSheet } from "@/components/playing/PlayerPanel";
 import { DiceRollReveal3D } from "@/components/playing/DiceRollReveal3D";
+import type { MechanicsSeed, SpellSlotState } from "@ai-dnd/contracts";
 
 type CampaignMode = "single_player" | "multiplayer";
 type MultiplayerIntent = "create" | "join";
@@ -319,6 +320,25 @@ const spellSelectionRules: Record<string, SpellSelectionRule> = {
     spellSlotsText: "4 first-level, 3 second-level, 2 third-level"
   }
 };
+const fullCasterSlotTable: Record<number, Record<string, SpellSlotState>> = {
+  5: {
+    "1": { max: 4, used: 0 },
+    "2": { max: 3, used: 0 },
+    "3": { max: 2, used: 0 }
+  }
+};
+const pactMagicSlotTable: Record<number, Record<string, SpellSlotState>> = {
+  5: {
+    "3": { max: 2, used: 0 }
+  }
+};
+const fullCasterClasses = new Set([
+  "Bard",
+  "Cleric",
+  "Druid",
+  "Sorcerer",
+  "Wizard"
+]);
 const spellSourceLabels: Record<string, string> = {
   "Absorb Elements": "Xanathar's Guide to Everything",
   "Aganazzar's Scorcher": "Xanathar's Guide to Everything",
@@ -2141,6 +2161,40 @@ function spellSelectionLimitsFor(
   };
 }
 
+function deriveSpellSlotsForSheet(
+  characterClass: string,
+  level: number
+): Record<string, SpellSlotState> | undefined {
+  if (fullCasterClasses.has(characterClass)) {
+    return fullCasterSlotTable[level];
+  }
+
+  if (characterClass === "Warlock") {
+    return pactMagicSlotTable[level];
+  }
+
+  return undefined;
+}
+
+function ordinalSpellLevel(level: string) {
+  return level === "1"
+    ? "1st"
+    : level === "2"
+      ? "2nd"
+      : level === "3"
+        ? "3rd"
+        : `${level}th`;
+}
+
+function spellSlotLinesForSheet(slots: Record<string, SpellSlotState> | undefined) {
+  return slots
+    ? Object.entries(slots).map(([level, slot]) => {
+        const remaining = Math.max(0, slot.max - slot.used);
+        return `${ordinalSpellLevel(level)}-level slots: ${slot.max} total, ${slot.used} used, ${remaining} remaining`;
+      })
+    : [];
+}
+
 function spellLevelFor(
   spellGroups: readonly SpellGroup[],
   spell: string
@@ -2559,8 +2613,14 @@ export function NewAdventureForm() {
   );
   const pointBuyPointsRemaining =
     pointBuyBudget - getPointBuyPointsSpent(abilityScores);
-  const backgroundSkillList = backgroundSkills[characterBackground] ?? [];
-  const proficientSkills = Array.from(new Set([...selectedSkills, ...backgroundSkillList]));
+  const backgroundSkillList = useMemo(
+    () => backgroundSkills[characterBackground] ?? [],
+    [characterBackground]
+  );
+  const proficientSkills = useMemo(
+    () => Array.from(new Set([...selectedSkills, ...backgroundSkillList])),
+    [backgroundSkillList, selectedSkills]
+  );
   const constitutionModifier = getModifier(resolvedAbilityScores.con);
   const maxHp = getAverageHp(selectedClass.hitDie, constitutionModifier);
   const passivePerception = 10 + getModifier(resolvedAbilityScores.wis) + (proficientSkills.includes("Perception") ? proficiencyBonus : 0);
@@ -2593,6 +2653,17 @@ export function NewAdventureForm() {
     () => selectedSpellCountsFor(selectedClass.spellGroups, selectedSpells),
     [selectedClass.spellGroups, selectedSpells]
   );
+  const mechanicsSeed = useMemo<MechanicsSeed>(() => {
+    const spellSlots = deriveSpellSlotsForSheet(selectedClass.id, characterLevel);
+
+    return {
+      characterClass: selectedClass.id,
+      level: characterLevel,
+      maxHp,
+      currentHp: maxHp,
+      ...(spellSlots ? { spellSlots } : {})
+    };
+  }, [maxHp, selectedClass.id]);
   const hasValidSpellSelection =
     selectedSpells.length > 0 &&
     selectedSpellCounts.Cantrip <= spellSelectionLimits.cantrips &&
@@ -2662,7 +2733,8 @@ export function NewAdventureForm() {
           `Spellcasting Ability: ${abilityDefinitions.find((ability) => ability.key === spellcastingAbility)?.label}`,
           `Spell Save DC: ${spellSaveDc}`,
           `Spell Attack Bonus: ${formatModifier(spellAttackBonus)}`,
-          `Spell Slots: ${spellSelectionLimits.spellSlotsText}`,
+          "Spell Slots",
+          ...spellSlotLinesForSheet(mechanicsSeed.spellSlots),
           ...selectedSpellLines
         ]
       : ["None"];
@@ -2757,6 +2829,7 @@ export function NewAdventureForm() {
     gender,
     hasSpells,
     maxHp,
+    mechanicsSeed,
     isJoinFlow,
     mode,
     passivePerception,
@@ -2770,7 +2843,6 @@ export function NewAdventureForm() {
     playerName,
     spellAttackBonus,
     spellSaveDc,
-    spellSelectionLimits,
     spellcastingAbility,
     subclass
   ]);
@@ -3366,7 +3438,8 @@ export function NewAdventureForm() {
             ? characterName.trim() || "Solo Player"
             : "Table Owner",
         characterName,
-        characterSheet
+        characterSheet,
+        mechanicsSeed
       });
 
       window.location.assign(
@@ -3395,7 +3468,8 @@ export function NewAdventureForm() {
         clientId: ownerClientId,
         username: playerName.trim(),
         characterName: characterName.trim(),
-        characterSheet
+        characterSheet,
+        mechanicsSeed
       });
 
       window.location.assign(

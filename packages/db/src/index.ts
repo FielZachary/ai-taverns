@@ -24,8 +24,18 @@ import type {
   DiceRollRequest,
   DiceRollResult,
   DiceRollSubmission,
+  MechanicsSeed,
+  MechanicsState,
   RoomSnapshot
 } from "@ai-dnd/contracts";
+import {
+  actorKeyForPlayer,
+  applyAcceptedCast,
+  assertMechanicsActionAllowed,
+  mechanicsStateWithActor,
+  projectMechanicsIntoCharacterSheet,
+  resolveMechanicsState
+} from "./mechanics.js";
 
 const { Pool } = pg;
 
@@ -735,6 +745,49 @@ export async function logCampaignEvent(
   return result.rows[0]?.id;
 }
 
+async function writeMechanicsStateForLockedCampaign(
+  db: Queryable,
+  campaignId: string,
+  mechanicsState: MechanicsState
+) {
+  await db.query(
+    `
+      update campaigns
+      set metadata = jsonb_set(metadata, '{mechanicsState}', $2::jsonb, true),
+          updated_at = now()
+      where id = $1
+    `,
+    [campaignId, JSON.stringify(mechanicsState)]
+  );
+}
+
+async function addOrReplacePlayerMechanicsActor(
+  db: Queryable,
+  input: {
+    campaign: CampaignRow;
+    playerId: string;
+    characterName: string;
+    seed?: MechanicsSeed | undefined;
+  }
+) {
+  const currentState = resolveMechanicsState(input.campaign, []);
+  const nextState = mechanicsStateWithActor({
+    existing: currentState,
+    playerId: input.playerId,
+    characterName: input.characterName,
+    seed: input.seed,
+    updatedAt: nowIso()
+  });
+
+  await writeMechanicsStateForLockedCampaign(db, input.campaign.id, nextState);
+  input.campaign.metadata = {
+    ...eventPayload(input.campaign.metadata),
+    mechanicsState: nextState
+  };
+
+  return nextState;
+}
+
 async function ensureCollectingTurn(
   db: Queryable,
   campaignId: string
@@ -1080,6 +1133,7 @@ export async function createCampaignForMode(
     playerName: string;
     characterName?: string | undefined;
     characterSheet?: string | undefined;
+    mechanicsSeed?: MechanicsSeed | undefined;
     userId: string;
     runtime?: DungeonMasterRuntime | undefined;
   }
@@ -1157,6 +1211,18 @@ export async function createCampaignForMode(
       ]
     );
     const playerRow = requireRow(player.rows[0], "Failed to create player.");
+    const mechanicsState = mechanicsStateWithActor({
+      playerId: playerRow.id,
+      characterName: playerRow.character_name,
+      seed: input.mechanicsSeed,
+      updatedAt: nowIso()
+    });
+
+    await writeMechanicsStateForLockedCampaign(
+      client,
+      campaign.id,
+      mechanicsState
+    );
     const turn = await ensureCollectingTurn(client, campaign.id);
 
     const createdEventId = await logCampaignEvent(client, campaign.id, "campaign_created", {
@@ -1210,11 +1276,12 @@ export async function createCampaignForMode(
 
     return {
       campaign,
+      mechanicsState,
       player: playerRow,
       turn: openingTurn,
       summary: mapCampaignSummaryRow({
       ...campaign,
-      metadata: genreMetadata,
+      metadata: { ...genreMetadata, mechanicsState },
       display_character_name: playerRow.character_name,
       display_username: playerRow.username,
       join_code: joinCode ?? null
@@ -1229,6 +1296,7 @@ export async function createCampaignForMode(
   const runtime = input.runtime;
   const openingTurn = createdState.turn;
   const openingRequest = formatOpeningSceneRequest({
+    campaign: createdState.campaign,
     mode: "single_player",
     players: [createdState.player],
     style: {
@@ -1423,6 +1491,7 @@ export async function joinCampaignByCode(
     username: string;
     characterName: string;
     characterSheet: string;
+    mechanicsSeed?: MechanicsSeed | undefined;
     userId: string;
   }
 ): Promise<CampaignSummary> {
@@ -1550,10 +1619,16 @@ export async function joinCampaignByCode(
           slot
         }
       );
+      await addOrReplacePlayerMechanicsActor(client, {
+        campaign: campaignRow,
+        playerId: userPlayer.id,
+        characterName,
+        seed: input.mechanicsSeed
+      });
       return campaignRow;
     }
 
-    await client.query(
+    const insertedPlayer = await client.query<PlayerRow>(
       `
         insert into players (
           campaign_id,
@@ -1587,6 +1662,26 @@ export async function joinCampaignByCode(
         slot
       ]
     );
+    const joinedPlayer =
+      insertedPlayer.rows[0] ??
+      (await client.query<PlayerRow>(
+        `
+          select *
+          from players
+          where campaign_id = $1 and client_id = $2
+          limit 1
+        `,
+        [campaignRow.id, clientId]
+      )).rows[0];
+
+    if (joinedPlayer) {
+      await addOrReplacePlayerMechanicsActor(client, {
+        campaign: campaignRow,
+        playerId: joinedPlayer.id,
+        characterName,
+        seed: input.mechanicsSeed
+      });
+    }
     await logCampaignEvent(client, campaignRow.id, "player_joined_by_code", {
       clientId,
       username,
@@ -2099,14 +2194,20 @@ async function getTurnSubmissions(db: Queryable, turnId: string) {
 
 function rowToRoomPlayer(
   player: PlayerRow,
-  submittedPlayerIds: Set<string>
+  submittedPlayerIds: Set<string>,
+  mechanicsState?: MechanicsState
 ): RoomSnapshot["players"][number] {
+  const actor = mechanicsState?.actors[actorKeyForPlayer(player.id)];
+
   return {
     id: player.client_id,
     slot: player.slot ?? 0,
     username: player.username,
     characterName: player.character_name,
-    characterSheet: player.character_sheet,
+    characterSheet: projectMechanicsIntoCharacterSheet(
+      player.character_sheet,
+      actor
+    ),
     status: submittedPlayerIds.has(player.id) ? "submitted" : "waiting",
     lastSeenAt: toIso(player.last_seen_at)
   };
@@ -2151,6 +2252,7 @@ async function buildRoomSnapshot(
     `,
     [campaign.id]
   );
+  const mechanicsState = resolveMechanicsState(campaign, playersResult.rows);
   const events = await db.query<EventRow>(
     `
       select id, type, payload, created_at
@@ -2209,7 +2311,7 @@ async function buildRoomSnapshot(
     mode: campaign.mode,
     sessionId: campaign.hermes_session_id,
     players: playersResult.rows.map((player) =>
-      rowToRoomPlayer(player, submittedPlayerIds)
+      rowToRoomPlayer(player, submittedPlayerIds, mechanicsState)
     ),
     messages,
     isResolving: currentTurn?.status === "resolving",
@@ -2304,7 +2406,10 @@ async function logTurnDebugTrace(
   await logCampaignEvent(db, input.campaignId, "turn_debug_trace", tracePayload);
 }
 
-function formatCanonicalCharacterContext(players: PlayerRow[]) {
+function formatCanonicalCharacterContext(
+  players: PlayerRow[],
+  mechanicsState: MechanicsState
+) {
   const playablePlayers = players.filter(isProfileComplete);
 
   if (playablePlayers.length === 0) {
@@ -2319,15 +2424,34 @@ function formatCanonicalCharacterContext(players: PlayerRow[]) {
       [
         `${index + 1}. ${player.username} playing ${player.character_name}`,
         "Character sheet:",
-        player.character_sheet
+        projectMechanicsIntoCharacterSheet(
+          player.character_sheet,
+          mechanicsState.actors[actorKeyForPlayer(player.id)]
+        )
       ].join("\n")
     )
   ].join("\n\n");
 }
 
-function formatSoloTurn(player: PlayerRow, content: string) {
+function formatMechanicsPromptContext(mechanicsState: MechanicsState) {
   return [
-    formatCanonicalCharacterContext([player]),
+    "Authoritative mechanics state:",
+    "If mechanicsState conflicts with transcript history, generated character-sheet text, or model memory, mechanicsState wins.",
+    JSON.stringify(mechanicsState)
+  ].join("\n");
+}
+
+function formatSoloTurn(
+  campaign: CampaignRow,
+  player: PlayerRow,
+  content: string
+) {
+  const mechanicsState = resolveMechanicsState(campaign, [player]);
+
+  return [
+    formatCanonicalCharacterContext([player], mechanicsState),
+    "",
+    formatMechanicsPromptContext(mechanicsState),
     "",
     "Current player action:",
     "Only treat concrete declared actions as actions. Quoted speech, questions, promises, plans, and corrections are dialogue or intent unless the player also says they move, travel, enter, search, attack, take something, cast a spell, or otherwise change the scene.",
@@ -2335,11 +2459,18 @@ function formatSoloTurn(player: PlayerRow, content: string) {
   ].join("\n");
 }
 
-function formatMultiplayerTurn(players: PlayerRow[], submissions: SubmissionRow[]) {
+function formatMultiplayerTurn(
+  campaign: CampaignRow,
+  players: PlayerRow[],
+  submissions: SubmissionRow[]
+) {
   const actionLines = formatSubmissionActionLines(submissions);
+  const mechanicsState = resolveMechanicsState(campaign, players);
 
   return [
-    formatCanonicalCharacterContext(players),
+    formatCanonicalCharacterContext(players, mechanicsState),
+    "",
+    formatMechanicsPromptContext(mechanicsState),
     "",
     "Current party actions:",
     "Resolve these submitted actions as one combined party turn. Account for timing, positioning, cooperation, conflict, and consequences across the whole party before asking what happens next.",
@@ -2361,10 +2492,12 @@ function formatSubmittedActionsForCombatGuard(submissions: SubmissionRow[]) {
 }
 
 function formatOpeningSceneRequest(input: {
+  campaign: CampaignRow;
   mode: CampaignMode;
   players: PlayerRow[];
   style: CampaignOpeningStyle;
 }) {
+  const mechanicsState = resolveMechanicsState(input.campaign, input.players);
   const modeDirection =
     input.mode === "single_player"
       ? "This is a singleplayer campaign. Spotlight the solo character directly, tie the premise to their sheet or background when possible, and make the first choice immediately actionable for one player."
@@ -2377,7 +2510,9 @@ function formatOpeningSceneRequest(input: {
     : "";
 
   return [
-    formatCanonicalCharacterContext(input.players),
+    formatCanonicalCharacterContext(input.players, mechanicsState),
+    "",
+    formatMechanicsPromptContext(mechanicsState),
     "",
     "Current player action:",
     openingSceneRequest,
@@ -3163,12 +3298,20 @@ async function getActivePlayers(db: Queryable, campaignId: string) {
 }
 
 function formatAskDmQuestion(
+  campaign: CampaignRow,
   players: PlayerRow[],
   asker: PlayerRow,
   question: string
 ) {
+  const mechanicsState = resolveMechanicsState(campaign, players.length > 0 ? players : [asker]);
+
   return [
-    formatCanonicalCharacterContext(players.length > 0 ? players : [asker]),
+    formatCanonicalCharacterContext(
+      players.length > 0 ? players : [asker],
+      mechanicsState
+    ),
+    "",
+    formatMechanicsPromptContext(mechanicsState),
     "",
     "Out-of-turn Ask DM question:",
     "The player is asking for clarification without advancing time. Answer as table guidance, not as a committed character action.",
@@ -3656,6 +3799,7 @@ export async function registerRoomPlayerForUser(
     username: string;
     characterName: string;
     characterSheet: string;
+    mechanicsSeed?: MechanicsSeed | undefined;
     userId: string;
   }
 ): Promise<RoomSnapshot> {
@@ -3744,6 +3888,25 @@ export async function registerRoomPlayerForUser(
         slot
       }
     );
+    const savedPlayer =
+      (await client.query<PlayerRow>(
+        `
+          select *
+          from players
+          where campaign_id = $1 and client_id = $2
+          limit 1
+        `,
+        [campaignRow.id, input.playerId]
+      )).rows[0] ?? existing.rows[0];
+
+    if (savedPlayer) {
+      await addOrReplacePlayerMechanicsActor(client, {
+        campaign: campaignRow,
+        playerId: savedPlayer.id,
+        characterName: input.characterName,
+        seed: input.mechanicsSeed
+      });
+    }
 
     return campaignRow;
   });
@@ -3867,6 +4030,7 @@ export async function beginRoomForUser(
   const runtime = input.runtime;
   const openingTurn = beginState.turn;
   const openingRequest = formatOpeningSceneRequest({
+    campaign: beginState.campaign,
     mode: "multiplayer",
     players: beginState.players,
     style: campaignOpeningStyleFromMetadata(beginState.campaign)
@@ -4088,6 +4252,42 @@ export async function submitRoomTurnForUser(
       throw createStatusError(400, "A player message is required.");
     }
 
+    if (!isRollSubmission && !input.skipTurn) {
+      const mechanicsState = resolveMechanicsState(campaignRow, [player]);
+
+      try {
+        assertMechanicsActionAllowed({
+          state: mechanicsState,
+          player,
+          message: trimmedContent
+        });
+      } catch (error) {
+        throw createStatusError(
+          400,
+          error instanceof Error ? error.message : "That action is not allowed."
+        );
+      }
+
+      const nextMechanicsState = applyAcceptedCast({
+        state: mechanicsState,
+        player,
+        message: trimmedContent,
+        updatedAt: nowIso()
+      });
+
+      if (nextMechanicsState !== mechanicsState) {
+        await writeMechanicsStateForLockedCampaign(
+          client,
+          campaignRow.id,
+          nextMechanicsState
+        );
+        campaignRow.metadata = {
+          ...eventPayload(campaignRow.metadata),
+          mechanicsState: nextMechanicsState
+        };
+      }
+    }
+
     await client.query(
       `
         insert into submissions (campaign_id, turn_id, player_id, content)
@@ -4189,6 +4389,7 @@ export async function submitRoomTurnForUser(
   if (submitState.shouldResolve) {
     try {
       const currentAction = formatMultiplayerTurn(
+        submitState.campaign,
         submitState.players,
         submitState.submissions
       );
@@ -4322,7 +4523,12 @@ export async function askDungeonMasterQuestionForUser(
   });
 
   const players = await getActivePlayers(db, campaign.id);
-  const currentAction = formatAskDmQuestion(players, player, trimmedQuestion);
+  const currentAction = formatAskDmQuestion(
+    campaign,
+    players,
+    player,
+    trimmedQuestion
+  );
   const instructions = withEldermereTurnContext(askDmInstructions(), campaign);
   const promptContext = runtime.buildPromptContext
     ? await runtime.buildPromptContext({
@@ -4444,6 +4650,42 @@ export async function submitSoloTurnForUser(
       throw createStatusError(400, "A player message is required.");
     }
 
+    if (!isRollSubmission) {
+      const mechanicsState = resolveMechanicsState(campaign, [player]);
+
+      try {
+        assertMechanicsActionAllowed({
+          state: mechanicsState,
+          player,
+          message: trimmedContent
+        });
+      } catch (error) {
+        throw createStatusError(
+          400,
+          error instanceof Error ? error.message : "That action is not allowed."
+        );
+      }
+
+      const nextMechanicsState = applyAcceptedCast({
+        state: mechanicsState,
+        player,
+        message: trimmedContent,
+        updatedAt: nowIso()
+      });
+
+      if (nextMechanicsState !== mechanicsState) {
+        await writeMechanicsStateForLockedCampaign(
+          client,
+          campaign.id,
+          nextMechanicsState
+        );
+        campaign.metadata = {
+          ...eventPayload(campaign.metadata),
+          mechanicsState: nextMechanicsState
+        };
+      }
+    }
+
     const submissionResult = await client.query<{ content: string }>(
       `
         insert into submissions (campaign_id, turn_id, player_id, content)
@@ -4524,7 +4766,11 @@ export async function submitSoloTurnForUser(
   }
 
   try {
-    const currentAction = formatSoloTurn(soloState.player, soloState.content);
+    const currentAction = formatSoloTurn(
+      soloState.campaign,
+      soloState.player,
+      soloState.content
+    );
     const reply = await askDungeonMaster(
       db,
       runtime,
@@ -4758,7 +5004,7 @@ export async function regenerateCampaignResponseForUser(
 
     return {
       campaign,
-      currentAction: formatSoloTurn(player, first.content),
+      currentAction: formatSoloTurn(campaign, player, first.content),
       currentPlayerAction: first.content,
       eventType,
       turn: resolvingTurn
