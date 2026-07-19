@@ -10,7 +10,7 @@ function contract(publicNarration: string) {
   });
 }
 
-describe("parseHermesDmContract combat roll guard", () => {
+describe("parseHermesDmContract", () => {
   it("accepts valid DM JSON wrapped in surrounding text", () => {
     const result = parseHermesDmContract(
       [
@@ -111,30 +111,36 @@ describe("parseHermesDmContract combat roll guard", () => {
     assert.equal(result.rollRequests.length, 0);
   });
 
-  it("still rejects an unresolved attack narrated as a hit", () => {
-    assert.throws(
-      () =>
-        parseHermesDmContract(
-          contract("Your sword hits the goblin and wounds it badly."),
-          {
-            currentPlayerAction: "I attack the goblin with my sword"
-          }
-        ),
-      /resolved a player combat action without structured roll_requests/
+  it("accepts combat outcomes narrated without structured roll requests", () => {
+    const result = parseHermesDmContract(
+      contract("Your sword hits the goblin and wounds it badly."),
+      {
+        currentPlayerAction: "I attack the goblin with my sword"
+      }
     );
+
+    assert.equal(
+      result.publicNarration,
+      "Your sword hits the goblin and wounds it badly."
+    );
+    assert.equal(result.nextInputNeeded, "player_actions");
+    assert.deepEqual(result.rollRequests, []);
   });
 
-  it("still rejects an unresolved spell narrated as damage", () => {
-    assert.throws(
-      () =>
-        parseHermesDmContract(
-          contract("The fireball detonates among the skeletons, destroying them."),
-          {
-            currentPlayerAction: "I cast fireball at the skeletons"
-          }
-        ),
-      /resolved a player combat action without structured roll_requests/
+  it("accepts spell outcomes narrated without structured roll requests", () => {
+    const result = parseHermesDmContract(
+      contract("The fireball detonates among the skeletons, destroying them."),
+      {
+        currentPlayerAction: "I cast fireball at the skeletons"
+      }
     );
+
+    assert.equal(
+      result.publicNarration,
+      "The fireball detonates among the skeletons, destroying them."
+    );
+    assert.equal(result.nextInputNeeded, "player_actions");
+    assert.deepEqual(result.rollRequests, []);
   });
 
   it("allows campaign openers to narrate danger without treating setup text as a player attack", () => {

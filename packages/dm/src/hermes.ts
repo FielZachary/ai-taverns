@@ -146,6 +146,8 @@ export function debugHermesDmContractFailure(
   content: string | undefined,
   options?: HermesDmContractParseOptions
 ) {
+  void options;
+
   const parsed = parseJsonObject(content?.trim() ?? "");
   const publicNarration = stringValue(parsed?.public_narration);
   const nextInputNeeded = stringValue(parsed?.next_input_needed);
@@ -164,54 +166,15 @@ export function debugHermesDmContractFailure(
     rollRequestsCount: rollRequests.length,
     rollRequestLabels: rollRequests.map((request) => request.label),
     mentionsPlayerFacingRoll: mentionsPlayerFacingRoll(publicNarration),
-    currentActionRequiresCombatRoll: currentActionRequiresCombatRoll(
-      combatRollActionText(options)
-    ),
-    resolvesCombatOutcome: resolvesCombatOutcome(publicNarration),
-    resolvesRequiredCombatRollWithoutRolls:
-      resolvesRequiredCombatRollWithoutRolls(publicNarration, rollRequests, options)
+    currentActionRequiresCombatRoll: false,
+    resolvesCombatOutcome: false,
+    resolvesRequiredCombatRollWithoutRolls: false
   };
 }
 
 function mentionsPlayerFacingRoll(text: string) {
   return /\broll\s+(?:a\s+)?(?:d?\d|1d\d+|d20)|\bmake\s+(?:a|an)\s+[^.?!]*(?:check|saving throw|save)\b/i.test(
     text
-  );
-}
-
-function currentActionIsRollSubmission(currentAction: string | undefined) {
-  return /\bI rolled\b/i.test(currentAction ?? "");
-}
-
-function currentActionRequiresCombatRoll(currentAction: string | undefined) {
-  if (!currentAction || currentActionIsRollSubmission(currentAction)) {
-    return false;
-  }
-
-  return /\b(attack|attacks|strike|strikes|stab|stabs|shoot|shoots|slash|slashes|thrust|thrusts|swing|swings|loose|looses|fireball|fire bolt|magic missile|cast|casts)\b/i.test(
-    currentAction
-  );
-}
-
-function combatRollActionText(options: HermesDmContractParseOptions | undefined) {
-  return options?.currentPlayerAction ?? options?.currentAction;
-}
-
-function resolvesCombatOutcome(publicNarration: string) {
-  return /\b(hit|hits|struck|stabbed|wound|wounds|wounded|damage|damages|damaged|detonate|detonates|detonated|engulf|engulfs|engulfed|burn|burns|burned|blackened|split|destroy|destroys|destroyed|kill|kills|killed|dead|dies|death|goes still|convulses)\b/i.test(
-    publicNarration
-  );
-}
-
-function resolvesRequiredCombatRollWithoutRolls(
-  publicNarration: string,
-  rollRequests: DiceRollRequest[],
-  options: HermesDmContractParseOptions | undefined
-) {
-  return (
-    rollRequests.length === 0 &&
-    currentActionRequiresCombatRoll(combatRollActionText(options)) &&
-    resolvesCombatOutcome(publicNarration)
   );
 }
 
@@ -404,6 +367,8 @@ export function parseHermesDmContract(
   content: string | undefined,
   options?: HermesDmContractParseOptions
 ): HermesDmContractResponse {
+  void options;
+
   const parsed = parseJsonObject(content?.trim() ?? "");
 
   if (!parsed) {
@@ -452,15 +417,6 @@ export function parseHermesDmContract(
   if (rollRequests.length === 0 && mentionsPlayerFacingRoll(publicNarration)) {
     throw new Error(
       "The DM provider mentioned a player-facing roll without structured roll_requests."
-    );
-  }
-
-  if (
-    !options?.allowResolvedCombatWithoutRolls &&
-    resolvesRequiredCombatRollWithoutRolls(publicNarration, rollRequests, options)
-  ) {
-    throw new Error(
-      "The DM provider resolved a player combat action without structured roll_requests."
     );
   }
 
