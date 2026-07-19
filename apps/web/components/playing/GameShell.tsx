@@ -1653,6 +1653,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
         disabled={
           pendingRollRequests.length > 0 ||
           isWaitingOnTargetedInputState ||
+          isWaitingOnCombatTurnState ||
           Boolean(activeDiceReveal) ||
           isSending ||
           !draft.trim()

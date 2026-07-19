@@ -7,6 +7,7 @@ import type {
 
 type PlayerLike = {
   id: string;
+  client_id?: string;
   character_name: string;
   character_sheet: string;
 };
@@ -573,7 +574,7 @@ export function detectTrackedCastIntent(message: string) {
 }
 
 function isCombatAction(message: string) {
-  return /\b(attack|strike|stab|shoot|cast|charge|grapple|shove|dash|disengage|dodge|hide|spell)\b/i.test(
+  return /\b(attack|attacks|hit|hits|strike|strikes|swing|swings|slash|slashes|stab|stabs|shoot|shoots|cast|casts|charge|charges|grapple|grapples|shove|shoves|dash|dashes|disengage|disengages|dodge|dodges|hide|hides|spell)\b/i.test(
     message
   );
 }
@@ -601,8 +602,13 @@ export function assertMechanicsActionAllowed(input: {
   player: PlayerLike;
   message: string;
 }) {
-  const actorKey = actorKeyForPlayer(input.player.id);
-  const actor = input.state.actors[actorKey];
+  const actorKeys = [
+    actorKeyForPlayer(input.player.id),
+    input.player.client_id ? actorKeyForPlayer(input.player.client_id) : undefined
+  ].filter((key): key is string => Boolean(key));
+  const actor = actorKeys
+    .map((actorKey) => input.state.actors[actorKey])
+    .find((candidate) => Boolean(candidate));
 
   if (!actor) {
     return;
@@ -612,7 +618,7 @@ export function assertMechanicsActionAllowed(input: {
     const exactCharacterName = normalizeText(actor.characterName);
     const exactTurnOwner = normalizeText(input.state.combat.turnOwner);
     const isTurnOwner =
-      input.state.combat.turnOwner === actorKey ||
+      actorKeys.includes(input.state.combat.turnOwner) ||
       (exactCharacterName && exactTurnOwner === exactCharacterName);
 
     if (
