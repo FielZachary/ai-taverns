@@ -4,7 +4,7 @@ const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 const fastifyApiOrigin = (
   process.env.FASTIFY_API_INTERNAL_ORIGIN ??
   process.env.NEXT_PUBLIC_FASTIFY_API_ORIGIN ??
-  "http://localhost:4000"
+  "http://127.0.0.1:4000"
 ).replace(/\/$/, "");
 
 /** @type {import("next").NextConfig} */
