@@ -474,6 +474,20 @@ function isNpcActorKey(actorKey: string) {
   return actorKey.startsWith("npc:");
 }
 
+function isNpcTurnOwner(state: MechanicsState, turnOwner: string) {
+  if (isNpcActorKey(turnOwner)) {
+    return true;
+  }
+
+  const normalizedTurnOwner = normalizeText(turnOwner);
+
+  return Object.entries(state.actors).some(
+    ([actorKey, actor]) =>
+      isNpcActorKey(actorKey) &&
+      normalizeText(actor.characterName) === normalizedTurnOwner
+  );
+}
+
 export function assertMechanicsActionAllowed(input: {
   state: MechanicsState;
   player: PlayerLike;
@@ -495,7 +509,7 @@ export function assertMechanicsActionAllowed(input: {
 
     if (
       !isTurnOwner &&
-      !isNpcActorKey(input.state.combat.turnOwner) &&
+      !isNpcTurnOwner(input.state, input.state.combat.turnOwner) &&
       isCombatAction(input.message)
     ) {
       throw new Error("It is not your turn.");

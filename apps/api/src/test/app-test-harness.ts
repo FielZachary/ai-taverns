@@ -1420,7 +1420,8 @@ before(async () => {
 
         if (
           input.message.toLowerCase().includes("scorching ray") &&
-          input.message.toLowerCase().includes("cutlass raider")
+          (input.message.toLowerCase().includes("cutlass raider") ||
+            input.message.toLowerCase().includes("horn-blower"))
         ) {
           const mechanicsJson = input.message.match(
             /If mechanicsState conflicts[\s\S]*?\n(\{[\s\S]*?\})\n\nCurrent turn input JSON:/
@@ -1445,7 +1446,7 @@ before(async () => {
               combat: {
                 active: true,
                 round: 1,
-                turnOwner: isMultiplayer ? null : (playerActorKeys[0] ?? "player:owner"),
+                turnOwner: isMultiplayer ? playerActorKeys[0] : null,
                 initiativeOrder: [
                   ...(playerActorKeys.length > 0 ? playerActorKeys : ["player:owner"]),
                   "npc:cutlass-raider",

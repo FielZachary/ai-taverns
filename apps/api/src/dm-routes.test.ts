@@ -657,6 +657,60 @@ test("solo combat catches up NPC turns instead of rejecting the player", async (
   assert.ok(providerInput);
   assert.match(providerInput.instructions, /resolve that NPC turn immediately/);
   assert.match(providerInput.message, /turnOwner is or becomes npc:\*/);
+
+  const updatedCampaign = database.campaigns.find(
+    (candidate) => candidate.id === campaignId
+  );
+  assert.ok(updatedCampaign);
+  updatedCampaign.metadata = {
+    ...(updatedCampaign.metadata as Record<string, unknown>),
+    mechanicsState: {
+      ...((updatedCampaign.metadata as Record<string, unknown>).mechanicsState as Record<
+        string,
+        unknown
+      >),
+      combat: {
+        active: true,
+        round: 2,
+        turnOwner: "Horn-blower",
+        initiativeOrder: [
+          playerActorKey,
+          "npc:cutlass-raider",
+          "npc:horn-blower"
+        ]
+      }
+    }
+  };
+
+  const secondSoloResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "I cast Scorching Ray at the horn-blower.",
+      clientMessageId: "npc-catchup-scorching-ray-second"
+    }
+  });
+
+  assert.equal(secondSoloResponse.statusCode, 200, secondSoloResponse.body);
+  const secondSolo = CampaignSoloTurnResponseSchema.parse(secondSoloResponse.json());
+  const secondDmMessage = secondSolo.messages.at(-1);
+  const secondDebug = secondDmMessage?.debug as DebugFields | undefined;
+  const secondCombatState = secondDebug?.combatState as
+    | {
+        combat?: {
+          turnOwner?: string | null;
+          round?: number;
+        };
+      }
+    | undefined;
+
+  assert.equal(secondDmMessage?.role, "dm");
+  assert.doesNotMatch(secondDmMessage?.content ?? "", /It is not your turn/i);
+  assert.equal(secondCombatState?.combat?.turnOwner, playerActorKey);
+  assert.equal(secondCombatState?.combat?.round, 1);
 });
 
 test("solo turns send the current action once outside provider history", async () => {

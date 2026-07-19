@@ -2532,6 +2532,55 @@ function formatMechanicsPromptContext(mechanicsState: MechanicsState) {
   ].join("\n");
 }
 
+function normalizeCombatTurnOwnerForInput(
+  state: MechanicsState,
+  input: {
+    mode: CampaignMode;
+    nextInputNeeded: "player_actions" | "dice_results";
+    inputPolicy: InputPolicy;
+  }
+): MechanicsState {
+  if (!state.combat.active || input.nextInputNeeded !== "player_actions") {
+    return state;
+  }
+
+  if (
+    input.mode === "multiplayer" &&
+    input.inputPolicy === "all_players" &&
+    state.combat.turnOwner?.startsWith("player:")
+  ) {
+    return {
+      ...state,
+      combat: {
+        ...state.combat,
+        turnOwner: null
+      }
+    };
+  }
+
+  if (input.mode === "single_player" && state.combat.turnOwner === null) {
+    const livingPlayerActorKeys = Object.entries(state.actors)
+      .filter(
+        ([actorKey, actor]) =>
+          actorKey.startsWith("player:") &&
+          (actor.currentHp === undefined || actor.currentHp > 0)
+      )
+      .map(([actorKey]) => actorKey);
+
+    if (livingPlayerActorKeys.length === 1) {
+      return {
+        ...state,
+        combat: {
+          ...state.combat,
+          turnOwner: livingPlayerActorKeys[0] ?? null
+        }
+      };
+    }
+  }
+
+  return state;
+}
+
 function formatSoloTurn(
   campaign: CampaignRow,
   player: PlayerRow,
@@ -3174,6 +3223,8 @@ const gameplayTurnOutputContractReminder = [
   "Also include non-empty mechanics_state_update.combat with active, round, turnOwner, and provisional initiativeOrder as actor-key strings when initiative roll_requests pauses resolution.",
   "If combat turnOwner is or becomes npc:*, resolve NPC turns before returning control to players.",
   "Do not end with next_input_needed player_actions while turnOwner is npc:*; set turnOwner to a player actor, or null for a multiplayer all-player prompt.",
+  "If the stored turnOwner is an NPC key or NPC character name, do not let submitted player attacks or spells preempt that NPC turn.",
+  "In singleplayer active combat, return control with turnOwner set to the player actor key, not null.",
   "Build combat actor names and keys only from the current scene and character sheets; never copy example NPC names into initiativeOrder.",
   "initiativeOrder should include active combatants only; exclude captives, bystanders, and noncombatants unless they can act in the fight."
 ].join("\n");
@@ -3606,7 +3657,7 @@ async function getCampaignEventMessages(
 async function askDungeonMaster(
   db: Queryable,
   runtime: DungeonMasterRuntime,
-  campaign: Pick<CampaignRow, "id" | "hermes_session_id" | "metadata">,
+  campaign: Pick<CampaignRow, "id" | "hermes_session_id" | "metadata" | "mode">,
   message: string,
   instructions: string,
   includeHistory = true,
@@ -3796,10 +3847,17 @@ async function askDungeonMaster(
     const rollRequests = normalizeRollRequests(contract.rollRequests);
     const reply = contract.publicNarration;
     const mechanicsState = resolveMechanicsState(campaign, []);
-    const nextMechanicsState = applyMechanicsStateUpdate(
-      mechanicsState,
-      contract.mechanicsStateUpdate,
-      nowIso()
+    const nextMechanicsState = normalizeCombatTurnOwnerForInput(
+      applyMechanicsStateUpdate(
+        mechanicsState,
+        contract.mechanicsStateUpdate,
+        nowIso()
+      ),
+      {
+        mode: campaign.mode,
+        nextInputNeeded: contract.nextInputNeeded,
+        inputPolicy: contract.inputPolicy
+      }
     );
 
     if (nextMechanicsState !== mechanicsState) {

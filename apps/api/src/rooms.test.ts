@@ -337,6 +337,7 @@ test("multiplayer combat catches up NPC turns instead of rejecting players", asy
   const updatedCampaign = database.campaigns.find(
     (candidate) => candidate.id === campaignId
   );
+  assert.ok(updatedCampaign);
   const mechanicsState = (updatedCampaign?.metadata as Record<string, unknown>)
     .mechanicsState as { combat?: { turnOwner?: string | null } };
 
@@ -345,6 +346,83 @@ test("multiplayer combat catches up NPC turns instead of rejecting players", asy
     getProviderInputs().at(-1)?.instructions ?? "",
     /null for a multiplayer party prompt/
   );
+
+  updatedCampaign.metadata = {
+    ...(updatedCampaign.metadata as Record<string, unknown>),
+    inputTargets: [],
+    inputPolicy: "all_players",
+    mechanicsState: {
+      ...mechanicsState,
+      combat: {
+        active: true,
+        round: 2,
+        turnOwner: "Horn-blower",
+        initiativeOrder: [
+          ownerActorKey,
+          joinerActorKey,
+          "npc:cutlass-raider",
+          "npc:horn-blower"
+        ]
+      }
+    }
+  };
+
+  const secondFirstSubmitResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/submit",
+    headers: {
+      cookie: joinerCookie
+    },
+    payload: {
+      roomId: campaignId,
+      playerId: joinerClientId,
+      message: "I cast Scorching Ray at the horn-blower."
+    }
+  });
+
+  assert.equal(
+    secondFirstSubmitResponse.statusCode,
+    200,
+    secondFirstSubmitResponse.body
+  );
+
+  const secondResolvingSubmitResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/submit",
+    headers: {
+      cookie: ownerCookie
+    },
+    payload: {
+      roomId: campaignId,
+      playerId: ownerClientId,
+      message: "I keep the cutlass raider occupied."
+    }
+  });
+
+  assert.equal(
+    secondResolvingSubmitResponse.statusCode,
+    200,
+    secondResolvingSubmitResponse.body
+  );
+  const secondResolvedRoom = RoomSubmitResponseSchema.parse(
+    secondResolvingSubmitResponse.json()
+  );
+
+  assert.equal(secondResolvedRoom.messages.at(-1)?.role, "dm");
+  assert.doesNotMatch(
+    secondResolvedRoom.messages.at(-1)?.content ?? "",
+    /It is not your turn/i
+  );
+
+  const secondUpdatedCampaign = database.campaigns.find(
+    (candidate) => candidate.id === campaignId
+  );
+  const secondMechanicsState = (secondUpdatedCampaign?.metadata as Record<
+    string,
+    unknown
+  >).mechanicsState as { combat?: { turnOwner?: string | null } };
+
+  assert.equal(secondMechanicsState.combat?.turnOwner, null);
 });
 
 test("room read and player update reject missing or forbidden campaigns", async () => {

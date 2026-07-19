@@ -60,5 +60,8 @@ describe("DM prompt spell saving throw guidance", () => {
     assert.match(hardRuntimeContract, /resolve that NPC turn immediately/);
     assert.match(hardRuntimeContract, /Do not end a response with `next_input_needed: "player_actions"`/);
     assert.match(hardRuntimeContract, /turnOwner` set to an `npc:\*` actor/);
+    assert.match(hardRuntimeContract, /NPC actor key or NPC character name/);
+    assert.match(hardRuntimeContract, /never let a submitted player attack, spell, or movement interrupt/);
+    assert.match(hardRuntimeContract, /do not use null for `turnOwner`/);
   });
 });
