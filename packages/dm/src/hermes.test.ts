@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { parseHermesDmContract } from "./hermes.js";
+import {
+  debugHermesDmContractFailure,
+  extractHermesRollRequest,
+  extractHermesRollRequests,
+  isInternalHermesMessage,
+  normalizeHermesContent,
+  normalizeHermesDmContent,
+  normalizeRollRequest,
+  normalizeRollRequests,
+  parseHermesDmContract,
+  titleFromSessionId
+} from "./hermes.js";
 
 function contract(publicNarration: string) {
   return JSON.stringify({
@@ -25,6 +36,107 @@ describe("parseHermesDmContract", () => {
       "The red banner snaps in the wind.\n\nWhat do you do?"
     );
     assert.equal(result.nextInputNeeded, "player_actions");
+  });
+
+  it("normalizes settings, input targeting, roll narration, and legacy field names", () => {
+    const result = parseHermesDmContract(
+      JSON.stringify({
+        public_narration: "The shadow slips behind the altar.",
+        roll_requests: [
+          {
+            id: "roll-1",
+            dice: "1d20",
+            label: "Perception",
+            modifier: 3,
+            advantage_state: "advantage"
+          }
+        ],
+        next_input_needed: "dice_results",
+        inputTargets: ["Mira"],
+        inputPolicy: "only_targeted_players",
+        setting: {
+          displayLocation: "Saltwatch Chapel",
+          worldName: "Brinefall",
+          startingLocation: "Harbor Road"
+        }
+      })
+    );
+
+    assert.equal(
+      result.publicNarration,
+      "The shadow slips behind the altar.\n\nRoll 1d20 + 3 at advantage for Perception."
+    );
+    assert.equal(result.nextInputNeeded, "dice_results");
+    assert.equal(result.inputPolicy, "only_targeted_players");
+    assert.deepEqual(result.inputTargets, ["Mira"]);
+    assert.deepEqual(result.setting, {
+      displayLocation: "Saltwatch Chapel",
+      worldName: "Brinefall",
+      startingLocation: "Harbor Road"
+    });
+  });
+
+  it("keeps roll narration unchanged when dice are already covered", () => {
+    const result = parseHermesDmContract(
+      JSON.stringify({
+        public_narration: "Roll 1d20 to wrench the wheel free.",
+        roll_requests: [{ id: "roll-1", dice: "1d20", label: "Athletics" }],
+        next_input_needed: "dice_results"
+      })
+    );
+
+    assert.equal(result.publicNarration, "Roll 1d20 to wrench the wheel free.");
+  });
+
+  it("rejects invalid contract shapes", () => {
+    assert.throws(
+      () => parseHermesDmContract("not json"),
+      /invalid JSON/
+    );
+    assert.throws(
+      () =>
+        parseHermesDmContract(
+          JSON.stringify({
+            public_narration: "",
+            roll_requests: [],
+            next_input_needed: "player_actions"
+          })
+        ),
+      /missing public_narration/
+    );
+    assert.throws(
+      () =>
+        parseHermesDmContract(
+          JSON.stringify({
+            public_narration: "The tide growls below.",
+            roll_requests: [],
+            next_input_needed: "wait"
+          })
+        ),
+      /invalid next_input_needed/
+    );
+    assert.throws(
+      () =>
+        parseHermesDmContract(
+          JSON.stringify({
+            public_narration: "The ledge cracks underfoot.",
+            roll_requests: [],
+            next_input_needed: "dice_results"
+          })
+        ),
+      /without structured roll_requests/
+    );
+    assert.throws(
+      () =>
+        parseHermesDmContract(
+          JSON.stringify({
+            public_narration: "Make a Dexterity saving throw.",
+            roll_requests: [],
+            next_input_needed: "player_actions"
+          })
+        ),
+      /without structured roll_requests/
+    );
   });
 
   it("accepts valid DM JSON inside a fenced code block", () => {
@@ -194,5 +306,87 @@ describe("parseHermesDmContract", () => {
 
     assert.equal(result.nextInputNeeded, "player_actions");
     assert.equal(result.rollRequests.length, 0);
+  });
+});
+
+describe("Hermes DM helpers", () => {
+  it("derives display titles and recognizes internal prompts", () => {
+    assert.equal(titleFromSessionId("ai-dnd-123456789"), "D&D Session 456789");
+    assert.equal(titleFromSessionId("ai-dnd-salt-wind"), "Salt Wind");
+    assert.equal(isInternalHermesMessage("AI_DND_INTERNAL_OPENING_REQUEST: begin"), true);
+    assert.equal(isInternalHermesMessage("The harbor bell rings."), false);
+  });
+
+  it("normalizes visible narration from contracts and legacy provider text", () => {
+    assert.equal(
+      normalizeHermesDmContent(contract("The lantern guttered. What do you do?")),
+      "The lantern guttered.\n\nWhat do you do?"
+    );
+    assert.equal(
+      normalizeHermesContent('Table{"success":true}\nDungeon Master The door opens.'),
+      "The door opens."
+    );
+    assert.equal(normalizeHermesContent("Plain tavern talk."), "Plain tavern talk.");
+    assert.equal(normalizeHermesContent(undefined), "");
+  });
+
+  it("normalizes roll request variants", () => {
+    const request = normalizeRollRequest({
+      check: "Investigation",
+      player: "Nia",
+      modifier: -1,
+      advantageState: "disadvantage"
+    });
+
+    assert.equal(request?.dice, "1d20");
+    assert.equal(request?.label, "Investigation");
+    assert.equal(request?.player, "Nia");
+    assert.equal(request?.modifier, -1);
+    assert.equal(request?.advantageState, "disadvantage");
+
+    assert.deepEqual(normalizeRollRequest(null), null);
+    assert.equal(normalizeRollRequests({ reason: "Stealth" }).length, 1);
+    assert.deepEqual(normalizeRollRequests(undefined), []);
+  });
+
+  it("extracts roll requests from contract and legacy response shapes", () => {
+    const contractRequests = extractHermesRollRequests({
+      message: {
+        content: JSON.stringify({
+          public_narration: "The lock resists.",
+          roll_requests: [{ id: "roll-1", dice: "1d20", label: "Thieves' Tools" }],
+          next_input_needed: "dice_results"
+        })
+      }
+    });
+
+    assert.equal(contractRequests[0]?.label, "Thieves' Tools");
+
+    assert.equal(
+      extractHermesRollRequest({
+        message: {
+          content: "legacy prose",
+          roll_request: { dice: "1d20", reason: "Survival" }
+        }
+      })?.label,
+      "Survival"
+    );
+    assert.deepEqual(extractHermesRollRequests("no request"), []);
+  });
+
+  it("summarizes contract failures for debug output", () => {
+    const debug = debugHermesDmContractFailure(
+      JSON.stringify({
+        public_narration: "Make a Wisdom save.",
+        roll_requests: [{ dice: "1d20", label: "Wisdom save" }],
+        next_input_needed: "dice_results"
+      })
+    );
+
+    assert.equal(debug.hasJsonObject, true);
+    assert.equal(debug.publicNarrationLength > 0, true);
+    assert.equal(debug.rollRequestsCount, 1);
+    assert.deepEqual(debug.rollRequestLabels, ["Wisdom save"]);
+    assert.equal(debug.mentionsPlayerFacingRoll, true);
   });
 });
