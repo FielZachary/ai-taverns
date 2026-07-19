@@ -31,6 +31,14 @@ export type RoomSnapshot = {
   pendingRollRequests?: DiceRollRequest[];
   inputTargets?: string[];
   inputPolicy?: InputPolicy;
+  combat?: {
+    active: boolean;
+    round: number;
+    turnOwner: string | null;
+    turnOwnerPlayerId: string | null;
+    turnOwnerCharacterName: string | null;
+    initiativeOrder: string[];
+  };
   updatedAt?: string;
 };
 
@@ -57,6 +65,8 @@ export function turnSubmissionValidationMessage({
   pendingRollRequests,
   currentPendingRollRequest,
   isWaitingOnTargetedInput,
+  isWaitingOnCombatTurn,
+  combatTurnOwnerName,
   isSinglePlayer,
   hasAdventureBegun,
   playerProfile
@@ -64,6 +74,8 @@ export function turnSubmissionValidationMessage({
   pendingRollRequests: DiceRollRequest[];
   currentPendingRollRequest: DiceRollRequest | null;
   isWaitingOnTargetedInput: boolean;
+  isWaitingOnCombatTurn: boolean;
+  combatTurnOwnerName?: string | undefined;
   isSinglePlayer: boolean;
   hasAdventureBegun: boolean;
   playerProfile: PlayerProfile;
@@ -76,6 +88,12 @@ export function turnSubmissionValidationMessage({
 
   if (isWaitingOnTargetedInput) {
     return "The DM is waiting on another player.";
+  }
+
+  if (isWaitingOnCombatTurn) {
+    return combatTurnOwnerName
+      ? `Waiting on ${combatTurnOwnerName}'s combat turn.`
+      : "Waiting on another combat turn.";
   }
 
   if (!isSinglePlayer && !hasAdventureBegun) {
@@ -186,6 +204,32 @@ export function isWaitingOnTargetedInput({
     inputTargets.length > 0 &&
     !inputTargetsCurrentPlayer(inputTargets, playerProfile, currentRoomPlayer)
   );
+}
+
+export function combatTurnOwnerName(
+  combat: RoomSnapshot["combat"] | undefined
+) {
+  return combat?.turnOwnerCharacterName?.trim() || undefined;
+}
+
+export function isWaitingOnCombatTurn({
+  isSinglePlayer,
+  combat,
+  currentRoomPlayer
+}: {
+  isSinglePlayer: boolean;
+  combat: RoomSnapshot["combat"] | undefined;
+  currentRoomPlayer?: RoomPlayer;
+}) {
+  if (isSinglePlayer || !combat?.active || !combat.turnOwner) {
+    return false;
+  }
+
+  if (!combat.turnOwnerPlayerId) {
+    return true;
+  }
+
+  return currentRoomPlayer?.id !== combat.turnOwnerPlayerId;
 }
 
 export function hasOptimisticSubmissionForCurrentPlayer({

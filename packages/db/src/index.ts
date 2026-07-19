@@ -2302,6 +2302,32 @@ function rowToRoomPlayer(
   };
 }
 
+function roomCombatSnapshot(
+  mechanicsState: MechanicsState,
+  players: PlayerRow[]
+): RoomSnapshot["combat"] {
+  const turnOwner = mechanicsState.combat.turnOwner;
+  const turnOwnerPlayer = turnOwner
+    ? players.find(
+        (player) =>
+          actorKeyForPlayer(player.id) === turnOwner ||
+          `player:${player.client_id}` === turnOwner ||
+          player.client_id === turnOwner
+      )
+    : undefined;
+  const turnOwnerActor = turnOwner ? mechanicsState.actors[turnOwner] : undefined;
+
+  return {
+    active: mechanicsState.combat.active,
+    round: mechanicsState.combat.round,
+    turnOwner,
+    turnOwnerPlayerId: turnOwnerPlayer?.client_id ?? null,
+    turnOwnerCharacterName:
+      turnOwnerPlayer?.character_name || turnOwnerActor?.characterName || null,
+    initiativeOrder: mechanicsState.combat.initiativeOrder
+  };
+}
+
 function eventAiDebug(payload: Record<string, unknown>, role: "player" | "dm") {
   if (role !== "dm") {
     return undefined;
@@ -2409,6 +2435,7 @@ async function buildRoomSnapshot(
     pendingRollRequests,
     inputTargets: inputTargetsFromCampaign(campaign),
     inputPolicy: inputPolicyFromCampaign(campaign),
+    combat: roomCombatSnapshot(mechanicsState, playersResult.rows),
     updatedAt: toIso(campaign.updated_at)
   };
 }

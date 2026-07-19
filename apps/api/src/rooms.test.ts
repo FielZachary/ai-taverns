@@ -461,6 +461,172 @@ test("multiplayer combat catches up NPC turns instead of rejecting players", asy
   assert.equal(secondMechanicsState.actors?.[ownerActorKey]?.currentHp, 8);
 });
 
+test("room snapshots expose active combat turn owner for clients", async () => {
+  const { ownerCookie, campaignId, ownerClientId, joinerClientId } =
+    await createMultiplayerRoom("room-combat-owner-snapshot");
+
+  const beginResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/begin",
+    headers: {
+      cookie: ownerCookie
+    },
+    payload: {
+      roomId: campaignId
+    }
+  });
+
+  assert.equal(beginResponse.statusCode, 200, beginResponse.body);
+
+  const ownerActorKey = `player:${ownerClientId}`;
+  const joinerActorKey = `player:${joinerClientId}`;
+  const campaign = database.campaigns.find(
+    (candidate) => candidate.id === campaignId
+  );
+  assert.ok(campaign);
+  campaign.metadata = {
+    ...(campaign.metadata as Record<string, unknown>),
+    mechanicsState: {
+      combat: {
+        active: true,
+        round: 2,
+        turnOwner: ownerActorKey,
+        initiativeOrder: [ownerActorKey, joinerActorKey, "npc:cutlass-raider"]
+      },
+      actors: {
+        [ownerActorKey]: {
+          characterName: "Owner Character",
+          currentHp: 14,
+          maxHp: 20,
+          conditions: []
+        },
+        [joinerActorKey]: {
+          characterName: "Joined Character",
+          currentHp: 18,
+          maxHp: 18,
+          conditions: []
+        },
+        "npc:cutlass-raider": {
+          characterName: "Cutlass raider",
+          currentHp: 12,
+          maxHp: 12,
+          conditions: []
+        }
+      }
+    }
+  };
+
+  const readResponse = await app.inject({
+    method: "GET",
+    url: `/api/room?roomId=${campaignId}`,
+    headers: {
+      cookie: ownerCookie
+    }
+  });
+
+  assert.equal(readResponse.statusCode, 200, readResponse.body);
+  const room = RoomReadResponseSchema.parse(readResponse.json());
+
+  assert.equal(room.combat.active, true);
+  assert.equal(room.combat.turnOwner, ownerActorKey);
+  assert.equal(room.combat.turnOwnerPlayerId, ownerClientId);
+  assert.equal(room.combat.turnOwnerCharacterName, "Owner Character");
+});
+
+test("multiplayer combat infers spell slots from explicit caster character sheet", async () => {
+  const ownerCookie = await signIn("room-inferred-slots-owner@example.com");
+  const joinerCookie = await signIn("room-inferred-slots-joiner@example.com");
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: {
+      cookie: ownerCookie
+    },
+    payload: {
+      mode: "multiplayer",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "classic_fantasy",
+      ownerClientId: "room-inferred-slots-owner-client",
+      playerName: "Owner",
+      characterName: "Owner",
+      characterSheet:
+        "A level 5 wizard with AC 14, 20 HP, initiative +2, Fireball, and poor impulse control."
+    }
+  });
+  const created = CampaignCreateResponseSchema.parse(createResponse.json());
+  assert.ok(created.campaign.joinCode);
+
+  const joinResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns/join",
+    headers: {
+      cookie: joinerCookie
+    },
+    payload: {
+      gameCode: created.campaign.joinCode,
+      clientId: "room-inferred-slots-joiner-client",
+      username: "Joined Player",
+      characterName: "Joined Character",
+      characterSheet: "A brave scout."
+    }
+  });
+  assert.equal(joinResponse.statusCode, 200, joinResponse.body);
+
+  const beginResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/begin",
+    headers: {
+      cookie: ownerCookie
+    },
+    payload: {
+      roomId: created.campaign.id
+    }
+  });
+  assert.equal(beginResponse.statusCode, 200, beginResponse.body);
+
+  const ownerSubmitResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/submit",
+    headers: {
+      cookie: ownerCookie
+    },
+    payload: {
+      roomId: created.campaign.id,
+      playerId: "room-inferred-slots-owner-client",
+      message:
+        "Mara has not noticed me, so I cast fireball on Mara and the two Drowned Choir raiders."
+    }
+  });
+  assert.equal(ownerSubmitResponse.statusCode, 200, ownerSubmitResponse.body);
+  const ownerSubmitted = RoomSubmitResponseSchema.parse(ownerSubmitResponse.json());
+  assert.match(
+    ownerSubmitted.players.find(
+      (player) => player.id === "room-inferred-slots-owner-client"
+    )?.characterSheet ?? "",
+    /3rd-level slots: 2 total, 1 used, 1 remaining/
+  );
+
+  const joinerSubmitResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/submit",
+    headers: {
+      cookie: joinerCookie
+    },
+    payload: {
+      roomId: created.campaign.id,
+      playerId: "room-inferred-slots-joiner-client",
+      message: "I dive behind the stone well before the blast blooms."
+    }
+  });
+  assert.equal(joinerSubmitResponse.statusCode, 200, joinerSubmitResponse.body);
+  const resolved = RoomSubmitResponseSchema.parse(joinerSubmitResponse.json());
+
+  assert.equal(resolved.pendingRollRequest?.dice, "8d6");
+  assert.equal(resolved.pendingRollRequest?.label, "Fireball damage");
+  assert.deepEqual(resolved.inputTargets, ["Owner"]);
+  assert.equal(resolved.inputPolicy, "only_targeted_players");
+});
+
 test("room read and player update reject missing or forbidden campaigns", async () => {
   const { ownerCookie, campaignId, joinerClientId } =
     await createMultiplayerRoom("room-forbidden");

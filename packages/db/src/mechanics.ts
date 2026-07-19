@@ -261,6 +261,98 @@ function legacyNumberLine(sheet: string, label: string) {
   return match ? Number(match[1]) : undefined;
 }
 
+function inferredLevelAndClassFromSheet(sheet: string) {
+  const patterns = [
+    /\blevel\s+(\d+)\s+([a-z]+)\b/i,
+    /\b([a-z]+)\s+level\s+(\d+)\b/i,
+    /^Class:\s*([a-z]+).*?^Level:\s*(\d+)/ims,
+    /^Level:\s*(\d+).*?^Class:\s*([a-z]+)/ims
+  ];
+
+  for (const pattern of patterns) {
+    const match = sheet.match(pattern);
+
+    if (!match) {
+      continue;
+    }
+
+    const first = match[1] ?? "";
+    const second = match[2] ?? "";
+    const level = /^\d+$/.test(first) ? Number(first) : Number(second);
+    const characterClass = /^\d+$/.test(first) ? second : first;
+
+    if (Number.isInteger(level) && level > 0 && characterClass.trim()) {
+      return { characterClass, level };
+    }
+  }
+
+  return null;
+}
+
+function inferredHpFromSheet(sheet: string) {
+  const maxHp = legacyNumberLine(sheet, "Max HP");
+  const currentHp = legacyNumberLine(sheet, "Current HP") ?? maxHp;
+
+  if (maxHp !== undefined) {
+    return { maxHp, currentHp };
+  }
+
+  const hpMatch = sheet.match(/\b(\d+)\s*(?:max\s*)?hp\b/i);
+  const hp = hpMatch?.[1] ? Number(hpMatch[1]) : undefined;
+
+  return hp !== undefined ? { maxHp: hp, currentHp: hp } : {};
+}
+
+function sheetMentionsTrackedSpellAtLevel(sheet: string, level: string) {
+  const normalizedSheet = sheet.toLowerCase();
+
+  return Array.from(trackedSpellLevels.entries()).some(
+    ([spellName, spellLevel]) =>
+      spellLevel === level &&
+      new RegExp(`\\b${spellNamePattern(spellName.toLowerCase())}\\b`).test(
+        normalizedSheet
+      )
+  );
+}
+
+function inferredSlotsFromSheet(sheet: string) {
+  const legacySlots = legacySlotsFromSheet(sheet);
+
+  if (legacySlots) {
+    return legacySlots;
+  }
+
+  const inferredIdentity = inferredLevelAndClassFromSheet(sheet);
+
+  if (!inferredIdentity) {
+    return undefined;
+  }
+
+  const inferredSlots = deriveSpellSlotsForClass(
+    inferredIdentity.characterClass,
+    inferredIdentity.level
+  );
+
+  if (!inferredSlots) {
+    return undefined;
+  }
+
+  const highestMentionedTrackedLevel = Math.max(
+    0,
+    ...Object.keys(inferredSlots)
+      .filter((level) => sheetMentionsTrackedSpellAtLevel(sheet, level))
+      .map(Number)
+  );
+
+  if (highestMentionedTrackedLevel <= 0) {
+    return undefined;
+  }
+
+  return Object.fromEntries(
+    Object.entries(inferredSlots).filter(([level]) => Number(level) <= highestMentionedTrackedLevel)
+  );
+}
+
 function legacySlotsFromSheet(sheet: string) {
   const slots: Record<string, SpellSlotState> = {};
   const slotLine =
@@ -297,18 +389,31 @@ function legacySlotsFromSheet(sheet: string) {
 }
 
 function legacyActorFromSheet(player: PlayerLike): MechanicsState["actors"][string] {
-  const maxHp = legacyNumberLine(player.character_sheet, "Max HP");
-  const currentHp = legacyNumberLine(player.character_sheet, "Current HP") ?? maxHp;
+  const { maxHp, currentHp } = inferredHpFromSheet(player.character_sheet);
+  const spellSlots = inferredSlotsFromSheet(player.character_sheet);
 
   return {
     characterName: player.character_name,
     ...(currentHp !== undefined ? { currentHp } : {}),
     ...(maxHp !== undefined ? { maxHp } : {}),
-    ...(legacySlotsFromSheet(player.character_sheet)
-      ? { spellSlots: legacySlotsFromSheet(player.character_sheet) }
-      : {}),
+    ...(spellSlots ? { spellSlots } : {}),
     concentration: null,
     conditions: []
+  };
+}
+
+function actorWithSheetFallback(
+  actor: MechanicsState["actors"][string],
+  fallback: MechanicsState["actors"][string]
+): MechanicsState["actors"][string] {
+  return {
+    ...actor,
+    characterName: actor.characterName || fallback.characterName,
+    currentHp: actor.currentHp ?? fallback.currentHp,
+    maxHp: actor.maxHp ?? fallback.maxHp,
+    spellSlots: actor.spellSlots ?? fallback.spellSlots,
+    concentration: actor.concentration ?? fallback.concentration,
+    conditions: actor.conditions ?? fallback.conditions
   };
 }
 
@@ -323,7 +428,10 @@ export function resolveMechanicsState(
 
     for (const player of players) {
       const key = actorKeyForPlayer(player.id);
-      actors[key] ??= legacyActorFromSheet(player);
+      const sheetFallback = legacyActorFromSheet(player);
+      actors[key] = actors[key]
+        ? actorWithSheetFallback(actors[key], sheetFallback)
+        : sheetFallback;
     }
 
     return { ...persisted, actors };
