@@ -1150,6 +1150,60 @@ before(async () => {
             content: message.content
           }))
         });
+        if (input.instructions.includes("AI Taverns response formatter")) {
+          return {
+            id: "provider-repair-1",
+            content: JSON.stringify({
+              public_narration:
+                "Plain prose from the provider becomes contract JSON.\n\nWhat do you do?",
+              roll_requests: [],
+              next_input_needed: "player_actions",
+              input_targets: [],
+              input_policy: "all_players"
+            }),
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: "{}",
+              model: "test-model",
+              providerTimings: []
+            }
+          };
+        }
+
+        if (input.message.includes("TRIGGER_PROSE_DM_RESPONSE")) {
+          const content =
+            "Plain prose from the provider becomes contract JSON.\n\nWhat do you do?";
+
+          return {
+            id: "provider-prose-1",
+            content,
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: content,
+              model: "test-model",
+              providerTimings: []
+            }
+          };
+        }
+
         if (input.message.includes("TRIGGER_PROVIDER_DEBUG_FAILURE")) {
           const error = new Error("DeepSeek returned an empty reply.");
           (error as { debug?: unknown }).debug = {

@@ -14,6 +14,7 @@ import {
   type EldermereCampaignStart,
   type AiDebugInfo,
   type GameMessage,
+  type HermesDmContractResponse,
   type HermesDmContractParseOptions,
   type InputPolicy
 } from "@ai-dnd/dm";
@@ -2447,15 +2448,26 @@ function formatSoloTurn(
   content: string
 ) {
   const mechanicsState = resolveMechanicsState(campaign, [player]);
+  const turnInput = {
+    type: "solo_turn",
+    action_policy:
+      "Only treat concrete declared actions as actions. Quoted speech, questions, promises, plans, and corrections are dialogue or intent unless the player also says they move, travel, enter, search, attack, take something, cast a spell, or otherwise change the scene.",
+    submissions: [
+      {
+        player: player.username,
+        character: player.character_name,
+        content
+      }
+    ]
+  };
 
   return [
     formatCanonicalCharacterContext([player], mechanicsState),
     "",
     formatMechanicsPromptContext(mechanicsState),
     "",
-    "Current player action:",
-    "Only treat concrete declared actions as actions. Quoted speech, questions, promises, plans, and corrections are dialogue or intent unless the player also says they move, travel, enter, search, attack, take something, cast a spell, or otherwise change the scene.",
-    `${player.username} (${player.character_name}): ${content}`
+    "Current turn input JSON:",
+    JSON.stringify(turnInput, null, 2)
   ].join("\n");
 }
 
@@ -2464,17 +2476,25 @@ function formatMultiplayerTurn(
   players: PlayerRow[],
   submissions: SubmissionRow[]
 ) {
-  const actionLines = formatSubmissionActionLines(submissions);
   const mechanicsState = resolveMechanicsState(campaign, players);
+  const turnInput = {
+    type: "multiplayer_turn",
+    resolution_policy:
+      "Resolve these submitted actions as one combined party turn. Account for timing, positioning, cooperation, conflict, and consequences across the whole party before asking what happens next.",
+    submissions: submissions.map((submission) => ({
+      player: submission.username?.trim() || "Unknown player",
+      character: submission.character_name?.trim() || "Unknown character",
+      content: submission.content
+    }))
+  };
 
   return [
     formatCanonicalCharacterContext(players, mechanicsState),
     "",
     formatMechanicsPromptContext(mechanicsState),
     "",
-    "Current party actions:",
-    "Resolve these submitted actions as one combined party turn. Account for timing, positioning, cooperation, conflict, and consequences across the whole party before asking what happens next.",
-    ...actionLines
+    "Current turn input JSON:",
+    JSON.stringify(turnInput, null, 2)
   ].join("\n");
 }
 
@@ -3004,6 +3024,56 @@ function answerFromAskDmProviderResponse(content: string) {
   throw new Error("The DM provider returned an empty answer.");
 }
 
+function dmContractRepairInstructions() {
+  return [
+    "You are an AI Taverns response formatter.",
+    "Convert the provided Dungeon Master response into exactly one valid JSON object.",
+    "Do not continue the scene, add new facts, remove meaningful details, or rewrite the narration except to preserve valid JSON string escaping.",
+    "Use this exact JSON shape:",
+    JSON.stringify({
+      public_narration: "The original player-facing Dungeon Master narration.",
+      roll_requests: [],
+      next_input_needed: "player_actions",
+      input_targets: [],
+      input_policy: "all_players",
+      setting: {
+        display_location: "",
+        world_name: "",
+        starting_location: ""
+      }
+    }),
+    "If the original response does not explicitly ask for dice, use an empty roll_requests array.",
+    "If a setting field is not clear from the original response, omit that field or use an empty string.",
+    "Return only the JSON object. No Markdown. No commentary."
+  ].join("\n");
+}
+
+const gameplayTurnOutputContractReminder = [
+  "Output contract reminder:",
+  "Return only one valid JSON object. Do not include prose, Markdown, or commentary outside JSON.",
+  "Required top-level keys: public_narration, roll_requests, next_input_needed, input_targets, input_policy."
+].join("\n");
+
+function appendGameplayTurnOutputContractReminder(message: string) {
+  return [message, "", gameplayTurnOutputContractReminder].join("\n");
+}
+
+function formatDmContractRepairRequest(input: {
+  currentAction: string;
+  providerResponse: string;
+}) {
+  return [
+    "The previous Dungeon Master provider response failed the AI Taverns JSON contract.",
+    "Convert it into the required contract without changing the scene outcome.",
+    "",
+    "Current turn input:",
+    input.currentAction,
+    "",
+    "Previous provider response:",
+    input.providerResponse
+  ].join("\n");
+}
+
 async function askEldermereOpeningPlanner(
   db: Queryable,
   runtime: DungeonMasterRuntime,
@@ -3456,13 +3526,16 @@ async function askDungeonMaster(
           baseInstructions: instructionsWithWorldContext
         })
       : null;
+    const providerMessage = appendGameplayTurnOutputContractReminder(
+      promptContext?.message ?? message
+    );
     const history =
       includeHistory && !promptContext
         ? await getCampaignEventMessages(db, campaign.id, 30, turnId)
         : [];
     const providerStartedAt = Date.now();
     let providerData = await runtime.askProvider({
-      message: promptContext?.message ?? message,
+      message: providerMessage,
       instructions: promptContext?.instructions ?? instructionsWithWorldContext,
       history,
       ...(streamEmitter && streamTurnId
@@ -3499,11 +3572,77 @@ async function askDungeonMaster(
       }
     });
 
-    const contract = parseHermesDmContract(providerData.content, {
-      ...contractOptions,
-      currentAction: message,
-      ...(currentPlayerAction ? { currentPlayerAction } : {})
-    });
+    let contract: HermesDmContractResponse;
+
+    try {
+      contract = parseHermesDmContract(providerData.content, {
+        ...contractOptions,
+        currentAction: message,
+        ...(currentPlayerAction ? { currentPlayerAction } : {})
+      });
+    } catch (parseError) {
+      const shouldRepairInvalidJson =
+        parseError instanceof Error &&
+        parseError.message ===
+          "The DM provider returned invalid JSON for a website turn.";
+
+      if (!shouldRepairInvalidJson) {
+        throw parseError;
+      }
+
+      await logTurnDebugTrace(db, {
+        campaignId: campaign.id,
+        traceId,
+        phase: "dm_contract_parse_failed",
+        turnId,
+        elapsedMs: Date.now() - startedAt,
+        payload: {
+          error: errorSummary(parseError),
+          diagnostics: debugHermesDmContractFailure(providerData.content, {
+            currentAction: message,
+            ...(currentPlayerAction ? { currentPlayerAction } : {})
+          }),
+          provider: providerDebugSummary(providerData.debug, {
+            includeRawResponse: true
+          })
+        }
+      });
+
+      const repairStartedAt = Date.now();
+      const repairData = await runtime.askProvider({
+        message: formatDmContractRepairRequest({
+          currentAction: providerMessage,
+          providerResponse: providerData.content
+        }),
+        instructions: dmContractRepairInstructions(),
+        history
+      });
+
+      await logTurnDebugTrace(db, {
+        campaignId: campaign.id,
+        traceId,
+        phase: "dm_contract_repair_response_received",
+        turnId,
+        elapsedMs: Date.now() - startedAt,
+        payload: {
+          durationMs: Date.now() - repairStartedAt,
+          originalError: errorSummary(parseError),
+          originalResponse: textStats(providerData.content),
+          provider: providerDebugSummary(repairData.debug, {
+            includeRawResponse: true
+          })
+        }
+      });
+
+      providerData = repairData;
+      providerDebug = repairData.debug;
+      contract = parseHermesDmContract(providerData.content, {
+        ...contractOptions,
+        currentAction: message,
+        ...(currentPlayerAction ? { currentPlayerAction } : {})
+      });
+    }
+
     const rollRequests = normalizeRollRequests(contract.rollRequests);
     const reply = contract.publicNarration;
 
