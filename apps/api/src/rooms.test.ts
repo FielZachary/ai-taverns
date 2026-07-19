@@ -533,6 +533,72 @@ test("room snapshots expose active combat turn owner for clients", async () => {
   assert.equal(room.combat.turnOwnerCharacterName, "Owner Character");
 });
 
+test("room submit accepts targeted input by mechanics actor key", async () => {
+  const { ownerCookie, joinerCookie, campaignId, ownerClientId, joinerClientId } =
+    await createMultiplayerRoom("room-actor-key-target");
+
+  const beginResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/begin",
+    headers: {
+      cookie: ownerCookie
+    },
+    payload: {
+      roomId: campaignId
+    }
+  });
+
+  assert.equal(beginResponse.statusCode, 200, beginResponse.body);
+
+  const ownerPlayer = database.players.find(
+    (player) =>
+      player.campaign_id === campaignId && player.client_id === ownerClientId
+  );
+  const campaign = database.campaigns.find(
+    (candidate) => candidate.id === campaignId
+  );
+
+  assert.ok(ownerPlayer);
+  assert.ok(campaign);
+
+  const ownerActorKey = `player:${ownerPlayer.id}`;
+  campaign.metadata = {
+    ...(campaign.metadata as Record<string, unknown>),
+    inputTargets: [ownerActorKey],
+    inputPolicy: "only_targeted_players"
+  };
+
+  const joinerSubmitResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/submit",
+    headers: {
+      cookie: joinerCookie
+    },
+    payload: {
+      roomId: campaignId,
+      playerId: joinerClientId,
+      message: "I try to answer out of turn."
+    }
+  });
+
+  assert.equal(joinerSubmitResponse.statusCode, 403);
+
+  const ownerSubmitResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/submit",
+    headers: {
+      cookie: ownerCookie
+    },
+    payload: {
+      roomId: campaignId,
+      playerId: ownerClientId,
+      message: "I answer the call."
+    }
+  });
+
+  assert.equal(ownerSubmitResponse.statusCode, 200, ownerSubmitResponse.body);
+});
+
 test("multiplayer combat infers spell slots from explicit caster character sheet", async () => {
   const ownerCookie = await signIn("room-inferred-slots-owner@example.com");
   const joinerCookie = await signIn("room-inferred-slots-joiner@example.com");

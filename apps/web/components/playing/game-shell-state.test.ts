@@ -32,6 +32,7 @@ const completeProfile: PlayerProfile = {
 
 const currentRoomPlayer: RoomPlayer = {
   id: "player-1",
+  actorKey: "player:actor-1",
   slot: 1,
   username: "Ada at Table",
   characterName: "Nyx the Bright",
@@ -253,6 +254,20 @@ describe("game shell state helpers", () => {
     expect(
       inputTargetsCurrentPlayer(
         ["Other Player", "Ada at Table"],
+        completeProfile,
+        currentRoomPlayer
+      )
+    ).toBe(true);
+    expect(
+      inputTargetsCurrentPlayer(
+        ["player:actor-1"],
+        completeProfile,
+        currentRoomPlayer
+      )
+    ).toBe(true);
+    expect(
+      inputTargetsCurrentPlayer(
+        ["player:player-1"],
         completeProfile,
         currentRoomPlayer
       )

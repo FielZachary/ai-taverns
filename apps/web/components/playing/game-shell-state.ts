@@ -12,6 +12,7 @@ export type CampaignMode = "single_player" | "multiplayer";
 
 export type RoomPlayer = {
   id: string;
+  actorKey?: string;
   slot: number;
   username: string;
   characterName: string;
@@ -376,6 +377,9 @@ export function rollRequestTargetsCurrentPlayer(
   }
 
   const playerNames = [
+    roomPlayer?.actorKey,
+    roomPlayer?.id,
+    roomPlayer?.id ? `player:${roomPlayer.id}` : undefined,
     profile.username,
     profile.characterName,
     roomPlayer?.username,

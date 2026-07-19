@@ -28,6 +28,7 @@ export const DiceRollSubmissionSchema = z.object({
 
 export const RoomPlayerSchema = z.object({
   id: z.string().min(1),
+  actorKey: z.string().min(1),
   slot: z.number().int().nonnegative(),
   username: z.string(),
   characterName: z.string(),

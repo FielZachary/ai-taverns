@@ -1919,7 +1919,13 @@ function rollRequestTargetsPlayer(request: DiceRollRequest, player: PlayerRow) {
     return true;
   }
 
-  const playerNames = [player.username, player.character_name]
+  const playerNames = [
+    actorKeyForPlayer(player.id),
+    `player:${player.client_id}`,
+    player.client_id,
+    player.username,
+    player.character_name
+  ]
     .map(normalizeRollTarget)
     .filter((name): name is string => Boolean(name));
 
@@ -1935,7 +1941,13 @@ function inputTargetMatchesPlayer(target: string, player: PlayerRow) {
     return false;
   }
 
-  const playerNames = [player.username, player.character_name]
+  const playerNames = [
+    actorKeyForPlayer(player.id),
+    `player:${player.client_id}`,
+    player.client_id,
+    player.username,
+    player.character_name
+  ]
     .map(normalizeRollTarget)
     .filter((name): name is string => Boolean(name));
 
@@ -2290,6 +2302,7 @@ function rowToRoomPlayer(
 
   return {
     id: player.client_id,
+    actorKey: actorKeyForPlayer(player.id),
     slot: player.slot ?? 0,
     username: player.username,
     characterName: player.character_name,

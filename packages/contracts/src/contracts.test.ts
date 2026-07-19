@@ -281,6 +281,7 @@ test("room contracts accept snapshots and mutation payloads", () => {
     players: [
       {
         id: "client-1",
+        actorKey: "player:actor-1",
         slot: 0,
         username: "Player",
         characterName: "Stone",
