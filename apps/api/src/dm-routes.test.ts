@@ -254,6 +254,59 @@ test("DM parser failure traces keep the exact provider response", async () => {
   assert.match(provider?.rawResponse ?? "", /Seren lunges with her blade/);
 });
 
+test("DM runtime repairs plain prose provider responses into contract JSON", async () => {
+  const { cookie, campaignId } = await createSinglePlayerCampaign(
+    "dm-runtime-contract-repair"
+  );
+  resetProviderInputs();
+
+  const soloResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "TRIGGER_PROSE_DM_RESPONSE",
+      clientMessageId: "contract-repair-action"
+    }
+  });
+
+  assert.equal(soloResponse.statusCode, 200, soloResponse.body);
+  const solo = CampaignSoloTurnResponseSchema.parse(soloResponse.json());
+  const latestDmMessage = solo.messages.at(-1);
+
+  assert.equal(latestDmMessage?.role, "dm");
+  assert.match(latestDmMessage?.content ?? "", /Plain prose from the provider/);
+
+  const tracesResponse = await app.inject({
+    method: "GET",
+    url: `/api/campaigns/${campaignId}/debug-traces?limit=20`,
+    headers: {
+      cookie
+    }
+  });
+
+  assert.equal(tracesResponse.statusCode, 200, tracesResponse.body);
+  const traces = CampaignDebugTracesResponseSchema.parse(tracesResponse.json());
+  assert.ok(
+    traces.traces.some((trace) => trace.phase === "dm_contract_parse_failed")
+  );
+  assert.ok(
+    traces.traces.some(
+      (trace) => trace.phase === "dm_contract_repair_response_received"
+    )
+  );
+  assert.ok(traces.traces.some((trace) => trace.phase === "dm_turn_completed"));
+  assert.equal(getProviderInputs().length, 2);
+  assert.match(getProviderInputs()[0]?.message ?? "", /Current turn input JSON/);
+  assert.match(getProviderInputs()[0]?.message ?? "", /Output contract reminder/);
+  assert.match(
+    getProviderInputs()[1]?.message ?? "",
+    /Previous provider response/
+  );
+});
+
 test("solo turns send the current action once outside provider history", async () => {
   const { cookie, campaignId } = await createSinglePlayerCampaign(
     "dm-runtime-current-action-history"
