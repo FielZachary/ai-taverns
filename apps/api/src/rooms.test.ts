@@ -329,9 +329,25 @@ test("multiplayer combat catches up NPC turns instead of rejecting players", asy
     resolvedRoom.messages.at(-1)?.content ?? "",
     /cutlass raider's turn resolves first/i
   );
+  assert.match(
+    resolvedRoom.messages.at(-1)?.content ?? "",
+    /attack roll: 17 vs AC 14 - hit/i
+  );
+  assert.match(
+    resolvedRoom.messages.at(-1)?.content ?? "",
+    /damage roll: 1d6 \+ 2 = 6/i
+  );
+  assert.match(
+    resolvedRoom.messages.at(-1)?.content ?? "",
+    /6 slashing damage/i
+  );
   assert.doesNotMatch(
     resolvedRoom.messages.at(-1)?.content ?? "",
     /It is not your turn/i
+  );
+  assert.doesNotMatch(
+    resolvedRoom.messages.at(-1)?.content ?? "",
+    /lunges[^.]*What do you do/is
   );
 
   const updatedCampaign = database.campaigns.find(
@@ -339,9 +355,13 @@ test("multiplayer combat catches up NPC turns instead of rejecting players", asy
   );
   assert.ok(updatedCampaign);
   const mechanicsState = (updatedCampaign?.metadata as Record<string, unknown>)
-    .mechanicsState as { combat?: { turnOwner?: string | null } };
+    .mechanicsState as {
+      combat?: { turnOwner?: string | null };
+      actors?: Record<string, { currentHp?: number }>;
+    };
 
   assert.equal(mechanicsState.combat?.turnOwner, null);
+  assert.equal(mechanicsState.actors?.[ownerActorKey]?.currentHp, 14);
   assert.match(
     getProviderInputs().at(-1)?.instructions ?? "",
     /null for a multiplayer party prompt/
@@ -409,6 +429,18 @@ test("multiplayer combat catches up NPC turns instead of rejecting players", asy
   );
 
   assert.equal(secondResolvedRoom.messages.at(-1)?.role, "dm");
+  assert.match(
+    secondResolvedRoom.messages.at(-1)?.content ?? "",
+    /attack roll: 17 vs AC 14 - hit/i
+  );
+  assert.match(
+    secondResolvedRoom.messages.at(-1)?.content ?? "",
+    /damage roll: 1d6 \+ 2 = 6/i
+  );
+  assert.match(
+    secondResolvedRoom.messages.at(-1)?.content ?? "",
+    /6 slashing damage/i
+  );
   assert.doesNotMatch(
     secondResolvedRoom.messages.at(-1)?.content ?? "",
     /It is not your turn/i
@@ -420,9 +452,13 @@ test("multiplayer combat catches up NPC turns instead of rejecting players", asy
   const secondMechanicsState = (secondUpdatedCampaign?.metadata as Record<
     string,
     unknown
-  >).mechanicsState as { combat?: { turnOwner?: string | null } };
+  >).mechanicsState as {
+    combat?: { turnOwner?: string | null };
+    actors?: Record<string, { currentHp?: number }>;
+  };
 
   assert.equal(secondMechanicsState.combat?.turnOwner, null);
+  assert.equal(secondMechanicsState.actors?.[ownerActorKey]?.currentHp, 8);
 });
 
 test("room read and player update reject missing or forbidden campaigns", async () => {

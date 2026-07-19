@@ -3225,6 +3225,9 @@ const gameplayTurnOutputContractReminder = [
   "Do not end with next_input_needed player_actions while turnOwner is npc:*; set turnOwner to a player actor, or null for a multiplayer all-player prompt.",
   "If the stored turnOwner is an NPC key or NPC character name, do not let submitted player attacks or spells preempt that NPC turn.",
   "In singleplayer active combat, return control with turnOwner set to the player actor key, not null.",
+  "Resolve NPC attacks fully using explicit wording: 'attack roll: X vs AC Y - hit/miss'; on a hit, immediately state 'damage roll: dice = total damage', update player HP, then return control.",
+  "For NPC hits, public_narration must include the words attack roll, vs AC, and damage roll before injury narration.",
+  "Do not end an NPC turn with only a wind-up like lunges, swings, aims, starts casting, or bears down unless a player-facing roll or reaction is required first.",
   "Build combat actor names and keys only from the current scene and character sheets; never copy example NPC names into initiativeOrder.",
   "initiativeOrder should include active combatants only; exclude captives, bystanders, and noncombatants unless they can act in the fight."
 ].join("\n");

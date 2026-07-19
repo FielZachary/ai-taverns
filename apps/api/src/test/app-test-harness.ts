@@ -1435,9 +1435,23 @@ before(async () => {
                 ).filter((key) => key.startsWith("player:"))
               : [];
           const isMultiplayer = input.message.includes('"type": "multiplayer_turn"');
+          const mechanicsState = mechanicsJson
+            ? (JSON.parse(mechanicsJson) as {
+                actors?: Record<
+                  string,
+                  { characterName?: string; currentHp?: number; maxHp?: number }
+                >;
+              })
+            : undefined;
+          const targetPlayerKey = playerActorKeys[0] ?? "player:owner";
+          const targetPlayer = mechanicsState?.actors?.[targetPlayerKey];
+          const targetName = targetPlayer?.characterName ?? "the front-line hero";
+          const targetMaxHp = targetPlayer?.maxHp ?? 20;
+          const targetCurrentHp = targetPlayer?.currentHp ?? targetMaxHp;
+          const targetNextHp = Math.max(0, targetCurrentHp - 6);
           const content = JSON.stringify({
             public_narration:
-              "The cutlass raider's turn resolves first: he rushes the pier steps, slashing wild and missing as spray slicks the stone. The horn-blower falters behind him.\n\nControl returns to the heroes. The declared Scorching Ray is now ready to resolve from the player side.",
+              `The cutlass raider's turn resolves first. Cutlass raider attack roll: 17 vs AC 14 - hit. Cutlass raider damage roll: 1d6 + 2 = 6 slashing damage.\n\nThe rusted blade bites across ${targetName}'s ribs before the raider wrenches it free. ${targetName} drops from ${targetCurrentHp} HP to ${targetNextHp} HP, still standing but hurt.\n\nControl returns to the heroes. What do you do?`,
             roll_requests: [],
             next_input_needed: "player_actions",
             input_targets: [],
@@ -1464,6 +1478,12 @@ before(async () => {
                   characterName: "Horn-blower",
                   currentHp: 10,
                   maxHp: 10,
+                  conditions: []
+                },
+                [targetPlayerKey]: {
+                  characterName: targetName,
+                  currentHp: targetNextHp,
+                  maxHp: targetMaxHp,
                   conditions: []
                 }
               }

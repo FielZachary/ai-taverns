@@ -63,5 +63,10 @@ describe("DM prompt spell saving throw guidance", () => {
     assert.match(hardRuntimeContract, /NPC actor key or NPC character name/);
     assert.match(hardRuntimeContract, /never let a submitted player attack, spell, or movement interrupt/);
     assert.match(hardRuntimeContract, /do not use null for `turnOwner`/);
+    assert.match(hardRuntimeContract, /roll the NPC attack as the DM/);
+    assert.match(hardRuntimeContract, /attack roll: <total> vs AC <target AC> - hit\/miss/);
+    assert.match(hardRuntimeContract, /damage roll: <dice expression> = <total>/);
+    assert.match(hardRuntimeContract, /The words 'attack roll', 'vs AC', and 'damage roll'/);
+    assert.match(hardRuntimeContract, /Never end an NPC weapon or spell attack with only a wind-up/);
   });
 });

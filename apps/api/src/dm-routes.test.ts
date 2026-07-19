@@ -645,13 +645,20 @@ test("solo combat catches up NPC turns instead of rejecting the player", async (
         combat?: {
           turnOwner?: string | null;
         };
+        actors?: Record<string, { currentHp?: number }>;
       }
     | undefined;
 
   assert.equal(latestDmMessage?.role, "dm");
   assert.match(latestDmMessage?.content ?? "", /cutlass raider's turn resolves first/i);
+  assert.match(latestDmMessage?.content ?? "", /attack roll: 17 vs AC 14 - hit/i);
+  assert.match(latestDmMessage?.content ?? "", /damage roll: 1d6 \+ 2 = 6/i);
+  assert.match(latestDmMessage?.content ?? "", /6 slashing damage/i);
+  assert.match(latestDmMessage?.content ?? "", /drops from 24 HP to 18 HP/i);
   assert.doesNotMatch(latestDmMessage?.content ?? "", /It is not your turn/i);
+  assert.doesNotMatch(latestDmMessage?.content ?? "", /lunges[^.]*What do you do/is);
   assert.equal(combatState?.combat?.turnOwner, playerActorKey);
+  assert.equal(combatState?.actors?.[playerActorKey]?.currentHp, 18);
 
   const providerInput = getProviderInputs().at(-1);
   assert.ok(providerInput);
@@ -704,13 +711,18 @@ test("solo combat catches up NPC turns instead of rejecting the player", async (
           turnOwner?: string | null;
           round?: number;
         };
+        actors?: Record<string, { currentHp?: number }>;
       }
     | undefined;
 
   assert.equal(secondDmMessage?.role, "dm");
+  assert.match(secondDmMessage?.content ?? "", /attack roll: 17 vs AC 14 - hit/i);
+  assert.match(secondDmMessage?.content ?? "", /damage roll: 1d6 \+ 2 = 6/i);
+  assert.match(secondDmMessage?.content ?? "", /6 slashing damage/i);
   assert.doesNotMatch(secondDmMessage?.content ?? "", /It is not your turn/i);
   assert.equal(secondCombatState?.combat?.turnOwner, playerActorKey);
   assert.equal(secondCombatState?.combat?.round, 1);
+  assert.equal(secondCombatState?.actors?.[playerActorKey]?.currentHp, 12);
 });
 
 test("solo turns send the current action once outside provider history", async () => {
