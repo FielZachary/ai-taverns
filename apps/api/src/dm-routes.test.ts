@@ -329,6 +329,64 @@ test("DM runtime repairs plain prose provider responses into contract JSON", asy
   );
 });
 
+test("DM runtime repairs player-facing roll prose into structured roll requests", async () => {
+  const { cookie, campaignId } = await createSinglePlayerCampaign(
+    "dm-runtime-roll-request-repair"
+  );
+  resetProviderInputs();
+
+  const soloResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "TRIGGER_MISSING_ROLL_REQUEST",
+      clientMessageId: "roll-request-repair-action"
+    }
+  });
+
+  assert.equal(soloResponse.statusCode, 200, soloResponse.body);
+  const solo = CampaignSoloTurnResponseSchema.parse(soloResponse.json());
+  const latestDmMessage = solo.messages.at(-1);
+
+  assert.equal(latestDmMessage?.role, "dm");
+  assert.match(
+    latestDmMessage?.content ?? "",
+    /Make a Dexterity saving throw\.\n\nRoll 1d20 for Dexterity saving throw\./
+  );
+  assert.equal(solo.pendingRollRequests.length, 1);
+  assert.equal(solo.pendingRollRequest?.dice, "1d20");
+  assert.equal(solo.pendingRollRequest?.label, "Dexterity saving throw");
+
+  const tracesResponse = await app.inject({
+    method: "GET",
+    url: `/api/campaigns/${campaignId}/debug-traces?limit=20`,
+    headers: {
+      cookie
+    }
+  });
+
+  assert.equal(tracesResponse.statusCode, 200, tracesResponse.body);
+  const traces = CampaignDebugTracesResponseSchema.parse(tracesResponse.json());
+  assert.ok(
+    traces.traces.some((trace) => trace.phase === "dm_contract_parse_failed")
+  );
+  assert.ok(
+    traces.traces.some(
+      (trace) => trace.phase === "dm_roll_request_repair_response_received"
+    )
+  );
+  assert.ok(traces.traces.some((trace) => trace.phase === "dm_turn_completed"));
+  assert.equal(getProviderInputs().length, 2);
+  assert.match(getProviderInputs()[1]?.message ?? "", /Player-facing prose:/);
+  assert.doesNotMatch(
+    getProviderInputs()[1]?.message ?? "",
+    /Current turn input JSON/
+  );
+});
+
 test("solo turns send the current action once outside provider history", async () => {
   const { cookie, campaignId } = await createSinglePlayerCampaign(
     "dm-runtime-current-action-history"

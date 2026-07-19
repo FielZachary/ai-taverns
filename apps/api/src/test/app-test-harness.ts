@@ -748,6 +748,80 @@ class FakeDatabase {
       return { rows: [] as T[] };
     }
 
+    if (
+      normalizedSql.startsWith("update campaigns set metadata = case") &&
+      normalizedSql.includes("pendingRollRequest")
+    ) {
+      const campaignId = values[0] as string;
+      const pendingRollRequests = JSON.parse(values[1] as string) as unknown[];
+      const pendingRollRequest = JSON.parse(values[2] as string) as unknown;
+      const campaign = this.campaigns.find(
+        (candidate) => candidate.id === campaignId
+      );
+
+      if (campaign) {
+        const metadata = campaign.metadata as Record<string, unknown>;
+
+        if (pendingRollRequests.length === 0) {
+          const {
+            pendingRollRequest: _pendingRollRequest,
+            pendingRollRequests: _pendingRollRequests,
+            ...nextMetadata
+          } = metadata;
+          void _pendingRollRequest;
+          void _pendingRollRequests;
+          campaign.metadata = nextMetadata;
+        } else {
+          campaign.metadata = {
+            ...metadata,
+            pendingRollRequest,
+            pendingRollRequests
+          };
+        }
+
+        campaign.updated_at = new Date();
+      }
+
+      return { rows: [] as T[] };
+    }
+
+    if (
+      normalizedSql.startsWith("update campaigns set metadata = case") &&
+      normalizedSql.includes("inputTargets")
+    ) {
+      const campaignId = values[0] as string;
+      const inputTargets = JSON.parse(values[1] as string) as unknown[];
+      const inputPolicy = JSON.parse(values[2] as string) as unknown;
+      const campaign = this.campaigns.find(
+        (candidate) => candidate.id === campaignId
+      );
+
+      if (campaign) {
+        const metadata = campaign.metadata as Record<string, unknown>;
+
+        if (inputTargets.length === 0) {
+          const {
+            inputTargets: _inputTargets,
+            inputPolicy: _inputPolicy,
+            ...nextMetadata
+          } = metadata;
+          void _inputTargets;
+          void _inputPolicy;
+          campaign.metadata = nextMetadata;
+        } else {
+          campaign.metadata = {
+            ...metadata,
+            inputTargets,
+            inputPolicy
+          };
+        }
+
+        campaign.updated_at = new Date();
+      }
+
+      return { rows: [] as T[] };
+    }
+
     if (normalizedSql.startsWith("update campaigns set metadata = jsonb_set")) {
       const campaignId = values[0] as string;
       const openingPlan = JSON.parse(values[1] as string) as Record<
@@ -1182,12 +1256,79 @@ before(async () => {
           };
         }
 
+        if (input.instructions.includes("AI Taverns roll request formatter")) {
+          const content = JSON.stringify({
+            public_narration: "Make a Dexterity saving throw.",
+            roll_requests: [
+              {
+                dice: "1d20",
+                label: "Dexterity saving throw"
+              }
+            ],
+            next_input_needed: "dice_results",
+            input_targets: [],
+            input_policy: "all_players"
+          });
+
+          return {
+            id: "provider-roll-repair-1",
+            content,
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: content,
+              model: "test-model",
+              temperature: 0.8,
+              providerTimings: []
+            }
+          };
+        }
+
         if (input.message.includes("TRIGGER_PROSE_DM_RESPONSE")) {
           const content =
             "Plain prose from the provider becomes contract JSON.\n\nWhat do you do?";
 
           return {
             id: "provider-prose-1",
+            content,
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: content,
+              model: "test-model",
+              temperature: 0.8,
+              providerTimings: []
+            }
+          };
+        }
+
+        if (input.message.includes("TRIGGER_MISSING_ROLL_REQUEST")) {
+          const content = JSON.stringify({
+            public_narration: "Make a Dexterity saving throw.",
+            roll_requests: [],
+            next_input_needed: "player_actions",
+            input_targets: [],
+            input_policy: "all_players"
+          });
+
+          return {
+            id: "provider-missing-roll-request",
             content,
             debug: {
               requestMessages: [
