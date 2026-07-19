@@ -43,6 +43,39 @@ describe("parseHermesDmContract", () => {
     assert.equal(result.nextInputNeeded, "player_actions");
   });
 
+  it("preserves mechanics state updates from DM JSON", () => {
+    const result = parseHermesDmContract(
+      JSON.stringify({
+        public_narration: "Mara staggers but keeps her feet. What do you do?",
+        roll_requests: [],
+        next_input_needed: "player_actions",
+        input_targets: [],
+        input_policy: "all_players",
+        mechanics_state_update: {
+          actors: {
+            "npc:mara": {
+              characterName: "Mara",
+              currentHp: 33,
+              maxHp: 45,
+              conditions: []
+            }
+          }
+        }
+      })
+    );
+
+    assert.deepEqual(result.mechanicsStateUpdate, {
+      actors: {
+        "npc:mara": {
+          characterName: "Mara",
+          currentHp: 33,
+          maxHp: 45,
+          conditions: []
+        }
+      }
+    });
+  });
+
   it("does not treat character sheet combat terms as the submitted action", () => {
     const result = parseHermesDmContract(
       contract(

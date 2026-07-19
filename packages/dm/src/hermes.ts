@@ -356,6 +356,7 @@ export type HermesDmContractResponse = {
   nextInputNeeded: "player_actions" | "dice_results";
   inputTargets: string[];
   inputPolicy: InputPolicy;
+  mechanicsStateUpdate?: Record<string, unknown>;
   setting?: {
     displayLocation?: string;
     worldName?: string;
@@ -388,6 +389,9 @@ export function parseHermesDmContract(
       ? "only_targeted_players"
       : "all_players";
   const setting = asObject(parsed.setting);
+  const mechanicsStateUpdate = asObject(
+    parsed.mechanics_state_update ?? parsed.mechanicsStateUpdate
+  );
   const displayLocation =
     stringValue(setting?.display_location) ||
     stringValue(setting?.displayLocation);
@@ -437,6 +441,7 @@ export function parseHermesDmContract(
     nextInputNeeded,
     inputTargets,
     inputPolicy,
+    ...(mechanicsStateUpdate ? { mechanicsStateUpdate } : {}),
     ...(settingValue ? { setting: settingValue } : {})
   };
 }

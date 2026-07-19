@@ -1242,7 +1242,7 @@ before(async () => {
           input.message.includes("TRIGGER_RESOLVED_COMBAT_WITHOUT_ROLLS")
         ) {
           const content = JSON.stringify({
-            public_narration:
+            narration_text:
               "Seren lunges with her blade. The strike hits the bandit squarely, opening a deep wound before he staggers back.",
             roll_requests: [],
             next_input_needed: "player_actions",
