@@ -98,29 +98,22 @@ vi.mock("./PlayerInput", async () => {
       {
         draft: string;
         isSending: boolean;
-        isSubmitted: boolean;
-        lockMessage?: string;
         onDraftChange: (value: string) => void;
         onSubmit: (event: FormEvent<HTMLFormElement>) => void;
       }
     >(function MockPlayerInput(
-      { draft, isSending, isSubmitted, lockMessage, onDraftChange, onSubmit },
+      { draft, isSending, onDraftChange, onSubmit },
       ref
     ) {
       return (
         <form onSubmit={onSubmit}>
-          {lockMessage ? <p>{lockMessage}</p> : null}
           <textarea
             aria-label="Turn draft"
             onChange={(event) => onDraftChange(event.target.value)}
-            readOnly={Boolean(lockMessage) || isSubmitted}
             ref={ref}
             value={draft}
           />
-          <button
-            disabled={isSending || Boolean(lockMessage) || isSubmitted || !draft.trim()}
-            type="submit"
-          >
+          <button disabled={isSending || !draft.trim()} type="submit">
             Send
           </button>
         </form>
@@ -280,60 +273,6 @@ afterEach(() => {
 });
 
 describe("GameShell", () => {
-  it("locks turn input while another player owns the combat turn", async () => {
-    localStorage.setItem("ai-dnd.playerId", "player-2");
-    listCampaignsMock.mockResolvedValue([multiplayerCampaign]);
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-
-      if (url.startsWith("/api/room?")) {
-        return responseJson(
-          multiplayerRoomSnapshot({
-            hasBegun: true,
-            messages: [
-              {
-                id: "dm-jin-turn",
-                role: "dm",
-                content: "Jin, you are up. What do you do?",
-                createdAt: "2026-07-12T00:00:00.000Z"
-              }
-            ],
-            combat: {
-              active: true,
-              round: 2,
-              turnOwner: "player:player-1",
-              turnOwnerPlayerId: "player-1",
-              turnOwnerCharacterName: "Ash",
-              initiativeOrder: [
-                "player:player-1",
-                "npc:armored-figure",
-                "player:player-2"
-              ]
-            }
-          })
-        );
-      }
-
-      if (url === "/api/auth/claim-guest-state") {
-        return responseJson({});
-      }
-
-      throw new Error(`Unexpected fetch: ${url}`);
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    render(<GameShell initialCampaignId={multiplayerCampaign.id} />);
-
-    expect(await screen.findByText("Jin, you are up. What do you do?"))
-      .toBeInTheDocument();
-    expect(screen.getByText("Waiting on Ash's combat turn")).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "Turn draft" })).toHaveAttribute(
-      "readonly"
-    );
-    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Send turn" })).toBeDisabled();
-  });
-
   it("shows a turn submit failure and unlocks the input for retry", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);

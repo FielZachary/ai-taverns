@@ -2584,6 +2584,20 @@ function normalizeCombatTurnOwnerForInput(
     return state;
   }
 
+  if (
+    input.mode === "multiplayer" &&
+    input.inputPolicy === "all_players" &&
+    state.combat.turnOwner?.startsWith("player:")
+  ) {
+    return {
+      ...state,
+      combat: {
+        ...state.combat,
+        turnOwner: null
+      }
+    };
+  }
+
   if (input.mode === "single_player" && state.combat.turnOwner === null) {
     const livingPlayerActorKeys = Object.entries(state.actors)
       .filter(

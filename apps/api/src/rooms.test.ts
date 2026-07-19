@@ -360,7 +360,7 @@ test("multiplayer combat catches up NPC turns instead of rejecting players", asy
       actors?: Record<string, { currentHp?: number }>;
     };
 
-  assert.equal(mechanicsState.combat?.turnOwner, ownerActorKey);
+  assert.equal(mechanicsState.combat?.turnOwner, null);
   assert.equal(mechanicsState.actors?.[ownerActorKey]?.currentHp, 14);
   assert.match(
     getProviderInputs().at(-1)?.instructions ?? "",
@@ -457,7 +457,7 @@ test("multiplayer combat catches up NPC turns instead of rejecting players", asy
     actors?: Record<string, { currentHp?: number }>;
   };
 
-  assert.equal(secondMechanicsState.combat?.turnOwner, ownerActorKey);
+  assert.equal(secondMechanicsState.combat?.turnOwner, null);
   assert.equal(secondMechanicsState.actors?.[ownerActorKey]?.currentHp, 8);
 });
 
@@ -531,112 +531,6 @@ test("room snapshots expose active combat turn owner for clients", async () => {
   assert.equal(room.combat.turnOwner, ownerActorKey);
   assert.equal(room.combat.turnOwnerPlayerId, ownerClientId);
   assert.equal(room.combat.turnOwnerCharacterName, "Owner Character");
-});
-
-test("room submit rejects combat actions from a player waiting on another player's turn", async () => {
-  const { ownerCookie, joinerCookie, campaignId, ownerClientId, joinerClientId } =
-    await createMultiplayerRoom("room-player-turn-gate");
-
-  const beginResponse = await app.inject({
-    method: "POST",
-    url: "/api/room/begin",
-    headers: {
-      cookie: ownerCookie
-    },
-    payload: {
-      roomId: campaignId
-    }
-  });
-
-  assert.equal(beginResponse.statusCode, 200, beginResponse.body);
-
-  const ownerActorKey = `player:${ownerClientId}`;
-  const joinerActorKey = `player:${joinerClientId}`;
-  const campaign = database.campaigns.find(
-    (candidate) => candidate.id === campaignId
-  );
-  assert.ok(campaign);
-  campaign.metadata = {
-    ...(campaign.metadata as Record<string, unknown>),
-    inputTargets: [],
-    inputPolicy: "all_players",
-    mechanicsState: {
-      combat: {
-        active: true,
-        round: 2,
-        turnOwner: ownerActorKey,
-        initiativeOrder: [ownerActorKey, "npc:armored-figure", joinerActorKey]
-      },
-      actors: {
-        [ownerActorKey]: {
-          characterName: "Owner Character",
-          currentHp: 11,
-          maxHp: 20,
-          conditions: []
-        },
-        [joinerActorKey]: {
-          characterName: "Joined Character",
-          currentHp: 18,
-          maxHp: 18,
-          conditions: []
-        },
-        "npc:armored-figure": {
-          characterName: "Armored figure",
-          currentHp: 7,
-          maxHp: 26,
-          conditions: []
-        }
-      }
-    }
-  };
-
-  const readResponse = await app.inject({
-    method: "GET",
-    url: `/api/room?roomId=${campaignId}`,
-    headers: {
-      cookie: joinerCookie
-    }
-  });
-
-  assert.equal(readResponse.statusCode, 200, readResponse.body);
-  const room = RoomReadResponseSchema.parse(readResponse.json());
-  assert.equal(room.combat.turnOwner, ownerActorKey);
-  assert.equal(room.combat.turnOwnerPlayerId, ownerClientId);
-  assert.equal(room.combat.turnOwnerCharacterName, "Owner Character");
-
-  const joinerSubmitResponse = await app.inject({
-    method: "POST",
-    url: "/api/room/submit",
-    headers: {
-      cookie: joinerCookie
-    },
-    payload: {
-      roomId: campaignId,
-      playerId: joinerClientId,
-      message: "I swing my greataxe at the figure."
-    }
-  });
-
-  assert.equal(joinerSubmitResponse.statusCode, 400, joinerSubmitResponse.body);
-  assert.match(
-    ApiErrorResponseSchema.parse(joinerSubmitResponse.json()).error.message,
-    /It is not your turn/
-  );
-
-  const ownerSubmitResponse = await app.inject({
-    method: "POST",
-    url: "/api/room/submit",
-    headers: {
-      cookie: ownerCookie
-    },
-    payload: {
-      roomId: campaignId,
-      playerId: ownerClientId,
-      message: "I cast Magic Missile at the figure."
-    }
-  });
-
-  assert.equal(ownerSubmitResponse.statusCode, 200, ownerSubmitResponse.body);
 });
 
 test("room submit accepts targeted input by mechanics actor key", async () => {

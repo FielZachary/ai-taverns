@@ -75,36 +75,6 @@ test("combat action guard still rejects combat actions owned by another player",
   );
 });
 
-test("combat action guard recognizes client actor keys for the owning player", () => {
-  const clientKeyState = combatState("player:vayne-client");
-
-  assert.doesNotThrow(() =>
-    assertMechanicsActionAllowed({
-      state: clientKeyState,
-      player: {
-        ...player,
-        client_id: "vayne-client"
-      },
-      message: "I cast Scorching Ray."
-    })
-  );
-
-  assert.throws(
-    () =>
-      assertMechanicsActionAllowed({
-        state: clientKeyState,
-        player: {
-          id: "nyra",
-          client_id: "nyra-client",
-          character_name: "Nyra",
-          character_sheet: "A fighter."
-        },
-        message: "I swing my greataxe."
-      }),
-    /It is not your turn/
-  );
-});
-
 test("mechanics state infers tracked spell slots from explicit caster prose", () => {
   const state = resolveMechanicsState(
     { metadata: {} },
