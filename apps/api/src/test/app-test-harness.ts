@@ -1418,6 +1418,92 @@ before(async () => {
           };
         }
 
+        if (input.message.includes("I cast fireball on Mara")) {
+          const mechanicsJson = input.message.match(
+            /If mechanicsState conflicts[\s\S]*?\n(\{[\s\S]*?\})\n\nCurrent turn input JSON:/
+          )?.[1];
+          const playerActorKey =
+            mechanicsJson
+              ? Object.keys(
+                  (JSON.parse(mechanicsJson) as {
+                    actors?: Record<string, unknown>;
+                  }).actors ?? {}
+                ).find((key) => key.startsWith("player:"))
+              : undefined;
+          const content = JSON.stringify({
+            public_narration:
+              "Seren casts Fireball. Mara and two Drowned Choir raiders are inside the spell radius.\n\nMara rolls 15 and succeeds. The first raider rolls 9 and fails. The second raider rolls 11 and fails.\n\nRoll 8d6 for Fireball damage.",
+            roll_requests: [
+              {
+                player: "Owner",
+                dice: "8d6",
+                modifier: 0,
+                label: "Fireball damage",
+                advantage_state: "normal",
+                reason:
+                  "Resolve Fireball damage after NPC Dexterity saving throws"
+              }
+            ],
+            next_input_needed: "dice_results",
+            input_targets: ["Owner"],
+            input_policy: "only_targeted_players",
+            mechanics_state_update: {
+              combat: {
+                active: true,
+                round: 1,
+                turnOwner: playerActorKey ?? "player:owner",
+                initiativeOrder: [
+                  playerActorKey ?? "player:owner",
+                  "npc:mara",
+                  "npc:drowned-choir-raider-1",
+                  "npc:drowned-choir-raider-2"
+                ]
+              },
+              actors: {
+                "npc:mara": {
+                  characterName: "Mara",
+                  currentHp: 45,
+                  maxHp: 45,
+                  conditions: []
+                },
+                "npc:drowned-choir-raider-1": {
+                  characterName: "Drowned Choir raider",
+                  currentHp: 16,
+                  maxHp: 16,
+                  conditions: []
+                },
+                "npc:drowned-choir-raider-2": {
+                  characterName: "Drowned Choir raider",
+                  currentHp: 16,
+                  maxHp: 16,
+                  conditions: []
+                }
+              }
+            }
+          });
+
+          return {
+            id: "provider-initiative-fireball",
+            content,
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: content,
+              model: "test-model",
+              temperature: 0.8,
+              providerTimings: []
+            }
+          };
+        }
+
         if (input.instructions.includes("campaign-opening planner")) {
           const selectedRegion =
             input.message.match(/Region: ([^.]+)\./)?.[1] ?? "Cael Ambrose";
