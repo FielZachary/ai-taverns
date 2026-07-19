@@ -577,6 +577,88 @@ test("surprise opening combat resolves the opening roll before initiative", asyn
   assert.equal(afterDamage.pendingRollRequest?.label, "Initiative");
 });
 
+test("solo combat catches up NPC turns instead of rejecting the player", async () => {
+  const { cookie, campaignId } = await createSinglePlayerCampaign(
+    "dm-runtime-npc-catchup"
+  );
+  const playerActorKey = "player:dm-runtime-npc-catchup-client";
+  const campaign = database.campaigns.find(
+    (candidate) => candidate.id === campaignId
+  );
+
+  assert.ok(campaign);
+  campaign.metadata = {
+    ...(campaign.metadata as Record<string, unknown>),
+    mechanicsState: {
+      combat: {
+        active: true,
+        round: 1,
+        turnOwner: "npc:cutlass-raider",
+        initiativeOrder: [
+          playerActorKey,
+          "npc:cutlass-raider",
+          "npc:horn-blower"
+        ]
+      },
+      actors: {
+        [playerActorKey]: {
+          characterName: "Seren",
+          currentHp: 24,
+          maxHp: 24,
+          conditions: []
+        },
+        "npc:cutlass-raider": {
+          characterName: "Cutlass raider",
+          currentHp: 12,
+          maxHp: 12,
+          conditions: []
+        },
+        "npc:horn-blower": {
+          characterName: "Horn-blower",
+          currentHp: 10,
+          maxHp: 10,
+          conditions: []
+        }
+      }
+    }
+  };
+  resetProviderInputs();
+
+  const soloResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "I cast Scorching Ray at the cutlass raider.",
+      clientMessageId: "npc-catchup-scorching-ray"
+    }
+  });
+
+  assert.equal(soloResponse.statusCode, 200, soloResponse.body);
+  const solo = CampaignSoloTurnResponseSchema.parse(soloResponse.json());
+  const latestDmMessage = solo.messages.at(-1);
+  const debug = latestDmMessage?.debug as DebugFields | undefined;
+  const combatState = debug?.combatState as
+    | {
+        combat?: {
+          turnOwner?: string | null;
+        };
+      }
+    | undefined;
+
+  assert.equal(latestDmMessage?.role, "dm");
+  assert.match(latestDmMessage?.content ?? "", /cutlass raider's turn resolves first/i);
+  assert.doesNotMatch(latestDmMessage?.content ?? "", /It is not your turn/i);
+  assert.equal(combatState?.combat?.turnOwner, playerActorKey);
+
+  const providerInput = getProviderInputs().at(-1);
+  assert.ok(providerInput);
+  assert.match(providerInput.instructions, /resolve that NPC turn immediately/);
+  assert.match(providerInput.message, /turnOwner is or becomes npc:\*/);
+});
+
 test("solo turns send the current action once outside provider history", async () => {
   const { cookie, campaignId } = await createSinglePlayerCampaign(
     "dm-runtime-current-action-history"

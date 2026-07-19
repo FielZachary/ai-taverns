@@ -1419,6 +1419,79 @@ before(async () => {
         }
 
         if (
+          input.message.toLowerCase().includes("scorching ray") &&
+          input.message.toLowerCase().includes("cutlass raider")
+        ) {
+          const mechanicsJson = input.message.match(
+            /If mechanicsState conflicts[\s\S]*?\n(\{[\s\S]*?\})\n\nCurrent turn input JSON:/
+          )?.[1];
+          const playerActorKeys =
+            mechanicsJson
+              ? Object.keys(
+                  (JSON.parse(mechanicsJson) as {
+                    actors?: Record<string, unknown>;
+                  }).actors ?? {}
+                ).filter((key) => key.startsWith("player:"))
+              : [];
+          const isMultiplayer = input.message.includes('"type": "multiplayer_turn"');
+          const content = JSON.stringify({
+            public_narration:
+              "The cutlass raider's turn resolves first: he rushes the pier steps, slashing wild and missing as spray slicks the stone. The horn-blower falters behind him.\n\nControl returns to the heroes. The declared Scorching Ray is now ready to resolve from the player side.",
+            roll_requests: [],
+            next_input_needed: "player_actions",
+            input_targets: [],
+            input_policy: "all_players",
+            mechanics_state_update: {
+              combat: {
+                active: true,
+                round: 1,
+                turnOwner: isMultiplayer ? null : (playerActorKeys[0] ?? "player:owner"),
+                initiativeOrder: [
+                  ...(playerActorKeys.length > 0 ? playerActorKeys : ["player:owner"]),
+                  "npc:cutlass-raider",
+                  "npc:horn-blower"
+                ]
+              },
+              actors: {
+                "npc:cutlass-raider": {
+                  characterName: "Cutlass raider",
+                  currentHp: 12,
+                  maxHp: 12,
+                  conditions: []
+                },
+                "npc:horn-blower": {
+                  characterName: "Horn-blower",
+                  currentHp: 10,
+                  maxHp: 10,
+                  conditions: []
+                }
+              }
+            }
+          });
+
+          return {
+            id: "provider-npc-turn-catchup",
+            content,
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: content,
+              model: "test-model",
+              temperature: 0.8,
+              providerTimings: []
+            }
+          };
+        }
+
+        if (
           input.message.includes("I rolled 8d6") &&
           input.message.includes("Fireball damage")
         ) {

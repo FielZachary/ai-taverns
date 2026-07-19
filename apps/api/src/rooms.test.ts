@@ -9,7 +9,13 @@ import {
   RoomSubmitResponseSchema
 } from "@ai-dnd/contracts";
 
-import { app, database, signIn } from "./test/app-test-harness.js";
+import {
+  app,
+  database,
+  getProviderInputs,
+  resetProviderInputs,
+  signIn
+} from "./test/app-test-harness.js";
 
 async function createMultiplayerRoom(label: string) {
   const ownerCookie = await signIn(`${label}-owner@example.com`);
@@ -203,6 +209,141 @@ test("room routes read, update player, begin, and submit through Fastify", async
       (turn) => turn.campaign_id === created.campaign.id && turn.status === "resolved"
     ).length,
     2
+  );
+});
+
+test("multiplayer combat catches up NPC turns instead of rejecting players", async () => {
+  const {
+    ownerCookie,
+    joinerCookie,
+    campaignId,
+    ownerClientId,
+    joinerClientId
+  } = await createMultiplayerRoom("room-npc-catchup");
+
+  const beginResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/begin",
+    headers: {
+      cookie: ownerCookie
+    },
+    payload: {
+      roomId: campaignId
+    }
+  });
+
+  assert.equal(beginResponse.statusCode, 200, beginResponse.body);
+
+  const ownerActorKey = `player:${ownerClientId}`;
+  const joinerActorKey = `player:${joinerClientId}`;
+  const campaign = database.campaigns.find(
+    (candidate) => candidate.id === campaignId
+  );
+
+  assert.ok(campaign);
+  campaign.metadata = {
+    ...(campaign.metadata as Record<string, unknown>),
+    inputTargets: [],
+    inputPolicy: "all_players",
+    mechanicsState: {
+      combat: {
+        active: true,
+        round: 1,
+        turnOwner: "npc:cutlass-raider",
+        initiativeOrder: [
+          ownerActorKey,
+          joinerActorKey,
+          "npc:cutlass-raider",
+          "npc:horn-blower"
+        ]
+      },
+      actors: {
+        [ownerActorKey]: {
+          characterName: "Owner Character",
+          currentHp: 20,
+          maxHp: 20,
+          conditions: []
+        },
+        [joinerActorKey]: {
+          characterName: "Joined Character",
+          currentHp: 18,
+          maxHp: 18,
+          conditions: []
+        },
+        "npc:cutlass-raider": {
+          characterName: "Cutlass raider",
+          currentHp: 12,
+          maxHp: 12,
+          conditions: []
+        },
+        "npc:horn-blower": {
+          characterName: "Horn-blower",
+          currentHp: 10,
+          maxHp: 10,
+          conditions: []
+        }
+      }
+    }
+  };
+  resetProviderInputs();
+
+  const firstSubmitResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/submit",
+    headers: {
+      cookie: joinerCookie
+    },
+    payload: {
+      roomId: campaignId,
+      playerId: joinerClientId,
+      message: "I cast Scorching Ray at the cutlass raider."
+    }
+  });
+
+  assert.equal(firstSubmitResponse.statusCode, 200, firstSubmitResponse.body);
+  const firstSubmit = RoomSubmitResponseSchema.parse(firstSubmitResponse.json());
+  assert.equal(
+    firstSubmit.players.find((player) => player.id === joinerClientId)?.status,
+    "submitted"
+  );
+
+  const resolvingSubmitResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/submit",
+    headers: {
+      cookie: ownerCookie
+    },
+    payload: {
+      roomId: campaignId,
+      playerId: ownerClientId,
+      message: "I cover the Scorching Ray cast from the pier."
+    }
+  });
+
+  assert.equal(resolvingSubmitResponse.statusCode, 200, resolvingSubmitResponse.body);
+  const resolvedRoom = RoomSubmitResponseSchema.parse(
+    resolvingSubmitResponse.json()
+  );
+  assert.equal(resolvedRoom.messages.at(-1)?.role, "dm");
+  assert.match(
+    resolvedRoom.messages.at(-1)?.content ?? "",
+    /cutlass raider's turn resolves first/i
+  );
+  assert.doesNotMatch(
+    resolvedRoom.messages.at(-1)?.content ?? "",
+    /It is not your turn/i
+  );
+
+  const updatedCampaign = database.campaigns.find(
+    (candidate) => candidate.id === campaignId
+  );
+  const mechanicsState = (updatedCampaign?.metadata as Record<string, unknown>)
+    .mechanicsState as { combat?: { turnOwner?: string | null } };
+
+  assert.equal(mechanicsState.combat?.turnOwner, null);
+  assert.match(
+    getProviderInputs().at(-1)?.instructions ?? "",
+    /null for a multiplayer party prompt/
   );
 });
 

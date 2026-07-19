@@ -470,6 +470,10 @@ function isCombatAction(message: string) {
   );
 }
 
+function isNpcActorKey(actorKey: string) {
+  return actorKey.startsWith("npc:");
+}
+
 export function assertMechanicsActionAllowed(input: {
   state: MechanicsState;
   player: PlayerLike;
@@ -489,7 +493,11 @@ export function assertMechanicsActionAllowed(input: {
       input.state.combat.turnOwner === actorKey ||
       (exactCharacterName && exactTurnOwner === exactCharacterName);
 
-    if (!isTurnOwner && isCombatAction(input.message)) {
+    if (
+      !isTurnOwner &&
+      !isNpcActorKey(input.state.combat.turnOwner) &&
+      isCombatAction(input.message)
+    ) {
       throw new Error("It is not your turn.");
     }
   }
