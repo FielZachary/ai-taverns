@@ -480,6 +480,103 @@ test("solo combat turn can start initiative through mechanics state update", asy
   assert.match(providerInput.message, /include active combatants only/);
 });
 
+test("surprise opening combat resolves the opening roll before initiative", async () => {
+  const cookie = await signIn("dm-runtime-surprise-initiative@example.com");
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: {
+      cookie
+    },
+    payload: {
+      mode: "single_player",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "high_adventure",
+      ownerClientId: "dm-runtime-surprise-initiative-client",
+      playerName: "Owner",
+      characterName: "Seren",
+      characterSheet: [
+        "Class: Sorcerer",
+        "Max HP: 32",
+        "Current HP: 32",
+        "Spell Slots",
+        "3rd-level slots: 2 total, 0 used, 2 remaining"
+      ].join("\n"),
+      mechanicsSeed: {
+        characterClass: "Sorcerer",
+        level: 5,
+        maxHp: 32,
+        currentHp: 32,
+        spellSlots: {
+          "3": { max: 2, used: 0 }
+        }
+      }
+    }
+  });
+  const created = CampaignCreateResponseSchema.parse(createResponse.json());
+  resetProviderInputs();
+
+  const soloResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${created.campaign.id}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "Mara has not noticed me, so I cast fireball on Mara",
+      clientMessageId: "surprise-fireball-action"
+    }
+  });
+
+  assert.equal(soloResponse.statusCode, 200, soloResponse.body);
+  const solo = CampaignSoloTurnResponseSchema.parse(soloResponse.json());
+  const latestDmMessage = solo.messages.at(-1);
+
+  assert.equal(latestDmMessage?.role, "dm");
+  assert.match(latestDmMessage?.content ?? "", /Roll 8d6 for Fireball damage/);
+  assert.equal(solo.pendingRollRequest?.dice, "8d6");
+  assert.equal(solo.pendingRollRequest?.label, "Fireball damage");
+  assert.equal(solo.pendingRollRequest?.modifier, 0);
+  assert.doesNotMatch(latestDmMessage?.content ?? "", /Roll 1d20 \+ 2 for initiative/);
+
+  const providerInput = getProviderInputs().at(-1);
+  assert.ok(providerInput);
+  assert.match(providerInput.instructions, /surprise or the drop/);
+  assert.match(providerInput.message, /resolve the opening action's required rolls first/);
+
+  assert.ok(solo.pendingRollRequest?.id);
+  const damageResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${created.campaign.id}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      rollSubmissions: [
+        {
+          rollRequestId: solo.pendingRollRequest.id,
+          rollResult: {
+            rolls: [5, 1, 4, 1, 3, 6, 4, 5],
+            total: 29
+          },
+          clientMessageId: "surprise-fireball-damage"
+        }
+      ]
+    }
+  });
+
+  assert.equal(damageResponse.statusCode, 200, damageResponse.body);
+  const afterDamage = CampaignSoloTurnResponseSchema.parse(damageResponse.json());
+  const damageDmMessage = afterDamage.messages.at(-1);
+
+  assert.equal(damageDmMessage?.role, "dm");
+  assert.match(damageDmMessage?.content ?? "", /opening strike has landed/i);
+  assert.match(damageDmMessage?.content ?? "", /roll 1d20 \+ 2 for initiative/i);
+  assert.equal(afterDamage.pendingRollRequest?.dice, "1d20");
+  assert.equal(afterDamage.pendingRollRequest?.modifier, 2);
+  assert.equal(afterDamage.pendingRollRequest?.label, "Initiative");
+});
+
 test("solo turns send the current action once outside provider history", async () => {
   const { cookie, campaignId } = await createSinglePlayerCampaign(
     "dm-runtime-current-action-history"

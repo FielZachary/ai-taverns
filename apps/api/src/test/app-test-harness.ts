@@ -1418,7 +1418,87 @@ before(async () => {
           };
         }
 
+        if (
+          input.message.includes("I rolled 8d6") &&
+          input.message.includes("Fireball damage")
+        ) {
+          const content = JSON.stringify({
+            public_narration:
+              "The surprise Fireball detonates across the pier. Mara staggers through the smoke, and the two raiders are thrown back by the blast.\n\nThe opening strike has landed. Now the rest of the fight catches up: roll 1d20 + 2 for initiative.",
+            roll_requests: [
+              {
+                player: "Owner",
+                dice: "1d20",
+                modifier: 2,
+                label: "Initiative",
+                advantage_state: "normal",
+                reason: "Determine turn order after the surprise opening strike"
+              }
+            ],
+            next_input_needed: "dice_results",
+            input_targets: ["Owner"],
+            input_policy: "only_targeted_players",
+            mechanics_state_update: {
+              combat: {
+                active: true,
+                round: 1,
+                turnOwner: "player:owner",
+                initiativeOrder: [
+                  "player:owner",
+                  "npc:mara",
+                  "npc:drowned-choir-raider-1",
+                  "npc:drowned-choir-raider-2"
+                ]
+              },
+              actors: {
+                "npc:mara": {
+                  characterName: "Mara",
+                  currentHp: 31,
+                  maxHp: 45,
+                  conditions: []
+                },
+                "npc:drowned-choir-raider-1": {
+                  characterName: "Drowned Choir raider",
+                  currentHp: 0,
+                  maxHp: 16,
+                  conditions: ["down"]
+                },
+                "npc:drowned-choir-raider-2": {
+                  characterName: "Drowned Choir raider",
+                  currentHp: 0,
+                  maxHp: 16,
+                  conditions: ["down"]
+                }
+              }
+            }
+          });
+
+          return {
+            id: "provider-surprise-fireball-damage",
+            content,
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: content,
+              model: "test-model",
+              temperature: 0.8,
+              providerTimings: []
+            }
+          };
+        }
+
         if (input.message.includes("I cast fireball on Mara")) {
+          const isSurpriseOpening = input.message.includes(
+            "Mara has not noticed me"
+          );
           const mechanicsJson = input.message.match(
             /If mechanicsState conflicts[\s\S]*?\n(\{[\s\S]*?\})\n\nCurrent turn input JSON:/
           )?.[1];
@@ -1432,16 +1512,28 @@ before(async () => {
               : undefined;
           const content = JSON.stringify({
             public_narration:
-              "Seren starts to cast Fireball, and Mara and the Drowned Choir raiders snap into motion.\n\nCombat begins. Roll 1d20 + 2 for initiative before the spell is resolved.",
+              isSurpriseOpening
+                ? "Seren catches Mara before she can react. Mara and two Drowned Choir raiders are inside the spell radius.\n\nMara rolls 15 and succeeds. The first raider rolls 9 and fails. The second raider rolls 11 and fails.\n\nRoll 8d6 for Fireball damage."
+                : "Seren starts to cast Fireball, and Mara and the Drowned Choir raiders snap into motion.\n\nCombat begins. Roll 1d20 + 2 for initiative before the spell is resolved.",
             roll_requests: [
-              {
-                player: "Owner",
-                dice: "1d20",
-                modifier: 2,
-                label: "Initiative",
-                advantage_state: "normal",
-                reason: "Determine turn order as combat begins"
-              }
+              isSurpriseOpening
+                ? {
+                    player: "Owner",
+                    dice: "8d6",
+                    modifier: 0,
+                    label: "Fireball damage",
+                    advantage_state: "normal",
+                    reason:
+                      "Resolve the surprise Fireball damage before initiative"
+                  }
+                : {
+                    player: "Owner",
+                    dice: "1d20",
+                    modifier: 2,
+                    label: "Initiative",
+                    advantage_state: "normal",
+                    reason: "Determine turn order as combat begins"
+                  }
             ],
             next_input_needed: "dice_results",
             input_targets: ["Owner"],
