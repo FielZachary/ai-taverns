@@ -10,7 +10,7 @@ const deepSeekBaseUrl = (
 ).replace(/\/+$/, "");
 const deepSeekModel = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const defaultDeepSeekTemperature = 0.8;
-const combatDeepSeekTemperature = 0.4;
+const combatDeepSeekTemperature = 0.2;
 const combatLanguagePattern =
   /\b(?:ac|armor class|attack(?:s|ed|ing)?|battle|combat|damage|enemy|enemies|fight(?:s|ing)?|foe(?:s)?|hit points?|hostile|hostilities|hp|initiative|kill(?:s|ed|ing)?|melee|npc turn|roll(?:s|ed|ing)? initiative|saving throw|strike(?:s|ing)?|weapon(?:s)?)\b/i;
 

@@ -175,8 +175,8 @@ test("DeepSeek provider lowers temperature for combat language", async () => {
     message: "I attack the bandit with my sword."
   });
 
-  assert.equal(requestBody?.temperature, 0.4);
-  assert.equal(response.debug.temperature, 0.4);
+  assert.equal(requestBody?.temperature, 0.2);
+  assert.equal(response.debug.temperature, 0.2);
 });
 
 test("DeepSeek provider does not lower temperature for system-only combat rules", async () => {
