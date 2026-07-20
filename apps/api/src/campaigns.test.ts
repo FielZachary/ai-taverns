@@ -355,6 +355,36 @@ test("mechanics state falls back to character sheet spell slots without seed", a
 
   assert.equal(createResponse.statusCode, 201, createResponse.body);
   const created = CampaignCreateResponseSchema.parse(createResponse.json());
+  const campaign = database.campaigns.find(
+    (candidate) => candidate.id === created.campaign.id
+  );
+  const player = database.players.find(
+    (candidate) => candidate.campaign_id === created.campaign.id
+  );
+
+  assert.ok(campaign);
+  assert.ok(player);
+  campaign.metadata = {
+    ...(campaign.metadata as Record<string, unknown>),
+    mechanicsState: {
+      combat: {
+        active: false,
+        round: 0,
+        turnOwner: null,
+        initiativeOrder: []
+      },
+      actors: {
+        [`player:${player.id}`]: {
+          characterName: "Jin",
+          currentHp: 32,
+          maxHp: 32,
+          concentration: null,
+          conditions: []
+        }
+      }
+    }
+  };
+
   const castResponse = await app.inject({
     method: "POST",
     url: `/api/campaigns/${created.campaign.id}/solo-turn`,

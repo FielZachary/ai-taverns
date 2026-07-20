@@ -336,6 +336,27 @@ function legacyActorFromSheet(player: PlayerLike): MechanicsState["actors"][stri
   };
 }
 
+function actorWithSheetFallback(
+  actor: MechanicsState["actors"][string] | undefined,
+  player: PlayerLike
+) {
+  const fallback = legacyActorFromSheet(player);
+
+  if (!actor) {
+    return fallback;
+  }
+
+  return {
+    ...actor,
+    characterName: actor.characterName || player.character_name,
+    currentHp: actor.currentHp ?? fallback.currentHp,
+    maxHp: actor.maxHp ?? fallback.maxHp,
+    spellSlots: actor.spellSlots ?? cloneSlots(fallback.spellSlots),
+    concentration: actor.concentration ?? null,
+    conditions: actor.conditions ?? []
+  };
+}
+
 export function resolveMechanicsState(
   campaign: CampaignLike,
   players: PlayerLike[]
@@ -347,7 +368,7 @@ export function resolveMechanicsState(
 
     for (const player of players) {
       const key = actorKeyForPlayer(player.id);
-      actors[key] ??= legacyActorFromSheet(player);
+      actors[key] = actorWithSheetFallback(actors[key], player);
     }
 
     return { ...persisted, actors };
