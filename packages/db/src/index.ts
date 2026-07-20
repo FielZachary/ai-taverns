@@ -3249,7 +3249,6 @@ function dmContractRepairInstructions() {
     "If the original response does not explicitly ask for dice, use an empty roll_requests array.",
     "If a setting field is not clear from the original response, omit that field or use an empty string.",
     "Fix mechanical contradictions before returning JSON. If an attack roll total is greater than or equal to AC, the attack hits; if it is lower than AC, the attack misses.",
-    "If the response asks for Lightning Bolt damage without visible Dexterity saves or initiative, fix that mechanics error using exactly the short spell-save template: '<caster> casts Lightning Bolt. <targets> are affected by the spell line.' Then '<target> rolls <number> and succeeds/fails.' Then 'Roll 8d6 for Lightning Bolt damage.' Do not say the target takes damage, full damage, half damage, HP loss, injury, defeat, death, or unconsciousness before the submitted damage roll.",
     "For NPC attacks, preserve DM-side attack and damage rolls in public_narration and do not put those DM-side rolls in roll_requests.",
     "Return only the JSON object. No Markdown. No commentary."
   ].join("\n");
@@ -3289,10 +3288,6 @@ const gameplayTurnOutputContractReminder = [
   "If the acting player clearly surprises unaware enemies, resolve the opening action's required rolls first, then ask initiative before enemy counteraction.",
   "Also include non-empty mechanics_state_update.combat with active, round, turnOwner, and provisional initiativeOrder as actor-key strings when initiative roll_requests pauses resolution.",
   "If combat turnOwner is or becomes npc:*, resolve NPC turns before returning control to players.",
-  "Before narrating a hostile outcome, check initiative/turn owner, triggered readied actions, attack rolls, saving throws, damage, HP, and conditions; if a required player-facing roll is missing, request it and stop.",
-  "Never write only 'Roll 8d6 for Lightning Bolt damage'; Lightning Bolt requires Dexterity saves in public_narration before 8d6 damage. After recorded saves, apply half damage rounded down on a success, update tracked HP/conditions, and do not narrate defeat unless HP reaches 0.",
-  "When a held/readied trigger occurs, resolve every triggered player action first; request Magic Missile 3d4 + 3 damage and weapon attack/damage rolls before narrating injury or defeat.",
-  "Do not say a player weapon attack hits, lands, connects, wounds, or misses before the attack roll is resolved.",
   "Off-turn player combat declarations are only stated intent, not actions already in motion; never say they are mid-swing, following immediately, or resolving before the next initiative actor.",
   "When multiple player submissions arrive in active combat, resolve the current turn owner's valid action first, keep other submissions as pending intent, and if the next actor is an enemy resolve that enemy turn before later player intent.",
   "Do not end with next_input_needed player_actions while turnOwner is npc:*; set turnOwner to a player actor, or null for a multiplayer all-player prompt.",
@@ -3877,21 +3872,11 @@ async function askDungeonMaster(
         parseError instanceof Error &&
         parseError.message ===
           "The DM provider contradicted an attack roll and AC comparison.";
-      const shouldRepairLightningBoltMissingSave =
-        parseError instanceof Error &&
-        parseError.message ===
-          "The DM provider requested Lightning Bolt damage without resolving saves or initiative.";
-      const shouldRepairLightningBoltPrematureDamage =
-        parseError instanceof Error &&
-        parseError.message ===
-          "The DM provider resolved Lightning Bolt damage before the submitted damage roll.";
 
       if (
         !shouldRepairInvalidJson &&
         !shouldRepairMissingStructuredRoll &&
-        !shouldRepairAttackRollContradiction &&
-        !shouldRepairLightningBoltMissingSave &&
-        !shouldRepairLightningBoltPrematureDamage
+        !shouldRepairAttackRollContradiction
       ) {
         throw parseError;
       }
