@@ -508,6 +508,7 @@ export type DungeonMasterRuntime = {
     message: string;
     instructions: string;
     history?: GameMessage[];
+    currentPlayerAction?: string;
     onPublicNarrationDelta?: (text: string) => void;
   }): Promise<DungeonMasterProviderResponse>;
   emitDmStreamEvent?(event: DmStreamEvent): void;
@@ -3773,6 +3774,7 @@ async function askDungeonMaster(
       message: providerMessage,
       instructions: promptContext?.instructions ?? instructionsWithWorldContext,
       history,
+      ...(currentPlayerAction ? { currentPlayerAction } : {}),
       ...(streamEmitter && streamTurnId
         ? {
             onPublicNarrationDelta: (text: string) => {
@@ -3862,7 +3864,8 @@ async function askDungeonMaster(
             message: formatDmRollRequestRepairRequest({
               publicNarration: publicNarrationFromProviderResponse(providerData.content)
             }),
-            instructions: dmRollRequestRepairInstructions()
+            instructions: dmRollRequestRepairInstructions(),
+            ...(currentPlayerAction ? { currentPlayerAction } : {})
           })
         : await runtime.askProvider({
             message: formatDmContractRepairRequest({
@@ -3870,7 +3873,8 @@ async function askDungeonMaster(
               providerResponse: providerData.content
             }),
             instructions: dmContractRepairInstructions(),
-            history
+            history,
+            ...(currentPlayerAction ? { currentPlayerAction } : {})
           });
 
       await logTurnDebugTrace(db, {
@@ -4967,7 +4971,8 @@ export async function askDungeonMasterQuestionForUser(
   const providerData = await runtime.askProvider({
     message: promptContext?.message ?? currentAction,
     instructions: promptContext?.instructions ?? instructions,
-    history
+    history,
+    currentPlayerAction: trimmedQuestion
   });
   const answer = answerFromAskDmProviderResponse(providerData.content);
   const questionMessageId = input.clientMessageId?.trim() || randomUUID();

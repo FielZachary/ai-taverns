@@ -53,6 +53,7 @@ export type DungeonMasterProviderInput = {
   message: string;
   instructions: string;
   history?: GameMessage[];
+  currentPlayerAction?: string;
   onPublicNarrationDelta?: (text: string) => void;
 };
 
@@ -275,10 +276,7 @@ function requestContentChars(messages: DeepSeekMessage[]) {
 }
 
 function providerTemperatureForInput(input: DungeonMasterProviderInput) {
-  const playerFacingContext = [
-    input.message,
-    ...(input.history ?? []).map((message) => message.content)
-  ].join("\n");
+  const playerFacingContext = input.currentPlayerAction ?? input.message;
 
   return combatLanguagePattern.test(playerFacingContext)
     ? combatDeepSeekTemperature
@@ -593,6 +591,7 @@ export async function askDungeonMasterProvider({
   message,
   instructions,
   history = [],
+  currentPlayerAction,
   onPublicNarrationDelta
 }: DungeonMasterProviderInput): Promise<DungeonMasterProviderResponse> {
   if (shouldUseTestProvider()) {
@@ -600,6 +599,7 @@ export async function askDungeonMasterProvider({
       message,
       instructions,
       history,
+      ...(currentPlayerAction ? { currentPlayerAction } : {}),
       ...(onPublicNarrationDelta ? { onPublicNarrationDelta } : {})
     });
   }
@@ -622,7 +622,8 @@ export async function askDungeonMasterProvider({
   const temperature = providerTemperatureForInput({
     message,
     instructions,
-    history
+    history,
+    ...(currentPlayerAction ? { currentPlayerAction } : {})
   });
 
   let requestMessages = messages;
