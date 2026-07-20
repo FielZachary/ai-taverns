@@ -28,6 +28,7 @@ export const DiceRollSubmissionSchema = z.object({
 
 export const RoomPlayerSchema = z.object({
   id: z.string().min(1),
+  actorKey: z.string().min(1),
   slot: z.number().int().nonnegative(),
   username: z.string(),
   characterName: z.string(),
@@ -60,6 +61,14 @@ export const RoomSnapshotSchema = z.object({
   pendingRollRequests: z.array(DiceRollRequestSchema),
   inputTargets: z.array(z.string()),
   inputPolicy: z.enum(["all_players", "only_targeted_players"]),
+  combat: z.object({
+    active: z.boolean(),
+    round: z.number().int().nonnegative(),
+    turnOwner: z.string().nullable(),
+    turnOwnerPlayerId: z.string().nullable(),
+    turnOwnerCharacterName: z.string().nullable(),
+    initiativeOrder: z.array(z.string())
+  }),
   updatedAt: z.string().datetime()
 });
 

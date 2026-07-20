@@ -387,6 +387,74 @@ test("DM runtime repairs player-facing roll prose into structured roll requests"
   );
 });
 
+test("DM runtime repairs contradictory attack roll and AC math", async () => {
+  const { cookie, campaignId } = await createSinglePlayerCampaign(
+    "dm-runtime-attack-roll-contradiction"
+  );
+  resetProviderInputs();
+
+  const soloResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "TRIGGER_ATTACK_ROLL_CONTRADICTION",
+      clientMessageId: "attack-roll-contradiction-action"
+    }
+  });
+
+  assert.equal(soloResponse.statusCode, 200, soloResponse.body);
+  const solo = CampaignSoloTurnResponseSchema.parse(soloResponse.json());
+  const latestDmMessage = solo.messages.at(-1);
+  const debug = latestDmMessage?.debug as DebugFields | undefined;
+  const combatState = debug?.combatState as
+    | {
+        actors?: Record<string, { currentHp?: number }>;
+      }
+    | undefined;
+
+  assert.equal(latestDmMessage?.role, "dm");
+  assert.match(latestDmMessage?.content ?? "", /Attack roll: 13 vs AC 10 - hit/);
+  assert.match(latestDmMessage?.content ?? "", /Damage roll: 1d8 \+ 1 = 6/);
+  assert.doesNotMatch(latestDmMessage?.content ?? "", /13 vs AC 10 - miss/);
+  assert.equal(
+    combatState?.actors?.["player:dm-runtime-attack-roll-contradiction-client"]
+      ?.currentHp,
+    14
+  );
+
+  const tracesResponse = await app.inject({
+    method: "GET",
+    url: `/api/campaigns/${campaignId}/debug-traces?limit=20`,
+    headers: {
+      cookie
+    }
+  });
+
+  assert.equal(tracesResponse.statusCode, 200, tracesResponse.body);
+  const traces = CampaignDebugTracesResponseSchema.parse(tracesResponse.json());
+  assert.ok(
+    traces.traces.some((trace) => trace.phase === "dm_contract_parse_failed")
+  );
+  assert.ok(
+    traces.traces.some(
+      (trace) => trace.phase === "dm_contract_repair_response_received"
+    )
+  );
+  assert.ok(traces.traces.some((trace) => trace.phase === "dm_turn_completed"));
+  assert.equal(getProviderInputs().length, 2);
+  assert.match(
+    getProviderInputs()[1]?.message ?? "",
+    /13 vs AC 10 - miss/
+  );
+  assert.match(
+    getProviderInputs()[1]?.instructions ?? "",
+    /greater than or equal to AC/
+  );
+});
+
 test("solo combat turn can start initiative through mechanics state update", async () => {
   const cookie = await signIn("dm-runtime-initiative@example.com");
   const createResponse = await app.inject({
@@ -453,8 +521,10 @@ test("solo combat turn can start initiative through mechanics state update", asy
     | undefined;
 
   assert.equal(latestDmMessage?.role, "dm");
-  assert.match(latestDmMessage?.content ?? "", /Roll 8d6 for Fireball damage/);
-  assert.equal(solo.pendingRollRequest?.dice, "8d6");
+  assert.match(latestDmMessage?.content ?? "", /Roll 1d20 \+ 2 for initiative/);
+  assert.equal(solo.pendingRollRequest?.dice, "1d20");
+  assert.equal(solo.pendingRollRequest?.modifier, 2);
+  assert.equal(solo.pendingRollRequest?.label, "Initiative");
   assert.equal(combatState?.combat?.active, true);
   assert.equal(combatState?.combat?.round, 1);
   assert.equal(combatState?.combat?.turnOwner?.startsWith("player:"), true);
@@ -468,14 +538,263 @@ test("solo combat turn can start initiative through mechanics state update", asy
   const providerInput = getProviderInputs().at(-1);
   assert.ok(providerInput);
   assert.match(providerInput.instructions, /When hostilities start/);
-  assert.match(providerInput.instructions, /build `initiativeOrder`/);
+  assert.match(providerInput.instructions, /roll initiative/);
   assert.match(providerInput.instructions, /advance `turnOwner`/);
   assert.match(
     providerInput.message,
-    /include non-empty mechanics_state_update\.combat/
+    /ask the acting player for initiative/
   );
   assert.match(providerInput.message, /never copy example NPC names/);
   assert.match(providerInput.message, /include active combatants only/);
+});
+
+test("surprise opening combat resolves the opening roll before initiative", async () => {
+  const cookie = await signIn("dm-runtime-surprise-initiative@example.com");
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: {
+      cookie
+    },
+    payload: {
+      mode: "single_player",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "high_adventure",
+      ownerClientId: "dm-runtime-surprise-initiative-client",
+      playerName: "Owner",
+      characterName: "Seren",
+      characterSheet: [
+        "Class: Sorcerer",
+        "Max HP: 32",
+        "Current HP: 32",
+        "Spell Slots",
+        "3rd-level slots: 2 total, 0 used, 2 remaining"
+      ].join("\n"),
+      mechanicsSeed: {
+        characterClass: "Sorcerer",
+        level: 5,
+        maxHp: 32,
+        currentHp: 32,
+        spellSlots: {
+          "3": { max: 2, used: 0 }
+        }
+      }
+    }
+  });
+  const created = CampaignCreateResponseSchema.parse(createResponse.json());
+  resetProviderInputs();
+
+  const soloResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${created.campaign.id}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "Mara has not noticed me, so I cast fireball on Mara",
+      clientMessageId: "surprise-fireball-action"
+    }
+  });
+
+  assert.equal(soloResponse.statusCode, 200, soloResponse.body);
+  const solo = CampaignSoloTurnResponseSchema.parse(soloResponse.json());
+  const latestDmMessage = solo.messages.at(-1);
+
+  assert.equal(latestDmMessage?.role, "dm");
+  assert.match(latestDmMessage?.content ?? "", /Roll 8d6 for Fireball damage/);
+  assert.equal(solo.pendingRollRequest?.dice, "8d6");
+  assert.equal(solo.pendingRollRequest?.label, "Fireball damage");
+  assert.equal(solo.pendingRollRequest?.modifier, 0);
+  assert.doesNotMatch(latestDmMessage?.content ?? "", /Roll 1d20 \+ 2 for initiative/);
+
+  const providerInput = getProviderInputs().at(-1);
+  assert.ok(providerInput);
+  assert.match(providerInput.instructions, /surprise or the drop/);
+  assert.match(providerInput.message, /resolve the opening action's required rolls first/);
+
+  assert.ok(solo.pendingRollRequest?.id);
+  const damageResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${created.campaign.id}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      rollSubmissions: [
+        {
+          rollRequestId: solo.pendingRollRequest.id,
+          rollResult: {
+            rolls: [5, 1, 4, 1, 3, 6, 4, 5],
+            total: 29
+          },
+          clientMessageId: "surprise-fireball-damage"
+        }
+      ]
+    }
+  });
+
+  assert.equal(damageResponse.statusCode, 200, damageResponse.body);
+  const afterDamage = CampaignSoloTurnResponseSchema.parse(damageResponse.json());
+  const damageDmMessage = afterDamage.messages.at(-1);
+
+  assert.equal(damageDmMessage?.role, "dm");
+  assert.match(damageDmMessage?.content ?? "", /opening strike has landed/i);
+  assert.match(damageDmMessage?.content ?? "", /roll 1d20 \+ 2 for initiative/i);
+  assert.equal(afterDamage.pendingRollRequest?.dice, "1d20");
+  assert.equal(afterDamage.pendingRollRequest?.modifier, 2);
+  assert.equal(afterDamage.pendingRollRequest?.label, "Initiative");
+});
+
+test("solo combat catches up NPC turns instead of rejecting the player", async () => {
+  const { cookie, campaignId } = await createSinglePlayerCampaign(
+    "dm-runtime-npc-catchup"
+  );
+  const playerActorKey = "player:dm-runtime-npc-catchup-client";
+  const campaign = database.campaigns.find(
+    (candidate) => candidate.id === campaignId
+  );
+
+  assert.ok(campaign);
+  campaign.metadata = {
+    ...(campaign.metadata as Record<string, unknown>),
+    mechanicsState: {
+      combat: {
+        active: true,
+        round: 1,
+        turnOwner: "npc:cutlass-raider",
+        initiativeOrder: [
+          playerActorKey,
+          "npc:cutlass-raider",
+          "npc:horn-blower"
+        ]
+      },
+      actors: {
+        [playerActorKey]: {
+          characterName: "Seren",
+          currentHp: 24,
+          maxHp: 24,
+          conditions: []
+        },
+        "npc:cutlass-raider": {
+          characterName: "Cutlass raider",
+          currentHp: 12,
+          maxHp: 12,
+          conditions: []
+        },
+        "npc:horn-blower": {
+          characterName: "Horn-blower",
+          currentHp: 10,
+          maxHp: 10,
+          conditions: []
+        }
+      }
+    }
+  };
+  resetProviderInputs();
+
+  const soloResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "I cast Scorching Ray at the cutlass raider.",
+      clientMessageId: "npc-catchup-scorching-ray"
+    }
+  });
+
+  assert.equal(soloResponse.statusCode, 200, soloResponse.body);
+  const solo = CampaignSoloTurnResponseSchema.parse(soloResponse.json());
+  const latestDmMessage = solo.messages.at(-1);
+  const debug = latestDmMessage?.debug as DebugFields | undefined;
+  const combatState = debug?.combatState as
+    | {
+        combat?: {
+          turnOwner?: string | null;
+        };
+        actors?: Record<string, { currentHp?: number }>;
+      }
+    | undefined;
+
+  assert.equal(latestDmMessage?.role, "dm");
+  assert.match(latestDmMessage?.content ?? "", /cutlass raider's turn resolves first/i);
+  assert.match(latestDmMessage?.content ?? "", /attack roll: 17 vs AC 14 - hit/i);
+  assert.match(latestDmMessage?.content ?? "", /damage roll: 1d6 \+ 2 = 6/i);
+  assert.match(latestDmMessage?.content ?? "", /6 slashing damage/i);
+  assert.match(latestDmMessage?.content ?? "", /drops from 24 HP to 18 HP/i);
+  assert.doesNotMatch(latestDmMessage?.content ?? "", /It is not your turn/i);
+  assert.doesNotMatch(latestDmMessage?.content ?? "", /lunges[^.]*What do you do/is);
+  assert.equal(combatState?.combat?.turnOwner, playerActorKey);
+  assert.equal(combatState?.actors?.[playerActorKey]?.currentHp, 18);
+
+  const providerInput = getProviderInputs().at(-1);
+  assert.ok(providerInput);
+  assert.match(providerInput.instructions, /resolve that NPC turn immediately/);
+  assert.match(providerInput.message, /turnOwner is or becomes npc:\*/);
+  assert.match(providerInput.message, /Off-turn player combat declarations are only stated intent/);
+  assert.match(providerInput.message, /not actions already in motion/);
+  assert.match(providerInput.message, /mid-swing, following immediately/);
+  assert.match(providerInput.message, /if the next actor is an enemy resolve that enemy turn/);
+
+  const updatedCampaign = database.campaigns.find(
+    (candidate) => candidate.id === campaignId
+  );
+  assert.ok(updatedCampaign);
+  updatedCampaign.metadata = {
+    ...(updatedCampaign.metadata as Record<string, unknown>),
+    mechanicsState: {
+      ...((updatedCampaign.metadata as Record<string, unknown>).mechanicsState as Record<
+        string,
+        unknown
+      >),
+      combat: {
+        active: true,
+        round: 2,
+        turnOwner: "Horn-blower",
+        initiativeOrder: [
+          playerActorKey,
+          "npc:cutlass-raider",
+          "npc:horn-blower"
+        ]
+      }
+    }
+  };
+
+  const secondSoloResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "I cast Scorching Ray at the horn-blower.",
+      clientMessageId: "npc-catchup-scorching-ray-second"
+    }
+  });
+
+  assert.equal(secondSoloResponse.statusCode, 200, secondSoloResponse.body);
+  const secondSolo = CampaignSoloTurnResponseSchema.parse(secondSoloResponse.json());
+  const secondDmMessage = secondSolo.messages.at(-1);
+  const secondDebug = secondDmMessage?.debug as DebugFields | undefined;
+  const secondCombatState = secondDebug?.combatState as
+    | {
+        combat?: {
+          turnOwner?: string | null;
+          round?: number;
+        };
+        actors?: Record<string, { currentHp?: number }>;
+      }
+    | undefined;
+
+  assert.equal(secondDmMessage?.role, "dm");
+  assert.match(secondDmMessage?.content ?? "", /attack roll: 17 vs AC 14 - hit/i);
+  assert.match(secondDmMessage?.content ?? "", /damage roll: 1d6 \+ 2 = 6/i);
+  assert.match(secondDmMessage?.content ?? "", /6 slashing damage/i);
+  assert.doesNotMatch(secondDmMessage?.content ?? "", /It is not your turn/i);
+  assert.equal(secondCombatState?.combat?.turnOwner, playerActorKey);
+  assert.equal(secondCombatState?.combat?.round, 1);
+  assert.equal(secondCombatState?.actors?.[playerActorKey]?.currentHp, 12);
 });
 
 test("solo turns send the current action once outside provider history", async () => {
