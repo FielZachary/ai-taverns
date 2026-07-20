@@ -145,6 +145,75 @@ test("DeepSeek provider sends filtered history and returns non-stream debug meta
   );
 });
 
+test("DeepSeek provider lowers temperature for combat language", async () => {
+  let requestBody:
+    | {
+        temperature?: number;
+      }
+    | undefined;
+
+  globalThis.fetch = async (_url, init) => {
+    requestBody = JSON.parse(String(init?.body)) as typeof requestBody;
+
+    return jsonResponse({
+      id: "combat-chat-1",
+      model: "test-chat-model",
+      choices: [
+        {
+          finish_reason: "stop",
+          message: {
+            content:
+              '{"public_narration":"The bandit raises a blade.","roll_requests":[],"next_input_needed":"player_actions","input_targets":[],"input_policy":"all_players"}'
+          }
+        }
+      ]
+    });
+  };
+
+  const response = await askDungeonMasterProvider({
+    instructions: "Return a JSON DM response.",
+    message: "I attack the bandit with my sword."
+  });
+
+  assert.equal(requestBody?.temperature, 0.4);
+  assert.equal(response.debug.temperature, 0.4);
+});
+
+test("DeepSeek provider does not lower temperature for system-only combat rules", async () => {
+  let requestBody:
+    | {
+        temperature?: number;
+      }
+    | undefined;
+
+  globalThis.fetch = async (_url, init) => {
+    requestBody = JSON.parse(String(init?.body)) as typeof requestBody;
+
+    return jsonResponse({
+      id: "noncombat-chat-1",
+      model: "test-chat-model",
+      choices: [
+        {
+          finish_reason: "stop",
+          message: {
+            content:
+              '{"public_narration":"The candle flickers.","roll_requests":[],"next_input_needed":"player_actions","input_targets":[],"input_policy":"all_players"}'
+          }
+        }
+      ]
+    });
+  };
+
+  const response = await askDungeonMasterProvider({
+    instructions:
+      "Return a JSON DM response. If combat starts, enforce initiative rules.",
+    message: "I inspect the old desk."
+  });
+
+  assert.equal(requestBody?.temperature, 0.8);
+  assert.equal(response.debug.temperature, 0.8);
+});
+
 test("test DM provider returns deterministic local contract JSON", async () => {
   process.env.AI_TAVERNS_TEST_DM_PROVIDER = "true";
   delete process.env.NODE_ENV;

@@ -9,7 +9,10 @@ const deepSeekBaseUrl = (
   process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com"
 ).replace(/\/+$/, "");
 const deepSeekModel = process.env.DEEPSEEK_MODEL || "deepseek-chat";
-const deepSeekTemperature = 0.8;
+const defaultDeepSeekTemperature = 0.8;
+const combatDeepSeekTemperature = 0.4;
+const combatLanguagePattern =
+  /\b(?:ac|armor class|attack(?:s|ed|ing)?|battle|combat|damage|enemy|enemies|fight(?:s|ing)?|foe(?:s)?|hit points?|hostile|hostilities|hp|initiative|kill(?:s|ed|ing)?|melee|npc turn|roll(?:s|ed|ing)? initiative|saving throw|strike(?:s|ing)?|weapon(?:s)?)\b/i;
 
 type DeepSeekMessage = AiDebugMessage;
 
@@ -87,7 +90,7 @@ function testProviderDebug(
     ],
     rawResponse: content,
     model: "ai-taverns-test-provider",
-    temperature: deepSeekTemperature,
+    temperature: providerTemperatureForInput(input),
     providerTimings: [
       {
         attempt: 1,
@@ -271,6 +274,17 @@ function requestContentChars(messages: DeepSeekMessage[]) {
   return messages.reduce((sum, message) => sum + message.content.length, 0);
 }
 
+function providerTemperatureForInput(input: DungeonMasterProviderInput) {
+  const playerFacingContext = [
+    input.message,
+    ...(input.history ?? []).map((message) => message.content)
+  ].join("\n");
+
+  return combatLanguagePattern.test(playerFacingContext)
+    ? combatDeepSeekTemperature
+    : defaultDeepSeekTemperature;
+}
+
 function decodeJsonStringPrefix(value: string) {
   let decoded = "";
 
@@ -378,6 +392,7 @@ function createPublicNarrationEmitter(
 
 async function requestDeepSeek(
   messages: DeepSeekMessage[],
+  temperature: number,
   attempt: number,
   onPublicNarrationDelta?: (text: string) => void
 ) {
@@ -385,7 +400,7 @@ async function requestDeepSeek(
   const requestBody = JSON.stringify({
     model: deepSeekModel,
     messages,
-    temperature: deepSeekTemperature,
+    temperature,
     max_tokens: 4096,
     ...(onPublicNarrationDelta ? { stream: true } : {})
   });
@@ -604,12 +619,18 @@ export async function askDungeonMasterProvider({
       content: message
     }
   ];
+  const temperature = providerTemperatureForInput({
+    message,
+    instructions,
+    history
+  });
 
   let requestMessages = messages;
   const timings: DeepSeekTiming[] = [];
   let fallbackBufferedAfterEmptyStream = false;
   let { data, timing } = await requestDeepSeek(
     requestMessages,
+    temperature,
     1,
     onPublicNarrationDelta
   );
@@ -620,6 +641,7 @@ export async function askDungeonMasterProvider({
     requestMessages = fullEmptyReplyRetryMessages(messages);
     ({ data, timing } = await requestDeepSeek(
       requestMessages,
+      temperature,
       2,
       undefined
     ));
@@ -635,7 +657,7 @@ export async function askDungeonMasterProvider({
         requestMessages,
         rawResponse: data.choices?.[0]?.message?.content ?? "",
         model: data.model ?? deepSeekModel,
-        temperature: deepSeekTemperature,
+        temperature,
         providerTimings: timings,
         ...(data.id ? { providerResponseId: data.id } : {})
       }
@@ -657,7 +679,7 @@ export async function askDungeonMasterProvider({
       requestMessages,
       rawResponse: content,
       model: data.model ?? deepSeekModel,
-      temperature: deepSeekTemperature,
+      temperature,
       providerTimings: timings,
       ...(data.id ? { providerResponseId: data.id } : {})
     }
