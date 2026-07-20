@@ -318,8 +318,8 @@ function decodeJsonStringPrefix(value: string) {
   return decoded;
 }
 
-function publicNarrationPrefix(buffer: string) {
-  const match = buffer.match(/"public_narration"\s*:\s*"/);
+function streamedDisplayTextPrefix(buffer: string) {
+  const match = buffer.match(/"(?:public_narration|answer)"\s*:\s*"/);
 
   if (!match || match.index === undefined) {
     return "";
@@ -365,7 +365,7 @@ function createPublicNarrationEmitter(
       return;
     }
 
-    const narration = publicNarrationPrefix(streamedContent);
+    const narration = streamedDisplayTextPrefix(streamedContent);
 
     if (narration.length <= emittedNarration.length) {
       return;
@@ -643,7 +643,7 @@ export async function askDungeonMasterProvider({
   }
 
   if (fallbackBufferedAfterEmptyStream && onPublicNarrationDelta) {
-    const narration = publicNarrationPrefix(content);
+    const narration = streamedDisplayTextPrefix(content);
 
     if (narration) {
       onPublicNarrationDelta(narration);

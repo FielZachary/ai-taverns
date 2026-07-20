@@ -1595,6 +1595,36 @@ before(async () => {
             }
           };
         }
+
+        if (input.instructions.includes("out-of-turn table question")) {
+          const answer =
+            "Those tracks look too broad for a wolf and too deliberate for a stray animal.";
+
+          input.onPublicNarrationDelta?.(answer.slice(0, 28));
+          input.onPublicNarrationDelta?.(answer.slice(28));
+
+          return {
+            id: "provider-ask-dm-1",
+            content: JSON.stringify({ answer }),
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: "{}",
+              model: "test-model",
+              temperature: 0.8,
+              providerTimings: []
+            }
+          };
+        }
+
         const publicNarration =
           "A lantern flickers over the old road as your adventure begins.\n\nA weathered sign points toward a ruined watchtower beyond the trees.\n\nWhat do you do?";
         const isEldermereNarrator = input.message.includes(

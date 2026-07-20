@@ -488,6 +488,52 @@ test("DeepSeek provider streams escaped narration prefixes as chunks arrive", as
   ]);
 });
 
+test("DeepSeek provider streams Ask DM answer prefixes as chunks arrive", async () => {
+  const narrationDeltas: string[] = [];
+
+  globalThis.fetch = async () =>
+    streamResponse([
+      streamData({
+        id: "ask-stream-1",
+        model: "test-model",
+        choices: [
+          {
+            delta: {
+              content: '{"answer":"Those tracks look too'
+            }
+          }
+        ]
+      }),
+      streamData({
+        id: "ask-stream-1",
+        model: "test-model",
+        choices: [
+          {
+            delta: {
+              content: ' broad for a wolf."}'
+            }
+          }
+        ]
+      }),
+      "data: [DONE]\n\n"
+    ]);
+
+  const response = await askDungeonMasterProvider({
+    instructions: "Return an Ask DM JSON answer.",
+    message: "Would I know these tracks?",
+    onPublicNarrationDelta: (delta) => narrationDeltas.push(delta)
+  });
+
+  assert.equal(
+    response.content,
+    '{"answer":"Those tracks look too broad for a wolf."}'
+  );
+  assert.deepEqual(narrationDeltas, [
+    "Those tracks look too",
+    " broad for a wolf."
+  ]);
+});
+
 test("DeepSeek provider retries an empty stream and reports an empty reply diagnostic", async () => {
   let requestCount = 0;
   const streams: Array<boolean | undefined> = [];
