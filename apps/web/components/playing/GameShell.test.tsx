@@ -98,15 +98,17 @@ vi.mock("./PlayerInput", async () => {
       {
         draft: string;
         isSending: boolean;
+        validationMessage?: string;
         onDraftChange: (value: string) => void;
         onSubmit: (event: FormEvent<HTMLFormElement>) => void;
       }
     >(function MockPlayerInput(
-      { draft, isSending, onDraftChange, onSubmit },
+      { draft, isSending, validationMessage, onDraftChange, onSubmit },
       ref
     ) {
       return (
         <form onSubmit={onSubmit}>
+          {validationMessage ? <p role="alert">{validationMessage}</p> : null}
           <textarea
             aria-label="Turn draft"
             onChange={(event) => onDraftChange(event.target.value)}
@@ -310,13 +312,18 @@ describe("GameShell", () => {
         value: "I test the iron handle."
       }
     });
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    fireEvent.submit(
+      screen.getByRole("button", { name: "Send" }).closest("form")!
+    );
 
     await waitFor(() => {
       expect(
         screen.getByText("The dungeon master lost the thread.")
       ).toBeInTheDocument();
     });
+    expect(screen.getByRole("textbox", { name: "Turn draft" })).toHaveValue(
+      "I test the iron handle."
+    );
 
     const submitCall = fetchMock.mock.calls.find(
       ([input, init]) =>
