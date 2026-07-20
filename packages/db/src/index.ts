@@ -739,7 +739,7 @@ export async function logCampaignEvent(
   payload: Record<string, unknown> = {}
 ): Promise<string | undefined> {
   const result = await db.query<{ id: string }>(
-    "insert into campaign_events (campaign_id, type, payload) values ($1, $2, $3::jsonb) returning id",
+    "insert into campaign_events (campaign_id, type, payload, created_at) values ($1, $2, $3::jsonb, clock_timestamp()) returning id",
     [campaignId, type, JSON.stringify(payload)]
   );
 
@@ -2356,10 +2356,28 @@ async function buildRoomSnapshot(
             'dm_question',
             'dm_answer'
           )
-        order by created_at desc
+        order by created_at desc,
+          case type
+            when 'dm_answer' then 0
+            when 'turn_resolved' then 1
+            when 'adventure_begun' then 1
+            when 'dm_question' then 2
+            when 'turn_submitted' then 3
+            else 4
+          end asc,
+          id desc
         limit 100
       ) recent_events
-      order by created_at asc
+      order by created_at asc,
+        case type
+          when 'turn_submitted' then 0
+          when 'dm_question' then 0
+          when 'turn_resolved' then 1
+          when 'adventure_begun' then 1
+          when 'dm_answer' then 1
+          else 2
+        end asc,
+        id asc
     `,
     [campaign.id]
   );
@@ -3541,10 +3559,28 @@ async function getCampaignEventMessages(
             'dm_question',
             'dm_answer'
           )
-        order by created_at desc
+        order by created_at desc,
+          case type
+            when 'dm_answer' then 0
+            when 'turn_resolved' then 1
+            when 'adventure_begun' then 1
+            when 'dm_question' then 2
+            when 'turn_submitted' then 3
+            else 4
+          end asc,
+          id desc
         limit $2
       ) recent_events
-      order by created_at asc
+      order by created_at asc,
+        case type
+          when 'turn_submitted' then 0
+          when 'dm_question' then 0
+          when 'turn_resolved' then 1
+          when 'adventure_begun' then 1
+          when 'dm_answer' then 1
+          else 2
+        end asc,
+        id asc
     `,
     [campaignId, limit]
   );

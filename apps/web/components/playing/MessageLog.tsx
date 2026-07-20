@@ -41,6 +41,19 @@ function MessageBody({ content }: { content: string }) {
   );
 }
 
+function RuneLoader({ label }: { label: string }) {
+  return (
+    <p className="rune-loader">
+      {label}
+      <span className="rune-loader-dots" aria-hidden="true">
+        <span>.</span>
+        <span>.</span>
+        <span>.</span>
+      </span>
+    </p>
+  );
+}
+
 function formatDebugPrompt(debug: AiDebugInfo) {
   return debug.requestMessages
     .map(
@@ -234,7 +247,11 @@ export function MessageLog({
                   </div>
                 ) : null}
               </div>
-              <MessageBody content={message.content} />
+              {message.role === "dm" && !message.content.trim() ? (
+                <RuneLoader label="Reading the runes" />
+              ) : (
+                <MessageBody content={message.content} />
+              )}
             </div>
           </article>
         );
@@ -257,14 +274,7 @@ export function MessageLog({
                 ) : null}
               </p>
             </div>
-            <p className="rune-loader">
-              Waiting
-              <span className="rune-loader-dots" aria-hidden="true">
-                <span>.</span>
-                <span>.</span>
-                <span>.</span>
-              </span>
-            </p>
+            <RuneLoader label="Waiting" />
           </div>
         </article>
       ))}
@@ -280,14 +290,7 @@ export function MessageLog({
           </div>
           <div className="message-content">
             <p className="message-label">Dungeon Master</p>
-            <p className="rune-loader">
-              Reading the runes
-              <span className="rune-loader-dots" aria-hidden="true">
-                <span>.</span>
-                <span>.</span>
-                <span>.</span>
-              </span>
-            </p>
+            <RuneLoader label="Reading the runes" />
           </div>
         </article>
       ) : null}
