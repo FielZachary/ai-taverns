@@ -130,8 +130,19 @@ export function mechanicsSeedFromCharacterInput(input: {
 
 export function actorFromMechanicsSeed(
   characterName: string,
-  seed: MechanicsSeed | undefined
+  seed: MechanicsSeed | undefined,
+  fallback?: MechanicsState["actors"][string] | undefined
 ): MechanicsState["actors"][string] {
+  if (!seed && fallback) {
+    return {
+      ...fallback,
+      characterName,
+      spellSlots: cloneSlots(fallback.spellSlots),
+      concentration: fallback.concentration ?? null,
+      conditions: [...(fallback.conditions ?? [])]
+    };
+  }
+
   return {
     characterName,
     currentHp: seed?.currentHp,
@@ -146,17 +157,30 @@ export function mechanicsStateWithActor(input: {
   existing?: MechanicsState | undefined;
   playerId: string;
   characterName: string;
+  characterSheet?: string | undefined;
   seed?: MechanicsSeed | undefined;
   updatedAt?: string | undefined;
 }): MechanicsState {
+  const actorKey = actorKeyForPlayer(input.playerId);
+  const fallbackActor =
+    input.existing?.actors[actorKey] ??
+    (input.characterSheet
+      ? legacyActorFromSheet({
+          id: input.playerId,
+          character_name: input.characterName,
+          character_sheet: input.characterSheet
+        })
+      : undefined);
+
   return {
     updatedAt: input.updatedAt,
     combat: input.existing?.combat ?? defaultCombatState,
     actors: {
       ...(input.existing?.actors ?? {}),
-      [actorKeyForPlayer(input.playerId)]: actorFromMechanicsSeed(
+      [actorKey]: actorFromMechanicsSeed(
         input.characterName,
-        input.seed
+        input.seed,
+        fallbackActor
       )
     }
   };

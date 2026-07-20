@@ -321,6 +321,58 @@ test("mechanics state initializes and projects spell slot lifecycle", async () =
   );
 });
 
+test("mechanics state falls back to character sheet spell slots without seed", async () => {
+  const cookie = await signIn("sheet-slots@example.com");
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: { cookie },
+    payload: {
+      mode: "single_player",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "classic_fantasy",
+      ownerClientId: "sheet-slots-client",
+      playerName: "Jin",
+      characterName: "Jin",
+      characterSheet: [
+        "Character Name: Jin",
+        "Level: 5",
+        "Class: Sorcerer",
+        "",
+        "Core Stats",
+        "Max HP: 32",
+        "Current HP: 32",
+        "",
+        "Spells",
+        "Spell Slots",
+        "1st-level slots: 4 total, 0 used, 4 remaining",
+        "2nd-level slots: 3 total, 0 used, 3 remaining",
+        "3rd-level slots: 2 total, 0 used, 2 remaining",
+        "Lightning Bolt"
+      ].join("\n")
+    }
+  });
+
+  assert.equal(createResponse.statusCode, 201, createResponse.body);
+  const created = CampaignCreateResponseSchema.parse(createResponse.json());
+  const castResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${created.campaign.id}/solo-turn`,
+    headers: { cookie },
+    payload: {
+      message: "I cast Lightning Bolt down the hallway."
+    }
+  });
+
+  assert.equal(castResponse.statusCode, 200, castResponse.body);
+  const cast = CampaignSoloTurnResponseSchema.parse(castResponse.json());
+
+  assert.match(
+    cast.players[0]?.characterSheet ?? "",
+    /3rd-level slots: 2 total, 1 used, 1 remaining/
+  );
+});
+
 test("mechanics state initializes Warlock pact slots", async () => {
   const cookie = await signIn("warlock-mechanics@example.com");
   const createResponse = await app.inject({

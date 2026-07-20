@@ -856,6 +856,7 @@ async function addOrReplacePlayerMechanicsActor(
     campaign: CampaignRow;
     playerId: string;
     characterName: string;
+    characterSheet?: string | undefined;
     seed?: MechanicsSeed | undefined;
   }
 ) {
@@ -864,6 +865,7 @@ async function addOrReplacePlayerMechanicsActor(
     existing: currentState,
     playerId: input.playerId,
     characterName: input.characterName,
+    characterSheet: input.characterSheet,
     seed: input.seed,
     updatedAt: nowIso()
   });
@@ -1303,6 +1305,7 @@ export async function createCampaignForMode(
     const mechanicsState = mechanicsStateWithActor({
       playerId: playerRow.id,
       characterName: playerRow.character_name,
+      characterSheet: playerRow.character_sheet,
       seed: input.mechanicsSeed,
       updatedAt: nowIso()
     });
@@ -1712,6 +1715,7 @@ export async function joinCampaignByCode(
         campaign: campaignRow,
         playerId: userPlayer.id,
         characterName,
+        characterSheet,
         seed: input.mechanicsSeed
       });
       return campaignRow;
@@ -1768,6 +1772,7 @@ export async function joinCampaignByCode(
         campaign: campaignRow,
         playerId: joinedPlayer.id,
         characterName,
+        characterSheet,
         seed: input.mechanicsSeed
       });
     }
@@ -4246,6 +4251,7 @@ export async function registerRoomPlayerForUser(
         campaign: campaignRow,
         playerId: savedPlayer.id,
         characterName: input.characterName,
+        characterSheet: input.characterSheet,
         seed: input.mechanicsSeed
       });
     }
