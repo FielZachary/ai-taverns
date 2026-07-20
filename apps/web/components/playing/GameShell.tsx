@@ -256,26 +256,15 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     () => displayedRoomPlayers.find((roomPlayer) => roomPlayer.id === playerId),
     [displayedRoomPlayers, playerId]
   );
-  const currentPlayerProfile = useMemo(
-    () =>
-      currentRoomPlayer
-        ? {
-            username: currentRoomPlayer.username,
-            characterName: currentRoomPlayer.characterName,
-            characterSheet: currentRoomPlayer.characterSheet
-          }
-        : playerProfile,
-    [currentRoomPlayer, playerProfile]
-  );
   const currentPendingRollRequests = useMemo(
     () =>
       currentPlayerRollRequests(
         pendingRollRequests,
-        currentPlayerProfile,
+        playerProfile,
         currentRoomPlayer,
         isSinglePlayer
       ),
-    [currentPlayerProfile, currentRoomPlayer, isSinglePlayer, pendingRollRequests]
+    [currentRoomPlayer, isSinglePlayer, pendingRollRequests, playerProfile]
   );
   const currentPendingRollRequest = currentPendingRollRequests[0] ?? null;
   const currentRequiredRollDice = useMemo(
@@ -568,7 +557,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
   const registerPlayerProfile = useCallback(
     async (profile: PlayerProfile) => {
       if (!playerId || !activeCampaign || isSinglePlayer) {
-        return null;
+        return;
       }
 
       const missingProfileFields = getMissingPlayerProfileFields(profile);
@@ -578,11 +567,11 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
           `Finish your ${missingProfileFields.join(", ")} before updating.`
         );
         setInputValidationPulse((currentPulse) => currentPulse + 1);
-        return null;
+        return;
       }
 
       if (playerRegistrationInFlightRef.current) {
-        return null;
+        return;
       }
 
       playerRegistrationInFlightRef.current = true;
@@ -609,7 +598,6 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
 
         const room = (await response.json()) as RoomSnapshot;
         applyRoomSnapshot(room);
-        return room;
       } finally {
         playerRegistrationInFlightRef.current = false;
       }
@@ -1065,7 +1053,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
       isWaitingOnTargetedInput: isWaitingOnTargetedInputState,
       isSinglePlayer,
       hasAdventureBegun,
-      playerProfile: currentPlayerProfile
+      playerProfile
     });
 
     if (validationMessage) {
@@ -1075,35 +1063,6 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
         inputRef.current?.focus();
       }
       return;
-    }
-
-    if (!isSinglePlayer && !playerId) {
-      setInputValidationMessage("Joining the room...");
-      setInputValidationPulse((currentPulse) => currentPulse + 1);
-      inputRef.current?.focus();
-      return;
-    }
-
-    if (!isSinglePlayer && !currentRoomPlayer) {
-      setInputValidationMessage("Joining the room...");
-      setInputValidationPulse((currentPulse) => currentPulse + 1);
-
-      try {
-        const room = await registerPlayerProfile(currentPlayerProfile);
-        const registeredPlayer = room?.players.find(
-          (roomPlayer) => roomPlayer.id === playerId
-        );
-
-        if (!registeredPlayer) {
-          inputRef.current?.focus();
-          return;
-        }
-      } catch {
-        setInputValidationMessage("The room could not be joined yet. Try again.");
-        setInputValidationPulse((currentPulse) => currentPulse + 1);
-        inputRef.current?.focus();
-        return;
-      }
     }
 
     setInputValidationMessage("");
@@ -1198,9 +1157,6 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
         pendingSubmissionRef.current = null;
         setOptimisticSubmittedPlayerId(null);
         setIsInputSubmitted(false);
-      }
-      if (!skipTurn) {
-        setDraft(content);
       }
     } finally {
       setIsSending(false);
