@@ -138,6 +138,25 @@ describe("MessageLog", () => {
     expect(screen.queryByText(/reading the runes/i)).not.toBeInTheDocument();
   });
 
+  it("shows the rune loader inside an empty streaming DM message", () => {
+    render(
+      <MessageLog
+        messages={[
+          gameMessage({
+            id: "streaming-dm",
+            role: "dm",
+            content: ""
+          })
+        ]}
+        isSending={true}
+        hideSendingIndicator={true}
+      />
+    );
+
+    expect(screen.getByText(/reading the runes/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/reading the runes/i)).toHaveLength(1);
+  });
+
   it("calls regenerate only for the eligible DM message and disables while busy", () => {
     const onRegenerateResponse = vi.fn();
     const messages = [

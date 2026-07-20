@@ -274,3 +274,97 @@ test("room realtime websocket streams DM turns without duplicating final message
     socket.terminate();
   }
 });
+
+test("room realtime websocket streams ask-DM answers", async () => {
+  const cookie = await signIn("realtime-ask-dm-stream@example.com");
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: {
+      cookie
+    },
+    payload: {
+      mode: "single_player",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "classic_fantasy",
+      ownerClientId: "realtime-ask-dm-stream-client",
+      playerName: "Realtime Ask",
+      characterName: "Seren",
+      characterSheet: "A curious ranger."
+    }
+  });
+  const created = CampaignCreateResponseSchema.parse(createResponse.json());
+  const socket = await app.injectWS(
+    `/api/room/live?roomId=${created.campaign.id}`,
+    {
+      headers: {
+        cookie
+      }
+    }
+  );
+
+  try {
+    const [heartbeatMessage] = await once(socket, "message");
+    const heartbeat = RoomRealtimeEventSchema.parse(
+      JSON.parse(heartbeatMessage.toString())
+    );
+
+    assert.equal(heartbeat.type, "heartbeat");
+
+    const streamEvents: unknown[] = [];
+    const streamDone = new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error("Timed out waiting for ask-DM stream events."));
+      }, 1_000);
+
+      socket.on("message", (message: { toString: () => string }) => {
+        const event = JSON.parse(message.toString()) as { type?: string };
+
+        if (!event.type?.startsWith("dm_stream_")) {
+          return;
+        }
+
+        streamEvents.push(event);
+
+        if (event.type === "dm_stream_done") {
+          clearTimeout(timeout);
+          resolve();
+        }
+      });
+    });
+
+    const askResponse = await app.inject({
+      method: "POST",
+      url: `/api/campaigns/${created.campaign.id}/ask-dm`,
+      headers: {
+        cookie
+      },
+      payload: {
+        question: "Would Seren recognize these tracks?"
+      }
+    });
+
+    assert.equal(askResponse.statusCode, 200, askResponse.body);
+    await streamDone;
+
+    assert.deepEqual(
+      streamEvents.map((event) => (event as { type: string }).type),
+      [
+        "dm_stream_started",
+        "dm_stream_delta",
+        "dm_stream_delta",
+        "dm_stream_done"
+      ]
+    );
+    assert.equal(
+      database.campaignEvents.filter(
+        (event) =>
+          event.campaign_id === created.campaign.id &&
+          event.type === "dm_answer"
+      ).length,
+      1
+    );
+  } finally {
+    socket.terminate();
+  }
+});

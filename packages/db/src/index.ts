@@ -740,7 +740,7 @@ export async function logCampaignEvent(
   payload: Record<string, unknown> = {}
 ): Promise<string | undefined> {
   const result = await db.query<{ id: string }>(
-    "insert into campaign_events (campaign_id, type, payload) values ($1, $2, $3::jsonb) returning id",
+    "insert into campaign_events (campaign_id, type, payload, created_at) values ($1, $2, $3::jsonb, clock_timestamp()) returning id",
     [campaignId, type, JSON.stringify(payload)]
   );
 
@@ -857,6 +857,7 @@ async function addOrReplacePlayerMechanicsActor(
     campaign: CampaignRow;
     playerId: string;
     characterName: string;
+    characterSheet?: string | undefined;
     seed?: MechanicsSeed | undefined;
   }
 ) {
@@ -865,6 +866,7 @@ async function addOrReplacePlayerMechanicsActor(
     existing: currentState,
     playerId: input.playerId,
     characterName: input.characterName,
+    characterSheet: input.characterSheet,
     seed: input.seed,
     updatedAt: nowIso()
   });
@@ -1304,6 +1306,7 @@ export async function createCampaignForMode(
     const mechanicsState = mechanicsStateWithActor({
       playerId: playerRow.id,
       characterName: playerRow.character_name,
+      characterSheet: playerRow.character_sheet,
       seed: input.mechanicsSeed,
       updatedAt: nowIso()
     });
@@ -1713,6 +1716,7 @@ export async function joinCampaignByCode(
         campaign: campaignRow,
         playerId: userPlayer.id,
         characterName,
+        characterSheet,
         seed: input.mechanicsSeed
       });
       return campaignRow;
@@ -1769,6 +1773,7 @@ export async function joinCampaignByCode(
         campaign: campaignRow,
         playerId: joinedPlayer.id,
         characterName,
+        characterSheet,
         seed: input.mechanicsSeed
       });
     }
@@ -2396,10 +2401,28 @@ async function buildRoomSnapshot(
             'dm_question',
             'dm_answer'
           )
-        order by created_at desc
+        order by created_at desc,
+          case type
+            when 'dm_answer' then 0
+            when 'turn_resolved' then 1
+            when 'adventure_begun' then 1
+            when 'dm_question' then 2
+            when 'turn_submitted' then 3
+            else 4
+          end asc,
+          id desc
         limit 100
       ) recent_events
-      order by created_at asc
+      order by created_at asc,
+        case type
+          when 'turn_submitted' then 0
+          when 'dm_question' then 0
+          when 'turn_resolved' then 1
+          when 'adventure_begun' then 1
+          when 'dm_answer' then 1
+          else 2
+        end asc,
+        id asc
     `,
     [campaign.id]
   );
@@ -3645,10 +3668,28 @@ async function getCampaignEventMessages(
             'dm_question',
             'dm_answer'
           )
-        order by created_at desc
+        order by created_at desc,
+          case type
+            when 'dm_answer' then 0
+            when 'turn_resolved' then 1
+            when 'adventure_begun' then 1
+            when 'dm_question' then 2
+            when 'turn_submitted' then 3
+            else 4
+          end asc,
+          id desc
         limit $2
       ) recent_events
-      order by created_at asc
+      order by created_at asc,
+        case type
+          when 'turn_submitted' then 0
+          when 'dm_question' then 0
+          when 'turn_resolved' then 1
+          when 'adventure_begun' then 1
+          when 'dm_answer' then 1
+          else 2
+        end asc,
+        id asc
     `,
     [campaignId, limit]
   );
@@ -4332,6 +4373,7 @@ export async function registerRoomPlayerForUser(
         campaign: campaignRow,
         playerId: savedPlayer.id,
         characterName: input.characterName,
+        characterSheet: input.characterSheet,
         seed: input.mechanicsSeed
       });
     }
@@ -4957,10 +4999,12 @@ export async function askDungeonMasterQuestionForUser(
     player,
     trimmedQuestion
   );
+  const streamTurnId = runtime.emitDmStreamEvent ? randomUUID() : undefined;
   const instructions = withEldermereTurnContext(askDmInstructions(), campaign);
   const promptContext = runtime.buildPromptContext
     ? await runtime.buildPromptContext({
         campaignId: campaign.id,
+        turnId: streamTurnId,
         currentAction,
         baseInstructions: instructions
       })
@@ -4968,35 +5012,83 @@ export async function askDungeonMasterQuestionForUser(
   const history = promptContext
     ? []
     : await getCampaignEventMessages(db, campaign.id);
-  const providerData = await runtime.askProvider({
-    message: promptContext?.message ?? currentAction,
-    instructions: promptContext?.instructions ?? instructions,
-    history,
-    currentPlayerAction: trimmedQuestion
-  });
-  const answer = answerFromAskDmProviderResponse(providerData.content);
-  const questionMessageId = input.clientMessageId?.trim() || randomUUID();
-  const answerMessageId = providerData.id || randomUUID();
 
-  await withTransaction(db, async (client) => {
-    await logCampaignEvent(client, campaign.id, "dm_question", {
-      messageId: questionMessageId,
-      role: "player",
-      playerId: player.id,
-      clientId: player.client_id,
-      username: player.username,
-      characterName: player.character_name,
-      content: trimmedQuestion
+  if (streamTurnId) {
+    runtime.emitDmStreamEvent?.({
+      type: "dm_stream_started",
+      roomId: campaign.id,
+      turnId: streamTurnId
     });
-    await logCampaignEvent(client, campaign.id, "dm_answer", {
-      messageId: answerMessageId,
-      role: "dm",
-      playerId: player.id,
-      inReplyToMessageId: questionMessageId,
-      content: answer,
-      aiDebug: providerData.debug
+  }
+
+  try {
+    const providerData = await runtime.askProvider({
+      message: promptContext?.message ?? currentAction,
+      instructions: promptContext?.instructions ?? instructions,
+      history,
+      currentPlayerAction: trimmedQuestion,
+      ...(streamTurnId
+        ? {
+            onPublicNarrationDelta: (text: string) => {
+              if (!text) {
+                return;
+              }
+
+              runtime.emitDmStreamEvent?.({
+                type: "dm_stream_delta",
+                roomId: campaign.id,
+                turnId: streamTurnId,
+                text
+              });
+            }
+          }
+        : {})
     });
-  });
+    const answer = answerFromAskDmProviderResponse(providerData.content);
+    const questionMessageId = input.clientMessageId?.trim() || randomUUID();
+    const answerMessageId = providerData.id || randomUUID();
+
+    await withTransaction(db, async (client) => {
+      await logCampaignEvent(client, campaign.id, "dm_question", {
+        messageId: questionMessageId,
+        role: "player",
+        playerId: player.id,
+        clientId: player.client_id,
+        username: player.username,
+        characterName: player.character_name,
+        content: trimmedQuestion
+      });
+      await logCampaignEvent(client, campaign.id, "dm_answer", {
+        messageId: answerMessageId,
+        role: "dm",
+        playerId: player.id,
+        inReplyToMessageId: questionMessageId,
+        content: answer,
+        aiDebug: providerData.debug
+      });
+    });
+
+    if (streamTurnId) {
+      runtime.emitDmStreamEvent?.({
+        type: "dm_stream_done",
+        roomId: campaign.id,
+        turnId: streamTurnId,
+        messageId: answerMessageId
+      });
+    }
+  } catch (error) {
+    if (streamTurnId) {
+      runtime.emitDmStreamEvent?.({
+        type: "dm_stream_failed",
+        roomId: campaign.id,
+        turnId: streamTurnId,
+        message:
+          error instanceof Error ? error.message : "DM provider call failed."
+      });
+    }
+
+    throw error;
+  }
 
   const updatedCampaign = await resolveRoomCampaign(
     db,

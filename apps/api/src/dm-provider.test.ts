@@ -145,38 +145,50 @@ test("DeepSeek provider sends filtered history and returns non-stream debug meta
   );
 });
 
-test("DeepSeek provider lowers temperature for combat language", async () => {
-  let requestBody:
-    | {
-        temperature?: number;
-      }
-    | undefined;
+test("DeepSeek provider lowers temperature for expanded combat language", async () => {
+  const temperatures: Array<number | undefined> = [];
 
   globalThis.fetch = async (_url, init) => {
-    requestBody = JSON.parse(String(init?.body)) as typeof requestBody;
+    const requestBody = JSON.parse(String(init?.body)) as {
+      temperature?: number;
+    };
+    temperatures.push(requestBody.temperature);
 
     return jsonResponse({
-      id: "combat-chat-1",
+      id: `combat-chat-${temperatures.length}`,
       model: "test-chat-model",
       choices: [
         {
           finish_reason: "stop",
           message: {
             content:
-              '{"public_narration":"The bandit raises a blade.","roll_requests":[],"next_input_needed":"player_actions","input_targets":[],"input_policy":"all_players"}'
+              '{"public_narration":"The danger sharpens.","roll_requests":[],"next_input_needed":"player_actions","input_targets":[],"input_policy":"all_players"}'
           }
         }
       ]
     });
   };
 
-  const response = await askDungeonMasterProvider({
-    instructions: "Return a JSON DM response.",
-    message: "I attack the bandit with my sword."
-  });
+  for (const currentPlayerAction of [
+    "I cast magic missile.",
+    "I stab the nearest cultist.",
+    "I swing my axe.",
+    "I shoot the lookout.",
+    "I raise my crossbow.",
+    "I draw my longsword."
+  ]) {
+    const response = await askDungeonMasterProvider({
+      instructions: "Return a JSON DM response.",
+      message:
+        "Character Sheet: Armor Class 13, HP 27, Weapons: dagger.\n\nCurrent player action: " +
+        currentPlayerAction,
+      currentPlayerAction
+    });
 
-  assert.equal(requestBody?.temperature, 0.2);
-  assert.equal(response.debug.temperature, 0.2);
+    assert.equal(response.debug.temperature, 0.2);
+  }
+
+  assert.deepEqual(temperatures, [0.2, 0.2, 0.2, 0.2, 0.2, 0.2]);
 });
 
 test("DeepSeek provider does not lower temperature for system-only combat rules", async () => {
@@ -590,6 +602,52 @@ test("DeepSeek provider streams escaped narration prefixes as chunks arrive", as
   assert.deepEqual(narrationDeltas, [
     "Line one\nTab\tBell☺",
     " markq"
+  ]);
+});
+
+test("DeepSeek provider streams Ask DM answer prefixes as chunks arrive", async () => {
+  const narrationDeltas: string[] = [];
+
+  globalThis.fetch = async () =>
+    streamResponse([
+      streamData({
+        id: "ask-stream-1",
+        model: "test-model",
+        choices: [
+          {
+            delta: {
+              content: '{"answer":"Those tracks look too'
+            }
+          }
+        ]
+      }),
+      streamData({
+        id: "ask-stream-1",
+        model: "test-model",
+        choices: [
+          {
+            delta: {
+              content: ' broad for a wolf."}'
+            }
+          }
+        ]
+      }),
+      "data: [DONE]\n\n"
+    ]);
+
+  const response = await askDungeonMasterProvider({
+    instructions: "Return an Ask DM JSON answer.",
+    message: "Would I know these tracks?",
+    onPublicNarrationDelta: (delta) => narrationDeltas.push(delta)
+  });
+
+  assert.equal(
+    response.content,
+    '{"answer":"Those tracks look too broad for a wolf."}'
+  );
+  assert.deepEqual(narrationDeltas, [
+    "Those tracks look too",
+    " broad for a wolf."
   ]);
 });
 

@@ -72,7 +72,9 @@ import {
 } from "./game-shell-dice";
 import {
   appendStreamingDmDelta,
+  completeStreamingDmMessage,
   mergeVisibleGameMessages,
+  removePersistedStreamingDmMessages,
   removeStreamingDmMessage,
   startStreamingDmMessage,
   type StreamingDmMessage
@@ -313,7 +315,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     [messages, roomMessages, streamingDmMessages]
   );
   const isShowingStreamingDmMessage = useMemo(
-    () => streamingDmMessages.some((message) => message.content.trim()),
+    () => streamingDmMessages.length > 0,
     [streamingDmMessages]
   );
   const waitingPlayers = useMemo(
@@ -367,6 +369,9 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     (room: RoomSnapshot) => {
       setRoomPlayers(room.players);
       setRoomMessages(room.messages);
+      setStreamingDmMessages((currentMessages) =>
+        removePersistedStreamingDmMessages(currentMessages, room.messages)
+      );
       setIsRoomResolving(room.isResolving);
       setHasAdventureBegun(room.hasBegun);
       setPendingRollRequests(rollRequestsFromRoom(room));
@@ -803,7 +808,11 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
           realtimeEvent.roomId === activeCampaign.id
         ) {
           setStreamingDmMessages((currentMessages) =>
-            removeStreamingDmMessage(currentMessages, realtimeEvent.turnId)
+            completeStreamingDmMessage(
+              currentMessages,
+              realtimeEvent.turnId,
+              realtimeEvent.messageId
+            )
           );
           void refreshRoom();
         }

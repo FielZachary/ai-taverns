@@ -130,8 +130,19 @@ export function mechanicsSeedFromCharacterInput(input: {
 
 export function actorFromMechanicsSeed(
   characterName: string,
-  seed: MechanicsSeed | undefined
+  seed: MechanicsSeed | undefined,
+  fallback?: MechanicsState["actors"][string] | undefined
 ): MechanicsState["actors"][string] {
+  if (!seed && fallback) {
+    return {
+      ...fallback,
+      characterName,
+      spellSlots: cloneSlots(fallback.spellSlots),
+      concentration: fallback.concentration ?? null,
+      conditions: [...(fallback.conditions ?? [])]
+    };
+  }
+
   return {
     characterName,
     currentHp: seed?.currentHp,
@@ -146,17 +157,30 @@ export function mechanicsStateWithActor(input: {
   existing?: MechanicsState | undefined;
   playerId: string;
   characterName: string;
+  characterSheet?: string | undefined;
   seed?: MechanicsSeed | undefined;
   updatedAt?: string | undefined;
 }): MechanicsState {
+  const actorKey = actorKeyForPlayer(input.playerId);
+  const fallbackActor =
+    input.existing?.actors[actorKey] ??
+    (input.characterSheet
+      ? legacyActorFromSheet({
+          id: input.playerId,
+          character_name: input.characterName,
+          character_sheet: input.characterSheet
+        })
+      : undefined);
+
   return {
     updatedAt: input.updatedAt,
     combat: input.existing?.combat ?? defaultCombatState,
     actors: {
       ...(input.existing?.actors ?? {}),
-      [actorKeyForPlayer(input.playerId)]: actorFromMechanicsSeed(
+      [actorKey]: actorFromMechanicsSeed(
         input.characterName,
-        input.seed
+        input.seed,
+        fallbackActor
       )
     }
   };
@@ -403,17 +427,23 @@ function legacyActorFromSheet(player: PlayerLike): MechanicsState["actors"][stri
 }
 
 function actorWithSheetFallback(
-  actor: MechanicsState["actors"][string],
-  fallback: MechanicsState["actors"][string]
+  actor: MechanicsState["actors"][string] | undefined,
+  player: PlayerLike
 ): MechanicsState["actors"][string] {
+  const fallback = legacyActorFromSheet(player);
+
+  if (!actor) {
+    return fallback;
+  }
+
   return {
     ...actor,
-    characterName: actor.characterName || fallback.characterName,
+    characterName: actor.characterName || player.character_name,
     currentHp: actor.currentHp ?? fallback.currentHp,
     maxHp: actor.maxHp ?? fallback.maxHp,
-    spellSlots: actor.spellSlots ?? fallback.spellSlots,
-    concentration: actor.concentration ?? fallback.concentration,
-    conditions: actor.conditions ?? fallback.conditions
+    spellSlots: actor.spellSlots ?? cloneSlots(fallback.spellSlots),
+    concentration: actor.concentration ?? null,
+    conditions: actor.conditions ?? []
   };
 }
 
@@ -428,10 +458,7 @@ export function resolveMechanicsState(
 
     for (const player of players) {
       const key = actorKeyForPlayer(player.id);
-      const sheetFallback = legacyActorFromSheet(player);
-      actors[key] = actors[key]
-        ? actorWithSheetFallback(actors[key], sheetFallback)
-        : sheetFallback;
+      actors[key] = actorWithSheetFallback(actors[key], player);
     }
 
     return { ...persisted, actors };
