@@ -10,6 +10,7 @@ export let database: FakeDatabase;
 let providerInputs: {
   message: string;
   instructions: string;
+  currentPlayerAction?: string;
   history: { role: string; content: string }[];
 }[] = [];
 
@@ -1221,6 +1222,9 @@ before(async () => {
         providerInputs.push({
           message: input.message,
           instructions: input.instructions,
+          ...(input.currentPlayerAction
+            ? { currentPlayerAction: input.currentPlayerAction }
+            : {}),
           history: (input.history ?? []).map((message) => ({
             role: message.role,
             content: message.content

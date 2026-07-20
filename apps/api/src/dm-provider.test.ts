@@ -145,6 +145,88 @@ test("DeepSeek provider sends filtered history and returns non-stream debug meta
   );
 });
 
+test("DeepSeek provider lowers temperature for expanded combat language", async () => {
+  const temperatures: Array<number | undefined> = [];
+
+  globalThis.fetch = async (_url, init) => {
+    const requestBody = JSON.parse(String(init?.body)) as {
+      temperature?: number;
+    };
+    temperatures.push(requestBody.temperature);
+
+    return jsonResponse({
+      id: `combat-chat-${temperatures.length}`,
+      model: "test-chat-model",
+      choices: [
+        {
+          finish_reason: "stop",
+          message: {
+            content:
+              '{"public_narration":"The danger sharpens.","roll_requests":[],"next_input_needed":"player_actions","input_targets":[],"input_policy":"all_players"}'
+          }
+        }
+      ]
+    });
+  };
+
+  for (const currentPlayerAction of [
+    "I cast magic missile.",
+    "I stab the nearest cultist.",
+    "I swing my axe.",
+    "I shoot the lookout.",
+    "I raise my crossbow.",
+    "I draw my longsword."
+  ]) {
+    const response = await askDungeonMasterProvider({
+      instructions: "Return a JSON DM response.",
+      message:
+        "Character Sheet: Armor Class 13, HP 27, Weapons: dagger.\n\nCurrent player action: " +
+        currentPlayerAction,
+      currentPlayerAction
+    });
+
+    assert.equal(response.debug.temperature, 0.2);
+  }
+
+  assert.deepEqual(temperatures, [0.2, 0.2, 0.2, 0.2, 0.2, 0.2]);
+});
+
+test("DeepSeek provider uses current player action instead of full prompt context for temperature", async () => {
+  let requestBody:
+    | {
+        temperature?: number;
+      }
+    | undefined;
+
+  globalThis.fetch = async (_url, init) => {
+    requestBody = JSON.parse(String(init?.body)) as typeof requestBody;
+
+    return jsonResponse({
+      id: "context-chat-1",
+      model: "test-chat-model",
+      choices: [
+        {
+          finish_reason: "stop",
+          message: {
+            content:
+              '{"public_narration":"There are two people beside you.","roll_requests":[],"next_input_needed":"player_actions","input_targets":[],"input_policy":"all_players"}'
+          }
+        }
+      ]
+    });
+  };
+
+  const response = await askDungeonMasterProvider({
+    instructions: "Return a JSON DM response.",
+    message:
+      "Character Sheet: Armor Class 13, HP 27, Weapons: dagger.\n\nCurrent player action: how many people are with us?",
+    currentPlayerAction: "how many people are with us?"
+  });
+
+  assert.equal(requestBody?.temperature, 0.8);
+  assert.equal(response.debug.temperature, 0.8);
+});
+
 test("test DM provider returns deterministic local contract JSON", async () => {
   process.env.AI_TAVERNS_TEST_DM_PROVIDER = "true";
   delete process.env.NODE_ENV;

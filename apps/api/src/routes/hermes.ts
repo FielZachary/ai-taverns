@@ -83,6 +83,7 @@ export async function registerHermesRoutes(
     const providerData = await runtime.askProvider({
       message: playerMessage,
       instructions: dungeonMasterInstructions,
+      currentPlayerAction: playerMessage,
       ...(body.history ? { history: body.history as GameMessage[] } : {})
     });
 
