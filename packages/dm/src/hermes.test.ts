@@ -90,6 +90,68 @@ describe("parseHermesDmContract", () => {
     assert.match(spellHit.publicNarration, /18 vs AC 15 - hit/);
   });
 
+  it("rejects Lightning Bolt damage requests that skip saves or initiative", () => {
+    assert.throws(
+      () =>
+        parseHermesDmContract(
+          JSON.stringify({
+            public_narration:
+              "Jin casts Lightning Bolt. The Factor is in the path.\n\nRoll 8d6 for Lightning Bolt damage.",
+            roll_requests: [
+              {
+                player: "Jin",
+                dice: "8d6",
+                label: "Lightning Bolt damage"
+              }
+            ],
+            next_input_needed: "dice_results"
+          })
+        ),
+      /requested Lightning Bolt damage without resolving saves or initiative/
+    );
+  });
+
+  it("accepts Lightning Bolt damage requests after visible saves", () => {
+    const result = parseHermesDmContract(
+      JSON.stringify({
+        public_narration:
+          "Jin casts Lightning Bolt. The Factor is affected by the spell line.\n\nThe Factor rolls 15 and succeeds.\n\nRoll 8d6 for Lightning Bolt damage.",
+        roll_requests: [
+          {
+            player: "Jin",
+            dice: "8d6",
+            label: "Lightning Bolt damage"
+          }
+        ],
+        next_input_needed: "dice_results"
+      })
+    );
+
+    assert.match(result.publicNarration, /The Factor rolls 15 and succeeds/);
+    assert.equal(result.rollRequests.length, 1);
+  });
+
+  it("rejects Lightning Bolt damage outcomes before the submitted damage roll", () => {
+    assert.throws(
+      () =>
+        parseHermesDmContract(
+          JSON.stringify({
+            public_narration:
+              "Jin casts Lightning Bolt. The Factor is affected by the spell line.\n\nThe Factor rolls 8 and fails. The Factor takes full damage.\n\nRoll 8d6 for Lightning Bolt damage.",
+            roll_requests: [
+              {
+                player: "Jin",
+                dice: "8d6",
+                label: "Lightning Bolt damage"
+              }
+            ],
+            next_input_needed: "dice_results"
+          })
+        ),
+      /resolved Lightning Bolt damage before the submitted damage roll/
+    );
+  });
+
   it("normalizes settings, input targeting, roll narration, and legacy field names", () => {
     const result = parseHermesDmContract(
       JSON.stringify({

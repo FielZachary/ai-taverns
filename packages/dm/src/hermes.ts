@@ -101,6 +101,53 @@ function stringArray(value: unknown) {
     : [];
 }
 
+function requestsLightningBoltDamage(rollRequests: DiceRollRequest[]) {
+  return rollRequests.some((request) => {
+    const dice = request.dice.trim().toLowerCase();
+    const label = request.label.trim().toLowerCase();
+
+    return dice === "8d6" && label.includes("lightning bolt");
+  });
+}
+
+function narrationHasLightningBoltSaveOrInitiative(publicNarration: string) {
+  return (
+    /initiative/i.test(publicNarration) ||
+    /rolls?\s+\d+[^.\n]*(?:succeeds|fails|success|failure)/i.test(
+      publicNarration
+    ) ||
+    /dexterity saving throw[^.\n]*(?:succeeds|fails|success|failure)/i.test(
+      publicNarration
+    )
+  );
+}
+
+function requestedLightningBoltDamageWithoutSave(
+  publicNarration: string,
+  rollRequests: DiceRollRequest[]
+) {
+  const asksInNarration =
+    /roll\s+8d6\s+for\s+lightning bolt damage/i.test(publicNarration);
+
+  return (
+    (asksInNarration || requestsLightningBoltDamage(rollRequests)) &&
+    !narrationHasLightningBoltSaveOrInitiative(publicNarration)
+  );
+}
+
+function resolvedLightningBoltDamageBeforeRoll(
+  publicNarration: string,
+  rollRequests: DiceRollRequest[]
+) {
+  if (!requestsLightningBoltDamage(rollRequests)) {
+    return false;
+  }
+
+  return /(?:takes?|took)\s+(?:full|half|\d+)[^.\n]*damage|hp drops?|current hp|unconscious|dead|dies|does not move|kill/i.test(
+    publicNarration
+  );
+}
+
 function extractJsonObject(text: string) {
   const trimmed = text.trim();
 
@@ -463,6 +510,18 @@ export function parseHermesDmContract(
   if (rollRequests.length === 0 && mentionsPlayerFacingRoll(publicNarration)) {
     throw new Error(
       "The DM provider mentioned a player-facing roll without structured roll_requests."
+    );
+  }
+
+  if (requestedLightningBoltDamageWithoutSave(publicNarration, rollRequests)) {
+    throw new Error(
+      "The DM provider requested Lightning Bolt damage without resolving saves or initiative."
+    );
+  }
+
+  if (resolvedLightningBoltDamageBeforeRoll(publicNarration, rollRequests)) {
+    throw new Error(
+      "The DM provider resolved Lightning Bolt damage before the submitted damage roll."
     );
   }
 

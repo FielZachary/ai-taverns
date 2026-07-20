@@ -18,6 +18,11 @@ describe("DM prompt spell saving throw guidance", () => {
       /Do not put NPC\/enemy saving throws in `roll_requests`/
     );
     assert.match(hardRuntimeContract, /Roll <damage dice> for <spell> damage/);
+    assert.match(hardRuntimeContract, /Lightning Bolt is a save-for-half line spell/);
+    assert.match(hardRuntimeContract, /before requesting its 8d6 damage/);
+    assert.match(hardRuntimeContract, /A Lightning Bolt damage `roll_requests` entry is invalid/);
+    assert.match(hardRuntimeContract, /reports each affected target's save total and success\/failure/);
+    assert.match(hardRuntimeContract, /Never write only 'Roll 8d6 for Lightning Bolt damage'/);
   });
 
   it("exempts pending spell damage from normal narration length and vividness pressure", () => {
@@ -43,6 +48,10 @@ describe("DM prompt spell saving throw guidance", () => {
     assert.match(hardRuntimeContract, /every affected tracked actor/);
     assert.match(hardRuntimeContract, /even if they remain above 0 HP/);
     assert.match(hardRuntimeContract, /`currentHp` above 0/);
+    assert.match(hardRuntimeContract, /mechanical checklist first/);
+    assert.match(hardRuntimeContract, /HP totals, and conditions/);
+    assert.match(hardRuntimeContract, /Only mark an actor defeated, unconscious, dead, wounded, healed/);
+    assert.match(hardRuntimeContract, /do not transfer an outcome from one actor to another/);
   });
 
   it("instructs the DM to start and advance initiative during combat", () => {
@@ -72,10 +81,32 @@ describe("DM prompt spell saving throw guidance", () => {
     assert.match(hardRuntimeContract, /roll the NPC attack as the DM/);
     assert.match(hardRuntimeContract, /attack roll: <total> vs AC <target AC> - hit\/miss/);
     assert.match(hardRuntimeContract, /damage roll: <dice expression> = <total>/);
+    assert.match(hardRuntimeContract, /Do not say a player weapon attack hits, lands, connects/);
     assert.match(hardRuntimeContract, /The words 'attack roll', 'vs AC', and 'damage roll'/);
     assert.match(hardRuntimeContract, /Never end an NPC weapon or spell attack with only a wind-up/);
     assert.match(hardRuntimeContract, /When the final active enemy is defeated/);
     assert.match(hardRuntimeContract, /set `mechanics_state_update\.combat\.active` to false/);
     assert.match(hardRuntimeContract, /Do not say a specific combatant is up next after combat has ended/);
+  });
+
+  it("requires triggered readied actions to resolve through their proper mechanics", () => {
+    assert.match(hardRuntimeContract, /held or readied action trigger occurs/);
+    assert.match(hardRuntimeContract, /resolve every triggered readied player action/);
+    assert.match(hardRuntimeContract, /first enemy entering a doorway or appearing in range/);
+    assert.match(hardRuntimeContract, /Apply automatic effects such as Magic Missile/);
+    assert.match(hardRuntimeContract, /request required attack\/damage rolls for weapon attacks/);
+    assert.match(hardRuntimeContract, /never narrate a readied weapon attack as a hit/);
+    assert.match(hardRuntimeContract, /Magic Missile automatically hits/);
+    assert.match(hardRuntimeContract, /request 3d4 \+ 3 damage/);
+    assert.match(hardRuntimeContract, /before narrating injury, defeat, unconsciousness, death/);
+  });
+
+  it("requires recorded save outcomes to control submitted spell damage", () => {
+    assert.match(hardRuntimeContract, /save-for-half area or line spells/);
+    assert.match(hardRuntimeContract, /Fireball or Lightning Bolt/);
+    assert.match(hardRuntimeContract, /use those recorded save outcomes exactly/);
+    assert.match(hardRuntimeContract, /half damage rounded down/);
+    assert.match(hardRuntimeContract, /exact tracked target HP and conditions/);
+    assert.match(hardRuntimeContract, /do not narrate defeat unless the resulting HP is 0/);
   });
 });
