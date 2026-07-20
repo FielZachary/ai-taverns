@@ -45,8 +45,10 @@ import {
   displayedRoomPlayersWithOptimisticSubmission,
   getMissingPlayerProfileFields,
   hasOptimisticSubmissionForCurrentPlayer,
+  combatTurnOwnerName,
   isInputSubmittedForCurrentRoomState,
   isWaitingOnAnotherPlayerRoll,
+  isWaitingOnCombatTurn,
   isWaitingOnTargetedInput,
   rollRequestsFromRoom,
   roomSnapshotSubmissionUpdate,
@@ -70,7 +72,9 @@ import {
 } from "./game-shell-dice";
 import {
   appendStreamingDmDelta,
+  completeStreamingDmMessage,
   mergeVisibleGameMessages,
+  removePersistedStreamingDmMessages,
   removeStreamingDmMessage,
   startStreamingDmMessage,
   type StreamingDmMessage
@@ -228,6 +232,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
   >([]);
   const [inputTargets, setInputTargets] = useState<string[]>([]);
   const [inputPolicy, setInputPolicy] = useState<InputPolicy>("all_players");
+  const [roomCombat, setRoomCombat] = useState<RoomSnapshot["combat"]>();
   const [activeDiceReveal, setActiveDiceReveal] =
     useState<ActiveDiceReveal | null>(null);
   const [isCharacterSheetOpen, setIsCharacterSheetOpen] = useState(false);
@@ -281,6 +286,12 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     playerProfile,
     currentRoomPlayer
   });
+  const isWaitingOnCombatTurnState = isWaitingOnCombatTurn({
+    isSinglePlayer,
+    combat: roomCombat,
+    currentRoomPlayer
+  });
+  const currentCombatTurnOwnerName = combatTurnOwnerName(roomCombat);
   const hasOptimisticSubmission = hasOptimisticSubmissionForCurrentPlayer({
     isSinglePlayer,
     optimisticSubmittedPlayerId,
@@ -304,7 +315,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     [messages, roomMessages, streamingDmMessages]
   );
   const isShowingStreamingDmMessage = useMemo(
-    () => streamingDmMessages.some((message) => message.content.trim()),
+    () => streamingDmMessages.length > 0,
     [streamingDmMessages]
   );
   const waitingPlayers = useMemo(
@@ -338,16 +349,35 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     !isSinglePlayer &&
     roomPlayers.length >= 2 &&
     !hasAdventureBegun;
+  const playerInputLockMessage = currentPendingRollRequest
+    ? `Roll required: ${
+        currentRequiredRollDice?.expression ?? currentPendingRollRequest.label
+      }`
+    : isWaitingOnAnotherPlayerRollState
+      ? "Waiting on another player's roll"
+    : isWaitingOnTargetedInputState
+      ? "Waiting on another player"
+    : isWaitingOnCombatTurnState
+      ? currentCombatTurnOwnerName
+        ? `Waiting on ${currentCombatTurnOwnerName}'s combat turn`
+        : "Waiting on another combat turn"
+    : !isSinglePlayer && !hasAdventureBegun
+      ? "You can only start once the adventure has begun"
+    : undefined;
 
   const applyRoomSnapshot = useCallback(
     (room: RoomSnapshot) => {
       setRoomPlayers(room.players);
       setRoomMessages(room.messages);
+      setStreamingDmMessages((currentMessages) =>
+        removePersistedStreamingDmMessages(currentMessages, room.messages)
+      );
       setIsRoomResolving(room.isResolving);
       setHasAdventureBegun(room.hasBegun);
       setPendingRollRequests(rollRequestsFromRoom(room));
       setInputTargets(room.inputTargets ?? []);
       setInputPolicy(room.inputPolicy ?? "all_players");
+      setRoomCombat(room.combat);
 
       const currentPlayer = room.players.find(
         (roomPlayer) => roomPlayer.id === playerId
@@ -427,6 +457,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
         setPendingRollRequests(rollRequestsFromRoom(room));
         setInputTargets(room.inputTargets ?? []);
         setInputPolicy(room.inputPolicy ?? "all_players");
+        setRoomCombat(room.combat);
       } else {
         applyRoomSnapshot(room);
       }
@@ -642,6 +673,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
       setPendingRollRequests([]);
       setInputTargets([]);
       setInputPolicy("all_players");
+      setRoomCombat(undefined);
       return;
     }
 
@@ -678,6 +710,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
             setPendingRollRequests(rollRequestsFromRoom(room));
             setInputTargets(room.inputTargets ?? []);
             setInputPolicy(room.inputPolicy ?? "all_players");
+            setRoomCombat(room.combat);
           } else {
             applyRoomSnapshot(room);
           }
@@ -775,7 +808,11 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
           realtimeEvent.roomId === activeCampaign.id
         ) {
           setStreamingDmMessages((currentMessages) =>
-            removeStreamingDmMessage(currentMessages, realtimeEvent.turnId)
+            completeStreamingDmMessage(
+              currentMessages,
+              realtimeEvent.turnId,
+              realtimeEvent.messageId
+            )
           );
           void refreshRoom();
         }
@@ -844,6 +881,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     setPendingRollRequests([]);
     setInputTargets([]);
     setInputPolicy("all_players");
+    setRoomCombat(undefined);
     setInputValidationMessage("");
     setTableAlert("");
     setIsInputSubmitted(false);
@@ -1042,6 +1080,8 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
       pendingRollRequests,
       currentPendingRollRequest,
       isWaitingOnTargetedInput: isWaitingOnTargetedInputState,
+      isWaitingOnCombatTurn: isWaitingOnCombatTurnState,
+      combatTurnOwnerName: currentCombatTurnOwnerName,
       isSinglePlayer,
       hasAdventureBegun,
       playerProfile
@@ -1581,20 +1621,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
                 Boolean(activeDiceReveal) ||
                 isInputSubmittedForCurrentState
               }
-              lockMessage={
-                currentPendingRollRequest
-                  ? `Roll required: ${
-                      currentRequiredRollDice?.expression ??
-                      currentPendingRollRequest.label
-                    }`
-                  : isWaitingOnAnotherPlayerRollState
-                    ? "Waiting on another player's roll"
-                    : isWaitingOnTargetedInputState
-                      ? "Waiting on another player"
-                  : !isSinglePlayer && !hasAdventureBegun
-                  ? "You can only start once the adventure has begun"
-                  : undefined
-              }
+              lockMessage={playerInputLockMessage}
               requiredRoll={currentPendingRollRequest}
               requiredRollExpression={currentRequiredRollDice?.expression}
               requiredQueuedDice={currentRequiredRollDice?.queuedDice}

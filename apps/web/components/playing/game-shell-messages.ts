@@ -4,8 +4,47 @@ export type StreamingDmMessage = GameMessage & {
   turnId: string;
 };
 
+type OrderedGameMessage = {
+  message: GameMessage;
+  sourceRank: number;
+  sourceIndex: number;
+};
+
 function streamingMessageId(turnId: string) {
   return `dm-stream-${turnId}`;
+}
+
+function messageTime(message: GameMessage) {
+  const parsedTime = Date.parse(message.createdAt);
+
+  return Number.isNaN(parsedTime) ? Number.POSITIVE_INFINITY : parsedTime;
+}
+
+function compareMessageTime(firstMessage: GameMessage, secondMessage: GameMessage) {
+  const firstTime = messageTime(firstMessage);
+  const secondTime = messageTime(secondMessage);
+
+  if (firstTime < secondTime) {
+    return -1;
+  }
+
+  if (firstTime > secondTime) {
+    return 1;
+  }
+
+  return 0;
+}
+
+function messageRoleRank(message: GameMessage) {
+  if (message.role === "player") {
+    return 0;
+  }
+
+  if (message.role === "dm") {
+    return 1;
+  }
+
+  return 2;
 }
 
 export function startStreamingDmMessage(
@@ -65,6 +104,27 @@ export function removeStreamingDmMessage(
   return currentMessages.filter((message) => message.turnId !== turnId);
 }
 
+export function completeStreamingDmMessage(
+  currentMessages: StreamingDmMessage[],
+  turnId: string,
+  messageId: string
+) {
+  return currentMessages.map((message) =>
+    message.turnId === turnId ? { ...message, id: messageId } : message
+  );
+}
+
+export function removePersistedStreamingDmMessages(
+  currentMessages: StreamingDmMessage[],
+  roomMessages: GameMessage[]
+) {
+  const roomMessageIds = new Set(
+    roomMessages.map((roomMessage) => roomMessage.id)
+  );
+
+  return currentMessages.filter((message) => !roomMessageIds.has(message.id));
+}
+
 export function mergeVisibleGameMessages({
   localMessages,
   roomMessages,
@@ -74,25 +134,47 @@ export function mergeVisibleGameMessages({
   roomMessages: GameMessage[];
   streamingDmMessages: StreamingDmMessage[];
 }) {
-  const mergedMessages = new Map<string, GameMessage>();
+  const mergedMessages = new Map<string, OrderedGameMessage>();
   const roomMessageIds = new Set(
     roomMessages.map((roomMessage) => roomMessage.id)
   );
 
-  localMessages.forEach((message) => {
-    mergedMessages.set(message.id, message);
+  localMessages.forEach((message, sourceIndex) => {
+    mergedMessages.set(message.id, { message, sourceRank: 0, sourceIndex });
   });
-  roomMessages.forEach((message) => {
-    mergedMessages.set(message.id, message);
+  roomMessages.forEach((message, sourceIndex) => {
+    mergedMessages.set(message.id, { message, sourceRank: 1, sourceIndex });
   });
-  streamingDmMessages.forEach((message) => {
+  streamingDmMessages.forEach((message, sourceIndex) => {
     if (!roomMessageIds.has(message.id)) {
-      mergedMessages.set(message.id, message);
+      mergedMessages.set(message.id, { message, sourceRank: 2, sourceIndex });
     }
   });
 
-  return Array.from(mergedMessages.values()).sort(
-    (firstMessage, secondMessage) =>
-      Date.parse(firstMessage.createdAt) - Date.parse(secondMessage.createdAt)
-  );
+  return Array.from(mergedMessages.values())
+    .sort((firstEntry, secondEntry) => {
+      const firstMessage = firstEntry.message;
+      const secondMessage = secondEntry.message;
+      const timeDifference = compareMessageTime(firstMessage, secondMessage);
+
+      if (timeDifference !== 0) {
+        return timeDifference;
+      }
+
+      const roleDifference =
+        messageRoleRank(firstMessage) - messageRoleRank(secondMessage);
+
+      if (roleDifference !== 0) {
+        return roleDifference;
+      }
+
+      const sourceDifference = firstEntry.sourceRank - secondEntry.sourceRank;
+
+      if (sourceDifference !== 0) {
+        return sourceDifference;
+      }
+
+      return firstEntry.sourceIndex - secondEntry.sourceIndex;
+    })
+    .map((entry) => entry.message);
 }

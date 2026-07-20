@@ -281,6 +281,7 @@ test("room contracts accept snapshots and mutation payloads", () => {
     players: [
       {
         id: "client-1",
+        actorKey: "player:actor-1",
         slot: 0,
         username: "Player",
         characterName: "Stone",
@@ -306,10 +307,19 @@ test("room contracts accept snapshots and mutation payloads", () => {
     pendingRollRequests: [],
     inputTargets: [],
     inputPolicy: "all_players",
+    combat: {
+      active: true,
+      round: 2,
+      turnOwner: "player:client-1",
+      turnOwnerPlayerId: "client-1",
+      turnOwnerCharacterName: "Stone",
+      initiativeOrder: ["player:client-1", "npc:raider"]
+    },
     updatedAt: "2026-07-05T00:00:00.000Z"
   });
 
   assert.equal(snapshot.players[0]?.status, "waiting");
+  assert.equal(snapshot.combat.turnOwnerPlayerId, "client-1");
 });
 
 test("room realtime contract accepts heartbeat and update events", () => {
@@ -401,6 +411,14 @@ test("DM route contracts accept solo, ask-DM, regenerate, and traces payloads", 
     pendingRollRequests: [],
     inputTargets: [],
     inputPolicy: "all_players",
+    combat: {
+      active: false,
+      round: 0,
+      turnOwner: null,
+      turnOwnerPlayerId: null,
+      turnOwnerCharacterName: null,
+      initiativeOrder: []
+    },
     updatedAt: "2026-07-05T00:00:00.000Z"
   });
 

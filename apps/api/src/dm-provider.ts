@@ -9,7 +9,10 @@ const deepSeekBaseUrl = (
   process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com"
 ).replace(/\/+$/, "");
 const deepSeekModel = process.env.DEEPSEEK_MODEL || "deepseek-chat";
-const deepSeekTemperature = 0.8;
+const defaultDeepSeekTemperature = 0.8;
+const combatDeepSeekTemperature = 0.2;
+const combatLanguagePattern =
+  /\b(?:ac|armor class|arrow(?:s)?|attack(?:s|ed|ing)?|battle|battleaxe(?:s)?|blade(?:s)?|blowgun(?:s)?|bow(?:s)?|cast(?:s|ed|ing)?|club(?:s)?|combat|crossbow(?:s)?|dagger(?:s)?|damage|dart(?:s)?|enemy|enemies|fight(?:s|ing)?|flail(?:s)?|foe(?:s)?|glaive(?:s)?|greataxe(?:s)?|greatclub(?:s)?|greatsword(?:s)?|halberd(?:s)?|handaxe(?:s)?|hit points?|hostile|hostilities|hp|initiative|javelin(?:s)?|kill(?:s|ed|ing)?|lance(?:s)?|longbow(?:s)?|longsword(?:s)?|mace(?:s)?|maul(?:s)?|melee|morningstar(?:s)?|net(?:s)?|npc turn|pike(?:s)?|quarterstaff|quarterstaves|rapier(?:s)?|roll(?:s|ed|ing)? initiative|saving throw|scimitar(?:s)?|shoot(?:s|ing)?|shot|shortbow(?:s)?|shortsword(?:s)?|sickle(?:s)?|sling(?:s)?|spear(?:s)?|stab(?:s|bed|bing)?|strike(?:s|ing)?|swing(?:s|ing|ung)?|sword(?:s)?|trident(?:s)?|war pick(?:s)?|warhammer(?:s)?|weapon(?:s)?|whip(?:s)?)\b/i;
 
 type DeepSeekMessage = AiDebugMessage;
 
@@ -50,6 +53,7 @@ export type DungeonMasterProviderInput = {
   message: string;
   instructions: string;
   history?: GameMessage[];
+  currentPlayerAction?: string;
   onPublicNarrationDelta?: (text: string) => void;
 };
 
@@ -87,7 +91,7 @@ function testProviderDebug(
     ],
     rawResponse: content,
     model: "ai-taverns-test-provider",
-    temperature: deepSeekTemperature,
+    temperature: providerTemperatureForInput(input),
     providerTimings: [
       {
         attempt: 1,
@@ -271,6 +275,14 @@ function requestContentChars(messages: DeepSeekMessage[]) {
   return messages.reduce((sum, message) => sum + message.content.length, 0);
 }
 
+function providerTemperatureForInput(input: DungeonMasterProviderInput) {
+  const playerFacingContext = input.currentPlayerAction ?? input.message;
+
+  return combatLanguagePattern.test(playerFacingContext)
+    ? combatDeepSeekTemperature
+    : defaultDeepSeekTemperature;
+}
+
 function decodeJsonStringPrefix(value: string) {
   let decoded = "";
 
@@ -318,8 +330,8 @@ function decodeJsonStringPrefix(value: string) {
   return decoded;
 }
 
-function publicNarrationPrefix(buffer: string) {
-  const match = buffer.match(/"public_narration"\s*:\s*"/);
+function streamedDisplayTextPrefix(buffer: string) {
+  const match = buffer.match(/"(?:public_narration|answer)"\s*:\s*"/);
 
   if (!match || match.index === undefined) {
     return "";
@@ -365,7 +377,7 @@ function createPublicNarrationEmitter(
       return;
     }
 
-    const narration = publicNarrationPrefix(streamedContent);
+    const narration = streamedDisplayTextPrefix(streamedContent);
 
     if (narration.length <= emittedNarration.length) {
       return;
@@ -378,6 +390,7 @@ function createPublicNarrationEmitter(
 
 async function requestDeepSeek(
   messages: DeepSeekMessage[],
+  temperature: number,
   attempt: number,
   onPublicNarrationDelta?: (text: string) => void
 ) {
@@ -385,7 +398,7 @@ async function requestDeepSeek(
   const requestBody = JSON.stringify({
     model: deepSeekModel,
     messages,
-    temperature: deepSeekTemperature,
+    temperature,
     max_tokens: 4096,
     ...(onPublicNarrationDelta ? { stream: true } : {})
   });
@@ -578,6 +591,7 @@ export async function askDungeonMasterProvider({
   message,
   instructions,
   history = [],
+  currentPlayerAction,
   onPublicNarrationDelta
 }: DungeonMasterProviderInput): Promise<DungeonMasterProviderResponse> {
   if (shouldUseTestProvider()) {
@@ -585,6 +599,7 @@ export async function askDungeonMasterProvider({
       message,
       instructions,
       history,
+      ...(currentPlayerAction ? { currentPlayerAction } : {}),
       ...(onPublicNarrationDelta ? { onPublicNarrationDelta } : {})
     });
   }
@@ -604,12 +619,19 @@ export async function askDungeonMasterProvider({
       content: message
     }
   ];
+  const temperature = providerTemperatureForInput({
+    message,
+    instructions,
+    history,
+    ...(currentPlayerAction ? { currentPlayerAction } : {})
+  });
 
   let requestMessages = messages;
   const timings: DeepSeekTiming[] = [];
   let fallbackBufferedAfterEmptyStream = false;
   let { data, timing } = await requestDeepSeek(
     requestMessages,
+    temperature,
     1,
     onPublicNarrationDelta
   );
@@ -620,6 +642,7 @@ export async function askDungeonMasterProvider({
     requestMessages = fullEmptyReplyRetryMessages(messages);
     ({ data, timing } = await requestDeepSeek(
       requestMessages,
+      temperature,
       2,
       undefined
     ));
@@ -635,7 +658,7 @@ export async function askDungeonMasterProvider({
         requestMessages,
         rawResponse: data.choices?.[0]?.message?.content ?? "",
         model: data.model ?? deepSeekModel,
-        temperature: deepSeekTemperature,
+        temperature,
         providerTimings: timings,
         ...(data.id ? { providerResponseId: data.id } : {})
       }
@@ -643,7 +666,7 @@ export async function askDungeonMasterProvider({
   }
 
   if (fallbackBufferedAfterEmptyStream && onPublicNarrationDelta) {
-    const narration = publicNarrationPrefix(content);
+    const narration = streamedDisplayTextPrefix(content);
 
     if (narration) {
       onPublicNarrationDelta(narration);
@@ -657,7 +680,7 @@ export async function askDungeonMasterProvider({
       requestMessages,
       rawResponse: content,
       model: data.model ?? deepSeekModel,
-      temperature: deepSeekTemperature,
+      temperature,
       providerTimings: timings,
       ...(data.id ? { providerResponseId: data.id } : {})
     }

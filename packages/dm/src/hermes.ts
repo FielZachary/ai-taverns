@@ -178,6 +178,40 @@ function mentionsPlayerFacingRoll(text: string) {
   );
 }
 
+function findAttackRollAcContradiction(text: string) {
+  const patterns = [
+    /\b(?:spell\s+)?attack roll\s*:?\s*(?:\d*d?\d+\s*(?:[+-]\s*\d+)?\s*=\s*)?(\d+)\s*(?:vs|against)\s*AC\s*(\d+)\s*[-—:;,]?\s*(hit|hits|miss|misses)\b/gi,
+    /\battack roll\s*:?\s*(\d+)\s*(?:vs|against)\s*AC\s*(\d+)\s*[-—:;,]?\s*(hit|hits|miss|misses)\b/gi,
+    /\brolls?\s+(?:a\s+)?(\d+)\s+(?:to hit|on (?:the )?attack)[^.?!;]*(?:vs|against)\s*(?:AC\s*)?(\d+)[^.?!;]*\b(hit|hits|miss|misses)\b/gi,
+    /\brolls?\s+(?:a\s+)?(\d+)[^.?!;]*(?:vs|against)\s*(?:AC\s*)?(\d+)[^.?!;]*\b(hit|hits|miss|misses)\b/gi
+  ];
+
+  for (const pattern of patterns) {
+    for (const match of text.matchAll(pattern)) {
+      const attackTotal = Number.parseInt(match[1] ?? "", 10);
+      const armorClass = Number.parseInt(match[2] ?? "", 10);
+      const outcome = (match[3] ?? "").toLowerCase();
+
+      if (!Number.isFinite(attackTotal) || !Number.isFinite(armorClass)) {
+        continue;
+      }
+
+      const saysHit = outcome.startsWith("hit");
+      const shouldHit = attackTotal >= armorClass;
+
+      if (saysHit !== shouldHit) {
+        return {
+          attackTotal,
+          armorClass,
+          outcome
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -415,6 +449,14 @@ export function parseHermesDmContract(
   if (nextInputNeeded === "dice_results" && rollRequests.length === 0) {
     throw new Error(
       "The DM provider requested dice_results without structured roll_requests."
+    );
+  }
+
+  const attackRollContradiction = findAttackRollAcContradiction(publicNarration);
+
+  if (attackRollContradiction) {
+    throw new Error(
+      "The DM provider contradicted an attack roll and AC comparison."
     );
   }
 

@@ -508,6 +508,7 @@ export type DungeonMasterRuntime = {
     message: string;
     instructions: string;
     history?: GameMessage[];
+    currentPlayerAction?: string;
     onPublicNarrationDelta?: (text: string) => void;
   }): Promise<DungeonMasterProviderResponse>;
   emitDmStreamEvent?(event: DmStreamEvent): void;
@@ -739,7 +740,7 @@ export async function logCampaignEvent(
   payload: Record<string, unknown> = {}
 ): Promise<string | undefined> {
   const result = await db.query<{ id: string }>(
-    "insert into campaign_events (campaign_id, type, payload) values ($1, $2, $3::jsonb) returning id",
+    "insert into campaign_events (campaign_id, type, payload, created_at) values ($1, $2, $3::jsonb, clock_timestamp()) returning id",
     [campaignId, type, JSON.stringify(payload)]
   );
 
@@ -856,6 +857,7 @@ async function addOrReplacePlayerMechanicsActor(
     campaign: CampaignRow;
     playerId: string;
     characterName: string;
+    characterSheet?: string | undefined;
     seed?: MechanicsSeed | undefined;
   }
 ) {
@@ -864,6 +866,7 @@ async function addOrReplacePlayerMechanicsActor(
     existing: currentState,
     playerId: input.playerId,
     characterName: input.characterName,
+    characterSheet: input.characterSheet,
     seed: input.seed,
     updatedAt: nowIso()
   });
@@ -1303,6 +1306,7 @@ export async function createCampaignForMode(
     const mechanicsState = mechanicsStateWithActor({
       playerId: playerRow.id,
       characterName: playerRow.character_name,
+      characterSheet: playerRow.character_sheet,
       seed: input.mechanicsSeed,
       updatedAt: nowIso()
     });
@@ -1712,6 +1716,7 @@ export async function joinCampaignByCode(
         campaign: campaignRow,
         playerId: userPlayer.id,
         characterName,
+        characterSheet,
         seed: input.mechanicsSeed
       });
       return campaignRow;
@@ -1768,6 +1773,7 @@ export async function joinCampaignByCode(
         campaign: campaignRow,
         playerId: joinedPlayer.id,
         characterName,
+        characterSheet,
         seed: input.mechanicsSeed
       });
     }
@@ -1919,7 +1925,13 @@ function rollRequestTargetsPlayer(request: DiceRollRequest, player: PlayerRow) {
     return true;
   }
 
-  const playerNames = [player.username, player.character_name]
+  const playerNames = [
+    actorKeyForPlayer(player.id),
+    `player:${player.client_id}`,
+    player.client_id,
+    player.username,
+    player.character_name
+  ]
     .map(normalizeRollTarget)
     .filter((name): name is string => Boolean(name));
 
@@ -1935,7 +1947,13 @@ function inputTargetMatchesPlayer(target: string, player: PlayerRow) {
     return false;
   }
 
-  const playerNames = [player.username, player.character_name]
+  const playerNames = [
+    actorKeyForPlayer(player.id),
+    `player:${player.client_id}`,
+    player.client_id,
+    player.username,
+    player.character_name
+  ]
     .map(normalizeRollTarget)
     .filter((name): name is string => Boolean(name));
 
@@ -2290,6 +2308,7 @@ function rowToRoomPlayer(
 
   return {
     id: player.client_id,
+    actorKey: actorKeyForPlayer(player.id),
     slot: player.slot ?? 0,
     username: player.username,
     characterName: player.character_name,
@@ -2299,6 +2318,32 @@ function rowToRoomPlayer(
     ),
     status: submittedPlayerIds.has(player.id) ? "submitted" : "waiting",
     lastSeenAt: toIso(player.last_seen_at)
+  };
+}
+
+function roomCombatSnapshot(
+  mechanicsState: MechanicsState,
+  players: PlayerRow[]
+): RoomSnapshot["combat"] {
+  const turnOwner = mechanicsState.combat.turnOwner;
+  const turnOwnerPlayer = turnOwner
+    ? players.find(
+        (player) =>
+          actorKeyForPlayer(player.id) === turnOwner ||
+          `player:${player.client_id}` === turnOwner ||
+          player.client_id === turnOwner
+      )
+    : undefined;
+  const turnOwnerActor = turnOwner ? mechanicsState.actors[turnOwner] : undefined;
+
+  return {
+    active: mechanicsState.combat.active,
+    round: mechanicsState.combat.round,
+    turnOwner,
+    turnOwnerPlayerId: turnOwnerPlayer?.client_id ?? null,
+    turnOwnerCharacterName:
+      turnOwnerPlayer?.character_name || turnOwnerActor?.characterName || null,
+    initiativeOrder: mechanicsState.combat.initiativeOrder
   };
 }
 
@@ -2356,10 +2401,28 @@ async function buildRoomSnapshot(
             'dm_question',
             'dm_answer'
           )
-        order by created_at desc
+        order by created_at desc,
+          case type
+            when 'dm_answer' then 0
+            when 'turn_resolved' then 1
+            when 'adventure_begun' then 1
+            when 'dm_question' then 2
+            when 'turn_submitted' then 3
+            else 4
+          end asc,
+          id desc
         limit 100
       ) recent_events
-      order by created_at asc
+      order by created_at asc,
+        case type
+          when 'turn_submitted' then 0
+          when 'dm_question' then 0
+          when 'turn_resolved' then 1
+          when 'adventure_begun' then 1
+          when 'dm_answer' then 1
+          else 2
+        end asc,
+        id asc
     `,
     [campaign.id]
   );
@@ -2409,6 +2472,7 @@ async function buildRoomSnapshot(
     pendingRollRequests,
     inputTargets: inputTargetsFromCampaign(campaign),
     inputPolicy: inputPolicyFromCampaign(campaign),
+    combat: roomCombatSnapshot(mechanicsState, playersResult.rows),
     updatedAt: toIso(campaign.updated_at)
   };
 }
@@ -2530,6 +2594,55 @@ function formatMechanicsPromptContext(mechanicsState: MechanicsState) {
     "If mechanicsState conflicts with transcript history, generated character-sheet text, or model memory, mechanicsState wins.",
     JSON.stringify(mechanicsState)
   ].join("\n");
+}
+
+function normalizeCombatTurnOwnerForInput(
+  state: MechanicsState,
+  input: {
+    mode: CampaignMode;
+    nextInputNeeded: "player_actions" | "dice_results";
+    inputPolicy: InputPolicy;
+  }
+): MechanicsState {
+  if (!state.combat.active || input.nextInputNeeded !== "player_actions") {
+    return state;
+  }
+
+  if (
+    input.mode === "multiplayer" &&
+    input.inputPolicy === "all_players" &&
+    state.combat.turnOwner?.startsWith("player:")
+  ) {
+    return {
+      ...state,
+      combat: {
+        ...state.combat,
+        turnOwner: null
+      }
+    };
+  }
+
+  if (input.mode === "single_player" && state.combat.turnOwner === null) {
+    const livingPlayerActorKeys = Object.entries(state.actors)
+      .filter(
+        ([actorKey, actor]) =>
+          actorKey.startsWith("player:") &&
+          (actor.currentHp === undefined || actor.currentHp > 0)
+      )
+      .map(([actorKey]) => actorKey);
+
+    if (livingPlayerActorKeys.length === 1) {
+      return {
+        ...state,
+        combat: {
+          ...state.combat,
+          turnOwner: livingPlayerActorKeys[0] ?? null
+        }
+      };
+    }
+  }
+
+  return state;
 }
 
 function formatSoloTurn(
@@ -3135,6 +3248,8 @@ function dmContractRepairInstructions() {
     }),
     "If the original response does not explicitly ask for dice, use an empty roll_requests array.",
     "If a setting field is not clear from the original response, omit that field or use an empty string.",
+    "Fix mechanical contradictions before returning JSON. If an attack roll total is greater than or equal to AC, the attack hits; if it is lower than AC, the attack misses.",
+    "For NPC attacks, preserve DM-side attack and damage rolls in public_narration and do not put those DM-side rolls in roll_requests.",
     "Return only the JSON object. No Markdown. No commentary."
   ].join("\n");
 }
@@ -3169,7 +3284,19 @@ const gameplayTurnOutputContractReminder = [
   "Output contract reminder:",
   "Return only one valid JSON object. Do not include prose, Markdown, or commentary outside JSON.",
   "Required top-level keys: public_narration, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update.",
-  "If hostilities start, include non-empty mechanics_state_update.combat with active, round, turnOwner, and initiativeOrder even when roll_requests pauses resolution.",
+  "If hostilities start while combat is inactive and enemies are ready or aware, ask the acting player for initiative in public_narration and roll_requests before resolving the attack or damage.",
+  "If the acting player clearly surprises unaware enemies, resolve the opening action's required rolls first, then ask initiative before enemy counteraction.",
+  "Also include non-empty mechanics_state_update.combat with active, round, turnOwner, and provisional initiativeOrder as actor-key strings when initiative roll_requests pauses resolution.",
+  "If combat turnOwner is or becomes npc:*, resolve NPC turns before returning control to players.",
+  "Off-turn player combat declarations are only stated intent, not actions already in motion; never say they are mid-swing, following immediately, or resolving before the next initiative actor.",
+  "When multiple player submissions arrive in active combat, resolve the current turn owner's valid action first, keep other submissions as pending intent, and if the next actor is an enemy resolve that enemy turn before later player intent.",
+  "Do not end with next_input_needed player_actions while turnOwner is npc:*; set turnOwner to a player actor, or null for a multiplayer all-player prompt.",
+  "If the stored turnOwner is an NPC key or NPC character name, do not let submitted player attacks or spells preempt that NPC turn.",
+  "In singleplayer active combat, return control with turnOwner set to the player actor key, not null.",
+  "Resolve NPC attacks fully using explicit wording: 'attack roll: X vs AC Y - hit/miss'; on a hit, immediately state 'damage roll: dice = total damage', update player HP, then return control.",
+  "For NPC hits, public_narration must include the words attack roll, vs AC, and damage roll before injury narration.",
+  "Do not end an NPC turn with only a wind-up like lunges, swings, aims, starts casting, or bears down unless a player-facing roll or reaction is required first.",
+  "When the final active enemy is defeated, set combat active false, turnOwner null, and initiativeOrder empty; do not say a specific combatant is up next after combat ends.",
   "Build combat actor names and keys only from the current scene and character sheets; never copy example NPC names into initiativeOrder.",
   "initiativeOrder should include active combatants only; exclude captives, bystanders, and noncombatants unless they can act in the fight."
 ].join("\n");
@@ -3541,10 +3668,28 @@ async function getCampaignEventMessages(
             'dm_question',
             'dm_answer'
           )
-        order by created_at desc
+        order by created_at desc,
+          case type
+            when 'dm_answer' then 0
+            when 'turn_resolved' then 1
+            when 'adventure_begun' then 1
+            when 'dm_question' then 2
+            when 'turn_submitted' then 3
+            else 4
+          end asc,
+          id desc
         limit $2
       ) recent_events
-      order by created_at asc
+      order by created_at asc,
+        case type
+          when 'turn_submitted' then 0
+          when 'dm_question' then 0
+          when 'turn_resolved' then 1
+          when 'adventure_begun' then 1
+          when 'dm_answer' then 1
+          else 2
+        end asc,
+        id asc
     `,
     [campaignId, limit]
   );
@@ -3602,7 +3747,7 @@ async function getCampaignEventMessages(
 async function askDungeonMaster(
   db: Queryable,
   runtime: DungeonMasterRuntime,
-  campaign: Pick<CampaignRow, "id" | "hermes_session_id" | "metadata">,
+  campaign: Pick<CampaignRow, "id" | "hermes_session_id" | "metadata" | "mode">,
   message: string,
   instructions: string,
   includeHistory = true,
@@ -3670,6 +3815,7 @@ async function askDungeonMaster(
       message: providerMessage,
       instructions: promptContext?.instructions ?? instructionsWithWorldContext,
       history,
+      ...(currentPlayerAction ? { currentPlayerAction } : {}),
       ...(streamEmitter && streamTurnId
         ? {
             onPublicNarrationDelta: (text: string) => {
@@ -3722,8 +3868,16 @@ async function askDungeonMaster(
       const shouldRepairMissingStructuredRoll =
         parseError instanceof Error &&
         parseError.message === missingStructuredRollMessage;
+      const shouldRepairAttackRollContradiction =
+        parseError instanceof Error &&
+        parseError.message ===
+          "The DM provider contradicted an attack roll and AC comparison.";
 
-      if (!shouldRepairInvalidJson && !shouldRepairMissingStructuredRoll) {
+      if (
+        !shouldRepairInvalidJson &&
+        !shouldRepairMissingStructuredRoll &&
+        !shouldRepairAttackRollContradiction
+      ) {
         throw parseError;
       }
 
@@ -3751,7 +3905,8 @@ async function askDungeonMaster(
             message: formatDmRollRequestRepairRequest({
               publicNarration: publicNarrationFromProviderResponse(providerData.content)
             }),
-            instructions: dmRollRequestRepairInstructions()
+            instructions: dmRollRequestRepairInstructions(),
+            ...(currentPlayerAction ? { currentPlayerAction } : {})
           })
         : await runtime.askProvider({
             message: formatDmContractRepairRequest({
@@ -3759,7 +3914,8 @@ async function askDungeonMaster(
               providerResponse: providerData.content
             }),
             instructions: dmContractRepairInstructions(),
-            history
+            history,
+            ...(currentPlayerAction ? { currentPlayerAction } : {})
           });
 
       await logTurnDebugTrace(db, {
@@ -3792,10 +3948,17 @@ async function askDungeonMaster(
     const rollRequests = normalizeRollRequests(contract.rollRequests);
     const reply = contract.publicNarration;
     const mechanicsState = resolveMechanicsState(campaign, []);
-    const nextMechanicsState = applyMechanicsStateUpdate(
-      mechanicsState,
-      contract.mechanicsStateUpdate,
-      nowIso()
+    const nextMechanicsState = normalizeCombatTurnOwnerForInput(
+      applyMechanicsStateUpdate(
+        mechanicsState,
+        contract.mechanicsStateUpdate,
+        nowIso()
+      ),
+      {
+        mode: campaign.mode,
+        nextInputNeeded: contract.nextInputNeeded,
+        inputPolicy: contract.inputPolicy
+      }
     );
 
     if (nextMechanicsState !== mechanicsState) {
@@ -4210,6 +4373,7 @@ export async function registerRoomPlayerForUser(
         campaign: campaignRow,
         playerId: savedPlayer.id,
         characterName: input.characterName,
+        characterSheet: input.characterSheet,
         seed: input.mechanicsSeed
       });
     }
@@ -4835,10 +4999,12 @@ export async function askDungeonMasterQuestionForUser(
     player,
     trimmedQuestion
   );
+  const streamTurnId = runtime.emitDmStreamEvent ? randomUUID() : undefined;
   const instructions = withEldermereTurnContext(askDmInstructions(), campaign);
   const promptContext = runtime.buildPromptContext
     ? await runtime.buildPromptContext({
         campaignId: campaign.id,
+        turnId: streamTurnId,
         currentAction,
         baseInstructions: instructions
       })
@@ -4846,34 +5012,83 @@ export async function askDungeonMasterQuestionForUser(
   const history = promptContext
     ? []
     : await getCampaignEventMessages(db, campaign.id);
-  const providerData = await runtime.askProvider({
-    message: promptContext?.message ?? currentAction,
-    instructions: promptContext?.instructions ?? instructions,
-    history
-  });
-  const answer = answerFromAskDmProviderResponse(providerData.content);
-  const questionMessageId = input.clientMessageId?.trim() || randomUUID();
-  const answerMessageId = providerData.id || randomUUID();
 
-  await withTransaction(db, async (client) => {
-    await logCampaignEvent(client, campaign.id, "dm_question", {
-      messageId: questionMessageId,
-      role: "player",
-      playerId: player.id,
-      clientId: player.client_id,
-      username: player.username,
-      characterName: player.character_name,
-      content: trimmedQuestion
+  if (streamTurnId) {
+    runtime.emitDmStreamEvent?.({
+      type: "dm_stream_started",
+      roomId: campaign.id,
+      turnId: streamTurnId
     });
-    await logCampaignEvent(client, campaign.id, "dm_answer", {
-      messageId: answerMessageId,
-      role: "dm",
-      playerId: player.id,
-      inReplyToMessageId: questionMessageId,
-      content: answer,
-      aiDebug: providerData.debug
+  }
+
+  try {
+    const providerData = await runtime.askProvider({
+      message: promptContext?.message ?? currentAction,
+      instructions: promptContext?.instructions ?? instructions,
+      history,
+      currentPlayerAction: trimmedQuestion,
+      ...(streamTurnId
+        ? {
+            onPublicNarrationDelta: (text: string) => {
+              if (!text) {
+                return;
+              }
+
+              runtime.emitDmStreamEvent?.({
+                type: "dm_stream_delta",
+                roomId: campaign.id,
+                turnId: streamTurnId,
+                text
+              });
+            }
+          }
+        : {})
     });
-  });
+    const answer = answerFromAskDmProviderResponse(providerData.content);
+    const questionMessageId = input.clientMessageId?.trim() || randomUUID();
+    const answerMessageId = providerData.id || randomUUID();
+
+    await withTransaction(db, async (client) => {
+      await logCampaignEvent(client, campaign.id, "dm_question", {
+        messageId: questionMessageId,
+        role: "player",
+        playerId: player.id,
+        clientId: player.client_id,
+        username: player.username,
+        characterName: player.character_name,
+        content: trimmedQuestion
+      });
+      await logCampaignEvent(client, campaign.id, "dm_answer", {
+        messageId: answerMessageId,
+        role: "dm",
+        playerId: player.id,
+        inReplyToMessageId: questionMessageId,
+        content: answer,
+        aiDebug: providerData.debug
+      });
+    });
+
+    if (streamTurnId) {
+      runtime.emitDmStreamEvent?.({
+        type: "dm_stream_done",
+        roomId: campaign.id,
+        turnId: streamTurnId,
+        messageId: answerMessageId
+      });
+    }
+  } catch (error) {
+    if (streamTurnId) {
+      runtime.emitDmStreamEvent?.({
+        type: "dm_stream_failed",
+        roomId: campaign.id,
+        turnId: streamTurnId,
+        message:
+          error instanceof Error ? error.message : "DM provider call failed."
+      });
+    }
+
+    throw error;
+  }
 
   const updatedCampaign = await resolveRoomCampaign(
     db,

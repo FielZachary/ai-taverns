@@ -10,6 +10,7 @@ export let database: FakeDatabase;
 let providerInputs: {
   message: string;
   instructions: string;
+  currentPlayerAction?: string;
   history: { role: string; content: string }[];
 }[] = [];
 
@@ -1221,12 +1222,57 @@ before(async () => {
         providerInputs.push({
           message: input.message,
           instructions: input.instructions,
+          ...(input.currentPlayerAction
+            ? { currentPlayerAction: input.currentPlayerAction }
+            : {}),
           history: (input.history ?? []).map((message) => ({
             role: message.role,
             content: message.content
           }))
         });
         if (input.instructions.includes("AI Taverns response formatter")) {
+          if (input.message.includes("Attack roll: 13 vs AC 10 - miss")) {
+            const content = JSON.stringify({
+              public_narration:
+                "The crossbow raider fires from behind the overturned boat. Attack roll: 13 vs AC 10 - hit. Damage roll: 1d8 + 1 = 6 piercing damage.\n\nThe bolt catches Seren in the side, dropping her from 20 HP to 14 HP.\n\nWhat do you do?",
+              roll_requests: [],
+              next_input_needed: "player_actions",
+              input_targets: [],
+              input_policy: "all_players",
+              mechanics_state_update: {
+                actors: {
+                  "player:dm-runtime-attack-roll-contradiction-client": {
+                    characterName: "Seren",
+                    currentHp: 14,
+                    maxHp: 20,
+                    conditions: []
+                  }
+                }
+              }
+            });
+
+            return {
+              id: "provider-attack-roll-contradiction-repair",
+              content,
+              debug: {
+                requestMessages: [
+                  {
+                    role: "system",
+                    content: input.instructions
+                  },
+                  {
+                    role: "user",
+                    content: input.message
+                  }
+                ],
+                rawResponse: content,
+                model: "test-model",
+                temperature: 0.8,
+                providerTimings: []
+              }
+            };
+          }
+
           return {
             id: "provider-repair-1",
             content: JSON.stringify({
@@ -1349,6 +1395,39 @@ before(async () => {
           };
         }
 
+        if (input.message.includes("TRIGGER_ATTACK_ROLL_CONTRADICTION")) {
+          const content = JSON.stringify({
+            public_narration:
+              "The crossbow raider fires from behind the overturned boat. Attack roll: 13 vs AC 10 - miss. The bolt skips off the stone at Seren's feet.\n\nWhat do you do?",
+            roll_requests: [],
+            next_input_needed: "player_actions",
+            input_targets: [],
+            input_policy: "all_players",
+            mechanics_state_update: {}
+          });
+
+          return {
+            id: "provider-attack-roll-contradiction",
+            content,
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: content,
+              model: "test-model",
+              temperature: 0.8,
+              providerTimings: []
+            }
+          };
+        }
+
         if (input.message.includes("TRIGGER_PROVIDER_DEBUG_FAILURE")) {
           const error = new Error("DeepSeek returned an empty reply.");
           (error as { debug?: unknown }).debug = {
@@ -1418,7 +1497,181 @@ before(async () => {
           };
         }
 
+        if (
+          input.message.toLowerCase().includes("scorching ray") &&
+          (input.message.toLowerCase().includes("cutlass raider") ||
+            input.message.toLowerCase().includes("horn-blower"))
+        ) {
+          const mechanicsJson = input.message.match(
+            /If mechanicsState conflicts[\s\S]*?\n(\{[\s\S]*?\})\n\nCurrent turn input JSON:/
+          )?.[1];
+          const playerActorKeys =
+            mechanicsJson
+              ? Object.keys(
+                  (JSON.parse(mechanicsJson) as {
+                    actors?: Record<string, unknown>;
+                  }).actors ?? {}
+                ).filter((key) => key.startsWith("player:"))
+              : [];
+          const isMultiplayer = input.message.includes('"type": "multiplayer_turn"');
+          const mechanicsState = mechanicsJson
+            ? (JSON.parse(mechanicsJson) as {
+                actors?: Record<
+                  string,
+                  { characterName?: string; currentHp?: number; maxHp?: number }
+                >;
+              })
+            : undefined;
+          const targetPlayerKey = playerActorKeys[0] ?? "player:owner";
+          const targetPlayer = mechanicsState?.actors?.[targetPlayerKey];
+          const targetName = targetPlayer?.characterName ?? "the front-line hero";
+          const targetMaxHp = targetPlayer?.maxHp ?? 20;
+          const targetCurrentHp = targetPlayer?.currentHp ?? targetMaxHp;
+          const targetNextHp = Math.max(0, targetCurrentHp - 6);
+          const content = JSON.stringify({
+            public_narration:
+              `The cutlass raider's turn resolves first. Cutlass raider attack roll: 17 vs AC 14 - hit. Cutlass raider damage roll: 1d6 + 2 = 6 slashing damage.\n\nThe rusted blade bites across ${targetName}'s ribs before the raider wrenches it free. ${targetName} drops from ${targetCurrentHp} HP to ${targetNextHp} HP, still standing but hurt.\n\nControl returns to the heroes. What do you do?`,
+            roll_requests: [],
+            next_input_needed: "player_actions",
+            input_targets: [],
+            input_policy: "all_players",
+            mechanics_state_update: {
+              combat: {
+                active: true,
+                round: 1,
+                turnOwner: isMultiplayer ? playerActorKeys[0] : null,
+                initiativeOrder: [
+                  ...(playerActorKeys.length > 0 ? playerActorKeys : ["player:owner"]),
+                  "npc:cutlass-raider",
+                  "npc:horn-blower"
+                ]
+              },
+              actors: {
+                "npc:cutlass-raider": {
+                  characterName: "Cutlass raider",
+                  currentHp: 12,
+                  maxHp: 12,
+                  conditions: []
+                },
+                "npc:horn-blower": {
+                  characterName: "Horn-blower",
+                  currentHp: 10,
+                  maxHp: 10,
+                  conditions: []
+                },
+                [targetPlayerKey]: {
+                  characterName: targetName,
+                  currentHp: targetNextHp,
+                  maxHp: targetMaxHp,
+                  conditions: []
+                }
+              }
+            }
+          });
+
+          return {
+            id: "provider-npc-turn-catchup",
+            content,
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: content,
+              model: "test-model",
+              temperature: 0.8,
+              providerTimings: []
+            }
+          };
+        }
+
+        if (
+          input.message.includes("I rolled 8d6") &&
+          input.message.includes("Fireball damage")
+        ) {
+          const content = JSON.stringify({
+            public_narration:
+              "The surprise Fireball detonates across the pier. Mara staggers through the smoke, and the two raiders are thrown back by the blast.\n\nThe opening strike has landed. Now the rest of the fight catches up: roll 1d20 + 2 for initiative.",
+            roll_requests: [
+              {
+                player: "Owner",
+                dice: "1d20",
+                modifier: 2,
+                label: "Initiative",
+                advantage_state: "normal",
+                reason: "Determine turn order after the surprise opening strike"
+              }
+            ],
+            next_input_needed: "dice_results",
+            input_targets: ["Owner"],
+            input_policy: "only_targeted_players",
+            mechanics_state_update: {
+              combat: {
+                active: true,
+                round: 1,
+                turnOwner: "player:owner",
+                initiativeOrder: [
+                  "player:owner",
+                  "npc:mara",
+                  "npc:drowned-choir-raider-1",
+                  "npc:drowned-choir-raider-2"
+                ]
+              },
+              actors: {
+                "npc:mara": {
+                  characterName: "Mara",
+                  currentHp: 31,
+                  maxHp: 45,
+                  conditions: []
+                },
+                "npc:drowned-choir-raider-1": {
+                  characterName: "Drowned Choir raider",
+                  currentHp: 0,
+                  maxHp: 16,
+                  conditions: ["down"]
+                },
+                "npc:drowned-choir-raider-2": {
+                  characterName: "Drowned Choir raider",
+                  currentHp: 0,
+                  maxHp: 16,
+                  conditions: ["down"]
+                }
+              }
+            }
+          });
+
+          return {
+            id: "provider-surprise-fireball-damage",
+            content,
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: content,
+              model: "test-model",
+              temperature: 0.8,
+              providerTimings: []
+            }
+          };
+        }
+
         if (input.message.includes("I cast fireball on Mara")) {
+          const isSurpriseOpening = input.message.includes(
+            "Mara has not noticed me"
+          );
           const mechanicsJson = input.message.match(
             /If mechanicsState conflicts[\s\S]*?\n(\{[\s\S]*?\})\n\nCurrent turn input JSON:/
           )?.[1];
@@ -1432,17 +1685,28 @@ before(async () => {
               : undefined;
           const content = JSON.stringify({
             public_narration:
-              "Seren casts Fireball. Mara and two Drowned Choir raiders are inside the spell radius.\n\nMara rolls 15 and succeeds. The first raider rolls 9 and fails. The second raider rolls 11 and fails.\n\nRoll 8d6 for Fireball damage.",
+              isSurpriseOpening
+                ? "Seren catches Mara before she can react. Mara and two Drowned Choir raiders are inside the spell radius.\n\nMara rolls 15 and succeeds. The first raider rolls 9 and fails. The second raider rolls 11 and fails.\n\nRoll 8d6 for Fireball damage."
+                : "Seren starts to cast Fireball, and Mara and the Drowned Choir raiders snap into motion.\n\nCombat begins. Roll 1d20 + 2 for initiative before the spell is resolved.",
             roll_requests: [
-              {
-                player: "Owner",
-                dice: "8d6",
-                modifier: 0,
-                label: "Fireball damage",
-                advantage_state: "normal",
-                reason:
-                  "Resolve Fireball damage after NPC Dexterity saving throws"
-              }
+              isSurpriseOpening
+                ? {
+                    player: "Owner",
+                    dice: "8d6",
+                    modifier: 0,
+                    label: "Fireball damage",
+                    advantage_state: "normal",
+                    reason:
+                      "Resolve the surprise Fireball damage before initiative"
+                  }
+                : {
+                    player: "Owner",
+                    dice: "1d20",
+                    modifier: 2,
+                    label: "Initiative",
+                    advantage_state: "normal",
+                    reason: "Determine turn order as combat begins"
+                  }
             ],
             next_input_needed: "dice_results",
             input_targets: ["Owner"],
@@ -1595,6 +1859,36 @@ before(async () => {
             }
           };
         }
+
+        if (input.instructions.includes("out-of-turn table question")) {
+          const answer =
+            "Those tracks look too broad for a wolf and too deliberate for a stray animal.";
+
+          input.onPublicNarrationDelta?.(answer.slice(0, 28));
+          input.onPublicNarrationDelta?.(answer.slice(28));
+
+          return {
+            id: "provider-ask-dm-1",
+            content: JSON.stringify({ answer }),
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: "{}",
+              model: "test-model",
+              temperature: 0.8,
+              providerTimings: []
+            }
+          };
+        }
+
         const publicNarration =
           "A lantern flickers over the old road as your adventure begins.\n\nA weathered sign points toward a ruined watchtower beyond the trees.\n\nWhat do you do?";
         const isEldermereNarrator = input.message.includes(
