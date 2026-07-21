@@ -1778,19 +1778,20 @@ before(async () => {
         }
 
         if (input.instructions.includes("combat narrator")) {
-          const isInitiativeAfterDamage = input.message.includes(
+          const combatNarratorPromptText = `${input.instructions}\n${input.message}`;
+          const isInitiativeAfterDamage = combatNarratorPromptText.includes(
             "The opening strike has landed"
           );
-          const isNpcCatchup = input.message.includes(
+          const isNpcCatchup = combatNarratorPromptText.includes(
             "The cutlass raider's turn resolves first"
           );
-          const isSurpriseFireball = input.message.includes(
+          const isSurpriseFireball = combatNarratorPromptText.includes(
             "Roll 8d6 for Fireball damage."
           );
-          const isInitiativeFireball = input.message.includes(
+          const isInitiativeFireball = combatNarratorPromptText.includes(
             "Roll 1d20 + 2 for initiative"
           );
-          const isResolvedLightningBolt = input.message.includes(
+          const isResolvedLightningBolt = combatNarratorPromptText.includes(
             "Elara takes 28 lightning damage"
           );
           const publicNarration = isNpcCatchup
@@ -1804,7 +1805,7 @@ before(async () => {
                 : isInitiativeFireball
                   ? "Seren starts to cast Fireball, and Mara and the Drowned Choir raiders snap into motion.\n\nCombat begins. Roll 1d20 + 2 for initiative before the spell is resolved."
                   : "Combat remains active around you.\n\nWhat do you do?";
-          const content = input.message.includes("TRIGGER_NARRATOR_FULL_CONTRACT")
+          const content = combatNarratorPromptText.includes("TRIGGER_NARRATOR_FULL_CONTRACT")
             ? JSON.stringify({
                 public_narration: publicNarration,
                 resolution_mode: "resolved_without_dice",

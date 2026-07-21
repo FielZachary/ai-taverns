@@ -701,7 +701,39 @@ test("combat roll submissions resolve instead of repeating submitted pending rol
     getProviderInputs()[0]?.message ?? "",
     /Existing pendingRollRequests:\n\[\]/
   );
-  assert.match(getProviderInputs()[1]?.instructions ?? "", /combat narrator/);
+  const narratorInput = getProviderInputs()[1];
+  assert.match(narratorInput?.instructions ?? "", /combat narrator/);
+  assert.match(
+    narratorInput?.instructions ?? "",
+    /Authoritative mechanics state:/
+  );
+  assert.match(
+    narratorInput?.instructions ?? "",
+    /Current turn input JSON:/
+  );
+  assert.match(
+    narratorInput?.instructions ?? "",
+    /Validated combat adjudication:/
+  );
+  assert.match(
+    narratorInput?.instructions ?? "",
+    /Adjudicator-enforced policy reminders:/
+  );
+  const narratorInstructions = narratorInput?.instructions ?? "";
+  const mechanicsIndex = narratorInstructions.indexOf(
+    "Authoritative mechanics state:"
+  );
+  const adjudicationIndex = narratorInstructions.indexOf(
+    "Validated combat adjudication:"
+  );
+  const worldIndex = narratorInstructions.indexOf("World Context:");
+  assert.ok(mechanicsIndex >= 0);
+  assert.ok(adjudicationIndex > mechanicsIndex);
+  assert.ok(worldIndex < 0 || adjudicationIndex < worldIndex);
+  assert.doesNotMatch(
+    narratorInput?.message ?? "",
+    /Validated combat adjudication:/
+  );
 });
 
 test("DM runtime repairs contradictory attack roll and AC math", async () => {
@@ -858,11 +890,11 @@ test("solo combat turn can start initiative through mechanics state update", asy
   assert.match(providerInput.instructions, /roll initiative/);
   assert.match(providerInput.instructions, /advance `turnOwner`/);
   assert.match(
-    providerInput.message,
+    providerInput.instructions,
     /ask the acting player for initiative/
   );
-  assert.match(providerInput.message, /never copy example NPC names/);
-  assert.match(providerInput.message, /include active combatants only/);
+  assert.match(providerInput.instructions, /never copy example NPC names/);
+  assert.match(providerInput.instructions, /include active combatants only/);
 });
 
 test("surprise opening combat resolves the opening roll before initiative", async () => {
@@ -927,7 +959,10 @@ test("surprise opening combat resolves the opening roll before initiative", asyn
   const providerInput = getProviderInputs().at(-1);
   assert.ok(providerInput);
   assert.match(providerInput.instructions, /surprise or the drop/);
-  assert.match(providerInput.message, /resolve the opening action's required rolls first/);
+  assert.match(
+    providerInput.instructions,
+    /resolve the opening action's required rolls first/
+  );
 
   assert.ok(solo.pendingRollRequest?.id);
   const damageResponse = await app.inject({
@@ -1048,11 +1083,17 @@ test("solo combat catches up NPC turns instead of rejecting the player", async (
   const providerInput = getProviderInputs().at(-1);
   assert.ok(providerInput);
   assert.match(providerInput.instructions, /resolve that NPC turn immediately/);
-  assert.match(providerInput.message, /turnOwner is or becomes npc:\*/);
-  assert.match(providerInput.message, /Off-turn player combat declarations are only stated intent/);
-  assert.match(providerInput.message, /not actions already in motion/);
-  assert.match(providerInput.message, /mid-swing, following immediately/);
-  assert.match(providerInput.message, /if the next actor is an enemy resolve that enemy turn/);
+  assert.match(providerInput.instructions, /turnOwner is or becomes npc:\*/);
+  assert.match(
+    providerInput.instructions,
+    /Off-turn player combat declarations are only stated intent/
+  );
+  assert.match(providerInput.instructions, /not actions already in motion/);
+  assert.match(providerInput.instructions, /mid-swing, following immediately/);
+  assert.match(
+    providerInput.instructions,
+    /if the next actor is an enemy resolve that enemy turn/
+  );
 
   const updatedCampaign = database.campaigns.find(
     (candidate) => candidate.id === campaignId

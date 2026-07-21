@@ -3515,6 +3515,23 @@ function combatNarratorRepairInstructions() {
   ].join("\n");
 }
 
+function splitCombatNarratorVisibleContext(currentAction: string) {
+  const mechanicsMarker = "Authoritative mechanics state:";
+  const mechanicsIndex = currentAction.indexOf(mechanicsMarker);
+
+  if (mechanicsIndex < 0) {
+    return {
+      priorityContext: currentAction.trim(),
+      visibleContext: ""
+    };
+  }
+
+  return {
+    priorityContext: currentAction.slice(mechanicsIndex).trim(),
+    visibleContext: currentAction.slice(0, mechanicsIndex).trim()
+  };
+}
+
 function formatCombatAdjudicatorRequest(input: {
   currentAction: string;
   mechanicsState: MechanicsState;
@@ -3551,13 +3568,9 @@ function formatCombatAdjudicatorRepairRequest(input: {
 }
 
 function formatCombatNarratorRequest(input: {
-  currentAction: string;
   adjudication: CombatAdjudication;
 }) {
   return [
-    "Current action and visible context:",
-    input.currentAction,
-    "",
     "Validated combat adjudication:",
     JSON.stringify({
       combat_relevance: input.adjudication.combatRelevance,
@@ -3845,10 +3858,21 @@ async function askCombatDungeonMaster(
     return null;
   }
 
-  const narratorMessage = formatCombatNarratorRequest({
-    currentAction: promptContext?.message ?? message,
-    adjudication
-  });
+  const narratorContext = splitCombatNarratorVisibleContext(
+    promptContext?.message ?? message
+  );
+  const narratorPriorityContext = [
+    "Combat narrator priority context:",
+    narratorContext.priorityContext,
+    "",
+    formatCombatNarratorRequest({
+      adjudication
+    })
+  ].join("\n");
+  const narratorMessage = [
+    "Current action and visible context:",
+    narratorContext.visibleContext || "No additional visible context."
+  ].join("\n");
   const callNarrator = async (attempt: "initial" | "repair") => {
     const providerStartedAt = Date.now();
     const data = await runtime.askProvider({
@@ -3862,9 +3886,13 @@ async function askCombatDungeonMaster(
               narratorMessage
             ].join("\n"),
       instructions: withEldermereTurnContext(
-        attempt === "initial"
-          ? combatNarratorInstructions()
-          : combatNarratorRepairInstructions(),
+        [
+          attempt === "initial"
+            ? combatNarratorInstructions()
+            : combatNarratorRepairInstructions(),
+          "",
+          narratorPriorityContext
+        ].join("\n"),
         campaign
       ),
       history,
