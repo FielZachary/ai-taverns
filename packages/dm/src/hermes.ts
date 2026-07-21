@@ -1,5 +1,4 @@
 import type { DiceRollRequest, InputPolicy } from "./game-types.js";
-export { dungeonMasterInstructions } from "./dm-prompt-layers.js";
 
 export const internalOpeningRequestPrefix = "AI_DND_INTERNAL_OPENING_REQUEST";
 export const internalPrepRequestPrefix = "AI_DND_INTERNAL_PREP_REQUEST";

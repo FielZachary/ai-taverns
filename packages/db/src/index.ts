@@ -2,14 +2,11 @@ import { randomInt, randomUUID } from "node:crypto";
 import pg from "pg";
 import type { SessionId, UserId } from "@ai-dnd/domain";
 import {
-  debugHermesDmContractFailure,
-  dungeonMasterInstructions,
   eldermereMetadataProfile,
   eldermereRegions,
   formatEldermereOpeningPromptContext,
   formatEldermereTurnPromptContext,
   openingSceneRequest,
-  normalizeHermesContent,
   parseHermesDmContract,
   isEldermerePreset,
   type EldermereCampaignStart,
@@ -516,6 +513,15 @@ type DungeonMasterReply = {
   resolutionMode: ResolutionMode;
   setting?: CampaignSettingSummary | undefined;
 };
+
+const dungeonMasterContractInstructions = [
+  "You are the AI Taverns DnD Dungeon Master.",
+  "Return exactly one valid JSON object and no Markdown.",
+  "Use public_narration for player-facing narration.",
+  "Use roll_requests for player-facing dice the website must collect.",
+  "Use mechanics_state_update for canonical game/mechanics state changes; the website owns persistence.",
+  "Required top-level keys: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update."
+].join("\n");
 
 export type DungeonMasterRuntime = {
   askProvider(input: {
@@ -2737,19 +2743,6 @@ function formatMultiplayerTurn(
   ].join("\n");
 }
 
-function formatSubmissionActionLines(submissions: SubmissionRow[]) {
-  return submissions.map((submission) => {
-    const username = submission.username?.trim() || "Unknown player";
-    const characterName = submission.character_name?.trim() || "Unknown character";
-
-    return `${username} (${characterName}): ${submission.content}`;
-  });
-}
-
-function formatSubmittedActionsForCombatGuard(submissions: SubmissionRow[]) {
-  return formatSubmissionActionLines(submissions).join("\n");
-}
-
 function formatOpeningSceneRequest(input: {
   campaign: CampaignRow;
   mode: CampaignMode;
@@ -3202,7 +3195,7 @@ function openingSceneInstructions(mode: CampaignMode) {
       : "The website has provided the full current party.";
 
   return [
-    dungeonMasterInstructions,
+    dungeonMasterContractInstructions,
     modeDirection,
     "Use the campaign setup and canonical character sheets to begin with a rich campaign opener: establish named place, larger context, shared purpose, first objective, and immediate obstacle. Do not mention implementation details."
   ].join(" ");
@@ -3263,61 +3256,6 @@ function answerFromAskDmProviderResponse(content: string) {
   throw new Error("The DM provider returned an empty answer.");
 }
 
-function dmContractRepairInstructions() {
-  return [
-    "You are an AI Taverns response formatter.",
-    "Convert the provided Dungeon Master response into exactly one valid JSON object.",
-    "Do not continue the scene, add new facts, remove meaningful details, or rewrite the narration except to preserve valid JSON string escaping.",
-    "Use this exact JSON shape:",
-    JSON.stringify({
-      public_narration: "The original player-facing Dungeon Master narration.",
-      resolution_mode: "resolved_without_dice",
-      roll_requests: [],
-      next_input_needed: "player_actions",
-      input_targets: [],
-      input_policy: "all_players",
-      mechanics_state_update: {},
-      setting: {
-        display_location: "",
-        world_name: "",
-        starting_location: ""
-      }
-    }),
-    "If the original response does not explicitly ask for dice, use an empty roll_requests array.",
-    "If a setting field is not clear from the original response, omit that field or use an empty string.",
-    "Fix mechanical contradictions before returning JSON. If an attack roll total is greater than or equal to AC, the attack hits; if it is lower than AC, the attack misses.",
-    "For NPC attacks, preserve DM-side attack and damage rolls in public_narration and do not put those DM-side rolls in roll_requests.",
-    "Return only the JSON object. No Markdown. No commentary."
-  ].join("\n");
-}
-
-function dmRollRequestRepairInstructions() {
-  return [
-    "You are an AI Taverns roll request formatter.",
-    "Convert the provided player-facing Dungeon Master prose into exactly one valid JSON object.",
-    "Preserve the prose exactly as public_narration.",
-    "Create roll_requests for every player-facing roll explicitly requested in the prose.",
-    "Use dice 1d20 unless the prose names different dice.",
-    "Set next_input_needed to dice_results.",
-    "Use this exact JSON shape:",
-    JSON.stringify({
-      public_narration: "The original player-facing Dungeon Master prose.",
-      resolution_mode: "needs_dice",
-      roll_requests: [
-        {
-          dice: "1d20",
-          label: "Short roll label"
-        }
-      ],
-      next_input_needed: "dice_results",
-      input_targets: [],
-      input_policy: "all_players",
-      mechanics_state_update: {}
-    }),
-    "Return only the JSON object. No Markdown. No commentary."
-  ].join("\n");
-}
-
 const gameplayTurnOutputContractReminder = [
   "Output contract reminder:",
   "Return only one valid JSON object. Do not include prose, Markdown, or commentary outside JSON.",
@@ -3343,658 +3281,6 @@ const gameplayTurnOutputContractReminder = [
 
 function appendGameplayTurnOutputContractReminder(message: string) {
   return [message, "", gameplayTurnOutputContractReminder].join("\n");
-}
-
-function formatDmContractRepairRequest(input: {
-  currentAction: string;
-  providerResponse: string;
-}) {
-  return [
-    "The previous Dungeon Master provider response failed the AI Taverns JSON contract.",
-    "Convert it into the required contract without changing the scene outcome.",
-    "",
-    "Current turn input:",
-    input.currentAction,
-    "",
-    "Previous provider response:",
-    input.providerResponse
-  ].join("\n");
-}
-
-function publicNarrationFromProviderResponse(providerResponse: string) {
-  const parsed = parseJsonRecord(providerResponse);
-  const publicNarration =
-    typeof parsed.public_narration === "string" ? parsed.public_narration.trim() : "";
-
-  return publicNarration || providerResponse.trim();
-}
-
-function formatDmRollRequestRepairRequest(input: { publicNarration: string }) {
-  return ["Player-facing prose:", input.publicNarration].join("\n");
-}
-
-type CombatRelevance =
-  | "combat"
-  | "combat_start"
-  | "pending_combat_roll"
-  | "non_combat_false_positive";
-
-type CombatAdjudication = {
-  combatRelevance: CombatRelevance;
-  resolutionMode: ResolutionMode;
-  rollRequests: DiceRollRequest[];
-  nextInputNeeded: "player_actions" | "dice_results";
-  inputTargets: string[];
-  inputPolicy: InputPolicy;
-  mechanicsStateUpdate?: Record<string, unknown>;
-  narrationBrief: {
-    beats: string[];
-    mustSay: string[];
-    mustNotSay: string[];
-  };
-};
-
-const combatActionPattern =
-  /\b(?:attack|attacks|strike|strikes|stab|shoot|fireball|magic missile|scorching ray|cast\b|damage|initiative|saving throw|save|weapon|sword|bow|crossbow|dagger|enemy|foe|hostile|combat|fight|kill)\b/i;
-
-function shouldUseCombatFlow(input: {
-  campaign: Pick<CampaignRow, "metadata">;
-  currentPlayerAction?: string | undefined;
-}) {
-  const mechanicsState = resolveMechanicsState(input.campaign as CampaignRow, []);
-  const pendingRollRequests = pendingRollRequestsFromCampaign(
-    input.campaign as CampaignRow
-  );
-  const pendingCombatRoll = pendingRollRequests.some((request) =>
-    combatActionPattern.test(`${request.label} ${request.dice}`)
-  );
-
-  return (
-    mechanicsState.combat.active ||
-    pendingCombatRoll ||
-    Boolean(
-      input.currentPlayerAction &&
-        combatActionPattern.test(input.currentPlayerAction)
-    )
-  );
-}
-
-function combatAdjudicatorInstructions(input: {
-  forceCombat: boolean;
-  forcePendingCombatRoll: boolean;
-}) {
-  return [
-    "You are the AI Taverns combat mechanics adjudicator.",
-    "Return exactly one valid JSON object and no Markdown.",
-    "Decide mechanics only. Do not write polished player-facing narration.",
-    "Use existing AI Taverns shapes only: roll_requests, input_targets, input_policy, and mechanics_state_update.",
-    "Do not invent a parallel combat state shape, roll schema, or persistence path.",
-    input.forceCombat
-      ? "Server state says combat is active, so combat_relevance must not be non_combat_false_positive."
-      : "",
-    input.forcePendingCombatRoll
-      ? "Server state has pending combat roll requests, so combat_relevance must be pending_combat_roll, combat, or combat_start."
-      : "",
-    "If roll_requests is non-empty or next_input_needed is dice_results, resolution_mode must be needs_dice.",
-    "Never return next_input_needed dice_results with an empty roll_requests array. If player dice are required, include every required structured roll request. If no player dice are required, set resolution_mode to resolved_without_dice, roll_requests to [], and next_input_needed to player_actions.",
-    "If resolution_mode is needs_dice, roll_requests must be non-empty and next_input_needed must be dice_results.",
-    "If resolution_mode is needs_dice, the narration brief must not resolve the pending rolled outcome.",
-    "For player attacks, request attack and damage together when damage dice are known.",
-    "For spells, use the real spell mechanic when it is clear. Lightning Bolt and Fireball force target Dexterity saving throws; they are not spell attack rolls. Scorching Ray is a spell attack. Magic Missile needs no attack roll or saving throw.",
-    "For spells that force NPC or enemy saving throws, roll those target saves as DM-side mechanics, report the save results in the narration brief, and request only the player-controlled damage/effect dice when needed.",
-    "When the current action contains submitted dice results, use those totals as already-rolled inputs for the current outcome.",
-    "For NPC attacks, resolve hit or miss and damage as DM-side mechanics; do not create roll_requests for NPC-side rolls.",
-    "Combat end must reset mechanics_state_update.combat exactly to active false, round 0, turnOwner null, initiativeOrder empty.",
-    "Required JSON shape:",
-    JSON.stringify({
-      combat_relevance: "combat",
-      resolution_mode: "needs_dice",
-      roll_requests: [],
-      next_input_needed: "player_actions",
-      input_targets: [],
-      input_policy: "all_players",
-      mechanics_state_update: {},
-      narration_brief: {
-        beats: [],
-        must_say: [],
-        must_not_say: []
-      }
-    })
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
-function combatAdjudicatorRepairInstructions(input: {
-  forceCombat: boolean;
-  forcePendingCombatRoll: boolean;
-}) {
-  return [
-    "You are the AI Taverns combat adjudication repair formatter.",
-    "Return exactly one valid JSON object and no Markdown.",
-    "The previous combat adjudication failed validation.",
-    "Preserve the intended combat mechanics and use existing AI Taverns shapes only: roll_requests, input_targets, input_policy, and mechanics_state_update.",
-    input.forceCombat
-      ? "Server state says combat is active, so combat_relevance must not be non_combat_false_positive."
-      : "",
-    input.forcePendingCombatRoll
-      ? "Server state has pending combat roll requests, so combat_relevance must be pending_combat_roll, combat, or combat_start."
-      : "",
-    "If next_input_needed is dice_results, roll_requests must be non-empty and resolution_mode must be needs_dice.",
-    "If no player dice are actually required, set resolution_mode to resolved_without_dice, roll_requests to [], and next_input_needed to player_actions.",
-    "Do not use dice_results as a generic pause. It is only valid when the app has structured roll_requests to collect.",
-    "If the current action contains submitted dice results, use those totals as already-rolled inputs for the current outcome.",
-    "Lightning Bolt and Fireball force target Dexterity saving throws; they are not spell attack rolls.",
-    "Return the full adjudicator JSON shape with combat_relevance, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, and narration_brief."
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
-function combatNarratorInstructions() {
-  return [
-    "You are the AI Taverns combat narrator.",
-    "Return exactly one valid JSON object and no Markdown.",
-    JSON.stringify({ public_narration: "Player-facing combat narration." }),
-    "Write only public_narration.",
-    "Do not create, remove, or change roll_requests, input policy, input targets, mechanics_state_update, HP, conditions, turn owner, success, failure, targets, or outcomes.",
-    "Follow the adjudication exactly. If dice are pending, stop before resolving the rolled outcome.",
-    "Use strong tabletop narration, but keep unresolved dice narration concise.",
-    "The adjudicator already enforced these combat policies: When hostilities start, roll initiative unless surprise or the drop applies; advance `turnOwner` only through adjudicated mechanics; resolve that NPC turn immediately when required; use null for a multiplayer party prompt when appropriate."
-  ].join("\n");
-}
-
-function combatNarratorRepairInstructions() {
-  return [
-    "You are an AI Taverns combat narration formatter.",
-    "Return exactly one valid JSON object and no Markdown.",
-    JSON.stringify({ public_narration: "Corrected player-facing combat narration." }),
-    "Preserve the adjudicated mechanics exactly.",
-    "Remove any contradiction of the adjudication.",
-    "If dice are pending, stop before resolving the rolled outcome."
-  ].join("\n");
-}
-
-function splitCombatNarratorVisibleContext(currentAction: string) {
-  const mechanicsMarker = "Authoritative mechanics state:";
-  const mechanicsIndex = currentAction.indexOf(mechanicsMarker);
-
-  if (mechanicsIndex < 0) {
-    return {
-      priorityContext: currentAction.trim(),
-      visibleContext: ""
-    };
-  }
-
-  return {
-    priorityContext: currentAction.slice(mechanicsIndex).trim(),
-    visibleContext: currentAction.slice(0, mechanicsIndex).trim()
-  };
-}
-
-function formatCombatAdjudicatorRequest(input: {
-  currentAction: string;
-  mechanicsState: MechanicsState;
-  pendingRollRequests: DiceRollRequest[];
-}) {
-  return [
-    formatMechanicsPromptContext(input.mechanicsState),
-    "",
-    "Existing pendingRollRequests:",
-    JSON.stringify(input.pendingRollRequests),
-    "",
-    "Current action and context:",
-    input.currentAction
-  ].join("\n");
-}
-
-function formatCombatAdjudicatorRepairRequest(input: {
-  validationError: unknown;
-  adjudicatorRequest: string;
-  providerResponse: string;
-}) {
-  return [
-    "Repair this combat adjudication so it passes validation.",
-    "",
-    "Validation error:",
-    errorSummary(input.validationError).message,
-    "",
-    "Original adjudicator request:",
-    input.adjudicatorRequest,
-    "",
-    "Invalid adjudicator response:",
-    input.providerResponse
-  ].join("\n");
-}
-
-function formatCombatNarratorRequest(input: {
-  adjudication: CombatAdjudication;
-}) {
-  return [
-    "Validated combat adjudication:",
-    JSON.stringify({
-      combat_relevance: input.adjudication.combatRelevance,
-      resolution_mode: input.adjudication.resolutionMode,
-      roll_requests: input.adjudication.rollRequests,
-      next_input_needed: input.adjudication.nextInputNeeded,
-      input_targets: input.adjudication.inputTargets,
-      input_policy: input.adjudication.inputPolicy,
-      mechanics_state_update: input.adjudication.mechanicsStateUpdate ?? {},
-      narration_brief: input.adjudication.narrationBrief
-    }),
-    "",
-    "Adjudicator-enforced policy reminders:",
-    gameplayTurnOutputContractReminder
-  ].join("\n");
-}
-
-function parseCombatAdjudication(content: string, input: {
-  forceCombat: boolean;
-  forcePendingCombatRoll: boolean;
-}): CombatAdjudication {
-  const parsed = parseJsonRecord(content);
-  const combatRelevance = eventPayloadString(parsed.combat_relevance) as CombatRelevance;
-  const allowedRelevance: CombatRelevance[] = [
-    "combat",
-    "combat_start",
-    "pending_combat_roll",
-    "non_combat_false_positive"
-  ];
-
-  if (!allowedRelevance.includes(combatRelevance)) {
-    throw new Error("Combat adjudicator returned invalid combat_relevance.");
-  }
-
-  if (
-    combatRelevance === "non_combat_false_positive" &&
-    (input.forceCombat || input.forcePendingCombatRoll)
-  ) {
-    throw new Error("Combat adjudicator cannot ignore active or pending combat.");
-  }
-
-  const response = parseHermesDmContract(
-    JSON.stringify({
-      public_narration: "Combat adjudication complete.",
-      resolution_mode: parsed.resolution_mode,
-      roll_requests: parsed.roll_requests,
-      next_input_needed: parsed.next_input_needed,
-      input_targets: parsed.input_targets,
-      input_policy: parsed.input_policy,
-      mechanics_state_update: parsed.mechanics_state_update
-    })
-  );
-  const rawBrief = eventPayload(parsed.narration_brief);
-
-  validateMechanicsStateUpdateTargetShape(response.mechanicsStateUpdate);
-
-  const adjudication = {
-    combatRelevance,
-    resolutionMode: response.resolutionMode,
-    rollRequests: response.rollRequests,
-    nextInputNeeded: response.nextInputNeeded,
-    inputTargets: response.inputTargets,
-    inputPolicy: response.inputPolicy,
-    narrationBrief: {
-      beats: Array.isArray(rawBrief.beats)
-        ? rawBrief.beats.filter((item): item is string => typeof item === "string")
-        : [],
-      mustSay: Array.isArray(rawBrief.must_say)
-        ? rawBrief.must_say.filter((item): item is string => typeof item === "string")
-        : [],
-      mustNotSay: Array.isArray(rawBrief.must_not_say)
-        ? rawBrief.must_not_say.filter((item): item is string => typeof item === "string")
-        : []
-    }
-  };
-
-  return {
-    ...adjudication,
-    ...(response.mechanicsStateUpdate
-      ? { mechanicsStateUpdate: response.mechanicsStateUpdate }
-      : {})
-  };
-}
-
-function validateMechanicsStateUpdateTargetShape(
-  update: Record<string, unknown> | undefined
-) {
-  if (!update) {
-    return;
-  }
-
-  const rawCombat = eventPayload(update.combat);
-
-  if (Object.keys(rawCombat).length > 0 && rawCombat.active === false) {
-    if (
-      rawCombat.round !== 0 ||
-      rawCombat.turnOwner !== null ||
-      !Array.isArray(rawCombat.initiativeOrder) ||
-      rawCombat.initiativeOrder.length !== 0
-    ) {
-      throw new Error("Combat end must reset round, turn owner, and initiative.");
-    }
-  }
-}
-
-function parseCombatNarration(content: string) {
-  const parsed = parseJsonRecord(content);
-  const publicNarration = eventPayloadString(parsed.public_narration);
-
-  if (!publicNarration) {
-    throw new Error("Combat narrator response is missing public_narration.");
-  }
-
-  return normalizeHermesContent(
-    JSON.stringify({
-      public_narration: publicNarration,
-      resolution_mode: "resolved_without_dice",
-      roll_requests: [],
-      next_input_needed: "player_actions"
-    })
-  );
-}
-
-function combatNarrationContradictsPendingDice(
-  narration: string,
-  adjudication: CombatAdjudication
-) {
-  return (
-    adjudication.resolutionMode === "needs_dice" &&
-    /\b(?:hits?|miss(?:es)?|wounds?|kills?|dies|defeated)\b/i.test(
-      narration
-    )
-  );
-}
-
-async function askCombatDungeonMaster(
-  db: Queryable,
-  runtime: DungeonMasterRuntime,
-  campaign: Pick<CampaignRow, "id" | "hermes_session_id" | "metadata" | "mode">,
-  message: string,
-  instructions: string,
-  includeHistory: boolean,
-  turnId: string | undefined,
-  currentPlayerAction: string | undefined,
-  options?: {
-    buildPromptContext?: boolean;
-    includeEldermereTurnContext?: boolean;
-  }
-): Promise<DungeonMasterReply | null> {
-  const traceId = randomUUID();
-  const startedAt = Date.now();
-  const mechanicsState = resolveMechanicsState(campaign as CampaignRow, []);
-  const pendingRollRequests = pendingRollRequestsFromCampaign(campaign as CampaignRow);
-  const forceCombat = mechanicsState.combat.active;
-  const forcePendingCombatRoll = pendingRollRequests.some((request) =>
-    combatActionPattern.test(`${request.label} ${request.dice}`)
-  );
-  const shouldBuildPromptContext = options?.buildPromptContext !== false;
-  const instructionsWithWorldContext =
-    options?.includeEldermereTurnContext === false
-      ? instructions
-      : withEldermereTurnContext(instructions, campaign);
-  const promptContext = shouldBuildPromptContext && runtime.buildPromptContext
-    ? await runtime.buildPromptContext({
-        campaignId: campaign.id,
-        turnId,
-        currentAction: message,
-        baseInstructions: instructionsWithWorldContext
-      })
-    : null;
-  const adjudicatorMessage = formatCombatAdjudicatorRequest({
-    currentAction: promptContext?.message ?? message,
-    mechanicsState,
-    pendingRollRequests
-  });
-  const history =
-    includeHistory && !promptContext
-      ? await getCampaignEventMessages(db, campaign.id, 30, turnId)
-      : [];
-
-  await logTurnDebugTrace(db, {
-    campaignId: campaign.id,
-    traceId,
-    phase: "combat_adjudicator_started",
-    turnId,
-    elapsedMs: 0,
-    payload: {
-      forceCombat,
-      forcePendingCombatRoll,
-      currentPlayerAction: currentPlayerAction
-        ? textStats(currentPlayerAction)
-        : undefined,
-      message: textStats(adjudicatorMessage)
-    }
-  });
-
-  const callAdjudicator = async (attempt: "initial" | "repair", error?: unknown) => {
-    const providerStartedAt = Date.now();
-    const data = await runtime.askProvider({
-      message:
-        attempt === "initial"
-          ? adjudicatorMessage
-          : formatCombatAdjudicatorRepairRequest({
-              validationError: error,
-              adjudicatorRequest: adjudicatorMessage,
-              providerResponse: adjudicatorData?.content ?? ""
-            }),
-      instructions: withEldermereTurnContext(
-        attempt === "initial"
-          ? combatAdjudicatorInstructions({ forceCombat, forcePendingCombatRoll })
-          : combatAdjudicatorRepairInstructions({
-              forceCombat,
-              forcePendingCombatRoll
-            }),
-        campaign
-      ),
-      history,
-      ...(currentPlayerAction ? { currentPlayerAction } : {})
-    });
-
-    await logTurnDebugTrace(db, {
-      campaignId: campaign.id,
-      traceId,
-      phase:
-        attempt === "initial"
-          ? "combat_adjudicator_response_received"
-          : "combat_adjudicator_repair_response_received",
-      turnId,
-      elapsedMs: Date.now() - startedAt,
-      payload: {
-        durationMs: Date.now() - providerStartedAt,
-        ...(error ? { originalError: errorSummary(error) } : {}),
-        provider: providerDebugSummary(data.debug, {
-          includeRawResponse: true
-        })
-      }
-    });
-
-    return data;
-  };
-  let adjudicatorData: DungeonMasterProviderResponse | undefined;
-  let adjudication: CombatAdjudication;
-
-  try {
-    adjudicatorData = await callAdjudicator("initial");
-    adjudication = parseCombatAdjudication(adjudicatorData.content, {
-      forceCombat,
-      forcePendingCombatRoll
-    });
-  } catch (adjudicationError) {
-    await logTurnDebugTrace(db, {
-      campaignId: campaign.id,
-      traceId,
-      phase: "combat_adjudicator_validation_failed",
-      turnId,
-      elapsedMs: Date.now() - startedAt,
-      payload: {
-        error: errorSummary(adjudicationError),
-        rawResponse: adjudicatorData
-          ? textStats(adjudicatorData.content)
-          : undefined
-      }
-    });
-
-    const repairData = await callAdjudicator("repair", adjudicationError);
-    adjudicatorData = repairData;
-    adjudication = parseCombatAdjudication(repairData.content, {
-      forceCombat,
-      forcePendingCombatRoll
-    });
-  }
-
-  if (adjudication.combatRelevance === "non_combat_false_positive") {
-    await logTurnDebugTrace(db, {
-      campaignId: campaign.id,
-      traceId,
-      phase: "combat_adjudicator_false_positive",
-      turnId,
-      elapsedMs: Date.now() - startedAt,
-      payload: {
-        resolutionMode: adjudication.resolutionMode
-      }
-    });
-
-    return null;
-  }
-
-  const narratorContext = splitCombatNarratorVisibleContext(
-    promptContext?.message ?? message
-  );
-  const narratorPriorityContext = [
-    "Combat narrator priority context:",
-    narratorContext.priorityContext,
-    "",
-    formatCombatNarratorRequest({
-      adjudication
-    })
-  ].join("\n");
-  const narratorMessage = [
-    "Current action and visible context:",
-    narratorContext.visibleContext || "No additional visible context."
-  ].join("\n");
-  const callNarrator = async (attempt: "initial" | "repair") => {
-    const providerStartedAt = Date.now();
-    const data = await runtime.askProvider({
-      message:
-        attempt === "initial"
-          ? narratorMessage
-          : [
-              "The previous combat narration contradicted the adjudication or tried to mutate mechanics.",
-              "Return corrected narrator JSON only.",
-              "",
-              narratorMessage
-            ].join("\n"),
-      instructions: withEldermereTurnContext(
-        [
-          attempt === "initial"
-            ? combatNarratorInstructions()
-            : combatNarratorRepairInstructions(),
-          "",
-          narratorPriorityContext
-        ].join("\n"),
-        campaign
-      ),
-      history,
-      ...(currentPlayerAction ? { currentPlayerAction } : {})
-    });
-
-    await logTurnDebugTrace(db, {
-      campaignId: campaign.id,
-      traceId,
-      phase:
-        attempt === "initial"
-          ? "combat_narrator_response_received"
-          : "combat_narrator_repair_response_received",
-      turnId,
-      elapsedMs: Date.now() - startedAt,
-      payload: {
-        durationMs: Date.now() - providerStartedAt,
-        provider: providerDebugSummary(data.debug, {
-          includeRawResponse: true
-        })
-      }
-    });
-
-    return data;
-  };
-
-  let narratorData = await callNarrator("initial");
-  let narration = parseCombatNarration(narratorData.content);
-
-  if (combatNarrationContradictsPendingDice(narration, adjudication)) {
-    narratorData = await callNarrator("repair");
-    narration = parseCombatNarration(narratorData.content);
-
-    if (combatNarrationContradictsPendingDice(narration, adjudication)) {
-      throw new Error(`Combat narrator contradicted adjudication. Trace ID: ${traceId}`);
-    }
-  }
-
-  const nextMechanicsState = normalizeCombatTurnOwnerForInput(
-    applyMechanicsStateUpdate(
-      mechanicsState,
-      adjudication.mechanicsStateUpdate,
-      nowIso()
-    ),
-    {
-      mode: campaign.mode,
-      nextInputNeeded: adjudication.nextInputNeeded,
-      inputPolicy: adjudication.inputPolicy
-    }
-  );
-
-  if (nextMechanicsState !== mechanicsState) {
-    await writeMechanicsStateForLockedCampaign(
-      db,
-      campaign.id,
-      nextMechanicsState
-    );
-  }
-
-  const debug: AiDebugInfo = {
-    ...narratorData.debug,
-    combatState: {
-      combat: nextMechanicsState.combat,
-      actors: nextMechanicsState.actors
-    },
-    combatAdjudication: {
-      provider: providerDebugSummary(adjudicatorData.debug, {
-        includeRawResponse: true
-      }),
-      combatRelevance: adjudication.combatRelevance,
-      resolutionMode: adjudication.resolutionMode,
-      rollRequests: adjudication.rollRequests,
-      nextInputNeeded: adjudication.nextInputNeeded,
-      inputTargets: adjudication.inputTargets,
-      inputPolicy: adjudication.inputPolicy,
-      mechanicsStateUpdate: adjudication.mechanicsStateUpdate
-    }
-  } as AiDebugInfo;
-
-  await logTurnDebugTrace(db, {
-    campaignId: campaign.id,
-    traceId,
-    phase: "combat_turn_completed",
-    turnId,
-    elapsedMs: Date.now() - startedAt,
-    payload: {
-      combatRelevance: adjudication.combatRelevance,
-      resolutionMode: adjudication.resolutionMode,
-      rollRequestsCount: adjudication.rollRequests.length,
-      nextInputNeeded: adjudication.nextInputNeeded
-    }
-  });
-
-  return {
-    id: narratorData.id ?? randomUUID(),
-    content: narration,
-    debug,
-    rollRequests: adjudication.rollRequests,
-    inputTargets: adjudication.inputTargets,
-    inputPolicy: adjudication.inputPolicy,
-    resolutionMode: adjudication.resolutionMode
-  };
 }
 
 async function askEldermereOpeningPlanner(
@@ -4491,37 +3777,6 @@ async function askDungeonMaster(
       : withEldermereTurnContext(instructions, campaign);
   let providerDebug: AiDebugInfo | undefined;
 
-  if (
-    currentPlayerAction &&
-    shouldUseCombatFlow({
-      campaign,
-      currentPlayerAction
-    })
-  ) {
-    const combatReply = await askCombatDungeonMaster(
-      db,
-      runtime,
-      campaign,
-      message,
-      instructions,
-      includeHistory,
-      turnId,
-      currentPlayerAction,
-      {
-        ...(options?.buildPromptContext === undefined
-          ? {}
-          : { buildPromptContext: options.buildPromptContext }),
-        ...(options?.includeEldermereTurnContext === undefined
-          ? {}
-          : { includeEldermereTurnContext: options.includeEldermereTurnContext })
-      }
-    );
-
-    if (combatReply) {
-      return combatReply;
-    }
-  }
-
   if (streamEmitter && streamTurnId) {
     streamEmitter({
       type: "dm_stream_started",
@@ -4561,7 +3816,7 @@ async function askDungeonMaster(
         ? await getCampaignEventMessages(db, campaign.id, 30, turnId)
         : [];
     const providerStartedAt = Date.now();
-    let providerData = await runtime.askProvider({
+    const providerData = await runtime.askProvider({
       message: providerMessage,
       instructions: promptContext?.instructions ?? instructionsWithWorldContext,
       history,
@@ -4600,100 +3855,14 @@ async function askDungeonMaster(
       }
     });
 
-    let contract: HermesDmContractResponse;
-
-    try {
-      contract = parseHermesDmContract(providerData.content, {
+    const contract: HermesDmContractResponse = parseHermesDmContract(
+      providerData.content,
+      {
         ...contractOptions,
         currentAction: message,
         ...(currentPlayerAction ? { currentPlayerAction } : {})
-      });
-    } catch (parseError) {
-      const missingStructuredRollMessage =
-        "The DM provider mentioned a player-facing roll without structured roll_requests.";
-      const shouldRepairInvalidJson =
-        parseError instanceof Error &&
-        parseError.message ===
-          "The DM provider returned invalid JSON for a website turn.";
-      const shouldRepairMissingStructuredRoll =
-        parseError instanceof Error &&
-        parseError.message === missingStructuredRollMessage;
-      const shouldRepairAttackRollContradiction =
-        parseError instanceof Error &&
-        parseError.message ===
-          "The DM provider contradicted an attack roll and AC comparison.";
-
-      if (
-        !shouldRepairInvalidJson &&
-        !shouldRepairMissingStructuredRoll &&
-        !shouldRepairAttackRollContradiction
-      ) {
-        throw parseError;
       }
-
-      await logTurnDebugTrace(db, {
-        campaignId: campaign.id,
-        traceId,
-        phase: "dm_contract_parse_failed",
-        turnId,
-        elapsedMs: Date.now() - startedAt,
-        payload: {
-          error: errorSummary(parseError),
-          diagnostics: debugHermesDmContractFailure(providerData.content, {
-            currentAction: message,
-            ...(currentPlayerAction ? { currentPlayerAction } : {})
-          }),
-          provider: providerDebugSummary(providerData.debug, {
-            includeRawResponse: true
-          })
-        }
-      });
-
-      const repairStartedAt = Date.now();
-      const repairData = shouldRepairMissingStructuredRoll
-        ? await runtime.askProvider({
-            message: formatDmRollRequestRepairRequest({
-              publicNarration: publicNarrationFromProviderResponse(providerData.content)
-            }),
-            instructions: dmRollRequestRepairInstructions(),
-            ...(currentPlayerAction ? { currentPlayerAction } : {})
-          })
-        : await runtime.askProvider({
-            message: formatDmContractRepairRequest({
-              currentAction: providerMessage,
-              providerResponse: providerData.content
-            }),
-            instructions: dmContractRepairInstructions(),
-            history,
-            ...(currentPlayerAction ? { currentPlayerAction } : {})
-          });
-
-      await logTurnDebugTrace(db, {
-        campaignId: campaign.id,
-        traceId,
-        phase: shouldRepairMissingStructuredRoll
-          ? "dm_roll_request_repair_response_received"
-          : "dm_contract_repair_response_received",
-        turnId,
-        elapsedMs: Date.now() - startedAt,
-        payload: {
-          durationMs: Date.now() - repairStartedAt,
-          originalError: errorSummary(parseError),
-          originalResponse: textStats(providerData.content),
-          provider: providerDebugSummary(repairData.debug, {
-            includeRawResponse: true
-          })
-        }
-      });
-
-      providerData = repairData;
-      providerDebug = repairData.debug;
-      contract = parseHermesDmContract(providerData.content, {
-        ...contractOptions,
-        currentAction: message,
-        ...(currentPlayerAction ? { currentPlayerAction } : {})
-      });
-    }
+    );
 
     const rollRequests = normalizeRollRequests(contract.rollRequests);
     const reply = contract.publicNarration;
@@ -4782,11 +3951,7 @@ async function askDungeonMaster(
         error: errorSummary(error),
         provider: providerDebugSummary(providerDebug, {
           includeRawResponse: true
-        }),
-        diagnostics:
-          error instanceof Error
-            ? undefined
-            : debugHermesDmContractFailure(String(error), { currentAction: message })
+        })
       }
     });
 
@@ -5629,10 +4794,9 @@ export async function submitRoomTurnForUser(
         input.runtime,
         submitState.campaign,
         currentAction,
-        dungeonMasterInstructions,
+        dungeonMasterContractInstructions,
         true,
-        submitState.turn.id,
-        formatSubmittedActionsForCombatGuard(submitState.submissions)
+        submitState.turn.id
       );
       const resolvedTurn = await finishResolvedTurn(db, {
         campaignId: submitState.campaign.id,
@@ -6063,7 +5227,7 @@ export async function submitSoloTurnForUser(
       runtime,
       soloState.campaign,
       currentAction,
-      dungeonMasterInstructions,
+      dungeonMasterContractInstructions,
       true,
       soloState.turn.id,
       soloState.content
@@ -6305,7 +5469,7 @@ export async function regenerateCampaignResponseForUser(
       runtime,
       regenerationState.campaign,
       regenerationState.currentAction,
-      dungeonMasterInstructions,
+      dungeonMasterContractInstructions,
       true,
       regenerationState.turn.id,
       regenerationState.currentPlayerAction
