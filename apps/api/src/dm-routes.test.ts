@@ -555,6 +555,42 @@ test("combat narrator extra mechanics fields are ignored", async () => {
   ]);
 });
 
+test("combat adjudicator repairs dice_results without roll requests", async () => {
+  const { cookie, campaignId } = await createSinglePlayerCampaign(
+    "dm-runtime-adjudicator-missing-roll"
+  );
+  resetProviderInputs();
+
+  const soloResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message:
+        "TRIGGER_ADJUDICATOR_MISSING_ROLL_REQUEST I attack Mara with my sword.",
+      clientMessageId: "adjudicator-missing-roll-action"
+    }
+  });
+
+  assert.equal(soloResponse.statusCode, 200, soloResponse.body);
+  const solo = CampaignSoloTurnResponseSchema.parse(soloResponse.json());
+
+  assert.equal(solo.pendingRollRequests.length, 1);
+  assert.equal(solo.pendingRollRequest?.dice, "1d20");
+  assert.equal(solo.pendingRollRequest?.label, "Initiative");
+  assert.match(solo.messages.at(-1)?.content ?? "", /Roll 1d20 \+ 2 for initiative/);
+  assert.equal(getProviderInputs().length, 3);
+  assert.match(getProviderInputs()[0]?.instructions ?? "", /combat mechanics adjudicator/);
+  assert.match(
+    getProviderInputs()[1]?.instructions ?? "",
+    /combat adjudication repair formatter/
+  );
+  assert.match(getProviderInputs()[1]?.message ?? "", /without structured roll_requests/);
+  assert.match(getProviderInputs()[2]?.instructions ?? "", /combat narrator/);
+});
+
 test("DM runtime repairs contradictory attack roll and AC math", async () => {
   const { cookie, campaignId } = await createSinglePlayerCampaign(
     "dm-runtime-attack-roll-contradiction"

@@ -3415,6 +3415,8 @@ function combatAdjudicatorInstructions(input: {
       ? "Server state has pending combat roll requests, so combat_relevance must be pending_combat_roll, combat, or combat_start."
       : "",
     "If roll_requests is non-empty or next_input_needed is dice_results, resolution_mode must be needs_dice.",
+    "Never return next_input_needed dice_results with an empty roll_requests array. If player dice are required, include every required structured roll request. If no player dice are required, set resolution_mode to resolved_without_dice, roll_requests to [], and next_input_needed to player_actions.",
+    "If resolution_mode is needs_dice, roll_requests must be non-empty and next_input_needed must be dice_results.",
     "If resolution_mode is needs_dice, the narration brief must not resolve the pending rolled outcome.",
     "For player attacks, request attack and damage together when damage dice are known.",
     "For NPC attacks, resolve hit or miss and damage as DM-side mechanics; do not create roll_requests for NPC-side rolls.",
@@ -3434,6 +3436,30 @@ function combatAdjudicatorInstructions(input: {
         must_not_say: []
       }
     })
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function combatAdjudicatorRepairInstructions(input: {
+  forceCombat: boolean;
+  forcePendingCombatRoll: boolean;
+}) {
+  return [
+    "You are the AI Taverns combat adjudication repair formatter.",
+    "Return exactly one valid JSON object and no Markdown.",
+    "The previous combat adjudication failed validation.",
+    "Preserve the intended combat mechanics and use existing AI Taverns shapes only: roll_requests, input_targets, input_policy, and mechanics_state_update.",
+    input.forceCombat
+      ? "Server state says combat is active, so combat_relevance must not be non_combat_false_positive."
+      : "",
+    input.forcePendingCombatRoll
+      ? "Server state has pending combat roll requests, so combat_relevance must be pending_combat_roll, combat, or combat_start."
+      : "",
+    "If next_input_needed is dice_results, roll_requests must be non-empty and resolution_mode must be needs_dice.",
+    "If no player dice are actually required, set resolution_mode to resolved_without_dice, roll_requests to [], and next_input_needed to player_actions.",
+    "Do not use dice_results as a generic pause. It is only valid when the app has structured roll_requests to collect.",
+    "Return the full adjudicator JSON shape with combat_relevance, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, and narration_brief."
   ]
     .filter(Boolean)
     .join("\n");
@@ -3476,6 +3502,25 @@ function formatCombatAdjudicatorRequest(input: {
     "",
     "Current action and context:",
     input.currentAction
+  ].join("\n");
+}
+
+function formatCombatAdjudicatorRepairRequest(input: {
+  validationError: unknown;
+  adjudicatorRequest: string;
+  providerResponse: string;
+}) {
+  return [
+    "Repair this combat adjudication so it passes validation.",
+    "",
+    "Validation error:",
+    errorSummary(input.validationError).message,
+    "",
+    "Original adjudicator request:",
+    input.adjudicatorRequest,
+    "",
+    "Invalid adjudicator response:",
+    input.providerResponse
   ].join("\n");
 }
 
@@ -3683,35 +3728,81 @@ async function askCombatDungeonMaster(
     }
   });
 
-  const adjudicatorStartedAt = Date.now();
-  const adjudicatorData = await runtime.askProvider({
-    message: adjudicatorMessage,
-    instructions: withEldermereTurnContext(
-      combatAdjudicatorInstructions({ forceCombat, forcePendingCombatRoll }),
-      campaign
-    ),
-    history,
-    ...(currentPlayerAction ? { currentPlayerAction } : {})
-  });
+  const callAdjudicator = async (attempt: "initial" | "repair", error?: unknown) => {
+    const providerStartedAt = Date.now();
+    const data = await runtime.askProvider({
+      message:
+        attempt === "initial"
+          ? adjudicatorMessage
+          : formatCombatAdjudicatorRepairRequest({
+              validationError: error,
+              adjudicatorRequest: adjudicatorMessage,
+              providerResponse: adjudicatorData?.content ?? ""
+            }),
+      instructions: withEldermereTurnContext(
+        attempt === "initial"
+          ? combatAdjudicatorInstructions({ forceCombat, forcePendingCombatRoll })
+          : combatAdjudicatorRepairInstructions({
+              forceCombat,
+              forcePendingCombatRoll
+            }),
+        campaign
+      ),
+      history,
+      ...(currentPlayerAction ? { currentPlayerAction } : {})
+    });
 
-  await logTurnDebugTrace(db, {
-    campaignId: campaign.id,
-    traceId,
-    phase: "combat_adjudicator_response_received",
-    turnId,
-    elapsedMs: Date.now() - startedAt,
-    payload: {
-      durationMs: Date.now() - adjudicatorStartedAt,
-      provider: providerDebugSummary(adjudicatorData.debug, {
-        includeRawResponse: true
-      })
-    }
-  });
+    await logTurnDebugTrace(db, {
+      campaignId: campaign.id,
+      traceId,
+      phase:
+        attempt === "initial"
+          ? "combat_adjudicator_response_received"
+          : "combat_adjudicator_repair_response_received",
+      turnId,
+      elapsedMs: Date.now() - startedAt,
+      payload: {
+        durationMs: Date.now() - providerStartedAt,
+        ...(error ? { originalError: errorSummary(error) } : {}),
+        provider: providerDebugSummary(data.debug, {
+          includeRawResponse: true
+        })
+      }
+    });
 
-  const adjudication = parseCombatAdjudication(adjudicatorData.content, {
-    forceCombat,
-    forcePendingCombatRoll
-  });
+    return data;
+  };
+  let adjudicatorData: DungeonMasterProviderResponse | undefined;
+  let adjudication: CombatAdjudication;
+
+  try {
+    adjudicatorData = await callAdjudicator("initial");
+    adjudication = parseCombatAdjudication(adjudicatorData.content, {
+      forceCombat,
+      forcePendingCombatRoll
+    });
+  } catch (adjudicationError) {
+    await logTurnDebugTrace(db, {
+      campaignId: campaign.id,
+      traceId,
+      phase: "combat_adjudicator_validation_failed",
+      turnId,
+      elapsedMs: Date.now() - startedAt,
+      payload: {
+        error: errorSummary(adjudicationError),
+        rawResponse: adjudicatorData
+          ? textStats(adjudicatorData.content)
+          : undefined
+      }
+    });
+
+    const repairData = await callAdjudicator("repair", adjudicationError);
+    adjudicatorData = repairData;
+    adjudication = parseCombatAdjudication(repairData.content, {
+      forceCombat,
+      forcePendingCombatRoll
+    });
+  }
 
   if (adjudication.combatRelevance === "non_combat_false_positive") {
     await logTurnDebugTrace(db, {

@@ -1340,6 +1340,60 @@ before(async () => {
           };
         }
 
+        if (input.instructions.includes("combat adjudication repair formatter")) {
+          const content = JSON.stringify({
+            combat_relevance: "combat_start",
+            resolution_mode: "needs_dice",
+            roll_requests: [
+              {
+                player: "Owner",
+                dice: "1d20",
+                modifier: 2,
+                label: "Initiative",
+                advantage_state: "normal",
+                reason: "Repair missing initiative roll request"
+              }
+            ],
+            next_input_needed: "dice_results",
+            input_targets: ["Owner"],
+            input_policy: "only_targeted_players",
+            mechanics_state_update: {
+              combat: {
+                active: true,
+                round: 1,
+                turnOwner: "player:owner",
+                initiativeOrder: ["player:owner", "npc:mara"]
+              }
+            },
+            narration_brief: {
+              beats: ["Combat begins; initiative is needed."],
+              must_say: ["Roll 1d20 + 2 for initiative."],
+              must_not_say: ["do not resolve the attack"]
+            }
+          });
+
+          return {
+            id: "provider-combat-adjudicator-repair",
+            content,
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: content,
+              model: "test-model",
+              temperature: 0.8,
+              providerTimings: []
+            }
+          };
+        }
+
         if (input.instructions.includes("combat mechanics adjudicator")) {
           const forceCombat = input.instructions.includes(
             "combat is active, so combat_relevance must not be non_combat_false_positive"
@@ -1351,7 +1405,29 @@ before(async () => {
               input.message.includes("TRIGGER_RESOLVED_COMBAT_WITHOUT_ROLLS"));
           let content: string;
 
-          if (falsePositive) {
+          if (input.message.includes("TRIGGER_ADJUDICATOR_MISSING_ROLL_REQUEST")) {
+            content = JSON.stringify({
+              combat_relevance: "combat_start",
+              resolution_mode: "needs_dice",
+              roll_requests: [],
+              next_input_needed: "dice_results",
+              input_targets: ["Owner"],
+              input_policy: "only_targeted_players",
+              mechanics_state_update: {
+                combat: {
+                  active: true,
+                  round: 1,
+                  turnOwner: "player:owner",
+                  initiativeOrder: ["player:owner", "npc:mara"]
+                }
+              },
+              narration_brief: {
+                beats: ["Combat begins; initiative is needed."],
+                must_say: ["Roll initiative."],
+                must_not_say: ["do not resolve the attack"]
+              }
+            });
+          } else if (falsePositive) {
             content = JSON.stringify({
               combat_relevance: "non_combat_false_positive",
               resolution_mode: "resolved_without_dice",
