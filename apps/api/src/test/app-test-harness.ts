@@ -135,6 +135,29 @@ type CampaignEventRecord = {
   created_at: Date;
 };
 
+type ContextChunkRecord = {
+  campaign_id: string;
+  context_key: string;
+  category: string;
+  title: string;
+  visibility: "player_safe" | "dm_only";
+  priority: number;
+  body_markdown: string;
+  archived_at: Date | null;
+  updated_at: Date;
+};
+
+type DmTurnTraceRecord = {
+  id: string;
+  campaign_id: string;
+  trace_id: string;
+  turn_id: string | null;
+  phase: string;
+  elapsed_ms: number | null;
+  payload: unknown;
+  created_at: Date;
+};
+
 class FakeDatabase {
   loginTokens: LoginTokenRecord[] = [];
   users: UserRecord[] = [];
@@ -143,6 +166,8 @@ class FakeDatabase {
   players: PlayerRecord[] = [];
   joinCodes: JoinCodeRecord[] = [];
   campaignEvents: CampaignEventRecord[] = [];
+  contextChunks: ContextChunkRecord[] = [];
+  dmTurnTraces: DmTurnTraceRecord[] = [];
   turns: TurnRecord[] = [];
   submissions: SubmissionRecord[] = [];
   nextId = 1;
@@ -654,10 +679,162 @@ class FakeDatabase {
       return { rows: [{ id: record.id } as T] };
     }
 
+    if (normalizedSql.startsWith("select context_key from campaign_context_chunks")) {
+      const campaignId = values[0] as string;
+
+      return {
+        rows: this.contextChunks
+          .filter(
+            (chunk) =>
+              chunk.campaign_id === campaignId && chunk.archived_at === null
+          )
+          .map((chunk) => ({ context_key: chunk.context_key }) as T)
+      };
+    }
+
     if (
-      normalizedSql.startsWith("insert into campaign_current_state") ||
-      normalizedSql.startsWith("insert into campaign_memories")
+      normalizedSql.startsWith(
+        "select context_key, category, title, visibility, priority, body_markdown, updated_at from campaign_context_chunks"
+      )
     ) {
+      const campaignId = values[0] as string;
+      const requestedKeys = new Set(values[1] as string[]);
+      const requestedCategories = new Set(values[2] as string[]);
+
+      return {
+        rows: this.contextChunks
+          .filter(
+            (chunk) =>
+              chunk.campaign_id === campaignId &&
+              requestedKeys.has(chunk.context_key) &&
+              requestedCategories.has(chunk.category) &&
+              chunk.archived_at === null
+          )
+          .sort((left, right) => right.priority - left.priority)
+          .map((chunk) => ({ ...chunk }) as T)
+      };
+    }
+
+    if (normalizedSql.startsWith("insert into dm_turn_traces")) {
+      const payloadIndex = normalizedSql.includes("elapsed_ms") ? 5 : 4;
+      const record: DmTurnTraceRecord = {
+        id: `dm-trace-${this.nextId++}`,
+        campaign_id: values[0] as string,
+        trace_id: values[1] as string,
+        turn_id: (values[2] as string | null) ?? null,
+        phase: values[3] as string,
+        elapsed_ms: normalizedSql.includes("elapsed_ms")
+          ? ((values[4] as number | null) ?? null)
+          : null,
+        payload:
+          typeof values[payloadIndex] === "string"
+            ? JSON.parse(values[payloadIndex] as string)
+            : values[payloadIndex],
+        created_at: new Date()
+      };
+      this.dmTurnTraces.push(record);
+      return { rows: [] as T[] };
+    }
+
+    if (normalizedSql.startsWith("insert into dm_context_snapshots")) {
+      return { rows: [] as T[] };
+    }
+
+    if (normalizedSql.startsWith("insert into dm_model_calls")) {
+      return { rows: [] as T[] };
+    }
+
+    if (normalizedSql.startsWith("insert into dm_output_reports")) {
+      return { rows: [] as T[] };
+    }
+
+    if (normalizedSql.startsWith("insert into dm_memory_patch_logs")) {
+      return { rows: [] as T[] };
+    }
+
+    if (
+      normalizedSql.startsWith(
+        "update campaign_context_chunks set body_markdown = concat_ws"
+      )
+    ) {
+      const campaignId = values[0] as string;
+      const contextKey = values[1] as string;
+      const markdown = values[2] as string;
+      const chunk = this.contextChunks.find(
+        (candidate) =>
+          candidate.campaign_id === campaignId &&
+          candidate.context_key === contextKey
+      );
+
+      if (chunk) {
+        chunk.body_markdown = [chunk.body_markdown, markdown]
+          .filter(Boolean)
+          .join("\n");
+        chunk.updated_at = new Date();
+      }
+
+      return { rows: [] as T[] };
+    }
+
+    if (
+      normalizedSql.startsWith(
+        "update campaign_context_chunks set body_markdown = $3"
+      )
+    ) {
+      const campaignId = values[0] as string;
+      const contextKey = values[1] as string;
+      const markdown = values[2] as string;
+      const chunk = this.contextChunks.find(
+        (candidate) =>
+          candidate.campaign_id === campaignId &&
+          candidate.context_key === contextKey
+      );
+
+      if (chunk) {
+        chunk.body_markdown = markdown;
+        chunk.updated_at = new Date();
+      }
+
+      return { rows: [] as T[] };
+    }
+
+    if (
+      normalizedSql.startsWith(
+        "update campaign_context_chunks set archived_at = now()"
+      )
+    ) {
+      const campaignId = values[0] as string;
+      const contextKey = values[1] as string;
+      const chunk = this.contextChunks.find(
+        (candidate) =>
+          candidate.campaign_id === campaignId &&
+          candidate.context_key === contextKey
+      );
+
+      if (chunk) {
+        chunk.archived_at = new Date();
+        chunk.updated_at = new Date();
+      }
+
+      return { rows: [] as T[] };
+    }
+
+    if (normalizedSql.startsWith("insert into campaign_context_chunks")) {
+      this.contextChunks.push({
+        campaign_id: values[0] as string,
+        context_key: values[1] as string,
+        category: values[2] as string,
+        title: values[3] as string,
+        visibility:
+          values[4] === "player_safe" || values[4] === "dm_only"
+            ? values[4]
+            : "dm_only",
+        priority: typeof values[5] === "number" ? values[5] : 0,
+        body_markdown: (values[6] ?? values[5]) as string,
+        archived_at: null,
+        updated_at: new Date()
+      });
+
       return { rows: [] as T[] };
     }
 
@@ -1041,29 +1218,30 @@ class FakeDatabase {
       return { rows };
     }
 
+    if (
+      normalizedSql.startsWith(
+        "select id, trace_id, turn_id, phase, elapsed_ms, payload, created_at from dm_turn_traces"
+      )
+    ) {
+      const campaignId = values[0] as string;
+      const traceId = values[1] as string | null;
+      const limit = values[2] as number;
+
+      return {
+        rows: this.dmTurnTraces
+          .filter(
+            (trace) =>
+              trace.campaign_id === campaignId &&
+              (!traceId || trace.trace_id === traceId)
+          )
+          .slice()
+          .reverse()
+          .slice(0, limit) as T[]
+      };
+    }
+
     if (normalizedSql.startsWith("select id, type, payload, created_at from")) {
       const campaignId = values[0] as string;
-      if (normalizedSql.includes("and type = 'turn_debug_trace'")) {
-        const traceId = values[1] as string | null;
-        const limit = values[2] as number;
-
-        return {
-          rows: this.campaignEvents
-            .filter((event) => {
-              if (
-                event.campaign_id !== campaignId ||
-                event.type !== "turn_debug_trace"
-              ) {
-                return false;
-              }
-
-              const payload = event.payload as Record<string, unknown>;
-              return !traceId || payload.traceId === traceId;
-            })
-            .slice(0, limit) as T[]
-        };
-      }
-
       if (normalizedSql.includes("payload->>'messageId' = $2")) {
         const messageId = values[1] as string;
 
@@ -1238,6 +1416,73 @@ before(async () => {
     connectToDatabase: false,
     dmRuntime: {
       askProvider: async (input) => {
+        if (input.instructions.includes("AI Taverns DM router")) {
+          const content = JSON.stringify({
+            job_needed: input.message.toLowerCase().includes("attack")
+              ? "combat"
+              : "scene_director",
+            context_keys: {
+              npc_context: [],
+              player_character_context: [],
+              combat_context: [],
+              relevant_world_context: [],
+              quests_open_threads: [],
+              overarching_big_plot_secrets: []
+            },
+            reason: "Deterministic test router response."
+          });
+
+          return {
+            id: "provider-router-1",
+            content,
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: content,
+              model: "test-model",
+              temperature: 0.8,
+              providerTimings: []
+            }
+          };
+        }
+
+        if (input.instructions.includes("memory/context updater")) {
+          const content = JSON.stringify({
+            patches: [],
+            new_context_chunks: [],
+            remove_context_chunks: []
+          });
+
+          return {
+            id: "provider-memory-updater-1",
+            content,
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: content,
+              model: "test-model",
+              temperature: 0.8,
+              providerTimings: []
+            }
+          };
+        }
+
         providerInputs.push({
           message: input.message,
           instructions: input.instructions,

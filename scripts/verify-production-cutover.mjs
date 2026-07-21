@@ -81,9 +81,14 @@ try {
         ('submissions'),
         ('campaign_events'),
         ('campaign_join_codes'),
-        ('turn_summaries'),
-        ('campaign_current_state'),
-        ('campaign_memories')
+        ('campaign_context_chunks'),
+        ('active_combats'),
+        ('combat_events'),
+        ('dm_turn_traces'),
+        ('dm_context_snapshots'),
+        ('dm_model_calls'),
+        ('dm_output_reports'),
+        ('dm_memory_patch_logs')
     ) as expected(table_name)
     left join information_schema.tables existing
       on existing.table_schema = 'public'

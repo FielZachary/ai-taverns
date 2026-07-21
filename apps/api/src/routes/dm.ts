@@ -16,6 +16,7 @@ import {
   type DungeonMasterRuntime,
   listCampaignDebugTracesForUser,
   regenerateCampaignResponseForUser,
+  runModularPostTurnContextJobs,
   submitSoloTurnForUser
 } from "@ai-dnd/db";
 import type { ApiConfig } from "../config.js";
@@ -56,6 +57,14 @@ export async function registerDmRoutes(
     emitDmStreamEvent(event) {
       baseRuntime.emitDmStreamEvent?.(event);
       fastify.roomRealtime.broadcast(event);
+    },
+    async runPostTurnContextJobs(input) {
+      if (baseRuntime.runPostTurnContextJobs) {
+        await baseRuntime.runPostTurnContextJobs(input);
+        return;
+      }
+
+      await runModularPostTurnContextJobs(fastify.pg, runtime, input);
     }
   };
 

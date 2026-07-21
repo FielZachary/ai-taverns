@@ -9,12 +9,23 @@ import {
   openingSceneRequest,
   parseHermesDmContract,
   isEldermerePreset,
+  buildMemoryUpdaterPrompt,
+  buildRouterPrompt,
+  jobPrompt,
+  renderContextChunks,
+  validateCombatEvents,
+  validateMainDmOutput,
+  validateMemoryPatches,
+  validateRouterOutput,
   type EldermereCampaignStart,
   type AiDebugInfo,
+  type ContextCategory,
+  type ContextChunk,
   type GameMessage,
   type HermesDmContractResponse,
   type HermesDmContractParseOptions,
-  type InputPolicy
+  type InputPolicy,
+  type ValidatedRouterOutput
 } from "@ai-dnd/dm";
 import type {
   CampaignMode,
@@ -514,6 +525,13 @@ type DungeonMasterReply = {
   setting?: CampaignSettingSummary | undefined;
 };
 
+type DmPromptContext = {
+  instructions: string;
+  message: string;
+  sections: unknown[];
+  budget: Record<string, unknown>;
+};
+
 const dungeonMasterContractInstructions = [
   "You are the AI Taverns DnD Dungeon Master.",
   "Return exactly one valid JSON object and no Markdown.",
@@ -1011,58 +1029,78 @@ async function seedEldermerePromptContextRecords(
     }
   ];
 
-  await db.query(
-    `
-      insert into campaign_current_state (
-        campaign_id,
-        style,
-        current_scene,
-        source_event_ids
-      )
-      values ($1, $2::jsonb, $3::jsonb, $4::uuid[])
-      on conflict (campaign_id) do update
-      set style = excluded.style,
-          current_scene = campaign_current_state.current_scene || excluded.current_scene,
-          source_event_ids = excluded.source_event_ids,
-          updated_at = now()
-    `,
-    [
-      campaignId,
-      JSON.stringify(style),
-      JSON.stringify(currentScene),
-      sourceEventIds
-    ]
-  );
+  const chunks = [
+    {
+      contextKey: "world:eldermere-style",
+      category: "relevant_world_context",
+      title: "Eldermere Style And Current Scene",
+      visibility: "dm_only",
+      priority: 10,
+      bodyMarkdown: [
+        "# Eldermere Style And Current Scene",
+        "",
+        "## Style",
+        JSON.stringify(style, null, 2),
+        "",
+        "## Current Scene",
+        JSON.stringify(currentScene, null, 2)
+      ].join("\n")
+    },
+    ...memories.map((memory) => ({
+      contextKey: `world:${memory.title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "")}`,
+      category: "relevant_world_context",
+      title: memory.title,
+      visibility: "dm_only",
+      priority: memory.importance,
+      bodyMarkdown: [
+        `# ${memory.title}`,
+        "",
+        memory.summary,
+        "",
+        `Entities: ${memory.entities.join(", ")}`,
+        sourceEventIds.length > 0
+          ? `Source event IDs: ${sourceEventIds.join(", ")}`
+          : ""
+      ]
+        .filter(Boolean)
+        .join("\n")
+    }))
+  ];
 
-  for (const memory of memories) {
-    await db.query(
+  for (const chunk of chunks) {
+    await bestEffortRuntimeInsert(
+      db,
       `
-        insert into campaign_memories (
+        insert into campaign_context_chunks (
           campaign_id,
-          memory_type,
+          context_key,
+          category,
           title,
-          summary,
-          entities,
-          status,
-          importance,
-          source_event_ids
+          visibility,
+          priority,
+          body_markdown
         )
-        values ($1, 'lore', $2, $3, $4::text[], 'active', $5, $6::uuid[])
-        on conflict (campaign_id, memory_type, lower(title)) do update
-        set summary = excluded.summary,
-            entities = excluded.entities,
-            status = 'active',
-            importance = excluded.importance,
-            source_event_ids = excluded.source_event_ids,
+        values ($1, $2, $3, $4, $5, $6, $7)
+        on conflict (campaign_id, context_key) do update
+        set category = excluded.category,
+            title = excluded.title,
+            visibility = excluded.visibility,
+            priority = excluded.priority,
+            body_markdown = excluded.body_markdown,
+            archived_at = null,
             updated_at = now()
       `,
       [
         campaignId,
-        memory.title,
-        memory.summary,
-        memory.entities,
-        memory.importance,
-        sourceEventIds
+        chunk.contextKey,
+        chunk.category,
+        chunk.title,
+        chunk.visibility,
+        chunk.priority,
+        chunk.bodyMarkdown
       ]
     );
   }
@@ -2600,7 +2638,667 @@ async function logTurnDebugTrace(
     ...(input.payload ?? {})
   };
 
-  await logCampaignEvent(db, input.campaignId, "turn_debug_trace", tracePayload);
+  await bestEffortRuntimeInsert(
+    db,
+    `
+      insert into dm_turn_traces (
+        campaign_id,
+        trace_id,
+        turn_id,
+        phase,
+        elapsed_ms,
+        payload
+      )
+      values ($1, $2, $3, $4, $5, $6::jsonb)
+    `,
+    [
+      input.campaignId,
+      input.traceId,
+      input.turnId ?? null,
+      input.phase,
+      input.elapsedMs ?? null,
+      JSON.stringify(tracePayload)
+    ]
+  );
+}
+
+function isMissingRuntimeTableError(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    ((error as { code?: unknown }).code === "42P01" ||
+      (error as { code?: unknown }).code === "42703")
+  );
+}
+
+async function bestEffortRuntimeInsert(
+  db: Queryable,
+  sql: string,
+  values: unknown[]
+) {
+  try {
+    await db.query(sql, values);
+  } catch (error) {
+    if (!isMissingRuntimeTableError(error)) {
+      throw error;
+    }
+  }
+}
+
+async function logDmTurnTrace(
+  db: Queryable,
+  input: {
+    campaignId: string;
+    traceId: string;
+    turnId?: string | undefined;
+    phase: string;
+    payload: Record<string, unknown>;
+  }
+) {
+  await bestEffortRuntimeInsert(
+    db,
+    `
+      insert into dm_turn_traces (
+        campaign_id,
+        trace_id,
+        turn_id,
+        phase,
+        payload
+      )
+      values ($1, $2, $3, $4, $5::jsonb)
+    `,
+    [
+      input.campaignId,
+      input.traceId,
+      input.turnId ?? null,
+      input.phase,
+      JSON.stringify(input.payload)
+    ]
+  );
+}
+
+async function logDmContextSnapshot(
+  db: Queryable,
+  input: {
+    campaignId: string;
+    traceId: string;
+    turnId?: string | undefined;
+    router: ValidatedRouterOutput;
+    chunks: ContextChunk[];
+    omitted: unknown[];
+  }
+) {
+  await bestEffortRuntimeInsert(
+    db,
+    `
+      insert into dm_context_snapshots (
+        campaign_id,
+        trace_id,
+        turn_id,
+        selected_job,
+        requested_context_keys,
+        included_context_keys,
+        omitted_context_keys,
+        payload
+      )
+      values ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb)
+    `,
+    [
+      input.campaignId,
+      input.traceId,
+      input.turnId ?? null,
+      input.router.jobNeeded,
+      JSON.stringify(input.router.contextKeys),
+      JSON.stringify(input.chunks.map((chunk) => chunk.id)),
+      JSON.stringify(input.omitted),
+      JSON.stringify({
+        fallbackUsed: input.router.fallbackUsed,
+        errors: input.router.errors
+      })
+    ]
+  );
+}
+
+async function logDmModelCall(
+  db: Queryable,
+  input: {
+    campaignId: string;
+    traceId: string;
+    turnId?: string | undefined;
+    phase: "router" | "main" | "memory_updater";
+    providerData: DungeonMasterProviderResponse;
+    durationMs: number;
+  }
+) {
+  await bestEffortRuntimeInsert(
+    db,
+    `
+      insert into dm_model_calls (
+        campaign_id,
+        trace_id,
+        turn_id,
+        phase,
+        provider,
+        model,
+        raw_response,
+        metadata
+      )
+      values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+    `,
+    [
+      input.campaignId,
+      input.traceId,
+      input.turnId ?? null,
+      input.phase,
+      "deepseek",
+      input.providerData.debug.model ?? null,
+      input.providerData.content,
+      JSON.stringify({
+        durationMs: input.durationMs,
+        providerResponseId: input.providerData.debug.providerResponseId,
+        timings: input.providerData.debug.providerTimings
+      })
+    ]
+  );
+}
+
+async function logDmOutputReport(
+  db: Queryable,
+  input: {
+    campaignId: string;
+    traceId: string;
+    turnId?: string | undefined;
+    payload: Record<string, unknown>;
+  }
+) {
+  await bestEffortRuntimeInsert(
+    db,
+    `
+      insert into dm_output_reports (
+        campaign_id,
+        trace_id,
+        turn_id,
+        payload
+      )
+      values ($1, $2, $3, $4::jsonb)
+    `,
+    [
+      input.campaignId,
+      input.traceId,
+      input.turnId ?? null,
+      JSON.stringify(input.payload)
+    ]
+  );
+}
+
+async function logDmMemoryPatchLog(
+  db: Queryable,
+  input: {
+    campaignId: string;
+    traceId: string;
+    turnId?: string | undefined;
+    payload: Record<string, unknown>;
+  }
+) {
+  await bestEffortRuntimeInsert(
+    db,
+    `
+      insert into dm_memory_patch_logs (
+        campaign_id,
+        trace_id,
+        turn_id,
+        payload
+      )
+      values ($1, $2, $3, $4::jsonb)
+    `,
+    [
+      input.campaignId,
+      input.traceId,
+      input.turnId ?? null,
+      JSON.stringify(input.payload)
+    ]
+  );
+}
+
+function contextKeyEntries(router: ValidatedRouterOutput) {
+  return Object.entries(router.contextKeys).flatMap(([category, keys]) =>
+    keys.map((key) => ({
+      category: category as ContextCategory,
+      key
+    }))
+  );
+}
+
+function mapContextChunkRow(row: Record<string, unknown>): ContextChunk {
+  const category = String(row.category ?? row.context_type) as ContextCategory;
+  const id = String(row.context_key ?? row.key ?? row.id);
+  const title = String(row.title ?? id);
+  const visibility =
+    row.visibility === "player_safe" || row.visibility === "dm_only"
+      ? row.visibility
+      : "dm_only";
+  const priority = typeof row.priority === "number" ? row.priority : 0;
+  const bodyMarkdown = String(row.body_markdown ?? row.bodyMarkdown ?? "");
+  const updatedAt = row.updated_at ? toIso(row.updated_at as Date | string) : undefined;
+
+  return {
+    id,
+    category,
+    title,
+    visibility,
+    priority,
+    bodyMarkdown,
+    ...(updatedAt ? { updatedAt } : {})
+  };
+}
+
+async function retrieveSelectedContextChunks(
+  db: Queryable,
+  campaignId: string,
+  router: ValidatedRouterOutput,
+  maxChars = 24000
+) {
+  const requested = contextKeyEntries(router);
+  const requestedKeys = requested.map((entry) => entry.key);
+
+  if (requestedKeys.length === 0) {
+    return { chunks: [] as ContextChunk[], omitted: [] as unknown[] };
+  }
+
+  let rows: Record<string, unknown>[] = [];
+
+  try {
+    const result = await db.query<Record<string, unknown>>(
+      `
+        select
+          context_key,
+          category,
+          title,
+          visibility,
+          priority,
+          body_markdown,
+          updated_at
+        from campaign_context_chunks
+        where campaign_id = $1
+          and context_key = any($2::text[])
+          and category = any($3::text[])
+          and archived_at is null
+        order by priority desc, updated_at desc
+      `,
+      [
+        campaignId,
+        requestedKeys,
+        [...new Set(requested.map((entry) => entry.category))]
+      ]
+    );
+    rows = result.rows;
+  } catch (error) {
+    if (!isMissingRuntimeTableError(error)) {
+      throw error;
+    }
+  }
+
+  const seen = new Set<string>();
+  const found = new Map(rows.map((row) => [String(row.context_key), row]));
+  const chunks: ContextChunk[] = [];
+  const omitted: unknown[] = [];
+  let usedChars = 0;
+
+  for (const request of requested) {
+    if (seen.has(request.key)) {
+      omitted.push({ ...request, reason: "duplicate" });
+      continue;
+    }
+
+    seen.add(request.key);
+    const row = found.get(request.key);
+
+    if (!row) {
+      omitted.push({ ...request, reason: "missing" });
+      continue;
+    }
+
+    const chunk = mapContextChunkRow(row);
+    const nextChars = usedChars + chunk.bodyMarkdown.length;
+
+    if (nextChars > maxChars) {
+      omitted.push({ ...request, reason: "budget_exceeded" });
+      continue;
+    }
+
+    usedChars = nextChars;
+    chunks.push(chunk);
+  }
+
+  return { chunks, omitted };
+}
+
+function mechanicsActorsForValidation(campaign: Pick<CampaignRow, "metadata">) {
+  return Object.fromEntries(
+    Object.entries(resolveMechanicsState(campaign, []).actors).map(([key, actor]) => {
+      const state: {
+        currentHp?: number;
+        maxHp?: number;
+        conditions?: string[];
+      } = {};
+
+      if (actor.currentHp !== undefined) {
+        state.currentHp = actor.currentHp;
+      }
+
+      if (actor.maxHp !== undefined) {
+        state.maxHp = actor.maxHp;
+      }
+
+      if (actor.conditions !== undefined) {
+        state.conditions = actor.conditions;
+      }
+
+      return [key, state];
+    })
+  );
+}
+
+async function buildModularDmPromptContext(
+  db: Queryable,
+  runtime: DungeonMasterRuntime,
+  campaign: Pick<CampaignRow, "id" | "metadata">,
+  input: {
+    traceId: string;
+    turnId?: string | undefined;
+    currentAction: string;
+    baseInstructions: string;
+    history: GameMessage[];
+  }
+): Promise<DmPromptContext> {
+  const routerStartedAt = Date.now();
+  const routerData = await runtime.askProvider({
+    instructions: buildRouterPrompt(),
+    message: input.currentAction,
+    history: input.history
+  });
+  const router = validateRouterOutput(routerData.content);
+
+  await logDmModelCall(db, {
+    campaignId: campaign.id,
+    traceId: input.traceId,
+    turnId: input.turnId,
+    phase: "router",
+    providerData: routerData,
+    durationMs: Date.now() - routerStartedAt
+  });
+
+  const context = await retrieveSelectedContextChunks(db, campaign.id, router);
+
+  await logDmContextSnapshot(db, {
+    campaignId: campaign.id,
+    traceId: input.traceId,
+    turnId: input.turnId,
+    router,
+    chunks: context.chunks,
+    omitted: context.omitted
+  });
+
+  return {
+    instructions: [
+      input.baseInstructions,
+      "",
+      jobPrompt(router.jobNeeded)
+    ].join("\n"),
+    message: [
+      "Selected context chunks:",
+      renderContextChunks(context.chunks),
+      "",
+      "Current turn input:",
+      input.currentAction
+    ].join("\n"),
+    sections: [
+      {
+        kind: "router",
+        jobNeeded: router.jobNeeded,
+        contextKeys: router.contextKeys,
+        fallbackUsed: router.fallbackUsed,
+        errors: router.errors
+      },
+      {
+        kind: "context_snapshot",
+        includedContextKeys: context.chunks.map((chunk) => chunk.id),
+        omittedContextKeys: context.omitted
+      }
+    ],
+    budget: {
+      maxContextChars: 24000,
+      includedContextChars: context.chunks.reduce(
+        (total, chunk) => total + chunk.bodyMarkdown.length,
+        0
+      )
+    }
+  };
+}
+
+async function listCampaignContextIds(db: Queryable, campaignId: string) {
+  try {
+    const result = await db.query<{ context_key: string }>(
+      `
+        select context_key
+        from campaign_context_chunks
+        where campaign_id = $1 and archived_at is null
+      `,
+      [campaignId]
+    );
+
+    return new Set(result.rows.map((row) => row.context_key));
+  } catch (error) {
+    if (!isMissingRuntimeTableError(error)) {
+      throw error;
+    }
+
+    return new Set<string>();
+  }
+}
+
+async function applyAcceptedMemoryPatch(
+  db: Queryable,
+  campaignId: string,
+  patch: Record<string, unknown>
+) {
+  const operation = patch.operation;
+  const contextId = String(patch.context_id ?? patch.contextId ?? "");
+  const markdown = String(patch.markdown ?? "");
+
+  if (operation === "append") {
+    await bestEffortRuntimeInsert(
+      db,
+      `
+        update campaign_context_chunks
+        set body_markdown = concat_ws(E'\n', body_markdown, $3),
+          updated_at = now()
+        where campaign_id = $1 and context_key = $2
+      `,
+      [campaignId, contextId, markdown]
+    );
+    return;
+  }
+
+  if (operation === "replace_section") {
+    await bestEffortRuntimeInsert(
+      db,
+      `
+        update campaign_context_chunks
+        set body_markdown = $3,
+          updated_at = now()
+        where campaign_id = $1 and context_key = $2
+      `,
+      [campaignId, contextId, markdown]
+    );
+    return;
+  }
+
+  if (operation === "archive_chunk") {
+    await bestEffortRuntimeInsert(
+      db,
+      `
+        update campaign_context_chunks
+        set archived_at = now(),
+          updated_at = now()
+        where campaign_id = $1 and context_key = $2
+      `,
+      [campaignId, contextId]
+    );
+    return;
+  }
+
+  if (operation === "create_chunk") {
+    await bestEffortRuntimeInsert(
+      db,
+      `
+        insert into campaign_context_chunks (
+          campaign_id,
+          context_key,
+          category,
+          title,
+          visibility,
+          priority,
+          body_markdown
+        )
+        values ($1, $2, $3, $4, $5, 0, $6)
+      `,
+      [
+        campaignId,
+        contextId,
+        String(patch.context_type ?? patch.contextType),
+        String(patch.title ?? contextId),
+        String(patch.visibility ?? "dm_only"),
+        markdown
+      ]
+    );
+  }
+}
+
+async function applyAcceptedMemoryPatches(
+  db: Queryable,
+  campaignId: string,
+  patches: Record<string, unknown>[]
+) {
+  for (const patch of patches) {
+    await applyAcceptedMemoryPatch(db, campaignId, patch);
+  }
+}
+
+export async function runModularPostTurnContextJobs(
+  db: Queryable,
+  runtime: DungeonMasterRuntime,
+  input: {
+    campaignId: string;
+    turnId: string;
+    currentAction: string;
+    dmResponse: string;
+    rollRequests?: DiceRollRequest[] | undefined;
+  }
+) {
+  const traceId = randomUUID();
+  const startedAt = Date.now();
+  const history = await getCampaignEventMessages(db, input.campaignId, 8);
+  const message = [
+    "Current turn input:",
+    input.currentAction,
+    "",
+    "Accepted public narration:",
+    input.dmResponse,
+    "",
+    "Roll requests:",
+    JSON.stringify(input.rollRequests ?? [], null, 2),
+    "",
+    "Recent messages:",
+    JSON.stringify(history, null, 2)
+  ].join("\n");
+
+  try {
+    await logDmTurnTrace(db, {
+      campaignId: input.campaignId,
+      traceId,
+      turnId: input.turnId,
+      phase: "memory_updater_started",
+      payload: {
+        historyCount: history.length,
+        message: textStats(message)
+      }
+    });
+
+    const providerStartedAt = Date.now();
+    const providerData = await runtime.askProvider({
+      instructions: buildMemoryUpdaterPrompt(),
+      message,
+      history: []
+    });
+
+    await logDmModelCall(db, {
+      campaignId: input.campaignId,
+      traceId,
+      turnId: input.turnId,
+      phase: "memory_updater",
+      providerData,
+      durationMs: Date.now() - providerStartedAt
+    });
+
+    const parsed = parseJsonRecord(providerData.content);
+    const proposedPatches = [
+      ...(Array.isArray(parsed?.patches) ? parsed.patches : []),
+      ...(Array.isArray(parsed?.new_context_chunks)
+        ? parsed.new_context_chunks.map((chunk) =>
+            eventPayload({
+              ...(eventPayload(chunk)),
+              operation: "create_chunk"
+            })
+          )
+        : []),
+      ...(Array.isArray(parsed?.remove_context_chunks)
+        ? parsed.remove_context_chunks.map((chunk) => ({
+            operation: "archive_chunk",
+            context_id: typeof chunk === "string"
+              ? chunk
+              : eventPayload(chunk).context_id
+          }))
+        : [])
+    ];
+    const existingContextIds = await listCampaignContextIds(db, input.campaignId);
+    const validation = validateMemoryPatches(
+      proposedPatches,
+      existingContextIds
+    );
+
+    await applyAcceptedMemoryPatches(
+      db,
+      input.campaignId,
+      validation.accepted
+    );
+
+    await logDmMemoryPatchLog(db, {
+      campaignId: input.campaignId,
+      traceId,
+      turnId: input.turnId,
+      payload: {
+        source: "memory_updater",
+        proposedPatches,
+        acceptedPatches: validation.accepted,
+        discardedPatches: validation.discarded,
+        durationMs: Date.now() - startedAt
+      }
+    });
+  } catch (error) {
+    await logDmMemoryPatchLog(db, {
+      campaignId: input.campaignId,
+      traceId,
+      turnId: input.turnId,
+      payload: {
+        source: "memory_updater",
+        failed: true,
+        error: errorSummary(error),
+        durationMs: Date.now() - startedAt
+      }
+    });
+  }
 }
 
 function formatCanonicalCharacterContext(
@@ -3800,21 +4498,28 @@ async function askDungeonMaster(
   });
 
   try {
-    const promptContext = shouldBuildPromptContext && runtime.buildPromptContext
-      ? await runtime.buildPromptContext({
-          campaignId: campaign.id,
-          turnId,
-          currentAction: message,
-          baseInstructions: instructionsWithWorldContext
-        })
+    const history = includeHistory
+      ? await getCampaignEventMessages(db, campaign.id, 30, turnId)
+      : [];
+    const promptContext = shouldBuildPromptContext
+      ? runtime.buildPromptContext
+        ? await runtime.buildPromptContext({
+            campaignId: campaign.id,
+            turnId,
+            currentAction: message,
+            baseInstructions: instructionsWithWorldContext
+          })
+        : await buildModularDmPromptContext(db, runtime, campaign, {
+            traceId,
+            turnId,
+            currentAction: message,
+            baseInstructions: instructionsWithWorldContext,
+            history
+          })
       : null;
     const providerMessage = appendGameplayTurnOutputContractReminder(
       promptContext?.message ?? message
     );
-    const history =
-      includeHistory && !promptContext
-        ? await getCampaignEventMessages(db, campaign.id, 30, turnId)
-        : [];
     const providerStartedAt = Date.now();
     const providerData = await runtime.askProvider({
       message: providerMessage,
@@ -3839,6 +4544,7 @@ async function askDungeonMaster(
         : {})
     });
     providerDebug = providerData.debug;
+    const providerDurationMs = Date.now() - providerStartedAt;
 
     await logTurnDebugTrace(db, {
       campaignId: campaign.id,
@@ -3847,13 +4553,35 @@ async function askDungeonMaster(
       turnId,
       elapsedMs: Date.now() - startedAt,
       payload: {
-        durationMs: Date.now() - providerStartedAt,
+        durationMs: providerDurationMs,
         historyCount: history.length,
+        promptContextSections: promptContext?.sections ?? [],
+        promptContextBudget: promptContext?.budget ?? {},
         provider: providerDebugSummary(providerData.debug, {
           includeRawResponse: true
         })
       }
     });
+
+    await logDmModelCall(db, {
+      campaignId: campaign.id,
+      traceId,
+      turnId,
+      phase: "main",
+      providerData,
+      durationMs: providerDurationMs
+    });
+
+    let outputEnvelope:
+      | ReturnType<typeof validateMainDmOutput>
+      | undefined;
+    let outputEnvelopeError: unknown;
+
+    try {
+      outputEnvelope = validateMainDmOutput(providerData.content);
+    } catch (error) {
+      outputEnvelopeError = error;
+    }
 
     const contract: HermesDmContractResponse = parseHermesDmContract(
       providerData.content,
@@ -3866,6 +4594,29 @@ async function askDungeonMaster(
 
     const rollRequests = normalizeRollRequests(contract.rollRequests);
     const reply = contract.publicNarration;
+    const combatValidation = outputEnvelope
+      ? validateCombatEvents(outputEnvelope.combatEvents, {
+          actors: mechanicsActorsForValidation(campaign)
+        })
+      : { accepted: [], discarded: [] };
+    const memoryValidation = outputEnvelope
+      ? validateMemoryPatches(
+          outputEnvelope.proposedContextUpdates,
+          new Set(
+            promptContext?.sections.flatMap((section) =>
+              typeof section === "object" &&
+              section !== null &&
+              "includedContextKeys" in section &&
+              Array.isArray(
+                (section as { includedContextKeys?: unknown }).includedContextKeys
+              )
+                ? ((section as { includedContextKeys: string[] })
+                    .includedContextKeys)
+                : []
+            ) ?? []
+          )
+        )
+      : { accepted: [], discarded: [] };
     const mechanicsState = resolveMechanicsState(campaign, []);
     const nextMechanicsState = normalizeCombatTurnOwnerForInput(
       applyMechanicsStateUpdate(
@@ -3906,6 +4657,10 @@ async function askDungeonMaster(
       turnId,
       elapsedMs: Date.now() - startedAt,
       payload: {
+        outputEnvelopeValidated: Boolean(outputEnvelope),
+        outputEnvelopeError: outputEnvelopeError
+          ? errorSummary(outputEnvelopeError)
+          : undefined,
         rollRequestsCount: rollRequests.length,
         rollRequestLabels: rollRequests.map((request) => request.label),
         nextInputNeeded: contract.nextInputNeeded,
@@ -3914,6 +4669,37 @@ async function askDungeonMaster(
         resolutionMode: contract.resolutionMode
       }
     });
+
+    await logDmOutputReport(db, {
+      campaignId: campaign.id,
+      traceId,
+      turnId,
+      payload: {
+        outputEnvelopeValidated: Boolean(outputEnvelope),
+        outputEnvelopeError: outputEnvelopeError
+          ? errorSummary(outputEnvelopeError)
+          : undefined,
+        rollRequestsCount: rollRequests.length,
+        acceptedCombatEventsCount: combatValidation.accepted.length,
+        discardedCombatEvents: combatValidation.discarded,
+        acceptedImmediateContextUpdatesCount: memoryValidation.accepted.length,
+        discardedImmediateContextUpdates: memoryValidation.discarded
+      }
+    });
+
+    if (outputEnvelope?.proposedContextUpdates.length) {
+      await logDmMemoryPatchLog(db, {
+        campaignId: campaign.id,
+        traceId,
+        turnId,
+        payload: {
+          source: "main_dm_output",
+          proposedPatches: outputEnvelope.proposedContextUpdates,
+          acceptedPatches: memoryValidation.accepted,
+          discardedPatches: memoryValidation.discarded
+        }
+      });
+    }
 
     await logTurnDebugTrace(db, {
       campaignId: campaign.id,
@@ -5548,23 +6334,34 @@ export async function listCampaignDebugTracesForUser(
   await assertCampaignAccessForUser(db, campaign, input.userId);
 
   const limit = Math.max(1, Math.min(input.limit ?? 50, 200));
-  const traceResult = await db.query<EventRow>(
+  const traceResult = await db.query<{
+    id: string;
+    trace_id: string;
+    turn_id: string | null;
+    phase: string;
+    elapsed_ms: number | null;
+    payload: unknown;
+    created_at: Date;
+  }>(
     `
-      select id, type, payload, created_at
-      from campaign_events
+      select id, trace_id, turn_id, phase, elapsed_ms, payload, created_at
+      from dm_turn_traces
       where campaign_id = $1
-        and type = 'turn_debug_trace'
-        and ($2::text is null or payload->>'traceId' = $2)
+        and ($2::text is null or trace_id = $2)
       order by created_at desc
       limit $3
     `,
     [input.campaignId, input.traceId ?? null, limit]
   );
 
-  return traceResult.rows.map((event) => ({
-    id: event.id,
-    createdAt: toIso(event.created_at),
-    ...eventPayload(event.payload)
+  return traceResult.rows.map((trace) => ({
+    id: trace.id,
+    traceId: trace.trace_id,
+    turnId: trace.turn_id ?? undefined,
+    phase: trace.phase,
+    elapsedMs: trace.elapsed_ms ?? undefined,
+    createdAt: toIso(trace.created_at),
+    ...eventPayload(trace.payload)
   }));
 }
 
