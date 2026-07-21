@@ -695,21 +695,13 @@ test("combat roll submissions resolve instead of repeating submitted pending rol
     /whether it finds its mark/
   );
   assert.equal(combatState?.actors?.["npc:elara"]?.currentHp, 14);
-  assert.equal(getProviderInputs().length, 3);
+  assert.equal(getProviderInputs().length, 2);
   assert.match(getProviderInputs()[0]?.instructions ?? "", /combat mechanics adjudicator/);
   assert.match(
     getProviderInputs()[0]?.message ?? "",
-    /Submitted roll results boundary/
+    /Existing pendingRollRequests:\n\[\]/
   );
-  assert.match(
-    getProviderInputs()[1]?.instructions ?? "",
-    /combat adjudication repair formatter/
-  );
-  assert.match(
-    getProviderInputs()[1]?.message ?? "",
-    /repeated submitted pending roll request/
-  );
-  assert.match(getProviderInputs()[2]?.instructions ?? "", /combat narrator/);
+  assert.match(getProviderInputs()[1]?.instructions ?? "", /combat narrator/);
 });
 
 test("DM runtime repairs contradictory attack roll and AC math", async () => {

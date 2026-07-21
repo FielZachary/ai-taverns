@@ -1341,71 +1341,36 @@ before(async () => {
         }
 
         if (input.instructions.includes("combat adjudication repair formatter")) {
-          const content = input.message.includes(
-            "TRIGGER_REPEAT_SUBMITTED_PENDING_ROLLS"
-          )
-            ? JSON.stringify({
-                combat_relevance: "pending_combat_roll",
-                resolution_mode: "resolved_without_dice",
-                roll_requests: [],
-                next_input_needed: "player_actions",
-                input_targets: [],
-                input_policy: "all_players",
-                mechanics_state_update: {
-                  combat: {
-                    active: true,
-                    round: 1,
-                    turnOwner: "player:owner",
-                    initiativeOrder: ["player:owner", "npc:elara"]
-                  },
-                  actors: {
-                    "npc:elara": {
-                      characterName: "Elara",
-                      currentHp: 14,
-                      maxHp: 42,
-                      conditions: []
-                    }
-                  }
-                },
-                narration_brief: {
-                  beats: [
-                    "The submitted Lightning Bolt rolls resolve.",
-                    "Elara takes lightning damage and the square erupts."
-                  ],
-                  must_say: ["Elara takes 28 lightning damage"],
-                  must_not_say: ["whether it finds its mark"]
-                }
-              })
-            : JSON.stringify({
-                combat_relevance: "combat_start",
-                resolution_mode: "needs_dice",
-                roll_requests: [
-                  {
-                    player: "Owner",
-                    dice: "1d20",
-                    modifier: 2,
-                    label: "Initiative",
-                    advantage_state: "normal",
-                    reason: "Repair missing initiative roll request"
-                  }
-                ],
-                next_input_needed: "dice_results",
-                input_targets: ["Owner"],
-                input_policy: "only_targeted_players",
-                mechanics_state_update: {
-                  combat: {
-                    active: true,
-                    round: 1,
-                    turnOwner: "player:owner",
-                    initiativeOrder: ["player:owner", "npc:mara"]
-                  }
-                },
-                narration_brief: {
-                  beats: ["Combat begins; initiative is needed."],
-                  must_say: ["Roll 1d20 + 2 for initiative."],
-                  must_not_say: ["do not resolve the attack"]
-                }
-              });
+          const content = JSON.stringify({
+            combat_relevance: "combat_start",
+            resolution_mode: "needs_dice",
+            roll_requests: [
+              {
+                player: "Owner",
+                dice: "1d20",
+                modifier: 2,
+                label: "Initiative",
+                advantage_state: "normal",
+                reason: "Repair missing initiative roll request"
+              }
+            ],
+            next_input_needed: "dice_results",
+            input_targets: ["Owner"],
+            input_policy: "only_targeted_players",
+            mechanics_state_update: {
+              combat: {
+                active: true,
+                round: 1,
+                turnOwner: "player:owner",
+                initiativeOrder: ["player:owner", "npc:mara"]
+              }
+            },
+            narration_brief: {
+              beats: ["Combat begins; initiative is needed."],
+              must_say: ["Roll 1d20 + 2 for initiative."],
+              must_not_say: ["do not resolve the attack"]
+            }
+          });
 
           return {
             id: "provider-combat-adjudicator-repair",
@@ -1440,7 +1405,43 @@ before(async () => {
               input.message.includes("TRIGGER_RESOLVED_COMBAT_WITHOUT_ROLLS"));
           let content: string;
 
-          if (input.message.includes("TRIGGER_REPEAT_SUBMITTED_PENDING_ROLLS")) {
+          if (
+            input.message.includes("TRIGGER_REPEAT_SUBMITTED_PENDING_ROLLS") &&
+            input.message.includes("Existing pendingRollRequests:\n[]")
+          ) {
+            content = JSON.stringify({
+              combat_relevance: "pending_combat_roll",
+              resolution_mode: "resolved_without_dice",
+              roll_requests: [],
+              next_input_needed: "player_actions",
+              input_targets: [],
+              input_policy: "all_players",
+              mechanics_state_update: {
+                combat: {
+                  active: true,
+                  round: 1,
+                  turnOwner: "player:owner",
+                  initiativeOrder: ["player:owner", "npc:elara"]
+                },
+                actors: {
+                  "npc:elara": {
+                    characterName: "Elara",
+                    currentHp: 14,
+                    maxHp: 42,
+                    conditions: []
+                  }
+                }
+              },
+              narration_brief: {
+                beats: [
+                  "The submitted Lightning Bolt rolls resolve.",
+                  "Elara takes lightning damage and the square erupts."
+                ],
+                must_say: ["Elara takes 28 lightning damage"],
+                must_not_say: ["whether it finds its mark"]
+              }
+            });
+          } else if (input.message.includes("TRIGGER_REPEAT_SUBMITTED_PENDING_ROLLS")) {
             content = JSON.stringify({
               combat_relevance: "pending_combat_roll",
               resolution_mode: "needs_dice",
