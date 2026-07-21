@@ -159,7 +159,12 @@ describe("modular AI DM runtime contracts", () => {
   });
 
   it("keeps prompts modular and explicit", () => {
-    assert.match(buildRouterPrompt(), /select context chunk keys only/i);
+    const routerPrompt = buildRouterPrompt();
+    const removedOpeningJob = ["campaign", "starter"].join("_");
+
+    assert.match(routerPrompt, /select context chunk keys only/i);
+    assert.match(routerPrompt, /Campaign opening scenes are handled/i);
+    assert.doesNotMatch(routerPrompt, new RegExp(removedOpeningJob));
     assert.match(jobPrompt("combat"), /Never silently modify HP/);
     assert.match(jobPrompt("clarification"), /Ask one concise/);
     assert.match(buildMemoryUpdaterPrompt(), /Allowed operations/);

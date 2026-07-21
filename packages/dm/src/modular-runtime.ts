@@ -1,5 +1,4 @@
 export const dmJobNames = [
-  "campaign_starter",
   "scene_director",
   "investigation",
   "npc_dialogue",
@@ -196,6 +195,7 @@ export function buildRouterPrompt() {
   return [
     "You are the AI Taverns DM router.",
     "Choose exactly one primary job for the current turn and select context chunk keys only.",
+    "Campaign opening scenes are handled by campaign creation flows, not by this router.",
     "Do not summarize, rewrite, mutate, or invent memory.",
     `Allowed jobs: ${dmJobNames.join(", ")}.`,
     `Context categories: ${contextCategories.join(", ")}.`,
@@ -212,10 +212,6 @@ export function jobPrompt(job: DmJobName) {
   ];
 
   const jobs: Record<DmJobName, string[]> = {
-    campaign_starter: [
-      "Create the opening playable campaign frame with immediate pressure and a clear first objective.",
-      "Do not begin with vague lore or exposition."
-    ],
     scene_director: [
       "Run normal gameplay outside combat.",
       "Narrate consequences, visible clues, hazards, opportunities, and meaningful choices without forcing player decisions."
