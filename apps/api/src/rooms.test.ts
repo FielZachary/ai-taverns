@@ -362,10 +362,7 @@ test("multiplayer combat catches up NPC turns instead of rejecting players", asy
 
   assert.equal(mechanicsState.combat?.turnOwner, null);
   assert.equal(mechanicsState.actors?.[ownerActorKey]?.currentHp, 14);
-  assert.match(
-    getProviderInputs().at(-1)?.instructions ?? "",
-    /null for a multiplayer party prompt/
-  );
+  assert.equal(getProviderInputs().length, 1);
 
   updatedCampaign.metadata = {
     ...(updatedCampaign.metadata as Record<string, unknown>),

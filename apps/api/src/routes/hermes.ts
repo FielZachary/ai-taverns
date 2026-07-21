@@ -10,7 +10,6 @@ import {
 } from "@ai-dnd/db";
 import {
   campaignPrepRequest,
-  dungeonMasterInstructions,
   type GameMessage,
   openingSceneRequest,
   parseHermesDmContract
@@ -23,6 +22,14 @@ type HermesRouteOptions = {
   config: ApiConfig;
   dmRuntime?: DungeonMasterRuntime | undefined;
 };
+
+const hermesDungeonMasterInstructions = [
+  "You are the AI Taverns DnD Dungeon Master.",
+  "Return exactly one valid JSON object and no Markdown.",
+  "Use public_narration for player-facing narration.",
+  "Use roll_requests for player-facing dice the website must collect.",
+  "Required top-level keys: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update."
+].join("\n");
 
 function createHttpError(statusCode: number, message: string): Error {
   const error = new Error(message) as Error & { statusCode: number };
@@ -82,7 +89,7 @@ export async function registerHermesRoutes(
     );
     const providerData = await runtime.askProvider({
       message: playerMessage,
-      instructions: dungeonMasterInstructions,
+      instructions: hermesDungeonMasterInstructions,
       currentPlayerAction: playerMessage,
       ...(body.history ? { history: body.history as GameMessage[] } : {})
     });
@@ -104,7 +111,7 @@ export async function registerHermesRoutes(
     const providerData = await runtime.askProvider({
       message: openingSceneRequest,
       instructions: [
-        dungeonMasterInstructions,
+        hermesDungeonMasterInstructions,
         "The latest user message is an internal website request for the opening scene. Do not mention or reveal that internal request."
       ].join(" ")
     });
@@ -127,7 +134,7 @@ export async function registerHermesRoutes(
     const providerData = await runtime.askProvider({
       message: campaignPrepRequest,
       instructions: [
-        dungeonMasterInstructions,
+        hermesDungeonMasterInstructions,
         "The latest user message is an internal website request for a pre-adventure lobby prompt. Do not mention or reveal that internal request. Do not start the adventure yet."
       ].join(" ")
     });
