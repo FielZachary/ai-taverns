@@ -479,6 +479,82 @@ test("active combat cannot be classified as a false positive", async () => {
   assert.match(getProviderInputs()[1]?.instructions ?? "", /combat narrator/);
 });
 
+test("combat narrator extra mechanics fields are ignored", async () => {
+  const { cookie, campaignId } = await createSinglePlayerCampaign(
+    "dm-runtime-narrator-full-contract"
+  );
+  const playerActorKey = "player:dm-runtime-narrator-full-contract-client";
+  const campaign = database.campaigns.find(
+    (candidate) => candidate.id === campaignId
+  );
+
+  assert.ok(campaign);
+  campaign.metadata = {
+    ...(campaign.metadata as Record<string, unknown>),
+    mechanicsState: {
+      combat: {
+        active: true,
+        round: 1,
+        turnOwner: playerActorKey,
+        initiativeOrder: [playerActorKey, "npc:mara"]
+      },
+      actors: {
+        [playerActorKey]: {
+          characterName: "Seren",
+          currentHp: 20,
+          maxHp: 20,
+          conditions: []
+        },
+        "npc:mara": {
+          characterName: "Mara",
+          currentHp: 12,
+          maxHp: 12,
+          conditions: []
+        }
+      }
+    }
+  };
+  resetProviderInputs();
+
+  const soloResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "TRIGGER_NARRATOR_FULL_CONTRACT I keep my guard up.",
+      clientMessageId: "narrator-full-contract-action"
+    }
+  });
+
+  assert.equal(soloResponse.statusCode, 200, soloResponse.body);
+  const solo = CampaignSoloTurnResponseSchema.parse(soloResponse.json());
+  const latestDmMessage = solo.messages.at(-1);
+  const debug = latestDmMessage?.debug as DebugFields | undefined;
+  const combatState = debug?.combatState as
+    | {
+        combat?: {
+          active?: boolean;
+          round?: number;
+          turnOwner?: string | null;
+          initiativeOrder?: string[];
+        };
+      }
+    | undefined;
+
+  assert.equal(latestDmMessage?.role, "dm");
+  assert.match(latestDmMessage?.content ?? "", /Combat remains active/);
+  assert.equal(solo.pendingRollRequests.length, 0);
+  assert.equal(combatState?.combat?.active, true);
+  assert.equal(combatState?.combat?.round, 1);
+  assert.equal(combatState?.combat?.turnOwner, playerActorKey);
+  assert.deepEqual(combatState?.combat?.initiativeOrder, [
+    playerActorKey,
+    "npc:mara"
+  ]);
+});
+
 test("DM runtime repairs contradictory attack roll and AC math", async () => {
   const { cookie, campaignId } = await createSinglePlayerCampaign(
     "dm-runtime-attack-roll-contradiction"

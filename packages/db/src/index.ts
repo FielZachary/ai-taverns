@@ -3600,15 +3600,6 @@ function parseCombatNarration(content: string) {
     throw new Error("Combat narrator response is missing public_narration.");
   }
 
-  if (
-    "roll_requests" in parsed ||
-    "mechanics_state_update" in parsed ||
-    "input_policy" in parsed ||
-    "input_targets" in parsed
-  ) {
-    throw new Error("Combat narrator attempted to mutate adjudicated mechanics.");
-  }
-
   return normalizeHermesContent(
     JSON.stringify({
       public_narration: publicNarration,

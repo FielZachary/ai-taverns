@@ -1645,17 +1645,40 @@ before(async () => {
           const isInitiativeFireball = input.message.includes(
             "Roll 1d20 + 2 for initiative"
           );
-          const content = JSON.stringify({
-            public_narration: isNpcCatchup
-              ? "The cutlass raider's turn resolves first. Cutlass raider attack roll: 17 vs AC 14 - hit. Cutlass raider damage roll: 1d6 + 2 = 6 slashing damage.\n\nThe rusted blade bites across Seren's ribs before the raider wrenches it free. Seren drops from 24 HP to 18 HP, still standing but hurt.\n\nControl returns to the heroes. What do you do?"
-              : isInitiativeAfterDamage
-                ? "The surprise Fireball detonates across the pier. Mara staggers through the smoke, and the two raiders are thrown back by the blast.\n\nThe opening strike has landed. Now the rest of the fight catches up: roll 1d20 + 2 for initiative."
-                : isSurpriseFireball
-                  ? "Seren catches Mara before she can react. Mara and two Drowned Choir raiders are inside the spell radius.\n\nMara rolls 15 and succeeds. The first raider rolls 9 and fails. The second raider rolls 11 and fails.\n\nRoll 8d6 for Fireball damage."
-                  : isInitiativeFireball
-                    ? "Seren starts to cast Fireball, and Mara and the Drowned Choir raiders snap into motion.\n\nCombat begins. Roll 1d20 + 2 for initiative before the spell is resolved."
-                    : "Combat remains active around you.\n\nWhat do you do?"
-          });
+          const publicNarration = isNpcCatchup
+            ? "The cutlass raider's turn resolves first. Cutlass raider attack roll: 17 vs AC 14 - hit. Cutlass raider damage roll: 1d6 + 2 = 6 slashing damage.\n\nThe rusted blade bites across Seren's ribs before the raider wrenches it free. Seren drops from 24 HP to 18 HP, still standing but hurt.\n\nControl returns to the heroes. What do you do?"
+            : isInitiativeAfterDamage
+              ? "The surprise Fireball detonates across the pier. Mara staggers through the smoke, and the two raiders are thrown back by the blast.\n\nThe opening strike has landed. Now the rest of the fight catches up: roll 1d20 + 2 for initiative."
+              : isSurpriseFireball
+                ? "Seren catches Mara before she can react. Mara and two Drowned Choir raiders are inside the spell radius.\n\nMara rolls 15 and succeeds. The first raider rolls 9 and fails. The second raider rolls 11 and fails.\n\nRoll 8d6 for Fireball damage."
+                : isInitiativeFireball
+                  ? "Seren starts to cast Fireball, and Mara and the Drowned Choir raiders snap into motion.\n\nCombat begins. Roll 1d20 + 2 for initiative before the spell is resolved."
+                  : "Combat remains active around you.\n\nWhat do you do?";
+          const content = input.message.includes("TRIGGER_NARRATOR_FULL_CONTRACT")
+            ? JSON.stringify({
+                public_narration: publicNarration,
+                resolution_mode: "resolved_without_dice",
+                roll_requests: [
+                  {
+                    dice: "1d20",
+                    label: "Narrator must not create this roll"
+                  }
+                ],
+                next_input_needed: "dice_results",
+                input_targets: ["Wrong target"],
+                input_policy: "only_targeted_players",
+                mechanics_state_update: {
+                  combat: {
+                    active: false,
+                    round: 0,
+                    turnOwner: null,
+                    initiativeOrder: []
+                  }
+                }
+              })
+            : JSON.stringify({
+                public_narration: publicNarration
+              });
 
           return {
             id: "provider-combat-narrator",
