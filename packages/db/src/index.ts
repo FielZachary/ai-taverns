@@ -4141,13 +4141,79 @@ function findForbiddenOpeningTerms(
   const allowedTerms = new Set(
     plan.allowedPlayerFacingTerms.map((term) => term.term.toLowerCase())
   );
-  const lowerNarration = narration.toLowerCase();
 
   return [...new Set(plan.forbiddenOpeningTerms)]
     .map((term) => term.trim())
     .filter(Boolean)
     .filter((term) => !allowedTerms.has(term.toLowerCase()))
-    .filter((term) => lowerNarration.includes(term.toLowerCase()));
+    .filter((term) => openingNarrationContainsTerm(narration, term));
+}
+
+function openingNarrationTermPattern(term: string) {
+  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  return new RegExp(
+    `(^|[^\\p{L}\\p{N}_])${escaped}(?=$|[^\\p{L}\\p{N}_])`,
+    "iu"
+  );
+}
+
+function openingNarrationContainsTerm(narration: string, term: string) {
+  return openingNarrationTermPattern(term).test(narration);
+}
+
+function plainReplacementForForbiddenOpeningTerm(term: string) {
+  switch (term.toLowerCase()) {
+    case "second dominion":
+      return "the fallen empire";
+    case "graywake":
+      return "the old catastrophe";
+    case "hush":
+      return "the long silence";
+    case "wellglass":
+      return "rare crystal";
+    default:
+      return "old lore";
+  }
+}
+
+function scrubForbiddenOpeningTerms(
+  narration: string,
+  plan: EldermereOpeningPlan
+) {
+  const allowedTerms = new Set(
+    plan.allowedPlayerFacingTerms.map((term) => term.term.toLowerCase())
+  );
+
+  return [...new Set(plan.forbiddenOpeningTerms)]
+    .map((term) => term.trim())
+    .filter(Boolean)
+    .filter((term) => !allowedTerms.has(term.toLowerCase()))
+    .reduce(
+      (current, term) =>
+        current.replace(
+          openingNarrationTermPattern(term),
+          (_match, prefix: string) =>
+            `${prefix}${plainReplacementForForbiddenOpeningTerm(term)}`
+        ),
+      narration
+    );
+}
+
+function repairEldermereOpeningReply(
+  reply: DungeonMasterReply,
+  plan: EldermereOpeningPlan
+): DungeonMasterReply {
+  return {
+    ...reply,
+    content: scrubForbiddenOpeningTerms(reply.content, plan),
+    setting: {
+      ...reply.setting,
+      worldName: "Eldermere",
+      startingLocation: plan.startingLocation.name,
+      displayLocation: plan.startingLocation.name
+    }
+  };
 }
 
 function eldermereOpeningSettingErrors(
@@ -4217,13 +4283,14 @@ async function askEldermereOpeningNarrator(
     return opening;
   }
 
+  const forbiddenTermPlural = forbiddenTerms.length === 1 ? "" : "s";
   const repairMessage = [
     narratorMessage,
     "",
     "Rewrite required:",
     ...(forbiddenTerms.length > 0
       ? [
-          `The previous public_narration used forbidden opening terms: ${forbiddenTerms.join(", ")}.`
+          `The previous public_narration used ${forbiddenTerms.length} forbidden opening term${forbiddenTermPlural} from forbidden_opening_terms.`
         ]
       : []),
     ...(settingErrors.length > 0
@@ -4258,19 +4325,7 @@ async function askEldermereOpeningNarrator(
   );
 
   if (remainingForbiddenTerms.length > 0 || remainingSettingErrors.length > 0) {
-    throw new Error(
-      [
-        "Eldermere opening narrator failed validation after repair.",
-        remainingForbiddenTerms.length > 0
-          ? `Forbidden terms: ${remainingForbiddenTerms.join(", ")}.`
-          : "",
-        remainingSettingErrors.length > 0
-          ? `Setting errors: ${remainingSettingErrors.join("; ")}.`
-          : ""
-      ]
-        .filter(Boolean)
-        .join(" ")
-    );
+    return repairEldermereOpeningReply(repairedOpening, plan);
   }
 
   return repairedOpening;

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { after, before } from "node:test";
 import type { FastifyInstance } from "fastify";
 import { AuthPasswordlessStartResponseSchema } from "@ai-dnd/contracts";
+import type { DungeonMasterRuntime } from "@ai-dnd/db";
 import { buildApp } from "../app.js";
 import { loadConfig } from "../config.js";
 
@@ -13,6 +14,8 @@ let providerInputs: {
   currentPlayerAction?: string;
   history: { role: string; content: string }[];
 }[] = [];
+type AskProvider = DungeonMasterRuntime["askProvider"];
+let providerOverride: AskProvider | undefined;
 
 type QueryResult<T> = {
   rows: T[];
@@ -110,6 +113,7 @@ type TurnRecord = {
   id: string;
   campaign_id: string;
   status: "collecting" | "resolving" | "resolved" | "failed" | "cancelled";
+  error?: string | null;
   created_at: Date;
   updated_at: Date;
 };
@@ -602,6 +606,20 @@ class FakeDatabase {
 
       if (turn) {
         turn.status = "resolved";
+        turn.updated_at = new Date();
+      }
+
+      return { rows: [] as T[] };
+    }
+
+    if (normalizedSql.startsWith("update turns set status = 'failed'")) {
+      const turnId = values[0] as string;
+      const error = values[1] as string;
+      const turn = this.turns.find((candidate) => candidate.id === turnId);
+
+      if (turn) {
+        turn.status = "failed";
+        turn.error = error;
         turn.updated_at = new Date();
       }
 
@@ -1231,6 +1249,10 @@ before(async () => {
             content: message.content
           }))
         });
+        if (providerOverride) {
+          return providerOverride(input);
+        }
+
         if (input.instructions.includes("AI Taverns response formatter")) {
           if (input.message.includes("Attack roll: 13 vs AC 10 - miss")) {
             const content = JSON.stringify({
@@ -2457,8 +2479,13 @@ after(async () => {
 
 export function resetProviderInputs() {
   providerInputs = [];
+  providerOverride = undefined;
 }
 
 export function getProviderInputs() {
   return providerInputs;
+}
+
+export function setProviderOverride(override: AskProvider | undefined) {
+  providerOverride = override;
 }
