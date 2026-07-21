@@ -3419,6 +3419,9 @@ function combatAdjudicatorInstructions(input: {
     "If resolution_mode is needs_dice, roll_requests must be non-empty and next_input_needed must be dice_results.",
     "If resolution_mode is needs_dice, the narration brief must not resolve the pending rolled outcome.",
     "For player attacks, request attack and damage together when damage dice are known.",
+    "For spells, use the real spell mechanic when it is clear. Lightning Bolt and Fireball force target Dexterity saving throws; they are not spell attack rolls. Scorching Ray is a spell attack. Magic Missile needs no attack roll or saving throw.",
+    "For spells that force NPC or enemy saving throws, roll those target saves as DM-side mechanics, report the save results in the narration brief, and request only the player-controlled damage/effect dice when needed.",
+    "When the current action contains submitted results for existing pendingRollRequests, consume those results and resolve the pending outcome. Do not ask for the same pending roll_requests again.",
     "For NPC attacks, resolve hit or miss and damage as DM-side mechanics; do not create roll_requests for NPC-side rolls.",
     "Combat end must reset mechanics_state_update.combat exactly to active false, round 0, turnOwner null, initiativeOrder empty.",
     "Required JSON shape:",
@@ -3459,6 +3462,8 @@ function combatAdjudicatorRepairInstructions(input: {
     "If next_input_needed is dice_results, roll_requests must be non-empty and resolution_mode must be needs_dice.",
     "If no player dice are actually required, set resolution_mode to resolved_without_dice, roll_requests to [], and next_input_needed to player_actions.",
     "Do not use dice_results as a generic pause. It is only valid when the app has structured roll_requests to collect.",
+    "If the current action contains submitted results for existing pendingRollRequests, consume those results and resolve the pending outcome. Do not ask for the same pending roll_requests again.",
+    "Lightning Bolt and Fireball force target Dexterity saving throws; they are not spell attack rolls.",
     "Return the full adjudicator JSON shape with combat_relevance, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, and narration_brief."
   ]
     .filter(Boolean)
@@ -3494,15 +3499,73 @@ function formatCombatAdjudicatorRequest(input: {
   mechanicsState: MechanicsState;
   pendingRollRequests: DiceRollRequest[];
 }) {
+  const submittedRolls = /\bI rolled\b/im.test(input.currentAction);
+
   return [
     formatMechanicsPromptContext(input.mechanicsState),
     "",
     "Existing pendingRollRequests:",
     JSON.stringify(input.pendingRollRequests),
+    ...(submittedRolls
+      ? [
+          "",
+          "Submitted roll results boundary:",
+          "The current action contains submitted dice results. Resolve those submitted rolls now. Do not request roll_requests for the same rolls again."
+        ]
+      : []),
     "",
     "Current action and context:",
     input.currentAction
   ].join("\n");
+}
+
+function sameRollRequest(left: DiceRollRequest, right: DiceRollRequest) {
+  return (
+    left.dice.trim().toLowerCase() === right.dice.trim().toLowerCase() &&
+    left.label.trim().toLowerCase() === right.label.trim().toLowerCase()
+  );
+}
+
+function submittedRollLabelsFromAction(currentAction: string) {
+  const labels: string[] = [];
+  const pattern = /\bI rolled\b[^\n]*?\bfor ([^\n.]+)\./gim;
+  let match = pattern.exec(currentAction);
+
+  while (match) {
+    const label = match[1]?.trim().toLowerCase();
+
+    if (label) {
+      labels.push(label);
+    }
+
+    match = pattern.exec(currentAction);
+  }
+
+  return labels;
+}
+
+function validateCombatAdjudicationAgainstPendingRollSubmission(input: {
+  adjudication: CombatAdjudication;
+  pendingRollRequests: DiceRollRequest[];
+  currentAction: string;
+}) {
+  if (!/\bI rolled\b/im.test(input.currentAction)) {
+    return;
+  }
+
+  const submittedLabels = submittedRollLabelsFromAction(input.currentAction);
+  const repeatedRequests = input.adjudication.rollRequests.filter((request) =>
+    input.pendingRollRequests.some((pending) => sameRollRequest(request, pending)) ||
+    submittedLabels.includes(request.label.trim().toLowerCase())
+  );
+
+  if (repeatedRequests.length > 0) {
+    throw new Error(
+      `Combat adjudicator repeated submitted pending roll request(s): ${repeatedRequests
+        .map((request) => request.label)
+        .join(", ")}.`
+    );
+  }
 }
 
 function formatCombatAdjudicatorRepairRequest(input: {
@@ -3781,6 +3844,11 @@ async function askCombatDungeonMaster(
       forceCombat,
       forcePendingCombatRoll
     });
+    validateCombatAdjudicationAgainstPendingRollSubmission({
+      adjudication,
+      pendingRollRequests,
+      currentAction: adjudicatorMessage
+    });
   } catch (adjudicationError) {
     await logTurnDebugTrace(db, {
       campaignId: campaign.id,
@@ -3801,6 +3869,11 @@ async function askCombatDungeonMaster(
     adjudication = parseCombatAdjudication(repairData.content, {
       forceCombat,
       forcePendingCombatRoll
+    });
+    validateCombatAdjudicationAgainstPendingRollSubmission({
+      adjudication,
+      pendingRollRequests,
+      currentAction: adjudicatorMessage
     });
   }
 

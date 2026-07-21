@@ -1341,36 +1341,71 @@ before(async () => {
         }
 
         if (input.instructions.includes("combat adjudication repair formatter")) {
-          const content = JSON.stringify({
-            combat_relevance: "combat_start",
-            resolution_mode: "needs_dice",
-            roll_requests: [
-              {
-                player: "Owner",
-                dice: "1d20",
-                modifier: 2,
-                label: "Initiative",
-                advantage_state: "normal",
-                reason: "Repair missing initiative roll request"
-              }
-            ],
-            next_input_needed: "dice_results",
-            input_targets: ["Owner"],
-            input_policy: "only_targeted_players",
-            mechanics_state_update: {
-              combat: {
-                active: true,
-                round: 1,
-                turnOwner: "player:owner",
-                initiativeOrder: ["player:owner", "npc:mara"]
-              }
-            },
-            narration_brief: {
-              beats: ["Combat begins; initiative is needed."],
-              must_say: ["Roll 1d20 + 2 for initiative."],
-              must_not_say: ["do not resolve the attack"]
-            }
-          });
+          const content = input.message.includes(
+            "TRIGGER_REPEAT_SUBMITTED_PENDING_ROLLS"
+          )
+            ? JSON.stringify({
+                combat_relevance: "pending_combat_roll",
+                resolution_mode: "resolved_without_dice",
+                roll_requests: [],
+                next_input_needed: "player_actions",
+                input_targets: [],
+                input_policy: "all_players",
+                mechanics_state_update: {
+                  combat: {
+                    active: true,
+                    round: 1,
+                    turnOwner: "player:owner",
+                    initiativeOrder: ["player:owner", "npc:elara"]
+                  },
+                  actors: {
+                    "npc:elara": {
+                      characterName: "Elara",
+                      currentHp: 14,
+                      maxHp: 42,
+                      conditions: []
+                    }
+                  }
+                },
+                narration_brief: {
+                  beats: [
+                    "The submitted Lightning Bolt rolls resolve.",
+                    "Elara takes lightning damage and the square erupts."
+                  ],
+                  must_say: ["Elara takes 28 lightning damage"],
+                  must_not_say: ["whether it finds its mark"]
+                }
+              })
+            : JSON.stringify({
+                combat_relevance: "combat_start",
+                resolution_mode: "needs_dice",
+                roll_requests: [
+                  {
+                    player: "Owner",
+                    dice: "1d20",
+                    modifier: 2,
+                    label: "Initiative",
+                    advantage_state: "normal",
+                    reason: "Repair missing initiative roll request"
+                  }
+                ],
+                next_input_needed: "dice_results",
+                input_targets: ["Owner"],
+                input_policy: "only_targeted_players",
+                mechanics_state_update: {
+                  combat: {
+                    active: true,
+                    round: 1,
+                    turnOwner: "player:owner",
+                    initiativeOrder: ["player:owner", "npc:mara"]
+                  }
+                },
+                narration_brief: {
+                  beats: ["Combat begins; initiative is needed."],
+                  must_say: ["Roll 1d20 + 2 for initiative."],
+                  must_not_say: ["do not resolve the attack"]
+                }
+              });
 
           return {
             id: "provider-combat-adjudicator-repair",
@@ -1405,7 +1440,40 @@ before(async () => {
               input.message.includes("TRIGGER_RESOLVED_COMBAT_WITHOUT_ROLLS"));
           let content: string;
 
-          if (input.message.includes("TRIGGER_ADJUDICATOR_MISSING_ROLL_REQUEST")) {
+          if (input.message.includes("TRIGGER_REPEAT_SUBMITTED_PENDING_ROLLS")) {
+            content = JSON.stringify({
+              combat_relevance: "pending_combat_roll",
+              resolution_mode: "needs_dice",
+              roll_requests: [
+                {
+                  player: "Owner",
+                  dice: "1d20",
+                  modifier: 3,
+                  label:
+                    "TRIGGER_REPEAT_SUBMITTED_PENDING_ROLLS Lightning Bolt spell attack roll",
+                  advantage_state: "normal",
+                  reason: "Buggy repeated request"
+                },
+                {
+                  player: "Owner",
+                  dice: "8d6",
+                  modifier: 0,
+                  label: "Lightning Bolt damage",
+                  advantage_state: "normal",
+                  reason: "Buggy repeated request"
+                }
+              ],
+              next_input_needed: "dice_results",
+              input_targets: ["Owner"],
+              input_policy: "only_targeted_players",
+              mechanics_state_update: {},
+              narration_brief: {
+                beats: ["Bug repeats unresolved Lightning Bolt narration."],
+                must_say: ["whether it finds its mark"],
+                must_not_say: []
+              }
+            });
+          } else if (input.message.includes("TRIGGER_ADJUDICATOR_MISSING_ROLL_REQUEST")) {
             content = JSON.stringify({
               combat_relevance: "combat_start",
               resolution_mode: "needs_dice",
@@ -1721,10 +1789,15 @@ before(async () => {
           const isInitiativeFireball = input.message.includes(
             "Roll 1d20 + 2 for initiative"
           );
+          const isResolvedLightningBolt = input.message.includes(
+            "Elara takes 28 lightning damage"
+          );
           const publicNarration = isNpcCatchup
             ? "The cutlass raider's turn resolves first. Cutlass raider attack roll: 17 vs AC 14 - hit. Cutlass raider damage roll: 1d6 + 2 = 6 slashing damage.\n\nThe rusted blade bites across Seren's ribs before the raider wrenches it free. Seren drops from 24 HP to 18 HP, still standing but hurt.\n\nControl returns to the heroes. What do you do?"
             : isInitiativeAfterDamage
               ? "The surprise Fireball detonates across the pier. Mara staggers through the smoke, and the two raiders are thrown back by the blast.\n\nThe opening strike has landed. Now the rest of the fight catches up: roll 1d20 + 2 for initiative."
+              : isResolvedLightningBolt
+                ? "The Lightning Bolt tears across the square and catches Elara before she can fully turn aside. Elara takes 28 lightning damage, staggering against the shrine doorway as thunder cracks over Greyfold.\n\nThe wardens snap out of their bored watchfulness and lower their spears. What do you do?"
               : isSurpriseFireball
                 ? "Seren catches Mara before she can react. Mara and two Drowned Choir raiders are inside the spell radius.\n\nMara rolls 15 and succeeds. The first raider rolls 9 and fails. The second raider rolls 11 and fails.\n\nRoll 8d6 for Fireball damage."
                 : isInitiativeFireball

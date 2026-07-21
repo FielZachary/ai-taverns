@@ -591,6 +591,127 @@ test("combat adjudicator repairs dice_results without roll requests", async () =
   assert.match(getProviderInputs()[2]?.instructions ?? "", /combat narrator/);
 });
 
+test("combat roll submissions resolve instead of repeating submitted pending rolls", async () => {
+  const { cookie, campaignId } = await createSinglePlayerCampaign(
+    "dm-runtime-repeat-submitted-pending-rolls"
+  );
+  const playerActorKey = "player:dm-runtime-repeat-submitted-pending-rolls-client";
+  const campaign = database.campaigns.find(
+    (candidate) => candidate.id === campaignId
+  );
+
+  assert.ok(campaign);
+  campaign.metadata = {
+    ...(campaign.metadata as Record<string, unknown>),
+    mechanicsState: {
+      combat: {
+        active: true,
+        round: 1,
+        turnOwner: playerActorKey,
+        initiativeOrder: [playerActorKey, "npc:elara"]
+      },
+      actors: {
+        [playerActorKey]: {
+          characterName: "Seren",
+          currentHp: 32,
+          maxHp: 32,
+          conditions: []
+        },
+        "npc:elara": {
+          characterName: "Elara",
+          currentHp: 42,
+          maxHp: 42,
+          conditions: []
+        }
+      }
+    },
+    pendingRollRequests: [
+      {
+        id: "lightning-attack",
+        player: "Owner",
+        dice: "1d20",
+        modifier: 3,
+        label:
+          "TRIGGER_REPEAT_SUBMITTED_PENDING_ROLLS Lightning Bolt spell attack roll",
+        advantageState: "normal",
+        reason: "Legacy bad Lightning Bolt request"
+      },
+      {
+        id: "lightning-damage",
+        player: "Owner",
+        dice: "8d6",
+        modifier: 0,
+        label: "Lightning Bolt damage",
+        advantageState: "normal",
+        reason: "Legacy bad Lightning Bolt request"
+      }
+    ]
+  };
+  resetProviderInputs();
+
+  const soloResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      rollSubmissions: [
+        {
+          rollRequestId: "lightning-attack",
+          rollResult: {
+            rolls: [8],
+            total: 11
+          },
+          clientMessageId: "lightning-attack-roll"
+        },
+        {
+          rollRequestId: "lightning-damage",
+          rollResult: {
+            rolls: [5, 3, 4, 1, 2, 5, 4, 4],
+            total: 28
+          },
+          clientMessageId: "lightning-damage-roll"
+        }
+      ]
+    }
+  });
+
+  assert.equal(soloResponse.statusCode, 200, soloResponse.body);
+  const solo = CampaignSoloTurnResponseSchema.parse(soloResponse.json());
+  const latestDmMessage = solo.messages.at(-1);
+  const debug = latestDmMessage?.debug as DebugFields | undefined;
+  const combatState = debug?.combatState as
+    | {
+        actors?: Record<string, { currentHp?: number }>;
+      }
+    | undefined;
+
+  assert.equal(latestDmMessage?.role, "dm");
+  assert.equal(solo.pendingRollRequests.length, 0);
+  assert.match(latestDmMessage?.content ?? "", /Elara takes 28 lightning damage/);
+  assert.doesNotMatch(
+    latestDmMessage?.content ?? "",
+    /whether it finds its mark/
+  );
+  assert.equal(combatState?.actors?.["npc:elara"]?.currentHp, 14);
+  assert.equal(getProviderInputs().length, 3);
+  assert.match(getProviderInputs()[0]?.instructions ?? "", /combat mechanics adjudicator/);
+  assert.match(
+    getProviderInputs()[0]?.message ?? "",
+    /Submitted roll results boundary/
+  );
+  assert.match(
+    getProviderInputs()[1]?.instructions ?? "",
+    /combat adjudication repair formatter/
+  );
+  assert.match(
+    getProviderInputs()[1]?.message ?? "",
+    /repeated submitted pending roll request/
+  );
+  assert.match(getProviderInputs()[2]?.instructions ?? "", /combat narrator/);
+});
+
 test("DM runtime repairs contradictory attack roll and AC math", async () => {
   const { cookie, campaignId } = await createSinglePlayerCampaign(
     "dm-runtime-attack-roll-contradiction"
