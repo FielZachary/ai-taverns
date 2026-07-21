@@ -13,6 +13,7 @@ export type AiDebugInfo = {
   model?: string;
   temperature?: number;
   combatState?: unknown;
+  combatAdjudication?: unknown;
   providerTimings?: {
     attempt: number;
     requestStartedAt: string;
@@ -50,7 +51,7 @@ export type DiceRollRequest = {
   label: string;
   player?: string;
   modifier?: number;
-  advantageState?: string;
+  advantageState?: "normal" | "advantage" | "disadvantage";
 };
 
 export type InputPolicy = "all_players" | "only_targeted_players";

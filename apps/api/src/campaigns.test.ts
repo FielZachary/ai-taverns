@@ -15,6 +15,7 @@ import {
   database,
   getProviderInputs,
   resetProviderInputs,
+  setProviderOverride,
   signIn
 } from "./test/app-test-harness.js";
 
@@ -39,7 +40,7 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
     }
   });
 
-  assert.equal(createResponse.statusCode, 201);
+  assert.equal(createResponse.statusCode, 201, createResponse.body);
 
   const created = CampaignCreateResponseSchema.parse(createResponse.json());
   const campaign = database.campaigns.find(
@@ -129,6 +130,154 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
     narratorInput.message,
     /Write the player-facing opener only from the Eldermere opening plan/
   );
+});
+
+test("POST /api/campaigns scrubs forbidden Eldermere opening terms after narrator repair", async () => {
+  const cookie = await signIn("eldermere-scrub@example.com");
+  resetProviderInputs();
+
+  setProviderOverride(async (input) => {
+    if (input.instructions.includes("campaign-opening planner")) {
+      return {
+        id: "provider-planner-forbidden-terms",
+        content: JSON.stringify({
+          campaign_title: "The Quiet Road",
+          region: {
+            name: "Cael Ambrose",
+            why_this_region: "It gives the opener a concrete local conflict.",
+            plain_description: "A troubled region with pressure close enough to touch."
+          },
+          starting_location: {
+            name: "Suncross",
+            type: "settlement",
+            why_this_location: "It is the selected campaign start.",
+            plain_description: "A specific place where the first problem is already visible."
+          },
+          opening_premise: {
+            why_the_party_is_here: "The party has come to answer a local summons.",
+            immediate_objective: "Find the person who sent for them.",
+            immediate_complication: "The locals are afraid to explain what happened.",
+            first_scene_location: "At the edge of Suncross.",
+            opening_mood: "watchful and tense",
+            campaign_promise: "A grounded mystery with old power underneath it."
+          },
+          player_facing_facts: [
+            "The party has a reason to be here now.",
+            "Someone local needs help and is afraid."
+          ],
+          allowed_player_facing_terms: [
+            {
+              term: "Cael Ambrose",
+              plain_meaning: "the larger region where the campaign begins"
+            },
+            {
+              term: "Suncross",
+              plain_meaning: "the settlement where the first scene begins"
+            }
+          ],
+          npc_seed: [
+            {
+              name: "Mara Vell",
+              role: "a worried local messenger",
+              wants: "help without drawing official attention",
+              visible_behavior: "keeps watching the street behind her"
+            }
+          ],
+          first_interactable_choices: [
+            "question Mara Vell",
+            "inspect the marked doorway",
+            "ask nearby locals what frightened them"
+          ],
+          sensory_palette: {
+            sights: ["a marked doorway", "lanterns lit early"],
+            sounds: ["low voices", "boots on stone"],
+            smells: ["cold rain"],
+            textures_or_weather: ["damp air"]
+          },
+          dm_private_context: [
+            "Old world lore may matter later, but should not be named in the opening."
+          ],
+          forbidden_opening_terms: ["Second Dominion", "Hush"],
+          narrator_instructions: ["Use the allowed terms only."],
+          opening_quality_checks: ["No forbidden opening terms appear."]
+        }),
+        debug: {
+          requestMessages: [],
+          rawResponse: "{}",
+          model: "test-model",
+          temperature: 0.8,
+          providerTimings: []
+        }
+      };
+    }
+
+    return {
+      id: "provider-narrator-forbidden-terms",
+      content: JSON.stringify({
+        public_narration:
+          "Suncross crouches beneath the old stones of the Second Dominion, where the Hush still seems to press against every shutter.\n\nMara Vell waits by a marked doorway, rain silvering her cloak.\n\nWhat do you do?",
+        roll_requests: [],
+        next_input_needed: "player_actions",
+        input_targets: [],
+        input_policy: "all_players",
+        setting: {
+          display_location: "",
+          world_name: "Wrong Realm",
+          starting_location: "Wrong Road"
+        }
+      }),
+      debug: {
+        requestMessages: [],
+        rawResponse: "{}",
+        model: "test-model",
+        temperature: 0.8,
+        providerTimings: []
+      }
+    };
+  });
+
+  const createResponse = await (async () => {
+    try {
+      return await app.inject({
+        method: "POST",
+        url: "/api/campaigns",
+        headers: {
+          cookie
+        },
+        payload: {
+          mode: "single_player",
+          campaignGenreKind: "preset",
+          campaignGenrePresetId: "eldermere",
+          ownerClientId: "eldermere-scrub-client",
+          playerName: "Eldermere Player",
+          characterName: "Mira",
+          characterSheet: "A ruin-delver who follows old glowing roads."
+        }
+      });
+    } finally {
+      setProviderOverride(undefined);
+    }
+  })();
+
+  assert.equal(createResponse.statusCode, 201, createResponse.body);
+
+  const created = CampaignCreateResponseSchema.parse(createResponse.json());
+  const openingEvent = database.campaignEvents.find(
+    (event) =>
+      event.campaign_id === created.campaign.id &&
+      event.type === "adventure_begun"
+  );
+  const payload = openingEvent?.payload as Record<string, unknown> | undefined;
+  const setting = payload?.setting as Record<string, unknown> | undefined;
+
+  assert.ok(payload);
+  assert.doesNotMatch(payload.content as string, /Second Dominion|Hush/);
+  assert.match(payload.content as string, /fallen empire/);
+  assert.match(payload.content as string, /long silence/);
+  assert.equal(setting?.worldName, "Eldermere");
+  assert.equal(setting?.startingLocation, "Suncross");
+  assert.equal(setting?.displayLocation, "Suncross");
+  assert.equal(getProviderInputs().length, 3);
 });
 
 

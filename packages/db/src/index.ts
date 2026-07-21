@@ -9,6 +9,7 @@ import {
   formatEldermereOpeningPromptContext,
   formatEldermereTurnPromptContext,
   openingSceneRequest,
+  normalizeHermesContent,
   parseHermesDmContract,
   isEldermerePreset,
   type EldermereCampaignStart,
@@ -501,6 +502,19 @@ type DungeonMasterProviderResponse = {
   id?: string;
   content: string;
   debug: AiDebugInfo;
+};
+
+type ResolutionMode = "needs_dice" | "resolved_without_dice";
+
+type DungeonMasterReply = {
+  id: string;
+  content: string;
+  debug: AiDebugInfo;
+  rollRequests: DiceRollRequest[];
+  inputTargets: string[];
+  inputPolicy: InputPolicy;
+  resolutionMode: ResolutionMode;
+  setting?: CampaignSettingSummary | undefined;
 };
 
 export type DungeonMasterRuntime = {
@@ -1443,6 +1457,7 @@ export async function createCampaignForMode(
       pendingRollRequests: opening.rollRequests,
       inputTargets: opening.inputTargets,
       inputPolicy: opening.inputPolicy,
+      resolutionMode: opening.resolutionMode,
       setting: opening.setting,
       aiDebug: opening.debug
     });
@@ -2177,6 +2192,27 @@ async function setPendingRollRequests(
     `,
     [campaignId, JSON.stringify(requests), JSON.stringify(currentRequest)]
   );
+}
+
+function metadataWithPendingRollRequests(
+  metadata: unknown,
+  requests: DiceRollRequest[]
+) {
+  const currentRequest = requests[0] ?? null;
+
+  if (requests.length === 0) {
+    const nextMetadata = { ...eventPayload(metadata) };
+    delete nextMetadata.pendingRollRequest;
+    delete nextMetadata.pendingRollRequests;
+
+    return nextMetadata;
+  }
+
+  return {
+    ...eventPayload(metadata),
+    pendingRollRequest: currentRequest,
+    pendingRollRequests: requests
+  };
 }
 
 async function resolveRoomCampaign(
@@ -3235,6 +3271,7 @@ function dmContractRepairInstructions() {
     "Use this exact JSON shape:",
     JSON.stringify({
       public_narration: "The original player-facing Dungeon Master narration.",
+      resolution_mode: "resolved_without_dice",
       roll_requests: [],
       next_input_needed: "player_actions",
       input_targets: [],
@@ -3265,6 +3302,7 @@ function dmRollRequestRepairInstructions() {
     "Use this exact JSON shape:",
     JSON.stringify({
       public_narration: "The original player-facing Dungeon Master prose.",
+      resolution_mode: "needs_dice",
       roll_requests: [
         {
           dice: "1d20",
@@ -3283,7 +3321,9 @@ function dmRollRequestRepairInstructions() {
 const gameplayTurnOutputContractReminder = [
   "Output contract reminder:",
   "Return only one valid JSON object. Do not include prose, Markdown, or commentary outside JSON.",
-  "Required top-level keys: public_narration, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update.",
+  "Required top-level keys: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update.",
+  "Set resolution_mode to needs_dice whenever roll_requests is non-empty or next_input_needed is dice_results; otherwise set it to resolved_without_dice.",
+  "When resolution_mode is needs_dice, public_narration must not resolve the rolled outcome.",
   "If hostilities start while combat is inactive and enemies are ready or aware, ask the acting player for initiative in public_narration and roll_requests before resolving the attack or damage.",
   "If the acting player clearly surprises unaware enemies, resolve the opening action's required rolls first, then ask initiative before enemy counteraction.",
   "Also include non-empty mechanics_state_update.combat with active, round, turnOwner, and provisional initiativeOrder as actor-key strings when initiative roll_requests pauses resolution.",
@@ -3331,6 +3371,630 @@ function publicNarrationFromProviderResponse(providerResponse: string) {
 
 function formatDmRollRequestRepairRequest(input: { publicNarration: string }) {
   return ["Player-facing prose:", input.publicNarration].join("\n");
+}
+
+type CombatRelevance =
+  | "combat"
+  | "combat_start"
+  | "pending_combat_roll"
+  | "non_combat_false_positive";
+
+type CombatAdjudication = {
+  combatRelevance: CombatRelevance;
+  resolutionMode: ResolutionMode;
+  rollRequests: DiceRollRequest[];
+  nextInputNeeded: "player_actions" | "dice_results";
+  inputTargets: string[];
+  inputPolicy: InputPolicy;
+  mechanicsStateUpdate?: Record<string, unknown>;
+  narrationBrief: {
+    beats: string[];
+    mustSay: string[];
+    mustNotSay: string[];
+  };
+};
+
+const combatActionPattern =
+  /\b(?:attack|attacks|strike|strikes|stab|shoot|fireball|magic missile|scorching ray|cast\b|damage|initiative|saving throw|save|weapon|sword|bow|crossbow|dagger|enemy|foe|hostile|combat|fight|kill)\b/i;
+
+function shouldUseCombatFlow(input: {
+  campaign: Pick<CampaignRow, "metadata">;
+  currentPlayerAction?: string | undefined;
+}) {
+  const mechanicsState = resolveMechanicsState(input.campaign as CampaignRow, []);
+  const pendingRollRequests = pendingRollRequestsFromCampaign(
+    input.campaign as CampaignRow
+  );
+  const pendingCombatRoll = pendingRollRequests.some((request) =>
+    combatActionPattern.test(`${request.label} ${request.dice}`)
+  );
+
+  return (
+    mechanicsState.combat.active ||
+    pendingCombatRoll ||
+    Boolean(
+      input.currentPlayerAction &&
+        combatActionPattern.test(input.currentPlayerAction)
+    )
+  );
+}
+
+function combatAdjudicatorInstructions(input: {
+  forceCombat: boolean;
+  forcePendingCombatRoll: boolean;
+}) {
+  return [
+    "You are the AI Taverns combat mechanics adjudicator.",
+    "Return exactly one valid JSON object and no Markdown.",
+    "Decide mechanics only. Do not write polished player-facing narration.",
+    "Use existing AI Taverns shapes only: roll_requests, input_targets, input_policy, and mechanics_state_update.",
+    "Do not invent a parallel combat state shape, roll schema, or persistence path.",
+    input.forceCombat
+      ? "Server state says combat is active, so combat_relevance must not be non_combat_false_positive."
+      : "",
+    input.forcePendingCombatRoll
+      ? "Server state has pending combat roll requests, so combat_relevance must be pending_combat_roll, combat, or combat_start."
+      : "",
+    "If roll_requests is non-empty or next_input_needed is dice_results, resolution_mode must be needs_dice.",
+    "Never return next_input_needed dice_results with an empty roll_requests array. If player dice are required, include every required structured roll request. If no player dice are required, set resolution_mode to resolved_without_dice, roll_requests to [], and next_input_needed to player_actions.",
+    "If resolution_mode is needs_dice, roll_requests must be non-empty and next_input_needed must be dice_results.",
+    "If resolution_mode is needs_dice, the narration brief must not resolve the pending rolled outcome.",
+    "For player attacks, request attack and damage together when damage dice are known.",
+    "For spells, use the real spell mechanic when it is clear. Lightning Bolt and Fireball force target Dexterity saving throws; they are not spell attack rolls. Scorching Ray is a spell attack. Magic Missile needs no attack roll or saving throw.",
+    "For spells that force NPC or enemy saving throws, roll those target saves as DM-side mechanics, report the save results in the narration brief, and request only the player-controlled damage/effect dice when needed.",
+    "When the current action contains submitted dice results, use those totals as already-rolled inputs for the current outcome.",
+    "For NPC attacks, resolve hit or miss and damage as DM-side mechanics; do not create roll_requests for NPC-side rolls.",
+    "Combat end must reset mechanics_state_update.combat exactly to active false, round 0, turnOwner null, initiativeOrder empty.",
+    "Required JSON shape:",
+    JSON.stringify({
+      combat_relevance: "combat",
+      resolution_mode: "needs_dice",
+      roll_requests: [],
+      next_input_needed: "player_actions",
+      input_targets: [],
+      input_policy: "all_players",
+      mechanics_state_update: {},
+      narration_brief: {
+        beats: [],
+        must_say: [],
+        must_not_say: []
+      }
+    })
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function combatAdjudicatorRepairInstructions(input: {
+  forceCombat: boolean;
+  forcePendingCombatRoll: boolean;
+}) {
+  return [
+    "You are the AI Taverns combat adjudication repair formatter.",
+    "Return exactly one valid JSON object and no Markdown.",
+    "The previous combat adjudication failed validation.",
+    "Preserve the intended combat mechanics and use existing AI Taverns shapes only: roll_requests, input_targets, input_policy, and mechanics_state_update.",
+    input.forceCombat
+      ? "Server state says combat is active, so combat_relevance must not be non_combat_false_positive."
+      : "",
+    input.forcePendingCombatRoll
+      ? "Server state has pending combat roll requests, so combat_relevance must be pending_combat_roll, combat, or combat_start."
+      : "",
+    "If next_input_needed is dice_results, roll_requests must be non-empty and resolution_mode must be needs_dice.",
+    "If no player dice are actually required, set resolution_mode to resolved_without_dice, roll_requests to [], and next_input_needed to player_actions.",
+    "Do not use dice_results as a generic pause. It is only valid when the app has structured roll_requests to collect.",
+    "If the current action contains submitted dice results, use those totals as already-rolled inputs for the current outcome.",
+    "Lightning Bolt and Fireball force target Dexterity saving throws; they are not spell attack rolls.",
+    "Return the full adjudicator JSON shape with combat_relevance, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, and narration_brief."
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function combatNarratorInstructions() {
+  return [
+    "You are the AI Taverns combat narrator.",
+    "Return exactly one valid JSON object and no Markdown.",
+    JSON.stringify({ public_narration: "Player-facing combat narration." }),
+    "Write only public_narration.",
+    "Do not create, remove, or change roll_requests, input policy, input targets, mechanics_state_update, HP, conditions, turn owner, success, failure, targets, or outcomes.",
+    "Follow the adjudication exactly. If dice are pending, stop before resolving the rolled outcome.",
+    "Use strong tabletop narration, but keep unresolved dice narration concise.",
+    "The adjudicator already enforced these combat policies: When hostilities start, roll initiative unless surprise or the drop applies; advance `turnOwner` only through adjudicated mechanics; resolve that NPC turn immediately when required; use null for a multiplayer party prompt when appropriate."
+  ].join("\n");
+}
+
+function combatNarratorRepairInstructions() {
+  return [
+    "You are an AI Taverns combat narration formatter.",
+    "Return exactly one valid JSON object and no Markdown.",
+    JSON.stringify({ public_narration: "Corrected player-facing combat narration." }),
+    "Preserve the adjudicated mechanics exactly.",
+    "Remove any contradiction of the adjudication.",
+    "If dice are pending, stop before resolving the rolled outcome."
+  ].join("\n");
+}
+
+function splitCombatNarratorVisibleContext(currentAction: string) {
+  const mechanicsMarker = "Authoritative mechanics state:";
+  const mechanicsIndex = currentAction.indexOf(mechanicsMarker);
+
+  if (mechanicsIndex < 0) {
+    return {
+      priorityContext: currentAction.trim(),
+      visibleContext: ""
+    };
+  }
+
+  return {
+    priorityContext: currentAction.slice(mechanicsIndex).trim(),
+    visibleContext: currentAction.slice(0, mechanicsIndex).trim()
+  };
+}
+
+function formatCombatAdjudicatorRequest(input: {
+  currentAction: string;
+  mechanicsState: MechanicsState;
+  pendingRollRequests: DiceRollRequest[];
+}) {
+  return [
+    formatMechanicsPromptContext(input.mechanicsState),
+    "",
+    "Existing pendingRollRequests:",
+    JSON.stringify(input.pendingRollRequests),
+    "",
+    "Current action and context:",
+    input.currentAction
+  ].join("\n");
+}
+
+function formatCombatAdjudicatorRepairRequest(input: {
+  validationError: unknown;
+  adjudicatorRequest: string;
+  providerResponse: string;
+}) {
+  return [
+    "Repair this combat adjudication so it passes validation.",
+    "",
+    "Validation error:",
+    errorSummary(input.validationError).message,
+    "",
+    "Original adjudicator request:",
+    input.adjudicatorRequest,
+    "",
+    "Invalid adjudicator response:",
+    input.providerResponse
+  ].join("\n");
+}
+
+function formatCombatNarratorRequest(input: {
+  adjudication: CombatAdjudication;
+}) {
+  return [
+    "Validated combat adjudication:",
+    JSON.stringify({
+      combat_relevance: input.adjudication.combatRelevance,
+      resolution_mode: input.adjudication.resolutionMode,
+      roll_requests: input.adjudication.rollRequests,
+      next_input_needed: input.adjudication.nextInputNeeded,
+      input_targets: input.adjudication.inputTargets,
+      input_policy: input.adjudication.inputPolicy,
+      mechanics_state_update: input.adjudication.mechanicsStateUpdate ?? {},
+      narration_brief: input.adjudication.narrationBrief
+    }),
+    "",
+    "Adjudicator-enforced policy reminders:",
+    gameplayTurnOutputContractReminder
+  ].join("\n");
+}
+
+function parseCombatAdjudication(content: string, input: {
+  forceCombat: boolean;
+  forcePendingCombatRoll: boolean;
+}): CombatAdjudication {
+  const parsed = parseJsonRecord(content);
+  const combatRelevance = eventPayloadString(parsed.combat_relevance) as CombatRelevance;
+  const allowedRelevance: CombatRelevance[] = [
+    "combat",
+    "combat_start",
+    "pending_combat_roll",
+    "non_combat_false_positive"
+  ];
+
+  if (!allowedRelevance.includes(combatRelevance)) {
+    throw new Error("Combat adjudicator returned invalid combat_relevance.");
+  }
+
+  if (
+    combatRelevance === "non_combat_false_positive" &&
+    (input.forceCombat || input.forcePendingCombatRoll)
+  ) {
+    throw new Error("Combat adjudicator cannot ignore active or pending combat.");
+  }
+
+  const response = parseHermesDmContract(
+    JSON.stringify({
+      public_narration: "Combat adjudication complete.",
+      resolution_mode: parsed.resolution_mode,
+      roll_requests: parsed.roll_requests,
+      next_input_needed: parsed.next_input_needed,
+      input_targets: parsed.input_targets,
+      input_policy: parsed.input_policy,
+      mechanics_state_update: parsed.mechanics_state_update
+    })
+  );
+  const rawBrief = eventPayload(parsed.narration_brief);
+
+  validateMechanicsStateUpdateTargetShape(response.mechanicsStateUpdate);
+
+  const adjudication = {
+    combatRelevance,
+    resolutionMode: response.resolutionMode,
+    rollRequests: response.rollRequests,
+    nextInputNeeded: response.nextInputNeeded,
+    inputTargets: response.inputTargets,
+    inputPolicy: response.inputPolicy,
+    narrationBrief: {
+      beats: Array.isArray(rawBrief.beats)
+        ? rawBrief.beats.filter((item): item is string => typeof item === "string")
+        : [],
+      mustSay: Array.isArray(rawBrief.must_say)
+        ? rawBrief.must_say.filter((item): item is string => typeof item === "string")
+        : [],
+      mustNotSay: Array.isArray(rawBrief.must_not_say)
+        ? rawBrief.must_not_say.filter((item): item is string => typeof item === "string")
+        : []
+    }
+  };
+
+  return {
+    ...adjudication,
+    ...(response.mechanicsStateUpdate
+      ? { mechanicsStateUpdate: response.mechanicsStateUpdate }
+      : {})
+  };
+}
+
+function validateMechanicsStateUpdateTargetShape(
+  update: Record<string, unknown> | undefined
+) {
+  if (!update) {
+    return;
+  }
+
+  const rawCombat = eventPayload(update.combat);
+
+  if (Object.keys(rawCombat).length > 0 && rawCombat.active === false) {
+    if (
+      rawCombat.round !== 0 ||
+      rawCombat.turnOwner !== null ||
+      !Array.isArray(rawCombat.initiativeOrder) ||
+      rawCombat.initiativeOrder.length !== 0
+    ) {
+      throw new Error("Combat end must reset round, turn owner, and initiative.");
+    }
+  }
+}
+
+function parseCombatNarration(content: string) {
+  const parsed = parseJsonRecord(content);
+  const publicNarration = eventPayloadString(parsed.public_narration);
+
+  if (!publicNarration) {
+    throw new Error("Combat narrator response is missing public_narration.");
+  }
+
+  return normalizeHermesContent(
+    JSON.stringify({
+      public_narration: publicNarration,
+      resolution_mode: "resolved_without_dice",
+      roll_requests: [],
+      next_input_needed: "player_actions"
+    })
+  );
+}
+
+function combatNarrationContradictsPendingDice(
+  narration: string,
+  adjudication: CombatAdjudication
+) {
+  return (
+    adjudication.resolutionMode === "needs_dice" &&
+    /\b(?:hits?|miss(?:es)?|wounds?|kills?|dies|defeated)\b/i.test(
+      narration
+    )
+  );
+}
+
+async function askCombatDungeonMaster(
+  db: Queryable,
+  runtime: DungeonMasterRuntime,
+  campaign: Pick<CampaignRow, "id" | "hermes_session_id" | "metadata" | "mode">,
+  message: string,
+  instructions: string,
+  includeHistory: boolean,
+  turnId: string | undefined,
+  currentPlayerAction: string | undefined,
+  options?: {
+    buildPromptContext?: boolean;
+    includeEldermereTurnContext?: boolean;
+  }
+): Promise<DungeonMasterReply | null> {
+  const traceId = randomUUID();
+  const startedAt = Date.now();
+  const mechanicsState = resolveMechanicsState(campaign as CampaignRow, []);
+  const pendingRollRequests = pendingRollRequestsFromCampaign(campaign as CampaignRow);
+  const forceCombat = mechanicsState.combat.active;
+  const forcePendingCombatRoll = pendingRollRequests.some((request) =>
+    combatActionPattern.test(`${request.label} ${request.dice}`)
+  );
+  const shouldBuildPromptContext = options?.buildPromptContext !== false;
+  const instructionsWithWorldContext =
+    options?.includeEldermereTurnContext === false
+      ? instructions
+      : withEldermereTurnContext(instructions, campaign);
+  const promptContext = shouldBuildPromptContext && runtime.buildPromptContext
+    ? await runtime.buildPromptContext({
+        campaignId: campaign.id,
+        turnId,
+        currentAction: message,
+        baseInstructions: instructionsWithWorldContext
+      })
+    : null;
+  const adjudicatorMessage = formatCombatAdjudicatorRequest({
+    currentAction: promptContext?.message ?? message,
+    mechanicsState,
+    pendingRollRequests
+  });
+  const history =
+    includeHistory && !promptContext
+      ? await getCampaignEventMessages(db, campaign.id, 30, turnId)
+      : [];
+
+  await logTurnDebugTrace(db, {
+    campaignId: campaign.id,
+    traceId,
+    phase: "combat_adjudicator_started",
+    turnId,
+    elapsedMs: 0,
+    payload: {
+      forceCombat,
+      forcePendingCombatRoll,
+      currentPlayerAction: currentPlayerAction
+        ? textStats(currentPlayerAction)
+        : undefined,
+      message: textStats(adjudicatorMessage)
+    }
+  });
+
+  const callAdjudicator = async (attempt: "initial" | "repair", error?: unknown) => {
+    const providerStartedAt = Date.now();
+    const data = await runtime.askProvider({
+      message:
+        attempt === "initial"
+          ? adjudicatorMessage
+          : formatCombatAdjudicatorRepairRequest({
+              validationError: error,
+              adjudicatorRequest: adjudicatorMessage,
+              providerResponse: adjudicatorData?.content ?? ""
+            }),
+      instructions: withEldermereTurnContext(
+        attempt === "initial"
+          ? combatAdjudicatorInstructions({ forceCombat, forcePendingCombatRoll })
+          : combatAdjudicatorRepairInstructions({
+              forceCombat,
+              forcePendingCombatRoll
+            }),
+        campaign
+      ),
+      history,
+      ...(currentPlayerAction ? { currentPlayerAction } : {})
+    });
+
+    await logTurnDebugTrace(db, {
+      campaignId: campaign.id,
+      traceId,
+      phase:
+        attempt === "initial"
+          ? "combat_adjudicator_response_received"
+          : "combat_adjudicator_repair_response_received",
+      turnId,
+      elapsedMs: Date.now() - startedAt,
+      payload: {
+        durationMs: Date.now() - providerStartedAt,
+        ...(error ? { originalError: errorSummary(error) } : {}),
+        provider: providerDebugSummary(data.debug, {
+          includeRawResponse: true
+        })
+      }
+    });
+
+    return data;
+  };
+  let adjudicatorData: DungeonMasterProviderResponse | undefined;
+  let adjudication: CombatAdjudication;
+
+  try {
+    adjudicatorData = await callAdjudicator("initial");
+    adjudication = parseCombatAdjudication(adjudicatorData.content, {
+      forceCombat,
+      forcePendingCombatRoll
+    });
+  } catch (adjudicationError) {
+    await logTurnDebugTrace(db, {
+      campaignId: campaign.id,
+      traceId,
+      phase: "combat_adjudicator_validation_failed",
+      turnId,
+      elapsedMs: Date.now() - startedAt,
+      payload: {
+        error: errorSummary(adjudicationError),
+        rawResponse: adjudicatorData
+          ? textStats(adjudicatorData.content)
+          : undefined
+      }
+    });
+
+    const repairData = await callAdjudicator("repair", adjudicationError);
+    adjudicatorData = repairData;
+    adjudication = parseCombatAdjudication(repairData.content, {
+      forceCombat,
+      forcePendingCombatRoll
+    });
+  }
+
+  if (adjudication.combatRelevance === "non_combat_false_positive") {
+    await logTurnDebugTrace(db, {
+      campaignId: campaign.id,
+      traceId,
+      phase: "combat_adjudicator_false_positive",
+      turnId,
+      elapsedMs: Date.now() - startedAt,
+      payload: {
+        resolutionMode: adjudication.resolutionMode
+      }
+    });
+
+    return null;
+  }
+
+  const narratorContext = splitCombatNarratorVisibleContext(
+    promptContext?.message ?? message
+  );
+  const narratorPriorityContext = [
+    "Combat narrator priority context:",
+    narratorContext.priorityContext,
+    "",
+    formatCombatNarratorRequest({
+      adjudication
+    })
+  ].join("\n");
+  const narratorMessage = [
+    "Current action and visible context:",
+    narratorContext.visibleContext || "No additional visible context."
+  ].join("\n");
+  const callNarrator = async (attempt: "initial" | "repair") => {
+    const providerStartedAt = Date.now();
+    const data = await runtime.askProvider({
+      message:
+        attempt === "initial"
+          ? narratorMessage
+          : [
+              "The previous combat narration contradicted the adjudication or tried to mutate mechanics.",
+              "Return corrected narrator JSON only.",
+              "",
+              narratorMessage
+            ].join("\n"),
+      instructions: withEldermereTurnContext(
+        [
+          attempt === "initial"
+            ? combatNarratorInstructions()
+            : combatNarratorRepairInstructions(),
+          "",
+          narratorPriorityContext
+        ].join("\n"),
+        campaign
+      ),
+      history,
+      ...(currentPlayerAction ? { currentPlayerAction } : {})
+    });
+
+    await logTurnDebugTrace(db, {
+      campaignId: campaign.id,
+      traceId,
+      phase:
+        attempt === "initial"
+          ? "combat_narrator_response_received"
+          : "combat_narrator_repair_response_received",
+      turnId,
+      elapsedMs: Date.now() - startedAt,
+      payload: {
+        durationMs: Date.now() - providerStartedAt,
+        provider: providerDebugSummary(data.debug, {
+          includeRawResponse: true
+        })
+      }
+    });
+
+    return data;
+  };
+
+  let narratorData = await callNarrator("initial");
+  let narration = parseCombatNarration(narratorData.content);
+
+  if (combatNarrationContradictsPendingDice(narration, adjudication)) {
+    narratorData = await callNarrator("repair");
+    narration = parseCombatNarration(narratorData.content);
+
+    if (combatNarrationContradictsPendingDice(narration, adjudication)) {
+      throw new Error(`Combat narrator contradicted adjudication. Trace ID: ${traceId}`);
+    }
+  }
+
+  const nextMechanicsState = normalizeCombatTurnOwnerForInput(
+    applyMechanicsStateUpdate(
+      mechanicsState,
+      adjudication.mechanicsStateUpdate,
+      nowIso()
+    ),
+    {
+      mode: campaign.mode,
+      nextInputNeeded: adjudication.nextInputNeeded,
+      inputPolicy: adjudication.inputPolicy
+    }
+  );
+
+  if (nextMechanicsState !== mechanicsState) {
+    await writeMechanicsStateForLockedCampaign(
+      db,
+      campaign.id,
+      nextMechanicsState
+    );
+  }
+
+  const debug: AiDebugInfo = {
+    ...narratorData.debug,
+    combatState: {
+      combat: nextMechanicsState.combat,
+      actors: nextMechanicsState.actors
+    },
+    combatAdjudication: {
+      provider: providerDebugSummary(adjudicatorData.debug, {
+        includeRawResponse: true
+      }),
+      combatRelevance: adjudication.combatRelevance,
+      resolutionMode: adjudication.resolutionMode,
+      rollRequests: adjudication.rollRequests,
+      nextInputNeeded: adjudication.nextInputNeeded,
+      inputTargets: adjudication.inputTargets,
+      inputPolicy: adjudication.inputPolicy,
+      mechanicsStateUpdate: adjudication.mechanicsStateUpdate
+    }
+  } as AiDebugInfo;
+
+  await logTurnDebugTrace(db, {
+    campaignId: campaign.id,
+    traceId,
+    phase: "combat_turn_completed",
+    turnId,
+    elapsedMs: Date.now() - startedAt,
+    payload: {
+      combatRelevance: adjudication.combatRelevance,
+      resolutionMode: adjudication.resolutionMode,
+      rollRequestsCount: adjudication.rollRequests.length,
+      nextInputNeeded: adjudication.nextInputNeeded
+    }
+  });
+
+  return {
+    id: narratorData.id ?? randomUUID(),
+    content: narration,
+    debug,
+    rollRequests: adjudication.rollRequests,
+    inputTargets: adjudication.inputTargets,
+    inputPolicy: adjudication.inputPolicy,
+    resolutionMode: adjudication.resolutionMode
+  };
 }
 
 async function askEldermereOpeningPlanner(
@@ -3477,13 +4141,79 @@ function findForbiddenOpeningTerms(
   const allowedTerms = new Set(
     plan.allowedPlayerFacingTerms.map((term) => term.term.toLowerCase())
   );
-  const lowerNarration = narration.toLowerCase();
 
   return [...new Set(plan.forbiddenOpeningTerms)]
     .map((term) => term.trim())
     .filter(Boolean)
     .filter((term) => !allowedTerms.has(term.toLowerCase()))
-    .filter((term) => lowerNarration.includes(term.toLowerCase()));
+    .filter((term) => openingNarrationContainsTerm(narration, term));
+}
+
+function openingNarrationTermPattern(term: string) {
+  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  return new RegExp(
+    `(^|[^\\p{L}\\p{N}_])${escaped}(?=$|[^\\p{L}\\p{N}_])`,
+    "iu"
+  );
+}
+
+function openingNarrationContainsTerm(narration: string, term: string) {
+  return openingNarrationTermPattern(term).test(narration);
+}
+
+function plainReplacementForForbiddenOpeningTerm(term: string) {
+  switch (term.toLowerCase()) {
+    case "second dominion":
+      return "the fallen empire";
+    case "graywake":
+      return "the old catastrophe";
+    case "hush":
+      return "the long silence";
+    case "wellglass":
+      return "rare crystal";
+    default:
+      return "old lore";
+  }
+}
+
+function scrubForbiddenOpeningTerms(
+  narration: string,
+  plan: EldermereOpeningPlan
+) {
+  const allowedTerms = new Set(
+    plan.allowedPlayerFacingTerms.map((term) => term.term.toLowerCase())
+  );
+
+  return [...new Set(plan.forbiddenOpeningTerms)]
+    .map((term) => term.trim())
+    .filter(Boolean)
+    .filter((term) => !allowedTerms.has(term.toLowerCase()))
+    .reduce(
+      (current, term) =>
+        current.replace(
+          openingNarrationTermPattern(term),
+          (_match, prefix: string) =>
+            `${prefix}${plainReplacementForForbiddenOpeningTerm(term)}`
+        ),
+      narration
+    );
+}
+
+function repairEldermereOpeningReply(
+  reply: DungeonMasterReply,
+  plan: EldermereOpeningPlan
+): DungeonMasterReply {
+  return {
+    ...reply,
+    content: scrubForbiddenOpeningTerms(reply.content, plan),
+    setting: {
+      ...reply.setting,
+      worldName: "Eldermere",
+      startingLocation: plan.startingLocation.name,
+      displayLocation: plan.startingLocation.name
+    }
+  };
 }
 
 function eldermereOpeningSettingErrors(
@@ -3553,13 +4283,14 @@ async function askEldermereOpeningNarrator(
     return opening;
   }
 
+  const forbiddenTermPlural = forbiddenTerms.length === 1 ? "" : "s";
   const repairMessage = [
     narratorMessage,
     "",
     "Rewrite required:",
     ...(forbiddenTerms.length > 0
       ? [
-          `The previous public_narration used forbidden opening terms: ${forbiddenTerms.join(", ")}.`
+          `The previous public_narration used ${forbiddenTerms.length} forbidden opening term${forbiddenTermPlural} from forbidden_opening_terms.`
         ]
       : []),
     ...(settingErrors.length > 0
@@ -3594,19 +4325,7 @@ async function askEldermereOpeningNarrator(
   );
 
   if (remainingForbiddenTerms.length > 0 || remainingSettingErrors.length > 0) {
-    throw new Error(
-      [
-        "Eldermere opening narrator failed validation after repair.",
-        remainingForbiddenTerms.length > 0
-          ? `Forbidden terms: ${remainingForbiddenTerms.join(", ")}.`
-          : "",
-        remainingSettingErrors.length > 0
-          ? `Setting errors: ${remainingSettingErrors.join("; ")}.`
-          : ""
-      ]
-        .filter(Boolean)
-        .join(" ")
-    );
+    return repairEldermereOpeningReply(repairedOpening, plan);
   }
 
   return repairedOpening;
@@ -3759,7 +4478,7 @@ async function askDungeonMaster(
     includeEldermereTurnContext?: boolean;
     suppressStreaming?: boolean;
   }
-) {
+): Promise<DungeonMasterReply> {
   const traceId = randomUUID();
   const startedAt = Date.now();
   const streamEmitter =
@@ -3771,6 +4490,37 @@ async function askDungeonMaster(
       ? instructions
       : withEldermereTurnContext(instructions, campaign);
   let providerDebug: AiDebugInfo | undefined;
+
+  if (
+    currentPlayerAction &&
+    shouldUseCombatFlow({
+      campaign,
+      currentPlayerAction
+    })
+  ) {
+    const combatReply = await askCombatDungeonMaster(
+      db,
+      runtime,
+      campaign,
+      message,
+      instructions,
+      includeHistory,
+      turnId,
+      currentPlayerAction,
+      {
+        ...(options?.buildPromptContext === undefined
+          ? {}
+          : { buildPromptContext: options.buildPromptContext }),
+        ...(options?.includeEldermereTurnContext === undefined
+          ? {}
+          : { includeEldermereTurnContext: options.includeEldermereTurnContext })
+      }
+    );
+
+    if (combatReply) {
+      return combatReply;
+    }
+  }
 
   if (streamEmitter && streamTurnId) {
     streamEmitter({
@@ -3991,7 +4741,8 @@ async function askDungeonMaster(
         rollRequestLabels: rollRequests.map((request) => request.label),
         nextInputNeeded: contract.nextInputNeeded,
         inputPolicy: contract.inputPolicy,
-        inputTargets: contract.inputTargets
+        inputTargets: contract.inputTargets,
+        resolutionMode: contract.resolutionMode
       }
     });
 
@@ -4015,6 +4766,7 @@ async function askDungeonMaster(
       rollRequests,
       inputTargets: contract.inputTargets,
       inputPolicy: contract.inputPolicy,
+      resolutionMode: contract.resolutionMode,
       setting: contract.setting
     };
   } catch (error) {
@@ -4147,6 +4899,7 @@ async function finishResolvedTurn(
     pendingRollRequests?: DiceRollRequest[];
     inputTargets?: string[];
     inputPolicy?: InputPolicy;
+    resolutionMode?: "needs_dice" | "resolved_without_dice";
     setting?: CampaignSettingSummary | undefined;
     aiDebug?: AiDebugInfo | undefined;
   }
@@ -4182,6 +4935,9 @@ async function finishResolvedTurn(
       ...settingPatch,
       pendingRollRequest: currentPendingRollRequest,
       pendingRollRequests,
+      resolutionMode:
+        input.resolutionMode ??
+        (pendingRollRequests.length > 0 ? "needs_dice" : "resolved_without_dice"),
       inputTargets: input.inputTargets ?? [],
       inputPolicy: input.inputPolicy ?? "all_players",
       aiDebug: input.aiDebug
@@ -4549,6 +5305,7 @@ export async function beginRoomForUser(
       pendingRollRequests: opening.rollRequests,
       inputTargets: opening.inputTargets,
       inputPolicy: opening.inputPolicy,
+      resolutionMode: opening.resolutionMode,
       setting: opening.setting,
       aiDebug: opening.debug
     });
@@ -4778,6 +5535,10 @@ export async function submitRoomTurnForUser(
         campaignRow.id,
         rollSubmission.remainingRollRequests
       );
+      campaignRow.metadata = metadataWithPendingRollRequests(
+        campaignRow.metadata,
+        rollSubmission.remainingRollRequests
+      );
     }
 
     await client.query("update players set last_seen_at = now() where id = $1", [
@@ -4882,6 +5643,7 @@ export async function submitRoomTurnForUser(
         pendingRollRequests: reply.rollRequests,
         inputTargets: reply.inputTargets,
         inputPolicy: reply.inputPolicy,
+        resolutionMode: reply.resolutionMode,
         aiDebug: reply.debug
       });
 
@@ -5229,6 +5991,10 @@ export async function submitSoloTurnForUser(
         campaign.id,
         rollSubmission.remainingRollRequests
       );
+      campaign.metadata = metadataWithPendingRollRequests(
+        campaign.metadata,
+        rollSubmission.remainingRollRequests
+      );
     }
 
     await client.query("update players set last_seen_at = now() where id = $1", [
@@ -5311,6 +6077,7 @@ export async function submitSoloTurnForUser(
       pendingRollRequests: reply.rollRequests,
       inputTargets: reply.inputTargets,
       inputPolicy: reply.inputPolicy,
+      resolutionMode: reply.resolutionMode,
       aiDebug: reply.debug
     });
 
@@ -5552,6 +6319,7 @@ export async function regenerateCampaignResponseForUser(
       pendingRollRequests: reply.rollRequests,
       inputTargets: reply.inputTargets,
       inputPolicy: reply.inputPolicy,
+      resolutionMode: reply.resolutionMode,
       setting: reply.setting,
       aiDebug: reply.debug
     });

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { after, before } from "node:test";
 import type { FastifyInstance } from "fastify";
 import { AuthPasswordlessStartResponseSchema } from "@ai-dnd/contracts";
+import type { DungeonMasterRuntime } from "@ai-dnd/db";
 import { buildApp } from "../app.js";
 import { loadConfig } from "../config.js";
 
@@ -13,6 +14,8 @@ let providerInputs: {
   currentPlayerAction?: string;
   history: { role: string; content: string }[];
 }[] = [];
+type AskProvider = DungeonMasterRuntime["askProvider"];
+let providerOverride: AskProvider | undefined;
 
 type QueryResult<T> = {
   rows: T[];
@@ -28,6 +31,7 @@ export type DebugFields = {
   rawResponse?: unknown;
   temperature?: unknown;
   combatState?: unknown;
+  combatAdjudication?: unknown;
 };
 
 type ConnectFn = () => Promise<{
@@ -109,6 +113,7 @@ type TurnRecord = {
   id: string;
   campaign_id: string;
   status: "collecting" | "resolving" | "resolved" | "failed" | "cancelled";
+  error?: string | null;
   created_at: Date;
   updated_at: Date;
 };
@@ -601,6 +606,20 @@ class FakeDatabase {
 
       if (turn) {
         turn.status = "resolved";
+        turn.updated_at = new Date();
+      }
+
+      return { rows: [] as T[] };
+    }
+
+    if (normalizedSql.startsWith("update turns set status = 'failed'")) {
+      const turnId = values[0] as string;
+      const error = values[1] as string;
+      const turn = this.turns.find((candidate) => candidate.id === turnId);
+
+      if (turn) {
+        turn.status = "failed";
+        turn.error = error;
         turn.updated_at = new Date();
       }
 
@@ -1230,6 +1249,10 @@ before(async () => {
             content: message.content
           }))
         });
+        if (providerOverride) {
+          return providerOverride(input);
+        }
+
         if (input.instructions.includes("AI Taverns response formatter")) {
           if (input.message.includes("Attack roll: 13 vs AC 10 - miss")) {
             const content = JSON.stringify({
@@ -1305,6 +1328,7 @@ before(async () => {
         if (input.instructions.includes("AI Taverns roll request formatter")) {
           const content = JSON.stringify({
             public_narration: "Make a Dexterity saving throw.",
+            resolution_mode: "needs_dice",
             roll_requests: [
               {
                 dice: "1d20",
@@ -1318,6 +1342,519 @@ before(async () => {
 
           return {
             id: "provider-roll-repair-1",
+            content,
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: content,
+              model: "test-model",
+              temperature: 0.8,
+              providerTimings: []
+            }
+          };
+        }
+
+        if (input.instructions.includes("combat adjudication repair formatter")) {
+          const content = JSON.stringify({
+            combat_relevance: "combat_start",
+            resolution_mode: "needs_dice",
+            roll_requests: [
+              {
+                player: "Owner",
+                dice: "1d20",
+                modifier: 2,
+                label: "Initiative",
+                advantage_state: "normal",
+                reason: "Repair missing initiative roll request"
+              }
+            ],
+            next_input_needed: "dice_results",
+            input_targets: ["Owner"],
+            input_policy: "only_targeted_players",
+            mechanics_state_update: {
+              combat: {
+                active: true,
+                round: 1,
+                turnOwner: "player:owner",
+                initiativeOrder: ["player:owner", "npc:mara"]
+              }
+            },
+            narration_brief: {
+              beats: ["Combat begins; initiative is needed."],
+              must_say: ["Roll 1d20 + 2 for initiative."],
+              must_not_say: ["do not resolve the attack"]
+            }
+          });
+
+          return {
+            id: "provider-combat-adjudicator-repair",
+            content,
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: content,
+              model: "test-model",
+              temperature: 0.8,
+              providerTimings: []
+            }
+          };
+        }
+
+        if (input.instructions.includes("combat mechanics adjudicator")) {
+          const forceCombat = input.instructions.includes(
+            "combat is active, so combat_relevance must not be non_combat_false_positive"
+          );
+          const falsePositive =
+            !forceCombat &&
+            (input.message.includes("TRIGGER_COMBAT_FALSE_POSITIVE") ||
+              input.message.includes("TRIGGER_ATTACK_ROLL_CONTRADICTION") ||
+              input.message.includes("TRIGGER_RESOLVED_COMBAT_WITHOUT_ROLLS"));
+          let content: string;
+
+          if (
+            input.message.includes("TRIGGER_REPEAT_SUBMITTED_PENDING_ROLLS") &&
+            input.message.includes("Existing pendingRollRequests:\n[]")
+          ) {
+            content = JSON.stringify({
+              combat_relevance: "pending_combat_roll",
+              resolution_mode: "resolved_without_dice",
+              roll_requests: [],
+              next_input_needed: "player_actions",
+              input_targets: [],
+              input_policy: "all_players",
+              mechanics_state_update: {
+                combat: {
+                  active: true,
+                  round: 1,
+                  turnOwner: "player:owner",
+                  initiativeOrder: ["player:owner", "npc:elara"]
+                },
+                actors: {
+                  "npc:elara": {
+                    characterName: "Elara",
+                    currentHp: 14,
+                    maxHp: 42,
+                    conditions: []
+                  }
+                }
+              },
+              narration_brief: {
+                beats: [
+                  "The submitted Lightning Bolt rolls resolve.",
+                  "Elara takes lightning damage and the square erupts."
+                ],
+                must_say: ["Elara takes 28 lightning damage"],
+                must_not_say: ["whether it finds its mark"]
+              }
+            });
+          } else if (input.message.includes("TRIGGER_REPEAT_SUBMITTED_PENDING_ROLLS")) {
+            content = JSON.stringify({
+              combat_relevance: "pending_combat_roll",
+              resolution_mode: "needs_dice",
+              roll_requests: [
+                {
+                  player: "Owner",
+                  dice: "1d20",
+                  modifier: 3,
+                  label:
+                    "TRIGGER_REPEAT_SUBMITTED_PENDING_ROLLS Lightning Bolt spell attack roll",
+                  advantage_state: "normal",
+                  reason: "Buggy repeated request"
+                },
+                {
+                  player: "Owner",
+                  dice: "8d6",
+                  modifier: 0,
+                  label: "Lightning Bolt damage",
+                  advantage_state: "normal",
+                  reason: "Buggy repeated request"
+                }
+              ],
+              next_input_needed: "dice_results",
+              input_targets: ["Owner"],
+              input_policy: "only_targeted_players",
+              mechanics_state_update: {},
+              narration_brief: {
+                beats: ["Bug repeats unresolved Lightning Bolt narration."],
+                must_say: ["whether it finds its mark"],
+                must_not_say: []
+              }
+            });
+          } else if (input.message.includes("TRIGGER_ADJUDICATOR_MISSING_ROLL_REQUEST")) {
+            content = JSON.stringify({
+              combat_relevance: "combat_start",
+              resolution_mode: "needs_dice",
+              roll_requests: [],
+              next_input_needed: "dice_results",
+              input_targets: ["Owner"],
+              input_policy: "only_targeted_players",
+              mechanics_state_update: {
+                combat: {
+                  active: true,
+                  round: 1,
+                  turnOwner: "player:owner",
+                  initiativeOrder: ["player:owner", "npc:mara"]
+                }
+              },
+              narration_brief: {
+                beats: ["Combat begins; initiative is needed."],
+                must_say: ["Roll initiative."],
+                must_not_say: ["do not resolve the attack"]
+              }
+            });
+          } else if (falsePositive) {
+            content = JSON.stringify({
+              combat_relevance: "non_combat_false_positive",
+              resolution_mode: "resolved_without_dice",
+              roll_requests: [],
+              next_input_needed: "player_actions",
+              input_targets: [],
+              input_policy: "all_players",
+              mechanics_state_update: {},
+              narration_brief: {
+                beats: ["This is not a combat action."],
+                must_say: [],
+                must_not_say: []
+              }
+            });
+          } else if (input.message.includes("I rolled 8d6")) {
+            content = JSON.stringify({
+              combat_relevance: "pending_combat_roll",
+              resolution_mode: "needs_dice",
+              roll_requests: [
+                {
+                  player: "Owner",
+                  dice: "1d20",
+                  modifier: 2,
+                  label: "Initiative",
+                  advantage_state: "normal",
+                  reason: "Determine turn order after the surprise opening strike"
+                }
+              ],
+              next_input_needed: "dice_results",
+              input_targets: ["Owner"],
+              input_policy: "only_targeted_players",
+              mechanics_state_update: {
+                combat: {
+                  active: true,
+                  round: 1,
+                  turnOwner: "player:owner",
+                  initiativeOrder: [
+                    "player:owner",
+                    "npc:mara",
+                    "npc:drowned-choir-raider-1",
+                    "npc:drowned-choir-raider-2"
+                  ]
+                },
+                actors: {
+                  "npc:mara": {
+                    characterName: "Mara",
+                    currentHp: 31,
+                    maxHp: 45,
+                    conditions: []
+                  }
+                }
+              },
+              narration_brief: {
+                beats: [
+                  "The opening strike has landed.",
+                  "Ask for initiative before enemy counteraction."
+                ],
+                must_say: ["roll 1d20 + 2 for initiative"],
+                must_not_say: ["do not resolve the next combat turn"]
+              }
+            });
+          } else if (
+            input.message.toLowerCase().includes("scorching ray") &&
+            (input.message.toLowerCase().includes("cutlass raider") ||
+              input.message.toLowerCase().includes("horn-blower"))
+          ) {
+            const mechanicsJson = input.message.match(
+              /If mechanicsState conflicts[\s\S]*?\n(\{[\s\S]*?\})\n\nExisting pendingRollRequests:/
+            )?.[1];
+            const playerActorKeys =
+              mechanicsJson
+                ? Object.keys(
+                    (JSON.parse(mechanicsJson) as {
+                      actors?: Record<string, unknown>;
+                    }).actors ?? {}
+                  ).filter((key) => key.startsWith("player:"))
+                : [];
+            const mechanicsState = mechanicsJson
+              ? (JSON.parse(mechanicsJson) as {
+                  actors?: Record<
+                    string,
+                    { characterName?: string; currentHp?: number; maxHp?: number }
+                  >;
+                })
+              : undefined;
+            const targetPlayerKey = playerActorKeys[0] ?? "player:owner";
+            const targetPlayer = mechanicsState?.actors?.[targetPlayerKey];
+            const targetName = targetPlayer?.characterName ?? "the front-line hero";
+            const targetMaxHp = targetPlayer?.maxHp ?? 20;
+            const targetCurrentHp = targetPlayer?.currentHp ?? targetMaxHp;
+            const targetNextHp = Math.max(0, targetCurrentHp - 6);
+
+            content = JSON.stringify({
+              combat_relevance: "combat",
+              resolution_mode: "resolved_without_dice",
+              roll_requests: [],
+              next_input_needed: "player_actions",
+              input_targets: [],
+              input_policy: "all_players",
+              mechanics_state_update: {
+                combat: {
+                  active: true,
+                  round: 1,
+                  turnOwner: null,
+                  initiativeOrder: [
+                    ...(playerActorKeys.length > 0
+                      ? playerActorKeys
+                      : ["player:owner"]),
+                    "npc:cutlass-raider",
+                    "npc:horn-blower"
+                  ]
+                },
+                actors: {
+                  "npc:cutlass-raider": {
+                    characterName: "Cutlass raider",
+                    currentHp: 12,
+                    maxHp: 12,
+                    conditions: []
+                  },
+                  "npc:horn-blower": {
+                    characterName: "Horn-blower",
+                    currentHp: 10,
+                    maxHp: 10,
+                    conditions: []
+                  },
+                  [targetPlayerKey]: {
+                    characterName: targetName,
+                    currentHp: targetNextHp,
+                    maxHp: targetMaxHp,
+                    conditions: []
+                  }
+                }
+              },
+              narration_brief: {
+                beats: [
+                  `The cutlass raider's turn resolves first.`,
+                  `Cutlass raider attack roll: 17 vs AC 14 - hit.`,
+                  `Cutlass raider damage roll: 1d6 + 2 = 6 slashing damage.`,
+                  `${targetName} drops from ${targetCurrentHp} HP to ${targetNextHp} HP.`
+                ],
+                must_say: [
+                  "attack roll: 17 vs AC 14 - hit",
+                  "damage roll: 1d6 + 2 = 6"
+                ],
+                must_not_say: []
+              }
+            });
+          } else if (input.message.includes("I cast fireball on Mara")) {
+            const isSurpriseOpening = input.message.includes(
+              "Mara has not noticed me"
+            );
+            const mechanicsJson = input.message.match(
+              /If mechanicsState conflicts[\s\S]*?\n(\{[\s\S]*?\})\n\nExisting pendingRollRequests:/
+            )?.[1];
+            const playerActorKey =
+              mechanicsJson
+                ? Object.keys(
+                    (JSON.parse(mechanicsJson) as {
+                      actors?: Record<string, unknown>;
+                    }).actors ?? {}
+                  ).find((key) => key.startsWith("player:"))
+                : undefined;
+
+            content = JSON.stringify({
+              combat_relevance: "combat_start",
+              resolution_mode: "needs_dice",
+              roll_requests: [
+                isSurpriseOpening
+                  ? {
+                      player: "Owner",
+                      dice: "8d6",
+                      modifier: 0,
+                      label: "Fireball damage",
+                      advantage_state: "normal",
+                      reason:
+                        "Resolve the surprise Fireball damage before initiative"
+                    }
+                  : {
+                      player: "Owner",
+                      dice: "1d20",
+                      modifier: 2,
+                      label: "Initiative",
+                      advantage_state: "normal",
+                      reason: "Determine turn order as combat begins"
+                    }
+              ],
+              next_input_needed: "dice_results",
+              input_targets: ["Owner"],
+              input_policy: "only_targeted_players",
+              mechanics_state_update: {
+                combat: {
+                  active: true,
+                  round: 1,
+                  turnOwner: playerActorKey ?? "player:owner",
+                  initiativeOrder: [
+                    playerActorKey ?? "player:owner",
+                    "npc:mara",
+                    "npc:drowned-choir-raider-1",
+                    "npc:drowned-choir-raider-2"
+                  ]
+                },
+                actors: {
+                  "npc:mara": {
+                    characterName: "Mara",
+                    currentHp: 45,
+                    maxHp: 45,
+                    conditions: []
+                  },
+                  "npc:drowned-choir-raider-1": {
+                    characterName: "Drowned Choir raider",
+                    currentHp: 16,
+                    maxHp: 16,
+                    conditions: []
+                  },
+                  "npc:drowned-choir-raider-2": {
+                    characterName: "Drowned Choir raider",
+                    currentHp: 16,
+                    maxHp: 16,
+                    conditions: []
+                  }
+                }
+              },
+              narration_brief: {
+                beats: isSurpriseOpening
+                  ? [
+                      "Seren catches Mara before she can react.",
+                      "Mara and two Drowned Choir raiders are inside the spell radius.",
+                      "Ask for Fireball damage."
+                    ]
+                  : [
+                      "Combat begins before the spell resolves.",
+                      "Ask for initiative."
+                    ],
+                must_say: [
+                  isSurpriseOpening
+                    ? "Roll 8d6 for Fireball damage."
+                    : "Roll 1d20 + 2 for initiative"
+                ],
+                must_not_say: ["do not resolve damage"]
+              }
+            });
+          } else {
+            content = JSON.stringify({
+              combat_relevance: forceCombat ? "combat" : "combat_start",
+              resolution_mode: "resolved_without_dice",
+              roll_requests: [],
+              next_input_needed: "player_actions",
+              input_targets: [],
+              input_policy: "all_players",
+              mechanics_state_update: {},
+              narration_brief: {
+                beats: ["Combat remains active but no dice are needed."],
+                must_say: ["What do you do?"],
+                must_not_say: []
+              }
+            });
+          }
+
+          return {
+            id: "provider-combat-adjudicator",
+            content,
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: content,
+              model: "test-model",
+              temperature: 0.8,
+              providerTimings: []
+            }
+          };
+        }
+
+        if (input.instructions.includes("combat narrator")) {
+          const combatNarratorPromptText = `${input.instructions}\n${input.message}`;
+          const isInitiativeAfterDamage = combatNarratorPromptText.includes(
+            "The opening strike has landed"
+          );
+          const isNpcCatchup = combatNarratorPromptText.includes(
+            "The cutlass raider's turn resolves first"
+          );
+          const isSurpriseFireball = combatNarratorPromptText.includes(
+            "Roll 8d6 for Fireball damage."
+          );
+          const isInitiativeFireball = combatNarratorPromptText.includes(
+            "Roll 1d20 + 2 for initiative"
+          );
+          const isResolvedLightningBolt = combatNarratorPromptText.includes(
+            "Elara takes 28 lightning damage"
+          );
+          const publicNarration = isNpcCatchup
+            ? "The cutlass raider's turn resolves first. Cutlass raider attack roll: 17 vs AC 14 - hit. Cutlass raider damage roll: 1d6 + 2 = 6 slashing damage.\n\nThe rusted blade bites across Seren's ribs before the raider wrenches it free. Seren drops from 24 HP to 18 HP, still standing but hurt.\n\nControl returns to the heroes. What do you do?"
+            : isInitiativeAfterDamage
+              ? "The surprise Fireball detonates across the pier. Mara staggers through the smoke, and the two raiders are thrown back by the blast.\n\nThe opening strike has landed. Now the rest of the fight catches up: roll 1d20 + 2 for initiative."
+              : isResolvedLightningBolt
+                ? "The Lightning Bolt tears across the square and catches Elara before she can fully turn aside. Elara takes 28 lightning damage, staggering against the shrine doorway as thunder cracks over Greyfold.\n\nThe wardens snap out of their bored watchfulness and lower their spears. What do you do?"
+              : isSurpriseFireball
+                ? "Seren catches Mara before she can react. Mara and two Drowned Choir raiders are inside the spell radius.\n\nMara rolls 15 and succeeds. The first raider rolls 9 and fails. The second raider rolls 11 and fails.\n\nRoll 8d6 for Fireball damage."
+                : isInitiativeFireball
+                  ? "Seren starts to cast Fireball, and Mara and the Drowned Choir raiders snap into motion.\n\nCombat begins. Roll 1d20 + 2 for initiative before the spell is resolved."
+                  : "Combat remains active around you.\n\nWhat do you do?";
+          const content = combatNarratorPromptText.includes("TRIGGER_NARRATOR_FULL_CONTRACT")
+            ? JSON.stringify({
+                public_narration: publicNarration,
+                resolution_mode: "resolved_without_dice",
+                roll_requests: [
+                  {
+                    dice: "1d20",
+                    label: "Narrator must not create this roll"
+                  }
+                ],
+                next_input_needed: "dice_results",
+                input_targets: ["Wrong target"],
+                input_policy: "only_targeted_players",
+                mechanics_state_update: {
+                  combat: {
+                    active: false,
+                    round: 0,
+                    turnOwner: null,
+                    initiativeOrder: []
+                  }
+                }
+              })
+            : JSON.stringify({
+                public_narration: publicNarration
+              });
+
+          return {
+            id: "provider-combat-narrator",
             content,
             debug: {
               requestMessages: [
@@ -1942,8 +2479,13 @@ after(async () => {
 
 export function resetProviderInputs() {
   providerInputs = [];
+  providerOverride = undefined;
 }
 
 export function getProviderInputs() {
   return providerInputs;
+}
+
+export function setProviderOverride(override: AskProvider | undefined) {
+  providerOverride = override;
 }
