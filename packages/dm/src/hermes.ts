@@ -255,6 +255,16 @@ function advantageText(advantageState: string | undefined) {
   return "";
 }
 
+function normalizeAdvantageState(value: string) {
+  const normalized = value.trim().toLowerCase();
+
+  return normalized === "normal" ||
+    normalized === "advantage" ||
+    normalized === "disadvantage"
+    ? normalized
+    : "";
+}
+
 function formatRollInstruction(request: DiceRollRequest, index: number) {
   const verb = index === 0 ? "Roll" : "then roll";
   return `${verb} ${request.dice}${modifierText(request.modifier)}${advantageText(
@@ -360,8 +370,10 @@ export function normalizeRollRequest(value: unknown): DiceRollRequest | null {
   const player = stringValue(request.player);
   const modifier = numberValue(request.modifier);
   const advantageState =
-    stringValue(request.advantageState) ||
-    stringValue(request.advantage_state);
+    normalizeAdvantageState(
+      stringValue(request.advantageState) ||
+        stringValue(request.advantage_state)
+    );
 
   return {
     id: stringValue(request.id) || crypto.randomUUID(),
@@ -386,6 +398,7 @@ export function normalizeRollRequests(value: unknown): DiceRollRequest[] {
 
 export type HermesDmContractResponse = {
   publicNarration: string;
+  resolutionMode: "needs_dice" | "resolved_without_dice";
   rollRequests: DiceRollRequest[];
   nextInputNeeded: "player_actions" | "dice_results";
   inputTargets: string[];
@@ -416,6 +429,9 @@ export function parseHermesDmContract(
     ? parsed.roll_requests
     : [];
   const rollRequests = normalizeRollRequests(rawRollRequests);
+  const rawResolutionMode = stringValue(
+    parsed.resolution_mode ?? parsed.resolutionMode
+  );
   const inputTargets = stringArray(parsed.input_targets ?? parsed.inputTargets);
   const rawInputPolicy = stringValue(parsed.input_policy ?? parsed.inputPolicy);
   const inputPolicy: InputPolicy =
@@ -452,6 +468,27 @@ export function parseHermesDmContract(
     );
   }
 
+  const inferredResolutionMode =
+    rollRequests.length > 0 || nextInputNeeded === "dice_results"
+      ? "needs_dice"
+      : "resolved_without_dice";
+
+  if (
+    rawResolutionMode &&
+    rawResolutionMode !== "needs_dice" &&
+    rawResolutionMode !== "resolved_without_dice"
+  ) {
+    throw new Error("The DM provider response has an invalid resolution_mode value.");
+  }
+
+  const resolutionMode = rawResolutionMode || inferredResolutionMode;
+
+  if (resolutionMode !== inferredResolutionMode) {
+    throw new Error(
+      "The DM provider response has a resolution_mode that conflicts with pending dice."
+    );
+  }
+
   const attackRollContradiction = findAttackRollAcContradiction(publicNarration);
 
   if (attackRollContradiction) {
@@ -479,6 +516,7 @@ export function parseHermesDmContract(
 
   return {
     publicNarration,
+    resolutionMode,
     rollRequests,
     nextInputNeeded,
     inputTargets,

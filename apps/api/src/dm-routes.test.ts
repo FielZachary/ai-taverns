@@ -387,6 +387,98 @@ test("DM runtime repairs player-facing roll prose into structured roll requests"
   );
 });
 
+test("combat gate false positives return to normal DM flow", async () => {
+  const { cookie, campaignId } = await createSinglePlayerCampaign(
+    "dm-runtime-combat-false-positive"
+  );
+  resetProviderInputs();
+
+  const soloResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "TRIGGER_COMBAT_FALSE_POSITIVE I point at the sword emblem.",
+      clientMessageId: "combat-false-positive-action"
+    }
+  });
+
+  assert.equal(soloResponse.statusCode, 200, soloResponse.body);
+  const solo = CampaignSoloTurnResponseSchema.parse(soloResponse.json());
+  const latestDmMessage = solo.messages.at(-1);
+
+  assert.equal(latestDmMessage?.role, "dm");
+  assert.equal(solo.pendingRollRequests.length, 0);
+  assert.equal(getProviderInputs().length, 2);
+  assert.match(getProviderInputs()[0]?.instructions ?? "", /combat mechanics adjudicator/);
+  assert.doesNotMatch(getProviderInputs()[1]?.instructions ?? "", /combat narrator/);
+});
+
+test("active combat cannot be classified as a false positive", async () => {
+  const { cookie, campaignId } = await createSinglePlayerCampaign(
+    "dm-runtime-active-combat-not-false-positive"
+  );
+  const campaign = database.campaigns.find(
+    (candidate) => candidate.id === campaignId
+  );
+
+  assert.ok(campaign);
+  campaign.metadata = {
+    ...(campaign.metadata as Record<string, unknown>),
+    mechanicsState: {
+      combat: {
+        active: true,
+        round: 1,
+        turnOwner: "player:dm-runtime-active-combat-not-false-positive-client",
+        initiativeOrder: [
+          "player:dm-runtime-active-combat-not-false-positive-client",
+          "npc:mara"
+        ]
+      },
+      actors: {
+        "player:dm-runtime-active-combat-not-false-positive-client": {
+          characterName: "Seren",
+          currentHp: 20,
+          maxHp: 20,
+          conditions: []
+        },
+        "npc:mara": {
+          characterName: "Mara",
+          currentHp: 12,
+          maxHp: 12,
+          conditions: []
+        }
+      }
+    }
+  };
+  resetProviderInputs();
+
+  const soloResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "TRIGGER_COMBAT_FALSE_POSITIVE I point at the sword emblem.",
+      clientMessageId: "active-combat-not-false-positive-action"
+    }
+  });
+
+  assert.equal(soloResponse.statusCode, 200, soloResponse.body);
+  const solo = CampaignSoloTurnResponseSchema.parse(soloResponse.json());
+  const latestDmMessage = solo.messages.at(-1);
+  const debug = latestDmMessage?.debug as DebugFields | undefined;
+
+  assert.equal(latestDmMessage?.role, "dm");
+  assert.ok(debug?.combatAdjudication);
+  assert.equal(getProviderInputs().length, 2);
+  assert.match(getProviderInputs()[0]?.instructions ?? "", /combat mechanics adjudicator/);
+  assert.match(getProviderInputs()[1]?.instructions ?? "", /combat narrator/);
+});
+
 test("DM runtime repairs contradictory attack roll and AC math", async () => {
   const { cookie, campaignId } = await createSinglePlayerCampaign(
     "dm-runtime-attack-roll-contradiction"

@@ -36,6 +36,40 @@ describe("parseHermesDmContract", () => {
       "The red banner snaps in the wind.\n\nWhat do you do?"
     );
     assert.equal(result.nextInputNeeded, "player_actions");
+    assert.equal(result.resolutionMode, "resolved_without_dice");
+  });
+
+  it("infers and validates resolution_mode", () => {
+    const resolved = parseHermesDmContract(
+      JSON.stringify({
+        public_narration: "The door opens. What do you do?",
+        roll_requests: [],
+        next_input_needed: "player_actions"
+      })
+    );
+    const needsDice = parseHermesDmContract(
+      JSON.stringify({
+        public_narration: "Roll 1d20 for Athletics.",
+        resolution_mode: "needs_dice",
+        roll_requests: [{ dice: "1d20", label: "Athletics" }],
+        next_input_needed: "dice_results"
+      })
+    );
+
+    assert.equal(resolved.resolutionMode, "resolved_without_dice");
+    assert.equal(needsDice.resolutionMode, "needs_dice");
+    assert.throws(
+      () =>
+        parseHermesDmContract(
+          JSON.stringify({
+            public_narration: "Roll 1d20 for Athletics.",
+            resolution_mode: "resolved_without_dice",
+            roll_requests: [{ dice: "1d20", label: "Athletics" }],
+            next_input_needed: "dice_results"
+          })
+        ),
+      /resolution_mode that conflicts/
+    );
   });
 
   it("rejects attack roll and AC contradictions", () => {

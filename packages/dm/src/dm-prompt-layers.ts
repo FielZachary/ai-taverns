@@ -1,6 +1,7 @@
 const responseContractExample = JSON.stringify(
   {
     public_narration: "The player-visible Dungeon Master narration.",
+    resolution_mode: "resolved_without_dice",
     roll_requests: [],
     next_input_needed: "player_actions",
     input_targets: [],
@@ -20,6 +21,7 @@ const noRollResponseExample = JSON.stringify(
   {
     public_narration:
       "The party steps through the broken door, and the watchtower's main hall opens around them.\n\nThe room is cold and dim, about thirty feet across. Most of the ceiling has collapsed near the far wall, where grey daylight spills through broken stone and rotten beams. Dust hangs in that light like smoke that never finished leaving.\n\nThe fire that killed this place did not burn cleanly. Black streaks climb the walls in uneven lines, then vanish behind fallen roof beams charred so deeply they look more like old bone than wood. Those beams lie across the stone floor among ash, broken chairs, cracked pottery, and bits of rusted iron.\n\nThen the creak comes again.\n\nIt comes from above you. A frayed rope hangs from a scorched ceiling beam, swaying slowly even though the air inside is still. The lower end is tied in a tight knot, but nothing hangs from it now. Each movement makes the beam groan softly overhead.\n\nNear the rope, several sets of bootprints cross through the dust. Some lead left, toward a narrow stone staircase descending beneath the tower. The steps disappear into darkness after only a few feet, and the dust on them has been recently disturbed.\n\nOther tracks lead right, toward a half-open wooden door into a smaller side room. From where you stand, you can see a fallen shelf, a broken barrel, and something pale lying on the floor behind them.\n\nOne set of prints does not lead cleanly anywhere. It turns into a long drag mark across the middle of the hall, as if someone stopped walking and was pulled.\n\nRight now, you have the swaying rope above you, the dark stairs to the left, the side room to the right, and the tracks and drag mark across the floor. What do you do?",
+    resolution_mode: "resolved_without_dice",
     roll_requests: [],
     next_input_needed: "player_actions",
     input_targets: [],
@@ -33,6 +35,7 @@ const rollRequestResponseExample = JSON.stringify(
   {
     public_narration:
       "The lock is old, swollen by rain, and threaded with a faint blue ward. Your tools can reach the pins, but doing this quietly will take precision.\n\nRoll 1d20 + 5 for a thieves' tools check.",
+    resolution_mode: "needs_dice",
     roll_requests: [
       {
         player: "Acting player",
@@ -55,6 +58,7 @@ const chainedRollRequestResponseExample = JSON.stringify(
   {
     public_narration:
       "The lookout's back is turned, and the campfire masks the scrape of loose stone underfoot. You can try to slip close and strike before you are noticed.\n\nRoll 1d20 + 6 for Stealth to determine whether you stay quiet. If you succeed, roll 1d20 + 7 at advantage for the rapier attack, then roll 1d8 + 4 for rapier damage so the strike can be resolved immediately if it hits.",
+    resolution_mode: "needs_dice",
     roll_requests: [
       {
         player: "Acting player",
@@ -94,6 +98,7 @@ const spellSavingThrowDamageRequestExample = JSON.stringify(
   {
     public_narration:
       "KAKA casts Fireball. Elara Thornwood, the first ash guard, and the second ash guard are inside the spell radius.\n\nElara Thornwood rolls 9 and fails. The first ash guard rolls 17 and succeeds. The second ash guard rolls 12 and fails.\n\nRoll 8d6 for Fireball damage.",
+    resolution_mode: "needs_dice",
     roll_requests: [
       {
         player: "Acting player",
@@ -117,6 +122,7 @@ const impossibleActionRollExample = JSON.stringify(
   {
     public_narration:
       "You cannot simply charm an oathbound ruler into surrender through force of personality alone; the oath, pride, and command magic in the room are stronger than a normal social opening. But your approach could still matter.\n\nIf you play this beautifully, you may make the ruler hesitate, reveal what they want, or create an opening for the party. Roll 1d20 + 7 for Persuasion.",
+    resolution_mode: "needs_dice",
     roll_requests: [
       {
         player: "Acting player",
@@ -140,6 +146,7 @@ const impossibleActionHighRollResultExample = JSON.stringify(
   {
     public_narration:
       "Your words land with unsettling precision. For one breath the ruler's smile fades, and everyone in the hall sees that you found a crack: loneliness, vanity, and fear of being remembered as a butcher.\n\nBut the oath-brand burns black, and whatever surrender might have been chosen is strangled before it reaches the mouth. The ruler does not yield.\n\nInstead, the blade lowers a fraction, and the answer comes coldly: 'Ask for one life, not my throne.'\n\nWhat do you do?",
+    resolution_mode: "resolved_without_dice",
     roll_requests: [],
     next_input_needed: "player_actions",
     input_targets: [],
@@ -153,6 +160,7 @@ const decisiveTravelPacingExample = JSON.stringify(
   {
     public_narration:
       "You keep moving, with the lantern held low enough to catch the worst roots before they catch your boots. The last lights of the settlement fade behind you, and the road narrows into wet earth, leaning trees, and the hush before bad weather.\n\nYou do not stop at every bend. You follow the directions you were given, pass the final boundary marker, and push on until the land itself changes underfoot. Only when the destination rises ahead does the journey become a choice again.\n\nThe entrance is partly exposed where the hillside has broken open. Cold air moves from the dark gap, carrying the smell of stone, old water, and something recently disturbed. Tracks cross the mud near the threshold, but they do not all point the same way.\n\nYou have reached the site. The way in is narrow, the light will not reach far, and the trail continues into darkness. What do you do?",
+    resolution_mode: "resolved_without_dice",
     roll_requests: [],
     next_input_needed: "player_actions",
     input_targets: [],
@@ -166,6 +174,7 @@ const decisiveObjectPacingExample = JSON.stringify(
   {
     public_narration:
       "You break the brittle seal and open the message instead of merely turning it over in your hands. The parchment has been folded so long that it resists you, then gives with a dry crackle.\n\nThe first lines are written in formal temple-script, but a newer hand has added urgent notes in the margin. The message names a compromised site, a missing witness, and a warning that something sealed has begun to stir again.\n\nThe object gives you three immediate leads: the marked location, the person who altered the message, and the repeated phrase written beneath the final line. What do you do?",
+    resolution_mode: "resolved_without_dice",
     roll_requests: [],
     next_input_needed: "player_actions",
     input_targets: [],
@@ -207,6 +216,8 @@ export const hardRuntimeContract = [
   "Return only valid JSON for gameplay turns. Do not wrap it in Markdown. Do not include any text before or after the JSON.",
   `Required JSON shape:\n${responseContractExample}`,
   "`public_narration` is the only player-visible DM narration.",
+  "`resolution_mode` must be `needs_dice` when `roll_requests` is non-empty or `next_input_needed` is `dice_results`; otherwise use `resolved_without_dice`.",
+  "If `resolution_mode` is `needs_dice`, stop narration before the rolled outcome is resolved.",
   "Use the supplied Authoritative mechanics state as the source of truth for HP, max HP, conditions, concentration, initiative, and turn ownership. When resolving damage, healing, or conditions, calculate exact new values for every affected tracked actor before narrating the outcome.",
   "When hostilities start while combat is inactive, decide whether the acting player clearly has surprise or the drop on the enemies. If not, ask the acting player to roll initiative before resolving the attack, spell, damage, or enemy response; use the character sheet initiative modifier if known, otherwise +0, say this in `public_narration`, and include the same initiative roll in `roll_requests`.",
   "If the acting player clearly has surprise or the drop on unaware enemies, resolve the opening action first through its normal required rolls. After that opening action is resolved, ask for initiative before any enemy counteraction or next combat turn.",
