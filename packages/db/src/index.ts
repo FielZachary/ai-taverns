@@ -1490,7 +1490,8 @@ export async function createCampaignForMode(
           true,
           openingTurn.id,
           undefined,
-          { allowResolvedCombatWithoutRolls: true }
+          { allowResolvedCombatWithoutRolls: true },
+          { buildPromptContext: false }
         );
     const resolvedTurn = await finishResolvedTurn(db, {
       campaignId: createdState.campaign.id,
@@ -2672,11 +2673,38 @@ function isMissingRuntimeTableError(error: unknown) {
   );
 }
 
+function isTransactionClient(db: Queryable): db is TransactionClient {
+  return (
+    "release" in db &&
+    typeof (db as { release?: unknown }).release === "function"
+  );
+}
+
 async function bestEffortRuntimeInsert(
   db: Queryable,
   sql: string,
   values: unknown[]
 ) {
+  if (isTransactionClient(db)) {
+    const savepointName = `runtime_insert_${randomUUID().replace(/-/g, "_")}`;
+
+    await db.query(`savepoint ${savepointName}`);
+
+    try {
+      await db.query(sql, values);
+      await db.query(`release savepoint ${savepointName}`);
+    } catch (error) {
+      await db.query(`rollback to savepoint ${savepointName}`);
+      await db.query(`release savepoint ${savepointName}`);
+
+      if (!isMissingRuntimeTableError(error)) {
+        throw error;
+      }
+    }
+
+    return;
+  }
+
   try {
     await db.query(sql, values);
   } catch (error) {
@@ -5245,7 +5273,8 @@ export async function beginRoomForUser(
           true,
           openingTurn.id,
           undefined,
-          { allowResolvedCombatWithoutRolls: true }
+          { allowResolvedCombatWithoutRolls: true },
+          { buildPromptContext: false }
         );
     const resolvedTurn = await finishResolvedTurn(db, {
       campaignId: beginState.campaign.id,
