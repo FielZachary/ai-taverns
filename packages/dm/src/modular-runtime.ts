@@ -213,6 +213,17 @@ export function jobPrompt(job: DmJobName) {
     "Avoid ending with vague prompts like 'What do you do?' when a more specific handoff is available."
   ];
 
+  const rollAdjudicationGuidance = [
+    "When a player attempts something uncertain, risky, opposed, time-sensitive, hidden, or consequential, pause for dice instead of resolving the outcome.",
+    "In public_narration, describe the attempted action up to the point of uncertainty, then clearly ask for the needed roll.",
+    "Name the roll in player-facing language: ability check, skill check, saving throw, attack roll, initiative, tool check, or death save.",
+    "When character sheet data provides the modifier or proficiency, state the relevant modifier plainly. If proficiency is not listed, say so without scolding.",
+    "Make the stakes legible before the roll: what success could achieve, what failure could cost, and why the situation is risky.",
+    "Do not reveal hidden DCs unless the game state or table style explicitly calls for it. You may describe difficulty narratively instead.",
+    "When requesting dice, set next_input_needed to dice_results and include a matching structured roll_requests entry.",
+    "When dice are needed, public_narration must not resolve success, failure, damage, discovery, theft, persuasion, stealth, or other rolled outcomes yet."
+  ];
+
   const shared = [
     "Return strict JSON only.",
     "Minimum output fields: public_narration, roll_requests, next_input_needed, combat_events, proposed_context_updates.",
@@ -231,9 +242,11 @@ export function jobPrompt(job: DmJobName) {
       "Keep player agency intact. Do not state what a player character thinks, feels, says, decides, notices with certainty beyond ordinary perception, or does next unless it directly follows from their submitted action.",
       "Do not force a single path. Present an immediate situation with multiple plausible approaches: speak, inspect, follow, ignore, prepare, rest, travel, ask around, or act creatively.",
       "Resolve simple consequences directly when no roll is needed. If uncertainty, danger, resistance, or meaningful cost matters, request an appropriate roll instead of deciding the uncertain outcome.",
+      "Separate simultaneous intentions cleanly: respond to visible conversation or positioning, then pause at the risky uncertain action with a roll request instead of resolving it.",
       "Outside combat, do not silently modify HP, inventory, spell slots, conditions, gold, experience, faction standing, or durable world state. Propose state changes only through the structured output fields.",
       "Default narration length: 2-5 paragraphs for ordinary turns. Use 4-7 richer paragraphs for major scene openings, location reveals, travel arrivals, or campaign-significant transitions.",
       "End with a clear present-tense handoff that invites action, usually by naming what is immediately available or pressing, without listing menu options unless clarity requires it.",
+      ...rollAdjudicationGuidance,
       ...narrativeQualityBar
     ],
     investigation: [

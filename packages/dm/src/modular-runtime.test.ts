@@ -168,6 +168,10 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("scene_director"), /concrete sensory detail/i);
     assert.match(jobPrompt("scene_director"), /observable behavior/i);
     assert.match(jobPrompt("scene_director"), /Keep player agency intact/i);
+    assert.match(jobPrompt("scene_director"), /pause for dice/i);
+    assert.match(jobPrompt("scene_director"), /next_input_needed to dice_results/i);
+    assert.match(jobPrompt("scene_director"), /structured roll_requests entry/i);
+    assert.match(jobPrompt("scene_director"), /must not resolve success/i);
     assert.match(jobPrompt("combat"), /Never silently modify HP/);
     assert.match(jobPrompt("clarification"), /Ask one concise/);
     assert.match(buildMemoryUpdaterPrompt(), /Allowed operations/);
