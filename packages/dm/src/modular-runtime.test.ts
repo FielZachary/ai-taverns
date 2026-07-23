@@ -177,6 +177,12 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("scene_director"), /failed roll consequence/i);
     assert.match(jobPrompt("scene_director"), /Do not copy their names/i);
     assert.match(jobPrompt("scene_director"), /\\n\\nWhat do you do\\?/);
+    assert.match(jobPrompt("npc_dialogue"), /Do not make social checks into mind control/i);
+    assert.match(jobPrompt("npc_dialogue"), /If a lie contradicts known facts/i);
+    assert.match(jobPrompt("npc_dialogue"), /very high Deception against a known contradiction/i);
+    assert.match(jobPrompt("npc_dialogue"), /Persuasion partial success/i);
+    assert.match(jobPrompt("npc_dialogue"), /failed Intimidation/i);
+    assert.match(jobPrompt("npc_dialogue"), /conversational texture/i);
     assert.match(jobPrompt("combat"), /Never silently modify HP/);
     assert.match(jobPrompt("clarification"), /Ask one concise/);
     assert.match(buildMemoryUpdaterPrompt(), /Allowed operations/);

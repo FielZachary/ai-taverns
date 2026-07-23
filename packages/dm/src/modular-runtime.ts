@@ -305,6 +305,99 @@ export function jobPrompt(job: DmJobName) {
     ].join("\n")
   ];
 
+  const socialRollGuidance = [
+    "For social rolls, interpret the result through the NPC's motives, knowledge, leverage, fears, loyalties, and current emotional state.",
+    "A high roll should not rewrite impossible facts, but it can make the NPC reinterpret the player's words, soften, hesitate, reveal more, offer a concession, or choose a face-saving way to comply.",
+    "A low roll should create social consequences: suspicion, offense, demands, delay, guards called, prices raised, trust lost, or new conditions. Keep failure playable.",
+    "Do not make NPCs mindless. Even on a strong Persuasion, Deception, or Intimidation result, preserve what the NPC knows, wants, and is willing to risk.",
+    "When resolving a social roll, explicitly show the NPC's emotional turn through posture, voice, silence, glances, interruptions, or changed demands.",
+    "If a lie contradicts known facts, use the roll to decide whether the NPC finds a plausible explanation, doubts their own read, accepts a partial truth, or demands proof. Do not erase the contradiction unless magic or context supports it.",
+    "If the player rolls extremely high, reward it with a vivid concession, useful information, improved positioning, reduced suspicion, or an unexpected opening.",
+    "If the player rolls extremely low, make the consequence clear but leave at least one playable response unless the fiction already made disaster unavoidable."
+  ];
+
+  const npcDialogueExamples = [
+    [
+      "Example: very high Deception against a known contradiction.",
+      'Player input: "I rolled a 30 for Deception."',
+      "Context: The player claimed to know a local merchant, but the NPC guard knows that merchant died months ago.",
+      "Good response:",
+      JSON.stringify(
+        {
+          public_narration: [
+            "For a moment, the guard looks certain she has caught you. Her hand stays near the hilt of her short sword, and the two sentries behind her stop pretending not to listen.",
+            'Then your face changes. Not into innocence exactly, but into something worse for her certainty: shock, grief, and the horrible blankness of someone hearing bad news too late. "Dead?" you say, and the word comes out thin enough that the guard\'s expression falters. "No. No, that cannot be right. He wrote to me after the spring floods. He said the Tankard was still standing. He said..."',
+            "You let the sentence break where a real memory might. The silence does the rest.",
+            "The guard's suspicion does not vanish all at once. It loses its footing. Her eyes flick from your face to the waiting line, to the other sentries, then down to the entry ledger where your name is still unwritten. She exhales through her nose, irritated now at the situation rather than purely at you.",
+            '"If you are playing me, elf, I will remember your face," she says. But the edge has gone out of her voice. "The Gilded Tankard is in the Merchant\'s Quarter, second left after the fountain. Ask for Mara. She took over after Brock passed."',
+            "She steps aside just enough to let you through. Not warmly. Not trustingly. But enough.",
+            "What do you do?"
+          ].join("\n\n"),
+          resolution_mode: "resolved_without_dice",
+          roll_requests: [],
+          next_input_needed: "player_actions",
+          input_targets: [],
+          input_policy: "acting_player",
+          mechanics_state_update: {}
+        },
+        null,
+        2
+      )
+    ].join("\n"),
+    [
+      "Example: Persuasion partial success with an NPC who has limits.",
+      'Player input: "I ask the clerk to tell me who paid him to alter the shipping records. I rolled 18 for Persuasion."',
+      "Context: The clerk is frightened of his employer and does not want to be seen helping the party.",
+      "Good response:",
+      JSON.stringify(
+        {
+          public_narration: [
+            "The clerk's mouth tightens at the word paid. He looks toward the archive door, then toward the frosted office window where his supervisor's silhouette moves behind the glass.",
+            '"Lower your voice," he says, and for the first time his polished little mask of procedure cracks. His fingers worry the edge of the receipt book until the paper bends. "You think I wanted my name on those ledgers? You think I had a choice?"',
+            "Your tone does its work. Not enough to make him brave, but enough to make him tired of being alone with the fear.",
+            'He pulls a blotter across the counter and writes three words with the stub of a pencil: blue wax seal. Then he scratches a line through them so hard the paper nearly tears. "I did not tell you a name," he says. "I do not know a name. But the courier came after midnight, wore a gray rain cloak, and carried letters sealed in blue wax. Same color the customs office uses for military exemptions."',
+            'He slides the ruined blotter into the waste basket and straightens as footsteps pass outside the archive. When he speaks again, his voice is back to its official whisper. "If you are done with your inquiry, I suggest you leave before I remember how much trouble you are causing me."',
+            "What do you do?"
+          ].join("\n\n"),
+          resolution_mode: "resolved_without_dice",
+          roll_requests: [],
+          next_input_needed: "player_actions",
+          input_targets: [],
+          input_policy: "acting_player",
+          mechanics_state_update: {}
+        },
+        null,
+        2
+      )
+    ].join("\n"),
+    [
+      "Example: failed Intimidation that escalates without ending play.",
+      'Player input: "I rolled a 6 for Intimidation. I tell the tavern owner he had better answer before I burn the place down."',
+      "Context: The tavern owner is scared, but the room is full of locals who know him and dislike threats from outsiders.",
+      "Good response:",
+      JSON.stringify(
+        {
+          public_narration: [
+            "The tavern goes quiet in the wrong way.",
+            "The owner does flinch. You see it in the quick pull of his shoulders and the way his hand tightens around the rag behind the bar. But fear is not the same thing as surrender, and you have chosen your threat in a room full of people who know the smell of this place better than they know your name.",
+            'A chair scrapes near the hearth. Someone mutters, "Easy now." Near the back, a woman with flour still on her sleeves stands up slowly, eyes fixed on you. The owner swallows, looks at them, and finds just enough courage in being watched.',
+            '"You threaten my roof in front of my neighbors?" he says. His voice shakes, but it carries. "Then here is my answer: get out."',
+            "He does not reach for a weapon. Not yet. But three patrons have turned in their seats, the door is behind you, and whatever he knows is now buried under anger and public pride. You can back down, apologize, change tactics, offer coin, appeal to someone else in the room, or push harder and risk this becoming a fight.",
+            "What do you do?"
+          ].join("\n\n"),
+          resolution_mode: "resolved_without_dice",
+          roll_requests: [],
+          next_input_needed: "player_actions",
+          input_targets: [],
+          input_policy: "acting_player",
+          mechanics_state_update: {}
+        },
+        null,
+        2
+      )
+    ].join("\n")
+  ];
+
   const shared = [
     "Return strict JSON only.",
     "Minimum output fields: public_narration, roll_requests, next_input_needed, combat_events, proposed_context_updates.",
@@ -337,8 +430,21 @@ export function jobPrompt(job: DmJobName) {
       "Reveal clues gradually and avoid dead ends on failed rolls."
     ],
     npc_dialogue: [
-      "Handle direct conversation with NPCs.",
-      "Keep NPC voice, motives, secrets, leverage, and social consequences coherent."
+      "Handle direct conversation with NPCs, including negotiation, deception, intimidation, persuasion, bargaining, interrogation, pleading, threats, boasts, apologies, and casual talk.",
+      "Treat every NPC as a person with a present want, a private concern, a social role, and a limit. Their dialogue should come from those pressures.",
+      "Keep NPC voice distinct through word choice, rhythm, formality, evasiveness, humor, anger, fear, confidence, or class/cultural position. Do not overdo dialect.",
+      "Before an NPC answers, decide what they know, what they believe, what they suspect, what they want from the player, and what they are trying not to reveal.",
+      "Let NPCs ask follow-up questions, challenge contradictions, demand proof, bargain, stall, threaten, soften, misdirect, or volunteer information when it fits their motives.",
+      "Do not make social checks into mind control. Persuasion cannot force self-destruction, Deception cannot change hard evidence by itself, and Intimidation can create fear without creating loyalty.",
+      "When no roll is needed, let the NPC respond naturally and move the conversation forward.",
+      "When uncertainty matters, request Deception, Persuasion, Intimidation, Insight, Performance, or another fitting check, then pause for dice.",
+      "When resolving dice results, narrate the NPC's reaction as a visible emotional and tactical shift, not just success or failure.",
+      "End with the NPC's new stance, demand, offer, refusal, question, or opening, then hand control back to the player.",
+      ...rollAdjudicationGuidance,
+      ...socialRollGuidance,
+      ...narrativeQualityBar,
+      "Examples below demonstrate NPC motive, voice, social pressure, partial concessions, failed social pressure, and roll-result narration. Do not copy their names, locations, NPC roles, conflicts, scene structure, or exact phrasing. Match their dramatic logic and conversational texture, not their content.",
+      ...npcDialogueExamples
     ],
     combat: [
       "Run tactical combat encounters.",
