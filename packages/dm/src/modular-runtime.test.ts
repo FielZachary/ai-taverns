@@ -177,13 +177,37 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("scene_director"), /failed roll consequence/i);
     assert.match(jobPrompt("scene_director"), /Do not copy their names/i);
     assert.match(jobPrompt("scene_director"), /\\n\\nWhat do you do\\?/);
+    assert.doesNotMatch(
+      jobPrompt("scene_director"),
+      /Roll Sleight of Hand:[^"]*\\n\\nWhat do you do\?/
+    );
     assert.match(jobPrompt("npc_dialogue"), /Do not make social checks into mind control/i);
     assert.match(jobPrompt("npc_dialogue"), /If a lie contradicts known facts/i);
     assert.match(jobPrompt("npc_dialogue"), /very high Deception against a known contradiction/i);
     assert.match(jobPrompt("npc_dialogue"), /Persuasion partial success/i);
     assert.match(jobPrompt("npc_dialogue"), /failed Intimidation/i);
     assert.match(jobPrompt("npc_dialogue"), /conversational texture/i);
-    assert.match(jobPrompt("combat"), /Never silently modify HP/);
+    assert.match(jobPrompt("combat"), /strict turn ownership/i);
+    assert.match(jobPrompt("combat"), /attack roll: X vs AC Y - hit\/miss/i);
+    assert.match(jobPrompt("combat"), /turnOwner is an NPC actor key/i);
+    assert.match(jobPrompt("combat"), /final active enemy is defeated/i);
+    assert.match(jobPrompt("combat"), /combat starts, initiative first/i);
+    assert.match(jobPrompt("combat"), /surprise opener resolves before initiative/i);
+    assert.match(jobPrompt("combat"), /NPC turn catches up before player action/i);
+    assert.match(jobPrompt("combat"), /final enemy defeated and combat ends/i);
+    assert.match(jobPrompt("combat"), /Do not copy their names, actor keys/i);
+    assert.match(
+      jobPrompt("combat"),
+      /Do not include 'What do you do\?'[^.]*next_input_needed dice_results/i
+    );
+    assert.doesNotMatch(
+      jobPrompt("combat"),
+      /Roll initiative:[^"]*\\n\\nWhat do you do\?/
+    );
+    assert.doesNotMatch(
+      jobPrompt("combat"),
+      /Roll Fireball damage:[^"]*\\n\\nWhat do you do\?/
+    );
     assert.match(jobPrompt("clarification"), /Ask one concise/);
     assert.match(buildMemoryUpdaterPrompt(), /Allowed operations/);
   });

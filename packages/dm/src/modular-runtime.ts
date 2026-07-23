@@ -258,8 +258,7 @@ export function jobPrompt(job: DmJobName) {
             "The guard does not move aside. Her quill pauses halfway down the entry line, and her eyes come back to you with the flat patience of someone who has heard a hundred versions of that answer before.",
             '"Trade partners," she repeats. "Name of the house, name of the factor, and the street they keep offices on." The guard tilts the clipboard just enough that the rain-specked page is hidden from view. Behind her, one of the other sentries shifts his spear from shoulder to hand, not alarmed yet, but listening.',
             "You let your answer hang in the air for half a breath and step close as if to clarify over the wind. Her belt pouch rests near the buckle of her sword belt, dark leather worn smooth at the flap. Your fingers start toward it while her attention is still divided between your face, the clipboard, and the line forming behind you.",
-            "This is possible, but risky: you are at a guarded city gate in daylight, with armed witnesses close enough to see a bad movement. Roll Sleight of Hand: 1d20 + your Dexterity modifier. Your character sheet does not list Sleight of Hand proficiency, so do not add proficiency unless another feature applies.",
-            "What do you do?"
+            "This is possible, but risky: you are at a guarded city gate in daylight, with armed witnesses close enough to see a bad movement. Roll Sleight of Hand: 1d20 + your Dexterity modifier. Your character sheet does not list Sleight of Hand proficiency, so do not add proficiency unless another feature applies."
           ].join("\n\n"),
           resolution_mode: "needs_dice",
           roll_requests: [
@@ -398,6 +397,212 @@ export function jobPrompt(job: DmJobName) {
     ].join("\n")
   ];
 
+  const combatGuidance = [
+    "Run tactical combat encounters with strict turn ownership, visible rolls, explicit state changes, and vivid but concise action narration.",
+    "Combat narration must never get ahead of combat state: if a roll, turn owner, initiative order, HP change, condition, resource use, or enemy defeat is unresolved, pause or encode it structurally instead of implying it only in prose.",
+    "Initiative and combat start:",
+    "If hostilities start while enemies are aware or ready, ask the acting player for initiative before resolving their attack, spell, or damage.",
+    "If the acting player clearly surprises unaware enemies, resolve the opening roll or effect first, then ask for initiative before enemy counteraction.",
+    "When combat begins, include mechanics_state_update.combat with active true, round 1, turnOwner, and provisional initiativeOrder using actor keys from the current scene and character sheets only.",
+    "Do not include bystanders, captives, scenery, or passive creatures in initiativeOrder unless they can meaningfully act in the fight.",
+    "Turn ownership:",
+    "Always respect the current combat turnOwner.",
+    "If turnOwner is an NPC actor key or NPC name, resolve that NPC turn before resolving submitted player attacks, spells, or combat actions.",
+    "Off-turn player combat declarations are intent, not actions already in motion. Do not narrate them as mid-swing, already casting, or resolving before the current initiative actor.",
+    "When multiple player submissions arrive, resolve the current turn owner's valid action first and treat other submissions as pending intent.",
+    "Do not end with next_input_needed player_actions while turnOwner is npc:*; resolve NPC turns until control returns to a player actor, or to all players in multiplayer when appropriate.",
+    "In singleplayer active combat, return control with turnOwner set to the player actor key, not null.",
+    "When the final active enemy is defeated, set combat active false, turnOwner null, and initiativeOrder empty. Do not say a combatant is up next after combat ends.",
+    "Rolls and dice:",
+    "Use roll_requests for player-facing dice the website must collect.",
+    "When requesting dice, set resolution_mode to needs_dice and next_input_needed to dice_results.",
+    "When resolution_mode is needs_dice, public_narration must not resolve the rolled outcome.",
+    "Name rolls clearly: attack roll, damage roll, saving throw, initiative, concentration check, death save, or relevant skill/tool check.",
+    "Use known modifiers, proficiency, advantage, or disadvantage from the character sheet or combat context when available. If unknown, ask for the base roll clearly without inventing bonuses.",
+    "Visible combat math:",
+    "For resolved attacks, make the numbers visible before injury narration.",
+    "Use explicit wording for attack outcomes: 'attack roll: X vs AC Y - hit/miss'.",
+    "On a hit, include explicit damage wording: 'damage roll: dice = total damage'.",
+    "For NPC hits against player characters, public_narration must include attack roll, vs AC, damage roll, damage amount, and HP change when HP is updated.",
+    "Never contradict the math: a roll below AC misses, and a roll meeting or exceeding AC hits unless a specific rule says otherwise.",
+    "Mechanics and state:",
+    "Never silently modify HP, resources, conditions, initiative, spell slots, inventory, death saves, concentration, or combat status only in prose.",
+    "Use mechanics_state_update for canonical mechanics changes and combat_events for traceable combat events.",
+    "HP cannot go below 0.",
+    "State changes should use known actor keys. Do not invent actor keys when current context already provides them.",
+    "If an enemy is reduced to 0 HP, narrate defeat clearly and update the combat state accordingly.",
+    "If a player reaches 0 HP, make the danger clear, update HP/condition state, and request or set up death saves only when appropriate to the rules and current turn flow.",
+    "NPC behavior:",
+    "Enemies should act according to motives, intelligence, morale, positioning, injuries, and the immediate threat.",
+    "Do not make enemies omniscient. They know what they can perceive, infer, or have been established to know.",
+    "Do not focus-fire cruelly unless the fiction, enemy tactics, or intelligence supports it.",
+    "Do not waste NPC turns. An NPC turn should usually attack, reposition, flee, use an ability, call for help, protect an objective, or create pressure.",
+    "Do not end an NPC turn with only a wind-up like lunges, swings, starts casting, or bears down unless a player-facing roll or reaction is required first.",
+    "Action economy and adjudication:",
+    "Respect a D&D-style action economy without overexplaining it: action, movement, bonus action, reaction, resources, and concentration matter when relevant.",
+    "If a player attempts too much in one turn, resolve the clearest committed main action and ask for clarification or defer the rest.",
+    "Translate creative combat ideas into the closest fair roll, save, attack, contested check, or environmental consequence.",
+    "Misses and failures should still keep momentum: changed position, exposed risk, spent resources, enemy reaction, lost opportunity, or revealed information.",
+    "Combat prose style:",
+    "Keep combat narration punchy and legible. Use shorter paragraphs than scene narration.",
+    "Put mechanics before flourish when mechanics decide the outcome.",
+    "Use vivid physical detail, but do not bury hit/miss, damage, HP, turn owner, or pending rolls inside ornate prose.",
+    "End every resolved combat beat with a clear handoff: whose turn or what immediate pressure remains, then 'What do you do?' on its own line when awaiting player action.",
+    "Do not include 'What do you do?' in public_narration when the response is requesting dice with next_input_needed dice_results."
+  ];
+
+  const combatExamples = [
+    [
+      "Example: combat starts, initiative first.",
+      'Player input: "I draw my sword and charge the bandit captain."',
+      "Context: The bandit captain and two cutthroats are alert, armed, and watching the player approach.",
+      "Good response:",
+      JSON.stringify(
+        {
+          public_narration: [
+            "Your sword clears the scabbard with a bright scrape, and the bandit captain's lazy grin disappears. She was waiting for this. Her boots shift in the mud, blade coming up as the two cutthroats beside her spread out to either side of the road.",
+            "You have the will to strike, but they are not surprised. The fight begins before anyone's steel lands.",
+            "Roll initiative: 1d20 + your initiative modifier."
+          ].join("\n\n"),
+          resolution_mode: "needs_dice",
+          roll_requests: [
+            {
+              id: "initiative-road-bandits",
+              dice: "1d20",
+              label: "Initiative",
+              modifier: 2
+            }
+          ],
+          next_input_needed: "dice_results",
+          input_targets: [],
+          input_policy: "acting_player",
+          mechanics_state_update: {
+            combat: {
+              active: true,
+              round: 1,
+              turnOwner: "player:owner",
+              initiativeOrder: [
+                "player:owner",
+                "npc:bandit-captain",
+                "npc:cutthroat-1",
+                "npc:cutthroat-2"
+              ]
+            }
+          }
+        },
+        null,
+        2
+      )
+    ].join("\n"),
+    [
+      "Example: surprise opener resolves before initiative.",
+      'Player input: "The raiders have not noticed me, so I cast Fireball into the middle of them."',
+      "Context: The player is hidden. The clustered enemies are unaware and have not entered initiative yet.",
+      "Good response:",
+      JSON.stringify(
+        {
+          public_narration: [
+            "You hold the spell until the raiders bunch beneath the broken archway, their voices low, their attention fixed on the road below. None of them look up.",
+            "The bead of fire leaves your hand like a falling star. For one breath, it is only a spark in the rain-dark air. Then it blossoms among them.",
+            "They are caught unaware, so resolve the opening blast before initiative. Roll Fireball damage: 8d6."
+          ].join("\n\n"),
+          resolution_mode: "needs_dice",
+          roll_requests: [
+            {
+              id: "surprise-fireball-damage",
+              dice: "8d6",
+              label: "Fireball damage",
+              modifier: 0
+            }
+          ],
+          next_input_needed: "dice_results",
+          input_targets: [],
+          input_policy: "acting_player",
+          mechanics_state_update: {}
+        },
+        null,
+        2
+      )
+    ].join("\n"),
+    [
+      "Example: NPC turn catches up before player action.",
+      'Player input: "I cast Scorching Ray at the cutlass raider."',
+      "Context: Combat is active. Current turnOwner is npc:cutlass-raider. The player is trying to act before their turn.",
+      "Good response:",
+      JSON.stringify(
+        {
+          public_narration: [
+            "The spell gathers in your hand, but the cutlass raider is already moving. His turn resolves first.",
+            "Cutlass raider attack roll: 17 vs AC 14 - hit. Cutlass raider damage roll: 1d6 + 2 = 6 slashing damage.",
+            "He slips inside your guard and carves a hard line across your ribs before springing back out of reach. You drop from 24 HP to 18 HP.",
+            "The raider's momentum carries him past you, and the opening is finally yours. The heat of Scorching Ray still coils around your fingers as control returns to you.",
+            "What do you do?"
+          ].join("\n\n"),
+          resolution_mode: "resolved_without_dice",
+          roll_requests: [],
+          next_input_needed: "player_actions",
+          input_targets: [],
+          input_policy: "acting_player",
+          mechanics_state_update: {
+            actors: {
+              "player:owner": {
+                currentHp: 18
+              }
+            },
+            combat: {
+              active: true,
+              round: 1,
+              turnOwner: "player:owner",
+              initiativeOrder: [
+                "player:owner",
+                "npc:cutlass-raider",
+                "npc:horn-blower"
+              ]
+            }
+          }
+        },
+        null,
+        2
+      )
+    ].join("\n"),
+    [
+      "Example: final enemy defeated and combat ends.",
+      'Player input: "I rolled 19 to hit and 11 damage against the last skeleton."',
+      "Context: The skeleton has 7 HP remaining and is the final active enemy.",
+      "Good response:",
+      JSON.stringify(
+        {
+          public_narration: [
+            "Your strike lands cleanly. Attack roll: 19 vs AC 13 - hit. Damage roll: 11 = 11 bludgeoning damage.",
+            "The mace crashes through the skeleton's raised arm and into its ribcage. Bone splinters across the flagstones, the blue corpse-light in its skull guttering once before going dark. What remains collapses in a dry clatter at your feet.",
+            "For a moment, the chamber is all echo and dust. No other enemies move. The fight is over.",
+            "What do you do?"
+          ].join("\n\n"),
+          resolution_mode: "resolved_without_dice",
+          roll_requests: [],
+          next_input_needed: "player_actions",
+          input_targets: [],
+          input_policy: "acting_player",
+          mechanics_state_update: {
+            actors: {
+              "npc:last-skeleton": {
+                currentHp: 0
+              }
+            },
+            combat: {
+              active: false,
+              round: 0,
+              turnOwner: null,
+              initiativeOrder: []
+            }
+          }
+        },
+        null,
+        2
+      )
+    ].join("\n")
+  ];
+
   const shared = [
     "Return strict JSON only.",
     "Minimum output fields: public_narration, roll_requests, next_input_needed, combat_events, proposed_context_updates.",
@@ -448,9 +653,9 @@ export function jobPrompt(job: DmJobName) {
     ],
     combat: [
       "Run tactical combat encounters.",
-      "Never silently modify HP, resources, conditions, initiative, or inventory.",
-      "State changes must be explicit combat_events accepted by the server.",
-      "Make useful numbers visible in narration: damage, DCs, saves, initiative, HP/resource outcomes."
+      ...combatGuidance,
+      "Examples below demonstrate combat pacing, visible math, turn ownership, roll pauses, and state-safe narration. Do not copy their names, actor keys, enemies, abilities, locations, or exact phrasing. Match their clarity and discipline, not their content.",
+      ...combatExamples
     ],
     clarification: [
       "Ask one concise clarifying question.",
