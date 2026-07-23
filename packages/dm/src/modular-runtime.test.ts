@@ -189,11 +189,16 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("npc_dialogue"), /conversational texture/i);
     assert.match(jobPrompt("combat"), /strict turn ownership/i);
     assert.match(jobPrompt("combat"), /attack roll: X vs AC Y - hit\/miss/i);
+    assert.match(jobPrompt("combat"), /Dexterity save: X vs DC Y - success\/failure/i);
+    assert.match(jobPrompt("combat"), /list each target's save result separately/i);
+    assert.match(jobPrompt("combat"), /full damage, the halved damage/i);
     assert.match(jobPrompt("combat"), /turnOwner is an NPC actor key/i);
     assert.match(jobPrompt("combat"), /final active enemy is defeated/i);
     assert.match(jobPrompt("combat"), /combat starts, initiative first/i);
     assert.match(jobPrompt("combat"), /surprise opener resolves before initiative/i);
     assert.match(jobPrompt("combat"), /NPC turn catches up before player action/i);
+    assert.match(jobPrompt("combat"), /area spell saves and damage are explicit/i);
+    assert.match(jobPrompt("combat"), /Robed priest Dexterity save: 16 vs DC 14 - success/i);
     assert.match(jobPrompt("combat"), /final enemy defeated and combat ends/i);
     assert.match(jobPrompt("combat"), /Do not copy their names, actor keys/i);
     assert.match(

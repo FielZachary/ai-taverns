@@ -424,6 +424,10 @@ export function jobPrompt(job: DmJobName) {
     "Use explicit wording for attack outcomes: 'attack roll: X vs AC Y - hit/miss'.",
     "On a hit, include explicit damage wording: 'damage roll: dice = total damage'.",
     "For NPC hits against player characters, public_narration must include attack roll, vs AC, damage roll, damage amount, and HP change when HP is updated.",
+    "For saving throws, make the numbers visible before consequence narration: 'Dexterity save: X vs DC Y - success/failure'.",
+    "When an area spell or effect affects multiple creatures, list each target's save result separately before applying damage or conditions.",
+    "For half-damage effects, state who succeeded, who failed, the full damage, the halved damage, and each affected actor's HP change when HP is updated.",
+    "If the relevant save DC is unknown, ask for it or use the known character sheet value; do not silently invent a DC.",
     "Never contradict the math: a roll below AC misses, and a roll meeting or exceeding AC hits unless a specific rule says otherwise.",
     "Mechanics and state:",
     "Never silently modify HP, resources, conditions, initiative, spell slots, inventory, death saves, concentration, or combat status only in prose.",
@@ -558,6 +562,53 @@ export function jobPrompt(job: DmJobName) {
                 "npc:cutlass-raider",
                 "npc:horn-blower"
               ]
+            }
+          }
+        },
+        null,
+        2
+      )
+    ].join("\n"),
+    [
+      "Example: area spell saves and damage are explicit.",
+      'Player input: "I rolled 8d6: 33 for Fireball damage."',
+      "Context: Fireball hit a scarred guardswoman at 4 HP, a robed priest at 7 HP, and two prone gate guards at 5 HP each. The caster's spell save DC is 14.",
+      "Good response:",
+      JSON.stringify(
+        {
+          public_narration: [
+            "The fireball detonates against the portcullis in a white-orange roar, hot enough to make the rain burst into steam before it reaches the stones.",
+            "Scarred guardswoman Dexterity save: 9 vs DC 14 - failure. Robed priest Dexterity save: 16 vs DC 14 - success. Gate guard Dexterity save: 7 vs DC 14 - failure. Gate guard Dexterity save: 12 vs DC 14 - failure.",
+            "Damage roll: 8d6 = 33 fire damage. The priest succeeds and takes half damage: 16 fire damage. The guardswoman and both gate guards fail and take 33 fire damage.",
+            "The scarred guardswoman is thrown backward, her sword spinning away as she drops from 4 HP to 0 HP. The robed priest slams into the iron bars behind him and slides down through the smoke, dropping from 7 HP to 0 HP despite twisting away from the worst of the blast. The two prone gate guards do not rise; both drop from 5 HP to 0 HP.",
+            "The roar collapses into the hiss of rain on scorched stone. No enemies remain standing, and the wicket gate hangs open through the smoke.",
+            "What do you do?"
+          ].join("\n\n"),
+          resolution_mode: "resolved_without_dice",
+          roll_requests: [],
+          next_input_needed: "player_actions",
+          input_targets: [],
+          input_policy: "acting_player",
+          mechanics_state_update: {
+            actors: {
+              "npc:scarred-guardswoman": {
+                currentHp: 0
+              },
+              "npc:robed-priest": {
+                currentHp: 0
+              },
+              "npc:gate-guard-1": {
+                currentHp: 0
+              },
+              "npc:gate-guard-2": {
+                currentHp: 0
+              }
+            },
+            combat: {
+              active: false,
+              round: 0,
+              turnOwner: null,
+              initiativeOrder: []
             }
           }
         },
