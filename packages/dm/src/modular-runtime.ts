@@ -224,6 +224,87 @@ export function jobPrompt(job: DmJobName) {
     "When dice are needed, public_narration must not resolve success, failure, damage, discovery, theft, persuasion, stealth, or other rolled outcomes yet."
   ];
 
+  const sceneDirectorExamples = [
+    [
+      "Example: rich scene hook, no roll.",
+      'Player input: "I look around the square before deciding where to go."',
+      "Good response:",
+      JSON.stringify(
+        {
+          public_narration: [
+            "The square is already awake, though the sun has barely cleared the rooftops. A fishmonger rinses silver scales from his cutting board into the gutter, a pair of apprentices argue over a tipped handcart, and somewhere behind the bakery shutters a woman laughs so loudly that several heads turn at once. Rain from the night before still clings to the cobbles, turning every wagon rut into a thin mirror of gray morning light.",
+            "At the center of the square, an old fountain coughs more than it flows. Someone has tied a strip of red cloth around the statue above it: not decoration, you suspect, but a warning or a plea. Most people give it a glance and then look away. The exception is a narrow-faced clerk in a green coat, who keeps circling the fountain with a ledger tucked under one arm, stopping every few steps to compare the cloth against something written on the page.",
+            "The exits from the square are easy to read. The smell of yeast and smoke rolls from the bakery lane. The louder street north leads toward the guild halls. South, under an archway stained by old soot, two city watchmen are questioning a mule driver beside a wagon with one broken wheel. The clerk notices you noticing the fountain, closes his ledger a little too quickly, and pretends to study the sky.",
+            "What do you do?"
+          ].join("\n\n"),
+          resolution_mode: "resolved_without_dice",
+          roll_requests: [],
+          next_input_needed: "player_actions",
+          input_targets: [],
+          input_policy: "acting_player",
+          mechanics_state_update: {}
+        },
+        null,
+        2
+      )
+    ].join("\n"),
+    [
+      "Example: mixed social action plus risky theft roll.",
+      'Player input: "I tell the gate guard I have business with trade partners in the city, and while she checks her papers I try to lift something from her belt pouch."',
+      "Good response:",
+      JSON.stringify(
+        {
+          public_narration: [
+            "The guard does not move aside. Her quill pauses halfway down the entry line, and her eyes come back to you with the flat patience of someone who has heard a hundred versions of that answer before.",
+            '"Trade partners," she repeats. "Name of the house, name of the factor, and the street they keep offices on." The guard tilts the clipboard just enough that the rain-specked page is hidden from view. Behind her, one of the other sentries shifts his spear from shoulder to hand, not alarmed yet, but listening.',
+            "You let your answer hang in the air for half a breath and step close as if to clarify over the wind. Her belt pouch rests near the buckle of her sword belt, dark leather worn smooth at the flap. Your fingers start toward it while her attention is still divided between your face, the clipboard, and the line forming behind you.",
+            "This is possible, but risky: you are at a guarded city gate in daylight, with armed witnesses close enough to see a bad movement. Roll Sleight of Hand: 1d20 + your Dexterity modifier. Your character sheet does not list Sleight of Hand proficiency, so do not add proficiency unless another feature applies.",
+            "What do you do?"
+          ].join("\n\n"),
+          resolution_mode: "needs_dice",
+          roll_requests: [
+            {
+              id: "lift-gate-guard-pouch",
+              dice: "1d20",
+              label: "Sleight of Hand",
+              modifier: 0
+            }
+          ],
+          next_input_needed: "dice_results",
+          input_targets: [],
+          input_policy: "acting_player",
+          mechanics_state_update: {}
+        },
+        null,
+        2
+      )
+    ].join("\n"),
+    [
+      "Example: failed roll consequence that keeps play moving.",
+      'Player input: "I rolled a 5 on Sleight of Hand."',
+      "Good response:",
+      JSON.stringify(
+        {
+          public_narration: [
+            "Your fingers brush the pouch flap, but the leather sticks for the smallest, worst possible moment. The guard feels the tug before you can withdraw.",
+            'Her hand snaps down over your wrist. The clipboard drops against her thigh with a wet slap, and the bored look vanishes from her face. "That," she says, loud enough for the nearest sentry to turn, "was a very poor answer."',
+            "The spear behind her lowers across the gate path, blocking the way into the city. The people waiting in line suddenly discover urgent reasons to step back from you. The guard does not draw steel, not yet, but her grip tightens and her other hand hovers near the whistle at her collar.",
+            '"Hands where I can see them. Then you are going to explain whether you are a fool, a thief, or both." You have a heartbeat before this becomes formal arrest: talk fast, comply, create a distraction, try to break free, or offer some proof that makes her hesitate.',
+            "What do you do?"
+          ].join("\n\n"),
+          resolution_mode: "resolved_without_dice",
+          roll_requests: [],
+          next_input_needed: "player_actions",
+          input_targets: [],
+          input_policy: "acting_player",
+          mechanics_state_update: {}
+        },
+        null,
+        2
+      )
+    ].join("\n")
+  ];
+
   const shared = [
     "Return strict JSON only.",
     "Minimum output fields: public_narration, roll_requests, next_input_needed, combat_events, proposed_context_updates.",
@@ -247,7 +328,9 @@ export function jobPrompt(job: DmJobName) {
       "Default narration length: 2-5 paragraphs for ordinary turns. Use 4-7 richer paragraphs for major scene openings, location reveals, travel arrivals, or campaign-significant transitions.",
       "End with a clear present-tense handoff that invites action, usually by naming what is immediately available or pressing, without listing menu options unless clarity requires it.",
       ...rollAdjudicationGuidance,
-      ...narrativeQualityBar
+      ...narrativeQualityBar,
+      "Examples below demonstrate pacing, specificity, agency boundaries, and roll handling. Do not copy their names, locations, weather, NPC roles, scene structure, or exact phrasing. Match their clarity and dramatic discipline, not their content.",
+      ...sceneDirectorExamples
     ],
     investigation: [
       "Handle discovery, mysteries, hidden information, and clue progression.",

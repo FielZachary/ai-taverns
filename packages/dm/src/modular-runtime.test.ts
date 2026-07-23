@@ -172,6 +172,11 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("scene_director"), /next_input_needed to dice_results/i);
     assert.match(jobPrompt("scene_director"), /structured roll_requests entry/i);
     assert.match(jobPrompt("scene_director"), /must not resolve success/i);
+    assert.match(jobPrompt("scene_director"), /rich scene hook, no roll/i);
+    assert.match(jobPrompt("scene_director"), /mixed social action plus risky theft roll/i);
+    assert.match(jobPrompt("scene_director"), /failed roll consequence/i);
+    assert.match(jobPrompt("scene_director"), /Do not copy their names/i);
+    assert.match(jobPrompt("scene_director"), /\\n\\nWhat do you do\\?/);
     assert.match(jobPrompt("combat"), /Never silently modify HP/);
     assert.match(jobPrompt("clarification"), /Ask one concise/);
     assert.match(buildMemoryUpdaterPrompt(), /Allowed operations/);
