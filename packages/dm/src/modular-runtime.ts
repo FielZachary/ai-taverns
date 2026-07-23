@@ -197,6 +197,8 @@ export function buildRouterPrompt() {
     "Choose exactly one primary job for the current turn and select context chunk keys only.",
     "Campaign opening scenes are handled by campaign creation flows, not by this router.",
     "Do not summarize, rewrite, mutate, or invent memory.",
+    "Choose clarification when the player's intended action is too underspecified to adjudicate safely, especially combat actions like casting a spell, making an attack, using a weapon, or targeting an area effect without a clear target, target area, or necessary tactical detail.",
+    "Do not choose clarification merely because an action is risky, opposed, or requires dice; route those to the relevant gameplay job and request rolls there.",
     `Allowed jobs: ${dmJobNames.join(", ")}.`,
     `Context categories: ${contextCategories.join(", ")}.`,
     "Return exactly one JSON object with job_needed, context_keys, and optional reason."

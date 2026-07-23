@@ -164,6 +164,9 @@ describe("modular AI DM runtime contracts", () => {
 
     assert.match(routerPrompt, /select context chunk keys only/i);
     assert.match(routerPrompt, /Campaign opening scenes are handled/i);
+    assert.match(routerPrompt, /Choose clarification when the player's intended action is too underspecified/i);
+    assert.match(routerPrompt, /without a clear target, target area, or necessary tactical detail/i);
+    assert.match(routerPrompt, /Do not choose clarification merely because an action is risky/i);
     assert.doesNotMatch(routerPrompt, new RegExp(removedOpeningJob));
     assert.match(jobPrompt("scene_director"), /concrete sensory detail/i);
     assert.match(jobPrompt("scene_director"), /observable behavior/i);
