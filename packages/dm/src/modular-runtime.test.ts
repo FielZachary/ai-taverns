@@ -165,6 +165,9 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(routerPrompt, /select context chunk keys only/i);
     assert.match(routerPrompt, /Campaign opening scenes are handled/i);
     assert.doesNotMatch(routerPrompt, new RegExp(removedOpeningJob));
+    assert.match(jobPrompt("scene_director"), /concrete sensory detail/i);
+    assert.match(jobPrompt("scene_director"), /observable behavior/i);
+    assert.match(jobPrompt("scene_director"), /Keep player agency intact/i);
     assert.match(jobPrompt("combat"), /Never silently modify HP/);
     assert.match(jobPrompt("clarification"), /Ask one concise/);
     assert.match(buildMemoryUpdaterPrompt(), /Allowed operations/);

@@ -204,6 +204,15 @@ export function buildRouterPrompt() {
 }
 
 export function jobPrompt(job: DmJobName) {
+  const narrativeQualityBar = [
+    "Prefer concrete nouns and active details over abstract mood labels.",
+    "Anchor every scene in physical space: near/far, entrances/exits, landmarks, crowds, obstacles, weather, light, or sound.",
+    "Use proper nouns when context provides them; invent names only when the scene needs specificity and no canonical name exists.",
+    "Let tension emerge from visible behavior, conflicting wants, scarce time, danger, mystery, obligation, or opportunity.",
+    "Avoid filler openings like 'As you...' unless it creates immediate placement or motion.",
+    "Avoid ending with vague prompts like 'What do you do?' when a more specific handoff is available."
+  ];
+
   const shared = [
     "Return strict JSON only.",
     "Minimum output fields: public_narration, roll_requests, next_input_needed, combat_events, proposed_context_updates.",
@@ -213,8 +222,19 @@ export function jobPrompt(job: DmJobName) {
 
   const jobs: Record<DmJobName, string[]> = {
     scene_director: [
-      "Run normal gameplay outside combat.",
-      "Narrate consequences, visible clues, hazards, opportunities, and meaningful choices without forcing player decisions."
+      "Run normal gameplay outside tactical combat.",
+      "Your job is to direct the living scene: establish place, motion, mood, visible characters, immediate tension, and meaningful options.",
+      "Write player-facing narration with concrete sensory detail: sights, sounds, smells, textures, weather, spatial relationships, and small signs of ordinary life.",
+      "Make scenes feel inhabited. Include people or creatures pursuing their own business, environmental motion, and at least one specific interactable detail when the scene is not already focused on a player action.",
+      "Use a grounded fantasy-adventure style: vivid, clear, and specific; not purple prose, not generic boxed text, not a summary of lore.",
+      "When introducing a hook, reveal it through observable behavior, overheard fragments, physical evidence, pressure, or an NPC need. Do not announce it as a quest.",
+      "Keep player agency intact. Do not state what a player character thinks, feels, says, decides, notices with certainty beyond ordinary perception, or does next unless it directly follows from their submitted action.",
+      "Do not force a single path. Present an immediate situation with multiple plausible approaches: speak, inspect, follow, ignore, prepare, rest, travel, ask around, or act creatively.",
+      "Resolve simple consequences directly when no roll is needed. If uncertainty, danger, resistance, or meaningful cost matters, request an appropriate roll instead of deciding the uncertain outcome.",
+      "Outside combat, do not silently modify HP, inventory, spell slots, conditions, gold, experience, faction standing, or durable world state. Propose state changes only through the structured output fields.",
+      "Default narration length: 2-5 paragraphs for ordinary turns. Use 4-7 richer paragraphs for major scene openings, location reveals, travel arrivals, or campaign-significant transitions.",
+      "End with a clear present-tense handoff that invites action, usually by naming what is immediately available or pressing, without listing menu options unless clarity requires it.",
+      ...narrativeQualityBar
     ],
     investigation: [
       "Handle discovery, mysteries, hidden information, and clue progression.",
