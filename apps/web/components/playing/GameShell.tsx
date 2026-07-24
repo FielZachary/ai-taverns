@@ -18,7 +18,8 @@ import type {
   DiceRollRequest,
   DiceRollSubmission,
   GameMessage,
-  InputPolicy
+  InputPolicy,
+  NextInputNeeded
 } from "@/lib/game-types";
 import {
   listCampaigns,
@@ -249,6 +250,8 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
   const [pendingRollRequests, setPendingRollRequests] = useState<
     DiceRollRequest[]
   >([]);
+  const [nextInputNeeded, setNextInputNeeded] =
+    useState<NextInputNeeded>("player_actions");
   const [inputTargets, setInputTargets] = useState<string[]>([]);
   const [inputPolicy, setInputPolicy] = useState<InputPolicy>("all_players");
   const [roomCombat, setRoomCombat] = useState<RoomSnapshot["combat"]>();
@@ -289,6 +292,8 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     [currentRoomPlayer, isSinglePlayer, pendingRollRequests, playerProfile]
   );
   const currentPendingRollRequest = currentPendingRollRequests[0] ?? null;
+  const hasPendingDiceInput =
+    nextInputNeeded === "dice_results" || pendingRollRequests.length > 0;
   const currentRequiredRollDice = useMemo(
     () => requiredDiceQueueFromRequests(currentPendingRollRequests),
     [currentPendingRollRequests]
@@ -370,6 +375,8 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     !isSinglePlayer &&
     roomPlayers.length >= 2 &&
     !hasAdventureBegun;
+  const canSelectAiModel =
+    isSinglePlayer || Boolean(activeCampaign?.ownerClientId === playerId);
   const playerInputLockMessage = currentPendingRollRequest
     ? `Roll required: ${
         currentRequiredRollDice?.expression ?? currentPendingRollRequest.label
@@ -396,6 +403,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
       setIsRoomResolving(room.isResolving);
       setHasAdventureBegun(room.hasBegun);
       setPendingRollRequests(rollRequestsFromRoom(room));
+      setNextInputNeeded(room.nextInputNeeded ?? "player_actions");
       setInputTargets(room.inputTargets ?? []);
       setInputPolicy(room.inputPolicy ?? "all_players");
       setRoomCombat(room.combat);
@@ -476,6 +484,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
         setIsRoomResolving(room.isResolving);
         setHasAdventureBegun(true);
         setPendingRollRequests(rollRequestsFromRoom(room));
+        setNextInputNeeded(room.nextInputNeeded ?? "player_actions");
         setInputTargets(room.inputTargets ?? []);
         setInputPolicy(room.inputPolicy ?? "all_players");
         setRoomCombat(room.combat);
@@ -692,6 +701,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
       pendingSubmissionRef.current = null;
       setOptimisticSubmittedPlayerId(null);
       setPendingRollRequests([]);
+      setNextInputNeeded("player_actions");
       setInputTargets([]);
       setInputPolicy("all_players");
       setRoomCombat(undefined);
@@ -729,6 +739,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
             setIsRoomResolving(room.isResolving);
             setHasAdventureBegun(true);
             setPendingRollRequests(rollRequestsFromRoom(room));
+            setNextInputNeeded(room.nextInputNeeded ?? "player_actions");
             setInputTargets(room.inputTargets ?? []);
             setInputPolicy(room.inputPolicy ?? "all_players");
             setRoomCombat(room.combat);
@@ -900,6 +911,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     setStreamingDmMessages([]);
     setHasAdventureBegun(campaign.mode === "single_player");
     setPendingRollRequests([]);
+    setNextInputNeeded("player_actions");
     setInputTargets([]);
     setInputPolicy("all_players");
     setRoomCombat(undefined);
@@ -1367,7 +1379,9 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const model = selectedAiModelFromForm(event.currentTarget);
+    const model = canSelectAiModel
+      ? selectedAiModelFromForm(event.currentTarget)
+      : defaultAiModel;
 
     if (inputMode === "ask_dm") {
       void askDungeonMaster(draft, model);
@@ -1378,7 +1392,10 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
   }
 
   function handleSkipTurn() {
-    void sendTurn("", { skipTurn: true, model: selectedAiModelFromStorage() });
+    void sendTurn("", {
+      skipTurn: true,
+      model: canSelectAiModel ? selectedAiModelFromStorage() : defaultAiModel
+    });
   }
 
   async function completePendingRollBatch(
@@ -1647,6 +1664,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
                 Boolean(activeDiceReveal) ||
                 isInputSubmittedForCurrentState
               }
+              canSelectAiModel={canSelectAiModel}
               lockMessage={playerInputLockMessage}
               requiredRoll={currentPendingRollRequest}
               requiredRollExpression={currentRequiredRollDice?.expression}
@@ -1686,7 +1704,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
         type="button"
         aria-label="Send turn"
         disabled={
-          pendingRollRequests.length > 0 ||
+          hasPendingDiceInput ||
           isWaitingOnTargetedInputState ||
           Boolean(activeDiceReveal) ||
           isSending ||
