@@ -8,9 +8,7 @@ import {
   Minus,
   Plus,
   ScrollText,
-  Sparkles,
-  Swords,
-  Users
+  Sparkles
 } from "lucide-react";
 import {
   campaignGenrePresets,
@@ -3536,9 +3534,7 @@ export function NewAdventureForm() {
                   aria-pressed={mode === "single_player"}
                   onClick={() => setMode("single_player")}
                 >
-                  <span className="mode-medallion">
-                    <Swords size={34} />
-                  </span>
+                  <span className="mode-banner-frame" aria-hidden="true" />
                   <span>
                     <strong>Singleplayer</strong>
                     <small>Private play with AI Taverns as your DM.</small>
@@ -3550,9 +3546,7 @@ export function NewAdventureForm() {
                   aria-pressed={mode === "multiplayer"}
                   onClick={() => setMode("multiplayer")}
                 >
-                  <span className="mode-medallion">
-                    <Users size={34} />
-                  </span>
+                  <span className="mode-banner-frame" aria-hidden="true" />
                   <span>
                     <strong>Multiplayer</strong>
                     <small>Invite players and resolve party turns together.</small>
