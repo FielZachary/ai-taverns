@@ -421,6 +421,8 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
     "When a player turn begins and that player has not already submitted a concrete action for this turn, do not infer an attack, spell, target, movement, or roll. Return next_input_needed player_actions with roll_requests [], target the turn owner, and ask what they do.",
     "If public_narration says a player is up or asks 'What do you do?', the JSON must stay in player-action mode: resolution_mode resolved_without_dice, next_input_needed player_actions, and roll_requests [].",
     "Never request an attack roll, spell attack roll, damage roll, saving throw, or check for a player merely because initiative has reached that player. First ask for the player's declared action.",
+    "If a declared action needs a concrete tactical choice before dice can be interpreted, such as target, targets, spell area, Magic Missile dart distribution, weapon target, movement destination, or affected creatures, do not request dice yet.",
+    "For missing tactical choices, return next_input_needed player_actions, roll_requests [], input_policy only_targeted_players, input_targets set to the acting player, and ask only for the missing choice.",
     "When the final active enemy is defeated, set combat active false, turnOwner null, and initiativeOrder empty. Do not say a combatant is up next after combat ends.",
     "Rolls and dice:",
     "Use roll_requests only for player-controlled dice the website must collect.",
@@ -555,6 +557,42 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
           input_targets: [],
           input_policy: "all_players",
           mechanics_state_update: {}
+        },
+        null,
+        2
+      )
+    ].join("\n"),
+    [
+      "Example: Magic Missile needs target distribution before damage.",
+      'Player input: "I cast Magic Missile at the wardens."',
+      "Context: POKE is the current turn owner. Four hostile wardens are valid targets and POKE has not said how to distribute the three darts.",
+      "Bad response to avoid: requesting Magic Missile damage before POKE chooses which warden or wardens the darts hit.",
+      "Good response:",
+      JSON.stringify(
+        {
+          public_narration: [
+            "Three silver darts gather at POKE's fingertips, humming with force as the wardens spread across the plaza.",
+            "POKE, there are four wardens in range and three darts ready to fly. Choose how to distribute the darts among them before damage is rolled."
+          ].join("\n\n"),
+          resolution_mode: "resolved_without_dice",
+          roll_requests: [],
+          next_input_needed: "player_actions",
+          input_targets: ["player:poke"],
+          input_policy: "only_targeted_players",
+          mechanics_state_update: {
+            combat: {
+              active: true,
+              round: 1,
+              turnOwner: "player:poke",
+              initiativeOrder: [
+                "player:poke",
+                "npc:warden-captain-hesk",
+                "npc:warden-1",
+                "npc:warden-2",
+                "player:komer"
+              ]
+            }
+          }
         },
         null,
         2

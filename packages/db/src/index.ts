@@ -4063,6 +4063,8 @@ const gameplayTurnOutputContractReminder = [
   "Off-turn player combat declarations are only stated intent, not actions already in motion; never say they are mid-swing, following immediately, or resolving before the next initiative actor.",
   "When multiple player submissions arrive in active combat, resolve the current turn owner's valid action first, keep other submissions as pending intent, and if the next actor is an enemy resolve that enemy turn before later player intent.",
   "If the stored turnOwner is an NPC key or NPC character name, do not let submitted player attacks or spells preempt that NPC turn.",
+  "If a declared action needs a concrete tactical choice before dice can be interpreted, such as target, targets, spell area, Magic Missile dart distribution, weapon target, movement destination, or affected creatures, do not request dice yet.",
+  "For missing tactical choices, return next_input_needed player_actions, roll_requests [], input_policy only_targeted_players, input_targets set to the acting player, and ask only for the missing choice.",
   "Resolve NPC attacks fully using explicit wording: 'attack roll: X vs AC Y - hit/miss'; on a hit, immediately state 'damage roll: dice = total damage', update player HP, then return control.",
   "For NPC hits, public_narration must include the words attack roll, vs AC, and damage roll before injury narration.",
   "When a player spell or feature forces an NPC or enemy saving throw, roll that save yourself before narrating success or failure, reveal the save roll and total, compare it to the player's known spell save DC when available, and do not put the NPC/enemy save in roll_requests.",

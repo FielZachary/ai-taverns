@@ -202,6 +202,14 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("combat"), /merely because initiative has reached/i);
     assert.match(
       jobPrompt("combat"),
+      /needs a concrete tactical choice before dice can be interpreted/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /For missing tactical choices, return next_input_needed player_actions, roll_requests \[\]/i
+    );
+    assert.match(
+      jobPrompt("combat"),
       /Only request player-controlled initiative rolls in roll_requests/i
     );
     assert.match(
@@ -231,6 +239,12 @@ describe("modular AI DM runtime contracts", () => {
       /Bandit captain initiative roll: 15\. Cutthroat initiative rolls: 11 and 8\./i
     );
     assert.match(jobPrompt("combat"), /surprise opener resolves before initiative/i);
+    assert.match(jobPrompt("combat"), /Magic Missile needs target distribution before damage/i);
+    assert.match(
+      jobPrompt("combat"),
+      /Bad response to avoid: requesting Magic Missile damage before POKE chooses/i
+    );
+    assert.match(jobPrompt("combat"), /"input_targets": \[\s+"player:poke"\s+\]/);
     assert.match(
       jobPrompt("combat"),
       /NPC turn catches up before an off-turn player intent/i
