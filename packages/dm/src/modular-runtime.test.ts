@@ -164,8 +164,62 @@ describe("modular AI DM runtime contracts", () => {
 
     assert.match(routerPrompt, /select context chunk keys only/i);
     assert.match(routerPrompt, /Campaign opening scenes are handled/i);
+    assert.match(routerPrompt, /Choose clarification when the player's intended action is too underspecified/i);
+    assert.match(routerPrompt, /without a clear target, target area, or necessary tactical detail/i);
+    assert.match(routerPrompt, /Do not choose clarification merely because an action is risky/i);
     assert.doesNotMatch(routerPrompt, new RegExp(removedOpeningJob));
+    assert.match(jobPrompt("scene_director"), /concrete sensory detail/i);
+    assert.match(jobPrompt("scene_director"), /observable behavior/i);
+    assert.match(jobPrompt("scene_director"), /Keep player agency intact/i);
+    assert.match(jobPrompt("scene_director"), /pause for dice/i);
+    assert.match(jobPrompt("scene_director"), /next_input_needed to dice_results/i);
+    assert.match(jobPrompt("scene_director"), /structured roll_requests entry/i);
+    assert.match(jobPrompt("scene_director"), /must not resolve success/i);
+    assert.match(jobPrompt("scene_director"), /rich scene hook, no roll/i);
+    assert.match(jobPrompt("scene_director"), /mixed social action plus risky theft roll/i);
+    assert.match(jobPrompt("scene_director"), /failed roll consequence/i);
+    assert.match(jobPrompt("scene_director"), /Do not copy their names/i);
+    assert.match(jobPrompt("scene_director"), /\\n\\nWhat do you do\\?/);
+    assert.doesNotMatch(
+      jobPrompt("scene_director"),
+      /Roll Sleight of Hand:[^"]*\\n\\nWhat do you do\?/
+    );
+    assert.match(jobPrompt("npc_dialogue"), /Do not make social checks into mind control/i);
+    assert.match(jobPrompt("npc_dialogue"), /If a lie contradicts known facts/i);
+    assert.match(jobPrompt("npc_dialogue"), /very high Deception against a known contradiction/i);
+    assert.match(jobPrompt("npc_dialogue"), /Persuasion partial success/i);
+    assert.match(jobPrompt("npc_dialogue"), /failed Intimidation/i);
+    assert.match(jobPrompt("npc_dialogue"), /conversational texture/i);
+    assert.match(jobPrompt("combat"), /strict turn ownership/i);
+    assert.match(jobPrompt("combat"), /roll_requests\[\]\.player/i);
+    assert.match(jobPrompt("combat"), /attack roll: X vs AC Y - hit\/miss/i);
+    assert.match(jobPrompt("combat"), /Dexterity save: X vs DC Y - success\/failure/i);
+    assert.match(jobPrompt("combat"), /list each target's save result separately/i);
+    assert.match(jobPrompt("combat"), /full damage, the halved damage/i);
+    assert.match(jobPrompt("combat"), /turnOwner is an NPC actor key/i);
+    assert.match(jobPrompt("combat"), /final active enemy is defeated/i);
+    assert.match(jobPrompt("combat"), /combat starts, initiative first/i);
+    assert.match(jobPrompt("combat"), /reveal every enemy initiative roll/i);
+    assert.match(jobPrompt("combat"), /Enemy initiative rolls are visible/i);
+    assert.match(jobPrompt("combat"), /surprise opener resolves before initiative/i);
+    assert.match(jobPrompt("combat"), /NPC turn catches up before player action/i);
+    assert.match(jobPrompt("combat"), /area spell saves and damage are explicit/i);
+    assert.match(jobPrompt("combat"), /Robed priest Dexterity save: 16 vs DC 14 - success/i);
+    assert.match(jobPrompt("combat"), /final enemy defeated and combat ends/i);
     assert.match(jobPrompt("combat"), /Never silently modify HP/);
+    assert.match(jobPrompt("combat"), /Do not copy their names, actor keys/i);
+    assert.match(
+      jobPrompt("combat"),
+      /Do not include 'What do you do\?'[^.]*next_input_needed dice_results/i
+    );
+    assert.doesNotMatch(
+      jobPrompt("combat"),
+      /Roll initiative:[^"]*\\n\\nWhat do you do\?/
+    );
+    assert.doesNotMatch(
+      jobPrompt("combat"),
+      /Roll Fireball damage:[^"]*\\n\\nWhat do you do\?/
+    );
     assert.match(jobPrompt("clarification"), /Ask one concise/);
     assert.match(buildMemoryUpdaterPrompt(), /Allowed operations/);
   });

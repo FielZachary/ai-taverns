@@ -33,6 +33,10 @@ while this private repository lacks the required GitHub plan features. Until
 that is resolved, keep using small verified changes and leave PRs open for
 manual merge if auto-merge cannot be enabled.
 
+Before pushing into a branch, check if the branch has already been merged into
+developement. If it has, delete the branch and create a new one for the code you
+are about to push
+
 ## Droplet Access
 
 When the user asks to access the AI Taverns DigitalOcean droplet, prefer the
