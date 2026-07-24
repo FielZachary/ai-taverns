@@ -2025,26 +2025,40 @@ h1 {
 }
 
 .chat-sidebar-actions button {
+  position: relative;
+  isolation: isolate;
   display: inline-flex;
   align-items: center;
-  justify-content: flex-start;
-  gap: 10px;
+  justify-content: center;
   min-height: 46px;
-  border: 1px solid rgba(226, 176, 93, 0.22);
+  border: 0;
   border-radius: 8px;
-  padding: 0 12px;
+  padding: 0 18px;
   color: var(--gold-bright);
-  background: rgba(217, 169, 74, 0.1);
+  background: transparent;
   font-family: var(--body-font);
   font-size: 0.84rem;
   font-weight: 900;
   letter-spacing: 0;
+  opacity: 0.48;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.86);
+}
+
+.chat-sidebar-actions button::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--gold-bright);
+  content: "";
+  -webkit-mask: url("/fantasygothicui/button9.png") center / 100% 100%
+    no-repeat;
+  mask: url("/fantasygothicui/button9.png") center / 100% 100% no-repeat;
 }
 
 .chat-sidebar-actions button:hover,
 .chat-sidebar-actions button:focus-visible {
-  border-color: rgba(244, 207, 122, 0.62);
-  background: rgba(217, 169, 74, 0.16);
+  opacity: 1;
+  filter: drop-shadow(0 0 8px rgba(244, 207, 122, 0.18));
 }
 
 .chat-sidebar-header {
@@ -3013,21 +3027,18 @@ h1 {
 
 .turn-form {
   display: grid;
-  grid-template-columns: 142px 72px minmax(0, 1fr) 118px;
-  gap: 12px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgba(10, 8, 7, 0.54);
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 .turn-form-warning {
-  border-color: rgba(244, 207, 122, 0.55);
-  box-shadow: 0 0 0 1px rgba(244, 207, 122, 0.12);
+  filter: drop-shadow(0 0 10px rgba(244, 207, 122, 0.16));
 }
 
 .turn-form-submitted {
-  background: rgba(5, 4, 4, 0.72);
+  background: transparent;
 }
 
 .turn-form-attention {
@@ -3048,11 +3059,25 @@ h1 {
 .turn-form-input-wrap {
   position: relative;
   min-width: 0;
+  padding: 0 58px 18px 18px;
+}
+
+.turn-form-input-wrap::before {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 8px;
+  background: url("/fantasygothicui/line1.png") center bottom / 100% 100%
+    no-repeat;
+  content: "";
+  opacity: 0.32;
+  pointer-events: none;
 }
 
 .turn-form-input-wrap textarea {
   width: 100%;
-  min-height: 72px;
+  min-height: 76px;
   resize: none;
   border: 0;
   outline: 0;
@@ -3062,12 +3087,44 @@ h1 {
   line-height: 1.45;
 }
 
+.turn-form .turn-submit-arrow {
+  position: absolute;
+  right: 12px;
+  bottom: 22px;
+  z-index: 2;
+  display: block;
+  width: 32px;
+  height: 38px;
+  min-height: 0;
+  border: 0;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.78);
+  opacity: 0.46;
+  -webkit-mask: url("/fantasygothicui/arrow4.png") center / contain no-repeat;
+  mask: url("/fantasygothicui/arrow4.png") center / contain no-repeat;
+  transform: rotate(90deg);
+  transition:
+    background 180ms ease,
+    opacity 180ms ease,
+    filter 180ms ease;
+}
+
+.turn-form .turn-submit-arrow:not(:disabled):hover,
+.turn-form .turn-submit-arrow:not(:disabled):focus-visible {
+  background: var(--gold-bright);
+  opacity: 1;
+  filter: drop-shadow(0 0 8px rgba(244, 207, 122, 0.24));
+}
+
+.turn-form .turn-submit-arrow:disabled {
+  cursor: not-allowed;
+  opacity: 0.24;
+}
+
 .turn-form-submitted .turn-form-input-wrap::after {
   position: absolute;
-  inset: -4px;
-  border: 1px solid rgba(244, 207, 122, 0.22);
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.58);
+  inset: 0 0 18px;
+  background: rgba(0, 0, 0, 0.44);
   content: "";
   pointer-events: none;
 }
@@ -3099,76 +3156,63 @@ h1 {
   color: rgba(249, 237, 214, 0.44);
 }
 
-.input-mode-toggle {
-  display: grid;
-  grid-template-columns: 1fr;
+.turn-action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
   gap: 8px;
 }
 
+.input-mode-toggle {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: min(100%, 260px);
+}
+
 .turn-form .input-mode-button {
-  min-height: 32px;
-  padding: 0 8px;
-  color: var(--muted);
-  background: rgba(217, 169, 74, 0.08);
+  min-height: 34px;
+  padding: 0 12px;
   font-size: 0.72rem;
 }
 
-.turn-form .input-mode-button.active {
-  color: #1b120b;
-  background: linear-gradient(180deg, #f4cf7a, #c88731);
+.turn-form .model-settings-button {
+  --toolbar-button-image: url("/fantasygothicui/square9.png");
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
 }
 
-.ai-model-menu {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-  color: var(--muted);
-  font-family: var(--body-font);
-  font-size: 0.68rem;
-  font-weight: 900;
-  letter-spacing: 0;
-  text-transform: uppercase;
-}
-
-.ai-model-menu select {
-  width: 100%;
-  min-height: 34px;
-  border: 1px solid rgba(244, 207, 122, 0.38);
-  border-radius: 8px;
-  color: var(--gold-bright);
-  background: rgba(217, 169, 74, 0.1);
-  font: inherit;
-  letter-spacing: 0;
+.turn-form .model-settings-button svg {
+  width: 15px;
+  height: 15px;
+  color: currentColor;
 }
 
 .dice-roll-control {
   position: relative;
-  min-width: 0;
+  flex: 0 0 auto;
 }
 
 .turn-form .dice-roll-button {
   display: inline-flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  width: 100%;
-  min-height: 72px;
-  padding: 8px;
-  color: var(--gold-bright);
-  background: rgba(217, 169, 74, 0.1);
-}
-
-.turn-form .dice-roll-button span {
-  font-size: 0.72rem;
-  line-height: 1;
-  text-transform: uppercase;
+  min-width: 76px;
+  height: 38px;
+  min-height: 38px;
+  padding: 0 16px;
+  --toolbar-button-image: url("/fantasygothicui/button12.png");
 }
 
 .dice-picker-popover {
   position: absolute;
   bottom: calc(100% + 10px);
-  left: 0;
+  right: 0;
   z-index: 8;
   display: grid;
   gap: 10px;
@@ -3184,7 +3228,7 @@ h1 {
 .dice-picker-popover::after {
   position: absolute;
   bottom: -6px;
-  left: 27px;
+  right: 27px;
   width: 10px;
   height: 10px;
   border-right: 1px solid rgba(244, 207, 122, 0.42);
@@ -3202,16 +3246,40 @@ h1 {
 
 .turn-form .dice-picker-option {
   position: relative;
-  min-height: 42px;
-  padding: 0 8px;
+  display: grid;
+  width: 58px;
+  min-width: 58px;
+  height: 58px;
+  min-height: 58px;
+  place-items: center;
+  justify-self: center;
+  border: 0;
+  padding: 0;
   color: var(--gold-bright);
-  background: rgba(217, 169, 74, 0.1);
+  background: transparent;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.86);
+}
+
+.turn-form .dice-picker-option::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--gold-bright);
+  content: "";
+  -webkit-mask: url("/fantasygothicui/square3.png") center / 100% 100%
+    no-repeat;
+  mask: url("/fantasygothicui/square3.png") center / 100% 100% no-repeat;
+}
+
+.turn-form .dice-picker-option:hover,
+.turn-form .dice-picker-option:focus-visible {
+  filter: drop-shadow(0 0 8px rgba(244, 207, 122, 0.18));
 }
 
 .dice-picker-option strong {
   position: absolute;
-  top: -7px;
-  right: -5px;
+  top: -4px;
+  right: -4px;
   display: grid;
   min-width: 20px;
   height: 20px;
@@ -3238,39 +3306,139 @@ h1 {
 }
 
 .turn-form button {
+  position: relative;
+  isolation: isolate;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 52px;
+  min-height: 38px;
   border: 1px solid rgba(244, 207, 122, 0.45);
   border-radius: 8px;
-  color: #1b120b;
-  background: linear-gradient(180deg, #f4cf7a, #c88731);
+  color: var(--gold-bright);
+  background: transparent;
   font-family: var(--body-font);
   font-weight: 900;
 }
 
+.turn-action-bar button {
+  --toolbar-button-image: url("/fantasygothicui/button4.png");
+  min-width: 82px;
+  border: 0;
+  padding: 0 18px;
+  color: var(--gold-bright);
+  opacity: 0.48;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.86);
+}
+
+.turn-action-bar button::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--gold-bright);
+  content: "";
+  -webkit-mask: var(--toolbar-button-image) center / 100% 100% no-repeat;
+  mask: var(--toolbar-button-image) center / 100% 100% no-repeat;
+}
+
+.turn-action-bar button:hover,
+.turn-action-bar button:focus-visible,
+.turn-action-bar .input-mode-button.active,
+.turn-action-bar .model-settings-button.active,
+.turn-action-bar .dice-roll-button:not(:disabled),
+.turn-form-actions button:not(:disabled) {
+  opacity: 1;
+  filter: drop-shadow(0 0 8px rgba(244, 207, 122, 0.18));
+}
+
 .turn-form button:disabled {
   cursor: not-allowed;
-  opacity: 0.5;
+  opacity: 0.32;
 }
 
 .turn-form-actions {
-  display: grid;
-  grid-template-columns: 1fr;
+  display: flex;
+  flex: 0 0 auto;
   gap: 8px;
 }
 
 .turn-form .turn-form-skip {
-  min-height: 32px;
-  color: var(--gold-bright);
-  background: rgba(217, 169, 74, 0.08);
+  min-height: 38px;
+  --toolbar-button-image: url("/fantasygothicui/button12.png");
+}
+
+.turn-form-actions button {
+  --toolbar-button-image: url("/fantasygothicui/button12.png");
 }
 
 .turn-form .dice-picker-clear {
   color: var(--gold-bright);
   background: rgba(217, 169, 74, 0.08);
+}
+
+.model-settings-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: rgba(3, 2, 2, 0.72);
+}
+
+.model-settings-modal {
+  display: grid;
+  gap: 16px;
+  width: min(420px, 100%);
+  border: 1px solid var(--line);
+  padding: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 248, 220, 0.045), transparent 28%),
+    rgba(26, 19, 15, 0.98);
+  box-shadow: 0 26px 90px rgba(0, 0, 0, 0.58);
+}
+
+.model-settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.model-settings-header h2 {
+  margin: 0;
+  color: var(--gold-bright);
+  font-size: 1.2rem;
+}
+
+.turn-form .model-settings-header button {
+  min-height: 34px;
+  border: 1px solid rgba(244, 207, 122, 0.24);
+  padding: 0 12px;
+  color: var(--gold-bright);
+  background: rgba(17, 13, 10, 0.48);
+}
+
+.model-settings-options {
+  display: grid;
+  gap: 10px;
+}
+
+.turn-form .model-settings-option {
+  justify-content: center;
+  min-height: 44px;
+  border: 1px solid rgba(244, 207, 122, 0.24);
+  color: var(--gold-bright);
+  background: rgba(17, 13, 10, 0.48);
+  opacity: 0.52;
+}
+
+.turn-form .model-settings-option.active,
+.turn-form .model-settings-option:hover,
+.turn-form .model-settings-option:focus-visible {
+  opacity: 1;
+  border-color: rgba(244, 207, 122, 0.58);
+  background: rgba(217, 169, 74, 0.12);
 }
 
 @keyframes dice-picker-appear {
@@ -3670,6 +3838,19 @@ h1 {
   display: none;
 }
 
+.table-page .play-table *,
+.table-page .play-table *::before,
+.table-page .play-table *::after,
+.table-page .character-sheet-overlay *,
+.table-page .character-sheet-overlay *::before,
+.table-page .character-sheet-overlay *::after,
+.table-page .dice-reveal-backdrop *,
+.table-page .dice-reveal-backdrop *::before,
+.table-page .dice-reveal-backdrop *::after,
+.table-page .floating-send {
+  border-radius: 0 !important;
+}
+
 h1,
 h2,
 h3,
@@ -3906,28 +4087,31 @@ h6 {
   }
 
   .turn-form {
-    grid-template-columns: 64px 1fr;
+    grid-template-columns: 1fr;
+  }
+
+  .turn-action-bar {
+    justify-content: flex-start;
   }
 
   .input-mode-toggle {
-    grid-column: 1 / -1;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    flex: 1 1 100%;
   }
 
   .turn-form button {
-    min-height: 46px;
+    min-height: 38px;
   }
 
   .turn-form .dice-roll-button {
-    min-height: 46px;
+    min-height: 38px;
   }
 
   .turn-form-input-wrap {
-    grid-column: span 1;
+    grid-column: 1 / -1;
   }
 
   .turn-form-actions {
-    grid-column: 1 / -1;
+    grid-column: auto;
   }
 }
 

@@ -55,23 +55,19 @@ describe("PlayerInput", () => {
     localStorage.clear();
   });
 
-  it("shows the concrete model picker and persists the selected model", () => {
+  it("opens model settings and persists the selected model", () => {
     renderPlayerInput();
 
-    expect(screen.getByRole("combobox", { name: /ai model/i })).toHaveValue(
-      "deepseek-v4-flash"
+    fireEvent.click(
+      screen.getByRole("button", { name: /ai model: deepseek v4 flash/i })
     );
-    expect(screen.getByRole("option", { name: "DeepSeek V4 Flash" }))
-      .toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Qwen 3.7 Flash" }))
-      .toBeInTheDocument();
 
-    fireEvent.change(screen.getByRole("combobox", { name: /ai model/i }), {
-      target: { value: "qwen-3-7-flash" }
-    });
+    expect(screen.getByRole("dialog", { name: /ai model/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Qwen 3.7 Flash" }));
 
     expect(localStorage.getItem("ai-dnd.aiModel")).toBe("qwen-3-7-flash");
-    expect(screen.getByDisplayValue("Qwen 3.7 Flash")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: /ai model/i })).not.toBeInTheDocument();
   });
 
   it("ignores stale provider-level model picker values", () => {
@@ -79,9 +75,9 @@ describe("PlayerInput", () => {
 
     renderPlayerInput();
 
-    expect(screen.getByRole("combobox", { name: /ai model/i })).toHaveValue(
-      "deepseek-v4-flash"
-    );
+    expect(
+      screen.getByRole("button", { name: /ai model: deepseek v4 flash/i })
+    ).toBeInTheDocument();
   });
 
   it("shows validation messages and locks submitted turn input", () => {
@@ -171,7 +167,7 @@ describe("PlayerInput", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /roll 1d20 \+ 2d6/i }))
-        .toHaveTextContent("3 dice");
+        .toHaveTextContent("Dice");
     });
 
     expect(screen.getByText("Roll to continue")).toBeInTheDocument();
