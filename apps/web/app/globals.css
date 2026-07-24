@@ -2693,6 +2693,39 @@ h1 {
   letter-spacing: 0.08em;
 }
 
+.invite-link-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.begin-adventure-panel .invite-link-controls .secondary-action {
+  min-height: 34px;
+  border-color: rgba(188, 169, 142, 0.34);
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.begin-adventure-panel .invite-link-controls .secondary-action:hover:not(:disabled) {
+  border-color: rgba(244, 207, 122, 0.45);
+  background: rgba(244, 207, 122, 0.12);
+}
+
+.invite-status,
+.invite-error-inline {
+  font-size: 0.76rem;
+  font-weight: 900;
+}
+
+.invite-status {
+  color: #a8d9a2;
+}
+
+.invite-error-inline {
+  color: #ffb19f;
+}
+
 .begin-adventure-panel button {
   display: inline-flex;
   align-items: center;
@@ -2712,6 +2745,108 @@ h1 {
 .begin-adventure-panel button:disabled {
   cursor: not-allowed;
   opacity: 0.46;
+}
+
+.invite-page {
+  display: grid;
+  min-height: 100dvh;
+  place-items: center;
+  padding: 28px;
+}
+
+.invite-panel {
+  width: min(640px, 100%);
+  padding: clamp(24px, 4vw, 42px);
+  border: 1px solid rgba(226, 176, 93, 0.22);
+  border-radius: 8px;
+  background: rgba(20, 15, 12, 0.86);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.34);
+}
+
+.invite-panel h1 {
+  margin: 0 0 18px;
+  font-family: var(--heading-font);
+  font-size: clamp(2rem, 5vw, 3.4rem);
+  letter-spacing: 0;
+}
+
+.invite-note,
+.invite-error {
+  margin: 12px 0 0;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.invite-note {
+  color: var(--muted);
+}
+
+.invite-error {
+  color: #ffb19f;
+}
+
+.invite-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 18px;
+  color: var(--muted);
+  font-size: 0.92rem;
+  font-weight: 900;
+}
+
+.invite-form {
+  display: grid;
+  gap: 14px;
+}
+
+.invite-form label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.invite-form input,
+.invite-form textarea {
+  width: 100%;
+  border: 1px solid rgba(226, 176, 93, 0.24);
+  border-radius: 8px;
+  color: var(--ink);
+  background: rgba(0, 0, 0, 0.24);
+  font-family: var(--body-font);
+  font-size: 1rem;
+}
+
+.invite-form input {
+  min-height: 42px;
+  padding: 0 12px;
+}
+
+.invite-form textarea {
+  resize: vertical;
+  min-height: 150px;
+  padding: 12px;
+}
+
+.invite-form button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  border: 1px solid rgba(244, 207, 122, 0.48);
+  border-radius: 8px;
+  color: #1b120b;
+  background: linear-gradient(180deg, #f4cf7a, #c88731);
+  font-weight: 900;
+}
+
+.invite-form button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
 }
 
 .message-log {
