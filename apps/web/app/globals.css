@@ -713,6 +713,7 @@ h1 {
     transform 320ms ease;
 }
 
+.mode-picker button.selected .mode-banner-frame,
 .mode-picker button:hover .mode-banner-frame,
 .mode-picker button:focus-visible .mode-banner-frame {
   filter:
