@@ -3137,7 +3137,7 @@ h1 {
 
 .turn-form .input-mode-button.active {
   color: #1b120b;
-  background: linear-gradient(180deg, #f4cf7a, #c88731);
+  background: #ffff00;
 }
 
 .dice-roll-control {
@@ -3249,7 +3249,7 @@ h1 {
   border: 1px solid rgba(244, 207, 122, 0.45);
   border-radius: 8px;
   color: #1b120b;
-  background: linear-gradient(180deg, #f4cf7a, #c88731);
+  background: #ffff00;
   font-family: var(--body-font);
   font-weight: 900;
 }
