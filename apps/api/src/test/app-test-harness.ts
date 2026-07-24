@@ -1581,6 +1581,40 @@ before(async () => {
           };
         }
 
+        if (input.message.includes("TRIGGER_CLARIFICATION_NEXT_INPUT")) {
+          const content = JSON.stringify({
+            public_narration:
+              "Seren, are you casting one spell this turn, or do you have a feature that lets you cast both? Choose the spell and target before I resolve it.",
+            resolution_mode: "needs_dice",
+            roll_requests: [],
+            next_input_needed: "clarification",
+            input_targets: ["player:owner"],
+            input_policy: "only_targeted_players",
+            mechanics_state_update: {}
+          });
+
+          return {
+            id: "provider-clarification-recovered",
+            content,
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: content,
+              model: "test-model",
+              temperature: 0.8,
+              providerTimings: []
+            }
+          };
+        }
+
         if (
           input.message.toLowerCase().includes("scorching ray") &&
           (input.message.toLowerCase().includes("cutlass raider") ||

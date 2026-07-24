@@ -8,6 +8,8 @@ import {
   formatEldermereTurnPromptContext,
   openingSceneRequest,
   parseDmContract,
+  recoverDmContractAfterParseFailure,
+  debugDmContractFailure,
   rollRequestDiagnostics,
   isEldermerePreset,
   buildMemoryUpdaterPrompt,
@@ -4876,6 +4878,9 @@ async function askDungeonMaster(
       | ReturnType<typeof validateMainDmOutput>
       | undefined;
     let outputEnvelopeError: unknown;
+    let contractParseRecovery:
+      | ReturnType<typeof recoverDmContractAfterParseFailure>
+      | undefined;
 
     try {
       outputEnvelope = validateMainDmOutput(providerData.content);
@@ -4883,14 +4888,41 @@ async function askDungeonMaster(
       outputEnvelopeError = error;
     }
 
-    const contract: DmContractResponse = parseDmContract(
-      providerData.content,
-      {
+    const contractParseOptions = {
         ...contractOptions,
         currentAction: message,
         ...(currentPlayerAction ? { currentPlayerAction } : {})
+      };
+    let contract: DmContractResponse;
+
+    try {
+      contract = parseDmContract(providerData.content, contractParseOptions);
+    } catch (error) {
+      const recovery = recoverDmContractAfterParseFailure(providerData.content);
+
+      if (!recovery) {
+        throw error;
       }
-    );
+
+      contractParseRecovery = recovery;
+      contract = recovery.contract;
+
+      await logTurnDebugTrace(db, {
+        campaignId: campaign.id,
+        traceId,
+        phase: "dm_contract_parse_recovered",
+        turnId,
+        elapsedMs: Date.now() - startedAt,
+        payload: {
+          error: errorSummary(error),
+          recovery: recovery.report,
+          contractFailure: debugDmContractFailure(
+            providerData.content,
+            contractParseOptions
+          )
+        }
+      });
+    }
 
     const rollRequests = normalizeRollRequests(contract.rollRequests);
     const rollRequestDiagnosticsReport = rollRequestDiagnostics(rollRequests);
@@ -4967,6 +4999,8 @@ async function askDungeonMaster(
         rollRequestLabels: rollRequests.map((request) => request.label),
         rollRequestDiagnostics: rollRequestDiagnosticsReport,
         nextInputNeeded: contract.nextInputNeeded,
+        contractParseRecovered: Boolean(contractParseRecovery),
+        contractParseRecovery: contractParseRecovery?.report,
         inputPolicy: normalizedInputControl.inputPolicy,
         inputTargets: normalizedInputControl.inputTargets,
         originalInputPolicy: contract.inputPolicy,
@@ -4998,6 +5032,8 @@ async function askDungeonMaster(
         outputEnvelopeError: outputEnvelopeError
           ? errorSummary(outputEnvelopeError)
           : undefined,
+        contractParseRecovered: Boolean(contractParseRecovery),
+        contractParseRecovery: contractParseRecovery?.report,
         rollRequestsCount: rollRequests.length,
         rollRequestDiagnostics: rollRequestDiagnosticsReport,
         acceptedCombatEventsCount: combatValidation.accepted.length,
