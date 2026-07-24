@@ -404,6 +404,11 @@ export type CampaignRow = {
   join_code?: string | null;
 };
 
+type CampaignSummaryRow = Omit<CampaignRow, "session_id"> & {
+  session_id?: string;
+  sessionId?: string;
+};
+
 type PlayerRow = {
   id: string;
   campaign_id: string;
@@ -597,7 +602,7 @@ function eventPayload(value: unknown): Record<string, unknown> {
     : {};
 }
 
-function campaignWorldName(campaign: CampaignRow) {
+function campaignWorldName(campaign: Pick<CampaignRow, "metadata" | "title">) {
   const metadata = eventPayload(campaign.metadata);
   const setting = eventPayload(metadata.setting);
   const genre = eventPayload(metadata.genre);
@@ -735,15 +740,20 @@ function normalizeCampaignTitle(title: string | undefined, sessionId: string) {
 }
 
 export function mapCampaignSummaryRow(
-  campaign: CampaignRow
+  campaign: CampaignSummaryRow
 ): CampaignSummary {
   const characterName = campaign.display_character_name?.trim();
   const playerName = campaign.display_username?.trim();
   const joinCode = campaign.join_code?.trim();
+  const sessionId = (campaign.session_id ?? campaign.sessionId)?.trim();
+
+  if (!sessionId) {
+    throw new Error("Campaign summary row is missing session_id.");
+  }
 
   return {
     id: campaign.id,
-    sessionId: campaign.session_id,
+    sessionId,
     mode: campaign.mode,
     title: characterName || playerName || campaign.title,
     preview: campaignWorldName(campaign),
@@ -1155,6 +1165,7 @@ export async function listCampaignSummariesForUser(
     `
       select
         campaigns.*,
+        campaigns.session_id as "sessionId",
         display_player.character_name as display_character_name,
         display_player.username as display_username,
         join_code.code as join_code
@@ -1210,6 +1221,7 @@ export async function getCampaignSummaryForUser(
     `
       select
         campaigns.*,
+        campaigns.session_id as "sessionId",
         display_player.character_name as display_character_name,
         display_player.username as display_username,
         join_code.code as join_code
