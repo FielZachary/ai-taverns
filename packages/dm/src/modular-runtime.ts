@@ -412,6 +412,7 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
     "Roll NPC and enemy initiative yourself every time, reveal each NPC/enemy initiative roll and total in public_narration, and encode the resulting order in mechanics_state_update or combat_events.",
     "Never ask players to roll initiative, saving throws, attacks, damage, checks, or any other dice for NPCs or enemies; NPC and enemy dice are DM-side rolls that must still be visible to the players.",
     "When combat begins, include mechanics_state_update.combat with active true, round 1, turnOwner, and provisional initiativeOrder using actor keys from the current scene and character sheets only.",
+    "After all requested player initiative rolls are submitted, initiative is resolved. If the first actor is an NPC, immediately resolve that NPC turn before returning control to players. Saying an NPC moves first is not a handoff; the NPC must act now.",
     "Do not include bystanders, captives, scenery, or passive creatures in initiativeOrder unless they can meaningfully act in the fight.",
     "Turn ownership:",
     "Always respect the current combat turnOwner.",
@@ -572,6 +573,49 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
               initiativeOrder: [
                 "npc:warden-lift-guard-1",
                 "npc:warden-lift-guard-2",
+                "player:komer"
+              ]
+            }
+          }
+        },
+        null,
+        2
+      )
+    ].join("\n"),
+    [
+      "Example: combat start initiative resolved, NPC opener acts now.",
+      "Player input: POKE and Komer submitted initiative results. POKE rolled 4. Komer rolled 2.",
+      "Context: POKE cast Magic Missile at alert Doran Ironhand's hand. Doran was not surprised, Doran rolled 18 initiative, and the resulting initiative order is npc:doran-ironhand, player:poke, player:komer. Combat is active and turnOwner is npc:doran-ironhand.",
+      "Bad response to avoid: only saying Doran moves first, listing the initiative order, or returning next_input_needed player_actions while turnOwner is still npc:doran-ironhand.",
+      "Good response:",
+      JSON.stringify(
+        {
+          public_narration: [
+            "Doran Ironhand moves before the darts can finish their line.",
+            "He snaps his right hand down and twists behind the iron-rimmed table, using it as hard cover while his left hand slams a brass alarm token against the stone.",
+            "The token rings like a struck bell. Two gallery guards turn toward the sound and start running.",
+            "Doran does not get a clean strike from behind the table, but he has changed the field: he has cover, the alarm is raised, and reinforcements are coming.",
+            "POKE, the Magic Missile intent is still yours to confirm now that Doran has cover and guards are closing.",
+            "What do you do?"
+          ].join("\n\n"),
+          resolution_mode: "resolved_without_dice",
+          roll_requests: [],
+          next_input_needed: "player_actions",
+          input_targets: ["player:poke"],
+          input_policy: "only_targeted_players",
+          mechanics_state_update: {
+            actors: {
+              "npc:doran-ironhand": {
+                conditions: ["behind hard cover", "alarm raised"]
+              }
+            },
+            combat: {
+              active: true,
+              round: 1,
+              turnOwner: "player:poke",
+              initiativeOrder: [
+                "npc:doran-ironhand",
+                "player:poke",
                 "player:komer"
               ]
             }

@@ -235,6 +235,14 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
+      /After all requested player initiative rolls are submitted, initiative is resolved/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Saying an NPC moves first is not a handoff/i
+    );
+    assert.match(
+      jobPrompt("combat"),
       /Never ask players to roll initiative, saving throws, attacks, damage, checks, or any other dice for NPCs or enemies/i
     );
     assert.match(jobPrompt("combat"), /dice must be bare dice notation only/i);
@@ -275,6 +283,15 @@ describe("modular AI DM runtime contracts", () => {
       jobPrompt("combat"),
       /Warden lift-guard 1 attack roll: 18 vs Komer's AC 15 - hit/i
     );
+    assert.match(
+      jobPrompt("combat"),
+      /combat start initiative resolved, NPC opener acts now/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Bad response to avoid: only saying Doran moves first/i
+    );
+    assert.match(jobPrompt("combat"), /Doran Ironhand moves before the darts/i);
     assert.match(jobPrompt("combat"), /surprise opener resolves before initiative/i);
     assert.match(jobPrompt("combat"), /Magic Missile needs target distribution before damage/i);
     assert.match(
