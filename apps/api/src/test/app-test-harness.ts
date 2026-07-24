@@ -175,7 +175,13 @@ class FakeDatabase {
   query: QueryFn = async <T>(sql: string, values: unknown[] = []) => {
     const normalizedSql = sql.replace(/\s+/g, " ").trim();
 
-    if (normalizedSql === "begin" || normalizedSql === "commit") {
+    if (
+      normalizedSql === "begin" ||
+      normalizedSql === "commit" ||
+      normalizedSql.startsWith("savepoint ") ||
+      normalizedSql.startsWith("rollback to savepoint ") ||
+      normalizedSql.startsWith("release savepoint ")
+    ) {
       return { rows: [] as T[] };
     }
 

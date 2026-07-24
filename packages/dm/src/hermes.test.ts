@@ -72,6 +72,58 @@ describe("parseHermesDmContract", () => {
     );
   });
 
+  it("requires narrated player roll targets to match structured roll request players", () => {
+    const targeted = parseHermesDmContract(
+      JSON.stringify({
+        public_narration: "The curse bites toward Por. Make a Wisdom saving throw, Por.",
+        resolution_mode: "needs_dice",
+        roll_requests: [
+          {
+            dice: "1d20",
+            label: "Wisdom saving throw",
+            player: "Por"
+          }
+        ],
+        next_input_needed: "dice_results"
+      })
+    );
+
+    assert.equal(targeted.rollRequests[0]?.player, "Por");
+    assert.throws(
+      () =>
+        parseHermesDmContract(
+          JSON.stringify({
+            public_narration:
+              "The curse bites toward Por. Make a Wisdom saving throw, Por.",
+            resolution_mode: "needs_dice",
+            roll_requests: [{ dice: "1d20", label: "Wisdom saving throw" }],
+            next_input_needed: "dice_results"
+          })
+        ),
+      /named a player-facing roll target/
+    );
+  });
+
+  it("infers roll request players from parenthetical labels", () => {
+    const result = parseHermesDmContract(
+      JSON.stringify({
+        public_narration:
+          "The fight catches up. Roll 1d20 for Initiative (Tart), then roll 1d20 for Initiative (Por).",
+        resolution_mode: "needs_dice",
+        roll_requests: [
+          { dice: "1d20", label: "Initiative (Tart)" },
+          { dice: "1d20", label: "Initiative (Por)" }
+        ],
+        next_input_needed: "dice_results"
+      })
+    );
+
+    assert.deepEqual(
+      result.rollRequests.map((request) => request.player),
+      ["Tart", "Por"]
+    );
+  });
+
   it("rejects attack roll and AC contradictions", () => {
     assert.throws(
       () =>

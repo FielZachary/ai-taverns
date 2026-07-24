@@ -537,6 +537,7 @@ const dungeonMasterContractInstructions = [
   "Return exactly one valid JSON object and no Markdown.",
   "Use public_narration for player-facing narration.",
   "Use roll_requests for player-facing dice the website must collect.",
+  "For any player-specific roll, set roll_requests[].player to the exact character name or player actor key; do not rely on prose or labels alone.",
   "Use mechanics_state_update for canonical game/mechanics state changes; the website owns persistence.",
   "Required top-level keys: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update."
 ].join("\n");
@@ -1490,7 +1491,8 @@ export async function createCampaignForMode(
           true,
           openingTurn.id,
           undefined,
-          { allowResolvedCombatWithoutRolls: true }
+          { allowResolvedCombatWithoutRolls: true },
+          { buildPromptContext: false }
         );
     const resolvedTurn = await finishResolvedTurn(db, {
       campaignId: createdState.campaign.id,
@@ -2168,7 +2170,8 @@ function validatePendingRollSubmissions(
     rollResult?: DiceRollResult;
     clientMessageId?: string;
   }>,
-  player?: PlayerRow
+  player?: PlayerRow,
+  options: { requireTargetedRolls?: boolean } = {}
 ) {
   if (submittedRolls.length === 0) {
     return {
@@ -2196,6 +2199,13 @@ function validatePendingRollSubmissions(
 
       if (!pendingRollRequest || submission.rollRequestId !== pendingRollRequest.id) {
         throw createStatusError(409, "The DM is waiting for the required roll.");
+      }
+
+      if (options.requireTargetedRolls && !normalizeRollTarget(pendingRollRequest.player)) {
+        throw createStatusError(
+          409,
+          "The DM roll request is missing a player target."
+        );
       }
 
       if (player && !rollRequestTargetsPlayer(pendingRollRequest, player)) {
@@ -2672,11 +2682,38 @@ function isMissingRuntimeTableError(error: unknown) {
   );
 }
 
+function isTransactionClient(db: Queryable): db is TransactionClient {
+  return (
+    "release" in db &&
+    typeof (db as { release?: unknown }).release === "function"
+  );
+}
+
 async function bestEffortRuntimeInsert(
   db: Queryable,
   sql: string,
   values: unknown[]
 ) {
+  if (isTransactionClient(db)) {
+    const savepointName = `runtime_insert_${randomUUID().replace(/-/g, "_")}`;
+
+    await db.query(`savepoint ${savepointName}`);
+
+    try {
+      await db.query(sql, values);
+      await db.query(`release savepoint ${savepointName}`);
+    } catch (error) {
+      await db.query(`rollback to savepoint ${savepointName}`);
+      await db.query(`release savepoint ${savepointName}`);
+
+      if (!isMissingRuntimeTableError(error)) {
+        throw error;
+      }
+    }
+
+    return;
+  }
+
   try {
     await db.query(sql, values);
   } catch (error) {
@@ -3961,6 +3998,7 @@ const gameplayTurnOutputContractReminder = [
   "Set resolution_mode to needs_dice whenever roll_requests is non-empty or next_input_needed is dice_results; otherwise set it to resolved_without_dice.",
   "When resolution_mode is needs_dice, public_narration must not resolve the rolled outcome.",
   "If hostilities start while combat is inactive and enemies are ready or aware, ask the acting player for initiative in public_narration and roll_requests before resolving the attack or damage.",
+  "When initiative is requested or resolved, explicitly reveal every enemy initiative roll and modifier that affects initiative order before stating who acts first.",
   "If the acting player clearly surprises unaware enemies, resolve the opening action's required rolls first, then ask initiative before enemy counteraction.",
   "Also include non-empty mechanics_state_update.combat with active, round, turnOwner, and provisional initiativeOrder as actor-key strings when initiative roll_requests pauses resolution.",
   "If combat turnOwner is or becomes npc:*, resolve NPC turns before returning control to players.",
@@ -5245,7 +5283,8 @@ export async function beginRoomForUser(
           true,
           openingTurn.id,
           undefined,
-          { allowResolvedCombatWithoutRolls: true }
+          { allowResolvedCombatWithoutRolls: true },
+          { buildPromptContext: false }
         );
     const resolvedTurn = await finishResolvedTurn(db, {
       campaignId: beginState.campaign.id,
@@ -5404,7 +5443,8 @@ export async function submitRoomTurnForUser(
     const rollSubmission = validatePendingRollSubmissions(
       pendingRollRequests,
       submittedRolls,
-      player
+      player,
+      { requireTargetedRolls: campaignRow.mode === "multiplayer" }
     );
 
     if (!isRollSubmission && pendingRollRequests.length > 0) {
