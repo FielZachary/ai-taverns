@@ -162,6 +162,37 @@ describe("parseDmContract", () => {
     });
   });
 
+  it("infers multiplayer initiative roll targets from initiative labels", () => {
+    const result = parseDmContract(
+      JSON.stringify({
+        public_narration: "The thing is aware. Roll initiative.",
+        resolution_mode: "needs_dice",
+        roll_requests: [
+          {
+            id: "initiative-tart",
+            dice: "1d20",
+            label: "Initiative (Tart)",
+            modifier: 0
+          },
+          {
+            id: "initiative-por",
+            dice: "1d20",
+            label: "Initiative (Por)",
+            modifier: 0
+          }
+        ],
+        next_input_needed: "dice_results",
+        input_targets: [],
+        input_policy: "all_players"
+      })
+    );
+
+    assert.deepEqual(
+      result.rollRequests.map((request) => request.player),
+      ["Tart", "Por"]
+    );
+  });
+
   it("keeps roll narration unchanged when dice are already covered", () => {
     const result = parseDmContract(
       JSON.stringify({

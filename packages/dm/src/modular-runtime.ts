@@ -420,6 +420,7 @@ export function jobPrompt(job: DmJobName) {
     "When requesting dice, set resolution_mode to needs_dice and next_input_needed to dice_results.",
     "When resolution_mode is needs_dice, public_narration must not resolve the rolled outcome.",
     "Name rolls clearly: attack roll, damage roll, saving throw, initiative, concentration check, death save, or relevant skill/tool check.",
+    "For multiplayer initiative, include one roll_requests item per player character and set each item's player field to that character's actor key or character name.",
     "Use known modifiers, proficiency, advantage, or disadvantage from the character sheet or combat context when available. If unknown, ask for the base roll clearly without inventing bonuses.",
     "Visible combat math:",
     "For resolved attacks, make the numbers visible before injury narration.",

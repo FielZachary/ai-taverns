@@ -3998,6 +3998,7 @@ const gameplayTurnOutputContractReminder = [
   "Set resolution_mode to needs_dice whenever roll_requests is non-empty or next_input_needed is dice_results; otherwise set it to resolved_without_dice.",
   "When resolution_mode is needs_dice, public_narration must not resolve the rolled outcome.",
   "If hostilities start while combat is inactive and enemies are ready or aware, ask the acting player for initiative in public_narration and roll_requests before resolving the attack or damage.",
+  "For multiplayer initiative, include one roll_requests item per player character and set each item's player field to that character's actor key or character name.",
   "If the acting player clearly surprises unaware enemies, resolve the opening action's required rolls first, then ask initiative before enemy counteraction.",
   "Also include non-empty mechanics_state_update.combat with active, round, turnOwner, and provisional initiativeOrder as actor-key strings when initiative roll_requests pauses resolution.",
   "If combat turnOwner is or becomes npc:*, resolve NPC turns before returning control to players.",
