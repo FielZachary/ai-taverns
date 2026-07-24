@@ -494,6 +494,24 @@ describe("DM provider helpers", () => {
     assert.equal(request?.modifier, -1);
     assert.equal(request?.advantageState, "disadvantage");
 
+    const magicMissileRequest = normalizeRollRequest({
+      dice: "3d4+3",
+      label: "Magic Missile damage",
+      modifier: 0
+    });
+
+    assert.equal(magicMissileRequest?.dice, "3d4");
+    assert.equal(magicMissileRequest?.modifier, 3);
+
+    const penaltyRequest = normalizeRollRequest({
+      dice: "1d20 - 1",
+      label: "Penalty check",
+      modifier: 2
+    });
+
+    assert.equal(penaltyRequest?.dice, "1d20");
+    assert.equal(penaltyRequest?.modifier, 1);
+
     assert.deepEqual(normalizeRollRequest(null), null);
     assert.equal(normalizeRollRequests({ reason: "Stealth" }).length, 1);
     assert.deepEqual(normalizeRollRequests(undefined), []);

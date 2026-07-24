@@ -212,6 +212,11 @@ describe("modular AI DM runtime contracts", () => {
       jobPrompt("combat"),
       /Never ask players to roll initiative, saving throws, attacks, damage, checks, or any other dice for NPCs or enemies/i
     );
+    assert.match(jobPrompt("combat"), /dice must be bare dice notation only/i);
+    assert.match(
+      jobPrompt("combat"),
+      /Magic Missile uses dice "3d4" and modifier 3/i
+    );
     assert.match(
       jobPrompt("combat"),
       /When a player spell or feature forces an NPC or enemy saving throw/i

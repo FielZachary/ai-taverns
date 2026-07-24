@@ -264,6 +264,23 @@ function normalizeAdvantageState(value: string) {
     : "";
 }
 
+function normalizeDiceAndModifier(dice: string, modifier: number | undefined) {
+  const match = dice.trim().match(/^(\d*d(?:4|6|8|10|12|20))\s*([+-])\s*(\d+)$/i);
+
+  if (!match) {
+    return { dice, modifier };
+  }
+
+  const diceModifier =
+    (match[2] === "-" ? -1 : 1) * Number.parseInt(match[3] ?? "0", 10);
+  const combinedModifier = (modifier ?? 0) + diceModifier;
+
+  return {
+    dice: match[1]?.toLowerCase() ?? dice,
+    modifier: combinedModifier === 0 ? undefined : combinedModifier
+  };
+}
+
 function titleCaseIdentifier(value: string) {
   return value
     .split(/[-_\s]+/)
@@ -399,7 +416,7 @@ export function normalizeRollRequest(
     return null;
   }
 
-  const dice = stringValue(request.dice) || "1d20";
+  const rawDice = stringValue(request.dice) || "1d20";
   const label =
     stringValue(request.label) ||
     stringValue(request.check) ||
@@ -410,7 +427,8 @@ export function normalizeRollRequest(
   const player =
     stringValue(request.player) ||
     inferredRollRequestPlayer(label, id, publicNarration);
-  const modifier = numberValue(request.modifier);
+  const rawModifier = numberValue(request.modifier);
+  const { dice, modifier } = normalizeDiceAndModifier(rawDice, rawModifier);
   const advantageState =
     normalizeAdvantageState(
       stringValue(request.advantageState) ||

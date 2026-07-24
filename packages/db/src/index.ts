@@ -542,6 +542,7 @@ const dungeonMasterContractInstructions = [
   "Return exactly one valid JSON object and no Markdown.",
   "Use public_narration for player-facing narration.",
   "Use roll_requests only for player-controlled dice the website must collect.",
+  "In roll_requests, dice must be bare dice notation only, such as 1d20, 3d4, or 8d6. Do not include + or - modifiers in dice; put static bonuses or penalties in modifier. Example: Magic Missile uses dice \"3d4\" and modifier 3, not dice \"3d4+3\".",
   "Use mechanics_state_update for canonical game/mechanics state changes; the website owns persistence.",
   "Required top-level keys: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update."
 ].join("\n");
@@ -1929,20 +1930,41 @@ function inferredRollRequestPlayer(label: string, id = "") {
   return rollIdTarget ? titleCaseIdentifier(rollIdTarget) : "";
 }
 
+function normalizeDiceAndModifier(dice: string, modifier: number | undefined) {
+  const match = dice.trim().match(/^(\d*d(?:4|6|8|10|12|20))\s*([+-])\s*(\d+)$/i);
+
+  if (!match) {
+    return { dice, modifier };
+  }
+
+  const diceModifier =
+    (match[2] === "-" ? -1 : 1) * Number.parseInt(match[3] ?? "0", 10);
+  const combinedModifier = (modifier ?? 0) + diceModifier;
+
+  return {
+    dice: match[1]?.toLowerCase() ?? dice,
+    modifier: combinedModifier === 0 ? undefined : combinedModifier
+  };
+}
+
 function normalizeRollRequest(value: unknown): DiceRollRequest | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
   }
 
   const candidate = value as Record<string, unknown>;
-  const dice = typeof candidate.dice === "string" ? candidate.dice.trim() : "";
+  const rawDice = typeof candidate.dice === "string" ? candidate.dice.trim() : "";
   const label = typeof candidate.label === "string" ? candidate.label.trim() : "";
 
-  if (!dice || !label) {
+  if (!rawDice || !label) {
     return null;
   }
 
-  const modifier = Number(candidate.modifier);
+  const rawModifier = Number(candidate.modifier);
+  const { dice, modifier } = normalizeDiceAndModifier(
+    rawDice,
+    Number.isFinite(rawModifier) ? rawModifier : undefined
+  );
   const advantageState =
     candidate.advantageState === "advantage" ||
     candidate.advantageState === "disadvantage" ||
@@ -1966,7 +1988,7 @@ function normalizeRollRequest(value: unknown): DiceRollRequest | null {
         ? candidate.player.trim()
         : inferredRollRequestPlayer(label, id) || undefined,
     dice,
-    modifier: Number.isFinite(modifier) ? modifier : undefined,
+    modifier,
     label,
     reason:
       typeof candidate.reason === "string" ? candidate.reason.trim() : undefined,
@@ -4029,6 +4051,7 @@ const gameplayTurnOutputContractReminder = [
   "input_policy must be all_players or only_targeted_players; never use acting_player.",
   "Set resolution_mode to needs_dice whenever roll_requests is non-empty or next_input_needed is dice_results; otherwise set it to resolved_without_dice.",
   "When resolution_mode is needs_dice, public_narration must not resolve the rolled outcome.",
+  "In roll_requests, dice must be bare dice notation only, such as 1d20, 3d4, or 8d6. Do not include + or - modifiers in dice; put static bonuses or penalties in modifier. Example: Magic Missile uses dice \"3d4\" and modifier 3, not dice \"3d4+3\".",
   "If hostilities start while combat is inactive and enemies are ready or aware, ask player-controlled combatants for initiative in public_narration and roll_requests before resolving the attack or damage.",
   "If the acting player clearly surprises unaware enemies, resolve the opening action's required rolls first, then ask player-controlled combatants for initiative before enemy counteraction.",
   "Only request player-controlled initiative rolls in roll_requests.",
