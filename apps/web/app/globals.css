@@ -2882,6 +2882,11 @@ h1 {
   line-height: 1.5;
 }
 
+.message-body strong {
+  color: var(--gold-bright);
+  font-weight: 900;
+}
+
 .message-dm .message-body {
   gap: 1.45rem;
 }
