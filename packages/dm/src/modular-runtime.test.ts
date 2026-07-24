@@ -258,6 +258,14 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("combat"), /Bold visible mechanics inside public_narration using Markdown/i);
     assert.match(
       jobPrompt("combat"),
+      /Do not put a visible mechanics sentence in its own standalone paragraph/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /one paragraph per actor\/effect plus a final handoff paragraph/i
+    );
+    assert.match(
+      jobPrompt("combat"),
       /\*\*Attack: 14 vs AC 10 - hit\. Damage: 5 piercing\.\*\*/
     );
     assert.match(jobPrompt("combat"), /attack roll: X vs AC Y - hit\/miss/i);
@@ -349,7 +357,11 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
-      /Warden lift-guard 1 attack roll: 18 vs Komer's AC 15 - hit/i
+      /\*\*Warden lift-guard 1 attack roll: 18 vs Komer's AC 15 - hit\. Damage roll: 1d6 \+ 2 = 5 piercing damage\.\*\* The spearpoint/i
+    );
+    assert.doesNotMatch(
+      jobPrompt("combat"),
+      /Warden lift-guard 1 attack roll:[^"]*\\n\\nThe spearpoint/i
     );
     assert.match(
       jobPrompt("combat"),

@@ -504,6 +504,8 @@ export function jobPrompt(
     "Keep combat narration punchy and legible. Use shorter paragraphs than scene narration.",
     "Group combat narration by action/result beat instead of putting every roll, save, HP change, or sentence on its own line.",
     "In resolved combat beats, combine description, visible mechanics, and consequence into compact paragraphs when they belong to the same actor, target group, or turn.",
+    "Do not put a visible mechanics sentence in its own standalone paragraph during resolved combat; attach it to the description or consequence paragraph for that beat.",
+    "A resolved combat turn with multiple actor turns usually needs one paragraph per actor/effect plus a final handoff paragraph, not one paragraph per mechanical line.",
     "Bold visible mechanics inside public_narration using Markdown, such as **Attack: 14 vs AC 10 - hit. Damage: 5 piercing.** or **Burning Hands damage: 10 fire.**",
     "Put mechanics before flourish when mechanics decide the outcome.",
     "Use vivid physical detail, but do not bury hit/miss, damage, HP, turn owner, or pending rolls inside ornate prose.",
@@ -582,12 +584,8 @@ export function jobPrompt(
       JSON.stringify(
         {
           public_narration: [
-            "The first lift warden moves before Komer can bring the greataxe up.",
-            "Warden lift-guard 1 attack roll: 18 vs Komer's AC 15 - hit. Warden lift-guard 1 damage roll: 1d6 + 2 = 5 piercing damage.",
-            "The spearpoint snaps forward under Komer's guard and punches into his shoulder. Komer drops from 16 HP to 11 HP.",
-            "The second warden follows in the opening.",
-            "Warden lift-guard 2 attack roll: 10 vs Komer's AC 15 - miss.",
-            "Komer twists aside, and the second spear skids off the haft of his greataxe with a bright scrape.",
+            "The first lift warden moves before Komer can bring the greataxe up. **Warden lift-guard 1 attack roll: 18 vs Komer's AC 15 - hit. Damage roll: 1d6 + 2 = 5 piercing damage.** The spearpoint snaps forward under Komer's guard and punches into his shoulder. Komer drops from 16 HP to 11 HP.",
+            "The second warden follows in the opening. **Warden lift-guard 2 attack roll: 10 vs Komer's AC 15 - miss.** Komer twists aside, and the second spear skids off the haft of his greataxe with a bright scrape.",
             "Komer, both wardens are in reach and your greataxe is already in motion.",
             "What do you do?"
           ].join("\n\n"),
@@ -779,8 +777,7 @@ export function jobPrompt(
         {
           public_narration: [
             "POKE's voice drops into the honeyed cadence of the charm spell, silver motes warming to gold as the magic reaches for Hesk's thoughts.",
-            "Warden Captain Hesk Wisdom save: 11 vs DC 13 - failure.",
-            "Her crossbow lowers by a fraction. The hard line of her jaw loosens, and she looks at POKE with sudden, uneasy familiarity rather than open hostility. The four wardens behind her keep their weapons raised, watching their captain for a signal that does not come.",
+            "**Warden Captain Hesk Wisdom save: 11 vs DC 13 - failure.** Her crossbow lowers by a fraction. The hard line of her jaw loosens, and she looks at POKE with sudden, uneasy familiarity rather than open hostility. The four wardens behind her keep their weapons raised, watching their captain for a signal that does not come.",
             "POKE, Hesk is charmed by you for now, but her squad has not been charmed and Komer's greataxe is still very visible.",
             "What do you do?"
           ].join("\n\n"),
@@ -821,9 +818,7 @@ export function jobPrompt(
       JSON.stringify(
         {
           public_narration: [
-            "The cutlass raider is already moving. His turn resolves first.",
-            "Cutlass raider attack roll: 17 vs AC 14 - hit. Cutlass raider damage roll: 1d6 + 2 = 6 slashing damage.",
-            "He slips inside your guard and carves a hard line across your ribs before springing back out of reach. You drop from 24 HP to 18 HP.",
+            "The cutlass raider is already moving. His turn resolves first. **Cutlass raider attack roll: 17 vs AC 14 - hit. Damage roll: 1d6 + 2 = 6 slashing damage.** He slips inside your guard and carves a hard line across your ribs before springing back out of reach. You drop from 24 HP to 18 HP.",
             "The raider's momentum carries him past you, and the opening is finally yours. Your declared Scorching Ray intent is still waiting for your turn, but no attack roll is resolved until you confirm the action now that the board has changed.",
             "What do you do?"
           ].join("\n\n"),
@@ -863,9 +858,7 @@ export function jobPrompt(
       JSON.stringify(
         {
           public_narration: [
-            "The wounded warden uses Komer's hesitation immediately.",
-            "Warden lift-guard 1 attack roll: 12 vs Komer's AC 18 - miss.",
-            "His spearpoint snaps for Komer's chest, but it skids off Komer's chain mail with a bright scrape. The failed thrust leaves him overextended.",
+            "The wounded warden uses Komer's hesitation immediately. **Warden lift-guard 1 attack roll: 12 vs Komer's AC 18 - miss.** His spearpoint snaps for Komer's chest, but it skids off Komer's chain mail with a bright scrape. The failed thrust leaves him overextended.",
             "POKE, the warden is wounded and exposed while Komer holds the line.",
             "What do you do?"
           ].join("\n\n"),
@@ -900,9 +893,7 @@ export function jobPrompt(
       JSON.stringify(
         {
           public_narration: [
-            "The green-eyed figure moves first.",
-            "Green-eye figure attack roll: 16 vs Por's AC 16 - hit. Green-eye figure damage roll: 1d6 + 3 = 7 slashing damage.",
-            "The claw rakes across Por's forearm, tearing through his sleeve and leaving three shallow but bleeding gashes. Por drops from 34 HP to 27 HP and steps back with his sword raised.",
+            "The green-eyed figure moves first. **Green-eye figure attack roll: 16 vs Por's AC 16 - hit. Damage roll: 1d6 + 3 = 7 slashing damage.** The claw rakes across Por's forearm, tearing through his sleeve and leaving three shallow but bleeding gashes. Por drops from 34 HP to 27 HP and steps back with his sword raised.",
             "Tart, the creature is within striking distance and Por is hurt.",
             "What do you do?"
           ].join("\n\n"),
@@ -942,9 +933,7 @@ export function jobPrompt(
       JSON.stringify(
         {
           public_narration: [
-            "Komer's greataxe crashes through the warden's guard.",
-            "Attack roll: 19 vs AC 16 - hit.",
-            "Roll greataxe damage: 1d12 + 2."
+            "Komer's greataxe crashes through the warden's guard. **Attack roll: 19 vs AC 16 - hit.** Roll greataxe damage: 1d12 + 2."
           ].join("\n\n"),
           resolution_mode: "needs_dice",
           roll_requests: [
@@ -985,8 +974,7 @@ export function jobPrompt(
         {
           public_narration: [
             "The fireball detonates against the portcullis in a white-orange roar, hot enough to make the rain burst into steam before it reaches the stones.",
-            "Scarred guardswoman Dexterity save: 9 vs DC 14 - failure. Robed priest Dexterity save: 16 vs DC 14 - success. Gate guard Dexterity save: 7 vs DC 14 - failure. Gate guard Dexterity save: 12 vs DC 14 - failure.",
-            "Damage roll: 8d6 = 33 fire damage. The priest succeeds and takes half damage: 16 fire damage. The guardswoman and both gate guards fail and take 33 fire damage.",
+            "**Scarred guardswoman Dexterity save: 9 vs DC 14 - failure. Robed priest Dexterity save: 16 vs DC 14 - success. Gate guard Dexterity save: 7 vs DC 14 - failure. Gate guard Dexterity save: 12 vs DC 14 - failure. Damage roll: 8d6 = 33 fire damage.** The priest succeeds and takes half damage: 16 fire damage. The guardswoman and both gate guards fail and take 33 fire damage.",
             "The scarred guardswoman is thrown backward, her sword spinning away as she drops from 4 HP to 0 HP. The robed priest slams into the iron bars behind him and slides down through the smoke, dropping from 7 HP to 0 HP despite twisting away from the worst of the blast. The two prone gate guards do not rise; both drop from 5 HP to 0 HP.",
             "The roar collapses into the hiss of rain on scorched stone. No enemies remain standing, and the wicket gate hangs open through the smoke.",
             "What do you do?"
@@ -1031,7 +1019,7 @@ export function jobPrompt(
       JSON.stringify(
         {
           public_narration: [
-            "Your strike lands cleanly. Attack roll: 19 vs AC 13 - hit. Damage roll: 11 = 11 bludgeoning damage.",
+            "Your strike lands cleanly. **Attack roll: 19 vs AC 13 - hit. Damage roll: 11 = 11 bludgeoning damage.**",
             "The mace crashes through the skeleton's raised arm and into its ribcage. Bone splinters across the flagstones, the blue corpse-light in its skull guttering once before going dark. What remains collapses in a dry clatter at your feet.",
             "For a moment, the chamber is all echo and dust. No other enemies move. The fight is over.",
             "What do you do?"
@@ -1065,6 +1053,7 @@ export function jobPrompt(
     "Return strict JSON only.",
     "Minimum output fields: public_narration, roll_requests, next_input_needed, combat_events, proposed_context_updates.",
     "Only public_narration is player-visible.",
+    "Do not use Markdown outside the JSON object; Markdown emphasis is allowed inside public_narration strings when the job guidance asks for it.",
     "Models may choose, narrate, infer, and propose; the server retrieves, validates, stores, and mutates."
   ];
 
@@ -1121,7 +1110,7 @@ export function jobPrompt(
     combat: [
       "Run tactical combat encounters.",
       ...combatGuidance,
-      "Examples below demonstrate combat pacing, visible math, turn ownership, roll pauses, and state-safe narration. Do not copy their names, actor keys, enemies, abilities, locations, or exact phrasing. Match their clarity and discipline, not their content.",
+      "Examples below demonstrate combat pacing, visible math, paragraph grouping, turn ownership, roll pauses, and state-safe narration. Do not copy their names, actor keys, enemies, abilities, locations, or exact phrasing. Match their clarity and discipline, not their content.",
       ...combatExamples
     ],
     clarification: [
