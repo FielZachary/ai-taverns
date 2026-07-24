@@ -305,7 +305,7 @@ test("DM parser failure traces keep the exact provider response", async () => {
   assert.match(provider?.rawResponse ?? "", /Seren lunges with her blade/);
 });
 
-test("DM contract metadata failures recover playable narration", async () => {
+test("DM contract accepts clarification as playable targeted input", async () => {
   const { cookie, campaignId } = await createSinglePlayerCampaign(
     "dm-runtime-contract-recovery"
   );
@@ -327,6 +327,9 @@ test("DM contract metadata failures recover playable narration", async () => {
     solo.messages.at(-1)?.content ?? "",
     /are you casting one spell this turn/i
   );
+  assert.equal(solo.nextInputNeeded, "clarification");
+  assert.deepEqual(solo.inputTargets, ["player:owner"]);
+  assert.equal(solo.inputPolicy, "only_targeted_players");
 
   const tracesResponse = await app.inject({
     method: "GET",
@@ -342,12 +345,7 @@ test("DM contract metadata failures recover playable narration", async () => {
     (trace) => trace.phase === "dm_contract_parse_recovered"
   );
 
-  assert.ok(recoveryTrace);
-  assert.match(
-    JSON.stringify(recoveryTrace),
-    /invalid next_input_needed value/
-  );
-  assert.match(JSON.stringify(recoveryTrace), /clarification/);
+  assert.equal(recoveryTrace, undefined);
 });
 
 test("solo combat turn can start initiative through mechanics state update", async () => {

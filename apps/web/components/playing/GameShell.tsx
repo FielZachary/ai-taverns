@@ -18,7 +18,8 @@ import type {
   DiceRollRequest,
   DiceRollSubmission,
   GameMessage,
-  InputPolicy
+  InputPolicy,
+  NextInputNeeded
 } from "@/lib/game-types";
 import {
   listCampaigns,
@@ -249,6 +250,8 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
   const [pendingRollRequests, setPendingRollRequests] = useState<
     DiceRollRequest[]
   >([]);
+  const [nextInputNeeded, setNextInputNeeded] =
+    useState<NextInputNeeded>("player_actions");
   const [inputTargets, setInputTargets] = useState<string[]>([]);
   const [inputPolicy, setInputPolicy] = useState<InputPolicy>("all_players");
   const [roomCombat, setRoomCombat] = useState<RoomSnapshot["combat"]>();
@@ -289,6 +292,8 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     [currentRoomPlayer, isSinglePlayer, pendingRollRequests, playerProfile]
   );
   const currentPendingRollRequest = currentPendingRollRequests[0] ?? null;
+  const hasPendingDiceInput =
+    nextInputNeeded === "dice_results" || pendingRollRequests.length > 0;
   const currentRequiredRollDice = useMemo(
     () => requiredDiceQueueFromRequests(currentPendingRollRequests),
     [currentPendingRollRequests]
@@ -398,6 +403,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
       setIsRoomResolving(room.isResolving);
       setHasAdventureBegun(room.hasBegun);
       setPendingRollRequests(rollRequestsFromRoom(room));
+      setNextInputNeeded(room.nextInputNeeded ?? "player_actions");
       setInputTargets(room.inputTargets ?? []);
       setInputPolicy(room.inputPolicy ?? "all_players");
       setRoomCombat(room.combat);
@@ -478,6 +484,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
         setIsRoomResolving(room.isResolving);
         setHasAdventureBegun(true);
         setPendingRollRequests(rollRequestsFromRoom(room));
+        setNextInputNeeded(room.nextInputNeeded ?? "player_actions");
         setInputTargets(room.inputTargets ?? []);
         setInputPolicy(room.inputPolicy ?? "all_players");
         setRoomCombat(room.combat);
@@ -694,6 +701,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
       pendingSubmissionRef.current = null;
       setOptimisticSubmittedPlayerId(null);
       setPendingRollRequests([]);
+      setNextInputNeeded("player_actions");
       setInputTargets([]);
       setInputPolicy("all_players");
       setRoomCombat(undefined);
@@ -731,6 +739,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
             setIsRoomResolving(room.isResolving);
             setHasAdventureBegun(true);
             setPendingRollRequests(rollRequestsFromRoom(room));
+            setNextInputNeeded(room.nextInputNeeded ?? "player_actions");
             setInputTargets(room.inputTargets ?? []);
             setInputPolicy(room.inputPolicy ?? "all_players");
             setRoomCombat(room.combat);
@@ -902,6 +911,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     setStreamingDmMessages([]);
     setHasAdventureBegun(campaign.mode === "single_player");
     setPendingRollRequests([]);
+    setNextInputNeeded("player_actions");
     setInputTargets([]);
     setInputPolicy("all_players");
     setRoomCombat(undefined);
@@ -1694,7 +1704,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
         type="button"
         aria-label="Send turn"
         disabled={
-          pendingRollRequests.length > 0 ||
+          hasPendingDiceInput ||
           isWaitingOnTargetedInputState ||
           Boolean(activeDiceReveal) ||
           isSending ||

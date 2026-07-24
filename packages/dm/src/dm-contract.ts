@@ -492,11 +492,16 @@ export function rollRequestDiagnostics(
   });
 }
 
+export type DmNextInputNeeded =
+  | "player_actions"
+  | "dice_results"
+  | "clarification";
+
 export type DmContractResponse = {
   publicNarration: string;
   resolutionMode: "needs_dice" | "resolved_without_dice";
   rollRequests: DiceRollRequest[];
-  nextInputNeeded: "player_actions" | "dice_results";
+  nextInputNeeded: DmNextInputNeeded;
   inputTargets: string[];
   inputPolicy: InputPolicy;
   mechanicsStateUpdate?: Record<string, unknown>;
@@ -565,7 +570,8 @@ export function parseDmContract(
 
   if (
     nextInputNeeded !== "player_actions" &&
-    nextInputNeeded !== "dice_results"
+    nextInputNeeded !== "dice_results" &&
+    nextInputNeeded !== "clarification"
   ) {
     throw new Error("The DM provider response has an invalid next_input_needed value.");
   }
@@ -652,9 +658,11 @@ export function recoverDmContractAfterParseFailure(
     parsed.resolution_mode ?? parsed.resolutionMode
   );
   const nextInputNeeded: DmContractResponse["nextInputNeeded"] =
-    rollRequests.length > 0 || originalNextInputNeeded === "dice_results"
+    rollRequests.length > 0
       ? "dice_results"
-      : "player_actions";
+      : originalNextInputNeeded === "clarification"
+        ? "clarification"
+        : "player_actions";
   const resolutionMode: DmContractResponse["resolutionMode"] =
     nextInputNeeded === "dice_results" ? "needs_dice" : "resolved_without_dice";
   const inputTargets = stringArray(parsed.input_targets ?? parsed.inputTargets);

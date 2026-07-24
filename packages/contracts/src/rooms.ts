@@ -27,6 +27,12 @@ export const DiceRollSubmissionSchema = z.object({
   clientMessageId: z.string().optional()
 });
 
+export const NextInputNeededSchema = z.enum([
+  "player_actions",
+  "dice_results",
+  "clarification"
+]);
+
 export const RoomPlayerSchema = z.object({
   id: z.string().min(1),
   actorKey: z.string().min(1),
@@ -60,6 +66,7 @@ export const RoomSnapshotSchema = z.object({
   hasBegun: z.boolean(),
   pendingRollRequest: DiceRollRequestSchema.nullable(),
   pendingRollRequests: z.array(DiceRollRequestSchema),
+  nextInputNeeded: NextInputNeededSchema,
   inputTargets: z.array(z.string()),
   inputPolicy: z.enum(["all_players", "only_targeted_players"]),
   combat: z.object({

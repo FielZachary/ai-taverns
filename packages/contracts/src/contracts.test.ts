@@ -305,6 +305,7 @@ test("room contracts accept snapshots and mutation payloads", () => {
     hasBegun: true,
     pendingRollRequest: null,
     pendingRollRequests: [],
+    nextInputNeeded: "player_actions",
     inputTargets: [],
     inputPolicy: "all_players",
     combat: {
@@ -409,6 +410,7 @@ test("DM route contracts accept solo, ask-DM, regenerate, and traces payloads", 
     hasBegun: true,
     pendingRollRequest: null,
     pendingRollRequests: [],
+    nextInputNeeded: "player_actions",
     inputTargets: [],
     inputPolicy: "all_players",
     combat: {

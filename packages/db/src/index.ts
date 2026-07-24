@@ -28,6 +28,7 @@ import {
   type GameMessage,
   type DmContractResponse,
   type DmContractParseOptions,
+  type DmNextInputNeeded,
   type DmJobName,
   type InputPolicy,
   type ValidatedRouterOutput
@@ -532,6 +533,7 @@ type DungeonMasterReply = {
   rollRequests: DiceRollRequest[];
   inputTargets: string[];
   inputPolicy: InputPolicy;
+  nextInputNeeded: DmNextInputNeeded;
   resolutionMode: ResolutionMode;
   setting?: CampaignSettingSummary | undefined;
 };
@@ -1528,6 +1530,7 @@ export async function createCampaignForMode(
       pendingRollRequests: opening.rollRequests,
       inputTargets: opening.inputTargets,
       inputPolicy: opening.inputPolicy,
+      nextInputNeeded: opening.nextInputNeeded,
       resolutionMode: opening.resolutionMode,
       setting: opening.setting,
       aiDebug: opening.debug
@@ -2042,6 +2045,23 @@ function inputPolicyFromCampaign(
   return metadata.inputPolicy === "only_targeted_players" && inputTargets.length > 0
     ? "only_targeted_players"
     : "all_players";
+}
+
+function nextInputNeededFromCampaign(campaign: CampaignRow): DmNextInputNeeded {
+  const metadata = eventPayload(campaign.metadata);
+  const value = metadata.nextInputNeeded;
+
+  if (
+    value === "player_actions" ||
+    value === "dice_results" ||
+    value === "clarification"
+  ) {
+    return value;
+  }
+
+  return pendingRollRequestsFromCampaign(campaign).length > 0
+    ? "dice_results"
+    : "player_actions";
 }
 
 function normalizeRollTarget(value: string | null | undefined) {
@@ -2626,6 +2646,7 @@ async function buildRoomSnapshot(
     hasBegun: campaign.has_begun,
     pendingRollRequest: pendingRollRequests[0] ?? null,
     pendingRollRequests,
+    nextInputNeeded: nextInputNeededFromCampaign(campaign),
     inputTargets: inputTargetsFromCampaign(campaign),
     inputPolicy: inputPolicyFromCampaign(campaign),
     combat: roomCombatSnapshot(mechanicsState, playersResult.rows),
@@ -3586,7 +3607,7 @@ function normalizeCombatInputControl(
   state: MechanicsState,
   input: {
     mode: CampaignMode;
-    nextInputNeeded: "player_actions" | "dice_results";
+    nextInputNeeded: DmNextInputNeeded;
     rollRequests: DiceRollRequest[];
     inputTargets: string[];
     inputPolicy: InputPolicy;
@@ -5077,6 +5098,7 @@ async function askDungeonMaster(
       rollRequests,
       inputTargets: normalizedInputControl.inputTargets,
       inputPolicy: normalizedInputControl.inputPolicy,
+      nextInputNeeded: contract.nextInputNeeded,
       resolutionMode: contract.resolutionMode,
       setting: contract.setting
     };
@@ -5168,7 +5190,8 @@ async function setPendingInputTargets(
   db: Queryable,
   campaignId: string,
   inputTargets: string[],
-  inputPolicy: InputPolicy
+  inputPolicy: InputPolicy,
+  nextInputNeeded: DmNextInputNeeded
 ) {
   const shouldTargetPlayers =
     inputPolicy === "only_targeted_players" && inputTargets.length > 0;
@@ -5177,11 +5200,17 @@ async function setPendingInputTargets(
     `
       update campaigns
       set metadata = case
-        when $2::jsonb = '[]'::jsonb then metadata - 'inputTargets' - 'inputPolicy'
+        when $2::jsonb = '[]'::jsonb and $4::text = 'player_actions'
+          then metadata - 'inputTargets' - 'inputPolicy' - 'nextInputNeeded'
         else jsonb_set(
-          jsonb_set(metadata, '{inputTargets}', $2::jsonb, true),
-          '{inputPolicy}',
-          $3::jsonb,
+          jsonb_set(
+            jsonb_set(metadata, '{inputTargets}', $2::jsonb, true),
+            '{inputPolicy}',
+            $3::jsonb,
+            true
+          ),
+          '{nextInputNeeded}',
+          to_jsonb($4::text),
           true
         )
       end
@@ -5190,7 +5219,8 @@ async function setPendingInputTargets(
     [
       campaignId,
       JSON.stringify(shouldTargetPlayers ? inputTargets : []),
-      JSON.stringify(shouldTargetPlayers ? inputPolicy : "all_players")
+      JSON.stringify(shouldTargetPlayers ? inputPolicy : "all_players"),
+      nextInputNeeded
     ]
   );
 }
@@ -5206,6 +5236,7 @@ async function finishResolvedTurn(
     pendingRollRequests?: DiceRollRequest[];
     inputTargets?: string[];
     inputPolicy?: InputPolicy;
+    nextInputNeeded?: DmNextInputNeeded;
     resolutionMode?: "needs_dice" | "resolved_without_dice";
     setting?: CampaignSettingSummary | undefined;
     aiDebug?: AiDebugInfo | undefined;
@@ -5242,6 +5273,9 @@ async function finishResolvedTurn(
       ...settingPatch,
       pendingRollRequest: currentPendingRollRequest,
       pendingRollRequests,
+      nextInputNeeded:
+        input.nextInputNeeded ??
+        (pendingRollRequests.length > 0 ? "dice_results" : "player_actions"),
       resolutionMode:
         input.resolutionMode ??
         (pendingRollRequests.length > 0 ? "needs_dice" : "resolved_without_dice"),
@@ -5269,7 +5303,9 @@ async function finishResolvedTurn(
       client,
       input.campaignId,
       input.inputTargets ?? [],
-      input.inputPolicy ?? "all_players"
+      input.inputPolicy ?? "all_players",
+      input.nextInputNeeded ??
+        (pendingRollRequests.length > 0 ? "dice_results" : "player_actions")
     );
     await ensureCollectingTurn(client, input.campaignId);
   });
@@ -5613,6 +5649,7 @@ export async function beginRoomForUser(
       pendingRollRequests: opening.rollRequests,
       inputTargets: opening.inputTargets,
       inputPolicy: opening.inputPolicy,
+      nextInputNeeded: opening.nextInputNeeded,
       resolutionMode: opening.resolutionMode,
       setting: opening.setting,
       aiDebug: opening.debug
@@ -5954,6 +5991,7 @@ export async function submitRoomTurnForUser(
         pendingRollRequests: reply.rollRequests,
         inputTargets: reply.inputTargets,
         inputPolicy: reply.inputPolicy,
+        nextInputNeeded: reply.nextInputNeeded,
         resolutionMode: reply.resolutionMode,
         aiDebug: reply.debug
       });
@@ -6394,6 +6432,7 @@ export async function submitSoloTurnForUser(
       pendingRollRequests: reply.rollRequests,
       inputTargets: reply.inputTargets,
       inputPolicy: reply.inputPolicy,
+      nextInputNeeded: reply.nextInputNeeded,
       resolutionMode: reply.resolutionMode,
       aiDebug: reply.debug
     });
@@ -6560,7 +6599,13 @@ export async function regenerateCampaignResponseForUser(
       replacedMessageId: input.messageId
     });
     await setPendingRollRequests(client, campaign.id, []);
-    await setPendingInputTargets(client, campaign.id, [], "all_players");
+    await setPendingInputTargets(
+      client,
+      campaign.id,
+      [],
+      "all_players",
+      "player_actions"
+    );
 
     const submissions = await client.query<
       SubmissionRow & { character_sheet: string | null; slot: number | null }
@@ -6636,6 +6681,7 @@ export async function regenerateCampaignResponseForUser(
       pendingRollRequests: reply.rollRequests,
       inputTargets: reply.inputTargets,
       inputPolicy: reply.inputPolicy,
+      nextInputNeeded: reply.nextInputNeeded,
       resolutionMode: reply.resolutionMode,
       setting: reply.setting,
       aiDebug: reply.debug

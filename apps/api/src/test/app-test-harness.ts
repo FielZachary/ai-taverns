@@ -999,6 +999,7 @@ class FakeDatabase {
       const campaignId = values[0] as string;
       const inputTargets = JSON.parse(values[1] as string) as unknown[];
       const inputPolicy = JSON.parse(values[2] as string) as unknown;
+      const nextInputNeeded = values[3] as unknown;
       const campaign = this.campaigns.find(
         (candidate) => candidate.id === campaignId
       );
@@ -1006,20 +1007,23 @@ class FakeDatabase {
       if (campaign) {
         const metadata = campaign.metadata as Record<string, unknown>;
 
-        if (inputTargets.length === 0) {
+        if (inputTargets.length === 0 && nextInputNeeded === "player_actions") {
           const {
             inputTargets: _inputTargets,
             inputPolicy: _inputPolicy,
+            nextInputNeeded: _nextInputNeeded,
             ...nextMetadata
           } = metadata;
           void _inputTargets;
           void _inputPolicy;
+          void _nextInputNeeded;
           campaign.metadata = nextMetadata;
         } else {
           campaign.metadata = {
             ...metadata,
             inputTargets,
-            inputPolicy
+            inputPolicy,
+            nextInputNeeded
           };
         }
 
