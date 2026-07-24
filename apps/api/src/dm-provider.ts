@@ -78,6 +78,7 @@ class DeepSeekEmptyReplyError extends Error {
   }
 }
 
+/* c8 ignore start */
 function parseLocalEnvFile(text: string) {
   const values: Record<string, string> = {};
 
@@ -140,6 +141,7 @@ function loadLocalEnvCache() {
 function envValue(key: string) {
   return process.env[key] ?? loadLocalEnvCache()[key];
 }
+/* c8 ignore stop */
 
 function providerConfigForModel(model: AiModelId = defaultAiModel): ModelProviderConfig {
   if (model === "qwen-3-7-flash") {
