@@ -1852,6 +1852,24 @@ h1 {
     transform 360ms ease;
 }
 
+.fantasy-arrow-icon {
+  display: inline-block;
+  width: 16px;
+  height: 20px;
+  flex: 0 0 auto;
+  background: currentColor;
+  -webkit-mask: url("/new-adventure/arrow3.svg") center / contain no-repeat;
+  mask: url("/new-adventure/arrow3.svg") center / contain no-repeat;
+}
+
+.fantasy-arrow-back {
+  transform: rotate(-90deg);
+}
+
+.fantasy-arrow-forward {
+  transform: rotate(90deg);
+}
+
 .creation-actions button::before {
   position: absolute;
   inset: 0;

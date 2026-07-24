@@ -2,8 +2,6 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
-  ArrowLeft,
-  ArrowRight,
   Check,
   Dice5,
   X,
@@ -4379,7 +4377,7 @@ export function NewAdventureForm() {
               disabled={stepIndex === 0 || isCreating || isFlowTransitioning}
               onClick={handleBack}
             >
-              <ArrowLeft size={16} />
+              <span className="fantasy-arrow-icon fantasy-arrow-back" aria-hidden="true" />
               Back
             </button>
             <button type="submit" disabled={isCreating || isFlowTransitioning}>
@@ -4393,7 +4391,7 @@ export function NewAdventureForm() {
               ) : (
                 <>
                   {isCharacterStep ? "Next" : "Continue"}
-                  <ArrowRight size={16} />
+                  <span className="fantasy-arrow-icon fantasy-arrow-forward" aria-hidden="true" />
                 </>
               )}
             </button>
