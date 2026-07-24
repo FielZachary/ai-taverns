@@ -37,6 +37,8 @@ async function nextCharacterStep() {
 
 async function choosePointBuyStats() {
   await nextCharacterStep();
+  await nextCharacterStep();
+  await nextCharacterStep();
 
   fireEvent.click(screen.getByRole("button", { name: "Point Buy" }));
 }
@@ -64,8 +66,6 @@ async function advanceSingleplayerToIdentity() {
   await continueFlow();
   await continueFlow();
   await choosePointBuyStats();
-  await nextCharacterStep();
-  await nextCharacterStep();
   await nextCharacterStep();
   await nextCharacterStep();
   await nextCharacterStep();
@@ -170,6 +170,22 @@ describe("NewAdventureForm", () => {
       screen.getByRole("heading", { name: /choose your character build/i })
     ).toBeInTheDocument();
 
+    expect(
+      screen.queryByRole("list", { name: /character creation progress/i })
+    ).not.toBeInTheDocument();
+
+    await nextCharacterStep();
+
+    expect(
+      screen.getByRole("heading", { name: /choose your class/i })
+    ).toBeInTheDocument();
+
+    await nextCharacterStep();
+
+    expect(
+      screen.getByRole("heading", { name: /choose your class choices/i })
+    ).toBeInTheDocument();
+
     await nextCharacterStep();
 
     expect(
@@ -226,7 +242,7 @@ describe("NewAdventureForm", () => {
     await nextCharacterStep();
 
     expect(
-      screen.getByRole("heading", { name: /choose your class/i })
+      screen.getByRole("heading", { name: /choose your species/i })
     ).toBeInTheDocument();
   });
 
@@ -236,8 +252,6 @@ describe("NewAdventureForm", () => {
     await continueFlow();
     await continueFlow();
     await choosePointBuyStats();
-    await nextCharacterStep();
-    await nextCharacterStep();
     await nextCharacterStep();
 
     expect(
