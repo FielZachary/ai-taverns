@@ -704,21 +704,21 @@ h1 {
   aspect-ratio: 451.92 / 1156.67;
   background: var(--gold-bright);
   filter: drop-shadow(0 18px 34px rgba(0, 0, 0, 0.34));
+  opacity: 0.48;
   -webkit-mask: url("/new-adventure/banner-frame-1.svg") center / contain no-repeat;
   mask: url("/new-adventure/banner-frame-1.svg") center / contain no-repeat;
   transition:
-    background 320ms ease,
     filter 320ms ease,
+    opacity 320ms ease,
     transform 320ms ease;
 }
 
-.mode-picker button.selected .mode-banner-frame,
 .mode-picker button:hover .mode-banner-frame,
 .mode-picker button:focus-visible .mode-banner-frame {
-  background: var(--ink);
   filter:
     drop-shadow(0 18px 34px rgba(0, 0, 0, 0.38))
     drop-shadow(0 0 12px rgba(244, 207, 122, 0.24));
+  opacity: 1;
   transform: translateY(-2px);
 }
 
