@@ -193,6 +193,41 @@ describe("parseDmContract", () => {
     );
   });
 
+  it("infers targeted saving throw rolls from narration and roll ids", () => {
+    const result = parseDmContract(
+      JSON.stringify({
+        public_narration: [
+          "It casts a spell. Make a Wisdom saving throw, Por.",
+          "",
+          "Roll 1d20 + your Wisdom modifier (0)."
+        ].join("\n"),
+        resolution_mode: "needs_dice",
+        roll_requests: [
+          {
+            id: "por-wisdom-save-vs-creature-spell",
+            dice: "1d20",
+            label: "Wisdom Saving Throw",
+            modifier: 0
+          }
+        ],
+        next_input_needed: "dice_results",
+        input_targets: [],
+        input_policy: "acting_player",
+        mechanics_state_update: {
+          combat: {
+            active: true,
+            round: 1,
+            turnOwner: "player:por",
+            initiativeOrder: ["npc:green-eye-figure", "player:por", "player:tart"]
+          }
+        }
+      })
+    );
+
+    assert.equal(result.rollRequests[0]?.player, "Por");
+    assert.equal(result.inputPolicy, "all_players");
+  });
+
   it("keeps roll narration unchanged when dice are already covered", () => {
     const result = parseDmContract(
       JSON.stringify({

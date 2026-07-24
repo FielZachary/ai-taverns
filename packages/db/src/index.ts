@@ -1893,11 +1893,28 @@ function metadataStringArray(value: unknown) {
     : [];
 }
 
-function inferredRollRequestPlayer(label: string) {
+function titleCaseIdentifier(value: string) {
+  return value
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function inferredRollRequestPlayer(label: string, id = "") {
   const initiativeMatch = label.match(/^initiative\s*\(([^)]+)\)$/i);
   const initiativeTarget = initiativeMatch?.[1]?.trim();
 
-  return initiativeTarget || "";
+  if (initiativeTarget) {
+    return initiativeTarget;
+  }
+
+  const rollIdTargetMatch = id.match(
+    /^([a-z][a-z0-9_-]*?)-(?:strength|dexterity|constitution|intelligence|wisdom|charisma|athletics|acrobatics|sleight|stealth|arcana|history|investigation|nature|religion|animal|insight|medicine|perception|survival|deception|intimidation|performance|persuasion|initiative|death|concentration|saving|save|check)\b/i
+  );
+  const rollIdTarget = rollIdTargetMatch?.[1]?.trim();
+
+  return rollIdTarget ? titleCaseIdentifier(rollIdTarget) : "";
 }
 
 function normalizeRollRequest(value: unknown): DiceRollRequest | null {
@@ -1925,15 +1942,17 @@ function normalizeRollRequest(value: unknown): DiceRollRequest | null {
         ? candidate.advantage_state
         : undefined;
 
+  const id =
+    typeof candidate.id === "string" && candidate.id.trim()
+      ? candidate.id.trim()
+      : randomUUID();
+
   return {
-    id:
-      typeof candidate.id === "string" && candidate.id.trim()
-        ? candidate.id.trim()
-        : randomUUID(),
+    id,
     player:
       typeof candidate.player === "string" && candidate.player.trim()
         ? candidate.player.trim()
-        : inferredRollRequestPlayer(label) || undefined,
+        : inferredRollRequestPlayer(label, id) || undefined,
     dice,
     modifier: Number.isFinite(modifier) ? modifier : undefined,
     label,
@@ -3995,10 +4014,11 @@ const gameplayTurnOutputContractReminder = [
   "Output contract reminder:",
   "Return only one valid JSON object. Do not include prose, Markdown, or commentary outside JSON.",
   "Required top-level keys: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update.",
+  "input_policy must be all_players or only_targeted_players; never use acting_player.",
   "Set resolution_mode to needs_dice whenever roll_requests is non-empty or next_input_needed is dice_results; otherwise set it to resolved_without_dice.",
   "When resolution_mode is needs_dice, public_narration must not resolve the rolled outcome.",
   "If hostilities start while combat is inactive and enemies are ready or aware, ask the acting player for initiative in public_narration and roll_requests before resolving the attack or damage.",
-  "For multiplayer initiative, include one roll_requests item per player character and set each item's player field to that character's actor key or character name.",
+  "For multiplayer initiative, saving throws, checks, attacks, and other targeted rolls, set each roll_requests item's player field to the targeted character's actor key or character name.",
   "If the acting player clearly surprises unaware enemies, resolve the opening action's required rolls first, then ask initiative before enemy counteraction.",
   "Also include non-empty mechanics_state_update.combat with active, round, turnOwner, and provisional initiativeOrder as actor-key strings when initiative roll_requests pauses resolution.",
   "If combat turnOwner is or becomes npc:*, resolve NPC turns before returning control to players.",

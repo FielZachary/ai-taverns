@@ -264,11 +264,41 @@ function normalizeAdvantageState(value: string) {
     : "";
 }
 
-function inferredRollRequestPlayer(label: string) {
+function titleCaseIdentifier(value: string) {
+  return value
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function inferredRollRequestPlayer(
+  label: string,
+  id = "",
+  publicNarration = ""
+) {
   const initiativeMatch = label.match(/^initiative\s*\(([^)]+)\)$/i);
   const initiativeTarget = initiativeMatch?.[1]?.trim();
 
-  return initiativeTarget || "";
+  if (initiativeTarget) {
+    return initiativeTarget;
+  }
+
+  const namedRollMatch = publicNarration.match(
+    /\bmake\s+(?:a|an)\s+[^.?!]*(?:saving throw|save|check)\s*,\s*([A-Z][A-Za-z0-9' -]{0,40})(?=[.?!\n]|$)/i
+  );
+  const namedRollTarget = namedRollMatch?.[1]?.trim();
+
+  if (namedRollTarget) {
+    return namedRollTarget;
+  }
+
+  const rollIdTargetMatch = id.match(
+    /^([a-z][a-z0-9_-]*?)-(?:strength|dexterity|constitution|intelligence|wisdom|charisma|athletics|acrobatics|sleight|stealth|arcana|history|investigation|nature|religion|animal|insight|medicine|perception|survival|deception|intimidation|performance|persuasion|initiative|death|concentration|saving|save|check)\b/i
+  );
+  const rollIdTarget = rollIdTargetMatch?.[1]?.trim();
+
+  return rollIdTarget ? titleCaseIdentifier(rollIdTarget) : "";
 }
 
 function formatRollInstruction(request: DiceRollRequest, index: number) {
@@ -358,7 +388,10 @@ function narrationWithRollInstructions(
   return `${normalizedNarration}\n\n${rollInstructionsFromRequests(rollRequests)}`;
 }
 
-export function normalizeRollRequest(value: unknown): DiceRollRequest | null {
+export function normalizeRollRequest(
+  value: unknown,
+  publicNarration = ""
+): DiceRollRequest | null {
   const rawRequest = Array.isArray(value) ? value[0] : value;
   const request = asObject(rawRequest);
 
@@ -373,7 +406,10 @@ export function normalizeRollRequest(value: unknown): DiceRollRequest | null {
     stringValue(request.reason) ||
     "Required roll";
 
-  const player = stringValue(request.player) || inferredRollRequestPlayer(label);
+  const id = stringValue(request.id) || crypto.randomUUID();
+  const player =
+    stringValue(request.player) ||
+    inferredRollRequestPlayer(label, id, publicNarration);
   const modifier = numberValue(request.modifier);
   const advantageState =
     normalizeAdvantageState(
@@ -382,7 +418,7 @@ export function normalizeRollRequest(value: unknown): DiceRollRequest | null {
     );
 
   return {
-    id: stringValue(request.id) || crypto.randomUUID(),
+    id,
     dice,
     label,
     ...(player ? { player } : {}),
@@ -391,14 +427,17 @@ export function normalizeRollRequest(value: unknown): DiceRollRequest | null {
   };
 }
 
-export function normalizeRollRequests(value: unknown): DiceRollRequest[] {
+export function normalizeRollRequests(
+  value: unknown,
+  publicNarration = ""
+): DiceRollRequest[] {
   if (Array.isArray(value)) {
     return value
-      .map((request) => normalizeRollRequest(request))
+      .map((request) => normalizeRollRequest(request, publicNarration))
       .filter((request): request is DiceRollRequest => Boolean(request));
   }
 
-  const request = normalizeRollRequest(value);
+  const request = normalizeRollRequest(value, publicNarration);
   return request ? [request] : [];
 }
 
@@ -431,10 +470,6 @@ export function parseDmContract(
 
   let publicNarration = stringValue(parsed.public_narration);
   const nextInputNeeded = stringValue(parsed.next_input_needed);
-  const rawRollRequests = Array.isArray(parsed.roll_requests)
-    ? parsed.roll_requests
-    : [];
-  const rollRequests = normalizeRollRequests(rawRollRequests);
   const rawResolutionMode = stringValue(
     parsed.resolution_mode ?? parsed.resolutionMode
   );
@@ -460,6 +495,11 @@ export function parseDmContract(
   if (!publicNarration) {
     throw new Error("The DM provider response is missing public_narration.");
   }
+
+  const rawRollRequests = Array.isArray(parsed.roll_requests)
+    ? parsed.roll_requests
+    : [];
+  const rollRequests = normalizeRollRequests(rawRollRequests, publicNarration);
 
   if (
     nextInputNeeded !== "player_actions" &&
