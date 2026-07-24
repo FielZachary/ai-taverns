@@ -10,6 +10,7 @@ import {
   normalizeRollRequest,
   normalizeRollRequests,
   parseDmContract,
+  rollRequestDiagnostics,
   titleFromSessionId
 } from "./dm-contract.js";
 
@@ -58,18 +59,16 @@ describe("parseDmContract", () => {
 
     assert.equal(resolved.resolutionMode, "resolved_without_dice");
     assert.equal(needsDice.resolutionMode, "needs_dice");
-    assert.throws(
-      () =>
-        parseDmContract(
-          JSON.stringify({
-            public_narration: "Roll 1d20 for Athletics.",
-            resolution_mode: "resolved_without_dice",
-            roll_requests: [{ dice: "1d20", label: "Athletics" }],
-            next_input_needed: "dice_results"
-          })
-        ),
-      /resolution_mode that conflicts/
+    const mismatchedNeedsDice = parseDmContract(
+      JSON.stringify({
+        public_narration: "Roll 1d20 for Athletics.",
+        resolution_mode: "resolved_without_dice",
+        roll_requests: [{ dice: "1d20", label: "Athletics" }],
+        next_input_needed: "dice_results"
+      })
     );
+
+    assert.equal(mismatchedNeedsDice.resolutionMode, "needs_dice");
   });
 
   it("rejects attack roll and AC contradictions", () => {
@@ -496,9 +495,60 @@ describe("DM provider helpers", () => {
     assert.equal(request?.modifier, -1);
     assert.equal(request?.advantageState, "disadvantage");
 
+    const magicMissileRequest = normalizeRollRequest({
+      dice: "3d4+3",
+      label: "Magic Missile damage",
+      modifier: 0
+    });
+
+    assert.equal(magicMissileRequest?.dice, "3d4");
+    assert.equal(magicMissileRequest?.modifier, 3);
+
+    const penaltyRequest = normalizeRollRequest({
+      dice: "1d20 - 1",
+      label: "Penalty check",
+      modifier: 2
+    });
+
+    assert.equal(penaltyRequest?.dice, "1d20");
+    assert.equal(penaltyRequest?.modifier, 1);
+
     assert.deepEqual(normalizeRollRequest(null), null);
     assert.equal(normalizeRollRequests({ reason: "Stealth" }).length, 1);
     assert.deepEqual(normalizeRollRequests(undefined), []);
+  });
+
+  it("diagnoses unsupported roll request dice without rejecting them", () => {
+    assert.deepEqual(
+      rollRequestDiagnostics([
+        {
+          id: "ok",
+          dice: "3d4",
+          label: "Magic Missile damage"
+        }
+      ]),
+      []
+    );
+    assert.deepEqual(
+      rollRequestDiagnostics([
+        {
+          id: "complex",
+          dice: "2d4+1d6",
+          label: "Complex damage"
+        }
+      ]),
+      [
+        {
+          severity: "error",
+          code: "unsupported_dice_notation",
+          id: "complex",
+          label: "Complex damage",
+          dice: "2d4+1d6",
+          message:
+            "Roll request dice must be bare supported dice notation so the UI can queue it."
+        }
+      ]
+    );
   });
 
   it("extracts roll requests from contract and legacy response shapes", () => {

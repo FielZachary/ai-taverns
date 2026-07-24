@@ -32,6 +32,7 @@ export type DebugFields = {
   temperature?: unknown;
   combatState?: unknown;
   combatAdjudication?: unknown;
+  router?: unknown;
 };
 
 type ConnectFn = () => Promise<{
@@ -1426,8 +1427,12 @@ before(async () => {
     dmRuntime: {
       askProvider: async (input) => {
         if (input.instructions.includes("AI Taverns DM router")) {
+          const currentTurnInputMatch = input.message.match(
+            /(?:^|\n)Current turn input:\s*([\s\S]*)$/i
+          );
+          const currentTurnInput = currentTurnInputMatch?.[1] ?? input.message;
           const content = JSON.stringify({
-            job_needed: input.message.toLowerCase().includes("attack")
+            job_needed: /\battack\b/i.test(currentTurnInput)
               ? "combat"
               : "scene_director",
             context_keys: {

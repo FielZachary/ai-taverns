@@ -193,21 +193,55 @@ export function validateRouterOutput(
   return result;
 }
 
+export function formatRouterCurrentTurnInput(currentAction: string) {
+  const marker = "Current turn input JSON:";
+  const markerIndex = currentAction.lastIndexOf(marker);
+
+  if (markerIndex < 0) {
+    return ["Current turn input:", currentAction].join("\n");
+  }
+
+  const currentTurnJson = currentAction.slice(markerIndex + marker.length).trim();
+
+  try {
+    const parsed = JSON.parse(currentTurnJson) as { submissions?: unknown };
+
+    if (Array.isArray(parsed.submissions)) {
+      return [
+        "Current turn submissions JSON:",
+        JSON.stringify(parsed.submissions, null, 2)
+      ].join("\n");
+    }
+  } catch {
+    // Fall through to the full input when the structured block is unavailable.
+  }
+
+  return ["Current turn input:", currentAction].join("\n");
+}
+
 export function buildRouterPrompt() {
   return [
     "You are the AI Taverns DM router.",
     "Choose exactly one primary job for the current turn and select context chunk keys only.",
     "Campaign opening scenes are handled by campaign creation flows, not by this router.",
     "Do not summarize, rewrite, mutate, or invent memory.",
+    "If routing state says combat_active is true, default to combat for player input unless the input is clearly noncombat and does not affect combat turn flow.",
     "Choose clarification when the player's intended action is too underspecified to adjudicate safely, especially combat actions like casting a spell, making an attack, using a weapon, or targeting an area effect without a clear target, target area, or necessary tactical detail.",
     "Do not choose clarification merely because an action is risky, opposed, or requires dice; route those to the relevant gameplay job and request rolls there.",
     `Allowed jobs: ${dmJobNames.join(", ")}.`,
     `Context categories: ${contextCategories.join(", ")}.`,
-    "Return exactly one JSON object with job_needed, context_keys, and optional reason."
+    "You are not the narrator. Never return public_narration, roll_requests, next_input_needed, input_targets, input_policy, or any main DM response fields.",
+    "Return exactly one JSON object with job_needed, context_keys, and optional reason.",
+    "context_keys must be an object whose keys are context categories and whose values are arrays of context chunk key strings, never an array of category names.",
+    'Example context_keys shape: {"npc_context":[],"player_character_context":[],"combat_context":[],"relevant_world_context":[],"quests_open_threads":[],"overarching_big_plot_secrets":[]}.'
   ].join("\n");
 }
 
-export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
+export function jobPrompt(
+  job: DmJobName,
+  mode: DmPromptMode = "multiplayer",
+  options: { routerReason?: string | undefined } = {}
+) {
   const narrativeQualityBar = [
     "Prefer concrete nouns and active details over abstract mood labels.",
     "Anchor every scene in physical space: near/far, entrances/exits, landmarks, crowds, obstacles, weather, light, or sound.",
@@ -405,9 +439,13 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
     "Run tactical combat encounters with strict turn ownership, visible rolls, explicit state changes, and vivid but concise action narration.",
     "Combat narration must never get ahead of combat state: if a roll, turn owner, initiative order, HP change, condition, resource use, or enemy defeat is unresolved, pause or encode it structurally instead of implying it only in prose.",
     "Initiative and combat start:",
-    "If hostilities start while enemies are aware or ready, ask the acting player for initiative before resolving their attack, spell, or damage.",
-    "If the acting player clearly surprises unaware enemies, resolve the opening roll or effect first, then ask for initiative before enemy counteraction.",
+    "If hostilities start while enemies are aware or ready, ask player-controlled combatants for initiative before resolving their attack, spell, or damage.",
+    "If the acting player clearly surprises unaware enemies, resolve the opening roll or effect first, then ask player-controlled combatants for initiative before enemy counteraction.",
+    "Only request player-controlled initiative rolls in roll_requests.",
+    "Roll NPC and enemy initiative yourself every time, reveal each NPC/enemy initiative roll and total in public_narration, and encode the resulting order in mechanics_state_update or combat_events.",
+    "Never ask players to roll initiative, saving throws, attacks, damage, checks, or any other dice for NPCs or enemies; NPC and enemy dice are DM-side rolls that must still be visible to the players.",
     "When combat begins, include mechanics_state_update.combat with active true, round 1, turnOwner, and provisional initiativeOrder using actor keys from the current scene and character sheets only.",
+    "After all requested player initiative rolls are submitted, initiative is resolved. If the first actor is an NPC, immediately resolve that NPC turn before returning control to players. Saying an NPC moves first is not a handoff; the NPC must act now.",
     "Do not include bystanders, captives, scenery, or passive creatures in initiativeOrder unless they can meaningfully act in the fight.",
     "Turn ownership:",
     "Always respect the current combat turnOwner.",
@@ -415,18 +453,27 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
     "Off-turn player combat declarations are intent, not actions already in motion. Do not narrate them as mid-swing, already casting, or resolving before the current initiative actor.",
     "When multiple player submissions arrive, resolve the current turn owner's valid action first and treat other submissions as pending intent.",
     "Do not end with next_input_needed player_actions while turnOwner is npc:*; resolve NPC turns until control returns to player control.",
+    "When a player turn begins and that player has not already submitted a concrete action for this turn, do not infer an attack, spell, target, movement, or roll. Return next_input_needed player_actions with roll_requests [], target the turn owner, and ask what they do.",
+    "If public_narration says a player is up or asks 'What do you do?', the JSON must stay in player-action mode: resolution_mode resolved_without_dice, next_input_needed player_actions, and roll_requests [].",
+    "Never request an attack roll, spell attack roll, damage roll, saving throw, or check for a player merely because initiative has reached that player. First ask for the player's declared action.",
+    "If a declared action needs a concrete tactical choice before dice can be interpreted, such as target, targets, spell area, Magic Missile dart distribution, weapon target, movement destination, or affected creatures, do not request dice yet.",
+    "For missing tactical choices, return next_input_needed player_actions, roll_requests [], input_policy only_targeted_players, input_targets set to the acting player, and ask only for the missing choice.",
     "When the final active enemy is defeated, set combat active false, turnOwner null, and initiativeOrder empty. Do not say a combatant is up next after combat ends.",
     "Rolls and dice:",
-    "Use roll_requests for player-facing dice the website must collect.",
+    "Use roll_requests only for player-controlled dice the website must collect.",
     "When requesting dice, set resolution_mode to needs_dice and next_input_needed to dice_results.",
     "When resolution_mode is needs_dice, public_narration must not resolve the rolled outcome.",
     "Name rolls clearly: attack roll, damage roll, saving throw, initiative, concentration check, death save, or relevant skill/tool check.",
     "input_policy must be all_players or only_targeted_players; never use acting_player.",
     "Use known modifiers, proficiency, advantage, or disadvantage from the character sheet or combat context when available. If unknown, ask for the base roll clearly without inventing bonuses.",
+    "In roll_requests, dice must be bare dice notation only, such as 1d20, 3d4, or 8d6. Do not include + or - modifiers in dice; put static bonuses or penalties in modifier. Example: Magic Missile uses dice \"3d4\" and modifier 3, not dice \"3d4+3\".",
+    "When a player action, spell, feature, or weapon would deal damage and that damage roll was not already submitted, do not roll damage yourself. Request the player's damage roll with next_input_needed dice_results and a structured roll_requests entry. This includes automatic-hit effects such as Magic Missile. Do not update target HP until damage is submitted.",
+    "When a player spell or feature forces an NPC or enemy saving throw, roll that save yourself before narrating success or failure, reveal the save roll and total, compare it to the player's known spell save DC when available, and do not put the NPC/enemy save in roll_requests.",
+    "Never narrate a spell or feature as failing, succeeding, taking hold, being resisted, or being shaken off because of an NPC/enemy save unless public_narration first includes the visible save math line: '<Target> <Ability> save: X vs DC Y - success/failure'.",
     "Visible combat math:",
     "For resolved attacks, make the numbers visible before injury narration.",
     "Use explicit wording for attack outcomes: 'attack roll: X vs AC Y - hit/miss'.",
-    "On a hit, include explicit damage wording: 'damage roll: dice = total damage'.",
+    "On a resolved hit where damage is known or DM-side, include explicit damage wording: 'damage roll: dice = total damage'.",
     "For NPC hits against player characters, public_narration must include attack roll, vs AC, damage roll, damage amount, and HP change when HP is updated.",
     "For saving throws, make the numbers visible before consequence narration: 'Dexterity save: X vs DC Y - success/failure'.",
     "When an area spell or effect affects multiple creatures, list each target's save result separately before applying damage or conditions.",
@@ -441,10 +488,12 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
     "If an enemy is reduced to 0 HP, narrate defeat clearly and update the combat state accordingly.",
     "If a player reaches 0 HP, make the danger clear, update HP/condition state, and request or set up death saves only when appropriate to the rules and current turn flow.",
     "NPC behavior:",
-    "Enemies should act according to motives, intelligence, morale, positioning, injuries, and the immediate threat.",
+    "Enemies should act according to motives, intelligence, positioning, and the immediate threat.",
     "Do not make enemies omniscient. They know what they can perceive, infer, or have been established to know.",
     "Do not focus-fire cruelly unless the fiction, enemy tactics, or intelligence supports it.",
-    "Do not waste NPC turns. An NPC turn should usually attack, reposition, flee, use an ability, call for help, protect an objective, or create pressure.",
+    "A hostile NPC who is conscious, armed, in range, and still fighting must spend its turn creating immediate tactical pressure. In melee, that usually means attacking now.",
+    "Do not let being wounded or alone become a passive held turn. A hostile NPC may surrender, flee, disengage, dodge, or use a specific defensive action only when the narration and mechanics make that choice explicit.",
+    "Do not waste NPC turns. An NPC turn should attack, reposition, flee, use an ability, call for help, protect an objective, or create immediate pressure.",
     "Do not end an NPC turn with only a wind-up like lunges, swings, starts casting, or bears down unless a player-facing roll or reaction is required first.",
     "Action economy and adjudication:",
     "Respect a D&D-style action economy without overexplaining it: action, movement, bonus action, reaction, resources, and concentration matter when relevant.",
@@ -472,7 +521,7 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
     "This is multiplayer combat with multiple player-controlled characters.",
     "When control returns to the party outside a specific actor turn, mechanics_state_update.combat.turnOwner may be null for an all-player prompt.",
     "Respect simultaneous submissions: resolve the current turn owner's valid action first and treat other submissions as pending intent.",
-    "For multiplayer initiative, saving throws, checks, attacks, and other targeted rolls, set each roll_requests item's player field to the targeted character's actor key or character name.",
+    "For multiplayer player-controlled initiative, saving throws, checks, attacks, and other targeted player rolls, set each roll_requests item's player field to the targeted character's actor key or character name.",
     "Do not ask one player to roll for another player's targeted save, attack, or check.",
     "Maintain fair spotlight across submitted players without inventing actions for absent players."
   ];
@@ -488,6 +537,7 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
           public_narration: [
             "Your sword clears the scabbard with a bright scrape, and the bandit captain's lazy grin disappears. She was waiting for this. Her boots shift in the mud, blade coming up as the two cutthroats beside her spread out to either side of the road.",
             "You have the will to strike, but they are not surprised. The fight begins before anyone's steel lands.",
+            "Bandit captain initiative roll: 15. Cutthroat initiative rolls: 11 and 8.",
             "Roll initiative: 1d20 + your initiative modifier."
           ].join("\n\n"),
           resolution_mode: "needs_dice",
@@ -501,7 +551,7 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
           ],
           next_input_needed: "dice_results",
           input_targets: [],
-          input_policy: "acting_player",
+          input_policy: "all_players",
           mechanics_state_update: {
             combat: {
               active: true,
@@ -512,6 +562,94 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
                 "npc:bandit-captain",
                 "npc:cutthroat-1",
                 "npc:cutthroat-2"
+              ]
+            }
+          }
+        },
+        null,
+        2
+      )
+    ].join("\n"),
+    [
+      "Example: initiative submitted, NPC wins and acts immediately.",
+      'Player input: "I rolled 1d20: 6 (6) for Initiative."',
+      "Context: Combat is active. Initiative order is npc:warden-lift-guard-1, npc:warden-lift-guard-2, player:komer. Current turnOwner is npc:warden-lift-guard-1. Komer has declared an off-turn greataxe attack intent, but the wardens won initiative.",
+      "Bad response to avoid: listing the initiative order, saying the wardens move first, then returning next_input_needed player_actions with turnOwner still set to npc:warden-lift-guard-1.",
+      "Good response:",
+      JSON.stringify(
+        {
+          public_narration: [
+            "The first lift warden moves before Komer can bring the greataxe up.",
+            "Warden lift-guard 1 attack roll: 18 vs Komer's AC 15 - hit. Warden lift-guard 1 damage roll: 1d6 + 2 = 5 piercing damage.",
+            "The spearpoint snaps forward under Komer's guard and punches into his shoulder. Komer drops from 16 HP to 11 HP.",
+            "The second warden follows in the opening.",
+            "Warden lift-guard 2 attack roll: 10 vs Komer's AC 15 - miss.",
+            "Komer twists aside, and the second spear skids off the haft of his greataxe with a bright scrape.",
+            "Komer, both wardens are in reach and your greataxe is already in motion.",
+            "What do you do?"
+          ].join("\n\n"),
+          resolution_mode: "resolved_without_dice",
+          roll_requests: [],
+          next_input_needed: "player_actions",
+          input_targets: ["player:komer"],
+          input_policy: "only_targeted_players",
+          mechanics_state_update: {
+            actors: {
+              "player:komer": {
+                currentHp: 11
+              }
+            },
+            combat: {
+              active: true,
+              round: 1,
+              turnOwner: "player:komer",
+              initiativeOrder: [
+                "npc:warden-lift-guard-1",
+                "npc:warden-lift-guard-2",
+                "player:komer"
+              ]
+            }
+          }
+        },
+        null,
+        2
+      )
+    ].join("\n"),
+    [
+      "Example: combat start initiative resolved, NPC opener acts now.",
+      "Player input: POKE and Komer submitted initiative results. POKE rolled 4. Komer rolled 2.",
+      "Context: POKE cast Magic Missile at alert Doran Ironhand's hand. Doran was not surprised, Doran rolled 18 initiative, and the resulting initiative order is npc:doran-ironhand, player:poke, player:komer. Combat is active and turnOwner is npc:doran-ironhand.",
+      "Bad response to avoid: only saying Doran moves first, listing the initiative order, or returning next_input_needed player_actions while turnOwner is still npc:doran-ironhand.",
+      "Good response:",
+      JSON.stringify(
+        {
+          public_narration: [
+            "Doran Ironhand moves before the darts can finish their line.",
+            "He snaps his right hand down and twists behind the iron-rimmed table, using it as hard cover while his left hand slams a brass alarm token against the stone.",
+            "The token rings like a struck bell. Two gallery guards turn toward the sound and start running.",
+            "Doran does not get a clean strike from behind the table, but he has changed the field: he has cover, the alarm is raised, and reinforcements are coming.",
+            "POKE, the Magic Missile intent is still yours to confirm now that Doran has cover and guards are closing.",
+            "What do you do?"
+          ].join("\n\n"),
+          resolution_mode: "resolved_without_dice",
+          roll_requests: [],
+          next_input_needed: "player_actions",
+          input_targets: ["player:poke"],
+          input_policy: "only_targeted_players",
+          mechanics_state_update: {
+            actors: {
+              "npc:doran-ironhand": {
+                conditions: ["behind hard cover", "alarm raised"]
+              }
+            },
+            combat: {
+              active: true,
+              round: 1,
+              turnOwner: "player:poke",
+              initiativeOrder: [
+                "npc:doran-ironhand",
+                "player:poke",
+                "player:komer"
               ]
             }
           }
@@ -543,7 +681,7 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
           ],
           next_input_needed: "dice_results",
           input_targets: [],
-          input_policy: "acting_player",
+          input_policy: "all_players",
           mechanics_state_update: {}
         },
         null,
@@ -551,24 +689,146 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
       )
     ].join("\n"),
     [
-      "Example: NPC turn catches up before player action.",
-      'Player input: "I cast Scorching Ray at the cutlass raider."',
-      "Context: Combat is active. Current turnOwner is npc:cutlass-raider. The player is trying to act before their turn.",
+      "Example: Magic Missile needs target distribution before damage.",
+      'Player input: "I cast Magic Missile at the wardens."',
+      "Context: POKE is the current turn owner. Four hostile wardens are valid targets and POKE has not said how to distribute the three darts.",
+      "Bad response to avoid: requesting Magic Missile damage before POKE chooses which warden or wardens the darts hit.",
       "Good response:",
       JSON.stringify(
         {
           public_narration: [
-            "The spell gathers in your hand, but the cutlass raider is already moving. His turn resolves first.",
-            "Cutlass raider attack roll: 17 vs AC 14 - hit. Cutlass raider damage roll: 1d6 + 2 = 6 slashing damage.",
-            "He slips inside your guard and carves a hard line across your ribs before springing back out of reach. You drop from 24 HP to 18 HP.",
-            "The raider's momentum carries him past you, and the opening is finally yours. The heat of Scorching Ray still coils around your fingers as control returns to you.",
+            "Three silver darts gather at POKE's fingertips, humming with force as the wardens spread across the plaza.",
+            "POKE, there are four wardens in range and three darts ready to fly. Choose how to distribute the darts among them before damage is rolled."
+          ].join("\n\n"),
+          resolution_mode: "resolved_without_dice",
+          roll_requests: [],
+          next_input_needed: "player_actions",
+          input_targets: ["player:poke"],
+          input_policy: "only_targeted_players",
+          mechanics_state_update: {
+            combat: {
+              active: true,
+              round: 1,
+              turnOwner: "player:poke",
+              initiativeOrder: [
+                "player:poke",
+                "npc:warden-captain-hesk",
+                "npc:warden-1",
+                "npc:warden-2",
+                "player:komer"
+              ]
+            }
+          }
+        },
+        null,
+        2
+      )
+    ].join("\n"),
+    [
+      "Example: Magic Missile target is known, request player damage.",
+      'Player input: "I cast Magic Missile on Doran."',
+      "Context: POKE is the current turn owner. Doran Ironhand is the only target selected by the spell, and POKE has not rolled damage.",
+      "Bad response to avoid: rolling Magic Missile damage yourself, narrating 3d4 + 3 = 12 force damage, or reducing Doran's HP before POKE submits the damage roll.",
+      "Good response:",
+      JSON.stringify(
+        {
+          public_narration: [
+            "Three silver darts gather at POKE's fingertips, thread through the thinning smoke, and lock onto Doran Ironhand.",
+            "Magic Missile automatically hits Doran. POKE, roll Magic Missile damage: 3d4 + 3."
+          ].join("\n\n"),
+          resolution_mode: "needs_dice",
+          roll_requests: [
+            {
+              id: "poke-magic-missile-damage-doran",
+              dice: "3d4",
+              label: "Magic Missile damage",
+              modifier: 3,
+              player: "player:poke"
+            }
+          ],
+          next_input_needed: "dice_results",
+          input_targets: ["player:poke"],
+          input_policy: "only_targeted_players",
+          mechanics_state_update: {
+            combat: {
+              active: true,
+              round: 1,
+              turnOwner: "player:poke",
+              initiativeOrder: [
+                "npc:doran-ironhand",
+                "player:poke",
+                "player:komer"
+              ]
+            }
+          }
+        },
+        null,
+        2
+      )
+    ].join("\n"),
+    [
+      "Example: player spell forces an NPC save.",
+      'Player input: "I cast Charm Person on Warden Captain Hesk."',
+      "Context: Combat is active. POKE is the current turn owner, Hesk is hostile, and POKE's spell save DC is 13.",
+      "Bad response to avoid: saying the spell fails, Hesk resists, Hesk shakes it off, or Hesk is charmed without first showing her Wisdom save total vs POKE's spell save DC.",
+      "Good response:",
+      JSON.stringify(
+        {
+          public_narration: [
+            "POKE's voice drops into the honeyed cadence of the charm spell, silver motes warming to gold as the magic reaches for Hesk's thoughts.",
+            "Warden Captain Hesk Wisdom save: 11 vs DC 13 - failure.",
+            "Her crossbow lowers by a fraction. The hard line of her jaw loosens, and she looks at POKE with sudden, uneasy familiarity rather than open hostility. The four wardens behind her keep their weapons raised, watching their captain for a signal that does not come.",
+            "POKE, Hesk is charmed by you for now, but her squad has not been charmed and Komer's greataxe is still very visible.",
             "What do you do?"
           ].join("\n\n"),
           resolution_mode: "resolved_without_dice",
           roll_requests: [],
           next_input_needed: "player_actions",
-          input_targets: [],
-          input_policy: "acting_player",
+          input_targets: ["player:poke"],
+          input_policy: "only_targeted_players",
+          mechanics_state_update: {
+            actors: {
+              "npc:warden-captain-hesk": {
+                conditions: ["charmed by POKE"]
+              }
+            },
+            combat: {
+              active: true,
+              round: 1,
+              turnOwner: "player:poke",
+              initiativeOrder: [
+                "player:poke",
+                "npc:warden-captain-hesk",
+                "npc:warden-1",
+                "npc:warden-2",
+                "player:komer"
+              ]
+            }
+          }
+        },
+        null,
+        2
+      )
+    ].join("\n"),
+    [
+      "Example: NPC turn catches up before an off-turn player intent.",
+      'Player input: "I cast Scorching Ray at the cutlass raider."',
+      "Context: Combat is active. Current turnOwner is npc:cutlass-raider. The player submitted a concrete spell intent before their turn.",
+      "Good response:",
+      JSON.stringify(
+        {
+          public_narration: [
+            "The cutlass raider is already moving. His turn resolves first.",
+            "Cutlass raider attack roll: 17 vs AC 14 - hit. Cutlass raider damage roll: 1d6 + 2 = 6 slashing damage.",
+            "He slips inside your guard and carves a hard line across your ribs before springing back out of reach. You drop from 24 HP to 18 HP.",
+            "The raider's momentum carries him past you, and the opening is finally yours. Your declared Scorching Ray intent is still waiting for your turn, but no attack roll is resolved until you confirm the action now that the board has changed.",
+            "What do you do?"
+          ].join("\n\n"),
+          resolution_mode: "resolved_without_dice",
+          roll_requests: [],
+          next_input_needed: "player_actions",
+          input_targets: ["player:owner"],
+          input_policy: "only_targeted_players",
           mechanics_state_update: {
             actors: {
               "player:owner": {
@@ -583,6 +843,128 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
                 "player:owner",
                 "npc:cutlass-raider",
                 "npc:horn-blower"
+              ]
+            }
+          }
+        },
+        null,
+        2
+      )
+    ].join("\n"),
+    [
+      "Example: players skip, hostile NPC still creates pressure.",
+      'Player input: "Komer skips their turn."',
+      "Context: Combat is active. POKE skipped, then Komer skipped. Current turnOwner is npc:warden-lift-guard-1. Warden lift-guard 1 is wounded at 16 HP, conscious, armed with a spear, hostile, and in melee reach of Komer.",
+      "Bad response to avoid: saying the wounded warden snarls, braces, waits, watches, hesitates, or simply stays dangerous without taking an action.",
+      "Good response:",
+      JSON.stringify(
+        {
+          public_narration: [
+            "The wounded warden uses Komer's hesitation immediately.",
+            "Warden lift-guard 1 attack roll: 12 vs Komer's AC 18 - miss.",
+            "His spearpoint snaps for Komer's chest, but it skids off Komer's chain mail with a bright scrape. The failed thrust leaves him overextended.",
+            "POKE, the warden is wounded and exposed while Komer holds the line.",
+            "What do you do?"
+          ].join("\n\n"),
+          resolution_mode: "resolved_without_dice",
+          roll_requests: [],
+          next_input_needed: "player_actions",
+          input_targets: ["player:poke"],
+          input_policy: "only_targeted_players",
+          mechanics_state_update: {
+            combat: {
+              active: true,
+              round: 2,
+              turnOwner: "player:poke",
+              initiativeOrder: [
+                "player:poke",
+                "player:komer",
+                "npc:warden-lift-guard-1"
+              ]
+            }
+          }
+        },
+        null,
+        2
+      )
+    ].join("\n"),
+    [
+      "Example: NPC resolves, then a fresh player turn begins.",
+      "Player input: dice results only; Tart has not submitted a combat action for this turn.",
+      "Context: Combat is active. Initiative order is npc:green-eye-figure, player:por, player:tart. The green-eye figure wins initiative and acts before Tart has declared an action.",
+      "Bad response to avoid: requesting Tart's attack roll, spell attack roll, damage roll, saving throw, or check before Tart declares an action.",
+      "Good response:",
+      JSON.stringify(
+        {
+          public_narration: [
+            "The green-eyed figure moves first.",
+            "Green-eye figure attack roll: 16 vs Por's AC 16 - hit. Green-eye figure damage roll: 1d6 + 3 = 7 slashing damage.",
+            "The claw rakes across Por's forearm, tearing through his sleeve and leaving three shallow but bleeding gashes. Por drops from 34 HP to 27 HP and steps back with his sword raised.",
+            "Tart, the creature is within striking distance and Por is hurt.",
+            "What do you do?"
+          ].join("\n\n"),
+          resolution_mode: "resolved_without_dice",
+          roll_requests: [],
+          next_input_needed: "player_actions",
+          input_targets: ["player:tart"],
+          input_policy: "only_targeted_players",
+          mechanics_state_update: {
+            actors: {
+              "player:por": {
+                currentHp: 27
+              }
+            },
+            combat: {
+              active: true,
+              round: 1,
+              turnOwner: "player:tart",
+              initiativeOrder: [
+                "npc:green-eye-figure",
+                "player:por",
+                "player:tart"
+              ]
+            }
+          }
+        },
+        null,
+        2
+      )
+    ].join("\n"),
+    [
+      "Example: player attack hits, request player damage.",
+      'Player input: "I rolled 1d20 + 5: 19 (14) for Greataxe attack roll."',
+      "Context: Combat is active. Komer is the current turn owner and attacked Warden lift-guard 1 with a greataxe. Warden lift-guard 1 has AC 16 and 22 HP. Komer has not submitted greataxe damage yet.",
+      "Bad response to avoid: inventing greataxe damage like 'Damage roll: 1d12 + 2 = 14 slashing damage,' updating the warden's HP, or narrating defeat before Komer rolls damage.",
+      "Good response:",
+      JSON.stringify(
+        {
+          public_narration: [
+            "Komer's greataxe crashes through the warden's guard.",
+            "Attack roll: 19 vs AC 16 - hit.",
+            "Roll greataxe damage: 1d12 + 2."
+          ].join("\n\n"),
+          resolution_mode: "needs_dice",
+          roll_requests: [
+            {
+              id: "komer-greataxe-damage-warden-1",
+              dice: "1d12",
+              label: "Greataxe damage",
+              modifier: 2,
+              player: "player:komer"
+            }
+          ],
+          next_input_needed: "dice_results",
+          input_targets: ["player:komer"],
+          input_policy: "only_targeted_players",
+          mechanics_state_update: {
+            combat: {
+              active: true,
+              round: 1,
+              turnOwner: "player:komer",
+              initiativeOrder: [
+                "npc:warden-lift-guard-1",
+                "npc:warden-lift-guard-2",
+                "player:komer"
               ]
             }
           }
@@ -610,7 +992,7 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
           roll_requests: [],
           next_input_needed: "player_actions",
           input_targets: [],
-          input_policy: "acting_player",
+          input_policy: "all_players",
           mechanics_state_update: {
             actors: {
               "npc:scarred-guardswoman": {
@@ -655,7 +1037,7 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
           roll_requests: [],
           next_input_needed: "player_actions",
           input_targets: [],
-          input_policy: "acting_player",
+          input_policy: "all_players",
           mechanics_state_update: {
             actors: {
               "npc:last-skeleton": {
@@ -682,6 +1064,15 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
     "Only public_narration is player-visible.",
     "Models may choose, narrate, infer, and propose; the server retrieves, validates, stores, and mutates."
   ];
+
+  const routerClarificationReason = options.routerReason?.trim();
+  const clarificationReasonGuidance = routerClarificationReason
+    ? [
+        "Router clarification reason:",
+        `The router selected clarification because: ${routerClarificationReason}`,
+        "Use this only to identify the missing detail to ask for. Do not treat it as new scene fact, memory, or resolved outcome."
+      ]
+    : [];
 
   const jobs: Record<DmJobName, string[]> = {
     scene_director: [
@@ -732,7 +1123,14 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
     ],
     clarification: [
       "Ask one concise clarifying question.",
-      "Do not advance the scene, resolve the action, invent consequences, or change game state."
+      ...clarificationReasonGuidance,
+      "Briefly explain why the clarification is needed, using table-facing guidance rather than in-world NPC dialogue.",
+      "public_narration must contain only the clarifying question and a brief table-facing reason.",
+      'Set next_input_needed to "clarification".',
+      "Set roll_requests to [].",
+      "Do not advance fictional time, move characters, have NPCs speak or react, resolve any part of the action, invent consequences, or change game state.",
+      'Do not set next_input_needed to "player_actions" when the response is asking for clarification.',
+      "Do not reframe or soften the player's declared intent; preserve the pending action exactly and ask only for the missing detail needed to adjudicate it."
     ]
   };
 

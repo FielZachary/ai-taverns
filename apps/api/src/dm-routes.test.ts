@@ -84,6 +84,20 @@ test("DM runtime routes handle authorized solo, ask-DM, regenerate, and traces",
     (solo.messages.at(-1)?.debug as DebugFields | undefined)?.temperature,
     0.8
   );
+  const routerDebug = (solo.messages.at(-1)?.debug as DebugFields | undefined)
+    ?.router as
+    | {
+        requestMessages?: { role?: string; content?: string }[];
+        rawResponse?: string;
+        parsedOutput?: { jobNeeded?: string };
+      }
+    | undefined;
+  assert.equal(typeof routerDebug?.parsedOutput?.jobNeeded, "string");
+  assert.match(
+    routerDebug?.requestMessages?.at(-1)?.content ?? "",
+    /Routing state JSON:/
+  );
+  assert.match(routerDebug?.rawResponse ?? "", /job_needed/);
   const combatState = (solo.messages.at(-1)?.debug as DebugFields | undefined)
     ?.combatState as
     | {
@@ -158,7 +172,7 @@ test("DM runtime routes handle authorized solo, ask-DM, regenerate, and traces",
 
   const tracesResponse = await app.inject({
     method: "GET",
-    url: `/api/campaigns/${created.campaign.id}/debug-traces?limit=10`,
+    url: `/api/campaigns/${created.campaign.id}/debug-traces?limit=20`,
     headers: {
       cookie
     }
@@ -170,6 +184,21 @@ test("DM runtime routes handle authorized solo, ask-DM, regenerate, and traces",
   assert.ok(
     traces.traces.some((trace) => trace.phase === "provider_response_received")
   );
+  const routerTrace = traces.traces.find(
+    (trace) => trace.phase === "router_response_received"
+  );
+  assert.ok(routerTrace);
+  const routerTraceProvider = routerTrace.provider as
+    | {
+        rawResponse?: string;
+        rawRequestMessages?: { role?: string; content?: string }[];
+      }
+    | undefined;
+  assert.match(
+    routerTraceProvider?.rawRequestMessages?.at(-1)?.content ?? "",
+    /Routing state JSON:/
+  );
+  assert.match(routerTraceProvider?.rawResponse ?? "", /job_needed/);
 });
 
 test("DM runtime failure traces include provider debug diagnostics", async () => {

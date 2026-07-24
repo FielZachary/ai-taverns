@@ -14,6 +14,14 @@ export type AiDebugInfo = {
   temperature?: number;
   combatState?: unknown;
   combatAdjudication?: unknown;
+  router?: {
+    requestMessages: AiDebugMessage[];
+    rawResponse: string;
+    parsedOutput?: unknown;
+    model?: string;
+    temperature?: number;
+    providerResponseId?: string;
+  };
   providerTimings?: {
     attempt: number;
     requestStartedAt: string;

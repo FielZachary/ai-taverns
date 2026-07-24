@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   buildMemoryUpdaterPrompt,
   buildRouterPrompt,
+  formatRouterCurrentTurnInput,
   jobPrompt,
   renderContextChunks,
   validateCombatEvents,
@@ -43,6 +44,67 @@ describe("modular AI DM runtime contracts", () => {
     assert.equal(result.fallbackUsed, true);
     assert.match(result.errors.join("\n"), /parseable JSON/);
     assert.deepEqual(result.contextKeys.combat_context, []);
+  });
+
+  it("supports combat-aware router fallback jobs", () => {
+    const result = validateRouterOutput(
+      JSON.stringify({
+        public_narration: "Komer's axe bites into the railing.",
+        roll_requests: [],
+        next_input_needed: "player_actions"
+      }),
+      "combat"
+    );
+
+    assert.equal(result.jobNeeded, "combat");
+    assert.equal(result.fallbackUsed, true);
+    assert.match(result.errors.join("\n"), /job_needed is required/);
+  });
+
+  it("formats router turn input with only structured submissions when available", () => {
+    const formatted = formatRouterCurrentTurnInput(
+      [
+        "Canonical player characters:",
+        "Very long sheet text",
+        "",
+        "Current turn input JSON:",
+        JSON.stringify(
+          {
+            type: "multiplayer_turn",
+            resolution_policy: "Resolve active combat.",
+            submissions: [
+              {
+                player: "Komer",
+                character: "Komer",
+                content: "I rolled 1d20 + 5: 10 (5) for Greataxe attack roll."
+              }
+            ]
+          },
+          null,
+          2
+        )
+      ].join("\n")
+    );
+
+    assert.match(formatted, /Current turn submissions JSON:/);
+    assert.match(formatted, /Greataxe attack roll/);
+    assert.doesNotMatch(formatted, /Very long sheet text/);
+    assert.doesNotMatch(formatted, /resolution_policy/);
+  });
+
+  it("warns the router not to emit main DM response fields", () => {
+    const prompt = buildRouterPrompt();
+
+    assert.match(prompt, /You are not the narrator/);
+    assert.match(prompt, /Never return public_narration/);
+  });
+
+  it("shows the router the required context_keys object shape", () => {
+    const prompt = buildRouterPrompt();
+
+    assert.match(prompt, /context_keys must be an object/);
+    assert.match(prompt, /never an array of category names/);
+    assert.match(prompt, /"combat_context":\[\]/);
   });
 
   it("renders selected context chunks as labelled markdown packets", () => {
@@ -164,6 +226,7 @@ describe("modular AI DM runtime contracts", () => {
 
     assert.match(routerPrompt, /select context chunk keys only/i);
     assert.match(routerPrompt, /Campaign opening scenes are handled/i);
+    assert.match(routerPrompt, /combat_active is true, default to combat/i);
     assert.match(routerPrompt, /Choose clarification when the player's intended action is too underspecified/i);
     assert.match(routerPrompt, /without a clear target, target area, or necessary tactical detail/i);
     assert.match(routerPrompt, /Do not choose clarification merely because an action is risky/i);
@@ -197,10 +260,153 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("combat"), /full damage, the halved damage/i);
     assert.match(jobPrompt("combat"), /turnOwner is an NPC actor key/i);
     assert.match(jobPrompt("combat"), /final active enemy is defeated/i);
+    assert.match(
+      jobPrompt("combat"),
+      /Enemies should act according to motives, intelligence, positioning, and the immediate threat/i
+    );
+    assert.doesNotMatch(
+      jobPrompt("combat"),
+      /morale, positioning, injuries/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /conscious, armed, in range, and still fighting must spend its turn creating immediate tactical pressure/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Do not let being wounded or alone become a passive held turn/i
+    );
+    assert.match(jobPrompt("combat"), /do not infer an attack, spell, target/i);
+    assert.match(jobPrompt("combat"), /roll_requests \[\]/i);
+    assert.match(jobPrompt("combat"), /merely because initiative has reached/i);
+    assert.match(
+      jobPrompt("combat"),
+      /needs a concrete tactical choice before dice can be interpreted/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /For missing tactical choices, return next_input_needed player_actions, roll_requests \[\]/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Only request player-controlled initiative rolls in roll_requests/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Roll NPC and enemy initiative yourself every time/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /After all requested player initiative rolls are submitted, initiative is resolved/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Saying an NPC moves first is not a handoff/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Never ask players to roll initiative, saving throws, attacks, damage, checks, or any other dice for NPCs or enemies/i
+    );
+    assert.match(jobPrompt("combat"), /dice must be bare dice notation only/i);
+    assert.match(
+      jobPrompt("combat"),
+      /Magic Missile uses dice "3d4" and modifier 3/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /When a player action, spell, feature, or weapon would deal damage/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /On a resolved hit where damage is known or DM-side/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /When a player spell or feature forces an NPC or enemy saving throw/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Never narrate a spell or feature as failing, succeeding, taking hold, being resisted, or being shaken off/i
+    );
     assert.match(jobPrompt("combat"), /combat starts, initiative first/i);
+    assert.match(
+      jobPrompt("combat"),
+      /Bandit captain initiative roll: 15\. Cutthroat initiative rolls: 11 and 8\./i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /initiative submitted, NPC wins and acts immediately/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Bad response to avoid: listing the initiative order, saying the wardens move first/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Warden lift-guard 1 attack roll: 18 vs Komer's AC 15 - hit/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /combat start initiative resolved, NPC opener acts now/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Bad response to avoid: only saying Doran moves first/i
+    );
+    assert.match(jobPrompt("combat"), /Doran Ironhand moves before the darts/i);
     assert.match(jobPrompt("combat"), /surprise opener resolves before initiative/i);
-    assert.match(jobPrompt("combat"), /NPC turn catches up before player action/i);
+    assert.match(jobPrompt("combat"), /Magic Missile needs target distribution before damage/i);
+    assert.match(
+      jobPrompt("combat"),
+      /Bad response to avoid: requesting Magic Missile damage before POKE chooses/i
+    );
+    assert.match(jobPrompt("combat"), /"input_targets": \[\s+"player:poke"\s+\]/);
+    assert.match(
+      jobPrompt("combat"),
+      /NPC turn catches up before an off-turn player intent/i
+    );
+    assert.match(jobPrompt("combat"), /players skip, hostile NPC still creates pressure/i);
+    assert.match(
+      jobPrompt("combat"),
+      /Bad response to avoid: saying the wounded warden snarls, braces, waits, watches, hesitates/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /NPC resolves, then a fresh player turn begins/i
+    );
+    assert.match(jobPrompt("combat"), /Bad response to avoid: requesting Tart's attack roll/i);
+    assert.match(jobPrompt("combat"), /"input_targets": \[\s+"player:tart"\s+\]/);
+    assert.match(jobPrompt("combat"), /player attack hits, request player damage/i);
+    assert.match(
+      jobPrompt("combat"),
+      /Bad response to avoid: inventing greataxe damage/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /"dice": "1d12"/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /player action, spell, feature, or weapon would deal damage/i
+    );
+    assert.match(jobPrompt("combat"), /automatic-hit effects such as Magic Missile/i);
+    assert.match(jobPrompt("combat"), /Magic Missile target is known, request player damage/i);
+    assert.match(
+      jobPrompt("combat"),
+      /Bad response to avoid: rolling Magic Missile damage yourself/i
+    );
+    assert.match(jobPrompt("combat"), /"dice": "3d4"/i);
+    assert.match(jobPrompt("combat"), /"modifier": 3/i);
     assert.match(jobPrompt("combat"), /area spell saves and damage are explicit/i);
+    assert.match(jobPrompt("combat"), /player spell forces an NPC save/i);
+    assert.match(
+      jobPrompt("combat"),
+      /Bad response to avoid: saying the spell fails, Hesk resists/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Warden Captain Hesk Wisdom save: 11 vs DC 13 - failure/i
+    );
     assert.match(jobPrompt("combat"), /Robed priest Dexterity save: 16 vs DC 14 - success/i);
     assert.match(jobPrompt("combat"), /final enemy defeated and combat ends/i);
     assert.match(jobPrompt("combat"), /Never silently modify HP/);
@@ -218,6 +424,13 @@ describe("modular AI DM runtime contracts", () => {
       /Roll Fireball damage:[^"]*\\n\\nWhat do you do\?/
     );
     assert.match(jobPrompt("clarification"), /Ask one concise/);
+    assert.match(jobPrompt("clarification"), /table-facing guidance rather than in-world NPC dialogue/i);
+    assert.match(jobPrompt("clarification"), /next_input_needed to "clarification"/);
+    assert.match(jobPrompt("clarification"), /Set roll_requests to \[\]/);
+    assert.match(jobPrompt("clarification"), /Do not advance fictional time/i);
+    assert.match(jobPrompt("clarification"), /have NPCs speak or react/i);
+    assert.match(jobPrompt("clarification"), /Do not set next_input_needed to "player_actions"/);
+    assert.match(jobPrompt("clarification"), /Do not reframe or soften the player's declared intent/i);
     assert.match(buildMemoryUpdaterPrompt(), /Allowed operations/);
   });
 
@@ -241,5 +454,33 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(multiplayerScenePrompt, /AI Taverns DM job: scene_director/i);
     assert.doesNotMatch(soloScenePrompt, /This is singleplayer combat/i);
     assert.doesNotMatch(multiplayerScenePrompt, /This is multiplayer combat/i);
+  });
+
+  it("inserts router reasons into clarification job guidance only when provided", () => {
+    const prompt = jobPrompt("clarification", "multiplayer", {
+      routerReason: "The spell target is ambiguous."
+    });
+
+    assert.match(prompt, /Ask one concise clarifying question\.\nRouter clarification reason:/);
+    assert.match(
+      prompt,
+      /The router selected clarification because: The spell target is ambiguous\./
+    );
+    assert.match(prompt, /Do not treat it as new scene fact, memory, or resolved outcome/);
+    assert.match(
+      prompt,
+      /resolved outcome\.\nBriefly explain why the clarification is needed/
+    );
+
+    assert.doesNotMatch(
+      jobPrompt("clarification", "multiplayer"),
+      /Router clarification reason/
+    );
+    assert.doesNotMatch(
+      jobPrompt("combat", "multiplayer", {
+        routerReason: "The spell target is ambiguous."
+      }),
+      /Router clarification reason/
+    );
   });
 });
