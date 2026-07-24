@@ -86,6 +86,27 @@ describe("MessageLog", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders bold markdown emphasis inside message paragraphs", () => {
+    renderMessageLog({
+      messages: [
+        gameMessage({
+          id: "dm-bold-message",
+          role: "dm",
+          content:
+            "**Attack: 14 vs AC 10 - hit.** The spearpoint drives into Klave."
+        })
+      ]
+    });
+
+    const mechanicText = screen.getByText("Attack: 14 vs AC 10 - hit.");
+
+    expect(mechanicText.tagName).toBe("STRONG");
+    expect(screen.queryByText(/\*\*Attack/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/The spearpoint drives into Klave\./)
+    ).toBeInTheDocument();
+  });
+
   it("renders ask-DM questions and waiting player status details", () => {
     renderMessageLog({
       messages: [
