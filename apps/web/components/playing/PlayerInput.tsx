@@ -155,86 +155,108 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
             {validationMessage}
           </p>
         ) : null}
-        <div className="input-mode-toggle" role="group" aria-label="Input mode">
-          <button
-            className={mode === "turn" ? "input-mode-button active" : "input-mode-button"}
-            type="button"
-            aria-pressed={mode === "turn"}
-            disabled={isSending}
-            onClick={() => onModeChange("turn")}
-          >
-            <Swords size={17} />
-            Turn
-          </button>
-          <button
-            className={
-              mode === "ask_dm" ? "input-mode-button active" : "input-mode-button"
-            }
-            type="button"
-            aria-pressed={mode === "ask_dm"}
-            disabled={isSending}
-            onClick={() => onModeChange("ask_dm")}
-          >
-            <MessageCircleQuestion size={17} />
-            Ask DM
-          </button>
-        </div>
-        <div className="dice-roll-control" ref={diceRollControlRef}>
-          <button
-            className="dice-roll-button"
-            type="button"
-            aria-label={
-              requiredRoll
-                ? `Roll ${requiredRollExpression ?? requiredRoll.dice}`
-                : "Open dice roller"
-            }
-            aria-expanded={isDicePickerOpen}
-            disabled={isAskMode || (isLocked && !isRollRequired) || isSending}
-            onClick={() => setIsDicePickerOpen((isOpen) => !isOpen)}
-          >
-            <Dice5 size={22} />
-            <span>
-              {queuedCount > 0
-                ? `${queuedCount} dice`
-                : requiredRollExpression ?? requiredRoll?.dice ?? "dice"}
-            </span>
-          </button>
-          {isDicePickerOpen ? (
-            <div className="dice-picker-popover" role="dialog" aria-label="Dice roller">
-              <div className="dice-picker-options">
-                {diceFaces.map((face) => (
+        <div className="turn-action-bar">
+          <div className="input-mode-toggle" role="group" aria-label="Input mode">
+            <button
+              className={mode === "turn" ? "input-mode-button active" : "input-mode-button"}
+              type="button"
+              aria-pressed={mode === "turn"}
+              disabled={isSending}
+              onClick={() => onModeChange("turn")}
+            >
+              <Swords size={17} />
+              Turn
+            </button>
+            <button
+              className={
+                mode === "ask_dm" ? "input-mode-button active" : "input-mode-button"
+              }
+              type="button"
+              aria-pressed={mode === "ask_dm"}
+              disabled={isSending}
+              onClick={() => onModeChange("ask_dm")}
+            >
+              <MessageCircleQuestion size={17} />
+              Ask DM
+            </button>
+          </div>
+          <div className="dice-roll-control" ref={diceRollControlRef}>
+            <button
+              className="dice-roll-button"
+              type="button"
+              aria-label={
+                requiredRoll
+                  ? `Roll ${requiredRollExpression ?? requiredRoll.dice}`
+                  : "Open dice roller"
+              }
+              aria-expanded={isDicePickerOpen}
+              disabled={isAskMode || (isLocked && !isRollRequired) || isSending}
+              onClick={() => setIsDicePickerOpen((isOpen) => !isOpen)}
+            >
+              <Dice5 size={22} />
+              <span>
+                {queuedCount > 0
+                  ? `${queuedCount} dice`
+                  : requiredRollExpression ?? requiredRoll?.dice ?? "dice"}
+              </span>
+            </button>
+            {isDicePickerOpen ? (
+              <div className="dice-picker-popover" role="dialog" aria-label="Dice roller">
+                <div className="dice-picker-options">
+                  {diceFaces.map((face) => (
+                    <button
+                      key={face}
+                      className="dice-picker-option"
+                      type="button"
+                      disabled={isSending}
+                      onClick={() => incrementDie(face)}
+                    >
+                      <span>{face}</span>
+                      {queuedDice[face] ? <strong>{queuedDice[face]}</strong> : null}
+                    </button>
+                  ))}
+                </div>
+                <div className="dice-picker-actions">
                   <button
-                    key={face}
-                    className="dice-picker-option"
+                    className="dice-picker-clear"
                     type="button"
-                    disabled={isSending}
-                    onClick={() => incrementDie(face)}
+                    disabled={queuedCount === 0 || isSending}
+                    onClick={clearQueuedDice}
                   >
-                    <span>{face}</span>
-                    {queuedDice[face] ? <strong>{queuedDice[face]}</strong> : null}
+                    Clear
                   </button>
-                ))}
+                  <button
+                    className="dice-picker-roll"
+                    type="button"
+                    disabled={queuedCount === 0 || isSending}
+                    onClick={rollQueuedDice}
+                  >
+                    Roll
+                  </button>
+                </div>
               </div>
-              <div className="dice-picker-actions">
-                <button
-                  className="dice-picker-clear"
-                  type="button"
-                  disabled={queuedCount === 0 || isSending}
-                  onClick={clearQueuedDice}
-                >
-                  Clear
-                </button>
-                <button
-                  className="dice-picker-roll"
-                  type="button"
-                  disabled={queuedCount === 0 || isSending}
-                  onClick={rollQueuedDice}
-                >
-                  Roll
-                </button>
-              </div>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
+          <div className="turn-form-actions">
+            {onSkipTurn ? (
+              <button
+                className="turn-form-skip"
+                type="button"
+                disabled={!canSkipTurn}
+                onClick={onSkipTurn}
+              >
+                <SkipForward size={18} />
+                Skip
+              </button>
+            ) : null}
+            <button
+              type="submit"
+              disabled={isRollRequired || isLocked || isSending || !draft.trim()}
+            >
+              {isAskMode ? <MessageCircleQuestion size={18} /> : <Send size={18} />}
+              {isAskMode ? "Ask" : "Send"}
+            </button>
+          </div>
         </div>
         <div className="turn-form-input-wrap">
           <textarea
@@ -254,26 +276,6 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
               {overlayMessage}
             </div>
           ) : null}
-        </div>
-        <div className="turn-form-actions">
-          {onSkipTurn ? (
-            <button
-              className="turn-form-skip"
-              type="button"
-              disabled={!canSkipTurn}
-              onClick={onSkipTurn}
-            >
-              <SkipForward size={18} />
-              Skip
-            </button>
-          ) : null}
-          <button
-            type="submit"
-            disabled={isRollRequired || isLocked || isSending || !draft.trim()}
-          >
-            {isAskMode ? <MessageCircleQuestion size={18} /> : <Send size={18} />}
-            {isAskMode ? "Ask" : "Send"}
-          </button>
         </div>
       </form>
     );

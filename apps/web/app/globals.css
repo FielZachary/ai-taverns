@@ -3016,21 +3016,18 @@ h1 {
 
 .turn-form {
   display: grid;
-  grid-template-columns: 142px 72px minmax(0, 1fr) 118px;
-  gap: 12px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgba(10, 8, 7, 0.54);
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 .turn-form-warning {
-  border-color: rgba(244, 207, 122, 0.55);
-  box-shadow: 0 0 0 1px rgba(244, 207, 122, 0.12);
+  filter: drop-shadow(0 0 10px rgba(244, 207, 122, 0.16));
 }
 
 .turn-form-submitted {
-  background: rgba(5, 4, 4, 0.72);
+  background: transparent;
 }
 
 .turn-form-attention {
@@ -3051,11 +3048,25 @@ h1 {
 .turn-form-input-wrap {
   position: relative;
   min-width: 0;
+  padding: 0 18px 18px;
+}
+
+.turn-form-input-wrap::before {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 28px;
+  background: url("/fantasygothicui/line1.png") center bottom / 100% 100%
+    no-repeat;
+  content: "";
+  opacity: 0.82;
+  pointer-events: none;
 }
 
 .turn-form-input-wrap textarea {
   width: 100%;
-  min-height: 72px;
+  min-height: 76px;
   resize: none;
   border: 0;
   outline: 0;
@@ -3067,10 +3078,8 @@ h1 {
 
 .turn-form-submitted .turn-form-input-wrap::after {
   position: absolute;
-  inset: -4px;
-  border: 1px solid rgba(244, 207, 122, 0.22);
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.58);
+  inset: 0 0 18px;
+  background: rgba(0, 0, 0, 0.44);
   content: "";
   pointer-events: none;
 }
@@ -3102,15 +3111,25 @@ h1 {
   color: rgba(249, 237, 214, 0.44);
 }
 
-.input-mode-toggle {
-  display: grid;
-  grid-template-columns: 1fr;
+.turn-action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
   gap: 8px;
 }
 
+.input-mode-toggle {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: min(100%, 260px);
+}
+
 .turn-form .input-mode-button {
-  min-height: 32px;
-  padding: 0 8px;
+  min-height: 34px;
+  padding: 0 12px;
   color: var(--muted);
   background: rgba(217, 169, 74, 0.08);
   font-size: 0.72rem;
@@ -3123,18 +3142,18 @@ h1 {
 
 .dice-roll-control {
   position: relative;
-  min-width: 0;
+  flex: 0 1 132px;
+  min-width: 92px;
 }
 
 .turn-form .dice-roll-button {
   display: inline-flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 7px;
   width: 100%;
-  min-height: 72px;
-  padding: 8px;
+  min-height: 38px;
+  padding: 0 12px;
   color: var(--gold-bright);
   background: rgba(217, 169, 74, 0.1);
 }
@@ -3222,7 +3241,7 @@ h1 {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 52px;
+  min-height: 38px;
   border: 1px solid rgba(244, 207, 122, 0.45);
   border-radius: 8px;
   color: #1b120b;
@@ -3237,13 +3256,13 @@ h1 {
 }
 
 .turn-form-actions {
-  display: grid;
-  grid-template-columns: 1fr;
+  display: flex;
+  flex: 0 0 auto;
   gap: 8px;
 }
 
 .turn-form .turn-form-skip {
-  min-height: 32px;
+  min-height: 38px;
   color: var(--gold-bright);
   background: rgba(217, 169, 74, 0.08);
 }
@@ -3899,11 +3918,16 @@ h6 {
   }
 
   .turn-form {
-    grid-template-columns: 64px 1fr;
+    gap: 8px;
+  }
+
+  .turn-action-bar,
+  .input-mode-toggle {
+    width: 100%;
   }
 
   .input-mode-toggle {
-    grid-column: 1 / -1;
+    display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -3915,12 +3939,21 @@ h6 {
     min-height: 46px;
   }
 
+  .dice-roll-control {
+    flex: 1 1 104px;
+  }
+
   .turn-form-input-wrap {
-    grid-column: span 1;
+    padding-right: 10px;
+    padding-left: 10px;
   }
 
   .turn-form-actions {
-    grid-column: 1 / -1;
+    flex: 1 1 auto;
+  }
+
+  .turn-form-actions button {
+    flex: 1 1 0;
   }
 }
 
