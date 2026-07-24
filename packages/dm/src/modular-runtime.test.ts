@@ -216,6 +216,10 @@ describe("modular AI DM runtime contracts", () => {
       jobPrompt("combat"),
       /When a player spell or feature forces an NPC or enemy saving throw/i
     );
+    assert.match(
+      jobPrompt("combat"),
+      /Never narrate a spell or feature as failing, succeeding, taking hold, being resisted, or being shaken off/i
+    );
     assert.match(jobPrompt("combat"), /combat starts, initiative first/i);
     assert.match(
       jobPrompt("combat"),
@@ -234,6 +238,10 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("combat"), /"input_targets": \[\s+"player:tart"\s+\]/);
     assert.match(jobPrompt("combat"), /area spell saves and damage are explicit/i);
     assert.match(jobPrompt("combat"), /player spell forces an NPC save/i);
+    assert.match(
+      jobPrompt("combat"),
+      /Bad response to avoid: saying the spell fails, Hesk resists/i
+    );
     assert.match(
       jobPrompt("combat"),
       /Warden Captain Hesk Wisdom save: 11 vs DC 13 - failure/i

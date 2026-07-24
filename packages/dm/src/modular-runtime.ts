@@ -430,6 +430,7 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
     "input_policy must be all_players or only_targeted_players; never use acting_player.",
     "Use known modifiers, proficiency, advantage, or disadvantage from the character sheet or combat context when available. If unknown, ask for the base roll clearly without inventing bonuses.",
     "When a player spell or feature forces an NPC or enemy saving throw, roll that save yourself before narrating success or failure, reveal the save roll and total, compare it to the player's known spell save DC when available, and do not put the NPC/enemy save in roll_requests.",
+    "Never narrate a spell or feature as failing, succeeding, taking hold, being resisted, or being shaken off because of an NPC/enemy save unless public_narration first includes the visible save math line: '<Target> <Ability> save: X vs DC Y - success/failure'.",
     "Visible combat math:",
     "For resolved attacks, make the numbers visible before injury narration.",
     "Use explicit wording for attack outcomes: 'attack roll: X vs AC Y - hit/miss'.",
@@ -562,6 +563,7 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
       "Example: player spell forces an NPC save.",
       'Player input: "I cast Charm Person on Warden Captain Hesk."',
       "Context: Combat is active. POKE is the current turn owner, Hesk is hostile, and POKE's spell save DC is 13.",
+      "Bad response to avoid: saying the spell fails, Hesk resists, Hesk shakes it off, or Hesk is charmed without first showing her Wisdom save total vs POKE's spell save DC.",
       "Good response:",
       JSON.stringify(
         {
