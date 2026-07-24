@@ -32,11 +32,25 @@ describe("new adventure page auth gate", () => {
   it("redirects unauthenticated users to login with new adventure as next", async () => {
     getOptionalUserMock.mockResolvedValue(null);
 
-    await expect(NewAdventurePage()).rejects.toMatchObject({
-      destination: "/login?next=/new-adventure"
+    await expect(
+      NewAdventurePage({ searchParams: Promise.resolve({}) })
+    ).rejects.toMatchObject({
+      destination: "/login?next=%2Fnew-adventure"
     });
 
-    expect(redirectMock).toHaveBeenCalledWith("/login?next=/new-adventure");
+    expect(redirectMock).toHaveBeenCalledWith("/login?next=%2Fnew-adventure");
+  });
+
+  it("preserves invite links through the login redirect", async () => {
+    getOptionalUserMock.mockResolvedValue(null);
+
+    await expect(
+      NewAdventurePage({
+        searchParams: Promise.resolve({ invite: "invite-token" })
+      })
+    ).rejects.toMatchObject({
+      destination: "/login?next=%2Fnew-adventure%3Finvite%3Dinvite-token"
+    });
   });
 
   it("renders the adventure form for authenticated users", async () => {
@@ -45,12 +59,32 @@ describe("new adventure page auth gate", () => {
       email: "hero@example.com"
     });
 
-    const result = await NewAdventurePage();
+    const result = await NewAdventurePage({ searchParams: Promise.resolve({}) });
 
     expect(result).toMatchObject({
       type: newAdventureFormMock,
-      props: {}
+      props: {
+        initialInviteToken: undefined
+      }
     });
     expect(redirectMock).not.toHaveBeenCalled();
+  });
+
+  it("passes invite tokens to the adventure form for authenticated users", async () => {
+    getOptionalUserMock.mockResolvedValue({
+      id: "user-1",
+      email: "hero@example.com"
+    });
+
+    const result = await NewAdventurePage({
+      searchParams: Promise.resolve({ invite: "invite-token" })
+    });
+
+    expect(result).toMatchObject({
+      type: newAdventureFormMock,
+      props: {
+        initialInviteToken: "invite-token"
+      }
+    });
   });
 });

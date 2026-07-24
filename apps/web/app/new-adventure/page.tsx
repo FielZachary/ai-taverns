@@ -2,12 +2,26 @@ import { redirect } from "next/navigation";
 import { NewAdventureForm } from "./new-adventure-form";
 import { getOptionalUser } from "@/lib/auth";
 
-export default async function NewAdventurePage() {
+type NewAdventurePageProps = {
+  searchParams: Promise<{
+    invite?: string;
+  }>;
+};
+
+export default async function NewAdventurePage({
+  searchParams
+}: NewAdventurePageProps) {
   const user = await getOptionalUser();
+  const { invite } = await searchParams;
+  const inviteToken = invite?.trim();
 
   if (!user) {
-    redirect("/login?next=/new-adventure");
+    const next = inviteToken
+      ? `/new-adventure?invite=${encodeURIComponent(inviteToken)}`
+      : "/new-adventure";
+
+    redirect(`/login?next=${encodeURIComponent(next)}`);
   }
 
-  return <NewAdventureForm />;
+  return <NewAdventureForm initialInviteToken={inviteToken} />;
 }

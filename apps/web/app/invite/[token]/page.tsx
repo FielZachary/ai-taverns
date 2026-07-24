@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { getOptionalUser } from "@/lib/auth";
-import { InviteJoinForm } from "./invite-join-form";
 
 type InvitePageProps = {
   params: Promise<{
@@ -23,5 +22,5 @@ export default async function InvitePage({ params }: InvitePageProps) {
     redirect(`/login?next=${encodeURIComponent(invitePath)}`);
   }
 
-  return <InviteJoinForm token={inviteToken} userEmail={user.email ?? ""} />;
+  redirect(`/new-adventure?invite=${encodeURIComponent(inviteToken)}`);
 }
