@@ -137,7 +137,7 @@ describe("PlayerInput", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /roll 1d20 \+ 2d6/i }))
-        .toHaveTextContent("3 dice");
+        .toHaveTextContent("Dice");
     });
 
     expect(screen.getByText("Roll to continue")).toBeInTheDocument();

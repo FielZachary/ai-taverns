@@ -3131,41 +3131,27 @@ h1 {
   min-height: 34px;
   padding: 0 12px;
   color: var(--muted);
-  background: rgba(217, 169, 74, 0.08);
   font-size: 0.72rem;
 }
 
 .turn-form .input-mode-button.active {
-  color: #1b120b;
-  background: var(--gold-bright);
+  color: var(--gold-bright);
 }
 
 .dice-roll-control {
   position: relative;
-  flex: 0 0 38px;
-  width: 38px;
+  flex: 0 0 auto;
 }
 
 .turn-form .dice-roll-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 38px;
+  min-width: 76px;
   height: 38px;
-  min-width: 38px;
   min-height: 38px;
-  padding: 0;
+  padding: 0 16px;
   color: var(--gold-bright);
-  background: rgba(217, 169, 74, 0.1);
-}
-
-.turn-form .dice-roll-button span {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
 }
 
 .dice-picker-popover {
@@ -3254,6 +3240,24 @@ h1 {
   font-weight: 900;
 }
 
+.turn-action-bar button {
+  min-width: 82px;
+  border: 0;
+  padding: 0 18px;
+  color: var(--gold-bright);
+  background:
+    url("/fantasygothicui/button4.png") center / 100% 100% no-repeat,
+    transparent;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.86);
+}
+
+.turn-action-bar button:hover,
+.turn-action-bar button:focus-visible,
+.turn-action-bar .input-mode-button.active {
+  color: var(--ink);
+  filter: drop-shadow(0 0 8px rgba(244, 207, 122, 0.18));
+}
+
 .turn-form button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
@@ -3268,7 +3272,6 @@ h1 {
 .turn-form .turn-form-skip {
   min-height: 38px;
   color: var(--gold-bright);
-  background: rgba(217, 169, 74, 0.08);
 }
 
 .turn-form .dice-picker-clear {
@@ -3940,15 +3943,13 @@ h6 {
   }
 
   .turn-form .dice-roll-button {
-    width: 46px;
     height: 46px;
-    min-width: 46px;
+    min-width: 82px;
     min-height: 46px;
   }
 
   .dice-roll-control {
-    flex: 0 0 46px;
-    width: 46px;
+    flex: 0 0 auto;
   }
 
   .turn-form-input-wrap {

@@ -6,7 +6,6 @@ import {
   useRef,
   useState
 } from "react";
-import { Dice5, MessageCircleQuestion, Send, SkipForward, Swords } from "lucide-react";
 import type { DiceRollRequest } from "@/lib/game-types";
 
 export type DiceFace = "d4" | "d6" | "d8" | "d10" | "d12" | "d20";
@@ -164,7 +163,6 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
               disabled={isSending}
               onClick={() => onModeChange("turn")}
             >
-              <Swords size={17} />
               Turn
             </button>
             <button
@@ -176,7 +174,6 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
               disabled={isSending}
               onClick={() => onModeChange("ask_dm")}
             >
-              <MessageCircleQuestion size={17} />
               Ask DM
             </button>
           </div>
@@ -193,12 +190,7 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
               disabled={isAskMode || (isLocked && !isRollRequired) || isSending}
               onClick={() => setIsDicePickerOpen((isOpen) => !isOpen)}
             >
-              <Dice5 size={22} />
-              <span>
-                {queuedCount > 0
-                  ? `${queuedCount} dice`
-                  : requiredRollExpression ?? requiredRoll?.dice ?? "dice"}
-              </span>
+              Dice
             </button>
             {isDicePickerOpen ? (
               <div className="dice-picker-popover" role="dialog" aria-label="Dice roller">
@@ -245,7 +237,6 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
                 disabled={!canSkipTurn}
                 onClick={onSkipTurn}
               >
-                <SkipForward size={18} />
                 Skip
               </button>
             ) : null}
@@ -253,7 +244,6 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
               type="submit"
               disabled={isRollRequired || isLocked || isSending || !draft.trim()}
             >
-              {isAskMode ? <MessageCircleQuestion size={18} /> : <Send size={18} />}
               {isAskMode ? "Ask" : "Send"}
             </button>
           </div>
