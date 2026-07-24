@@ -145,7 +145,7 @@ test("DeepSeek provider sends filtered history and returns non-stream debug meta
   );
 });
 
-test("DeepSeek provider lowers temperature for expanded combat language", async () => {
+test("DeepSeek provider ignores combat language without routed DM job", async () => {
   const temperatures: Array<number | undefined> = [];
 
   globalThis.fetch = async (_url, init) => {
@@ -155,7 +155,7 @@ test("DeepSeek provider lowers temperature for expanded combat language", async 
     temperatures.push(requestBody.temperature);
 
     return jsonResponse({
-      id: `combat-chat-${temperatures.length}`,
+      id: `unrouted-combat-language-chat-${temperatures.length}`,
       model: "test-chat-model",
       choices: [
         {
@@ -185,10 +185,10 @@ test("DeepSeek provider lowers temperature for expanded combat language", async 
       currentPlayerAction
     });
 
-    assert.equal(response.debug.temperature, 0.2);
+    assert.equal(response.debug.temperature, 0.8);
   }
 
-  assert.deepEqual(temperatures, [0.2, 0.2, 0.2, 0.2, 0.2, 0.2]);
+  assert.deepEqual(temperatures, [0.8, 0.8, 0.8, 0.8, 0.8, 0.8]);
 });
 
 test("DeepSeek provider uses routed DM job for temperature", async () => {
@@ -289,7 +289,7 @@ test("DeepSeek provider does not lower temperature for system-only combat rules"
   assert.equal(response.debug.temperature, 0.8);
 });
 
-test("DeepSeek provider uses current player action instead of full prompt context for temperature", async () => {
+test("DeepSeek provider defaults to high temperature without routed DM job", async () => {
   let requestBody:
     | {
         temperature?: number;
