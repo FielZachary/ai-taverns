@@ -3130,12 +3130,7 @@ h1 {
 .turn-form .input-mode-button {
   min-height: 34px;
   padding: 0 12px;
-  color: var(--muted);
   font-size: 0.72rem;
-}
-
-.turn-form .input-mode-button.active {
-  color: var(--gold-bright);
 }
 
 .dice-roll-control {
@@ -3151,7 +3146,7 @@ h1 {
   height: 38px;
   min-height: 38px;
   padding: 0 16px;
-  color: var(--gold-bright);
+  --toolbar-button-image: url("/fantasygothicui/button12.png");
 }
 
 .dice-picker-popover {
@@ -3227,6 +3222,8 @@ h1 {
 }
 
 .turn-form button {
+  position: relative;
+  isolation: isolate;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -3234,33 +3231,44 @@ h1 {
   min-height: 38px;
   border: 1px solid rgba(244, 207, 122, 0.45);
   border-radius: 8px;
-  color: #1b120b;
-  background: var(--gold-bright);
+  color: var(--gold-bright);
+  background: transparent;
   font-family: var(--body-font);
   font-weight: 900;
 }
 
 .turn-action-bar button {
+  --toolbar-button-image: url("/fantasygothicui/button4.png");
   min-width: 82px;
   border: 0;
   padding: 0 18px;
   color: var(--gold-bright);
-  background:
-    url("/fantasygothicui/button4.png") center / 100% 100% no-repeat,
-    transparent;
+  opacity: 0.48;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.86);
+}
+
+.turn-action-bar button::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--gold-bright);
+  content: "";
+  -webkit-mask: var(--toolbar-button-image) center / 100% 100% no-repeat;
+  mask: var(--toolbar-button-image) center / 100% 100% no-repeat;
 }
 
 .turn-action-bar button:hover,
 .turn-action-bar button:focus-visible,
-.turn-action-bar .input-mode-button.active {
-  color: var(--ink);
+.turn-action-bar .input-mode-button.active,
+.turn-action-bar .dice-roll-button:not(:disabled),
+.turn-form-actions button:not(:disabled) {
+  opacity: 1;
   filter: drop-shadow(0 0 8px rgba(244, 207, 122, 0.18));
 }
 
 .turn-form button:disabled {
   cursor: not-allowed;
-  opacity: 0.5;
+  opacity: 0.32;
 }
 
 .turn-form-actions {
@@ -3271,7 +3279,11 @@ h1 {
 
 .turn-form .turn-form-skip {
   min-height: 38px;
-  color: var(--gold-bright);
+  --toolbar-button-image: url("/fantasygothicui/button12.png");
+}
+
+.turn-form-actions button {
+  --toolbar-button-image: url("/fantasygothicui/button12.png");
 }
 
 .turn-form .dice-picker-clear {
