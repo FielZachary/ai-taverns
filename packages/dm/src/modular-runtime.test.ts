@@ -314,7 +314,7 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
-      /When a player-controlled attack roll hits and damage was not already submitted/i
+      /When a player action, spell, feature, or weapon would deal damage/i
     );
     assert.match(
       jobPrompt("combat"),
@@ -385,6 +385,18 @@ describe("modular AI DM runtime contracts", () => {
       jobPrompt("combat"),
       /"dice": "1d12"/i
     );
+    assert.match(
+      jobPrompt("combat"),
+      /player action, spell, feature, or weapon would deal damage/i
+    );
+    assert.match(jobPrompt("combat"), /automatic-hit effects such as Magic Missile/i);
+    assert.match(jobPrompt("combat"), /Magic Missile target is known, request player damage/i);
+    assert.match(
+      jobPrompt("combat"),
+      /Bad response to avoid: rolling Magic Missile damage yourself/i
+    );
+    assert.match(jobPrompt("combat"), /"dice": "3d4"/i);
+    assert.match(jobPrompt("combat"), /"modifier": 3/i);
     assert.match(jobPrompt("combat"), /area spell saves and damage are explicit/i);
     assert.match(jobPrompt("combat"), /player spell forces an NPC save/i);
     assert.match(

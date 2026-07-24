@@ -463,7 +463,7 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
     "input_policy must be all_players or only_targeted_players; never use acting_player.",
     "Use known modifiers, proficiency, advantage, or disadvantage from the character sheet or combat context when available. If unknown, ask for the base roll clearly without inventing bonuses.",
     "In roll_requests, dice must be bare dice notation only, such as 1d20, 3d4, or 8d6. Do not include + or - modifiers in dice; put static bonuses or penalties in modifier. Example: Magic Missile uses dice \"3d4\" and modifier 3, not dice \"3d4+3\".",
-    "When a player-controlled attack roll hits and damage was not already submitted, do not roll damage yourself. Request the player's damage roll with next_input_needed dice_results and a structured roll_requests entry. Do not update target HP until damage is submitted.",
+    "When a player action, spell, feature, or weapon would deal damage and that damage roll was not already submitted, do not roll damage yourself. Request the player's damage roll with next_input_needed dice_results and a structured roll_requests entry. This includes automatic-hit effects such as Magic Missile. Do not update target HP until damage is submitted.",
     "When a player spell or feature forces an NPC or enemy saving throw, roll that save yourself before narrating success or failure, reveal the save roll and total, compare it to the player's known spell save DC when available, and do not put the NPC/enemy save in roll_requests.",
     "Never narrate a spell or feature as failing, succeeding, taking hold, being resisted, or being shaken off because of an NPC/enemy save unless public_narration first includes the visible save math line: '<Target> <Ability> save: X vs DC Y - success/failure'.",
     "Visible combat math:",
@@ -711,6 +711,48 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
                 "npc:warden-captain-hesk",
                 "npc:warden-1",
                 "npc:warden-2",
+                "player:komer"
+              ]
+            }
+          }
+        },
+        null,
+        2
+      )
+    ].join("\n"),
+    [
+      "Example: Magic Missile target is known, request player damage.",
+      'Player input: "I cast Magic Missile on Doran."',
+      "Context: POKE is the current turn owner. Doran Ironhand is the only target selected by the spell, and POKE has not rolled damage.",
+      "Bad response to avoid: rolling Magic Missile damage yourself, narrating 3d4 + 3 = 12 force damage, or reducing Doran's HP before POKE submits the damage roll.",
+      "Good response:",
+      JSON.stringify(
+        {
+          public_narration: [
+            "Three silver darts gather at POKE's fingertips, thread through the thinning smoke, and lock onto Doran Ironhand.",
+            "Magic Missile automatically hits Doran. POKE, roll Magic Missile damage: 3d4 + 3."
+          ].join("\n\n"),
+          resolution_mode: "needs_dice",
+          roll_requests: [
+            {
+              id: "poke-magic-missile-damage-doran",
+              dice: "3d4",
+              label: "Magic Missile damage",
+              modifier: 3,
+              player: "player:poke"
+            }
+          ],
+          next_input_needed: "dice_results",
+          input_targets: ["player:poke"],
+          input_policy: "only_targeted_players",
+          mechanics_state_update: {
+            combat: {
+              active: true,
+              round: 1,
+              turnOwner: "player:poke",
+              initiativeOrder: [
+                "npc:doran-ironhand",
+                "player:poke",
                 "player:komer"
               ]
             }
