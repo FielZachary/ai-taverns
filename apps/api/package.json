@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "predev": "npm run build -w @ai-dnd/domain && npm run build -w @ai-dnd/contracts && npm run build -w @ai-dnd/dm && npm run build -w @ai-dnd/db",
+    "predev": "npm run build -w @ai-dnd/domain && npm run build -w @ai-dnd/contracts && npm run build -w @ai-dnd/dm && npm run build -w @ai-dnd/db && node ../../scripts/run-db-migrations.mjs",
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
     "build": "tsc -p tsconfig.build.json",
