@@ -31,6 +31,7 @@ import {
   type ValidatedRouterOutput
 } from "@ai-dnd/dm";
 import type {
+  AiModelId,
   CampaignMode,
   CampaignSummary,
   DmStreamEvent,
@@ -559,6 +560,7 @@ export type DungeonMasterRuntime = {
     history?: GameMessage[];
     currentPlayerAction?: string;
     dmJob?: DmJobName;
+    model?: AiModelId;
     onPublicNarrationDelta?: (text: string) => void;
   }): Promise<DungeonMasterProviderResponse>;
   emitDmStreamEvent?(event: DmStreamEvent): void;
@@ -567,6 +569,7 @@ export type DungeonMasterRuntime = {
     turnId?: string | undefined;
     currentAction: string;
     baseInstructions: string;
+    model?: AiModelId;
   }): Promise<{
     instructions: string;
     message: string;
@@ -3192,6 +3195,7 @@ async function buildModularDmPromptContext(
     currentAction: string;
     baseInstructions: string;
     history: GameMessage[];
+    model?: AiModelId;
   }
 ): Promise<DmPromptContext> {
   const players = await getActiveCampaignPlayers(db, campaign.id);
@@ -3205,7 +3209,8 @@ async function buildModularDmPromptContext(
   const routerData = await runtime.askProvider({
     instructions: routerInstructions,
     message: routerMessage,
-    history: input.history
+    history: input.history,
+    ...(input.model ? { model: input.model } : {})
   });
   const router = validateRouterOutput(
     routerData.content,
@@ -4748,6 +4753,7 @@ async function askDungeonMaster(
   options?: {
     buildPromptContext?: boolean;
     includeEldermereTurnContext?: boolean;
+    model?: AiModelId;
     suppressStreaming?: boolean;
   }
 ): Promise<DungeonMasterReply> {
@@ -4795,14 +4801,16 @@ async function askDungeonMaster(
             campaignId: campaign.id,
             turnId,
             currentAction: message,
-            baseInstructions: instructionsWithWorldContext
+            baseInstructions: instructionsWithWorldContext,
+            ...(options?.model ? { model: options.model } : {})
           })
         : await buildModularDmPromptContext(db, runtime, campaign, {
             traceId,
             turnId,
             currentAction: message,
             baseInstructions: instructionsWithWorldContext,
-            history
+            history,
+            ...(options?.model ? { model: options.model } : {})
           })
       : null;
     const providerMessage = appendGameplayTurnOutputContractReminder(
@@ -4816,6 +4824,7 @@ async function askDungeonMaster(
       history,
       ...(currentPlayerAction ? { currentPlayerAction } : {}),
       ...(promptContext?.jobNeeded ? { dmJob: promptContext.jobNeeded } : {}),
+      ...(options?.model ? { model: options.model } : {}),
       ...(streamEmitter && streamTurnId
         ? {
             onPublicNarrationDelta: (text: string) => {
@@ -5667,6 +5676,7 @@ export async function submitRoomTurnForUser(
     rollRequestId?: string;
     rollResult?: DiceRollResult;
     clientMessageId?: string;
+    model?: AiModelId;
     rollSubmissions?: DiceRollSubmission[];
   }
 ): Promise<RoomSnapshot> {
@@ -5893,7 +5903,10 @@ export async function submitRoomTurnForUser(
         currentAction,
         dungeonMasterContractInstructions,
         true,
-        submitState.turn.id
+        submitState.turn.id,
+        undefined,
+        undefined,
+        input.model ? { model: input.model } : undefined
       );
       const resolvedTurn = await finishResolvedTurn(db, {
         campaignId: submitState.campaign.id,
@@ -5971,6 +5984,7 @@ export async function askDungeonMasterQuestionForUser(
     question: string;
     userId: string;
     clientMessageId?: string;
+    model?: AiModelId;
   }
 ): Promise<RoomSnapshot> {
   const trimmedQuestion = input.question.trim();
@@ -6025,12 +6039,13 @@ export async function askDungeonMasterQuestionForUser(
   const streamTurnId = runtime.emitDmStreamEvent ? randomUUID() : undefined;
   const instructions = withEldermereTurnContext(askDmInstructions(), campaign);
   const promptContext = runtime.buildPromptContext
-    ? await runtime.buildPromptContext({
-        campaignId: campaign.id,
-        turnId: streamTurnId,
-        currentAction,
-        baseInstructions: instructions
-      })
+      ? await runtime.buildPromptContext({
+          campaignId: campaign.id,
+          turnId: streamTurnId,
+          currentAction,
+          baseInstructions: instructions,
+          ...(input.model ? { model: input.model } : {})
+        })
     : null;
   const history = promptContext
     ? []
@@ -6050,6 +6065,7 @@ export async function askDungeonMasterQuestionForUser(
       instructions: promptContext?.instructions ?? instructions,
       history,
       currentPlayerAction: trimmedQuestion,
+      ...(input.model ? { model: input.model } : {}),
       ...(streamTurnId
         ? {
             onPublicNarrationDelta: (text: string) => {
@@ -6132,6 +6148,7 @@ export async function submitSoloTurnForUser(
     rollRequestId?: string;
     rollResult?: DiceRollResult;
     clientMessageId?: string;
+    model?: AiModelId;
     rollSubmissions?: DiceRollSubmission[];
   }
 ): Promise<RoomSnapshot> {
@@ -6327,7 +6344,9 @@ export async function submitSoloTurnForUser(
       dungeonMasterContractInstructions,
       true,
       soloState.turn.id,
-      soloState.content
+      soloState.content,
+      undefined,
+      input.model ? { model: input.model } : undefined
     );
     const resolvedTurn = await finishResolvedTurn(db, {
       campaignId: soloState.campaign.id,

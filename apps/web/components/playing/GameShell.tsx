@@ -14,6 +14,7 @@ import {
   X
 } from "lucide-react";
 import type {
+  AiModelId,
   DiceRollRequest,
   DiceRollSubmission,
   GameMessage,
@@ -81,9 +82,27 @@ import {
 } from "./game-shell-messages";
 
 const openingMessages: GameMessage[] = [];
+const aiModelStorageKey = "ai-dnd.aiModel";
+const defaultAiModel: AiModelId = "deepseek-v4-flash";
 const playerIdStorageKey = "ai-dnd.playerId";
 const roomRequestTimeoutMs = 8_000;
 const fallbackRoomPollMs = 25_000;
+
+function isAiModelId(value: FormDataEntryValue | string | null): value is AiModelId {
+  return value === "deepseek-v4-flash" || value === "qwen-3-7-flash";
+}
+
+function selectedAiModelFromStorage(): AiModelId {
+  const savedAiModel = window.localStorage.getItem(aiModelStorageKey);
+
+  return isAiModelId(savedAiModel) ? savedAiModel : defaultAiModel;
+}
+
+function selectedAiModelFromForm(form: HTMLFormElement): AiModelId {
+  const submittedModel = new FormData(form).get("aiModel");
+
+  return isAiModelId(submittedModel) ? submittedModel : selectedAiModelFromStorage();
+}
 
 type CampaignSummary = ApiCampaignSummary & ChatSummary;
 
@@ -1063,7 +1082,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
 
   async function sendTurn(
     messageText: string,
-    options: { skipTurn?: boolean } = {}
+    options: { skipTurn?: boolean; model?: AiModelId } = {}
   ) {
     const skipTurn = Boolean(options.skipTurn);
     const currentPlayerName =
@@ -1137,7 +1156,8 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
         playerId,
         message: content,
         skipTurn,
-        clientMessageId: playerMessage.id
+        clientMessageId: playerMessage.id,
+        model: options.model ?? selectedAiModelFromStorage()
       });
       const response = await fetch(
         request.endpoint,
@@ -1264,7 +1284,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     }
   }
 
-  async function askDungeonMaster(messageText: string) {
+  async function askDungeonMaster(messageText: string, model: AiModelId) {
     const question = messageText.trim();
 
     if (!question || isSending || !activeCampaign) {
@@ -1297,7 +1317,8 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
           },
           body: JSON.stringify({
             question,
-            clientMessageId: playerMessage.id
+            clientMessageId: playerMessage.id,
+            model
           })
         }
       );
@@ -1346,16 +1367,18 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const model = selectedAiModelFromForm(event.currentTarget);
+
     if (inputMode === "ask_dm") {
-      void askDungeonMaster(draft);
+      void askDungeonMaster(draft, model);
       return;
     }
 
-    void sendTurn(draft);
+    void sendTurn(draft, { model });
   }
 
   function handleSkipTurn() {
-    void sendTurn("", { skipTurn: true });
+    void sendTurn("", { skipTurn: true, model: selectedAiModelFromStorage() });
   }
 
   async function completePendingRollBatch(
@@ -1385,7 +1408,8 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
         singlePlayer,
         playerId,
         rollSubmissions,
-        clientMessageId: rollMessage.id
+        clientMessageId: rollMessage.id,
+        model: selectedAiModelFromStorage()
       });
       const response = await fetch(
         request.endpoint,
