@@ -26,6 +26,7 @@ body {
 body {
   --heading-font: var(--font-heading), "Cinzel", Georgia, serif;
   --body-font: var(--font-body), "Cormorant Garamond", Georgia, serif;
+  --play-text-font: Georgia, "Times New Roman", serif;
   color: var(--ink);
   background:
     radial-gradient(circle at 18% 12%, rgba(173, 71, 43, 0.26), transparent 28rem),
@@ -2839,6 +2840,7 @@ h1 {
 .message-body {
   display: grid;
   gap: 1.15rem;
+  font-family: var(--play-text-font);
 }
 
 .message-body p {
@@ -3071,6 +3073,7 @@ h1 {
   outline: 0;
   color: var(--ink);
   background: transparent;
+  font-family: var(--play-text-font);
   line-height: 1.45;
 }
 
