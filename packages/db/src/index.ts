@@ -12,6 +12,7 @@ import {
   isEldermerePreset,
   buildMemoryUpdaterPrompt,
   buildRouterPrompt,
+  formatRouterCurrentTurnInput,
   jobPrompt,
   renderContextChunks,
   validateCombatEvents,
@@ -3155,9 +3156,12 @@ function buildRouterMessage(input: {
     "Routing state JSON:",
     JSON.stringify(input.routerState, null, 2),
     "",
-    "Current turn input:",
-    input.currentAction
+    formatRouterCurrentTurnInput(input.currentAction)
   ].join("\n");
+}
+
+function routerFallbackJob(routerState: Record<string, unknown>): DmJobName {
+  return routerState.combat_active === true ? "combat" : "scene_director";
 }
 
 function routerDebugFromPromptContext(
@@ -3203,7 +3207,10 @@ async function buildModularDmPromptContext(
     message: routerMessage,
     history: input.history
   });
-  const router = validateRouterOutput(routerData.content);
+  const router = validateRouterOutput(
+    routerData.content,
+    routerFallbackJob(routerState)
+  );
 
   await logDmModelCall(db, {
     campaignId: campaign.id,

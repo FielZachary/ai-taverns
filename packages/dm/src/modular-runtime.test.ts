@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   buildMemoryUpdaterPrompt,
   buildRouterPrompt,
+  formatRouterCurrentTurnInput,
   jobPrompt,
   renderContextChunks,
   validateCombatEvents,
@@ -43,6 +44,59 @@ describe("modular AI DM runtime contracts", () => {
     assert.equal(result.fallbackUsed, true);
     assert.match(result.errors.join("\n"), /parseable JSON/);
     assert.deepEqual(result.contextKeys.combat_context, []);
+  });
+
+  it("supports combat-aware router fallback jobs", () => {
+    const result = validateRouterOutput(
+      JSON.stringify({
+        public_narration: "Komer's axe bites into the railing.",
+        roll_requests: [],
+        next_input_needed: "player_actions"
+      }),
+      "combat"
+    );
+
+    assert.equal(result.jobNeeded, "combat");
+    assert.equal(result.fallbackUsed, true);
+    assert.match(result.errors.join("\n"), /job_needed is required/);
+  });
+
+  it("formats router turn input with only structured submissions when available", () => {
+    const formatted = formatRouterCurrentTurnInput(
+      [
+        "Canonical player characters:",
+        "Very long sheet text",
+        "",
+        "Current turn input JSON:",
+        JSON.stringify(
+          {
+            type: "multiplayer_turn",
+            resolution_policy: "Resolve active combat.",
+            submissions: [
+              {
+                player: "Komer",
+                character: "Komer",
+                content: "I rolled 1d20 + 5: 10 (5) for Greataxe attack roll."
+              }
+            ]
+          },
+          null,
+          2
+        )
+      ].join("\n")
+    );
+
+    assert.match(formatted, /Current turn submissions JSON:/);
+    assert.match(formatted, /Greataxe attack roll/);
+    assert.doesNotMatch(formatted, /Very long sheet text/);
+    assert.doesNotMatch(formatted, /resolution_policy/);
+  });
+
+  it("warns the router not to emit main DM response fields", () => {
+    const prompt = buildRouterPrompt();
+
+    assert.match(prompt, /You are not the narrator/);
+    assert.match(prompt, /Never return public_narration/);
   });
 
   it("renders selected context chunks as labelled markdown packets", () => {

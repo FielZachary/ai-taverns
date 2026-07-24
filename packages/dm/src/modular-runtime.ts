@@ -193,6 +193,32 @@ export function validateRouterOutput(
   return result;
 }
 
+export function formatRouterCurrentTurnInput(currentAction: string) {
+  const marker = "Current turn input JSON:";
+  const markerIndex = currentAction.lastIndexOf(marker);
+
+  if (markerIndex < 0) {
+    return ["Current turn input:", currentAction].join("\n");
+  }
+
+  const currentTurnJson = currentAction.slice(markerIndex + marker.length).trim();
+
+  try {
+    const parsed = JSON.parse(currentTurnJson) as { submissions?: unknown };
+
+    if (Array.isArray(parsed.submissions)) {
+      return [
+        "Current turn submissions JSON:",
+        JSON.stringify(parsed.submissions, null, 2)
+      ].join("\n");
+    }
+  } catch {
+    // Fall through to the full input when the structured block is unavailable.
+  }
+
+  return ["Current turn input:", currentAction].join("\n");
+}
+
 export function buildRouterPrompt() {
   return [
     "You are the AI Taverns DM router.",
@@ -204,6 +230,7 @@ export function buildRouterPrompt() {
     "Do not choose clarification merely because an action is risky, opposed, or requires dice; route those to the relevant gameplay job and request rolls there.",
     `Allowed jobs: ${dmJobNames.join(", ")}.`,
     `Context categories: ${contextCategories.join(", ")}.`,
+    "You are not the narrator. Never return public_narration, roll_requests, next_input_needed, input_targets, input_policy, or any main DM response fields.",
     "Return exactly one JSON object with job_needed, context_keys, and optional reason."
   ].join("\n");
 }
