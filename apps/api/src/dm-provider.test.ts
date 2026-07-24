@@ -191,6 +191,69 @@ test("DeepSeek provider lowers temperature for expanded combat language", async 
   assert.deepEqual(temperatures, [0.2, 0.2, 0.2, 0.2, 0.2, 0.2]);
 });
 
+test("DeepSeek provider uses routed DM job for temperature", async () => {
+  const temperatures: Array<number | undefined> = [];
+
+  globalThis.fetch = async (_url, init) => {
+    const requestBody = JSON.parse(String(init?.body)) as {
+      temperature?: number;
+    };
+    temperatures.push(requestBody.temperature);
+
+    return jsonResponse({
+      id: `job-temperature-chat-${temperatures.length}`,
+      model: "test-chat-model",
+      choices: [
+        {
+          finish_reason: "stop",
+          message: {
+            content:
+              '{"public_narration":"The scene moves.","roll_requests":[],"next_input_needed":"player_actions","input_targets":[],"input_policy":"all_players"}'
+          }
+        }
+      ]
+    });
+  };
+
+  const calls = [
+    {
+      dmJob: "combat" as const,
+      message: "I inspect the quiet mural.",
+      expectedTemperature: 0.2
+    },
+    {
+      dmJob: "scene_director" as const,
+      message: "The old mural depicts a battle and a shattered sword.",
+      expectedTemperature: 0.8
+    },
+    {
+      dmJob: "investigation" as const,
+      message: "I study the blood pattern near the spear rack.",
+      expectedTemperature: 0.8
+    },
+    {
+      dmJob: "npc_dialogue" as const,
+      message: "I ask the veteran how the fight started.",
+      expectedTemperature: 0.8
+    }
+  ];
+
+  for (const call of calls) {
+    const response = await askDungeonMasterProvider({
+      instructions: "Return a JSON DM response.",
+      message: call.message,
+      dmJob: call.dmJob
+    });
+
+    assert.equal(response.debug.temperature, call.expectedTemperature);
+  }
+
+  assert.deepEqual(
+    temperatures,
+    calls.map((call) => call.expectedTemperature)
+  );
+});
+
 test("DeepSeek provider does not lower temperature for system-only combat rules", async () => {
   let requestBody:
     | {

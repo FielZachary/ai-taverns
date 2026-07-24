@@ -25,6 +25,7 @@ import {
   type GameMessage,
   type DmContractResponse,
   type DmContractParseOptions,
+  type DmJobName,
   type InputPolicy,
   type ValidatedRouterOutput
 } from "@ai-dnd/dm";
@@ -534,6 +535,7 @@ type DungeonMasterReply = {
 type DmPromptContext = {
   instructions: string;
   message: string;
+  jobNeeded?: DmJobName;
   sections: unknown[];
   budget: Record<string, unknown>;
   routerDebug?: NonNullable<AiDebugInfo["router"]>;
@@ -555,6 +557,7 @@ export type DungeonMasterRuntime = {
     instructions: string;
     history?: GameMessage[];
     currentPlayerAction?: string;
+    dmJob?: DmJobName;
     onPublicNarrationDelta?: (text: string) => void;
   }): Promise<DungeonMasterProviderResponse>;
   emitDmStreamEvent?(event: DmStreamEvent): void;
@@ -566,6 +569,7 @@ export type DungeonMasterRuntime = {
   }): Promise<{
     instructions: string;
     message: string;
+    jobNeeded?: DmJobName;
     sections: unknown[];
     budget: Record<string, unknown>;
   }>;
@@ -3249,6 +3253,7 @@ async function buildModularDmPromptContext(
       "",
       jobPrompt(router.jobNeeded, campaign.mode)
     ].join("\n"),
+    jobNeeded: router.jobNeeded,
     message: [
       "Selected context chunks:",
       renderContextChunks(context.chunks),
@@ -4799,6 +4804,7 @@ async function askDungeonMaster(
       instructions: promptContext?.instructions ?? instructionsWithWorldContext,
       history,
       ...(currentPlayerAction ? { currentPlayerAction } : {}),
+      ...(promptContext?.jobNeeded ? { dmJob: promptContext.jobNeeded } : {}),
       ...(streamEmitter && streamTurnId
         ? {
             onPublicNarrationDelta: (text: string) => {

@@ -1,6 +1,7 @@
 import type {
   AiDebugInfo,
   AiDebugMessage,
+  DmJobName,
   GameMessage
 } from "@ai-dnd/dm";
 
@@ -54,6 +55,7 @@ export type DungeonMasterProviderInput = {
   instructions: string;
   history?: GameMessage[];
   currentPlayerAction?: string;
+  dmJob?: DmJobName;
   onPublicNarrationDelta?: (text: string) => void;
 };
 
@@ -276,6 +278,18 @@ function requestContentChars(messages: DeepSeekMessage[]) {
 }
 
 function providerTemperatureForInput(input: DungeonMasterProviderInput) {
+  if (input.dmJob === "combat") {
+    return combatDeepSeekTemperature;
+  }
+
+  if (
+    input.dmJob === "scene_director" ||
+    input.dmJob === "investigation" ||
+    input.dmJob === "npc_dialogue"
+  ) {
+    return defaultDeepSeekTemperature;
+  }
+
   const playerFacingContext = input.currentPlayerAction ?? input.message;
 
   return combatLanguagePattern.test(playerFacingContext)
@@ -592,6 +606,7 @@ export async function askDungeonMasterProvider({
   instructions,
   history = [],
   currentPlayerAction,
+  dmJob,
   onPublicNarrationDelta
 }: DungeonMasterProviderInput): Promise<DungeonMasterProviderResponse> {
   if (shouldUseTestProvider()) {
@@ -600,6 +615,7 @@ export async function askDungeonMasterProvider({
       instructions,
       history,
       ...(currentPlayerAction ? { currentPlayerAction } : {}),
+      ...(dmJob ? { dmJob } : {}),
       ...(onPublicNarrationDelta ? { onPublicNarrationDelta } : {})
     });
   }
@@ -623,7 +639,8 @@ export async function askDungeonMasterProvider({
     message,
     instructions,
     history,
-    ...(currentPlayerAction ? { currentPlayerAction } : {})
+    ...(currentPlayerAction ? { currentPlayerAction } : {}),
+    ...(dmJob ? { dmJob } : {})
   });
 
   let requestMessages = messages;
