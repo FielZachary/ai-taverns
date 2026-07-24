@@ -58,18 +58,16 @@ describe("parseDmContract", () => {
 
     assert.equal(resolved.resolutionMode, "resolved_without_dice");
     assert.equal(needsDice.resolutionMode, "needs_dice");
-    assert.throws(
-      () =>
-        parseDmContract(
-          JSON.stringify({
-            public_narration: "Roll 1d20 for Athletics.",
-            resolution_mode: "resolved_without_dice",
-            roll_requests: [{ dice: "1d20", label: "Athletics" }],
-            next_input_needed: "dice_results"
-          })
-        ),
-      /resolution_mode that conflicts/
+    const mismatchedNeedsDice = parseDmContract(
+      JSON.stringify({
+        public_narration: "Roll 1d20 for Athletics.",
+        resolution_mode: "resolved_without_dice",
+        roll_requests: [{ dice: "1d20", label: "Athletics" }],
+        next_input_needed: "dice_results"
+      })
     );
+
+    assert.equal(mismatchedNeedsDice.resolutionMode, "needs_dice");
   });
 
   it("rejects attack roll and AC contradictions", () => {

@@ -527,13 +527,7 @@ export function parseDmContract(
     throw new Error("The DM provider response has an invalid resolution_mode value.");
   }
 
-  const resolutionMode = rawResolutionMode || inferredResolutionMode;
-
-  if (resolutionMode !== inferredResolutionMode) {
-    throw new Error(
-      "The DM provider response has a resolution_mode that conflicts with pending dice."
-    );
-  }
+  const resolutionMode = inferredResolutionMode;
 
   const attackRollContradiction = findAttackRollAcContradiction(publicNarration);
 
