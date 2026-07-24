@@ -220,4 +220,26 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("clarification"), /Ask one concise/);
     assert.match(buildMemoryUpdaterPrompt(), /Allowed operations/);
   });
+
+  it("renders mode-specific job guidance without duplicating job prompts", () => {
+    const soloCombatPrompt = jobPrompt("combat", "single_player");
+    const multiplayerCombatPrompt = jobPrompt("combat", "multiplayer");
+    const soloScenePrompt = jobPrompt("scene_director", "single_player");
+    const multiplayerScenePrompt = jobPrompt("scene_director", "multiplayer");
+
+    assert.match(soloCombatPrompt, /This is singleplayer combat/i);
+    assert.match(soloCombatPrompt, /solo player actor key/i);
+    assert.doesNotMatch(soloCombatPrompt, /This is multiplayer combat/i);
+    assert.doesNotMatch(soloCombatPrompt, /multiplayer all-player prompt/i);
+
+    assert.match(multiplayerCombatPrompt, /This is multiplayer combat/i);
+    assert.match(multiplayerCombatPrompt, /all-player prompt/i);
+    assert.doesNotMatch(multiplayerCombatPrompt, /This is singleplayer combat/i);
+    assert.doesNotMatch(multiplayerCombatPrompt, /solo player actor key/i);
+
+    assert.match(soloScenePrompt, /AI Taverns DM job: scene_director/i);
+    assert.match(multiplayerScenePrompt, /AI Taverns DM job: scene_director/i);
+    assert.doesNotMatch(soloScenePrompt, /This is singleplayer combat/i);
+    assert.doesNotMatch(multiplayerScenePrompt, /This is multiplayer combat/i);
+  });
 });

@@ -3071,7 +3071,7 @@ function mechanicsActorsForValidation(campaign: Pick<CampaignRow, "metadata">) {
 async function buildModularDmPromptContext(
   db: Queryable,
   runtime: DungeonMasterRuntime,
-  campaign: Pick<CampaignRow, "id" | "metadata">,
+  campaign: Pick<CampaignRow, "id" | "metadata" | "mode">,
   input: {
     traceId: string;
     turnId?: string | undefined;
@@ -3112,7 +3112,7 @@ async function buildModularDmPromptContext(
     instructions: [
       input.baseInstructions,
       "",
-      jobPrompt(router.jobNeeded)
+      jobPrompt(router.jobNeeded, campaign.mode)
     ].join("\n"),
     message: [
       "Selected context chunks:",
@@ -4030,25 +4030,43 @@ const gameplayTurnOutputContractReminder = [
   "Set resolution_mode to needs_dice whenever roll_requests is non-empty or next_input_needed is dice_results; otherwise set it to resolved_without_dice.",
   "When resolution_mode is needs_dice, public_narration must not resolve the rolled outcome.",
   "If hostilities start while combat is inactive and enemies are ready or aware, ask the acting player for initiative in public_narration and roll_requests before resolving the attack or damage.",
-  "For multiplayer initiative, saving throws, checks, attacks, and other targeted rolls, set each roll_requests item's player field to the targeted character's actor key or character name.",
   "If the acting player clearly surprises unaware enemies, resolve the opening action's required rolls first, then ask initiative before enemy counteraction.",
   "Also include non-empty mechanics_state_update.combat with active, round, turnOwner, and provisional initiativeOrder as actor-key strings when initiative roll_requests pauses resolution.",
   "If combat turnOwner is or becomes npc:*, resolve NPC turns before returning control to players.",
   "Off-turn player combat declarations are only stated intent, not actions already in motion; never say they are mid-swing, following immediately, or resolving before the next initiative actor.",
   "When multiple player submissions arrive in active combat, resolve the current turn owner's valid action first, keep other submissions as pending intent, and if the next actor is an enemy resolve that enemy turn before later player intent.",
-  "Do not end with next_input_needed player_actions while turnOwner is npc:*; set turnOwner to a player actor, or null for a multiplayer all-player prompt.",
   "If the stored turnOwner is an NPC key or NPC character name, do not let submitted player attacks or spells preempt that NPC turn.",
-  "In singleplayer active combat, return control with turnOwner set to the player actor key, not null.",
   "Resolve NPC attacks fully using explicit wording: 'attack roll: X vs AC Y - hit/miss'; on a hit, immediately state 'damage roll: dice = total damage', update player HP, then return control.",
   "For NPC hits, public_narration must include the words attack roll, vs AC, and damage roll before injury narration.",
   "Do not end an NPC turn with only a wind-up like lunges, swings, aims, starts casting, or bears down unless a player-facing roll or reaction is required first.",
   "When the final active enemy is defeated, set combat active false, turnOwner null, and initiativeOrder empty; do not say a specific combatant is up next after combat ends.",
   "Build combat actor names and keys only from the current scene and character sheets; never copy example NPC names into initiativeOrder.",
   "initiativeOrder should include active combatants only; exclude captives, bystanders, and noncombatants unless they can act in the fight."
-].join("\n");
+];
 
-function appendGameplayTurnOutputContractReminder(message: string) {
-  return [message, "", gameplayTurnOutputContractReminder].join("\n");
+const gameplayTurnModeReminder: Record<CampaignMode, string[]> = {
+  single_player: [
+    "Singleplayer combat reminder:",
+    "Do not end with next_input_needed player_actions while turnOwner is npc:*; set turnOwner to the solo player actor key unless combat has ended.",
+    "In singleplayer active combat, return control with turnOwner set to the player actor key, not null."
+  ],
+  multiplayer: [
+    "Multiplayer combat reminder:",
+    "Do not end with next_input_needed player_actions while turnOwner is npc:*; set turnOwner to a player actor, or null for a multiplayer all-player prompt.",
+    "For multiplayer initiative, saving throws, checks, attacks, and other targeted rolls, set each roll_requests item's player field to the targeted character's actor key or character name."
+  ]
+};
+
+function appendGameplayTurnOutputContractReminder(
+  message: string,
+  mode: CampaignMode
+) {
+  return [
+    message,
+    "",
+    ...gameplayTurnOutputContractReminder,
+    ...gameplayTurnModeReminder[mode]
+  ].join("\n");
 }
 
 async function askEldermereOpeningPlanner(
@@ -4588,7 +4606,8 @@ async function askDungeonMaster(
           })
       : null;
     const providerMessage = appendGameplayTurnOutputContractReminder(
-      promptContext?.message ?? message
+      promptContext?.message ?? message,
+      campaign.mode
     );
     const providerStartedAt = Date.now();
     const providerData = await runtime.askProvider({

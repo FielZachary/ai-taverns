@@ -8,6 +8,8 @@ export const dmJobNames = [
 
 export type DmJobName = (typeof dmJobNames)[number];
 
+export type DmPromptMode = "single_player" | "multiplayer";
+
 export const contextCategories = [
   "npc_context",
   "player_character_context",
@@ -205,7 +207,7 @@ export function buildRouterPrompt() {
   ].join("\n");
 }
 
-export function jobPrompt(job: DmJobName) {
+export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
   const narrativeQualityBar = [
     "Prefer concrete nouns and active details over abstract mood labels.",
     "Anchor every scene in physical space: near/far, entrances/exits, landmarks, crowds, obstacles, weather, light, or sound.",
@@ -412,8 +414,7 @@ export function jobPrompt(job: DmJobName) {
     "If turnOwner is an NPC actor key or NPC name, resolve that NPC turn before resolving submitted player attacks, spells, or combat actions.",
     "Off-turn player combat declarations are intent, not actions already in motion. Do not narrate them as mid-swing, already casting, or resolving before the current initiative actor.",
     "When multiple player submissions arrive, resolve the current turn owner's valid action first and treat other submissions as pending intent.",
-    "Do not end with next_input_needed player_actions while turnOwner is npc:*; resolve NPC turns until control returns to a player actor, or to all players in multiplayer when appropriate.",
-    "In singleplayer active combat, return control with turnOwner set to the player actor key, not null.",
+    "Do not end with next_input_needed player_actions while turnOwner is npc:*; resolve NPC turns until control returns to player control.",
     "When the final active enemy is defeated, set combat active false, turnOwner null, and initiativeOrder empty. Do not say a combatant is up next after combat ends.",
     "Rolls and dice:",
     "Use roll_requests for player-facing dice the website must collect.",
@@ -421,7 +422,6 @@ export function jobPrompt(job: DmJobName) {
     "When resolution_mode is needs_dice, public_narration must not resolve the rolled outcome.",
     "Name rolls clearly: attack roll, damage roll, saving throw, initiative, concentration check, death save, or relevant skill/tool check.",
     "input_policy must be all_players or only_targeted_players; never use acting_player.",
-    "For multiplayer initiative, saving throws, checks, attacks, and other targeted rolls, set each roll_requests item's player field to the targeted character's actor key or character name.",
     "Use known modifiers, proficiency, advantage, or disadvantage from the character sheet or combat context when available. If unknown, ask for the base roll clearly without inventing bonuses.",
     "Visible combat math:",
     "For resolved attacks, make the numbers visible before injury narration.",
@@ -457,6 +457,24 @@ export function jobPrompt(job: DmJobName) {
     "Use vivid physical detail, but do not bury hit/miss, damage, HP, turn owner, or pending rolls inside ornate prose.",
     "End every resolved combat beat with a clear handoff: whose turn or what immediate pressure remains, then 'What do you do?' on its own line when awaiting player action.",
     "Do not include 'What do you do?' in public_narration when the response is requesting dice with next_input_needed dice_results."
+  ];
+
+  const soloCombatGuidance = [
+    "This is singleplayer combat with one player character as the spotlight.",
+    "When returning control after resolved NPC turns, set mechanics_state_update.combat.turnOwner to the solo player actor key; do not use null unless combat has ended.",
+    "Do not wait for multiple player submissions or describe other player characters as pending actors.",
+    "If the solo player gives an off-turn combat intent while an NPC owns the turn, treat it as intent only; resolve NPC turns first, then hand control back to the solo player.",
+    "Keep tactical state explicit but pacing brisk: avoid party-coordination narration, table-waiting language, or all-player prompts.",
+    "When player-facing dice are needed, target roll_requests to the solo player character."
+  ];
+
+  const multiplayerCombatGuidance = [
+    "This is multiplayer combat with multiple player-controlled characters.",
+    "When control returns to the party outside a specific actor turn, mechanics_state_update.combat.turnOwner may be null for an all-player prompt.",
+    "Respect simultaneous submissions: resolve the current turn owner's valid action first and treat other submissions as pending intent.",
+    "For multiplayer initiative, saving throws, checks, attacks, and other targeted rolls, set each roll_requests item's player field to the targeted character's actor key or character name.",
+    "Do not ask one player to roll for another player's targeted save, attack, or check.",
+    "Maintain fair spotlight across submitted players without inventing actions for absent players."
   ];
 
   const combatExamples = [
@@ -718,7 +736,32 @@ export function jobPrompt(job: DmJobName) {
     ]
   };
 
-  return [`AI Taverns DM job: ${job}`, ...jobs[job], ...shared].join("\n");
+  const modeSpecificJobGuidance: Record<
+    DmPromptMode,
+    Record<DmJobName, string[]>
+  > = {
+    single_player: {
+      scene_director: [],
+      investigation: [],
+      npc_dialogue: [],
+      combat: soloCombatGuidance,
+      clarification: []
+    },
+    multiplayer: {
+      scene_director: [],
+      investigation: [],
+      npc_dialogue: [],
+      combat: multiplayerCombatGuidance,
+      clarification: []
+    }
+  };
+
+  return [
+    `AI Taverns DM job: ${job}`,
+    ...jobs[job],
+    ...modeSpecificJobGuidance[mode][job],
+    ...shared
+  ].join("\n");
 }
 
 export function buildMemoryUpdaterPrompt() {
