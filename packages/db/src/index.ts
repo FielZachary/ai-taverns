@@ -3559,29 +3559,25 @@ function formatMechanicsPromptContext(mechanicsState: MechanicsState) {
   ].join("\n");
 }
 
-function normalizeCombatTurnOwnerForInput(
+function normalizeCombatInputControl(
   state: MechanicsState,
   input: {
     mode: CampaignMode;
     nextInputNeeded: "player_actions" | "dice_results";
+    rollRequests: DiceRollRequest[];
+    inputTargets: string[];
     inputPolicy: InputPolicy;
   }
-): MechanicsState {
+): {
+  mechanicsState: MechanicsState;
+  inputTargets: string[];
+  inputPolicy: InputPolicy;
+} {
   if (!state.combat.active || input.nextInputNeeded !== "player_actions") {
-    return state;
-  }
-
-  if (
-    input.mode === "multiplayer" &&
-    input.inputPolicy === "all_players" &&
-    state.combat.turnOwner?.startsWith("player:")
-  ) {
     return {
-      ...state,
-      combat: {
-        ...state.combat,
-        turnOwner: null
-      }
+      mechanicsState: state,
+      inputTargets: input.inputTargets,
+      inputPolicy: input.inputPolicy
     };
   }
 
@@ -3595,17 +3591,37 @@ function normalizeCombatTurnOwnerForInput(
       .map(([actorKey]) => actorKey);
 
     if (livingPlayerActorKeys.length === 1) {
-      return {
+      const mechanicsState = {
         ...state,
         combat: {
           ...state.combat,
           turnOwner: livingPlayerActorKeys[0] ?? null
         }
       };
+      return {
+        mechanicsState,
+        inputTargets: input.inputTargets,
+        inputPolicy: input.inputPolicy
+      };
     }
   }
 
-  return state;
+  if (
+    input.rollRequests.length === 0 &&
+    state.combat.turnOwner?.startsWith("player:")
+  ) {
+    return {
+      mechanicsState: state,
+      inputTargets: [state.combat.turnOwner],
+      inputPolicy: "only_targeted_players"
+    };
+  }
+
+  return {
+    mechanicsState: state,
+    inputTargets: input.inputTargets,
+    inputPolicy: input.inputPolicy
+  };
 }
 
 function formatSoloTurn(
@@ -4192,6 +4208,7 @@ const gameplayTurnOutputContractReminder = [
   "Never ask players to roll initiative, saving throws, attacks, damage, checks, or any other dice for NPCs or enemies; NPC and enemy dice are DM-side rolls that must still be visible to the players.",
   "Also include non-empty mechanics_state_update.combat with active, round, turnOwner, and provisional initiativeOrder as actor-key strings when initiative roll_requests pauses resolution.",
   "If combat turnOwner is or becomes npc:*, resolve NPC turns before returning control to players.",
+  "During active combat, if next control belongs to a player turnOwner and no roll_requests are pending, set input_policy only_targeted_players and input_targets to that player actor key only; do not use all_players for ordinary turn-based combat.",
   "Off-turn player combat declarations are only stated intent, not actions already in motion; never say they are mid-swing, following immediately, or resolving before the next initiative actor.",
   "When multiple player submissions arrive in active combat, resolve the current turn owner's valid action first, keep other submissions as pending intent, and if the next actor is an enemy resolve that enemy turn before later player intent.",
   "If the stored turnOwner is an NPC key or NPC character name, do not let submitted player attacks or spells preempt that NPC turn.",
@@ -4871,18 +4888,17 @@ async function askDungeonMaster(
         )
       : { accepted: [], discarded: [] };
     const mechanicsState = resolveMechanicsState(campaign, []);
-    const nextMechanicsState = normalizeCombatTurnOwnerForInput(
-      applyMechanicsStateUpdate(
-        mechanicsState,
-        contract.mechanicsStateUpdate,
-        nowIso()
-      ),
+    const normalizedInputControl = normalizeCombatInputControl(
+      applyMechanicsStateUpdate(mechanicsState, contract.mechanicsStateUpdate, nowIso()),
       {
         mode: campaign.mode,
         nextInputNeeded: contract.nextInputNeeded,
+        rollRequests,
+        inputTargets: contract.inputTargets,
         inputPolicy: contract.inputPolicy
       }
     );
+    const nextMechanicsState = normalizedInputControl.mechanicsState;
 
     if (nextMechanicsState !== mechanicsState) {
       await writeMechanicsStateForLockedCampaign(
@@ -4920,8 +4936,10 @@ async function askDungeonMaster(
         rollRequestLabels: rollRequests.map((request) => request.label),
         rollRequestDiagnostics: rollRequestDiagnosticsReport,
         nextInputNeeded: contract.nextInputNeeded,
-        inputPolicy: contract.inputPolicy,
-        inputTargets: contract.inputTargets,
+        inputPolicy: normalizedInputControl.inputPolicy,
+        inputTargets: normalizedInputControl.inputTargets,
+        originalInputPolicy: contract.inputPolicy,
+        originalInputTargets: contract.inputTargets,
         resolutionMode: contract.resolutionMode
       }
     });
@@ -4990,8 +5008,8 @@ async function askDungeonMaster(
       content: reply,
       debug: debugWithCombatState,
       rollRequests,
-      inputTargets: contract.inputTargets,
-      inputPolicy: contract.inputPolicy,
+      inputTargets: normalizedInputControl.inputTargets,
+      inputPolicy: normalizedInputControl.inputPolicy,
       resolutionMode: contract.resolutionMode,
       setting: contract.setting
     };

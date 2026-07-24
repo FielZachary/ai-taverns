@@ -14,6 +14,7 @@ import {
   database,
   getProviderInputs,
   resetProviderInputs,
+  setProviderOverride,
   signIn
 } from "./test/app-test-harness.js";
 
@@ -360,8 +361,10 @@ test("multiplayer combat catches up NPC turns instead of rejecting players", asy
       actors?: Record<string, { currentHp?: number }>;
     };
 
-  assert.equal(mechanicsState.combat?.turnOwner, null);
+  assert.equal(mechanicsState.combat?.turnOwner, ownerActorKey);
   assert.equal(mechanicsState.actors?.[ownerActorKey]?.currentHp, 14);
+  assert.deepEqual(resolvedRoom.inputTargets, [ownerActorKey]);
+  assert.equal(resolvedRoom.inputPolicy, "only_targeted_players");
   assert.equal(getProviderInputs().length, 1);
 
   updatedCampaign.metadata = {
@@ -454,8 +457,10 @@ test("multiplayer combat catches up NPC turns instead of rejecting players", asy
     actors?: Record<string, { currentHp?: number }>;
   };
 
-  assert.equal(secondMechanicsState.combat?.turnOwner, null);
+  assert.equal(secondMechanicsState.combat?.turnOwner, ownerActorKey);
   assert.equal(secondMechanicsState.actors?.[ownerActorKey]?.currentHp, 8);
+  assert.deepEqual(secondResolvedRoom.inputTargets, [ownerActorKey]);
+  assert.equal(secondResolvedRoom.inputPolicy, "only_targeted_players");
 });
 
 test("room snapshots expose active combat turn owner for clients", async () => {
@@ -594,6 +599,173 @@ test("room submit accepts targeted input by mechanics actor key", async () => {
   });
 
   assert.equal(ownerSubmitResponse.statusCode, 200, ownerSubmitResponse.body);
+});
+
+test("active combat targets only the next player turn owner after DM resolution", async () => {
+  const { ownerCookie, campaignId, ownerClientId } =
+    await createMultiplayerRoom("room-combat-targets-turn-owner");
+
+  const beginResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/begin",
+    headers: {
+      cookie: ownerCookie
+    },
+    payload: {
+      roomId: campaignId
+    }
+  });
+
+  assert.equal(beginResponse.statusCode, 200, beginResponse.body);
+
+  const ownerPlayer = database.players.find(
+    (player) =>
+      player.campaign_id === campaignId && player.client_id === ownerClientId
+  );
+  const joinerPlayer = database.players.find(
+    (player) =>
+      player.campaign_id === campaignId && player.client_id !== ownerClientId
+  );
+  const campaign = database.campaigns.find(
+    (candidate) => candidate.id === campaignId
+  );
+
+  assert.ok(ownerPlayer);
+  assert.ok(joinerPlayer);
+  assert.ok(campaign);
+
+  const ownerActorKey = `player:${ownerPlayer.id}`;
+  const joinerActorKey = `player:${joinerPlayer.id}`;
+  campaign.metadata = {
+    ...(campaign.metadata as Record<string, unknown>),
+    inputTargets: [ownerActorKey],
+    inputPolicy: "only_targeted_players",
+    mechanicsState: {
+      combat: {
+        active: true,
+        round: 1,
+        turnOwner: ownerActorKey,
+        initiativeOrder: [ownerActorKey, joinerActorKey, "npc:warden-1"]
+      },
+      actors: {
+        [ownerActorKey]: {
+          characterName: "Owner Character",
+          currentHp: 20,
+          maxHp: 20,
+          conditions: []
+        },
+        [joinerActorKey]: {
+          characterName: "Joined Character",
+          currentHp: 18,
+          maxHp: 18,
+          conditions: []
+        },
+        "npc:warden-1": {
+          characterName: "Warden 1",
+          currentHp: 5,
+          maxHp: 12,
+          conditions: []
+        }
+      }
+    }
+  };
+
+  setProviderOverride(async (input) => {
+    const content = JSON.stringify({
+      public_narration:
+        "Owner Character's spell drops the warden. Joined Character, you're up next. What do you do?",
+      resolution_mode: "resolved_without_dice",
+      roll_requests: [],
+      next_input_needed: "player_actions",
+      input_targets: [],
+      input_policy: "all_players",
+      mechanics_state_update: {
+        combat: {
+          active: true,
+          round: 1,
+          turnOwner: joinerActorKey,
+          initiativeOrder: [ownerActorKey, joinerActorKey, "npc:warden-1"]
+        },
+        actors: {
+          "npc:warden-1": {
+            currentHp: 0
+          }
+        }
+      }
+    });
+
+    return {
+      id: "provider-combat-turn-target-regression",
+      content,
+      debug: {
+        requestMessages: [
+          {
+            role: "system",
+            content: input.instructions
+          },
+          {
+            role: "user",
+            content: input.message
+          }
+        ],
+        rawResponse: content,
+        model: "test-model",
+        temperature: 0.8,
+        providerTimings: []
+      }
+    };
+  });
+
+  try {
+    const ownerSubmitResponse = await app.inject({
+      method: "POST",
+      url: "/api/room/submit",
+      headers: {
+        cookie: ownerCookie
+      },
+      payload: {
+        roomId: campaignId,
+        playerId: ownerClientId,
+        message: "I finish the warden with Magic Missile."
+      }
+    });
+
+    assert.equal(ownerSubmitResponse.statusCode, 200, ownerSubmitResponse.body);
+    const resolved = RoomSubmitResponseSchema.parse(ownerSubmitResponse.json());
+
+    assert.deepEqual(resolved.inputTargets, [joinerActorKey]);
+    assert.equal(resolved.inputPolicy, "only_targeted_players");
+    assert.equal(resolved.combat.turnOwner, joinerActorKey);
+
+    const updatedCampaign = database.campaigns.find(
+      (candidate) => candidate.id === campaignId
+    );
+    assert.deepEqual(
+      (updatedCampaign?.metadata as Record<string, unknown>).inputTargets,
+      [joinerActorKey]
+    );
+    assert.equal(
+      (updatedCampaign?.metadata as Record<string, unknown>).inputPolicy,
+      "only_targeted_players"
+    );
+
+    const ownerAgainResponse = await app.inject({
+      method: "POST",
+      url: "/api/room/submit",
+      headers: {
+        cookie: ownerCookie
+      },
+      payload: {
+        roomId: campaignId,
+        playerId: ownerClientId,
+        message: "I keep acting out of turn."
+      }
+    });
+
+    assert.equal(ownerAgainResponse.statusCode, 403);
+  } finally {
+    setProviderOverride(undefined);
+  }
 });
 
 test("multiplayer combat infers spell slots from explicit caster character sheet", async () => {
