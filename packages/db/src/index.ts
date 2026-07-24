@@ -767,6 +767,7 @@ export function mapCampaignSummaryRow(
     sessionId,
     mode: campaign.mode,
     title: characterName || playerName || campaign.title,
+    ...(campaign.owner_client_id ? { ownerClientId: campaign.owner_client_id } : {}),
     preview: campaignWorldName(campaign),
     messageCount: 0,
     ...(joinCode ? { joinCode } : {})

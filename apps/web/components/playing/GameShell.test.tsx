@@ -98,15 +98,16 @@ vi.mock("./PlayerInput", async () => {
       {
         draft: string;
         isSending: boolean;
+        canSelectAiModel?: boolean;
         onDraftChange: (value: string) => void;
         onSubmit: (event: FormEvent<HTMLFormElement>) => void;
       }
     >(function MockPlayerInput(
-      { draft, isSending, onDraftChange, onSubmit },
+      { draft, isSending, canSelectAiModel, onDraftChange, onSubmit },
       ref
     ) {
       return (
-        <form onSubmit={onSubmit}>
+        <form data-can-select-model={String(canSelectAiModel)} onSubmit={onSubmit}>
           <textarea
             aria-label="Turn draft"
             onChange={(event) => onDraftChange(event.target.value)}
@@ -165,6 +166,7 @@ const multiplayerCampaign = {
   sessionId: "provider-session-2",
   mode: "multiplayer",
   title: "Candlekeep Circle",
+  ownerClientId: "player-1",
   preview: "Two players gather at the table.",
   joinCode: "GLOW-42"
 } satisfies CampaignSummary;
@@ -446,6 +448,73 @@ describe("GameShell", () => {
       "data-sending",
       "false"
     );
+  });
+
+  it("disables model selection for non-leader multiplayer players", async () => {
+    localStorage.setItem("ai-dnd.aiModel", "qwen-3-7-flash");
+    listCampaignsMock.mockResolvedValue([
+      {
+        ...multiplayerCampaign,
+        ownerClientId: "player-2"
+      }
+    ]);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url.startsWith("/api/room?")) {
+        return responseJson(multiplayerRoomSnapshot({ hasBegun: true }));
+      }
+
+      if (url === "/api/auth/claim-guest-state") {
+        return responseJson({});
+      }
+
+      if (url === "/api/room/submit" && init?.method === "POST") {
+        return responseJson(
+          multiplayerRoomSnapshot({
+            hasBegun: true,
+            messages: [
+              {
+                id: "dm-response",
+                role: "dm",
+                content: "The corridor answers with dust and silence.",
+                createdAt: "2026-07-12T00:00:01.000Z"
+              }
+            ]
+          })
+        );
+      }
+
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<GameShell initialCampaignId={multiplayerCampaign.id} />);
+
+    const inputForm = await screen.findByText("Send").then((button) =>
+      button.closest("form")
+    );
+
+    expect(inputForm).toHaveAttribute("data-can-select-model", "false");
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Turn draft" }), {
+      target: {
+        value: "I listen at the sealed door."
+      }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      const submitCall = fetchMock.mock.calls.find(
+        ([input, init]) =>
+          String(input) === "/api/room/submit" && init?.method === "POST"
+      );
+
+      expect(JSON.parse(String(submitCall?.[1]?.body))).toMatchObject({
+        message: "I listen at the sealed door.",
+        model: "deepseek-v4-flash"
+      });
+    });
   });
 
   it("shows realtime DM stream failures and refreshes the room state", async () => {

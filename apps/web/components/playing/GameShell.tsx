@@ -370,6 +370,8 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     !isSinglePlayer &&
     roomPlayers.length >= 2 &&
     !hasAdventureBegun;
+  const canSelectAiModel =
+    isSinglePlayer || Boolean(activeCampaign?.ownerClientId === playerId);
   const playerInputLockMessage = currentPendingRollRequest
     ? `Roll required: ${
         currentRequiredRollDice?.expression ?? currentPendingRollRequest.label
@@ -1367,7 +1369,9 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const model = selectedAiModelFromForm(event.currentTarget);
+    const model = canSelectAiModel
+      ? selectedAiModelFromForm(event.currentTarget)
+      : defaultAiModel;
 
     if (inputMode === "ask_dm") {
       void askDungeonMaster(draft, model);
@@ -1378,7 +1382,10 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
   }
 
   function handleSkipTurn() {
-    void sendTurn("", { skipTurn: true, model: selectedAiModelFromStorage() });
+    void sendTurn("", {
+      skipTurn: true,
+      model: canSelectAiModel ? selectedAiModelFromStorage() : defaultAiModel
+    });
   }
 
   async function completePendingRollBatch(
@@ -1647,6 +1654,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
                 Boolean(activeDiceReveal) ||
                 isInputSubmittedForCurrentState
               }
+              canSelectAiModel={canSelectAiModel}
               lockMessage={playerInputLockMessage}
               requiredRoll={currentPendingRollRequest}
               requiredRollExpression={currentRequiredRollDice?.expression}
