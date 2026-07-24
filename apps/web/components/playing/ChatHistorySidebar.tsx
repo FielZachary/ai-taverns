@@ -1,4 +1,4 @@
-import { Pencil, Plus, ScrollText, Search, Trash2 } from "lucide-react";
+import { Pencil, Plus, Search, Trash2 } from "lucide-react";
 
 export type ChatSummary = {
   id: string;
@@ -98,8 +98,7 @@ export function ChatHistorySidebar({
 
       <div className="chat-sidebar-actions" aria-label="Table actions">
         <button type="button" onClick={onViewCharacterSheet}>
-          <ScrollText size={18} />
-          View Character Sheet
+          Player Resources
         </button>
       </div>
     </aside>
