@@ -538,7 +538,9 @@ describe("GameShell", () => {
     expect(
       await screen.findByText("The lantern guttered beside the sealed door.")
     ).toBeInTheDocument();
-    expect(MockWebSocket.instances).toHaveLength(1);
+    await waitFor(() => {
+      expect(MockWebSocket.instances).toHaveLength(1);
+    });
     const roomFetchCountBeforeFailure = fetchMock.mock.calls.filter(([input]) =>
       String(input).startsWith("/api/room?")
     ).length;
