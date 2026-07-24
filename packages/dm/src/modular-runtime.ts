@@ -405,8 +405,11 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
     "Run tactical combat encounters with strict turn ownership, visible rolls, explicit state changes, and vivid but concise action narration.",
     "Combat narration must never get ahead of combat state: if a roll, turn owner, initiative order, HP change, condition, resource use, or enemy defeat is unresolved, pause or encode it structurally instead of implying it only in prose.",
     "Initiative and combat start:",
-    "If hostilities start while enemies are aware or ready, ask the acting player for initiative before resolving their attack, spell, or damage.",
-    "If the acting player clearly surprises unaware enemies, resolve the opening roll or effect first, then ask for initiative before enemy counteraction.",
+    "If hostilities start while enemies are aware or ready, ask player-controlled combatants for initiative before resolving their attack, spell, or damage.",
+    "If the acting player clearly surprises unaware enemies, resolve the opening roll or effect first, then ask player-controlled combatants for initiative before enemy counteraction.",
+    "Only request player-controlled initiative rolls in roll_requests.",
+    "Roll NPC and enemy initiative yourself every time, reveal each NPC/enemy initiative roll and total in public_narration, and encode the resulting order in mechanics_state_update or combat_events.",
+    "Never ask players to roll initiative, saving throws, attacks, damage, checks, or any other dice for NPCs or enemies; NPC and enemy dice are DM-side rolls that must still be visible to the players.",
     "When combat begins, include mechanics_state_update.combat with active true, round 1, turnOwner, and provisional initiativeOrder using actor keys from the current scene and character sheets only.",
     "Do not include bystanders, captives, scenery, or passive creatures in initiativeOrder unless they can meaningfully act in the fight.",
     "Turn ownership:",
@@ -420,7 +423,7 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
     "Never request an attack roll, spell attack roll, damage roll, saving throw, or check for a player merely because initiative has reached that player. First ask for the player's declared action.",
     "When the final active enemy is defeated, set combat active false, turnOwner null, and initiativeOrder empty. Do not say a combatant is up next after combat ends.",
     "Rolls and dice:",
-    "Use roll_requests for player-facing dice the website must collect.",
+    "Use roll_requests only for player-controlled dice the website must collect.",
     "When requesting dice, set resolution_mode to needs_dice and next_input_needed to dice_results.",
     "When resolution_mode is needs_dice, public_narration must not resolve the rolled outcome.",
     "Name rolls clearly: attack roll, damage roll, saving throw, initiative, concentration check, death save, or relevant skill/tool check.",
@@ -475,7 +478,7 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
     "This is multiplayer combat with multiple player-controlled characters.",
     "When control returns to the party outside a specific actor turn, mechanics_state_update.combat.turnOwner may be null for an all-player prompt.",
     "Respect simultaneous submissions: resolve the current turn owner's valid action first and treat other submissions as pending intent.",
-    "For multiplayer initiative, saving throws, checks, attacks, and other targeted rolls, set each roll_requests item's player field to the targeted character's actor key or character name.",
+    "For multiplayer player-controlled initiative, saving throws, checks, attacks, and other targeted player rolls, set each roll_requests item's player field to the targeted character's actor key or character name.",
     "Do not ask one player to roll for another player's targeted save, attack, or check.",
     "Maintain fair spotlight across submitted players without inventing actions for absent players."
   ];
@@ -491,6 +494,7 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
           public_narration: [
             "Your sword clears the scabbard with a bright scrape, and the bandit captain's lazy grin disappears. She was waiting for this. Her boots shift in the mud, blade coming up as the two cutthroats beside her spread out to either side of the road.",
             "You have the will to strike, but they are not surprised. The fight begins before anyone's steel lands.",
+            "Bandit captain initiative roll: 15. Cutthroat initiative rolls: 11 and 8.",
             "Roll initiative: 1d20 + your initiative modifier."
           ].join("\n\n"),
           resolution_mode: "needs_dice",

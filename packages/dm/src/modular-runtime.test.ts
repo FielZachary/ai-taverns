@@ -200,7 +200,23 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("combat"), /do not infer an attack, spell, target/i);
     assert.match(jobPrompt("combat"), /roll_requests \[\]/i);
     assert.match(jobPrompt("combat"), /merely because initiative has reached/i);
+    assert.match(
+      jobPrompt("combat"),
+      /Only request player-controlled initiative rolls in roll_requests/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Roll NPC and enemy initiative yourself every time/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Never ask players to roll initiative, saving throws, attacks, damage, checks, or any other dice for NPCs or enemies/i
+    );
     assert.match(jobPrompt("combat"), /combat starts, initiative first/i);
+    assert.match(
+      jobPrompt("combat"),
+      /Bandit captain initiative roll: 15\. Cutthroat initiative rolls: 11 and 8\./i
+    );
     assert.match(jobPrompt("combat"), /surprise opener resolves before initiative/i);
     assert.match(
       jobPrompt("combat"),

@@ -541,7 +541,7 @@ const dungeonMasterContractInstructions = [
   "You are the AI Taverns DnD Dungeon Master.",
   "Return exactly one valid JSON object and no Markdown.",
   "Use public_narration for player-facing narration.",
-  "Use roll_requests for player-facing dice the website must collect.",
+  "Use roll_requests only for player-controlled dice the website must collect.",
   "Use mechanics_state_update for canonical game/mechanics state changes; the website owns persistence.",
   "Required top-level keys: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update."
 ].join("\n");
@@ -4029,8 +4029,11 @@ const gameplayTurnOutputContractReminder = [
   "input_policy must be all_players or only_targeted_players; never use acting_player.",
   "Set resolution_mode to needs_dice whenever roll_requests is non-empty or next_input_needed is dice_results; otherwise set it to resolved_without_dice.",
   "When resolution_mode is needs_dice, public_narration must not resolve the rolled outcome.",
-  "If hostilities start while combat is inactive and enemies are ready or aware, ask the acting player for initiative in public_narration and roll_requests before resolving the attack or damage.",
-  "If the acting player clearly surprises unaware enemies, resolve the opening action's required rolls first, then ask initiative before enemy counteraction.",
+  "If hostilities start while combat is inactive and enemies are ready or aware, ask player-controlled combatants for initiative in public_narration and roll_requests before resolving the attack or damage.",
+  "If the acting player clearly surprises unaware enemies, resolve the opening action's required rolls first, then ask player-controlled combatants for initiative before enemy counteraction.",
+  "Only request player-controlled initiative rolls in roll_requests.",
+  "Roll NPC and enemy initiative yourself every time, reveal each NPC/enemy initiative roll and total in public_narration, and encode the resulting order in mechanics_state_update or combat_events.",
+  "Never ask players to roll initiative, saving throws, attacks, damage, checks, or any other dice for NPCs or enemies; NPC and enemy dice are DM-side rolls that must still be visible to the players.",
   "Also include non-empty mechanics_state_update.combat with active, round, turnOwner, and provisional initiativeOrder as actor-key strings when initiative roll_requests pauses resolution.",
   "If combat turnOwner is or becomes npc:*, resolve NPC turns before returning control to players.",
   "Off-turn player combat declarations are only stated intent, not actions already in motion; never say they are mid-swing, following immediately, or resolving before the next initiative actor.",
@@ -4053,7 +4056,7 @@ const gameplayTurnModeReminder: Record<CampaignMode, string[]> = {
   multiplayer: [
     "Multiplayer combat reminder:",
     "Do not end with next_input_needed player_actions while turnOwner is npc:*; set turnOwner to a player actor, or null for a multiplayer all-player prompt.",
-    "For multiplayer initiative, saving throws, checks, attacks, and other targeted rolls, set each roll_requests item's player field to the targeted character's actor key or character name."
+    "For multiplayer player-controlled initiative, saving throws, checks, attacks, and other targeted player rolls, set each roll_requests item's player field to the targeted character's actor key or character name."
   ]
 };
 
