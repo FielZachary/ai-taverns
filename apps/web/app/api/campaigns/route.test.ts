@@ -24,7 +24,7 @@ describe("campaign API route", () => {
     const upstreamBody = {
       campaign: {
         id: "campaign-1",
-        hermesSessionId: "ai-dnd-1",
+        sessionId: "ai-dnd-1",
         mode: "single_player",
         title: "Debug Hero",
         preview: "Eldermere",

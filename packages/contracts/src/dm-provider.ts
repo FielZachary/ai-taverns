@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { DiceRollRequestSchema } from "./rooms.js";
 
-export const HermesGameMessageSchema = z
+export const DmProviderGameMessageSchema = z
   .object({
     id: z.string().min(1),
     role: z.enum(["player", "dm", "system"]),
@@ -11,26 +11,26 @@ export const HermesGameMessageSchema = z
   })
   .passthrough();
 
-export const HermesTurnRequestSchema = z.object({
+export const DmProviderTurnRequestSchema = z.object({
   message: z.string().optional(),
-  history: z.array(HermesGameMessageSchema).optional(),
+  history: z.array(DmProviderGameMessageSchema).optional(),
   sessionId: z.string().optional()
 });
 
-export const HermesPrepRequestSchema = z.object({
+export const DmProviderPrepRequestSchema = z.object({
   sessionId: z.string().optional(),
   ownerClientId: z.string().optional()
 });
 
-export const HermesTurnResponseSchema = z.object({
-  message: HermesGameMessageSchema,
+export const DmProviderTurnResponseSchema = z.object({
+  message: DmProviderGameMessageSchema,
   pendingRollRequest: DiceRollRequestSchema.nullable().optional(),
   pendingRollRequests: z.array(DiceRollRequestSchema).optional(),
   inputTargets: z.array(z.string()).optional(),
   inputPolicy: z.enum(["all_players", "only_targeted_players"]).optional()
 });
 
-export type HermesGameMessage = z.infer<typeof HermesGameMessageSchema>;
-export type HermesTurnRequest = z.infer<typeof HermesTurnRequestSchema>;
-export type HermesPrepRequest = z.infer<typeof HermesPrepRequestSchema>;
-export type HermesTurnResponse = z.infer<typeof HermesTurnResponseSchema>;
+export type DmProviderGameMessage = z.infer<typeof DmProviderGameMessageSchema>;
+export type DmProviderTurnRequest = z.infer<typeof DmProviderTurnRequestSchema>;
+export type DmProviderPrepRequest = z.infer<typeof DmProviderPrepRequestSchema>;
+export type DmProviderTurnResponse = z.infer<typeof DmProviderTurnResponseSchema>;

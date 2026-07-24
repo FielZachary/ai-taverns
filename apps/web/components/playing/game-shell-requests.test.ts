@@ -8,7 +8,7 @@ import {
 
 const campaign = {
   id: "campaign/with space",
-  hermesSessionId: "session-1"
+  sessionId: "session-1"
 };
 
 const rollSubmissions: DiceRollSubmission[] = [

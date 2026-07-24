@@ -154,7 +154,7 @@ const listCampaignsMock = vi.mocked(listCampaigns);
 
 const campaign = {
   id: "11111111-1111-4111-8111-111111111111",
-  hermesSessionId: "hermes-session-1",
+  sessionId: "provider-session-1",
   mode: "single_player",
   title: "Lantern Below",
   preview: "A damp stone stairway waits."
@@ -162,7 +162,7 @@ const campaign = {
 
 const multiplayerCampaign = {
   id: "22222222-2222-4222-8222-222222222222",
-  hermesSessionId: "hermes-session-2",
+  sessionId: "provider-session-2",
   mode: "multiplayer",
   title: "Candlekeep Circle",
   preview: "Two players gather at the table.",
@@ -173,7 +173,7 @@ function roomSnapshot(overrides: Partial<RoomSnapshot> = {}): RoomSnapshot {
   return {
     roomId: campaign.id,
     mode: "single_player",
-    sessionId: campaign.hermesSessionId,
+    sessionId: campaign.sessionId,
     players: [],
     messages: [
       {
@@ -200,7 +200,7 @@ function multiplayerRoomSnapshot(
   return roomSnapshot({
     roomId: multiplayerCampaign.id,
     mode: "multiplayer",
-    sessionId: multiplayerCampaign.hermesSessionId,
+    sessionId: multiplayerCampaign.sessionId,
     players: [
       {
         id: "player-1",
@@ -437,7 +437,7 @@ describe("GameShell", () => {
     );
     expect(JSON.parse(String(beginCall?.[1]?.body))).toEqual({
       roomId: multiplayerCampaign.id,
-      sessionId: multiplayerCampaign.hermesSessionId
+      sessionId: multiplayerCampaign.sessionId
     });
     expect(
       screen.getByRole("button", { name: /begin adventure/i })

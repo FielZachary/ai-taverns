@@ -5,7 +5,7 @@ export const CampaignModeSchema = z.enum(["single_player", "multiplayer"]);
 
 export const CampaignSummarySchema = z.object({
   id: z.string().uuid(),
-  hermesSessionId: z.string().min(1),
+  sessionId: z.string().min(1),
   mode: CampaignModeSchema,
   title: z.string().min(1),
   preview: z.string().optional(),

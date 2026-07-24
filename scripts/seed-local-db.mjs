@@ -18,7 +18,7 @@ const pool = new Pool({
 const userId = "00000000-0000-4000-8000-000000000101";
 const campaignId = "00000000-0000-4000-8000-000000000201";
 const playerId = "00000000-0000-4000-8000-000000000301";
-const hermesSessionId = "ai-dnd-local-seed";
+const sessionId = "ai-dnd-local-seed";
 
 try {
   await pool.query(
@@ -43,7 +43,7 @@ try {
     `
       insert into campaigns (
         id,
-        hermes_session_id,
+        session_id,
         title,
         mode,
         has_begun,
@@ -66,7 +66,7 @@ try {
           owner_user_id = excluded.owner_user_id,
           metadata = excluded.metadata
     `,
-    [campaignId, hermesSessionId, userId]
+    [campaignId, sessionId, userId]
   );
   await pool.query(
     `

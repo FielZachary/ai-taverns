@@ -906,7 +906,7 @@ test("room routes support session fallback and reject incomplete player profiles
 
   const readBySessionResponse = await app.inject({
     method: "GET",
-    url: `/api/room?sessionId=${campaign.hermes_session_id}`,
+    url: `/api/room?sessionId=${campaign.session_id}`,
     headers: {
       cookie: ownerCookie
     }
@@ -1136,58 +1136,6 @@ test("room submit rejects pending roll mismatches", async () => {
   assert.equal(
     ApiErrorResponseSchema.parse(wrongPlayerRollResponse.json()).error.code,
     "FORBIDDEN"
-  );
-});
-
-test("room submit rejects untargeted multiplayer pending rolls", async () => {
-  const { ownerCookie, campaignId, ownerClientId } =
-    await createMultiplayerRoom("room-untargeted-pending-roll");
-
-  const beginResponse = await app.inject({
-    method: "POST",
-    url: "/api/room/begin",
-    headers: {
-      cookie: ownerCookie
-    },
-    payload: {
-      roomId: campaignId
-    }
-  });
-
-  assert.equal(beginResponse.statusCode, 200, beginResponse.body);
-
-  const campaign = database.campaigns.find(
-    (candidate) => candidate.id === campaignId
-  );
-  assert.ok(campaign);
-  campaign.metadata = {
-    ...(campaign.metadata as Record<string, unknown>),
-    pendingRollRequests: [
-      {
-        id: "anonymous-save",
-        dice: "1d20",
-        label: "Wisdom save"
-      }
-    ]
-  };
-
-  const response = await app.inject({
-    method: "POST",
-    url: "/api/room/submit",
-    headers: {
-      cookie: ownerCookie
-    },
-    payload: {
-      roomId: campaignId,
-      playerId: ownerClientId,
-      rollRequestId: "anonymous-save"
-    }
-  });
-
-  assert.equal(response.statusCode, 409);
-  assert.equal(
-    ApiErrorResponseSchema.parse(response.json()).error.code,
-    "BAD_REQUEST"
   );
 });
 

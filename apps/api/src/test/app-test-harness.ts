@@ -68,7 +68,7 @@ type SessionRecord = {
 
 type CampaignRecord = {
   id: string;
-  hermes_session_id: string;
+  session_id: string;
   mode: "single_player" | "multiplayer";
   title: string;
   status: "active" | "archived" | "deleted";
@@ -324,7 +324,7 @@ class FakeDatabase {
       const sessionId = values[1] as string;
       const campaign = this.campaigns.find(
         (candidate) =>
-          (candidate.id === roomId || candidate.hermes_session_id === sessionId) &&
+          (candidate.id === roomId || candidate.session_id === sessionId) &&
           candidate.status !== "deleted"
       );
 
@@ -333,15 +333,15 @@ class FakeDatabase {
 
     if (
       normalizedSql.startsWith(
-        "select * from campaigns where (hermes_session_id = $1"
+        "select * from campaigns where (session_id = $1"
       )
     ) {
       const roomId = values[0] as string;
       const sessionId = values[1] as string;
       const campaign = this.campaigns.find(
         (candidate) =>
-          (candidate.hermes_session_id === roomId ||
-            candidate.hermes_session_id === sessionId) &&
+          (candidate.session_id === roomId ||
+            candidate.session_id === sessionId) &&
           candidate.status !== "deleted"
       );
 
@@ -499,23 +499,23 @@ class FakeDatabase {
 
     if (normalizedSql.startsWith("insert into campaigns")) {
       const now = new Date();
-      const isHermesCompatibilityInsert = !normalizedSql.includes("metadata");
+      const isLegacySessionInsert = !normalizedSql.includes("metadata");
       const record: CampaignRecord = {
         id: `00000000-0000-4000-8000-${String(this.nextId++).padStart(12, "0")}`,
-        hermes_session_id: values[0] as string,
+        session_id: values[0] as string,
         title: values[1] as string,
-        mode: (isHermesCompatibilityInsert ? values[4] : values[2]) as
+        mode: (isLegacySessionInsert ? values[4] : values[2]) as
           | "single_player"
           | "multiplayer",
         status: "active",
         has_begun: false,
-        owner_client_id: (isHermesCompatibilityInsert ? values[2] : values[3]) as
+        owner_client_id: (isLegacySessionInsert ? values[2] : values[3]) as
           | string
           | null,
-        owner_user_id: (isHermesCompatibilityInsert ? values[3] : values[4]) as
+        owner_user_id: (isLegacySessionInsert ? values[3] : values[4]) as
           | string
           | null,
-        metadata: isHermesCompatibilityInsert
+        metadata: isLegacySessionInsert
           ? {}
           : (JSON.parse(values[5] as string) as unknown),
         created_at: now,

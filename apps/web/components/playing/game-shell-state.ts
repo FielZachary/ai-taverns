@@ -368,13 +368,12 @@ function normalizePlayerTarget(value: string | undefined) {
 export function rollRequestTargetsCurrentPlayer(
   request: DiceRollRequest,
   profile: PlayerProfile,
-  roomPlayer?: RoomPlayer,
-  options: { allowUntargeted?: boolean } = {}
+  roomPlayer?: RoomPlayer
 ) {
   const target = normalizePlayerTarget(request.player);
 
   if (!target) {
-    return options.allowUntargeted ?? true;
+    return true;
   }
 
   const playerNames = [
@@ -415,8 +414,7 @@ export function inputTargetsCurrentPlayer(
         player: target
       },
       profile,
-      roomPlayer,
-      { allowUntargeted: false }
+      roomPlayer
     )
   );
 }
@@ -433,9 +431,7 @@ export function currentPlayerRollRequests(
 
   if (
     pendingRequests.length === 0 ||
-    !rollRequestTargetsCurrentPlayer(pendingRequests[0], profile, roomPlayer, {
-      allowUntargeted: false
-    })
+    !rollRequestTargetsCurrentPlayer(pendingRequests[0], profile, roomPlayer)
   ) {
     return [];
   }
@@ -443,11 +439,7 @@ export function currentPlayerRollRequests(
   const targetedRequests: DiceRollRequest[] = [];
 
   for (const request of pendingRequests) {
-    if (
-      !rollRequestTargetsCurrentPlayer(request, profile, roomPlayer, {
-        allowUntargeted: false
-      })
-    ) {
+    if (!rollRequestTargetsCurrentPlayer(request, profile, roomPlayer)) {
       break;
     }
 

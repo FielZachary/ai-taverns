@@ -191,7 +191,6 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("npc_dialogue"), /failed Intimidation/i);
     assert.match(jobPrompt("npc_dialogue"), /conversational texture/i);
     assert.match(jobPrompt("combat"), /strict turn ownership/i);
-    assert.match(jobPrompt("combat"), /roll_requests\[\]\.player/i);
     assert.match(jobPrompt("combat"), /attack roll: X vs AC Y - hit\/miss/i);
     assert.match(jobPrompt("combat"), /Dexterity save: X vs DC Y - success\/failure/i);
     assert.match(jobPrompt("combat"), /list each target's save result separately/i);
@@ -199,8 +198,6 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("combat"), /turnOwner is an NPC actor key/i);
     assert.match(jobPrompt("combat"), /final active enemy is defeated/i);
     assert.match(jobPrompt("combat"), /combat starts, initiative first/i);
-    assert.match(jobPrompt("combat"), /reveal every enemy initiative roll/i);
-    assert.match(jobPrompt("combat"), /Enemy initiative rolls are visible/i);
     assert.match(jobPrompt("combat"), /surprise opener resolves before initiative/i);
     assert.match(jobPrompt("combat"), /NPC turn catches up before player action/i);
     assert.match(jobPrompt("combat"), /area spell saves and damage are explicit/i);

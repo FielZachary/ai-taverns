@@ -223,14 +223,6 @@ describe("game shell state helpers", () => {
         currentRoomPlayer
       )
     ).toBe(true);
-    expect(
-      rollRequestTargetsCurrentPlayer(
-        rollRequest("untargeted"),
-        completeProfile,
-        currentRoomPlayer,
-        { allowUntargeted: false }
-      )
-    ).toBe(false);
 
     expect(
       rollRequestTargetsCurrentPlayer(
@@ -310,14 +302,31 @@ describe("game shell state helpers", () => {
         false
       )
     ).toEqual([]);
+  });
+
+  it("does not ask one multiplayer actor to roll another actor's initiative", () => {
+    const requests = [
+      {
+        ...rollRequest("initiative-tart", "Tart"),
+        label: "Initiative (Tart)"
+      },
+      {
+        ...rollRequest("initiative-nyx", "Nyx the Bright"),
+        label: "Initiative (Nyx the Bright)"
+      }
+    ];
+
+    expect(
+      currentPlayerRollRequests(requests, completeProfile, currentRoomPlayer, false)
+    ).toEqual([]);
     expect(
       currentPlayerRollRequests(
-        [rollRequest("untargeted"), rollRequest("nyx", "Nyx")],
+        requests.slice().reverse(),
         completeProfile,
         currentRoomPlayer,
         false
       )
-    ).toEqual([]);
+    ).toEqual([requests[1]]);
   });
 
   it("prefers batched pending roll requests over the legacy single request", () => {
