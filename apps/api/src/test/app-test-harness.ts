@@ -421,7 +421,10 @@ class FakeDatabase {
       return { rows: [] as T[] };
     }
 
-    if (normalizedSql.startsWith("select campaigns.*, display_player.character_name")) {
+    if (
+      normalizedSql.startsWith("select campaigns.*,") &&
+      normalizedSql.includes("display_player.character_name")
+    ) {
       if (normalizedSql.includes("where campaigns.id = $1")) {
         const campaignId = values[0] as string;
         const userId = values[1] as string;
