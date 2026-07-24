@@ -198,6 +198,22 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("combat"), /full damage, the halved damage/i);
     assert.match(jobPrompt("combat"), /turnOwner is an NPC actor key/i);
     assert.match(jobPrompt("combat"), /final active enemy is defeated/i);
+    assert.match(
+      jobPrompt("combat"),
+      /Enemies should act according to motives, intelligence, positioning, and the immediate threat/i
+    );
+    assert.doesNotMatch(
+      jobPrompt("combat"),
+      /morale, positioning, injuries/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /conscious, armed, in range, and still fighting must spend its turn creating immediate tactical pressure/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Do not let being wounded or alone become a passive held turn/i
+    );
     assert.match(jobPrompt("combat"), /do not infer an attack, spell, target/i);
     assert.match(jobPrompt("combat"), /roll_requests \[\]/i);
     assert.match(jobPrompt("combat"), /merely because initiative has reached/i);
@@ -269,6 +285,11 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(
       jobPrompt("combat"),
       /NPC turn catches up before an off-turn player intent/i
+    );
+    assert.match(jobPrompt("combat"), /players skip, hostile NPC still creates pressure/i);
+    assert.match(
+      jobPrompt("combat"),
+      /Bad response to avoid: saying the wounded warden snarls, braces, waits, watches, hesitates/i
     );
     assert.match(
       jobPrompt("combat"),

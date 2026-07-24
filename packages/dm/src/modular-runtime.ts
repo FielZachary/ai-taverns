@@ -454,10 +454,12 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
     "If an enemy is reduced to 0 HP, narrate defeat clearly and update the combat state accordingly.",
     "If a player reaches 0 HP, make the danger clear, update HP/condition state, and request or set up death saves only when appropriate to the rules and current turn flow.",
     "NPC behavior:",
-    "Enemies should act according to motives, intelligence, morale, positioning, injuries, and the immediate threat.",
+    "Enemies should act according to motives, intelligence, positioning, and the immediate threat.",
     "Do not make enemies omniscient. They know what they can perceive, infer, or have been established to know.",
     "Do not focus-fire cruelly unless the fiction, enemy tactics, or intelligence supports it.",
-    "Do not waste NPC turns. An NPC turn should usually attack, reposition, flee, use an ability, call for help, protect an objective, or create pressure.",
+    "A hostile NPC who is conscious, armed, in range, and still fighting must spend its turn creating immediate tactical pressure. In melee, that usually means attacking now.",
+    "Do not let being wounded or alone become a passive held turn. A hostile NPC may surrender, flee, disengage, dodge, or use a specific defensive action only when the narration and mechanics make that choice explicit.",
+    "Do not waste NPC turns. An NPC turn should attack, reposition, flee, use an ability, call for help, protect an objective, or create immediate pressure.",
     "Do not end an NPC turn with only a wind-up like lunges, swings, starts casting, or bears down unless a player-facing roll or reaction is required first.",
     "Action economy and adjudication:",
     "Respect a D&D-style action economy without overexplaining it: action, movement, bonus action, reaction, resources, and concentration matter when relevant.",
@@ -722,6 +724,43 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
                 "player:owner",
                 "npc:cutlass-raider",
                 "npc:horn-blower"
+              ]
+            }
+          }
+        },
+        null,
+        2
+      )
+    ].join("\n"),
+    [
+      "Example: players skip, hostile NPC still creates pressure.",
+      'Player input: "Komer skips their turn."',
+      "Context: Combat is active. POKE skipped, then Komer skipped. Current turnOwner is npc:warden-lift-guard-1. Warden lift-guard 1 is wounded at 16 HP, conscious, armed with a spear, hostile, and in melee reach of Komer.",
+      "Bad response to avoid: saying the wounded warden snarls, braces, waits, watches, hesitates, or simply stays dangerous without taking an action.",
+      "Good response:",
+      JSON.stringify(
+        {
+          public_narration: [
+            "The wounded warden uses Komer's hesitation immediately.",
+            "Warden lift-guard 1 attack roll: 12 vs Komer's AC 18 - miss.",
+            "His spearpoint snaps for Komer's chest, but it skids off Komer's chain mail with a bright scrape. The failed thrust leaves him overextended.",
+            "POKE, the warden is wounded and exposed while Komer holds the line.",
+            "What do you do?"
+          ].join("\n\n"),
+          resolution_mode: "resolved_without_dice",
+          roll_requests: [],
+          next_input_needed: "player_actions",
+          input_targets: ["player:poke"],
+          input_policy: "only_targeted_players",
+          mechanics_state_update: {
+            combat: {
+              active: true,
+              round: 2,
+              turnOwner: "player:poke",
+              initiativeOrder: [
+                "player:poke",
+                "player:komer",
+                "npc:warden-lift-guard-1"
               ]
             }
           }
