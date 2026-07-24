@@ -232,79 +232,6 @@ function hasRollRequestDiceCoverage(text: string, requests: DiceRollRequest[]) {
   );
 }
 
-function inferPlayerFromRollLabel(label: string) {
-  const match = label.trim().match(/\(([^()]+)\)\s*$/);
-  const player = match?.[1]?.trim();
-
-  return player || "";
-}
-
-function normalizeTargetText(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function rollRequestTargetsNarratedPlayer(
-  request: DiceRollRequest,
-  player: string
-) {
-  const target = normalizeTargetText(player);
-  const requestPlayer = normalizeTargetText(request.player ?? "");
-
-  return Boolean(
-    target &&
-      requestPlayer &&
-      (target === requestPlayer ||
-        target.includes(requestPlayer) ||
-        requestPlayer.includes(target))
-  );
-}
-
-function narratedPlayerRollTargets(publicNarration: string) {
-  const targets: string[] = [];
-  const patterns = [
-    /\bmake\s+(?:a|an)\s+[^.?!]*(?:saving throw|save|check)\s*,\s*([A-Z][A-Za-z0-9' -]{0,40})(?=[.?!])/gi,
-    /\broll\s+[^.?!]*?\(([A-Za-z][A-Za-z0-9' -]{0,40})\)/gi
-  ];
-
-  for (const pattern of patterns) {
-    for (const match of publicNarration.matchAll(pattern)) {
-      const target = match[1]?.trim();
-
-      if (target) {
-        targets.push(target);
-      }
-    }
-  }
-
-  return [...new Set(targets.map(normalizeTargetText))]
-    .map((normalizedTarget) =>
-      targets.find((target) => normalizeTargetText(target) === normalizedTarget)
-    )
-    .filter((target): target is string => Boolean(target));
-}
-
-function validateNarratedRollTargets(
-  publicNarration: string,
-  rollRequests: DiceRollRequest[]
-) {
-  for (const target of narratedPlayerRollTargets(publicNarration)) {
-    if (
-      !rollRequests.some((request) =>
-        rollRequestTargetsNarratedPlayer(request, target)
-      )
-    ) {
-      throw new Error(
-        "The DM provider named a player-facing roll target without a matching structured roll request player."
-      );
-    }
-  }
-}
-
 function modifierText(modifier: number | undefined) {
   if (!modifier) {
     return "";
@@ -339,15 +266,9 @@ function normalizeAdvantageState(value: string) {
 
 function formatRollInstruction(request: DiceRollRequest, index: number) {
   const verb = index === 0 ? "Roll" : "then roll";
-  const player = stringValue(request.player);
-  const targetText =
-    player && !request.label.toLowerCase().includes(player.toLowerCase())
-      ? ` (${player})`
-      : "";
-
   return `${verb} ${request.dice}${modifierText(request.modifier)}${advantageText(
     request.advantageState
-  )} for ${request.label}${targetText}`;
+  )} for ${request.label}`;
 }
 
 function rollInstructionsFromRequests(requests: DiceRollRequest[]) {
@@ -445,8 +366,7 @@ export function normalizeRollRequest(value: unknown): DiceRollRequest | null {
     stringValue(request.reason) ||
     "Required roll";
 
-  const player =
-    stringValue(request.player) || inferPlayerFromRollLabel(label);
+  const player = stringValue(request.player);
   const modifier = numberValue(request.modifier);
   const advantageState =
     normalizeAdvantageState(
@@ -581,8 +501,6 @@ export function parseHermesDmContract(
       "The DM provider mentioned a player-facing roll without structured roll_requests."
     );
   }
-
-  validateNarratedRollTargets(publicNarration, rollRequests);
 
   publicNarration = narrationWithRollInstructions(publicNarration, rollRequests);
 

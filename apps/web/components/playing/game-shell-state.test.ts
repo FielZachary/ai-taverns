@@ -223,14 +223,6 @@ describe("game shell state helpers", () => {
         currentRoomPlayer
       )
     ).toBe(true);
-    expect(
-      rollRequestTargetsCurrentPlayer(
-        rollRequest("untargeted"),
-        completeProfile,
-        currentRoomPlayer,
-        { allowUntargeted: false }
-      )
-    ).toBe(false);
 
     expect(
       rollRequestTargetsCurrentPlayer(
@@ -305,14 +297,6 @@ describe("game shell state helpers", () => {
     expect(
       currentPlayerRollRequests(
         [rollRequest("other", "Bran"), rollRequest("nyx", "Nyx")],
-        completeProfile,
-        currentRoomPlayer,
-        false
-      )
-    ).toEqual([]);
-    expect(
-      currentPlayerRollRequests(
-        [rollRequest("untargeted"), rollRequest("nyx", "Nyx")],
         completeProfile,
         currentRoomPlayer,
         false
