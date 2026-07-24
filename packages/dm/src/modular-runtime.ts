@@ -404,6 +404,7 @@ export function jobPrompt(job: DmJobName) {
     "Combat narration must never get ahead of combat state: if a roll, turn owner, initiative order, HP change, condition, resource use, or enemy defeat is unresolved, pause or encode it structurally instead of implying it only in prose.",
     "Initiative and combat start:",
     "If hostilities start while enemies are aware or ready, ask the acting player for initiative before resolving their attack, spell, or damage.",
+    "When initiative is requested or resolved, explicitly reveal every enemy initiative roll and modifier that affects initiative order before stating who acts first.",
     "If the acting player clearly surprises unaware enemies, resolve the opening roll or effect first, then ask for initiative before enemy counteraction.",
     "When combat begins, include mechanics_state_update.combat with active true, round 1, turnOwner, and provisional initiativeOrder using actor keys from the current scene and character sheets only.",
     "Do not include bystanders, captives, scenery, or passive creatures in initiativeOrder unless they can meaningfully act in the fight.",
@@ -417,6 +418,7 @@ export function jobPrompt(job: DmJobName) {
     "When the final active enemy is defeated, set combat active false, turnOwner null, and initiativeOrder empty. Do not say a combatant is up next after combat ends.",
     "Rolls and dice:",
     "Use roll_requests for player-facing dice the website must collect.",
+    "For any player-specific roll, set roll_requests[].player to the exact character name or player actor key; do not rely on prose or labels alone.",
     "When requesting dice, set resolution_mode to needs_dice and next_input_needed to dice_results.",
     "When resolution_mode is needs_dice, public_narration must not resolve the rolled outcome.",
     "Name rolls clearly: attack roll, damage roll, saving throw, initiative, concentration check, death save, or relevant skill/tool check.",
@@ -468,6 +470,7 @@ export function jobPrompt(job: DmJobName) {
           public_narration: [
             "Your sword clears the scabbard with a bright scrape, and the bandit captain's lazy grin disappears. She was waiting for this. Her boots shift in the mud, blade coming up as the two cutthroats beside her spread out to either side of the road.",
             "You have the will to strike, but they are not surprised. The fight begins before anyone's steel lands.",
+            "Enemy initiative rolls are visible: Bandit captain 1d20 + 2 = 17; cutthroat 1d20 + 1 = 12; cutthroat 1d20 + 1 = 8.",
             "Roll initiative: 1d20 + your initiative modifier."
           ].join("\n\n"),
           resolution_mode: "needs_dice",

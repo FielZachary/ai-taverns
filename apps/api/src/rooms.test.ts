@@ -1139,6 +1139,58 @@ test("room submit rejects pending roll mismatches", async () => {
   );
 });
 
+test("room submit rejects untargeted multiplayer pending rolls", async () => {
+  const { ownerCookie, campaignId, ownerClientId } =
+    await createMultiplayerRoom("room-untargeted-pending-roll");
+
+  const beginResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/begin",
+    headers: {
+      cookie: ownerCookie
+    },
+    payload: {
+      roomId: campaignId
+    }
+  });
+
+  assert.equal(beginResponse.statusCode, 200, beginResponse.body);
+
+  const campaign = database.campaigns.find(
+    (candidate) => candidate.id === campaignId
+  );
+  assert.ok(campaign);
+  campaign.metadata = {
+    ...(campaign.metadata as Record<string, unknown>),
+    pendingRollRequests: [
+      {
+        id: "anonymous-save",
+        dice: "1d20",
+        label: "Wisdom save"
+      }
+    ]
+  };
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/room/submit",
+    headers: {
+      cookie: ownerCookie
+    },
+    payload: {
+      roomId: campaignId,
+      playerId: ownerClientId,
+      rollRequestId: "anonymous-save"
+    }
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.equal(
+    ApiErrorResponseSchema.parse(response.json()).error.code,
+    "BAD_REQUEST"
+  );
+});
+
 test("room routes require an owned session", async () => {
   const response = await app.inject({
     method: "GET",
