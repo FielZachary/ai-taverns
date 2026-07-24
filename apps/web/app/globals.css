@@ -2043,6 +2043,7 @@ h1 {
   font-size: 0.84rem;
   font-weight: 900;
   letter-spacing: 0;
+  opacity: 0.48;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.86);
 }
 
@@ -2059,6 +2060,7 @@ h1 {
 
 .chat-sidebar-actions button:hover,
 .chat-sidebar-actions button:focus-visible {
+  opacity: 1;
   filter: drop-shadow(0 0 8px rgba(244, 207, 122, 0.18));
 }
 
