@@ -3118,6 +3118,29 @@ h1 {
   background: linear-gradient(180deg, #f4cf7a, #c88731);
 }
 
+.ai-model-menu {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: var(--muted);
+  font-family: var(--body-font);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.ai-model-menu select {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid rgba(244, 207, 122, 0.38);
+  border-radius: 8px;
+  color: var(--gold-bright);
+  background: rgba(217, 169, 74, 0.1);
+  font: inherit;
+  letter-spacing: 0;
+}
+
 .dice-roll-control {
   position: relative;
   min-width: 0;
@@ -3888,7 +3911,7 @@ h6 {
 
   .input-mode-toggle {
     grid-column: 1 / -1;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .turn-form button {

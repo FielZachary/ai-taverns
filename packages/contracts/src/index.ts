@@ -1,4 +1,5 @@
 export * from "./auth.js";
+export * from "./ai-models.js";
 export * from "./campaigns.js";
 export * from "./dm.js";
 export * from "./errors.js";

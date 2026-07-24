@@ -7,7 +7,7 @@ import {
   useState
 } from "react";
 import { Dice5, MessageCircleQuestion, Send, SkipForward, Swords } from "lucide-react";
-import type { DiceRollRequest } from "@/lib/game-types";
+import type { AiModelId, DiceRollRequest } from "@/lib/game-types";
 
 export type DiceFace = "d4" | "d6" | "d8" | "d10" | "d12" | "d20";
 export type QueuedDice = Partial<Record<DiceFace, number>>;
@@ -32,9 +32,18 @@ type PlayerInputProps = {
 };
 
 const diceFaces: DiceFace[] = ["d4", "d6", "d8", "d10", "d12", "d20"];
+const aiModelStorageKey = "ai-dnd.aiModel";
+const aiModelOptions: { id: AiModelId; label: string }[] = [
+  { id: "deepseek-v4-flash", label: "DeepSeek V4 Flash" },
+  { id: "qwen-3-7-flash", label: "Qwen 3.7 Flash" }
+];
 
 function queuedDiceTotal(queuedDice: QueuedDice) {
   return Object.values(queuedDice).reduce((sum, count) => sum + (count ?? 0), 0);
+}
+
+function isAiModelId(value: string): value is AiModelId {
+  return aiModelOptions.some((option) => option.id === value);
 }
 
 export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
@@ -60,8 +69,18 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
   ) {
     const [isCallingAttention, setIsCallingAttention] = useState(false);
     const [isDicePickerOpen, setIsDicePickerOpen] = useState(false);
+    const [selectedAiModel, setSelectedAiModel] =
+      useState<AiModelId>("deepseek-v4-flash");
     const [queuedDice, setQueuedDice] = useState<QueuedDice>({});
     const diceRollControlRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+      const savedAiModel = window.localStorage.getItem(aiModelStorageKey);
+
+      if (savedAiModel && isAiModelId(savedAiModel)) {
+        setSelectedAiModel(savedAiModel);
+      }
+    }, []);
 
     useEffect(() => {
       if (!validationMessage) {
@@ -141,6 +160,11 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
       setIsDicePickerOpen(false);
     }
 
+    function chooseAiModel(modelId: AiModelId) {
+      setSelectedAiModel(modelId);
+      window.localStorage.setItem(aiModelStorageKey, modelId);
+    }
+
     return (
       <form
         className={`turn-form ${
@@ -150,6 +174,7 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
         }`}
         onSubmit={onSubmit}
       >
+        <input type="hidden" name="aiModel" value={selectedAiModel} />
         {validationMessage ? (
           <p className="turn-form-validation" key={validationPulse} role="alert">
             {validationMessage}
@@ -178,6 +203,21 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
             <MessageCircleQuestion size={17} />
             Ask DM
           </button>
+          <label className="ai-model-menu">
+            <span>Model</span>
+            <select
+              aria-label="AI model"
+              disabled={isSending}
+              value={selectedAiModel}
+              onChange={(event) => chooseAiModel(event.target.value as AiModelId)}
+            >
+              {aiModelOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
         <div className="dice-roll-control" ref={diceRollControlRef}>
           <button

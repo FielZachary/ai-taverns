@@ -4,6 +4,7 @@ import type {
   FormEvent
 } from "react";
 import {
+  beforeEach,
   describe,
   expect,
   it,
@@ -50,6 +51,39 @@ function renderPlayerInput(
 }
 
 describe("PlayerInput", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("shows the concrete model picker and persists the selected model", () => {
+    renderPlayerInput();
+
+    expect(screen.getByRole("combobox", { name: /ai model/i })).toHaveValue(
+      "deepseek-v4-flash"
+    );
+    expect(screen.getByRole("option", { name: "DeepSeek V4 Flash" }))
+      .toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Qwen 3.7 Flash" }))
+      .toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("combobox", { name: /ai model/i }), {
+      target: { value: "qwen-3-7-flash" }
+    });
+
+    expect(localStorage.getItem("ai-dnd.aiModel")).toBe("qwen-3-7-flash");
+    expect(screen.getByDisplayValue("Qwen 3.7 Flash")).toBeInTheDocument();
+  });
+
+  it("ignores stale provider-level model picker values", () => {
+    localStorage.setItem("ai-dnd.aiModel", "deepseek-reasoner");
+
+    renderPlayerInput();
+
+    expect(screen.getByRole("combobox", { name: /ai model/i })).toHaveValue(
+      "deepseek-v4-flash"
+    );
+  });
+
   it("shows validation messages and locks submitted turn input", () => {
     const props = renderPlayerInput({
       isSubmitted: true,

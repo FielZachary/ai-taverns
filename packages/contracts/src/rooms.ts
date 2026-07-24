@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AiModelIdSchema } from "./ai-models.js";
 import { CampaignModeSchema } from "./campaigns.js";
 import { MechanicsSeedSchema } from "./mechanics.js";
 
@@ -101,6 +102,7 @@ export const RoomSubmitRequestSchema = z.object({
   rollRequestId: z.string().optional(),
   rollResult: DiceRollResultSchema.optional(),
   clientMessageId: z.string().optional(),
+  model: AiModelIdSchema.optional(),
   rollSubmissions: z.array(DiceRollSubmissionSchema).optional()
 });
 

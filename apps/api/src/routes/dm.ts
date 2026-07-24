@@ -96,6 +96,7 @@ export async function registerDmRoutes(
         ...(rollRequestId ? { rollRequestId } : {}),
         ...(body.rollResult ? { rollResult: body.rollResult } : {}),
         ...(clientMessageId ? { clientMessageId } : {}),
+        ...(body.model ? { model: body.model } : {}),
         ...(rollSubmissions ? { rollSubmissions } : {})
       })
     );
@@ -126,7 +127,8 @@ export async function registerDmRoutes(
         campaignId: params.campaignId,
         question,
         userId: user.id,
-        ...(clientMessageId ? { clientMessageId } : {})
+        ...(clientMessageId ? { clientMessageId } : {}),
+        ...(body.model ? { model: body.model } : {})
       })
     );
 

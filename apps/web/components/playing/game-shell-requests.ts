@@ -1,4 +1,4 @@
-import type { DiceRollSubmission } from "@/lib/game-types";
+import type { AiModelId, DiceRollSubmission } from "@/lib/game-types";
 
 type CampaignRequestContext = {
   id: string;
@@ -16,7 +16,8 @@ export function buildTurnSubmissionRequest({
   playerId,
   message,
   skipTurn,
-  clientMessageId
+  clientMessageId,
+  model
 }: {
   campaign: CampaignRequestContext;
   singlePlayer: boolean;
@@ -24,13 +25,15 @@ export function buildTurnSubmissionRequest({
   message: string;
   skipTurn: boolean;
   clientMessageId: string;
+  model: AiModelId;
 }): GameShellRequest {
   if (singlePlayer) {
     return {
       endpoint: `/api/campaigns/${encodeURIComponent(campaign.id)}/solo-turn`,
       body: {
         message,
-        clientMessageId
+        clientMessageId,
+        model
       }
     };
   }
@@ -43,7 +46,8 @@ export function buildTurnSubmissionRequest({
       playerId,
       message,
       skipTurn,
-      clientMessageId
+      clientMessageId,
+      model
     }
   };
 }
@@ -53,20 +57,23 @@ export function buildRollSubmissionRequest({
   singlePlayer,
   playerId,
   rollSubmissions,
-  clientMessageId
+  clientMessageId,
+  model
 }: {
   campaign: CampaignRequestContext;
   singlePlayer: boolean;
   playerId: string;
   rollSubmissions: DiceRollSubmission[];
   clientMessageId: string;
+  model: AiModelId;
 }): GameShellRequest {
   if (singlePlayer) {
     return {
       endpoint: `/api/campaigns/${encodeURIComponent(campaign.id)}/solo-turn`,
       body: {
         rollSubmissions,
-        clientMessageId
+        clientMessageId,
+        model
       }
     };
   }
@@ -78,7 +85,8 @@ export function buildRollSubmissionRequest({
       sessionId: campaign.sessionId,
       playerId,
       rollSubmissions,
-      clientMessageId
+      clientMessageId,
+      model
     }
   };
 }

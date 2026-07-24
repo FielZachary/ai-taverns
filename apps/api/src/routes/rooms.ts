@@ -172,6 +172,7 @@ export async function registerRoomRoutes(
         ...(rollRequestId ? { rollRequestId } : {}),
         ...(body.rollResult ? { rollResult: body.rollResult } : {}),
         ...(clientMessageId ? { clientMessageId } : {}),
+        ...(body.model ? { model: body.model } : {}),
         ...(body.rollSubmissions ? { rollSubmissions: body.rollSubmissions } : {})
       })
     );

@@ -31,13 +31,15 @@ describe("game shell request helpers", () => {
         playerId: "player-1",
         message: "I inspect the door.",
         skipTurn: false,
-        clientMessageId: "message-1"
+        clientMessageId: "message-1",
+        model: "deepseek-v4-flash"
       })
     ).toEqual({
       endpoint: "/api/campaigns/campaign%2Fwith%20space/solo-turn",
       body: {
         message: "I inspect the door.",
-        clientMessageId: "message-1"
+        clientMessageId: "message-1",
+        model: "deepseek-v4-flash"
       }
     });
   });
@@ -50,7 +52,8 @@ describe("game shell request helpers", () => {
         playerId: "player-1",
         message: "Nyx skips their turn.",
         skipTurn: true,
-        clientMessageId: "message-2"
+        clientMessageId: "message-2",
+        model: "qwen-3-7-flash"
       })
     ).toEqual({
       endpoint: "/api/room/submit",
@@ -60,7 +63,8 @@ describe("game shell request helpers", () => {
         playerId: "player-1",
         message: "Nyx skips their turn.",
         skipTurn: true,
-        clientMessageId: "message-2"
+        clientMessageId: "message-2",
+        model: "qwen-3-7-flash"
       }
     });
   });
@@ -72,13 +76,15 @@ describe("game shell request helpers", () => {
         singlePlayer: true,
         playerId: "player-1",
         rollSubmissions,
-        clientMessageId: "message-3"
+        clientMessageId: "message-3",
+        model: "deepseek-v4-flash"
       })
     ).toEqual({
       endpoint: "/api/campaigns/campaign%2Fwith%20space/solo-turn",
       body: {
         rollSubmissions,
-        clientMessageId: "message-3"
+        clientMessageId: "message-3",
+        model: "deepseek-v4-flash"
       }
     });
   });
@@ -90,7 +96,8 @@ describe("game shell request helpers", () => {
         singlePlayer: false,
         playerId: "player-1",
         rollSubmissions,
-        clientMessageId: "message-4"
+        clientMessageId: "message-4",
+        model: "qwen-3-7-flash"
       })
     ).toEqual({
       endpoint: "/api/room/submit",
@@ -99,7 +106,8 @@ describe("game shell request helpers", () => {
         sessionId: "session-1",
         playerId: "player-1",
         rollSubmissions,
-        clientMessageId: "message-4"
+        clientMessageId: "message-4",
+        model: "qwen-3-7-flash"
       }
     });
   });
