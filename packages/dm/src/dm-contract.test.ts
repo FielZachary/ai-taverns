@@ -71,6 +71,26 @@ describe("parseDmContract", () => {
     assert.equal(mismatchedNeedsDice.resolutionMode, "needs_dice");
   });
 
+  it("accepts clarification as a first-class input state", () => {
+    const result = parseDmContract(
+      JSON.stringify({
+        public_narration:
+          "Seren, are you casting one spell this turn, or do you have a feature that lets you cast both?",
+        resolution_mode: "needs_dice",
+        roll_requests: [],
+        next_input_needed: "clarification",
+        input_targets: ["player:seren"],
+        input_policy: "only_targeted_players"
+      })
+    );
+
+    assert.equal(result.nextInputNeeded, "clarification");
+    assert.equal(result.resolutionMode, "resolved_without_dice");
+    assert.deepEqual(result.inputTargets, ["player:seren"]);
+    assert.equal(result.inputPolicy, "only_targeted_players");
+  });
+
+
   it("rejects attack roll and AC contradictions", () => {
     assert.throws(
       () =>

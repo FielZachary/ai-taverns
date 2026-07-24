@@ -999,6 +999,7 @@ class FakeDatabase {
       const campaignId = values[0] as string;
       const inputTargets = JSON.parse(values[1] as string) as unknown[];
       const inputPolicy = JSON.parse(values[2] as string) as unknown;
+      const nextInputNeeded = values[3] as unknown;
       const campaign = this.campaigns.find(
         (candidate) => candidate.id === campaignId
       );
@@ -1006,20 +1007,23 @@ class FakeDatabase {
       if (campaign) {
         const metadata = campaign.metadata as Record<string, unknown>;
 
-        if (inputTargets.length === 0) {
+        if (inputTargets.length === 0 && nextInputNeeded === "player_actions") {
           const {
             inputTargets: _inputTargets,
             inputPolicy: _inputPolicy,
+            nextInputNeeded: _nextInputNeeded,
             ...nextMetadata
           } = metadata;
           void _inputTargets;
           void _inputPolicy;
+          void _nextInputNeeded;
           campaign.metadata = nextMetadata;
         } else {
           campaign.metadata = {
             ...metadata,
             inputTargets,
-            inputPolicy
+            inputPolicy,
+            nextInputNeeded
           };
         }
 
@@ -1561,6 +1565,40 @@ before(async () => {
 
           return {
             id: "provider-combat-parse-failure",
+            content,
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: content,
+              model: "test-model",
+              temperature: 0.8,
+              providerTimings: []
+            }
+          };
+        }
+
+        if (input.message.includes("TRIGGER_CLARIFICATION_NEXT_INPUT")) {
+          const content = JSON.stringify({
+            public_narration:
+              "Seren, are you casting one spell this turn, or do you have a feature that lets you cast both? Choose the spell and target before I resolve it.",
+            resolution_mode: "needs_dice",
+            roll_requests: [],
+            next_input_needed: "clarification",
+            input_targets: ["player:owner"],
+            input_policy: "only_targeted_players",
+            mechanics_state_update: {}
+          });
+
+          return {
+            id: "provider-clarification-recovered",
             content,
             debug: {
               requestMessages: [

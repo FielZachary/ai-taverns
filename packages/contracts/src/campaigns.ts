@@ -8,6 +8,7 @@ export const CampaignSummarySchema = z.object({
   sessionId: z.string().min(1),
   mode: CampaignModeSchema,
   title: z.string().min(1),
+  ownerClientId: z.string().optional(),
   preview: z.string().optional(),
   time: z.string().optional(),
   messageCount: z.number().int().nonnegative().optional(),

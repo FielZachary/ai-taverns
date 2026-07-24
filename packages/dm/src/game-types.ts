@@ -63,6 +63,10 @@ export type DiceRollRequest = {
 };
 
 export type InputPolicy = "all_players" | "only_targeted_players";
+export type NextInputNeeded =
+  | "player_actions"
+  | "dice_results"
+  | "clarification";
 
 export type DiceRollResult = {
   rolls: number[];
@@ -85,6 +89,7 @@ export type DmProviderTurnResponse = {
   message: GameMessage;
   pendingRollRequest?: DiceRollRequest | null;
   pendingRollRequests?: DiceRollRequest[];
+  nextInputNeeded?: NextInputNeeded;
   inputTargets?: string[];
   inputPolicy?: InputPolicy;
 };

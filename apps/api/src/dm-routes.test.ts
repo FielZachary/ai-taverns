@@ -305,6 +305,49 @@ test("DM parser failure traces keep the exact provider response", async () => {
   assert.match(provider?.rawResponse ?? "", /Seren lunges with her blade/);
 });
 
+test("DM contract accepts clarification as playable targeted input", async () => {
+  const { cookie, campaignId } = await createSinglePlayerCampaign(
+    "dm-runtime-contract-recovery"
+  );
+
+  const soloResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "TRIGGER_CLARIFICATION_NEXT_INPUT"
+    }
+  });
+
+  assert.equal(soloResponse.statusCode, 200, soloResponse.body);
+  const solo = CampaignSoloTurnResponseSchema.parse(soloResponse.json());
+  assert.match(
+    solo.messages.at(-1)?.content ?? "",
+    /are you casting one spell this turn/i
+  );
+  assert.equal(solo.nextInputNeeded, "clarification");
+  assert.deepEqual(solo.inputTargets, ["player:owner"]);
+  assert.equal(solo.inputPolicy, "only_targeted_players");
+
+  const tracesResponse = await app.inject({
+    method: "GET",
+    url: `/api/campaigns/${campaignId}/debug-traces?limit=10`,
+    headers: {
+      cookie
+    }
+  });
+
+  assert.equal(tracesResponse.statusCode, 200, tracesResponse.body);
+  const traces = CampaignDebugTracesResponseSchema.parse(tracesResponse.json());
+  const recoveryTrace = traces.traces.find(
+    (trace) => trace.phase === "dm_contract_parse_recovered"
+  );
+
+  assert.equal(recoveryTrace, undefined);
+});
+
 test("solo combat turn can start initiative through mechanics state update", async () => {
   const cookie = await signIn("dm-runtime-initiative@example.com");
   const createResponse = await app.inject({

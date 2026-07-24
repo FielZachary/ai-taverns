@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DiceRollRequestSchema } from "./rooms.js";
+import { DiceRollRequestSchema, NextInputNeededSchema } from "./rooms.js";
 
 export const DmProviderGameMessageSchema = z
   .object({
@@ -26,6 +26,7 @@ export const DmProviderTurnResponseSchema = z.object({
   message: DmProviderGameMessageSchema,
   pendingRollRequest: DiceRollRequestSchema.nullable().optional(),
   pendingRollRequests: z.array(DiceRollRequestSchema).optional(),
+  nextInputNeeded: NextInputNeededSchema.optional(),
   inputTargets: z.array(z.string()).optional(),
   inputPolicy: z.enum(["all_players", "only_targeted_players"]).optional()
 });

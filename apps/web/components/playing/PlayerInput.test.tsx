@@ -70,6 +70,20 @@ describe("PlayerInput", () => {
     expect(screen.queryByRole("dialog", { name: /ai model/i })).not.toBeInTheDocument();
   });
 
+  it("does not open model settings when model selection is disabled", () => {
+    renderPlayerInput({ canSelectAiModel: false });
+
+    const modelButton = screen.getByRole("button", {
+      name: /ai model: deepseek v4 flash/i
+    });
+
+    expect(modelButton).toBeDisabled();
+
+    fireEvent.click(modelButton);
+
+    expect(screen.queryByRole("dialog", { name: /ai model/i })).not.toBeInTheDocument();
+  });
+
   it("ignores stale provider-level model picker values", () => {
     localStorage.setItem("ai-dnd.aiModel", "deepseek-reasoner");
 

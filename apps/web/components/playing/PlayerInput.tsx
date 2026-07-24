@@ -18,6 +18,7 @@ type PlayerInputProps = {
   mode: PlayerInputMode;
   isSending: boolean;
   isSubmitted: boolean;
+  canSelectAiModel?: boolean;
   lockMessage?: string;
   requiredRoll?: DiceRollRequest | null;
   requiredRollExpression?: string;
@@ -53,6 +54,7 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
       mode,
       isSending,
       isSubmitted,
+      canSelectAiModel = true,
       lockMessage,
       requiredRoll,
       requiredRollExpression,
@@ -162,6 +164,10 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
     }
 
     function chooseAiModel(modelId: AiModelId) {
+      if (!canSelectAiModel) {
+        return;
+      }
+
       setSelectedAiModel(modelId);
       window.localStorage.setItem(aiModelStorageKey, modelId);
       setIsModelPickerOpen(false);
@@ -215,8 +221,12 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
               type="button"
               aria-label={`AI model: ${selectedAiModelLabel}`}
               aria-expanded={isModelPickerOpen}
-              disabled={isSending}
-              onClick={() => setIsModelPickerOpen(true)}
+              disabled={isSending || !canSelectAiModel}
+              onClick={() => {
+                if (canSelectAiModel) {
+                  setIsModelPickerOpen(true);
+                }
+              }}
             >
               <Settings size={17} />
             </button>

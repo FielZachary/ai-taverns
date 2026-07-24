@@ -18,4 +18,5 @@ test("mapCampaignSummaryRow preserves an explicit camelCase session id alias", (
   } satisfies Omit<CampaignRow, "session_id"> & { sessionId: string });
 
   assert.equal(summary.sessionId, "ai-dnd-session-1");
+  assert.equal(summary.ownerClientId, "client-1");
 });

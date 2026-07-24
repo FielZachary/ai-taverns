@@ -1,7 +1,8 @@
 import type {
   DiceRollRequest,
   GameMessage,
-  InputPolicy
+  InputPolicy,
+  NextInputNeeded
 } from "@/lib/game-types";
 import {
   defaultCharacterSheet,
@@ -30,6 +31,7 @@ export type RoomSnapshot = {
   hasBegun: boolean;
   pendingRollRequest: DiceRollRequest | null;
   pendingRollRequests?: DiceRollRequest[];
+  nextInputNeeded?: NextInputNeeded;
   inputTargets?: string[];
   inputPolicy?: InputPolicy;
   combat?: {

@@ -492,11 +492,16 @@ export function rollRequestDiagnostics(
   });
 }
 
+export type DmNextInputNeeded =
+  | "player_actions"
+  | "dice_results"
+  | "clarification";
+
 export type DmContractResponse = {
   publicNarration: string;
   resolutionMode: "needs_dice" | "resolved_without_dice";
   rollRequests: DiceRollRequest[];
-  nextInputNeeded: "player_actions" | "dice_results";
+  nextInputNeeded: DmNextInputNeeded;
   inputTargets: string[];
   inputPolicy: InputPolicy;
   mechanicsStateUpdate?: Record<string, unknown>;
@@ -504,6 +509,17 @@ export type DmContractResponse = {
     displayLocation?: string;
     worldName?: string;
     startingLocation?: string;
+  };
+};
+
+export type DmContractRecovery = {
+  contract: DmContractResponse;
+  report: {
+    originalNextInputNeeded: string;
+    recoveredNextInputNeeded: DmContractResponse["nextInputNeeded"];
+    originalResolutionMode: string;
+    recoveredResolutionMode: DmContractResponse["resolutionMode"];
+    rollRequestsCount: number;
   };
 };
 
@@ -554,7 +570,8 @@ export function parseDmContract(
 
   if (
     nextInputNeeded !== "player_actions" &&
-    nextInputNeeded !== "dice_results"
+    nextInputNeeded !== "dice_results" &&
+    nextInputNeeded !== "clarification"
   ) {
     throw new Error("The DM provider response has an invalid next_input_needed value.");
   }
@@ -614,6 +631,85 @@ export function parseDmContract(
     inputPolicy,
     ...(mechanicsStateUpdate ? { mechanicsStateUpdate } : {}),
     ...(settingValue ? { setting: settingValue } : {})
+  };
+}
+
+export function recoverDmContractAfterParseFailure(
+  content: string | undefined
+): DmContractRecovery | null {
+  const parsed = parseJsonObject(content?.trim() ?? "");
+
+  if (!parsed) {
+    return null;
+  }
+
+  const publicNarration = stringValue(parsed.public_narration);
+
+  if (!publicNarration) {
+    return null;
+  }
+
+  const rawRollRequests = Array.isArray(parsed.roll_requests)
+    ? parsed.roll_requests
+    : [];
+  const rollRequests = normalizeRollRequests(rawRollRequests, publicNarration);
+  const originalNextInputNeeded = stringValue(parsed.next_input_needed);
+  const originalResolutionMode = stringValue(
+    parsed.resolution_mode ?? parsed.resolutionMode
+  );
+  const nextInputNeeded: DmContractResponse["nextInputNeeded"] =
+    rollRequests.length > 0
+      ? "dice_results"
+      : originalNextInputNeeded === "clarification"
+        ? "clarification"
+        : "player_actions";
+  const resolutionMode: DmContractResponse["resolutionMode"] =
+    nextInputNeeded === "dice_results" ? "needs_dice" : "resolved_without_dice";
+  const inputTargets = stringArray(parsed.input_targets ?? parsed.inputTargets);
+  const rawInputPolicy = stringValue(parsed.input_policy ?? parsed.inputPolicy);
+  const inputPolicy: InputPolicy =
+    rawInputPolicy === "only_targeted_players" && inputTargets.length > 0
+      ? "only_targeted_players"
+      : "all_players";
+  const mechanicsStateUpdate = asObject(
+    parsed.mechanics_state_update ?? parsed.mechanicsStateUpdate
+  );
+  const setting = asObject(parsed.setting);
+  const displayLocation =
+    stringValue(setting?.display_location) ||
+    stringValue(setting?.displayLocation);
+  const worldName =
+    stringValue(setting?.world_name) || stringValue(setting?.worldName);
+  const startingLocation =
+    stringValue(setting?.starting_location) ||
+    stringValue(setting?.startingLocation);
+  const settingValue =
+    displayLocation || worldName || startingLocation
+      ? {
+          displayLocation: displayLocation || startingLocation || worldName,
+          ...(worldName ? { worldName } : {}),
+          ...(startingLocation ? { startingLocation } : {})
+        }
+      : undefined;
+
+  return {
+    contract: {
+      publicNarration: narrationWithRollInstructions(publicNarration, rollRequests),
+      resolutionMode,
+      rollRequests,
+      nextInputNeeded,
+      inputTargets,
+      inputPolicy,
+      ...(mechanicsStateUpdate ? { mechanicsStateUpdate } : {}),
+      ...(settingValue ? { setting: settingValue } : {})
+    },
+    report: {
+      originalNextInputNeeded,
+      recoveredNextInputNeeded: nextInputNeeded,
+      originalResolutionMode,
+      recoveredResolutionMode: resolutionMode,
+      rollRequestsCount: rollRequests.length
+    }
   };
 }
 
