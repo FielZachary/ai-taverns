@@ -585,31 +585,6 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     };
   }, [fetchCampaigns, initialCampaignId, loadCampaignMessages]);
 
-  useEffect(() => {
-    let shouldIgnore = false;
-
-    async function refreshCampaigns() {
-      try {
-        const campaigns = await fetchCampaigns();
-
-        if (!shouldIgnore) {
-          setAvailableCampaigns(campaigns);
-        }
-      } catch {
-        // Keep the last good sidebar list if the server is briefly unavailable.
-      }
-    }
-
-    const interval = window.setInterval(() => {
-      void refreshCampaigns();
-    }, 3000);
-
-    return () => {
-      shouldIgnore = true;
-      window.clearInterval(interval);
-    };
-  }, [fetchCampaigns]);
-
   const registerPlayerProfile = useCallback(
     async (profile: PlayerProfile) => {
       if (!playerId || !activeCampaign || isSinglePlayer) {
