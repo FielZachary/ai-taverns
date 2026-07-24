@@ -3142,26 +3142,30 @@ h1 {
 
 .dice-roll-control {
   position: relative;
-  flex: 0 1 132px;
-  min-width: 92px;
+  flex: 0 0 38px;
+  width: 38px;
 }
 
 .turn-form .dice-roll-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  width: 100%;
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
   min-height: 38px;
-  padding: 0 12px;
+  padding: 0;
   color: var(--gold-bright);
   background: rgba(217, 169, 74, 0.1);
 }
 
 .turn-form .dice-roll-button span {
-  font-size: 0.72rem;
-  line-height: 1;
-  text-transform: uppercase;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 .dice-picker-popover {
@@ -3936,11 +3940,15 @@ h6 {
   }
 
   .turn-form .dice-roll-button {
+    width: 46px;
+    height: 46px;
+    min-width: 46px;
     min-height: 46px;
   }
 
   .dice-roll-control {
-    flex: 1 1 104px;
+    flex: 0 0 46px;
+    width: 46px;
   }
 
   .turn-form-input-wrap {
