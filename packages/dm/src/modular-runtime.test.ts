@@ -455,4 +455,32 @@ describe("modular AI DM runtime contracts", () => {
     assert.doesNotMatch(soloScenePrompt, /This is singleplayer combat/i);
     assert.doesNotMatch(multiplayerScenePrompt, /This is multiplayer combat/i);
   });
+
+  it("inserts router reasons into clarification job guidance only when provided", () => {
+    const prompt = jobPrompt("clarification", "multiplayer", {
+      routerReason: "The spell target is ambiguous."
+    });
+
+    assert.match(prompt, /Ask one concise clarifying question\.\nRouter clarification reason:/);
+    assert.match(
+      prompt,
+      /The router selected clarification because: The spell target is ambiguous\./
+    );
+    assert.match(prompt, /Do not treat it as new scene fact, memory, or resolved outcome/);
+    assert.match(
+      prompt,
+      /resolved outcome\.\nBriefly explain why the clarification is needed/
+    );
+
+    assert.doesNotMatch(
+      jobPrompt("clarification", "multiplayer"),
+      /Router clarification reason/
+    );
+    assert.doesNotMatch(
+      jobPrompt("combat", "multiplayer", {
+        routerReason: "The spell target is ambiguous."
+      }),
+      /Router clarification reason/
+    );
+  });
 });

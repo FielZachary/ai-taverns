@@ -237,7 +237,11 @@ export function buildRouterPrompt() {
   ].join("\n");
 }
 
-export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
+export function jobPrompt(
+  job: DmJobName,
+  mode: DmPromptMode = "multiplayer",
+  options: { routerReason?: string | undefined } = {}
+) {
   const narrativeQualityBar = [
     "Prefer concrete nouns and active details over abstract mood labels.",
     "Anchor every scene in physical space: near/far, entrances/exits, landmarks, crowds, obstacles, weather, light, or sound.",
@@ -1061,6 +1065,15 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
     "Models may choose, narrate, infer, and propose; the server retrieves, validates, stores, and mutates."
   ];
 
+  const routerClarificationReason = options.routerReason?.trim();
+  const clarificationReasonGuidance = routerClarificationReason
+    ? [
+        "Router clarification reason:",
+        `The router selected clarification because: ${routerClarificationReason}`,
+        "Use this only to identify the missing detail to ask for. Do not treat it as new scene fact, memory, or resolved outcome."
+      ]
+    : [];
+
   const jobs: Record<DmJobName, string[]> = {
     scene_director: [
       "Run normal gameplay outside tactical combat.",
@@ -1110,6 +1123,7 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
     ],
     clarification: [
       "Ask one concise clarifying question.",
+      ...clarificationReasonGuidance,
       "Briefly explain why the clarification is needed, using table-facing guidance rather than in-world NPC dialogue.",
       "public_narration must contain only the clarifying question and a brief table-facing reason.",
       'Set next_input_needed to "clarification".',

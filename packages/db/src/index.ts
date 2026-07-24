@@ -3258,7 +3258,10 @@ async function buildModularDmPromptContext(
     instructions: [
       input.baseInstructions,
       "",
-      jobPrompt(router.jobNeeded, campaign.mode)
+      jobPrompt(router.jobNeeded, campaign.mode, {
+        routerReason:
+          router.jobNeeded === "clarification" ? router.reason : undefined
+      })
     ].join("\n"),
     jobNeeded: router.jobNeeded,
     message: [
