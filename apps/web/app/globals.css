@@ -1928,6 +1928,18 @@ h1 {
   opacity: 0.68;
 }
 
+.new-adventure-page *,
+.new-adventure-page *::before,
+.new-adventure-page *::after,
+.campaign-creation-screen *,
+.campaign-creation-screen *::before,
+.campaign-creation-screen *::after,
+.equipment-modal-backdrop *,
+.equipment-modal-backdrop *::before,
+.equipment-modal-backdrop *::after {
+  border-radius: 0 !important;
+}
+
 @keyframes new-adventure-flow-exit {
   to {
     opacity: 0;
