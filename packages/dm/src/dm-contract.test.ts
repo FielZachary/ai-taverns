@@ -289,26 +289,6 @@ describe("parseDmContract", () => {
         ),
       /without structured roll_requests/
     );
-    assert.throws(
-      () =>
-        parseDmContract(
-          JSON.stringify({
-            public_narration: "Por, you are up. What do you do?",
-            resolution_mode: "needs_dice",
-            roll_requests: [
-              {
-                id: "por-attack-1",
-                dice: "1d20",
-                label: "Attack roll with longsword",
-                modifier: 6,
-                player: "player:por"
-              }
-            ],
-            next_input_needed: "dice_results"
-          })
-        ),
-      /requested dice_results while asking for player action/
-    );
   });
 
   it("accepts valid DM JSON inside a fenced code block", () => {

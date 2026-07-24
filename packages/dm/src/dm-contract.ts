@@ -177,10 +177,6 @@ function mentionsPlayerFacingRoll(text: string) {
   );
 }
 
-function asksForPlayerAction(text: string) {
-  return /\bwhat do you do\?\s*$/i.test(text.trim());
-}
-
 function findAttackRollAcContradiction(text: string) {
   const patterns = [
     /\b(?:spell\s+)?attack roll\s*:?\s*(?:\d*d?\d+\s*(?:[+-]\s*\d+)?\s*=\s*)?(\d+)\s*(?:vs|against)\s*AC\s*(\d+)\s*[-—:;,]?\s*(hit|hits|miss|misses)\b/gi,
@@ -515,12 +511,6 @@ export function parseDmContract(
   if (nextInputNeeded === "dice_results" && rollRequests.length === 0) {
     throw new Error(
       "The DM provider requested dice_results without structured roll_requests."
-    );
-  }
-
-  if (nextInputNeeded === "dice_results" && asksForPlayerAction(publicNarration)) {
-    throw new Error(
-      "The DM provider requested dice_results while asking for player action."
     );
   }
 
