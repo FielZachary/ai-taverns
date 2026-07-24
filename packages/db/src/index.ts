@@ -3662,7 +3662,9 @@ function formatMultiplayerTurn(
   const turnInput = {
     type: "multiplayer_turn",
     resolution_policy:
-      "Resolve these submitted actions as one combined party turn. Account for timing, positioning, cooperation, conflict, and consequences across the whole party before asking what happens next.",
+      mechanicsState.combat.active
+        ? "Resolve active combat by canonical initiative order. The current mechanicsState.combat.turnOwner acts first. Submitted actions from non-turn owners are pending intent only unless their turn is reached."
+        : "Resolve the submitted player actions together. Account for timing, positioning, cooperation, conflict, and consequences before asking what happens next.",
     submissions: submissions.map((submission) => ({
       player: submission.username?.trim() || "Unknown player",
       character: submission.character_name?.trim() || "Unknown character",
@@ -4232,7 +4234,9 @@ const gameplayTurnModeReminder: Record<CampaignMode, string[]> = {
   ],
   multiplayer: [
     "Multiplayer combat reminder:",
-    "Do not end with next_input_needed player_actions while turnOwner is npc:*; set turnOwner to a player actor, or null for a multiplayer all-player prompt.",
+    "In active initiative combat, do not end with next_input_needed player_actions while turnOwner is npc:*; resolve NPC turns until control reaches a player actor or combat ends.",
+    "In active initiative combat, when control reaches a player actor and no roll_requests are pending, set turnOwner to that player actor, input_policy only_targeted_players, and input_targets to that actor key.",
+    "Use turnOwner null with an all-player prompt only when combat is inactive or the scene is explicitly outside strict initiative.",
     "For multiplayer player-controlled initiative, saving throws, checks, attacks, and other targeted player rolls, set each roll_requests item's player field to the targeted character's actor key or character name."
   ]
 };

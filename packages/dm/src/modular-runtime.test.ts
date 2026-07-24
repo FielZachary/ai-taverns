@@ -239,6 +239,18 @@ describe("modular AI DM runtime contracts", () => {
       jobPrompt("combat"),
       /Bandit captain initiative roll: 15\. Cutthroat initiative rolls: 11 and 8\./i
     );
+    assert.match(
+      jobPrompt("combat"),
+      /initiative submitted, NPC wins and acts immediately/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Bad response to avoid: listing the initiative order, saying the wardens move first/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Warden lift-guard 1 attack roll: 18 vs Komer's AC 15 - hit/i
+    );
     assert.match(jobPrompt("combat"), /surprise opener resolves before initiative/i);
     assert.match(jobPrompt("combat"), /Magic Missile needs target distribution before damage/i);
     assert.match(

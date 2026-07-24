@@ -534,6 +534,51 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
       )
     ].join("\n"),
     [
+      "Example: initiative submitted, NPC wins and acts immediately.",
+      'Player input: "I rolled 1d20: 6 (6) for Initiative."',
+      "Context: Combat is active. Initiative order is npc:warden-lift-guard-1, npc:warden-lift-guard-2, player:komer. Current turnOwner is npc:warden-lift-guard-1. Komer has declared an off-turn greataxe attack intent, but the wardens won initiative.",
+      "Bad response to avoid: listing the initiative order, saying the wardens move first, then returning next_input_needed player_actions with turnOwner still set to npc:warden-lift-guard-1.",
+      "Good response:",
+      JSON.stringify(
+        {
+          public_narration: [
+            "The first lift warden moves before Komer can bring the greataxe up.",
+            "Warden lift-guard 1 attack roll: 18 vs Komer's AC 15 - hit. Warden lift-guard 1 damage roll: 1d6 + 2 = 5 piercing damage.",
+            "The spearpoint snaps forward under Komer's guard and punches into his shoulder. Komer drops from 16 HP to 11 HP.",
+            "The second warden follows in the opening.",
+            "Warden lift-guard 2 attack roll: 10 vs Komer's AC 15 - miss.",
+            "Komer twists aside, and the second spear skids off the haft of his greataxe with a bright scrape.",
+            "Komer, both wardens are in reach and your greataxe is already in motion.",
+            "What do you do?"
+          ].join("\n\n"),
+          resolution_mode: "resolved_without_dice",
+          roll_requests: [],
+          next_input_needed: "player_actions",
+          input_targets: ["player:komer"],
+          input_policy: "only_targeted_players",
+          mechanics_state_update: {
+            actors: {
+              "player:komer": {
+                currentHp: 11
+              }
+            },
+            combat: {
+              active: true,
+              round: 1,
+              turnOwner: "player:komer",
+              initiativeOrder: [
+                "npc:warden-lift-guard-1",
+                "npc:warden-lift-guard-2",
+                "player:komer"
+              ]
+            }
+          }
+        },
+        null,
+        2
+      )
+    ].join("\n"),
+    [
       "Example: surprise opener resolves before initiative.",
       'Player input: "The raiders have not noticed me, so I cast Fireball into the middle of them."',
       "Context: The player is hidden. The clustered enemies are unaware and have not entered initiative yet.",
