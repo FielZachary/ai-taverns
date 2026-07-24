@@ -143,9 +143,9 @@ const campaignCreationLoadingSteps = [
 ];
 const customCharacterCreationSteps = [
   "Build",
-  "Stats",
   "Class",
   "Class Choices",
+  "Stats",
   "Species",
   "Spells",
   "Proficiencies",
@@ -157,8 +157,8 @@ const customCharacterCreationSteps = [
 ];
 const quickCharacterCreationSteps = [
   "Build",
-  "Stats",
   "Class",
+  "Stats",
   "Species",
   "Spells",
   "Equipment",
@@ -2905,8 +2905,7 @@ export function NewAdventureForm() {
     isCustomWorldStep,
     isJoinFlow,
     isLastCharacterStep,
-    equipmentChoiceStepIndex,
-    equipmentChoices.length,
+    isEquipmentCharacterStep,
     isEquipmentSummaryStep,
     mode,
     stepIndex
@@ -3663,25 +3662,6 @@ export function NewAdventureForm() {
 
             {isCharacterStep ? (
               <div className="character-builder">
-                <ol className="character-creation-steps" aria-label="Character creation progress">
-                  {characterCreationSteps.map((step, index) => (
-                    <li
-                      className={[
-                        index === characterStepIndex ? "active" : "",
-                        index < characterStepIndex ? "complete" : ""
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
-                      key={step}
-                    >
-                      <span>
-                        {index < characterStepIndex ? <Check size={11} /> : index + 1}
-                      </span>
-                      <strong>{step}</strong>
-                    </li>
-                  ))}
-                </ol>
-
                 {characterStepIndex === 0 ? (
                   <fieldset className="option-picker build-mode-picker">
                     <legend>Build style</legend>
