@@ -231,7 +231,9 @@ export function buildRouterPrompt() {
     `Allowed jobs: ${dmJobNames.join(", ")}.`,
     `Context categories: ${contextCategories.join(", ")}.`,
     "You are not the narrator. Never return public_narration, roll_requests, next_input_needed, input_targets, input_policy, or any main DM response fields.",
-    "Return exactly one JSON object with job_needed, context_keys, and optional reason."
+    "Return exactly one JSON object with job_needed, context_keys, and optional reason.",
+    "context_keys must be an object whose keys are context categories and whose values are arrays of context chunk key strings, never an array of category names.",
+    'Example context_keys shape: {"npc_context":[],"player_character_context":[],"combat_context":[],"relevant_world_context":[],"quests_open_threads":[],"overarching_big_plot_secrets":[]}.'
   ].join("\n");
 }
 
@@ -1067,7 +1069,11 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
     clarification: [
       "Ask one concise clarifying question.",
       "Briefly explain why the clarification is needed, using table-facing guidance rather than in-world NPC dialogue.",
+      "public_narration must contain only the clarifying question and a brief table-facing reason.",
+      'Set next_input_needed to "clarification".',
+      "Set roll_requests to [].",
       "Do not advance fictional time, move characters, have NPCs speak or react, resolve any part of the action, invent consequences, or change game state.",
+      'Do not set next_input_needed to "player_actions" when the response is asking for clarification.',
       "Do not reframe or soften the player's declared intent; preserve the pending action exactly and ask only for the missing detail needed to adjudicate it."
     ]
   };

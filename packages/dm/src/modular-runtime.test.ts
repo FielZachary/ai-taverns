@@ -99,6 +99,14 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(prompt, /Never return public_narration/);
   });
 
+  it("shows the router the required context_keys object shape", () => {
+    const prompt = buildRouterPrompt();
+
+    assert.match(prompt, /context_keys must be an object/);
+    assert.match(prompt, /never an array of category names/);
+    assert.match(prompt, /"combat_context":\[\]/);
+  });
+
   it("renders selected context chunks as labelled markdown packets", () => {
     const rendered = renderContextChunks([
       {
@@ -405,8 +413,11 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(jobPrompt("clarification"), /Ask one concise/);
     assert.match(jobPrompt("clarification"), /table-facing guidance rather than in-world NPC dialogue/i);
+    assert.match(jobPrompt("clarification"), /next_input_needed to "clarification"/);
+    assert.match(jobPrompt("clarification"), /Set roll_requests to \[\]/);
     assert.match(jobPrompt("clarification"), /Do not advance fictional time/i);
     assert.match(jobPrompt("clarification"), /have NPCs speak or react/i);
+    assert.match(jobPrompt("clarification"), /Do not set next_input_needed to "player_actions"/);
     assert.match(jobPrompt("clarification"), /Do not reframe or soften the player's declared intent/i);
     assert.match(buildMemoryUpdaterPrompt(), /Allowed operations/);
   });
