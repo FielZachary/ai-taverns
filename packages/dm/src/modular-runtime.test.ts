@@ -254,6 +254,12 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("npc_dialogue"), /failed Intimidation/i);
     assert.match(jobPrompt("npc_dialogue"), /conversational texture/i);
     assert.match(jobPrompt("combat"), /strict turn ownership/i);
+    assert.match(jobPrompt("combat"), /Group combat narration by action\/result beat/i);
+    assert.match(jobPrompt("combat"), /Bold visible mechanics inside public_narration using Markdown/i);
+    assert.match(
+      jobPrompt("combat"),
+      /\*\*Attack: 14 vs AC 10 - hit\. Damage: 5 piercing\.\*\*/
+    );
     assert.match(jobPrompt("combat"), /attack roll: X vs AC Y - hit\/miss/i);
     assert.match(jobPrompt("combat"), /Dexterity save: X vs DC Y - success\/failure/i);
     assert.match(jobPrompt("combat"), /list each target's save result separately/i);
