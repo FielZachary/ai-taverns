@@ -54,7 +54,7 @@ function RuneLoader({ label }: { label: string }) {
   );
 }
 
-function formatDebugPrompt(debug: AiDebugInfo) {
+function formatDebugPrompt(debug: Pick<AiDebugInfo, "requestMessages">) {
   return debug.requestMessages
     .map(
       (message, index) =>
@@ -99,20 +99,36 @@ function MessageDebugModal({
         </header>
         <div className="debug-modal-content">
           <section>
-            <h3>Temperature</h3>
-            <pre>{debug.temperature ?? "Not recorded"}</pre>
-          </section>
-          <section>
-            <h3>Combat State</h3>
-            <pre>{formatDebugJson(debug.combatState)}</pre>
-          </section>
-          <section>
             <h3>Prompt Sent</h3>
             <pre>{formatDebugPrompt(debug)}</pre>
           </section>
           <section>
             <h3>AI Output</h3>
             <pre>{debug.rawResponse}</pre>
+          </section>
+          {debug.router ? (
+            <>
+              <section>
+                <h3>Router Prompt Sent</h3>
+                <pre>{formatDebugPrompt(debug.router)}</pre>
+              </section>
+              <section>
+                <h3>Router Output</h3>
+                <pre>{debug.router.rawResponse}</pre>
+              </section>
+              <section>
+                <h3>Router Parsed Output</h3>
+                <pre>{formatDebugJson(debug.router.parsedOutput)}</pre>
+              </section>
+            </>
+          ) : null}
+          <section>
+            <h3>Temperature</h3>
+            <pre>{debug.temperature ?? "Not recorded"}</pre>
+          </section>
+          <section>
+            <h3>Combat State</h3>
+            <pre>{formatDebugJson(debug.combatState)}</pre>
           </section>
         </div>
       </section>

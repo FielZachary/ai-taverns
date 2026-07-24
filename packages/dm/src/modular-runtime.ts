@@ -199,6 +199,7 @@ export function buildRouterPrompt() {
     "Choose exactly one primary job for the current turn and select context chunk keys only.",
     "Campaign opening scenes are handled by campaign creation flows, not by this router.",
     "Do not summarize, rewrite, mutate, or invent memory.",
+    "If routing state says combat_active is true, default to combat for player input unless the input is clearly noncombat and does not affect combat turn flow.",
     "Choose clarification when the player's intended action is too underspecified to adjudicate safely, especially combat actions like casting a spell, making an attack, using a weapon, or targeting an area effect without a clear target, target area, or necessary tactical detail.",
     "Do not choose clarification merely because an action is risky, opposed, or requires dice; route those to the relevant gameplay job and request rolls there.",
     `Allowed jobs: ${dmJobNames.join(", ")}.`,

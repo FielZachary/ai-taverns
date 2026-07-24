@@ -536,6 +536,7 @@ type DmPromptContext = {
   message: string;
   sections: unknown[];
   budget: Record<string, unknown>;
+  routerDebug?: NonNullable<AiDebugInfo["router"]>;
 };
 
 const dungeonMasterContractInstructions = [
@@ -2644,7 +2645,7 @@ function errorSummary(error: unknown) {
 
 function providerDebugSummary(
   debug: AiDebugInfo | undefined,
-  options: { includeRawResponse?: boolean } = {}
+  options: { includeRawResponse?: boolean; includeRequestMessages?: boolean } = {}
 ) {
   if (!debug) {
     return undefined;
@@ -2665,6 +2666,9 @@ function providerDebugSummary(
     rawResponseLength: debug.rawResponse.length,
     rawResponsePreview: previewText(debug.rawResponse),
     ...(options.includeRawResponse ? { rawResponse: debug.rawResponse } : {}),
+    ...(options.includeRequestMessages
+      ? { rawRequestMessages: debug.requestMessages }
+      : {}),
     providerTimings: debug.providerTimings
   };
 }
@@ -3091,6 +3095,85 @@ function mechanicsActorsForValidation(campaign: Pick<CampaignRow, "metadata">) {
   );
 }
 
+async function getActiveCampaignPlayers(db: Queryable, campaignId: string) {
+  const result = await db.query<PlayerRow>(
+    `
+      select *
+      from players
+      where campaign_id = $1
+        and status = 'active'
+      order by slot asc nulls last, created_at asc
+    `,
+    [campaignId]
+  );
+
+  return result.rows;
+}
+
+function routerStateForCampaign(
+  campaign: Pick<CampaignRow, "metadata" | "mode">,
+  players: PlayerRow[]
+) {
+  const mechanicsState = resolveMechanicsState(campaign, players);
+  const pendingRollRequests = pendingRollRequestsFromCampaign(campaign as CampaignRow);
+  const inputTargets = inputTargetsFromCampaign(campaign as CampaignRow);
+  const inputPolicy = inputPolicyFromCampaign(campaign as CampaignRow);
+  const combat = roomCombatSnapshot(mechanicsState, players);
+
+  return {
+    campaign_mode: campaign.mode,
+    combat_active: combat.active,
+    combat,
+    input_policy: inputPolicy,
+    input_targets: inputTargets,
+    pending_roll_requests: pendingRollRequests.map((request) => ({
+      id: request.id,
+      label: request.label,
+      dice: request.dice,
+      player: request.player,
+      modifier: request.modifier
+    })),
+    active_players: players.map((player) => ({
+      actorKey: actorKeyForPlayer(player.id),
+      clientId: player.client_id,
+      username: player.username,
+      characterName: player.character_name,
+      slot: player.slot
+    }))
+  };
+}
+
+function buildRouterMessage(input: {
+  currentAction: string;
+  routerState: Record<string, unknown>;
+}) {
+  return [
+    "Routing state JSON:",
+    JSON.stringify(input.routerState, null, 2),
+    "",
+    "Current turn input:",
+    input.currentAction
+  ].join("\n");
+}
+
+function routerDebugFromPromptContext(
+  promptContext:
+    | DmPromptContext
+    | {
+        instructions: string;
+        message: string;
+        sections: unknown[];
+        budget: Record<string, unknown>;
+      }
+    | null
+) {
+  return promptContext &&
+    "routerDebug" in promptContext &&
+    promptContext.routerDebug
+    ? promptContext.routerDebug
+    : undefined;
+}
+
 async function buildModularDmPromptContext(
   db: Queryable,
   runtime: DungeonMasterRuntime,
@@ -3103,10 +3186,17 @@ async function buildModularDmPromptContext(
     history: GameMessage[];
   }
 ): Promise<DmPromptContext> {
+  const players = await getActiveCampaignPlayers(db, campaign.id);
+  const routerState = routerStateForCampaign(campaign, players);
+  const routerInstructions = buildRouterPrompt();
+  const routerMessage = buildRouterMessage({
+    currentAction: input.currentAction,
+    routerState
+  });
   const routerStartedAt = Date.now();
   const routerData = await runtime.askProvider({
-    instructions: buildRouterPrompt(),
-    message: input.currentAction,
+    instructions: routerInstructions,
+    message: routerMessage,
     history: input.history
   });
   const router = validateRouterOutput(routerData.content);
@@ -3118,6 +3208,28 @@ async function buildModularDmPromptContext(
     phase: "router",
     providerData: routerData,
     durationMs: Date.now() - routerStartedAt
+  });
+
+  await logTurnDebugTrace(db, {
+    campaignId: campaign.id,
+    traceId: input.traceId,
+    phase: "router_response_received",
+    turnId: input.turnId,
+    elapsedMs: Date.now() - routerStartedAt,
+    payload: {
+      routerState,
+      router: {
+        jobNeeded: router.jobNeeded,
+        contextKeys: router.contextKeys,
+        fallbackUsed: router.fallbackUsed,
+        errors: router.errors,
+        reason: router.reason
+      },
+      provider: providerDebugSummary(routerData.debug, {
+        includeRawResponse: true,
+        includeRequestMessages: true
+      })
+    }
   });
 
   const context = await retrieveSelectedContextChunks(db, campaign.id, router);
@@ -3150,7 +3262,9 @@ async function buildModularDmPromptContext(
         jobNeeded: router.jobNeeded,
         contextKeys: router.contextKeys,
         fallbackUsed: router.fallbackUsed,
-        errors: router.errors
+        errors: router.errors,
+        reason: router.reason,
+        routerState
       },
       {
         kind: "context_snapshot",
@@ -3164,6 +3278,24 @@ async function buildModularDmPromptContext(
         (total, chunk) => total + chunk.bodyMarkdown.length,
         0
       )
+    },
+    routerDebug: {
+      requestMessages: routerData.debug.requestMessages,
+      rawResponse: routerData.debug.rawResponse,
+      parsedOutput: {
+        jobNeeded: router.jobNeeded,
+        contextKeys: router.contextKeys,
+        fallbackUsed: router.fallbackUsed,
+        errors: router.errors,
+        reason: router.reason
+      },
+      ...(routerData.debug.model ? { model: routerData.debug.model } : {}),
+      ...(routerData.debug.temperature !== undefined
+        ? { temperature: routerData.debug.temperature }
+        : {}),
+      ...(routerData.debug.providerResponseId
+        ? { providerResponseId: routerData.debug.providerResponseId }
+        : {})
     }
   };
 }
@@ -4759,12 +4891,14 @@ async function askDungeonMaster(
         nextMechanicsState
       );
     }
+    const routerDebug = routerDebugFromPromptContext(promptContext);
     const debugWithCombatState: AiDebugInfo = {
       ...providerData.debug,
       combatState: {
         combat: nextMechanicsState.combat,
         actors: nextMechanicsState.actors
-      }
+      },
+      ...(routerDebug ? { router: routerDebug } : {})
     };
 
     if (!reply) {
