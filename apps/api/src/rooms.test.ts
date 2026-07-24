@@ -906,7 +906,7 @@ test("room routes support session fallback and reject incomplete player profiles
 
   const readBySessionResponse = await app.inject({
     method: "GET",
-    url: `/api/room?sessionId=${campaign.hermes_session_id}`,
+    url: `/api/room?sessionId=${campaign.session_id}`,
     headers: {
       cookie: ownerCookie
     }

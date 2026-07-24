@@ -1,12 +1,12 @@
 import type { DiceRollRequest, GameMessage } from "./game";
 
-export type HermesTurnRequest = {
+export type DmProviderTurnRequest = {
   message: string;
   history: GameMessage[];
   sessionId?: string;
 };
 
-export type HermesTurnResponse = {
+export type DmProviderTurnResponse = {
   message: GameMessage;
   pendingRollRequest?: DiceRollRequest | null;
 };

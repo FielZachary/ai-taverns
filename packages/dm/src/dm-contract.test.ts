@@ -1,17 +1,17 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  debugHermesDmContractFailure,
-  extractHermesRollRequest,
-  extractHermesRollRequests,
-  isInternalHermesMessage,
-  normalizeHermesContent,
-  normalizeHermesDmContent,
+  debugDmContractFailure,
+  extractDmProviderRollRequest,
+  extractDmProviderRollRequests,
+  isInternalDmProviderMessage,
+  normalizeDmProviderContent,
+  normalizeDmContractContent,
   normalizeRollRequest,
   normalizeRollRequests,
-  parseHermesDmContract,
+  parseDmContract,
   titleFromSessionId
-} from "./hermes.js";
+} from "./dm-contract.js";
 
 function contract(publicNarration: string) {
   return JSON.stringify({
@@ -21,9 +21,9 @@ function contract(publicNarration: string) {
   });
 }
 
-describe("parseHermesDmContract", () => {
+describe("parseDmContract", () => {
   it("accepts valid DM JSON wrapped in surrounding text", () => {
-    const result = parseHermesDmContract(
+    const result = parseDmContract(
       [
         "Here is the response:",
         contract("The red banner snaps in the wind. What do you do?"),
@@ -40,14 +40,14 @@ describe("parseHermesDmContract", () => {
   });
 
   it("infers and validates resolution_mode", () => {
-    const resolved = parseHermesDmContract(
+    const resolved = parseDmContract(
       JSON.stringify({
         public_narration: "The door opens. What do you do?",
         roll_requests: [],
         next_input_needed: "player_actions"
       })
     );
-    const needsDice = parseHermesDmContract(
+    const needsDice = parseDmContract(
       JSON.stringify({
         public_narration: "Roll 1d20 for Athletics.",
         resolution_mode: "needs_dice",
@@ -60,7 +60,7 @@ describe("parseHermesDmContract", () => {
     assert.equal(needsDice.resolutionMode, "needs_dice");
     assert.throws(
       () =>
-        parseHermesDmContract(
+        parseDmContract(
           JSON.stringify({
             public_narration: "Roll 1d20 for Athletics.",
             resolution_mode: "resolved_without_dice",
@@ -75,7 +75,7 @@ describe("parseHermesDmContract", () => {
   it("rejects attack roll and AC contradictions", () => {
     assert.throws(
       () =>
-        parseHermesDmContract(
+        parseDmContract(
           contract(
             "The raider fires. Attack roll: 13 vs AC 10 - miss. The bolt skips off the stone. What do you do?"
           )
@@ -85,7 +85,7 @@ describe("parseHermesDmContract", () => {
 
     assert.throws(
       () =>
-        parseHermesDmContract(
+        parseDmContract(
           contract(
             "The arcanist hurls fire. Spell attack roll: 9 vs AC 15 - hit. Damage roll: 2d10 = 11 fire damage."
           )
@@ -95,7 +95,7 @@ describe("parseHermesDmContract", () => {
 
     assert.throws(
       () =>
-        parseHermesDmContract(
+        parseDmContract(
           contract(
             "The arcanist hurls fire. Spell attack roll: d20 + 7 = 10 vs AC 15 - hit. Damage roll: 2d10 = 11 fire damage."
           )
@@ -105,15 +105,15 @@ describe("parseHermesDmContract", () => {
   });
 
   it("accepts correct attack roll and AC comparisons", () => {
-    const hit = parseHermesDmContract(
+    const hit = parseDmContract(
       contract(
         "The raider fires. Attack roll: 13 vs AC 10 - hit. Damage roll: 1d8 + 2 = 7 piercing damage."
       )
     );
-    const miss = parseHermesDmContract(
+    const miss = parseDmContract(
       contract("The archer fires. Attack roll: 9 vs AC 15 - miss.")
     );
-    const spellHit = parseHermesDmContract(
+    const spellHit = parseDmContract(
       contract(
         "The arcanist hurls fire. Spell attack roll: d20 + 7 = 18 vs AC 15 - hit. Damage roll: 2d10 = 11 fire damage."
       )
@@ -125,7 +125,7 @@ describe("parseHermesDmContract", () => {
   });
 
   it("normalizes settings, input targeting, roll narration, and legacy field names", () => {
-    const result = parseHermesDmContract(
+    const result = parseDmContract(
       JSON.stringify({
         public_narration: "The shadow slips behind the altar.",
         roll_requests: [
@@ -163,7 +163,7 @@ describe("parseHermesDmContract", () => {
   });
 
   it("keeps roll narration unchanged when dice are already covered", () => {
-    const result = parseHermesDmContract(
+    const result = parseDmContract(
       JSON.stringify({
         public_narration: "Roll 1d20 to wrench the wheel free.",
         roll_requests: [{ id: "roll-1", dice: "1d20", label: "Athletics" }],
@@ -176,12 +176,12 @@ describe("parseHermesDmContract", () => {
 
   it("rejects invalid contract shapes", () => {
     assert.throws(
-      () => parseHermesDmContract("not json"),
+      () => parseDmContract("not json"),
       /invalid JSON/
     );
     assert.throws(
       () =>
-        parseHermesDmContract(
+        parseDmContract(
           JSON.stringify({
             public_narration: "",
             roll_requests: [],
@@ -192,7 +192,7 @@ describe("parseHermesDmContract", () => {
     );
     assert.throws(
       () =>
-        parseHermesDmContract(
+        parseDmContract(
           JSON.stringify({
             public_narration: "The tide growls below.",
             roll_requests: [],
@@ -203,7 +203,7 @@ describe("parseHermesDmContract", () => {
     );
     assert.throws(
       () =>
-        parseHermesDmContract(
+        parseDmContract(
           JSON.stringify({
             public_narration: "The ledge cracks underfoot.",
             roll_requests: [],
@@ -214,7 +214,7 @@ describe("parseHermesDmContract", () => {
     );
     assert.throws(
       () =>
-        parseHermesDmContract(
+        parseDmContract(
           JSON.stringify({
             public_narration: "Make a Dexterity saving throw.",
             roll_requests: [],
@@ -226,7 +226,7 @@ describe("parseHermesDmContract", () => {
   });
 
   it("accepts valid DM JSON inside a fenced code block", () => {
-    const result = parseHermesDmContract(
+    const result = parseDmContract(
       [
         "```json",
         contract("The campfire pops as Yenna gestures you inside. What do you do?"),
@@ -242,7 +242,7 @@ describe("parseHermesDmContract", () => {
   });
 
   it("preserves mechanics state updates from DM JSON", () => {
-    const result = parseHermesDmContract(
+    const result = parseDmContract(
       JSON.stringify({
         public_narration: "Mara staggers but keeps her feet. What do you do?",
         roll_requests: [],
@@ -275,7 +275,7 @@ describe("parseHermesDmContract", () => {
   });
 
   it("does not treat character sheet combat terms as the submitted action", () => {
-    const result = parseHermesDmContract(
+    const result = parseDmContract(
       contract(
         "You follow the muddy path until a hooded lantern burns steadily at the fork. What do you do?"
       ),
@@ -297,7 +297,7 @@ describe("parseHermesDmContract", () => {
   });
 
   it("does not treat multiplayer character sheet equipment as submitted combat", () => {
-    const result = parseHermesDmContract(
+    const result = parseDmContract(
       contract(
         "The wounded courier goes still long enough to listen, then points toward the chapel door. What do you do?"
       ),
@@ -329,7 +329,7 @@ describe("parseHermesDmContract", () => {
   });
 
   it("does not treat non-attacking weapon references as combat actions", () => {
-    const result = parseHermesDmContract(
+    const result = parseDmContract(
       contract(
         "The wounded guard accepts the sword hilt-first and tells you the bridge is still held. What do you do?"
       ),
@@ -343,7 +343,7 @@ describe("parseHermesDmContract", () => {
   });
 
   it("accepts combat outcomes narrated without structured roll requests", () => {
-    const result = parseHermesDmContract(
+    const result = parseDmContract(
       contract("Your sword hits the goblin and wounds it badly."),
       {
         currentPlayerAction: "I attack the goblin with my sword"
@@ -359,7 +359,7 @@ describe("parseHermesDmContract", () => {
   });
 
   it("accepts spell outcomes narrated without structured roll requests", () => {
-    const result = parseHermesDmContract(
+    const result = parseDmContract(
       contract("The fireball detonates among the skeletons, destroying them."),
       {
         currentPlayerAction: "I cast fireball at the skeletons"
@@ -375,7 +375,7 @@ describe("parseHermesDmContract", () => {
   });
 
   it("allows campaign openers to narrate danger without treating setup text as a player attack", () => {
-    const result = parseHermesDmContract(
+    const result = parseDmContract(
       contract(
         "Smoke rises from the watchtower where the first attack has already left the gate blackened. The road ahead splits between a wounded courier and a blocked bridge. What do you do?"
       ),
@@ -395,25 +395,25 @@ describe("parseHermesDmContract", () => {
   });
 });
 
-describe("Hermes DM helpers", () => {
+describe("DM provider helpers", () => {
   it("derives display titles and recognizes internal prompts", () => {
     assert.equal(titleFromSessionId("ai-dnd-123456789"), "D&D Session 456789");
     assert.equal(titleFromSessionId("ai-dnd-salt-wind"), "Salt Wind");
-    assert.equal(isInternalHermesMessage("AI_DND_INTERNAL_OPENING_REQUEST: begin"), true);
-    assert.equal(isInternalHermesMessage("The harbor bell rings."), false);
+    assert.equal(isInternalDmProviderMessage("AI_DND_INTERNAL_OPENING_REQUEST: begin"), true);
+    assert.equal(isInternalDmProviderMessage("The harbor bell rings."), false);
   });
 
   it("normalizes visible narration from contracts and legacy provider text", () => {
     assert.equal(
-      normalizeHermesDmContent(contract("The lantern guttered. What do you do?")),
+      normalizeDmContractContent(contract("The lantern guttered. What do you do?")),
       "The lantern guttered.\n\nWhat do you do?"
     );
     assert.equal(
-      normalizeHermesContent('Table{"success":true}\nDungeon Master The door opens.'),
+      normalizeDmProviderContent('Table{"success":true}\nDungeon Master The door opens.'),
       "The door opens."
     );
-    assert.equal(normalizeHermesContent("Plain tavern talk."), "Plain tavern talk.");
-    assert.equal(normalizeHermesContent(undefined), "");
+    assert.equal(normalizeDmProviderContent("Plain tavern talk."), "Plain tavern talk.");
+    assert.equal(normalizeDmProviderContent(undefined), "");
   });
 
   it("normalizes roll request variants", () => {
@@ -436,7 +436,7 @@ describe("Hermes DM helpers", () => {
   });
 
   it("extracts roll requests from contract and legacy response shapes", () => {
-    const contractRequests = extractHermesRollRequests({
+    const contractRequests = extractDmProviderRollRequests({
       message: {
         content: JSON.stringify({
           public_narration: "The lock resists.",
@@ -449,7 +449,7 @@ describe("Hermes DM helpers", () => {
     assert.equal(contractRequests[0]?.label, "Thieves' Tools");
 
     assert.equal(
-      extractHermesRollRequest({
+      extractDmProviderRollRequest({
         message: {
           content: "legacy prose",
           roll_request: { dice: "1d20", reason: "Survival" }
@@ -457,11 +457,11 @@ describe("Hermes DM helpers", () => {
       })?.label,
       "Survival"
     );
-    assert.deepEqual(extractHermesRollRequests("no request"), []);
+    assert.deepEqual(extractDmProviderRollRequests("no request"), []);
   });
 
   it("summarizes contract failures for debug output", () => {
-    const debug = debugHermesDmContractFailure(
+    const debug = debugDmContractFailure(
       JSON.stringify({
         public_narration: "Make a Wisdom save.",
         roll_requests: [{ dice: "1d20", label: "Wisdom save" }],

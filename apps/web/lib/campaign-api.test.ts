@@ -10,7 +10,7 @@ import {
 
 const campaign = {
   id: "11111111-1111-4111-8111-111111111111",
-  hermesSessionId: "hermes-session",
+  sessionId: "provider-session",
   mode: "multiplayer",
   title: "Crystal Caves",
   preview: "A bright cavern waits.",

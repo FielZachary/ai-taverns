@@ -1,2 +1,2 @@
 export * from "./game";
-export * from "./hermes";
+export * from "./dm-provider";

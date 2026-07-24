@@ -2,7 +2,7 @@ import type { DiceRollSubmission } from "@/lib/game-types";
 
 type CampaignRequestContext = {
   id: string;
-  hermesSessionId: string;
+  sessionId: string;
 };
 
 export type GameShellRequest = {
@@ -39,7 +39,7 @@ export function buildTurnSubmissionRequest({
     endpoint: "/api/room/submit",
     body: {
       roomId: campaign.id,
-      sessionId: campaign.hermesSessionId,
+      sessionId: campaign.sessionId,
       playerId,
       message,
       skipTurn,
@@ -75,7 +75,7 @@ export function buildRollSubmissionRequest({
     endpoint: "/api/room/submit",
     body: {
       roomId: campaign.id,
-      sessionId: campaign.hermesSessionId,
+      sessionId: campaign.sessionId,
       playerId,
       rollSubmissions,
       clientMessageId

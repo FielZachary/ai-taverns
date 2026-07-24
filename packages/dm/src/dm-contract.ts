@@ -35,11 +35,11 @@ export function titleFromSessionId(sessionId: string) {
     .join(" ");
 }
 
-export function isInternalHermesMessage(content: string | undefined) {
+export function isInternalDmProviderMessage(content: string | undefined) {
   return Boolean(content?.trim().startsWith("AI_DND_INTERNAL_"));
 }
 
-export function normalizeHermesContent(content: string | undefined) {
+export function normalizeDmProviderContent(content: string | undefined) {
   const text = content?.trim() ?? "";
 
   if (!text) {
@@ -47,12 +47,12 @@ export function normalizeHermesContent(content: string | undefined) {
   }
 
   try {
-    return parseHermesDmContract(text).publicNarration;
+    return parseDmContract(text).publicNarration;
   } catch {
-    // Older Hermes messages and user messages are plain text.
+    // Older provider messages and user messages are plain text.
   }
 
-  const replyMarkers = ["Dungeon Master", "Hermes"];
+  const replyMarkers = ["Dungeon Master"];
   const visibleReplyMarker = replyMarkers
     .map((marker) => ({
       marker,
@@ -131,7 +131,7 @@ function parseJsonObject(text: string) {
   }
 }
 
-export type HermesDmContractParseOptions = {
+export type DmContractParseOptions = {
   currentAction?: string;
   currentPlayerAction?: string;
   allowResolvedCombatWithoutRolls?: boolean;
@@ -141,9 +141,9 @@ function previewText(value: string, maxLength = 800) {
   return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
 }
 
-export function debugHermesDmContractFailure(
+export function debugDmContractFailure(
   content: string | undefined,
-  options?: HermesDmContractParseOptions
+  options?: DmContractParseOptions
 ) {
   void options;
 
@@ -264,6 +264,13 @@ function normalizeAdvantageState(value: string) {
     : "";
 }
 
+function inferredRollRequestPlayer(label: string) {
+  const initiativeMatch = label.match(/^initiative\s*\(([^)]+)\)$/i);
+  const initiativeTarget = initiativeMatch?.[1]?.trim();
+
+  return initiativeTarget || "";
+}
+
 function formatRollInstruction(request: DiceRollRequest, index: number) {
   const verb = index === 0 ? "Roll" : "then roll";
   return `${verb} ${request.dice}${modifierText(request.modifier)}${advantageText(
@@ -366,7 +373,7 @@ export function normalizeRollRequest(value: unknown): DiceRollRequest | null {
     stringValue(request.reason) ||
     "Required roll";
 
-  const player = stringValue(request.player);
+  const player = stringValue(request.player) || inferredRollRequestPlayer(label);
   const modifier = numberValue(request.modifier);
   const advantageState =
     normalizeAdvantageState(
@@ -395,7 +402,7 @@ export function normalizeRollRequests(value: unknown): DiceRollRequest[] {
   return request ? [request] : [];
 }
 
-export type HermesDmContractResponse = {
+export type DmContractResponse = {
   publicNarration: string;
   resolutionMode: "needs_dice" | "resolved_without_dice";
   rollRequests: DiceRollRequest[];
@@ -410,10 +417,10 @@ export type HermesDmContractResponse = {
   };
 };
 
-export function parseHermesDmContract(
+export function parseDmContract(
   content: string | undefined,
-  options?: HermesDmContractParseOptions
-): HermesDmContractResponse {
+  options?: DmContractParseOptions
+): DmContractResponse {
   void options;
 
   const parsed = parseJsonObject(content?.trim() ?? "");
@@ -525,11 +532,11 @@ export function parseHermesDmContract(
   };
 }
 
-export function normalizeHermesDmContent(content: string | undefined) {
-  return parseHermesDmContract(content).publicNarration;
+export function normalizeDmContractContent(content: string | undefined) {
+  return parseDmContract(content).publicNarration;
 }
 
-export function extractHermesRollRequests(value: unknown): DiceRollRequest[] {
+export function extractDmProviderRollRequests(value: unknown): DiceRollRequest[] {
   const data = asObject(value);
 
   if (!data) {
@@ -540,7 +547,7 @@ export function extractHermesRollRequests(value: unknown): DiceRollRequest[] {
 
   if (messageContent) {
     try {
-      const contract = parseHermesDmContract(messageContent);
+      const contract = parseDmContract(messageContent);
       return contract.rollRequests;
     } catch {
       // Fall through to legacy response shapes below.
@@ -567,6 +574,6 @@ export function extractHermesRollRequests(value: unknown): DiceRollRequest[] {
   return [];
 }
 
-export function extractHermesRollRequest(value: unknown): DiceRollRequest | null {
-  return extractHermesRollRequests(value)[0] ?? null;
+export function extractDmProviderRollRequest(value: unknown): DiceRollRequest | null {
+  return extractDmProviderRollRequests(value)[0] ?? null;
 }

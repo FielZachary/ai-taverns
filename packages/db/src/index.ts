@@ -7,7 +7,7 @@ import {
   formatEldermereOpeningPromptContext,
   formatEldermereTurnPromptContext,
   openingSceneRequest,
-  parseHermesDmContract,
+  parseDmContract,
   isEldermerePreset,
   buildMemoryUpdaterPrompt,
   buildRouterPrompt,
@@ -22,8 +22,8 @@ import {
   type ContextCategory,
   type ContextChunk,
   type GameMessage,
-  type HermesDmContractResponse,
-  type HermesDmContractParseOptions,
+  type DmContractResponse,
+  type DmContractParseOptions,
   type InputPolicy,
   type ValidatedRouterOutput
 } from "@ai-dnd/dm";
@@ -389,7 +389,7 @@ export async function claimGuestStateForUser(
 
 export type CampaignRow = {
   id: string;
-  hermes_session_id: string;
+  session_id: string;
   mode: CampaignMode;
   title: string;
   status: CampaignStatus;
@@ -743,7 +743,7 @@ export function mapCampaignSummaryRow(
 
   return {
     id: campaign.id,
-    hermesSessionId: campaign.hermes_session_id,
+    sessionId: campaign.session_id,
     mode: campaign.mode,
     title: characterName || playerName || campaign.title,
     preview: campaignWorldName(campaign),
@@ -1311,7 +1311,7 @@ export async function createCampaignForMode(
     const inserted = await client.query<CampaignRow>(
       `
         insert into campaigns (
-          hermes_session_id,
+          session_id,
           title,
           mode,
           has_begun,
@@ -1377,7 +1377,7 @@ export async function createCampaignForMode(
     const turn = await ensureCollectingTurn(client, campaign.id);
 
     const createdEventId = await logCampaignEvent(client, campaign.id, "campaign_created", {
-      hermesSessionId: sessionId,
+      sessionId: sessionId,
       mode: input.mode,
       genre: input.campaignGenre,
       genreKind: input.campaignGenreKind ?? "preset"
@@ -1496,7 +1496,7 @@ export async function createCampaignForMode(
     const resolvedTurn = await finishResolvedTurn(db, {
       campaignId: createdState.campaign.id,
       turnId: openingTurn.id,
-      hermesMessageId: opening.id,
+      modelMessageId: opening.id,
       reply: opening.content,
       eventType: "adventure_begun",
       pendingRollRequests: opening.rollRequests,
@@ -1530,7 +1530,7 @@ export async function createCampaignForMode(
   }
 }
 
-export async function createCampaignForHermesSession(
+export async function createCampaignForSession(
   db: pg.Pool,
   input: {
     sessionId: string;
@@ -1546,14 +1546,14 @@ export async function createCampaignForHermesSession(
     const result = await client.query<CampaignRow>(
       `
         insert into campaigns (
-          hermes_session_id,
+          session_id,
           title,
           owner_client_id,
           owner_user_id,
           mode
         )
         values ($1, $2, $3, $4, $5)
-        on conflict (hermes_session_id) do update
+        on conflict (session_id) do update
         set title = excluded.title,
             mode = excluded.mode,
             status = 'active',
@@ -1574,7 +1574,7 @@ export async function createCampaignForHermesSession(
 
     await ensureCollectingTurn(client, campaign.id);
     await logCampaignEvent(client, campaign.id, "campaign_created", {
-      hermesSessionId: input.sessionId
+      sessionId: input.sessionId
     });
 
     return campaign;
@@ -1893,6 +1893,13 @@ function metadataStringArray(value: unknown) {
     : [];
 }
 
+function inferredRollRequestPlayer(label: string) {
+  const initiativeMatch = label.match(/^initiative\s*\(([^)]+)\)$/i);
+  const initiativeTarget = initiativeMatch?.[1]?.trim();
+
+  return initiativeTarget || "";
+}
+
 function normalizeRollRequest(value: unknown): DiceRollRequest | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -1924,7 +1931,9 @@ function normalizeRollRequest(value: unknown): DiceRollRequest | null {
         ? candidate.id.trim()
         : randomUUID(),
     player:
-      typeof candidate.player === "string" ? candidate.player.trim() : undefined,
+      typeof candidate.player === "string" && candidate.player.trim()
+        ? candidate.player.trim()
+        : inferredRollRequestPlayer(label) || undefined,
     dice,
     modifier: Number.isFinite(modifier) ? modifier : undefined,
     label,
@@ -2269,7 +2278,7 @@ async function resolveRoomCampaign(
     ? `
         select *
         from campaigns
-        where (id = $1 or hermes_session_id = $2)
+        where (id = $1 or session_id = $2)
           and status <> 'deleted'
         order by created_at desc
         limit 1
@@ -2277,7 +2286,7 @@ async function resolveRoomCampaign(
     : `
         select *
         from campaigns
-        where (hermes_session_id = $1 or hermes_session_id = $2)
+        where (session_id = $1 or session_id = $2)
           and status <> 'deleted'
         order by created_at desc
         limit 1
@@ -2542,7 +2551,7 @@ async function buildRoomSnapshot(
   return {
     roomId: campaign.id,
     mode: campaign.mode,
-    sessionId: campaign.hermes_session_id,
+    sessionId: campaign.session_id,
     players: playersResult.rows.map((player) =>
       rowToRoomPlayer(player, submittedPlayerIds, mechanicsState)
     ),
@@ -4266,7 +4275,7 @@ async function askEldermereOpeningNarrator(
   instructions: string,
   plan: EldermereOpeningPlan,
   turnId?: string,
-  contractOptions?: HermesDmContractParseOptions
+  contractOptions?: DmContractParseOptions
 ) {
   const narratorMessage = formatEldermereNarratorOpeningRequest({
     openingRequest,
@@ -4478,13 +4487,13 @@ async function getCampaignEventMessages(
 async function askDungeonMaster(
   db: Queryable,
   runtime: DungeonMasterRuntime,
-  campaign: Pick<CampaignRow, "id" | "hermes_session_id" | "metadata" | "mode">,
+  campaign: Pick<CampaignRow, "id" | "session_id" | "metadata" | "mode">,
   message: string,
   instructions: string,
   includeHistory = true,
   turnId?: string,
   currentPlayerAction?: string,
-  contractOptions?: HermesDmContractParseOptions,
+  contractOptions?: DmContractParseOptions,
   options?: {
     buildPromptContext?: boolean;
     includeEldermereTurnContext?: boolean;
@@ -4518,7 +4527,7 @@ async function askDungeonMaster(
     turnId,
     elapsedMs: 0,
     payload: {
-      hermesSessionId: campaign.hermes_session_id,
+      sessionId: campaign.session_id,
       includeHistory,
       message: textStats(message),
       instructions: textStats(instructionsWithWorldContext)
@@ -4611,7 +4620,7 @@ async function askDungeonMaster(
       outputEnvelopeError = error;
     }
 
-    const contract: HermesDmContractResponse = parseHermesDmContract(
+    const contract: DmContractResponse = parseDmContract(
       providerData.content,
       {
         ...contractOptions,
@@ -4872,7 +4881,7 @@ async function finishResolvedTurn(
   input: {
     campaignId: string;
     turnId: string;
-    hermesMessageId: string | undefined;
+    modelMessageId: string | undefined;
     reply: string;
     eventType: "adventure_begun" | "turn_resolved";
     pendingRollRequests?: DiceRollRequest[];
@@ -4892,10 +4901,10 @@ async function finishResolvedTurn(
     await client.query(
       `
         update turns
-        set status = 'resolved', hermes_message_id = $2, resolved_at = now(), error = null
+        set status = 'resolved', model_message_id = $2, resolved_at = now(), error = null
         where id = $1
       `,
-      [input.turnId, input.hermesMessageId ?? null]
+      [input.turnId, input.modelMessageId ?? null]
     );
     await client.query(
       `
@@ -4907,8 +4916,8 @@ async function finishResolvedTurn(
     );
     dmEventId = await logCampaignEvent(client, input.campaignId, input.eventType, {
       turnId: input.turnId,
-      hermesMessageId: input.hermesMessageId,
-      messageId: input.hermesMessageId ?? randomUUID(),
+      modelMessageId: input.modelMessageId,
+      messageId: input.modelMessageId ?? randomUUID(),
       role: "dm",
       content: input.reply,
       ...settingPatch,
@@ -5279,7 +5288,7 @@ export async function beginRoomForUser(
     const resolvedTurn = await finishResolvedTurn(db, {
       campaignId: beginState.campaign.id,
       turnId: openingTurn.id,
-      hermesMessageId: opening.id,
+      modelMessageId: opening.id,
       reply: opening.content,
       eventType: "adventure_begun",
       pendingRollRequests: opening.rollRequests,
@@ -5321,7 +5330,7 @@ export async function beginRoomForUser(
   const updatedCampaign = await resolveRoomCampaign(
     db,
     beginState.campaign.id,
-    beginState.campaign.hermes_session_id
+    beginState.campaign.session_id
   );
 
   return buildRoomSnapshot(db, updatedCampaign ?? beginState.campaign);
@@ -5616,7 +5625,7 @@ export async function submitRoomTurnForUser(
       const resolvedTurn = await finishResolvedTurn(db, {
         campaignId: submitState.campaign.id,
         turnId: submitState.turn.id,
-        hermesMessageId: reply.id,
+        modelMessageId: reply.id,
         reply: reply.content,
         eventType: "turn_resolved",
         pendingRollRequests: reply.rollRequests,
@@ -5654,7 +5663,7 @@ export async function submitRoomTurnForUser(
   const updatedCampaign = await resolveRoomCampaign(
     db,
     submitState.campaign.id,
-    submitState.campaign.hermes_session_id
+    submitState.campaign.session_id
   );
 
   return buildRoomSnapshot(db, updatedCampaign ?? submitState.campaign);
@@ -5834,7 +5843,7 @@ export async function askDungeonMasterQuestionForUser(
   const updatedCampaign = await resolveRoomCampaign(
     db,
     campaign.id,
-    campaign.hermes_session_id
+    campaign.session_id
   );
 
   return buildRoomSnapshot(db, updatedCampaign ?? campaign);
@@ -6025,7 +6034,7 @@ export async function submitSoloTurnForUser(
     const updatedCampaign = await resolveRoomCampaign(
       db,
       soloState.campaign.id,
-      soloState.campaign.hermes_session_id
+      soloState.campaign.session_id
     );
 
     return buildRoomSnapshot(db, updatedCampaign ?? soloState.campaign);
@@ -6050,7 +6059,7 @@ export async function submitSoloTurnForUser(
     const resolvedTurn = await finishResolvedTurn(db, {
       campaignId: soloState.campaign.id,
       turnId: soloState.turn.id,
-      hermesMessageId: reply.id,
+      modelMessageId: reply.id,
       reply: reply.content,
       eventType: "turn_resolved",
       pendingRollRequests: reply.rollRequests,
@@ -6087,7 +6096,7 @@ export async function submitSoloTurnForUser(
   const updatedCampaign = await resolveRoomCampaign(
     db,
     soloState.campaign.id,
-    soloState.campaign.hermes_session_id
+    soloState.campaign.session_id
   );
 
   return buildRoomSnapshot(db, updatedCampaign ?? soloState.campaign);
@@ -6292,7 +6301,7 @@ export async function regenerateCampaignResponseForUser(
     const resolvedTurn = await finishResolvedTurn(db, {
       campaignId: regenerationState.campaign.id,
       turnId: regenerationState.turn.id,
-      hermesMessageId: reply.id,
+      modelMessageId: reply.id,
       reply: reply.content,
       eventType: regenerationState.eventType,
       pendingRollRequests: reply.rollRequests,
@@ -6330,7 +6339,7 @@ export async function regenerateCampaignResponseForUser(
   const updatedCampaign = await resolveRoomCampaign(
     db,
     regenerationState.campaign.id,
-    regenerationState.campaign.hermes_session_id
+    regenerationState.campaign.session_id
   );
 
   return buildRoomSnapshot(db, updatedCampaign ?? regenerationState.campaign);

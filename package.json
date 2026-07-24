@@ -21,8 +21,6 @@
     "pr:auto-merge": "bash scripts/pr-auto-merge.sh",
     "pr:promote-production": "bash scripts/promote-production.sh",
     "droplet:one-time-access": "bash scripts/droplet-one-time-access.sh",
-    "hermes:bridge": "bash scripts/start-hermes-bridge.sh",
-    "hermes:secure-bridge": "bash scripts/start-hermes-secure-bridge.sh",
     "lint": "npm run lint -w @ai-dnd/web",
     "coverage": "npm run coverage --workspaces --if-present",
     "coverage:check": "node scripts/check-coverage-thresholds.mjs",

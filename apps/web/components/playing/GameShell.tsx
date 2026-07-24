@@ -164,7 +164,7 @@ function roomSocketUrl(campaign: CampaignSummary) {
 
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   url.searchParams.set("roomId", campaign.id);
-  url.searchParams.set("sessionId", campaign.hermesSessionId);
+  url.searchParams.set("sessionId", campaign.sessionId);
 
   return url.toString();
 }
@@ -435,7 +435,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
       const response = await fetch(
         `/api/room?roomId=${encodeURIComponent(
           campaign.id
-        )}&sessionId=${encodeURIComponent(campaign.hermesSessionId)}`
+        )}&sessionId=${encodeURIComponent(campaign.sessionId)}`
       );
 
       if (!response.ok) {
@@ -610,7 +610,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
           },
           body: JSON.stringify({
             roomId: activeCampaign.id,
-            sessionId: activeCampaign.hermesSessionId,
+            sessionId: activeCampaign.sessionId,
             playerId,
             username: profile.username,
             characterName: profile.characterName,
@@ -693,7 +693,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
         const response = await fetchWithTimeout(
           `/api/room?roomId=${encodeURIComponent(
             activeCampaign.id
-          )}&sessionId=${encodeURIComponent(activeCampaign.hermesSessionId)}`,
+          )}&sessionId=${encodeURIComponent(activeCampaign.sessionId)}`,
           { cache: "no-store" }
         );
 
@@ -1029,7 +1029,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
         },
         body: JSON.stringify({
           roomId: activeCampaign.id,
-          sessionId: activeCampaign.hermesSessionId
+          sessionId: activeCampaign.sessionId
         })
       });
 

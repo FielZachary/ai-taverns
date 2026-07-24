@@ -24,9 +24,9 @@ import {
   CampaignSoloTurnResponseSchema,
   MechanicsSeedSchema,
   HealthResponseSchema,
-  HermesPrepRequestSchema,
-  HermesTurnRequestSchema,
-  HermesTurnResponseSchema,
+  DmProviderPrepRequestSchema,
+  DmProviderTurnRequestSchema,
+  DmProviderTurnResponseSchema,
   DmStreamEventSchema,
   RoomPlayerUpdateRequestSchema,
   RoomRealtimeEventSchema,
@@ -194,7 +194,7 @@ test("campaign contracts accept list, create, and join preview payloads", () => 
     campaigns: [
       {
         id: "00000000-0000-4000-8000-000000000001",
-        hermesSessionId: "ai-dnd-session",
+        sessionId: "ai-dnd-session",
         mode: "multiplayer",
         title: "Table Owner",
         preview: "Classic Fantasy",
@@ -438,8 +438,8 @@ test("DM route contracts accept solo, ask-DM, regenerate, and traces payloads", 
   );
 });
 
-test("Hermes compatibility contracts accept turn and prep payloads", () => {
-  const request = HermesTurnRequestSchema.parse({
+test("DM provider contracts accept turn and prep payloads", () => {
+  const request = DmProviderTurnRequestSchema.parse({
     message: "I open the old gate.",
     history: [
       {
@@ -451,11 +451,11 @@ test("Hermes compatibility contracts accept turn and prep payloads", () => {
     ],
     sessionId: "ai-dnd-session"
   });
-  const prep = HermesPrepRequestSchema.parse({
+  const prep = DmProviderPrepRequestSchema.parse({
     sessionId: "ai-dnd-session",
     ownerClientId: "client-1"
   });
-  const response = HermesTurnResponseSchema.parse({
+  const response = DmProviderTurnResponseSchema.parse({
     message: {
       id: "dm-message-1",
       role: "dm",
