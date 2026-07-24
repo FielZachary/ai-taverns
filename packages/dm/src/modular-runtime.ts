@@ -415,7 +415,9 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
     "Off-turn player combat declarations are intent, not actions already in motion. Do not narrate them as mid-swing, already casting, or resolving before the current initiative actor.",
     "When multiple player submissions arrive, resolve the current turn owner's valid action first and treat other submissions as pending intent.",
     "Do not end with next_input_needed player_actions while turnOwner is npc:*; resolve NPC turns until control returns to player control.",
-    "When a player turn begins and that player has not already submitted a concrete action for this turn, do not infer an attack, spell, target, movement, or roll. Return next_input_needed player_actions with no roll_requests, target the turn owner, and ask what they do.",
+    "When a player turn begins and that player has not already submitted a concrete action for this turn, do not infer an attack, spell, target, movement, or roll. Return next_input_needed player_actions with roll_requests [], target the turn owner, and ask what they do.",
+    "If public_narration says a player is up or asks 'What do you do?', the JSON must stay in player-action mode: resolution_mode resolved_without_dice, next_input_needed player_actions, and roll_requests [].",
+    "Never request an attack roll, spell attack roll, damage roll, saving throw, or check for a player merely because initiative has reached that player. First ask for the player's declared action.",
     "When the final active enemy is defeated, set combat active false, turnOwner null, and initiativeOrder empty. Do not say a combatant is up next after combat ends.",
     "Rolls and dice:",
     "Use roll_requests for player-facing dice the website must collect.",
@@ -596,6 +598,7 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
       "Example: NPC resolves, then a fresh player turn begins.",
       "Player input: dice results only; Tart has not submitted a combat action for this turn.",
       "Context: Combat is active. Initiative order is npc:green-eye-figure, player:por, player:tart. The green-eye figure wins initiative and acts before Tart has declared an action.",
+      "Bad response to avoid: requesting Tart's attack roll, spell attack roll, damage roll, saving throw, or check before Tart declares an action.",
       "Good response:",
       JSON.stringify(
         {
