@@ -602,6 +602,22 @@ describe("game shell state helpers", () => {
         detail: undefined
       }
     ]);
+    expect(
+      waitingPlayerStatuses({
+        roomPlayers: players,
+        hasAdventureBegun: true,
+        isSinglePlayer: false,
+        inputPolicy: "only_targeted_players",
+        inputTargets: ["player:player-1"]
+      })
+    ).toEqual([
+      {
+        id: "player-1",
+        status: "waiting",
+        name: "Nyx",
+        detail: "Ada"
+      }
+    ]);
   });
 
   it("selects the active character sheet from current player, room players, then profile", () => {
