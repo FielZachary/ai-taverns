@@ -260,7 +260,6 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
   const [isCharacterSheetOpen, setIsCharacterSheetOpen] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const roomPollInFlightRef = useRef(false);
-  const playerRegistrationInFlightRef = useRef(false);
 
   const activeCampaign = useMemo(
     () =>
@@ -423,11 +422,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
           characterSheet: currentPlayer.characterSheet
         };
 
-        setPlayerProfile((currentProfile) =>
-          getMissingPlayerProfileFields(currentProfile).length === 0
-            ? currentProfile
-            : snapshotProfile
-        );
+        setPlayerProfile(snapshotProfile);
       }
 
       const submissionUpdate = roomSnapshotSubmissionUpdate({
@@ -584,86 +579,6 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
       shouldIgnore = true;
     };
   }, [fetchCampaigns, initialCampaignId, loadCampaignMessages]);
-
-  const registerPlayerProfile = useCallback(
-    async (profile: PlayerProfile) => {
-      if (!playerId || !activeCampaign || isSinglePlayer) {
-        return;
-      }
-
-      const missingProfileFields = getMissingPlayerProfileFields(profile);
-
-      if (missingProfileFields.length > 0) {
-        setInputValidationMessage(
-          `Finish your ${missingProfileFields.join(", ")} before updating.`
-        );
-        setInputValidationPulse((currentPulse) => currentPulse + 1);
-        return;
-      }
-
-      if (playerRegistrationInFlightRef.current) {
-        return;
-      }
-
-      playerRegistrationInFlightRef.current = true;
-
-      try {
-        const response = await fetchWithTimeout("/api/room/player", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            roomId: activeCampaign.id,
-            sessionId: activeCampaign.sessionId,
-            playerId,
-            username: profile.username,
-            characterName: profile.characterName,
-            characterSheet: profile.characterSheet
-          })
-        });
-
-        if (!response.ok) {
-          throw new Error("Room registration failed.");
-        }
-
-        const room = (await response.json()) as RoomSnapshot;
-        applyRoomSnapshot(room);
-      } finally {
-        playerRegistrationInFlightRef.current = false;
-      }
-    },
-    [activeCampaign, applyRoomSnapshot, isSinglePlayer, playerId]
-  );
-
-  useEffect(() => {
-    if (
-      !activeCampaign ||
-      isSinglePlayer ||
-      !playerId ||
-      getMissingPlayerProfileFields(playerProfile).length > 0
-    ) {
-      return;
-    }
-
-    function registerPlayer() {
-      void registerPlayerProfile(playerProfile).catch(() => undefined);
-    }
-
-    const timeout = window.setTimeout(registerPlayer, 350);
-    const interval = window.setInterval(registerPlayer, 10_000);
-
-    return () => {
-      window.clearTimeout(timeout);
-      window.clearInterval(interval);
-    };
-  }, [
-    activeCampaign,
-    isSinglePlayer,
-    playerId,
-    playerProfile,
-    registerPlayerProfile
-  ]);
 
   useEffect(() => {
     if (!activeCampaign) {

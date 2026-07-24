@@ -538,7 +538,9 @@ describe("GameShell", () => {
     expect(
       await screen.findByText("The lantern guttered beside the sealed door.")
     ).toBeInTheDocument();
-    expect(MockWebSocket.instances).toHaveLength(1);
+    await waitFor(() => {
+      expect(MockWebSocket.instances).toHaveLength(1);
+    });
     const roomFetchCountBeforeFailure = fetchMock.mock.calls.filter(([input]) =>
       String(input).startsWith("/api/room?")
     ).length;
@@ -568,5 +570,107 @@ describe("GameShell", () => {
       "data-sending",
       "false"
     );
+  });
+
+  it("does not overwrite an old multiplayer adventure with the previous character profile", async () => {
+    const pokeCampaign = {
+      ...multiplayerCampaign,
+      id: "33333333-3333-4333-8333-333333333333",
+      sessionId: "provider-session-poke",
+      title: "POKE"
+    } satisfies CampaignSummary;
+    const jinCampaign = {
+      ...multiplayerCampaign,
+      id: "44444444-4444-4444-8444-444444444444",
+      sessionId: "provider-session-jin",
+      title: "Jin"
+    } satisfies CampaignSummary;
+
+    listCampaignsMock.mockResolvedValue([pokeCampaign, jinCampaign]);
+
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, _init?: RequestInit) => {
+        const url = String(input);
+
+        if (url === "/api/auth/claim-guest-state") {
+          return responseJson({});
+        }
+
+        if (url.startsWith("/api/room?")) {
+          const requestUrl = new URL(url, "https://app.example");
+          const roomId = requestUrl.searchParams.get("roomId");
+
+          if (roomId === pokeCampaign.id) {
+            return responseJson(
+              multiplayerRoomSnapshot({
+                roomId: pokeCampaign.id,
+                sessionId: pokeCampaign.sessionId,
+                players: [
+                  {
+                    id: "player-1",
+                    slot: 0,
+                    username: "Current Player",
+                    characterName: "POKE",
+                    characterSheet: "Name: POKE",
+                    status: "waiting"
+                  }
+                ]
+              })
+            );
+          }
+
+          if (roomId === jinCampaign.id) {
+            return responseJson(
+              multiplayerRoomSnapshot({
+                roomId: jinCampaign.id,
+                sessionId: jinCampaign.sessionId,
+                players: [
+                  {
+                    id: "player-1",
+                    slot: 0,
+                    username: "Current Player",
+                    characterName: "Jin",
+                    characterSheet: "Name: Jin",
+                    status: "waiting"
+                  }
+                ]
+              })
+            );
+          }
+        }
+
+        throw new Error(`Unexpected fetch: ${url}`);
+      }
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<GameShell initialCampaignId={pokeCampaign.id} />);
+
+    expect(await screen.findByRole("button", { name: "POKE" })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Jin" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Jin" })).toHaveAttribute(
+        "aria-current",
+        "page"
+      );
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 450));
+
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        if (String(input) !== "/api/room/player" || init?.method !== "POST") {
+          return false;
+        }
+
+        const body = JSON.parse(String(init.body));
+        return body.roomId === jinCampaign.id && body.characterName === "POKE";
+      })
+    ).toBe(false);
   });
 });
