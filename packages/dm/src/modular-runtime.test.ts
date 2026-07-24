@@ -228,6 +228,14 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
+      /When a player-controlled attack roll hits and damage was not already submitted/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /On a resolved hit where damage is known or DM-side/i
+    );
+    assert.match(
+      jobPrompt("combat"),
       /When a player spell or feature forces an NPC or enemy saving throw/i
     );
     assert.match(
@@ -268,6 +276,15 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(jobPrompt("combat"), /Bad response to avoid: requesting Tart's attack roll/i);
     assert.match(jobPrompt("combat"), /"input_targets": \[\s+"player:tart"\s+\]/);
+    assert.match(jobPrompt("combat"), /player attack hits, request player damage/i);
+    assert.match(
+      jobPrompt("combat"),
+      /Bad response to avoid: inventing greataxe damage/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /"dice": "1d12"/i
+    );
     assert.match(jobPrompt("combat"), /area spell saves and damage are explicit/i);
     assert.match(jobPrompt("combat"), /player spell forces an NPC save/i);
     assert.match(

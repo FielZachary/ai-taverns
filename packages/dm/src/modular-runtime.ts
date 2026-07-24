@@ -433,12 +433,13 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
     "input_policy must be all_players or only_targeted_players; never use acting_player.",
     "Use known modifiers, proficiency, advantage, or disadvantage from the character sheet or combat context when available. If unknown, ask for the base roll clearly without inventing bonuses.",
     "In roll_requests, dice must be bare dice notation only, such as 1d20, 3d4, or 8d6. Do not include + or - modifiers in dice; put static bonuses or penalties in modifier. Example: Magic Missile uses dice \"3d4\" and modifier 3, not dice \"3d4+3\".",
+    "When a player-controlled attack roll hits and damage was not already submitted, do not roll damage yourself. Request the player's damage roll with next_input_needed dice_results and a structured roll_requests entry. Do not update target HP until damage is submitted.",
     "When a player spell or feature forces an NPC or enemy saving throw, roll that save yourself before narrating success or failure, reveal the save roll and total, compare it to the player's known spell save DC when available, and do not put the NPC/enemy save in roll_requests.",
     "Never narrate a spell or feature as failing, succeeding, taking hold, being resisted, or being shaken off because of an NPC/enemy save unless public_narration first includes the visible save math line: '<Target> <Ability> save: X vs DC Y - success/failure'.",
     "Visible combat math:",
     "For resolved attacks, make the numbers visible before injury narration.",
     "Use explicit wording for attack outcomes: 'attack roll: X vs AC Y - hit/miss'.",
-    "On a hit, include explicit damage wording: 'damage roll: dice = total damage'.",
+    "On a resolved hit where damage is known or DM-side, include explicit damage wording: 'damage roll: dice = total damage'.",
     "For NPC hits against player characters, public_narration must include attack roll, vs AC, damage roll, damage amount, and HP change when HP is updated.",
     "For saving throws, make the numbers visible before consequence narration: 'Dexterity save: X vs DC Y - success/failure'.",
     "When an area spell or effect affects multiple creatures, list each target's save result separately before applying damage or conditions.",
@@ -763,6 +764,49 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
                 "npc:green-eye-figure",
                 "player:por",
                 "player:tart"
+              ]
+            }
+          }
+        },
+        null,
+        2
+      )
+    ].join("\n"),
+    [
+      "Example: player attack hits, request player damage.",
+      'Player input: "I rolled 1d20 + 5: 19 (14) for Greataxe attack roll."',
+      "Context: Combat is active. Komer is the current turn owner and attacked Warden lift-guard 1 with a greataxe. Warden lift-guard 1 has AC 16 and 22 HP. Komer has not submitted greataxe damage yet.",
+      "Bad response to avoid: inventing greataxe damage like 'Damage roll: 1d12 + 2 = 14 slashing damage,' updating the warden's HP, or narrating defeat before Komer rolls damage.",
+      "Good response:",
+      JSON.stringify(
+        {
+          public_narration: [
+            "Komer's greataxe crashes through the warden's guard.",
+            "Attack roll: 19 vs AC 16 - hit.",
+            "Roll greataxe damage: 1d12 + 2."
+          ].join("\n\n"),
+          resolution_mode: "needs_dice",
+          roll_requests: [
+            {
+              id: "komer-greataxe-damage-warden-1",
+              dice: "1d12",
+              label: "Greataxe damage",
+              modifier: 2,
+              player: "player:komer"
+            }
+          ],
+          next_input_needed: "dice_results",
+          input_targets: ["player:komer"],
+          input_policy: "only_targeted_players",
+          mechanics_state_update: {
+            combat: {
+              active: true,
+              round: 1,
+              turnOwner: "player:komer",
+              initiativeOrder: [
+                "npc:warden-lift-guard-1",
+                "npc:warden-lift-guard-2",
+                "player:komer"
               ]
             }
           }
