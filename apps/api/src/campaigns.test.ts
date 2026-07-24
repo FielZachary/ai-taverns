@@ -2,9 +2,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   ApiErrorResponseSchema,
+  CampaignInviteCreateResponseSchema,
+  CampaignInviteDisableResponseSchema,
+  CampaignInviteListResponseSchema,
   CampaignCreateResponseSchema,
   CampaignJoinPreviewResponseSchema,
   CampaignJoinResponseSchema,
+  LobbyInviteJoinResponseSchema,
+  LobbyInvitePreviewResponseSchema,
   CampaignListResponseSchema,
   CampaignReadResponseSchema,
   CampaignSoloTurnResponseSchema
@@ -1007,6 +1012,216 @@ test("campaign join rejects invalid and disabled game codes", async () => {
     assert.equal(
       ApiErrorResponseSchema.parse(response.json()).error.code,
       "NOT_FOUND"
+    );
+  }
+});
+
+test("campaign lobby invites are owner managed and let players join unstarted lobbies", async () => {
+  const ownerCookie = await signIn("invite-owner@example.com");
+  const joinerCookie = await signIn("invite-joiner@example.com");
+  const otherCookie = await signIn("invite-other@example.com");
+
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: {
+      cookie: ownerCookie
+    },
+    payload: {
+      mode: "multiplayer",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "classic_fantasy",
+      ownerClientId: "invite-owner-client",
+      playerName: "Owner"
+    }
+  });
+  const created = CampaignCreateResponseSchema.parse(createResponse.json());
+
+  const forbiddenResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${created.campaign.id}/invites`,
+    headers: {
+      cookie: otherCookie
+    },
+    payload: {}
+  });
+
+  assert.equal(forbiddenResponse.statusCode, 403);
+
+  const inviteResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${created.campaign.id}/invites`,
+    headers: {
+      cookie: ownerCookie
+    },
+    payload: {
+      maxUses: 2
+    }
+  });
+
+  assert.equal(inviteResponse.statusCode, 201, inviteResponse.body);
+  const invite = CampaignInviteCreateResponseSchema.parse(inviteResponse.json());
+  assert.equal(invite.invite.campaignId, created.campaign.id);
+  assert.equal(invite.invite.maxUses, 2);
+  assert.ok(invite.invite.token.length >= 16);
+
+  const listResponse = await app.inject({
+    method: "GET",
+    url: `/api/campaigns/${created.campaign.id}/invites`,
+    headers: {
+      cookie: ownerCookie
+    }
+  });
+
+  assert.equal(listResponse.statusCode, 200, listResponse.body);
+  const inviteList = CampaignInviteListResponseSchema.parse(listResponse.json());
+  assert.equal(inviteList.invites.length, 1);
+  assert.equal(inviteList.invites[0]?.id, invite.invite.id);
+
+  const previewResponse = await app.inject({
+    method: "GET",
+    url: `/api/invites/${invite.invite.token}/preview`,
+    headers: {
+      cookie: joinerCookie
+    }
+  });
+
+  assert.equal(previewResponse.statusCode, 200, previewResponse.body);
+  const preview = LobbyInvitePreviewResponseSchema.parse(previewResponse.json());
+  assert.equal(preview.campaignTitle, "Classic Fantasy Adventure");
+  assert.equal(preview.availableSlots, 3);
+
+  const joinResponse = await app.inject({
+    method: "POST",
+    url: `/api/invites/${invite.invite.token}/join`,
+    headers: {
+      cookie: joinerCookie
+    },
+    payload: {
+      clientId: "invite-joiner-client",
+      username: "Joined Player",
+      characterName: "Tamsin",
+      characterSheet: "A bright-eyed scout."
+    }
+  });
+
+  assert.equal(joinResponse.statusCode, 200, joinResponse.body);
+  const joined = LobbyInviteJoinResponseSchema.parse(joinResponse.json());
+  assert.equal(joined.campaign.id, created.campaign.id);
+  assert.equal(joined.campaign.title, "Tamsin");
+  assert.equal(database.campaignInvites[0]?.use_count, 1);
+  assert.equal(database.campaignInviteUses.length, 1);
+
+  const disableResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${created.campaign.id}/invites/${invite.invite.id}/disable`,
+    headers: {
+      cookie: ownerCookie
+    }
+  });
+
+  assert.equal(disableResponse.statusCode, 200, disableResponse.body);
+  const disabled = CampaignInviteDisableResponseSchema.parse(
+    disableResponse.json()
+  );
+  assert.equal(disabled.invite.enabled, false);
+
+  const disabledPreviewResponse = await app.inject({
+    method: "GET",
+    url: `/api/invites/${invite.invite.token}/preview`,
+    headers: {
+      cookie: joinerCookie
+    }
+  });
+
+  assert.equal(disabledPreviewResponse.statusCode, 404);
+});
+
+test("lobby invites and game codes reject campaigns after adventure start", async () => {
+  const ownerCookie = await signIn("started-invite-owner@example.com");
+  const joinerCookie = await signIn("started-invite-joiner@example.com");
+
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: {
+      cookie: ownerCookie
+    },
+    payload: {
+      mode: "multiplayer",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "mystery",
+      ownerClientId: "started-invite-owner-client",
+      playerName: "Owner"
+    }
+  });
+  const created = CampaignCreateResponseSchema.parse(createResponse.json());
+  const inviteResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${created.campaign.id}/invites`,
+    headers: {
+      cookie: ownerCookie
+    },
+    payload: {}
+  });
+  const invite = CampaignInviteCreateResponseSchema.parse(inviteResponse.json());
+  const campaign = database.campaigns.find(
+    (candidate) => candidate.id === created.campaign.id
+  );
+
+  assert.ok(campaign);
+  campaign.has_begun = true;
+
+  for (const response of [
+    await app.inject({
+      method: "GET",
+      url: `/api/invites/${invite.invite.token}/preview`,
+      headers: {
+        cookie: joinerCookie
+      }
+    }),
+    await app.inject({
+      method: "POST",
+      url: `/api/invites/${invite.invite.token}/join`,
+      headers: {
+        cookie: joinerCookie
+      },
+      payload: {
+        clientId: "late-invite-client",
+        username: "Late Player",
+        characterName: "Late",
+        characterSheet: "Too late."
+      }
+    }),
+    await app.inject({
+      method: "POST",
+      url: "/api/campaigns/join/preview",
+      headers: {
+        cookie: joinerCookie
+      },
+      payload: {
+        gameCode: created.campaign.joinCode
+      }
+    }),
+    await app.inject({
+      method: "POST",
+      url: "/api/campaigns/join",
+      headers: {
+        cookie: joinerCookie
+      },
+      payload: {
+        gameCode: created.campaign.joinCode,
+        clientId: "late-code-client",
+        username: "Late Player",
+        characterName: "Late",
+        characterSheet: "Too late."
+      }
+    })
+  ]) {
+    assert.equal(response.statusCode, 409, response.body);
+    assert.match(
+      ApiErrorResponseSchema.parse(response.json()).error.message,
+      /already begun/
     );
   }
 });

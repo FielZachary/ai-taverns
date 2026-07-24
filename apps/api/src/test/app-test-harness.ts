@@ -110,6 +110,29 @@ type JoinCodeRecord = {
   disabled_at: Date | null;
 };
 
+type CampaignInviteRecord = {
+  id: string;
+  campaign_id: string;
+  token_hash: string;
+  enabled: boolean;
+  max_uses: number | null;
+  use_count: number;
+  expires_at: Date | null;
+  created_by_user_id: string;
+  created_at: Date;
+  disabled_at: Date | null;
+  disabled_by_user_id: string | null;
+};
+
+type CampaignInviteUseRecord = {
+  id: string;
+  invite_id: string;
+  campaign_id: string;
+  joined_user_id: string;
+  player_id: string;
+  used_at: Date;
+};
+
 type TurnRecord = {
   id: string;
   campaign_id: string;
@@ -166,6 +189,8 @@ class FakeDatabase {
   campaigns: CampaignRecord[] = [];
   players: PlayerRecord[] = [];
   joinCodes: JoinCodeRecord[] = [];
+  campaignInvites: CampaignInviteRecord[] = [];
+  campaignInviteUses: CampaignInviteUseRecord[] = [];
   campaignEvents: CampaignEventRecord[] = [];
   contextChunks: ContextChunkRecord[] = [];
   dmTurnTraces: DmTurnTraceRecord[] = [];
@@ -360,10 +385,17 @@ class FakeDatabase {
     if (
       normalizedSql ===
       "select * from campaigns where id = $1 and status = 'active' limit 1"
+      || normalizedSql ===
+      "select * from campaigns where id = $1 and status = 'active' limit 1 for update"
+      || normalizedSql ===
+      "select * from campaigns where id = $1 and status = 'active' and mode = 'multiplayer' limit 1"
     ) {
       const campaign = this.campaigns.find(
         (candidate) =>
-          candidate.id === values[0] && candidate.status === "active"
+          candidate.id === values[0] &&
+          candidate.status === "active" &&
+          (!normalizedSql.includes("mode = 'multiplayer'") ||
+            candidate.mode === "multiplayer")
       );
 
       return { rows: campaign ? ([campaign] as T[]) : ([] as T[]) };
@@ -372,6 +404,8 @@ class FakeDatabase {
     if (
       normalizedSql ===
       "select * from campaigns where id = $1 and status <> 'deleted' limit 1"
+      || normalizedSql ===
+      "select * from campaigns where id = $1 and status <> 'deleted' limit 1 for update"
     ) {
       const campaign = this.campaigns.find(
         (candidate) =>
@@ -1093,6 +1127,116 @@ class FakeDatabase {
       return { rows: [{ code: record.code } as T] };
     }
 
+    if (normalizedSql.startsWith("insert into campaign_invites")) {
+      const record: CampaignInviteRecord = {
+        id: `00000000-0000-4000-8000-${String(this.nextId++).padStart(12, "0")}`,
+        campaign_id: values[0] as string,
+        token_hash: values[1] as string,
+        max_uses: (values[2] as number | null) ?? null,
+        expires_at: (values[3] as Date | null) ?? null,
+        created_by_user_id: values[4] as string,
+        enabled: true,
+        use_count: 0,
+        created_at: new Date(),
+        disabled_at: null,
+        disabled_by_user_id: null
+      };
+      this.campaignInvites.push(record);
+      return { rows: [record as T] };
+    }
+
+    if (normalizedSql.startsWith("select * from campaign_invites")) {
+      const campaignId = values[0] as string;
+      const rows = this.campaignInvites
+        .filter((invite) => invite.campaign_id === campaignId)
+        .slice()
+        .reverse()
+        .slice(0, 20);
+
+      return { rows: rows as T[] };
+    }
+
+    if (normalizedSql.startsWith("update campaign_invites set enabled = false")) {
+      const inviteId = values[0] as string;
+      const campaignId = values[1] as string;
+      const userId = values[2] as string;
+      const invite = this.campaignInvites.find(
+        (candidate) =>
+          candidate.id === inviteId && candidate.campaign_id === campaignId
+      );
+
+      if (!invite) {
+        return { rows: [] as T[] };
+      }
+
+      invite.enabled = false;
+      invite.disabled_at ??= new Date();
+      invite.disabled_by_user_id = userId;
+      return { rows: [invite as T] };
+    }
+
+    if (
+      normalizedSql.startsWith("select campaign_invites.*, campaigns.title as campaign_title")
+    ) {
+      const tokenHash = values[0] as string;
+      const invite = this.campaignInvites.find(
+        (candidate) => candidate.token_hash === tokenHash && candidate.enabled
+      );
+      const campaign = invite
+        ? this.campaigns.find(
+            (candidate) => candidate.id === invite.campaign_id
+          )
+        : undefined;
+
+      if (!invite || !campaign) {
+        return { rows: [] as T[] };
+      }
+
+      const activePlayers = this.players.filter(
+        (player) =>
+          player.campaign_id === campaign.id && player.status === "active"
+      ).length;
+
+      return {
+        rows: [
+          {
+            ...invite,
+            campaign_title: campaign.title,
+            campaign_status: campaign.status,
+            campaign_mode: campaign.mode,
+            campaign_has_begun: campaign.has_begun,
+            active_players: activePlayers
+          } as T
+        ]
+      };
+    }
+
+    if (normalizedSql.startsWith("update campaign_invites set use_count")) {
+      const inviteId = values[0] as string;
+      const invite = this.campaignInvites.find(
+        (candidate) => candidate.id === inviteId
+      );
+
+      if (invite) {
+        invite.use_count += 1;
+      }
+
+      return { rows: [] as T[] };
+    }
+
+    if (normalizedSql.startsWith("insert into campaign_invite_uses")) {
+      this.campaignInviteUses.push({
+        id: `invite-use-${this.nextId++}`,
+        invite_id: values[0] as string,
+        campaign_id: values[1] as string,
+        joined_user_id: values[2] as string,
+        player_id: values[3] as string,
+        used_at: new Date()
+      });
+
+      return { rows: [] as T[] };
+    }
+
     if (normalizedSql.startsWith("select campaigns.id as campaign_id")) {
       const code = values[0] as string;
       const joinCode = this.joinCodes.find(
@@ -1190,6 +1334,16 @@ class FakeDatabase {
           candidate.campaign_id === campaignId && candidate.client_id === clientId
       );
       return { rows: player ? ([player] as T[]) : ([] as T[]) };
+    }
+
+    if (normalizedSql.startsWith("select count(*) as active_players from players")) {
+      const campaignId = values[0] as string;
+      const activePlayers = this.players.filter(
+        (player) =>
+          player.campaign_id === campaignId && player.status === "active"
+      ).length;
+
+      return { rows: [{ active_players: activePlayers } as T] };
     }
 
     if (normalizedSql.startsWith("select submissions.player_id")) {

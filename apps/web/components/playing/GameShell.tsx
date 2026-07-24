@@ -9,10 +9,13 @@ import {
   useState
 } from "react";
 import {
+  Copy,
+  Link,
   Play,
   Send,
   X
 } from "lucide-react";
+import type { CampaignInvite } from "@ai-dnd/contracts";
 import type {
   AiModelId,
   DiceRollRequest,
@@ -22,6 +25,9 @@ import type {
   NextInputNeeded
 } from "@/lib/game-types";
 import {
+  createCampaignInvite,
+  disableCampaignInvite,
+  listCampaignInvites,
   listCampaigns,
   type CampaignSummary as ApiCampaignSummary
 } from "@/lib/campaign-api";
@@ -189,6 +195,10 @@ function roomSocketUrl(campaign: CampaignSummary) {
   return url.toString();
 }
 
+function inviteUrl(token: string) {
+  return `${window.location.origin}/invite/${encodeURIComponent(token)}`;
+}
+
 function parseRoomRealtimeEvent(value: string): RoomRealtimeEvent | null {
   try {
     const event = JSON.parse(value) as Partial<RoomRealtimeEvent>;
@@ -255,6 +265,11 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
   const [inputTargets, setInputTargets] = useState<string[]>([]);
   const [inputPolicy, setInputPolicy] = useState<InputPolicy>("all_players");
   const [roomCombat, setRoomCombat] = useState<RoomSnapshot["combat"]>();
+  const [campaignInvites, setCampaignInvites] = useState<CampaignInvite[]>([]);
+  const [inviteStatus, setInviteStatus] = useState("");
+  const [inviteError, setInviteError] = useState("");
+  const [isCreatingInvite, setIsCreatingInvite] = useState(false);
+  const [isDisablingInvites, setIsDisablingInvites] = useState(false);
   const [activeDiceReveal, setActiveDiceReveal] =
     useState<ActiveDiceReveal | null>(null);
   const [isCharacterSheetOpen, setIsCharacterSheetOpen] = useState(false);
@@ -268,6 +283,14 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     [activeCampaignId, availableCampaigns]
   );
   const isSinglePlayer = activeCampaign?.mode === "single_player";
+  const canManageInvites = Boolean(
+    activeCampaign?.mode === "multiplayer" &&
+      activeCampaign.joinCode &&
+      !hasAdventureBegun
+  );
+  const activeInviteCount = campaignInvites.filter(
+    (invite) => invite.enabled && !invite.disabledAt
+  ).length;
   const displayedRoomPlayers = useMemo(
     () =>
       displayedRoomPlayersWithOptimisticSubmission(
@@ -579,6 +602,41 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
       shouldIgnore = true;
     };
   }, [fetchCampaigns, initialCampaignId, loadCampaignMessages]);
+
+  useEffect(() => {
+    let shouldIgnore = false;
+
+    async function loadInvites() {
+      if (!activeCampaign || !canManageInvites) {
+        setCampaignInvites([]);
+        setInviteStatus("");
+        setInviteError("");
+        return;
+      }
+
+      try {
+        const invites = await listCampaignInvites(activeCampaign.id);
+
+        if (!shouldIgnore) {
+          setCampaignInvites(invites);
+        }
+      } catch (caught) {
+        if (!shouldIgnore) {
+          setInviteError(
+            caught instanceof Error
+              ? caught.message
+              : "Invite links could not be loaded."
+          );
+        }
+      }
+    }
+
+    void loadInvites();
+
+    return () => {
+      shouldIgnore = true;
+    };
+  }, [activeCampaign, canManageInvites]);
 
   useEffect(() => {
     if (!activeCampaign) {
@@ -932,6 +990,75 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
           createdAt: new Date().toISOString()
         }
       ]);
+    }
+  }
+
+  async function handleCopyInviteLink() {
+    if (!activeCampaign || isCreatingInvite) {
+      return;
+    }
+
+    setIsCreatingInvite(true);
+    setInviteError("");
+    setInviteStatus("");
+
+    try {
+      const invite = await createCampaignInvite(activeCampaign.id);
+      const url = inviteUrl(invite.token);
+
+      await navigator.clipboard.writeText(url);
+      setCampaignInvites((currentInvites) => [invite, ...currentInvites]);
+      setInviteStatus("Invite link copied.");
+    } catch (caught) {
+      setInviteError(
+        caught instanceof Error
+          ? caught.message
+          : "The invite link could not be copied."
+      );
+    } finally {
+      setIsCreatingInvite(false);
+    }
+  }
+
+  async function handleDisableInviteLinks() {
+    if (!activeCampaign || isDisablingInvites) {
+      return;
+    }
+
+    const activeInvites = campaignInvites.filter(
+      (invite) => invite.enabled && !invite.disabledAt
+    );
+
+    if (activeInvites.length === 0) {
+      return;
+    }
+
+    setIsDisablingInvites(true);
+    setInviteError("");
+    setInviteStatus("");
+
+    try {
+      const disabledInvites = await Promise.all(
+        activeInvites.map((invite) =>
+          disableCampaignInvite(activeCampaign.id, invite.id)
+        )
+      );
+      const disabledById = new Map(
+        disabledInvites.map((invite) => [invite.id, invite])
+      );
+
+      setCampaignInvites((currentInvites) =>
+        currentInvites.map((invite) => disabledById.get(invite.id) ?? invite)
+      );
+      setInviteStatus("Invite links disabled.");
+    } catch (caught) {
+      setInviteError(
+        caught instanceof Error
+          ? caught.message
+          : "Invite links could not be disabled."
+      );
+    } finally {
+      setIsDisablingInvites(false);
     }
   }
 
@@ -1526,6 +1653,38 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
                   <div className="game-code-callout">
                     <span>Game Code</span>
                     <strong>{activeCampaign.joinCode}</strong>
+                  </div>
+                ) : null}
+                {canManageInvites ? (
+                  <div className="invite-link-controls">
+                    <button
+                      type="button"
+                      className="secondary-action"
+                      disabled={isCreatingInvite}
+                      onClick={() => void handleCopyInviteLink()}
+                    >
+                      <Copy size={16} />
+                      {isCreatingInvite ? "Copying..." : "Copy Invite Link"}
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-action"
+                      disabled={activeInviteCount === 0 || isDisablingInvites}
+                      onClick={() => void handleDisableInviteLinks()}
+                    >
+                      <Link size={16} />
+                      {isDisablingInvites
+                        ? "Disabling..."
+                        : `Disable Links${
+                            activeInviteCount > 0 ? ` (${activeInviteCount})` : ""
+                          }`}
+                    </button>
+                    {inviteStatus ? (
+                      <span className="invite-status">{inviteStatus}</span>
+                    ) : null}
+                    {inviteError ? (
+                      <span className="invite-error-inline">{inviteError}</span>
+                    ) : null}
                   </div>
                 ) : null}
                 <p>

@@ -1,13 +1,20 @@
 import {
+  CampaignInviteCreateResponseSchema,
+  CampaignInviteDisableResponseSchema,
+  CampaignInviteListResponseSchema,
   CampaignCreateResponseSchema,
   CampaignJoinPreviewResponseSchema,
   CampaignJoinResponseSchema,
   CampaignListResponseSchema,
   CampaignReadResponseSchema,
+  LobbyInviteJoinResponseSchema,
+  LobbyInvitePreviewResponseSchema,
+  type CampaignInviteCreateRequest,
   type CampaignCreateRequest,
   type CampaignJoinPreviewRequest,
   type CampaignJoinRequest,
-  type CampaignSummary
+  type CampaignSummary,
+  type LobbyInviteJoinRequest
 } from "@ai-dnd/contracts";
 
 type Parser<T> = {
@@ -119,6 +126,95 @@ export async function joinCampaign(input: CampaignJoinRequest) {
     response,
     CampaignJoinResponseSchema,
     "The game could not be joined."
+  );
+
+  return data.campaign;
+}
+
+export async function createCampaignInvite(
+  campaignId: string,
+  input: CampaignInviteCreateRequest = {}
+) {
+  const response = await fetch(
+    `/api/campaigns/${encodeURIComponent(campaignId)}/invites`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(input)
+    }
+  );
+  const data = await parseJsonResponse(
+    response,
+    CampaignInviteCreateResponseSchema,
+    "The invite link could not be created."
+  );
+
+  return data.invite;
+}
+
+export async function listCampaignInvites(campaignId: string) {
+  const response = await fetch(
+    `/api/campaigns/${encodeURIComponent(campaignId)}/invites`
+  );
+  const data = await parseJsonResponse(
+    response,
+    CampaignInviteListResponseSchema,
+    "Invite links could not be loaded."
+  );
+
+  return data.invites;
+}
+
+export async function disableCampaignInvite(
+  campaignId: string,
+  inviteId: string
+) {
+  const response = await fetch(
+    `/api/campaigns/${encodeURIComponent(
+      campaignId
+    )}/invites/${encodeURIComponent(inviteId)}/disable`,
+    {
+      method: "POST"
+    }
+  );
+  const data = await parseJsonResponse(
+    response,
+    CampaignInviteDisableResponseSchema,
+    "The invite link could not be disabled."
+  );
+
+  return data.invite;
+}
+
+export async function previewLobbyInvite(token: string) {
+  const response = await fetch(
+    `/api/invites/${encodeURIComponent(token)}/preview`
+  );
+
+  return parseJsonResponse(
+    response,
+    LobbyInvitePreviewResponseSchema,
+    "That invite link could not be checked."
+  );
+}
+
+export async function joinLobbyInvite(
+  token: string,
+  input: LobbyInviteJoinRequest
+) {
+  const response = await fetch(`/api/invites/${encodeURIComponent(token)}/join`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(input)
+  });
+  const data = await parseJsonResponse(
+    response,
+    LobbyInviteJoinResponseSchema,
+    "The lobby could not be joined."
   );
 
   return data.campaign;

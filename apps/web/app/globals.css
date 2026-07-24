@@ -2693,6 +2693,39 @@ h1 {
   letter-spacing: 0.08em;
 }
 
+.invite-link-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.begin-adventure-panel .invite-link-controls .secondary-action {
+  min-height: 34px;
+  border-color: rgba(188, 169, 142, 0.34);
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.begin-adventure-panel .invite-link-controls .secondary-action:hover:not(:disabled) {
+  border-color: rgba(244, 207, 122, 0.45);
+  background: rgba(244, 207, 122, 0.12);
+}
+
+.invite-status,
+.invite-error-inline {
+  font-size: 0.76rem;
+  font-weight: 900;
+}
+
+.invite-status {
+  color: #a8d9a2;
+}
+
+.invite-error-inline {
+  color: #ffb19f;
+}
+
 .begin-adventure-panel button {
   display: inline-flex;
   align-items: center;

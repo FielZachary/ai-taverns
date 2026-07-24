@@ -1,4 +1,4 @@
-import { randomInt, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomInt, randomUUID } from "node:crypto";
 import pg from "pg";
 import type { SessionId, UserId } from "@ai-dnd/domain";
 import {
@@ -35,6 +35,7 @@ import {
 } from "@ai-dnd/dm";
 import type {
   AiModelId,
+  CampaignInvite,
   CampaignMode,
   CampaignSummary,
   DmStreamEvent,
@@ -145,6 +146,7 @@ type TurnStatus =
 
 const maxPlayers = 4;
 const joinCodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const inviteTokenBytes = 32;
 
 function requireRow<TRow>(row: TRow | undefined, message: string): TRow {
   if (!row) {
@@ -461,6 +463,28 @@ type JoinCodeRow = {
   has_begun: boolean;
 };
 
+type CampaignInviteRow = {
+  id: string;
+  campaign_id: string;
+  token_hash: string;
+  enabled: boolean;
+  max_uses: number | null;
+  use_count: number;
+  expires_at: Date | string | null;
+  created_by_user_id: string;
+  created_at: Date | string;
+  disabled_at: Date | string | null;
+  disabled_by_user_id: string | null;
+};
+
+type CampaignInvitePreviewRow = CampaignInviteRow & {
+  campaign_title: string;
+  campaign_status: CampaignStatus;
+  campaign_mode: CampaignMode;
+  campaign_has_begun: boolean;
+  active_players: string | number;
+};
+
 type CampaignSettingSummary = {
   displayLocation?: string;
   worldName?: string;
@@ -609,6 +633,34 @@ function generateJoinCode() {
     { length: 6 },
     () => joinCodeAlphabet[randomInt(0, joinCodeAlphabet.length)]
   ).join("");
+}
+
+function generateInviteToken() {
+  return randomBytes(inviteTokenBytes).toString("base64url");
+}
+
+function hashInviteToken(token: string) {
+  return createHash("sha256")
+    .update("ai-taverns-campaign-invite:")
+    .update(token)
+    .digest("hex");
+}
+
+function normalizeInviteToken(token: string | undefined) {
+  return (token ?? "").trim();
+}
+
+function mapCampaignInviteRow(row: CampaignInviteRow): CampaignInvite {
+  return {
+    id: row.id,
+    campaignId: row.campaign_id,
+    enabled: row.enabled,
+    maxUses: row.max_uses,
+    useCount: Number(row.use_count),
+    expiresAt: row.expires_at ? toIso(row.expires_at) : null,
+    createdAt: toIso(row.created_at),
+    disabledAt: row.disabled_at ? toIso(row.disabled_at) : null
+  };
 }
 
 function eventPayload(value: unknown): Record<string, unknown> {
@@ -1657,6 +1709,10 @@ export async function previewCampaignJoinByCode(
     throw createStatusError(409, "That game is already full.");
   }
 
+  if (campaign.has_begun) {
+    throw createStatusError(409, "That adventure has already begun.");
+  }
+
   return {
     code: campaign.code,
     campaignTitle: campaign.title,
@@ -1710,6 +1766,10 @@ export async function joinCampaignByCode(
 
     if (!campaignRow) {
       throw createStatusError(404, "That game code was not found.");
+    }
+
+    if (campaignRow.has_begun) {
+      throw createStatusError(409, "That adventure has already begun.");
     }
 
     const existingForUser = await client.query<PlayerRow>(
@@ -1880,6 +1940,507 @@ export async function joinCampaignByCode(
     ...campaign,
     display_character_name: characterName,
     display_username: username,
+    join_code: null
+  });
+}
+
+export async function createCampaignInvite(
+  db: pg.Pool,
+  input: {
+    campaignId: string;
+    userId: string;
+    maxUses?: number | null | undefined;
+    expiresAt?: string | null | undefined;
+  }
+) {
+  const expiresAt = input.expiresAt ? new Date(input.expiresAt) : null;
+
+  if (expiresAt && Number.isNaN(expiresAt.getTime())) {
+    throw createStatusError(400, "Invite expiration is invalid.");
+  }
+
+  if (expiresAt && expiresAt <= new Date()) {
+    throw createStatusError(400, "Invite expiration must be in the future.");
+  }
+
+  if (input.maxUses !== undefined && input.maxUses !== null && input.maxUses <= 0) {
+    throw createStatusError(400, "Invite max uses must be greater than zero.");
+  }
+
+  const { invite, token } = await withTransaction(db, async (client) => {
+    const campaignResult = await client.query<CampaignRow>(
+      `
+        select *
+        from campaigns
+        where id = $1 and status = 'active'
+        limit 1
+        for update
+      `,
+      [input.campaignId]
+    );
+    const campaign = campaignResult.rows[0];
+
+    if (!campaign) {
+      throw createStatusError(404, "Campaign not found.");
+    }
+
+    if (campaign.owner_user_id !== input.userId) {
+      throw createStatusError(403, "Only the campaign owner can manage invites.");
+    }
+
+    if (campaign.mode !== "multiplayer") {
+      throw createStatusError(400, "Only multiplayer campaigns can invite players.");
+    }
+
+    if (campaign.has_begun) {
+      throw createStatusError(409, "That adventure has already begun.");
+    }
+
+    const token = generateInviteToken();
+    const inserted = await client.query<CampaignInviteRow>(
+      `
+        insert into campaign_invites (
+          campaign_id,
+          token_hash,
+          max_uses,
+          expires_at,
+          created_by_user_id
+        )
+        values ($1, $2, $3, $4, $5)
+        returning *
+      `,
+      [
+        input.campaignId,
+        hashInviteToken(token),
+        input.maxUses ?? null,
+        expiresAt,
+        input.userId
+      ]
+    );
+    const invite = requireRow(inserted.rows[0], "Failed to create invite.");
+
+    await logCampaignEvent(client, input.campaignId, "invite_created", {
+      inviteId: invite.id,
+      maxUses: invite.max_uses,
+      expiresAt: invite.expires_at ? toIso(invite.expires_at) : null
+    });
+
+    return { invite, token };
+  });
+
+  return {
+    invite: {
+      ...mapCampaignInviteRow(invite),
+      token
+    }
+  };
+}
+
+export async function listCampaignInvitesForOwner(
+  db: Queryable,
+  input: {
+    campaignId: string;
+    userId: string;
+  }
+): Promise<CampaignInvite[]> {
+  const campaignResult = await db.query<CampaignRow>(
+    `
+      select *
+      from campaigns
+      where id = $1 and status <> 'deleted'
+      limit 1
+    `,
+    [input.campaignId]
+  );
+  const campaign = campaignResult.rows[0];
+
+  if (!campaign) {
+    throw createStatusError(404, "Campaign not found.");
+  }
+
+  if (campaign.owner_user_id !== input.userId) {
+    throw createStatusError(403, "Only the campaign owner can manage invites.");
+  }
+
+  const result = await db.query<CampaignInviteRow>(
+    `
+      select *
+      from campaign_invites
+      where campaign_id = $1
+      order by created_at desc
+      limit 20
+    `,
+    [input.campaignId]
+  );
+
+  return result.rows.map(mapCampaignInviteRow);
+}
+
+export async function disableCampaignInvite(
+  db: pg.Pool,
+  input: {
+    campaignId: string;
+    inviteId: string;
+    userId: string;
+  }
+): Promise<CampaignInvite> {
+  return withTransaction(db, async (client) => {
+    const campaignResult = await client.query<CampaignRow>(
+      `
+        select *
+        from campaigns
+        where id = $1 and status <> 'deleted'
+        limit 1
+        for update
+      `,
+      [input.campaignId]
+    );
+    const campaign = campaignResult.rows[0];
+
+    if (!campaign) {
+      throw createStatusError(404, "Campaign not found.");
+    }
+
+    if (campaign.owner_user_id !== input.userId) {
+      throw createStatusError(403, "Only the campaign owner can manage invites.");
+    }
+
+    const result = await client.query<CampaignInviteRow>(
+      `
+        update campaign_invites
+        set enabled = false,
+            disabled_at = coalesce(disabled_at, now()),
+            disabled_by_user_id = $3
+        where id = $1 and campaign_id = $2
+        returning *
+      `,
+      [input.inviteId, input.campaignId, input.userId]
+    );
+    const invite = result.rows[0];
+
+    if (!invite) {
+      throw createStatusError(404, "Invite not found.");
+    }
+
+    await logCampaignEvent(client, input.campaignId, "invite_disabled", {
+      inviteId: input.inviteId
+    });
+
+    return mapCampaignInviteRow(invite);
+  });
+}
+
+function assertInviteCanJoin(invite: CampaignInvitePreviewRow) {
+  if (
+    !invite.enabled ||
+    invite.campaign_status !== "active" ||
+    invite.campaign_mode !== "multiplayer"
+  ) {
+    throw createStatusError(404, "That invite was not found.");
+  }
+
+  if (invite.expires_at && new Date(invite.expires_at) <= new Date()) {
+    throw createStatusError(410, "That invite has expired.");
+  }
+
+  if (invite.max_uses !== null && invite.use_count >= invite.max_uses) {
+    throw createStatusError(409, "That invite has already been used.");
+  }
+
+  if (invite.campaign_has_begun) {
+    throw createStatusError(409, "That adventure has already begun.");
+  }
+
+  const activePlayers = Number(invite.active_players);
+
+  if (activePlayers >= maxPlayers) {
+    throw createStatusError(409, "That game is already full.");
+  }
+}
+
+async function findLobbyInviteForToken(
+  db: Queryable,
+  token: string,
+  lockCampaign = false
+) {
+  const normalizedToken = normalizeInviteToken(token);
+
+  if (!normalizedToken) {
+    throw createStatusError(404, "That invite was not found.");
+  }
+
+  const result = await db.query<CampaignInvitePreviewRow>(
+    `
+      select
+        campaign_invites.*,
+        campaigns.title as campaign_title,
+        campaigns.status as campaign_status,
+        campaigns.mode as campaign_mode,
+        campaigns.has_begun as campaign_has_begun,
+        0 as active_players
+      from campaign_invites
+      join campaigns on campaigns.id = campaign_invites.campaign_id
+      where campaign_invites.token_hash = $1
+        and campaign_invites.enabled = true
+      limit 1
+      ${lockCampaign ? "for update of campaigns, campaign_invites" : ""}
+    `,
+    [hashInviteToken(normalizedToken)]
+  );
+  const invite = result.rows[0];
+
+  if (!invite) {
+    throw createStatusError(404, "That invite was not found.");
+  }
+
+  assertInviteCanJoin(invite);
+
+  const activePlayers = await db.query<{ active_players: string | number }>(
+    `
+      select count(*) as active_players
+      from players
+      where campaign_id = $1 and status = 'active'
+    `,
+    [invite.campaign_id]
+  );
+
+  invite.active_players = activePlayers.rows[0]?.active_players ?? 0;
+  assertInviteCanJoin(invite);
+
+  return invite;
+}
+
+export async function previewLobbyInvite(db: Queryable, token: string) {
+  const invite = await findLobbyInviteForToken(db, token);
+  const activePlayers = Number(invite.active_players);
+
+  return {
+    campaignTitle: invite.campaign_title,
+    availableSlots: Math.max(0, maxPlayers - activePlayers),
+    expiresAt: invite.expires_at ? toIso(invite.expires_at) : null
+  };
+}
+
+export async function joinCampaignByInvite(
+  db: pg.Pool,
+  input: {
+    token: string;
+    clientId: string;
+    username: string;
+    characterName: string;
+    characterSheet: string;
+    mechanicsSeed?: MechanicsSeed | undefined;
+    userId: string;
+  }
+): Promise<CampaignSummary> {
+  const clientId = input.clientId.trim();
+  const username = input.username.trim();
+  const characterName = input.characterName.trim();
+  const characterSheet = input.characterSheet.trim();
+
+  if (!clientId || !username || !characterName || !characterSheet) {
+    throw createStatusError(400, "Complete your player profile before joining.");
+  }
+
+  const { campaign, player } = await withTransaction(db, async (client) => {
+    const invite = await findLobbyInviteForToken(client, input.token, true);
+    const campaignResult = await client.query<CampaignRow>(
+      `
+        select *
+        from campaigns
+        where id = $1 and status = 'active' and mode = 'multiplayer'
+        limit 1
+      `,
+      [invite.campaign_id]
+    );
+    const campaignRow = requireRow(
+      campaignResult.rows[0],
+      "Campaign not found."
+    );
+
+    const existingForUser = await client.query<PlayerRow>(
+      `
+        select *
+        from players
+        where campaign_id = $1 and user_id = $2
+        order by
+          (status = 'active') desc,
+          created_at asc
+        limit 1
+      `,
+      [campaignRow.id, input.userId]
+    );
+    const userPlayer = existingForUser.rows[0];
+
+    if (userPlayer?.status === "kicked") {
+      throw createStatusError(403, "You cannot join this game.");
+    }
+
+    const existingForClient = await client.query<PlayerRow>(
+      `
+        select *
+        from players
+        where campaign_id = $1 and client_id = $2
+        limit 1
+      `,
+      [campaignRow.id, clientId]
+    );
+    const clientPlayer = existingForClient.rows[0];
+
+    if (clientPlayer?.status === "kicked") {
+      throw createStatusError(403, "You cannot join this game from this device.");
+    }
+
+    if (
+      clientPlayer &&
+      clientPlayer.user_id &&
+      clientPlayer.user_id !== input.userId
+    ) {
+      throw createStatusError(
+        409,
+        "This browser is already joined to that game."
+      );
+    }
+
+    const slotResult = await client.query<{ slot: number }>(
+      `
+        select slot
+        from players
+        where campaign_id = $1 and status <> 'kicked' and slot is not null
+        order by slot asc
+      `,
+      [campaignRow.id]
+    );
+    const usedSlots = new Set(slotResult.rows.map((row) => row.slot));
+    const existingSlot = userPlayer?.slot ?? clientPlayer?.slot ?? undefined;
+    const firstOpenSlot = Array.from({ length: maxPlayers }, (_, slot) =>
+      slot
+    ).find((slot) => !usedSlots.has(slot));
+    const slot = existingSlot ?? firstOpenSlot;
+
+    if (slot === undefined) {
+      throw createStatusError(409, "That game is already full.");
+    }
+
+    if (userPlayer?.status === "active") {
+      await client.query(
+        `
+          update players
+          set client_id = $2,
+              username = $3,
+              character_name = $4,
+              character_sheet = $5,
+              slot = $6,
+              last_seen_at = now()
+          where id = $1
+        `,
+        [userPlayer.id, clientId, username, characterName, characterSheet, slot]
+      );
+      await addOrReplacePlayerMechanicsActor(client, {
+        campaign: campaignRow,
+        playerId: userPlayer.id,
+        characterName,
+        characterSheet,
+        seed: input.mechanicsSeed
+      });
+      await logCampaignEvent(
+        client,
+        campaignRow.id,
+        "player_profile_updated_by_invite",
+        {
+          inviteId: invite.id,
+          clientId,
+          username,
+          characterName,
+          slot
+        }
+      );
+
+      return { campaign: campaignRow, player: userPlayer };
+    }
+
+    const insertedPlayer = await client.query<PlayerRow>(
+      `
+        insert into players (
+          campaign_id,
+          client_id,
+          user_id,
+          username,
+          character_name,
+          character_sheet,
+          slot,
+          status,
+          last_seen_at
+        )
+        values ($1, $2, $3, $4, $5, $6, $7, 'active', now())
+        on conflict (campaign_id, client_id) do update
+        set user_id = excluded.user_id,
+            username = excluded.username,
+            character_name = excluded.character_name,
+            character_sheet = excluded.character_sheet,
+            slot = excluded.slot,
+            status = 'active',
+            kicked_at = null,
+            last_seen_at = now()
+        returning *
+      `,
+      [
+        campaignRow.id,
+        clientId,
+        input.userId,
+        username,
+        characterName,
+        characterSheet,
+        slot
+      ]
+    );
+    const joinedPlayer = requireRow(
+      insertedPlayer.rows[0],
+      "Failed to join campaign."
+    );
+
+    await addOrReplacePlayerMechanicsActor(client, {
+      campaign: campaignRow,
+      playerId: joinedPlayer.id,
+      characterName,
+      characterSheet,
+      seed: input.mechanicsSeed
+    });
+    await client.query(
+      `
+        update campaign_invites
+        set use_count = use_count + 1
+        where id = $1
+      `,
+      [invite.id]
+    );
+    await client.query(
+      `
+        insert into campaign_invite_uses (
+          invite_id,
+          campaign_id,
+          joined_user_id,
+          player_id
+        )
+        values ($1, $2, $3, $4)
+      `,
+      [invite.id, campaignRow.id, input.userId, joinedPlayer.id]
+    );
+    await logCampaignEvent(client, campaignRow.id, "player_joined_by_invite", {
+      inviteId: invite.id,
+      clientId,
+      username,
+      characterName,
+      slot
+    });
+
+    return { campaign: campaignRow, player: joinedPlayer };
+  });
+
+  return mapCampaignSummaryRow({
+    ...campaign,
+    display_character_name: player.character_name,
+    display_username: player.username,
     join_code: null
   });
 }
