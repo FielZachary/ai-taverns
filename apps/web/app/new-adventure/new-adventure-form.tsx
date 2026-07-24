@@ -3527,31 +3527,35 @@ export function NewAdventureForm() {
         <div className={`new-adventure-flow new-adventure-flow-${flowTransition}`}>
           {stepIndex === 0 ? (
             <>
-              <div className="mode-picker" role="radiogroup" aria-label="Campaign mode">
-                <button
-                  type="button"
-                  className={mode === "single_player" ? "selected" : ""}
-                  aria-pressed={mode === "single_player"}
-                  onClick={() => setMode("single_player")}
-                >
-                  <span className="mode-banner-frame" aria-hidden="true" />
-                  <span>
-                    <strong>Singleplayer</strong>
-                    <small>Private play with AI Taverns as your DM.</small>
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  className={mode === "multiplayer" ? "selected" : ""}
-                  aria-pressed={mode === "multiplayer"}
-                  onClick={() => setMode("multiplayer")}
-                >
-                  <span className="mode-banner-frame" aria-hidden="true" />
-                  <span>
-                    <strong>Multiplayer</strong>
-                    <small>Invite players and resolve party turns together.</small>
-                  </span>
-                </button>
+              <div className="mode-choice-panel">
+                <span className="mode-choice-line mode-choice-line-top" aria-hidden="true" />
+                <div className="mode-picker" role="radiogroup" aria-label="Campaign mode">
+                  <button
+                    type="button"
+                    className={mode === "single_player" ? "selected" : ""}
+                    aria-pressed={mode === "single_player"}
+                    onClick={() => setMode("single_player")}
+                  >
+                    <span className="mode-banner-frame" aria-hidden="true" />
+                    <span>
+                      <strong>Singleplayer</strong>
+                      <small>Private play with AI Taverns as your DM.</small>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className={mode === "multiplayer" ? "selected" : ""}
+                    aria-pressed={mode === "multiplayer"}
+                    onClick={() => setMode("multiplayer")}
+                  >
+                    <span className="mode-banner-frame" aria-hidden="true" />
+                    <span>
+                      <strong>Multiplayer</strong>
+                      <small>Invite players and resolve party turns together.</small>
+                    </span>
+                  </button>
+                </div>
+                <span className="mode-choice-line mode-choice-line-bottom" aria-hidden="true" />
               </div>
             </>
           ) : null}

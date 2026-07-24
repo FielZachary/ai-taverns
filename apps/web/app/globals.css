@@ -671,6 +671,26 @@ h1 {
   transform: translateY(0);
 }
 
+.mode-choice-panel {
+  display: grid;
+  justify-items: center;
+  gap: 18px;
+}
+
+.mode-choice-line {
+  display: block;
+  width: min(100%, 680px);
+  height: clamp(20px, 4vw, 32px);
+  background: var(--gold-bright);
+  opacity: 0.42;
+  -webkit-mask: url("/new-adventure/line-7.svg") center / contain no-repeat;
+  mask: url("/new-adventure/line-7.svg") center / contain no-repeat;
+}
+
+.mode-choice-line-top {
+  transform: scaleX(-1);
+}
+
 .mode-picker {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
