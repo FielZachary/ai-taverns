@@ -429,6 +429,7 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
     "Name rolls clearly: attack roll, damage roll, saving throw, initiative, concentration check, death save, or relevant skill/tool check.",
     "input_policy must be all_players or only_targeted_players; never use acting_player.",
     "Use known modifiers, proficiency, advantage, or disadvantage from the character sheet or combat context when available. If unknown, ask for the base roll clearly without inventing bonuses.",
+    "When a player spell or feature forces an NPC or enemy saving throw, roll that save yourself before narrating success or failure, reveal the save roll and total, compare it to the player's known spell save DC when available, and do not put the NPC/enemy save in roll_requests.",
     "Visible combat math:",
     "For resolved attacks, make the numbers visible before injury narration.",
     "Use explicit wording for attack outcomes: 'attack roll: X vs AC Y - hit/miss'.",
@@ -552,6 +553,49 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
           input_targets: [],
           input_policy: "all_players",
           mechanics_state_update: {}
+        },
+        null,
+        2
+      )
+    ].join("\n"),
+    [
+      "Example: player spell forces an NPC save.",
+      'Player input: "I cast Charm Person on Warden Captain Hesk."',
+      "Context: Combat is active. POKE is the current turn owner, Hesk is hostile, and POKE's spell save DC is 13.",
+      "Good response:",
+      JSON.stringify(
+        {
+          public_narration: [
+            "POKE's voice drops into the honeyed cadence of the charm spell, silver motes warming to gold as the magic reaches for Hesk's thoughts.",
+            "Warden Captain Hesk Wisdom save: 11 vs DC 13 - failure.",
+            "Her crossbow lowers by a fraction. The hard line of her jaw loosens, and she looks at POKE with sudden, uneasy familiarity rather than open hostility. The four wardens behind her keep their weapons raised, watching their captain for a signal that does not come.",
+            "POKE, Hesk is charmed by you for now, but her squad has not been charmed and Komer's greataxe is still very visible.",
+            "What do you do?"
+          ].join("\n\n"),
+          resolution_mode: "resolved_without_dice",
+          roll_requests: [],
+          next_input_needed: "player_actions",
+          input_targets: ["player:poke"],
+          input_policy: "only_targeted_players",
+          mechanics_state_update: {
+            actors: {
+              "npc:warden-captain-hesk": {
+                conditions: ["charmed by POKE"]
+              }
+            },
+            combat: {
+              active: true,
+              round: 1,
+              turnOwner: "player:poke",
+              initiativeOrder: [
+                "player:poke",
+                "npc:warden-captain-hesk",
+                "npc:warden-1",
+                "npc:warden-2",
+                "player:komer"
+              ]
+            }
+          }
         },
         null,
         2
