@@ -6,7 +6,7 @@ import {
   useRef,
   useState
 } from "react";
-import { Dice5, MessageCircleQuestion, Send, SkipForward, Swords } from "lucide-react";
+import { Settings } from "lucide-react";
 import type { AiModelId, DiceRollRequest } from "@/lib/game-types";
 
 export type DiceFace = "d4" | "d6" | "d8" | "d10" | "d12" | "d20";
@@ -69,6 +69,7 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
   ) {
     const [isCallingAttention, setIsCallingAttention] = useState(false);
     const [isDicePickerOpen, setIsDicePickerOpen] = useState(false);
+    const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
     const [selectedAiModel, setSelectedAiModel] =
       useState<AiModelId>("deepseek-v4-flash");
     const [queuedDice, setQueuedDice] = useState<QueuedDice>({});
@@ -163,7 +164,12 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
     function chooseAiModel(modelId: AiModelId) {
       setSelectedAiModel(modelId);
       window.localStorage.setItem(aiModelStorageKey, modelId);
+      setIsModelPickerOpen(false);
     }
+
+    const selectedAiModelLabel =
+      aiModelOptions.find((option) => option.id === selectedAiModel)?.label ??
+      aiModelOptions[0].label;
 
     return (
       <form
@@ -180,99 +186,103 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
             {validationMessage}
           </p>
         ) : null}
-        <div className="input-mode-toggle" role="group" aria-label="Input mode">
-          <button
-            className={mode === "turn" ? "input-mode-button active" : "input-mode-button"}
-            type="button"
-            aria-pressed={mode === "turn"}
-            disabled={isSending}
-            onClick={() => onModeChange("turn")}
-          >
-            <Swords size={17} />
-            Turn
-          </button>
-          <button
-            className={
-              mode === "ask_dm" ? "input-mode-button active" : "input-mode-button"
-            }
-            type="button"
-            aria-pressed={mode === "ask_dm"}
-            disabled={isSending}
-            onClick={() => onModeChange("ask_dm")}
-          >
-            <MessageCircleQuestion size={17} />
-            Ask DM
-          </button>
-          <label className="ai-model-menu">
-            <span>Model</span>
-            <select
-              aria-label="AI model"
+        <div className="turn-action-bar">
+          <div className="input-mode-toggle" role="group" aria-label="Input mode">
+            <button
+              className={mode === "turn" ? "input-mode-button active" : "input-mode-button"}
+              type="button"
+              aria-pressed={mode === "turn"}
               disabled={isSending}
-              value={selectedAiModel}
-              onChange={(event) => chooseAiModel(event.target.value as AiModelId)}
+              onClick={() => onModeChange("turn")}
             >
-              {aiModelOptions.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <div className="dice-roll-control" ref={diceRollControlRef}>
-          <button
-            className="dice-roll-button"
-            type="button"
-            aria-label={
-              requiredRoll
-                ? `Roll ${requiredRollExpression ?? requiredRoll.dice}`
-                : "Open dice roller"
-            }
-            aria-expanded={isDicePickerOpen}
-            disabled={isAskMode || (isLocked && !isRollRequired) || isSending}
-            onClick={() => setIsDicePickerOpen((isOpen) => !isOpen)}
-          >
-            <Dice5 size={22} />
-            <span>
-              {queuedCount > 0
-                ? `${queuedCount} dice`
-                : requiredRollExpression ?? requiredRoll?.dice ?? "dice"}
-            </span>
-          </button>
-          {isDicePickerOpen ? (
-            <div className="dice-picker-popover" role="dialog" aria-label="Dice roller">
-              <div className="dice-picker-options">
-                {diceFaces.map((face) => (
+              Turn
+            </button>
+            <button
+              className={
+                mode === "ask_dm" ? "input-mode-button active" : "input-mode-button"
+              }
+              type="button"
+              aria-pressed={mode === "ask_dm"}
+              disabled={isSending}
+              onClick={() => onModeChange("ask_dm")}
+            >
+              Ask DM
+            </button>
+            <button
+              className={`model-settings-button ${
+                isModelPickerOpen ? "active" : ""
+              }`}
+              type="button"
+              aria-label={`AI model: ${selectedAiModelLabel}`}
+              aria-expanded={isModelPickerOpen}
+              disabled={isSending}
+              onClick={() => setIsModelPickerOpen(true)}
+            >
+              <Settings size={17} />
+            </button>
+          </div>
+          <div className="dice-roll-control" ref={diceRollControlRef}>
+            <button
+              className="dice-roll-button"
+              type="button"
+              aria-label={
+                requiredRoll
+                  ? `Roll ${requiredRollExpression ?? requiredRoll.dice}`
+                  : "Open dice roller"
+              }
+              aria-expanded={isDicePickerOpen}
+              disabled={isAskMode || (isLocked && !isRollRequired) || isSending}
+              onClick={() => setIsDicePickerOpen((isOpen) => !isOpen)}
+            >
+              Dice
+            </button>
+            {isDicePickerOpen ? (
+              <div className="dice-picker-popover" role="dialog" aria-label="Dice roller">
+                <div className="dice-picker-options">
+                  {diceFaces.map((face) => (
+                    <button
+                      key={face}
+                      className="dice-picker-option"
+                      type="button"
+                      disabled={isSending}
+                      onClick={() => incrementDie(face)}
+                    >
+                      <span>{face}</span>
+                      {queuedDice[face] ? <strong>{queuedDice[face]}</strong> : null}
+                    </button>
+                  ))}
+                </div>
+                <div className="dice-picker-actions">
                   <button
-                    key={face}
-                    className="dice-picker-option"
+                    className="dice-picker-clear"
                     type="button"
-                    disabled={isSending}
-                    onClick={() => incrementDie(face)}
+                    disabled={queuedCount === 0 || isSending}
+                    onClick={clearQueuedDice}
                   >
-                    <span>{face}</span>
-                    {queuedDice[face] ? <strong>{queuedDice[face]}</strong> : null}
+                    Clear
                   </button>
-                ))}
+                  <button
+                    className="dice-picker-roll"
+                    type="button"
+                    disabled={queuedCount === 0 || isSending}
+                    onClick={rollQueuedDice}
+                  >
+                    Roll
+                  </button>
+                </div>
               </div>
-              <div className="dice-picker-actions">
-                <button
-                  className="dice-picker-clear"
-                  type="button"
-                  disabled={queuedCount === 0 || isSending}
-                  onClick={clearQueuedDice}
-                >
-                  Clear
-                </button>
-                <button
-                  className="dice-picker-roll"
-                  type="button"
-                  disabled={queuedCount === 0 || isSending}
-                  onClick={rollQueuedDice}
-                >
-                  Roll
-                </button>
-              </div>
+            ) : null}
+          </div>
+          {onSkipTurn ? (
+            <div className="turn-form-actions">
+              <button
+                className="turn-form-skip"
+                type="button"
+                disabled={!canSkipTurn}
+                onClick={onSkipTurn}
+              >
+                Skip
+              </button>
             </div>
           ) : null}
         </div>
@@ -294,27 +304,49 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
               {overlayMessage}
             </div>
           ) : null}
-        </div>
-        <div className="turn-form-actions">
-          {onSkipTurn ? (
-            <button
-              className="turn-form-skip"
-              type="button"
-              disabled={!canSkipTurn}
-              onClick={onSkipTurn}
-            >
-              <SkipForward size={18} />
-              Skip
-            </button>
-          ) : null}
           <button
+            className="turn-submit-arrow"
             type="submit"
+            aria-label={isAskMode ? "Ask" : "Send"}
             disabled={isRollRequired || isLocked || isSending || !draft.trim()}
-          >
-            {isAskMode ? <MessageCircleQuestion size={18} /> : <Send size={18} />}
-            {isAskMode ? "Ask" : "Send"}
-          </button>
+          />
         </div>
+        {isModelPickerOpen ? (
+          <div className="model-settings-backdrop" role="presentation">
+            <section
+              className="model-settings-modal"
+              aria-label="AI model"
+              role="dialog"
+            >
+              <header className="model-settings-header">
+                <h2>AI Model</h2>
+                <button
+                  type="button"
+                  onClick={() => setIsModelPickerOpen(false)}
+                >
+                  Close
+                </button>
+              </header>
+              <div className="model-settings-options">
+                {aiModelOptions.map((option) => (
+                  <button
+                    className={
+                      option.id === selectedAiModel
+                        ? "model-settings-option active"
+                        : "model-settings-option"
+                    }
+                    key={option.id}
+                    type="button"
+                    aria-pressed={option.id === selectedAiModel}
+                    onClick={() => chooseAiModel(option.id)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </section>
+          </div>
+        ) : null}
       </form>
     );
   }
