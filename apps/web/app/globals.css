@@ -890,6 +890,65 @@ h1 {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.class-picker button {
+  position: relative;
+  align-content: end;
+  min-height: 188px;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(8, 6, 4, 0.12), rgba(8, 6, 4, 0.82)),
+    linear-gradient(90deg, rgba(8, 6, 4, 0.74), rgba(8, 6, 4, 0.18)),
+    var(--class-art-url),
+    rgba(17, 13, 10, 0.48);
+  background-position: center;
+  background-size: cover;
+  isolation: isolate;
+}
+
+.class-picker button::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(circle at 50% 16%, rgba(244, 207, 122, 0.18), transparent 36%),
+    linear-gradient(180deg, transparent 34%, rgba(0, 0, 0, 0.46));
+  content: "";
+  opacity: 0.86;
+  transition: opacity 160ms ease;
+}
+
+.class-picker button.selected,
+.class-picker button:hover,
+.class-picker button:focus-visible {
+  background:
+    linear-gradient(180deg, rgba(8, 6, 4, 0.04), rgba(8, 6, 4, 0.76)),
+    linear-gradient(90deg, rgba(173, 71, 43, 0.32), rgba(8, 6, 4, 0.1)),
+    var(--class-art-url),
+    rgba(17, 13, 10, 0.48);
+  background-position: center;
+  background-size: cover;
+}
+
+.class-picker button.selected::before,
+.class-picker button:hover::before,
+.class-picker button:focus-visible::before {
+  opacity: 0.68;
+}
+
+.class-picker strong,
+.class-picker small {
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.92);
+}
+
+.class-picker strong {
+  color: #fff7df;
+  font-size: 1.05rem;
+}
+
+.class-picker small {
+  color: rgba(255, 239, 202, 0.84);
+}
+
 .compact-option-picker > div {
   grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
 }

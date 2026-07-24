@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { CSSProperties, FormEvent, useEffect, useMemo, useState } from "react";
 import {
   Check,
   Dice5,
@@ -24,6 +24,21 @@ import {
 import { defaultCharacterSheet } from "@/components/playing/PlayerPanel";
 import { DiceRollReveal3D } from "@/components/playing/DiceRollReveal3D";
 import type { MechanicsSeed, SpellSlotState } from "@ai-dnd/contracts";
+import artificerClassArt from "../../../../assets/classes art/artificer.png";
+import barbarianClassArt from "../../../../assets/classes art/barbarian.png";
+import bardClassArt from "../../../../assets/classes art/bard.png";
+import bloodHunterClassArt from "../../../../assets/classes art/blood-hunter.png";
+import clericClassArt from "../../../../assets/classes art/cleric.png";
+import druidClassArt from "../../../../assets/classes art/druid.png";
+import fighterClassArt from "../../../../assets/classes art/fighter.png";
+import monkClassArt from "../../../../assets/classes art/monk.png";
+import paladinClassArt from "../../../../assets/classes art/paladin.png";
+import psionClassArt from "../../../../assets/classes art/psion.png";
+import rangerClassArt from "../../../../assets/classes art/ranger.png";
+import rogueClassArt from "../../../../assets/classes art/rogue.png";
+import sorcererClassArt from "../../../../assets/classes art/sorcerer.png";
+import warlockClassArt from "../../../../assets/classes art/warlock.png";
+import wizardClassArt from "../../../../assets/classes art/wizard.png";
 
 type CampaignMode = "single_player" | "multiplayer";
 type MultiplayerIntent = "create" | "join";
@@ -1134,6 +1149,24 @@ type CharacterSpecies = (typeof speciesOptions)[number];
 type CharacterBackground = (typeof backgroundOptions)[number];
 type Alignment = (typeof alignmentOptions)[number];
 type Gender = (typeof genderOptions)[number];
+
+const classArtByClass: Record<CharacterClass, string> = {
+  Artificer: artificerClassArt.src,
+  Barbarian: barbarianClassArt.src,
+  Bard: bardClassArt.src,
+  "Blood Hunter": bloodHunterClassArt.src,
+  Cleric: clericClassArt.src,
+  Druid: druidClassArt.src,
+  Fighter: fighterClassArt.src,
+  Monk: monkClassArt.src,
+  Paladin: paladinClassArt.src,
+  Psion: psionClassArt.src,
+  Ranger: rangerClassArt.src,
+  Rogue: rogueClassArt.src,
+  Sorcerer: sorcererClassArt.src,
+  Warlock: warlockClassArt.src,
+  Wizard: wizardClassArt.src
+};
 
 const equipmentCategoryOptions: Record<EquipmentCategory, string[]> = {
   simpleWeapon: [
@@ -3789,6 +3822,11 @@ export function NewAdventureForm({
                           aria-pressed={characterClass === option.id}
                           key={option.id}
                           onClick={() => handleClassChange(option.id)}
+                          style={
+                            {
+                              "--class-art-url": `url(${classArtByClass[option.id]})`
+                            } as CSSProperties
+                          }
                         >
                           <strong>{option.id}</strong>
                           <small>{option.summary}</small>

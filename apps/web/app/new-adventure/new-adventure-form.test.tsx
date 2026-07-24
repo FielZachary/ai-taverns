@@ -246,6 +246,22 @@ describe("NewAdventureForm", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders class cards with class artwork backgrounds", async () => {
+    render(<NewAdventureForm />);
+
+    await continueFlow();
+    await continueFlow();
+    await nextCharacterStep();
+
+    const fighterButton = screen.getByRole("button", {
+      name: /fighter/i
+    });
+
+    expect(fighterButton.style.getPropertyValue("--class-art-url")).toContain(
+      "url("
+    );
+  });
+
   it("shows species stat bonuses as muted subtitles", async () => {
     render(<NewAdventureForm />);
 
