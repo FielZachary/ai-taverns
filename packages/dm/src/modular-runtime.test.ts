@@ -283,6 +283,10 @@ describe("modular AI DM runtime contracts", () => {
       /Roll Fireball damage:[^"]*\\n\\nWhat do you do\?/
     );
     assert.match(jobPrompt("clarification"), /Ask one concise/);
+    assert.match(jobPrompt("clarification"), /table-facing guidance rather than in-world NPC dialogue/i);
+    assert.match(jobPrompt("clarification"), /Do not advance fictional time/i);
+    assert.match(jobPrompt("clarification"), /have NPCs speak or react/i);
+    assert.match(jobPrompt("clarification"), /Do not reframe or soften the player's declared intent/i);
     assert.match(buildMemoryUpdaterPrompt(), /Allowed operations/);
   });
 

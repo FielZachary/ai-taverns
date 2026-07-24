@@ -867,7 +867,9 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
     ],
     clarification: [
       "Ask one concise clarifying question.",
-      "Do not advance the scene, resolve the action, invent consequences, or change game state."
+      "Briefly explain why the clarification is needed, using table-facing guidance rather than in-world NPC dialogue.",
+      "Do not advance fictional time, move characters, have NPCs speak or react, resolve any part of the action, invent consequences, or change game state.",
+      "Do not reframe or soften the player's declared intent; preserve the pending action exactly and ask only for the missing detail needed to adjudicate it."
     ]
   };
 
