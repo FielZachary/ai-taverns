@@ -1,6 +1,4 @@
 :root {
-  --heading-font: var(--font-heading), "Cinzel", Georgia, serif;
-  --body-font: var(--font-body), "Cormorant Garamond", Georgia, serif;
   --bg: #120f0d;
   --panel: rgba(38, 29, 23, 0.86);
   --panel-strong: rgba(56, 40, 31, 0.96);
@@ -26,6 +24,8 @@ body {
 }
 
 body {
+  --heading-font: var(--font-heading), "Cinzel", Georgia, serif;
+  --body-font: var(--font-body), "Cormorant Garamond", Georgia, serif;
   color: var(--ink);
   background:
     radial-gradient(circle at 18% 12%, rgba(173, 71, 43, 0.26), transparent 28rem),
