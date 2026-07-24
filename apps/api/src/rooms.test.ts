@@ -736,6 +736,21 @@ test("active combat targets only the next player turn owner after DM resolution"
     assert.deepEqual(resolved.inputTargets, [joinerActorKey]);
     assert.equal(resolved.inputPolicy, "only_targeted_players");
     assert.equal(resolved.combat.turnOwner, joinerActorKey);
+    const latestDmDebug = resolved.messages.at(-1)?.debug as
+      | {
+          router?: {
+            requestMessages?: { role?: string; content?: string }[];
+            rawResponse?: string;
+            parsedOutput?: { jobNeeded?: string };
+          };
+        }
+      | undefined;
+    assert.match(
+      latestDmDebug?.router?.requestMessages?.at(-1)?.content ?? "",
+      /Routing state JSON:/
+    );
+    assert.match(latestDmDebug?.router?.rawResponse ?? "", /job_needed/);
+    assert.equal(typeof latestDmDebug?.router?.parsedOutput?.jobNeeded, "string");
 
     const updatedCampaign = database.campaigns.find(
       (candidate) => candidate.id === campaignId
