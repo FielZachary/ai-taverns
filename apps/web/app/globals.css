@@ -3181,6 +3181,21 @@ h1 {
   font-size: 0.72rem;
 }
 
+.turn-form .model-settings-button {
+  --toolbar-button-image: url("/fantasygothicui/square9.png");
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
+  min-height: 38px;
+  padding: 0;
+}
+
+.turn-form .model-settings-button svg {
+  width: 17px;
+  height: 17px;
+  color: currentColor;
+}
+
 .dice-roll-control {
   position: relative;
   flex: 0 0 auto;
@@ -3332,6 +3347,7 @@ h1 {
 .turn-action-bar button:hover,
 .turn-action-bar button:focus-visible,
 .turn-action-bar .input-mode-button.active,
+.turn-action-bar .model-settings-button.active,
 .turn-action-bar .dice-roll-button:not(:disabled),
 .turn-form-actions button:not(:disabled) {
   opacity: 1;
@@ -3361,6 +3377,71 @@ h1 {
 .turn-form .dice-picker-clear {
   color: var(--gold-bright);
   background: rgba(217, 169, 74, 0.08);
+}
+
+.model-settings-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: rgba(3, 2, 2, 0.72);
+}
+
+.model-settings-modal {
+  display: grid;
+  gap: 16px;
+  width: min(420px, 100%);
+  border: 1px solid var(--line);
+  padding: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 248, 220, 0.045), transparent 28%),
+    rgba(26, 19, 15, 0.98);
+  box-shadow: 0 26px 90px rgba(0, 0, 0, 0.58);
+}
+
+.model-settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.model-settings-header h2 {
+  margin: 0;
+  color: var(--gold-bright);
+  font-size: 1.2rem;
+}
+
+.turn-form .model-settings-header button {
+  min-height: 34px;
+  border: 1px solid rgba(244, 207, 122, 0.24);
+  padding: 0 12px;
+  color: var(--gold-bright);
+  background: rgba(17, 13, 10, 0.48);
+}
+
+.model-settings-options {
+  display: grid;
+  gap: 10px;
+}
+
+.turn-form .model-settings-option {
+  justify-content: center;
+  min-height: 44px;
+  border: 1px solid rgba(244, 207, 122, 0.24);
+  color: var(--gold-bright);
+  background: rgba(17, 13, 10, 0.48);
+  opacity: 0.52;
+}
+
+.turn-form .model-settings-option.active,
+.turn-form .model-settings-option:hover,
+.turn-form .model-settings-option:focus-visible {
+  opacity: 1;
+  border-color: rgba(244, 207, 122, 0.58);
+  background: rgba(217, 169, 74, 0.12);
 }
 
 @keyframes dice-picker-appear {

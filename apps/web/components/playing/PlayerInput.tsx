@@ -6,6 +6,7 @@ import {
   useRef,
   useState
 } from "react";
+import { Settings } from "lucide-react";
 import type { DiceRollRequest } from "@/lib/game-types";
 
 export type DiceFace = "d4" | "d6" | "d8" | "d10" | "d12" | "d20";
@@ -31,9 +32,21 @@ type PlayerInputProps = {
 };
 
 const diceFaces: DiceFace[] = ["d4", "d6", "d8", "d10", "d12", "d20"];
+const aiModelStorageKey = "ai-dnd.aiModel";
+const aiModelOptions = [
+  { id: "server-default", label: "Default" },
+  { id: "deepseek-chat", label: "DeepSeek Chat" },
+  { id: "deepseek-reasoner", label: "DeepSeek Reasoner" }
+] as const;
+
+type AiModelId = (typeof aiModelOptions)[number]["id"];
 
 function queuedDiceTotal(queuedDice: QueuedDice) {
   return Object.values(queuedDice).reduce((sum, count) => sum + (count ?? 0), 0);
+}
+
+function isAiModelId(value: string): value is AiModelId {
+  return aiModelOptions.some((option) => option.id === value);
 }
 
 export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
@@ -59,8 +72,19 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
   ) {
     const [isCallingAttention, setIsCallingAttention] = useState(false);
     const [isDicePickerOpen, setIsDicePickerOpen] = useState(false);
+    const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
+    const [selectedAiModel, setSelectedAiModel] =
+      useState<AiModelId>("server-default");
     const [queuedDice, setQueuedDice] = useState<QueuedDice>({});
     const diceRollControlRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+      const savedAiModel = window.localStorage.getItem(aiModelStorageKey);
+
+      if (savedAiModel && isAiModelId(savedAiModel)) {
+        setSelectedAiModel(savedAiModel);
+      }
+    }, []);
 
     useEffect(() => {
       if (!validationMessage) {
@@ -140,6 +164,16 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
       setIsDicePickerOpen(false);
     }
 
+    function chooseAiModel(modelId: AiModelId) {
+      setSelectedAiModel(modelId);
+      window.localStorage.setItem(aiModelStorageKey, modelId);
+      setIsModelPickerOpen(false);
+    }
+
+    const selectedAiModelLabel =
+      aiModelOptions.find((option) => option.id === selectedAiModel)?.label ??
+      aiModelOptions[0].label;
+
     return (
       <form
         className={`turn-form ${
@@ -175,6 +209,17 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
               onClick={() => onModeChange("ask_dm")}
             >
               Ask DM
+            </button>
+            <button
+              className={`model-settings-button ${
+                isModelPickerOpen ? "active" : ""
+              }`}
+              type="button"
+              aria-label={`AI model: ${selectedAiModelLabel}`}
+              aria-expanded={isModelPickerOpen}
+              onClick={() => setIsModelPickerOpen(true)}
+            >
+              <Settings size={17} />
             </button>
           </div>
           <div className="dice-roll-control" ref={diceRollControlRef}>
@@ -267,6 +312,42 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
             disabled={isRollRequired || isLocked || isSending || !draft.trim()}
           />
         </div>
+        {isModelPickerOpen ? (
+          <div className="model-settings-backdrop" role="presentation">
+            <section
+              className="model-settings-modal"
+              aria-label="AI model"
+              role="dialog"
+            >
+              <header className="model-settings-header">
+                <h2>AI Model</h2>
+                <button
+                  type="button"
+                  onClick={() => setIsModelPickerOpen(false)}
+                >
+                  Close
+                </button>
+              </header>
+              <div className="model-settings-options">
+                {aiModelOptions.map((option) => (
+                  <button
+                    className={
+                      option.id === selectedAiModel
+                        ? "model-settings-option active"
+                        : "model-settings-option"
+                    }
+                    key={option.id}
+                    type="button"
+                    aria-pressed={option.id === selectedAiModel}
+                    onClick={() => chooseAiModel(option.id)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </section>
+          </div>
+        ) : null}
       </form>
     );
   }

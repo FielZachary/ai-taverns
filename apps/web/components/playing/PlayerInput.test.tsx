@@ -4,6 +4,7 @@ import type {
   FormEvent
 } from "react";
 import {
+  beforeEach,
   describe,
   expect,
   it,
@@ -50,6 +51,23 @@ function renderPlayerInput(
 }
 
 describe("PlayerInput", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("opens model settings and persists the selected model", () => {
+    renderPlayerInput();
+
+    fireEvent.click(screen.getByRole("button", { name: /ai model: default/i }));
+
+    expect(screen.getByRole("dialog", { name: /ai model/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "DeepSeek Reasoner" }));
+
+    expect(localStorage.getItem("ai-dnd.aiModel")).toBe("deepseek-reasoner");
+    expect(screen.queryByRole("dialog", { name: /ai model/i })).not.toBeInTheDocument();
+  });
+
   it("shows validation messages and locks submitted turn input", () => {
     const props = renderPlayerInput({
       isSubmitted: true,
