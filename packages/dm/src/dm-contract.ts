@@ -459,6 +459,39 @@ export function normalizeRollRequests(
   return request ? [request] : [];
 }
 
+export type RollRequestDiagnostic = {
+  severity: "error";
+  code: "unsupported_dice_notation";
+  id?: string;
+  label: string;
+  dice: string;
+  message: string;
+};
+
+export function rollRequestDiagnostics(
+  requests: Array<
+    Pick<DiceRollRequest, "dice" | "label"> & { id?: string | undefined }
+  >
+): RollRequestDiagnostic[] {
+  return requests.flatMap((request) => {
+    if (/^\d*d(?:4|6|8|10|12|20)$/i.test(request.dice.trim())) {
+      return [];
+    }
+
+    return [
+      {
+        severity: "error",
+        code: "unsupported_dice_notation",
+        ...(request.id ? { id: request.id } : {}),
+        label: request.label,
+        dice: request.dice,
+        message:
+          "Roll request dice must be bare supported dice notation so the UI can queue it."
+      }
+    ];
+  });
+}
+
 export type DmContractResponse = {
   publicNarration: string;
   resolutionMode: "needs_dice" | "resolved_without_dice";

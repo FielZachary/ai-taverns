@@ -8,6 +8,7 @@ import {
   formatEldermereTurnPromptContext,
   openingSceneRequest,
   parseDmContract,
+  rollRequestDiagnostics,
   isEldermerePreset,
   buildMemoryUpdaterPrompt,
   buildRouterPrompt,
@@ -4710,6 +4711,7 @@ async function askDungeonMaster(
     );
 
     const rollRequests = normalizeRollRequests(contract.rollRequests);
+    const rollRequestDiagnosticsReport = rollRequestDiagnostics(rollRequests);
     const reply = contract.publicNarration;
     const combatValidation = outputEnvelope
       ? validateCombatEvents(outputEnvelope.combatEvents, {
@@ -4780,12 +4782,27 @@ async function askDungeonMaster(
           : undefined,
         rollRequestsCount: rollRequests.length,
         rollRequestLabels: rollRequests.map((request) => request.label),
+        rollRequestDiagnostics: rollRequestDiagnosticsReport,
         nextInputNeeded: contract.nextInputNeeded,
         inputPolicy: contract.inputPolicy,
         inputTargets: contract.inputTargets,
         resolutionMode: contract.resolutionMode
       }
     });
+
+    if (rollRequestDiagnosticsReport.length > 0) {
+      await logTurnDebugTrace(db, {
+        campaignId: campaign.id,
+        traceId,
+        phase: "dm_roll_request_diagnostics",
+        turnId,
+        elapsedMs: Date.now() - startedAt,
+        payload: {
+          diagnostics: rollRequestDiagnosticsReport,
+          rollRequests
+        }
+      });
+    }
 
     await logDmOutputReport(db, {
       campaignId: campaign.id,
@@ -4797,6 +4814,7 @@ async function askDungeonMaster(
           ? errorSummary(outputEnvelopeError)
           : undefined,
         rollRequestsCount: rollRequests.length,
+        rollRequestDiagnostics: rollRequestDiagnosticsReport,
         acceptedCombatEventsCount: combatValidation.accepted.length,
         discardedCombatEvents: combatValidation.discarded,
         acceptedImmediateContextUpdatesCount: memoryValidation.accepted.length,

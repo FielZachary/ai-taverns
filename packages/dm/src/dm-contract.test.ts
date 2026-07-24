@@ -10,6 +10,7 @@ import {
   normalizeRollRequest,
   normalizeRollRequests,
   parseDmContract,
+  rollRequestDiagnostics,
   titleFromSessionId
 } from "./dm-contract.js";
 
@@ -515,6 +516,39 @@ describe("DM provider helpers", () => {
     assert.deepEqual(normalizeRollRequest(null), null);
     assert.equal(normalizeRollRequests({ reason: "Stealth" }).length, 1);
     assert.deepEqual(normalizeRollRequests(undefined), []);
+  });
+
+  it("diagnoses unsupported roll request dice without rejecting them", () => {
+    assert.deepEqual(
+      rollRequestDiagnostics([
+        {
+          id: "ok",
+          dice: "3d4",
+          label: "Magic Missile damage"
+        }
+      ]),
+      []
+    );
+    assert.deepEqual(
+      rollRequestDiagnostics([
+        {
+          id: "complex",
+          dice: "2d4+1d6",
+          label: "Complex damage"
+        }
+      ]),
+      [
+        {
+          severity: "error",
+          code: "unsupported_dice_notation",
+          id: "complex",
+          label: "Complex damage",
+          dice: "2d4+1d6",
+          message:
+            "Roll request dice must be bare supported dice notation so the UI can queue it."
+        }
+      ]
+    );
   });
 
   it("extracts roll requests from contract and legacy response shapes", () => {
