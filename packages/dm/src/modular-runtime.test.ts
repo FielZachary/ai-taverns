@@ -197,9 +197,18 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("combat"), /full damage, the halved damage/i);
     assert.match(jobPrompt("combat"), /turnOwner is an NPC actor key/i);
     assert.match(jobPrompt("combat"), /final active enemy is defeated/i);
+    assert.match(jobPrompt("combat"), /do not infer an attack, spell, target/i);
     assert.match(jobPrompt("combat"), /combat starts, initiative first/i);
     assert.match(jobPrompt("combat"), /surprise opener resolves before initiative/i);
-    assert.match(jobPrompt("combat"), /NPC turn catches up before player action/i);
+    assert.match(
+      jobPrompt("combat"),
+      /NPC turn catches up before an off-turn player intent/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /NPC resolves, then a fresh player turn begins/i
+    );
+    assert.match(jobPrompt("combat"), /"input_targets": \[\s+"player:tart"\s+\]/);
     assert.match(jobPrompt("combat"), /area spell saves and damage are explicit/i);
     assert.match(jobPrompt("combat"), /Robed priest Dexterity save: 16 vs DC 14 - success/i);
     assert.match(jobPrompt("combat"), /final enemy defeated and combat ends/i);

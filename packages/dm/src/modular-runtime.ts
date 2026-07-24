@@ -415,6 +415,7 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
     "Off-turn player combat declarations are intent, not actions already in motion. Do not narrate them as mid-swing, already casting, or resolving before the current initiative actor.",
     "When multiple player submissions arrive, resolve the current turn owner's valid action first and treat other submissions as pending intent.",
     "Do not end with next_input_needed player_actions while turnOwner is npc:*; resolve NPC turns until control returns to player control.",
+    "When a player turn begins and that player has not already submitted a concrete action for this turn, do not infer an attack, spell, target, movement, or roll. Return next_input_needed player_actions with no roll_requests, target the turn owner, and ask what they do.",
     "When the final active enemy is defeated, set combat active false, turnOwner null, and initiativeOrder empty. Do not say a combatant is up next after combat ends.",
     "Rolls and dice:",
     "Use roll_requests for player-facing dice the website must collect.",
@@ -501,7 +502,7 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
           ],
           next_input_needed: "dice_results",
           input_targets: [],
-          input_policy: "acting_player",
+          input_policy: "all_players",
           mechanics_state_update: {
             combat: {
               active: true,
@@ -543,7 +544,7 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
           ],
           next_input_needed: "dice_results",
           input_targets: [],
-          input_policy: "acting_player",
+          input_policy: "all_players",
           mechanics_state_update: {}
         },
         null,
@@ -551,24 +552,24 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
       )
     ].join("\n"),
     [
-      "Example: NPC turn catches up before player action.",
+      "Example: NPC turn catches up before an off-turn player intent.",
       'Player input: "I cast Scorching Ray at the cutlass raider."',
-      "Context: Combat is active. Current turnOwner is npc:cutlass-raider. The player is trying to act before their turn.",
+      "Context: Combat is active. Current turnOwner is npc:cutlass-raider. The player submitted a concrete spell intent before their turn.",
       "Good response:",
       JSON.stringify(
         {
           public_narration: [
-            "The spell gathers in your hand, but the cutlass raider is already moving. His turn resolves first.",
+            "The cutlass raider is already moving. His turn resolves first.",
             "Cutlass raider attack roll: 17 vs AC 14 - hit. Cutlass raider damage roll: 1d6 + 2 = 6 slashing damage.",
             "He slips inside your guard and carves a hard line across your ribs before springing back out of reach. You drop from 24 HP to 18 HP.",
-            "The raider's momentum carries him past you, and the opening is finally yours. The heat of Scorching Ray still coils around your fingers as control returns to you.",
+            "The raider's momentum carries him past you, and the opening is finally yours. Your declared Scorching Ray intent is still waiting for your turn, but no attack roll is resolved until you confirm the action now that the board has changed.",
             "What do you do?"
           ].join("\n\n"),
           resolution_mode: "resolved_without_dice",
           roll_requests: [],
           next_input_needed: "player_actions",
-          input_targets: [],
-          input_policy: "acting_player",
+          input_targets: ["player:owner"],
+          input_policy: "only_targeted_players",
           mechanics_state_update: {
             actors: {
               "player:owner": {
@@ -583,6 +584,47 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
                 "player:owner",
                 "npc:cutlass-raider",
                 "npc:horn-blower"
+              ]
+            }
+          }
+        },
+        null,
+        2
+      )
+    ].join("\n"),
+    [
+      "Example: NPC resolves, then a fresh player turn begins.",
+      "Player input: dice results only; Tart has not submitted a combat action for this turn.",
+      "Context: Combat is active. Initiative order is npc:green-eye-figure, player:por, player:tart. The green-eye figure wins initiative and acts before Tart has declared an action.",
+      "Good response:",
+      JSON.stringify(
+        {
+          public_narration: [
+            "The green-eyed figure moves first.",
+            "Green-eye figure attack roll: 16 vs Por's AC 16 - hit. Green-eye figure damage roll: 1d6 + 3 = 7 slashing damage.",
+            "The claw rakes across Por's forearm, tearing through his sleeve and leaving three shallow but bleeding gashes. Por drops from 34 HP to 27 HP and steps back with his sword raised.",
+            "Tart, the creature is within striking distance and Por is hurt.",
+            "What do you do?"
+          ].join("\n\n"),
+          resolution_mode: "resolved_without_dice",
+          roll_requests: [],
+          next_input_needed: "player_actions",
+          input_targets: ["player:tart"],
+          input_policy: "only_targeted_players",
+          mechanics_state_update: {
+            actors: {
+              "player:por": {
+                currentHp: 27
+              }
+            },
+            combat: {
+              active: true,
+              round: 1,
+              turnOwner: "player:tart",
+              initiativeOrder: [
+                "npc:green-eye-figure",
+                "player:por",
+                "player:tart"
               ]
             }
           }
@@ -610,7 +652,7 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
           roll_requests: [],
           next_input_needed: "player_actions",
           input_targets: [],
-          input_policy: "acting_player",
+          input_policy: "all_players",
           mechanics_state_update: {
             actors: {
               "npc:scarred-guardswoman": {
@@ -655,7 +697,7 @@ export function jobPrompt(job: DmJobName, mode: DmPromptMode = "multiplayer") {
           roll_requests: [],
           next_input_needed: "player_actions",
           input_targets: [],
-          input_policy: "acting_player",
+          input_policy: "all_players",
           mechanics_state_update: {
             actors: {
               "npc:last-skeleton": {
