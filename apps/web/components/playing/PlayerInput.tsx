@@ -229,8 +229,8 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
               </div>
             ) : null}
           </div>
-          <div className="turn-form-actions">
-            {onSkipTurn ? (
+          {onSkipTurn ? (
+            <div className="turn-form-actions">
               <button
                 className="turn-form-skip"
                 type="button"
@@ -239,14 +239,8 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
               >
                 Skip
               </button>
-            ) : null}
-            <button
-              type="submit"
-              disabled={isRollRequired || isLocked || isSending || !draft.trim()}
-            >
-              {isAskMode ? "Ask" : "Send"}
-            </button>
-          </div>
+            </div>
+          ) : null}
         </div>
         <div className="turn-form-input-wrap">
           <textarea
@@ -266,6 +260,12 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
               {overlayMessage}
             </div>
           ) : null}
+          <button
+            className="turn-submit-arrow"
+            type="submit"
+            aria-label={isAskMode ? "Ask" : "Send"}
+            disabled={isRollRequired || isLocked || isSending || !draft.trim()}
+          />
         </div>
       </form>
     );

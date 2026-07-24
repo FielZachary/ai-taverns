@@ -3060,7 +3060,7 @@ h1 {
 .turn-form-input-wrap {
   position: relative;
   min-width: 0;
-  padding: 0 18px 18px;
+  padding: 0 58px 18px 18px;
 }
 
 .turn-form-input-wrap::before {
@@ -3086,6 +3086,40 @@ h1 {
   background: transparent;
   font-family: var(--play-text-font);
   line-height: 1.45;
+}
+
+.turn-form .turn-submit-arrow {
+  position: absolute;
+  right: 12px;
+  bottom: 22px;
+  z-index: 2;
+  display: block;
+  width: 32px;
+  height: 38px;
+  min-height: 0;
+  border: 0;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.78);
+  opacity: 0.46;
+  -webkit-mask: url("/fantasygothicui/arrow4.png") center / contain no-repeat;
+  mask: url("/fantasygothicui/arrow4.png") center / contain no-repeat;
+  transform: rotate(90deg);
+  transition:
+    background 180ms ease,
+    opacity 180ms ease,
+    filter 180ms ease;
+}
+
+.turn-form .turn-submit-arrow:not(:disabled):hover,
+.turn-form .turn-submit-arrow:not(:disabled):focus-visible {
+  background: var(--gold-bright);
+  opacity: 1;
+  filter: drop-shadow(0 0 8px rgba(244, 207, 122, 0.24));
+}
+
+.turn-form .turn-submit-arrow:disabled {
+  cursor: not-allowed;
+  opacity: 0.24;
 }
 
 .turn-form-submitted .turn-form-input-wrap::after {
@@ -3979,6 +4013,17 @@ h6 {
   .turn-form-input-wrap {
     padding-right: 10px;
     padding-left: 10px;
+  }
+
+  .turn-form-input-wrap {
+    padding-right: 52px;
+  }
+
+  .turn-form .turn-submit-arrow {
+    right: 8px;
+    bottom: 21px;
+    width: 30px;
+    height: 36px;
   }
 
   .turn-form-actions {
