@@ -3056,11 +3056,11 @@ h1 {
   right: 0;
   bottom: 0;
   left: 0;
-  height: 28px;
+  height: 8px;
   background: url("/fantasygothicui/line1.png") center bottom / 100% 100%
     no-repeat;
   content: "";
-  opacity: 0.82;
+  opacity: 0.32;
   pointer-events: none;
 }
 
