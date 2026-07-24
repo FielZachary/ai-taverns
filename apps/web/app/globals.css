@@ -3650,6 +3650,19 @@ h1 {
   display: none;
 }
 
+.table-page .play-table *,
+.table-page .play-table *::before,
+.table-page .play-table *::after,
+.table-page .character-sheet-overlay *,
+.table-page .character-sheet-overlay *::before,
+.table-page .character-sheet-overlay *::after,
+.table-page .dice-reveal-backdrop *,
+.table-page .dice-reveal-backdrop *::before,
+.table-page .dice-reveal-backdrop *::after,
+.table-page .floating-send {
+  border-radius: 0 !important;
+}
+
 h1,
 h2,
 h3,
