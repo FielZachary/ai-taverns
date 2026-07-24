@@ -24,15 +24,15 @@ body {
 }
 
 body {
+  --heading-font: var(--font-heading), "Cinzel", Georgia, serif;
+  --body-font: var(--font-body), "Cormorant Garamond", Georgia, serif;
+  --play-text-font: Georgia, "Times New Roman", serif;
   color: var(--ink);
   background:
     radial-gradient(circle at 18% 12%, rgba(173, 71, 43, 0.26), transparent 28rem),
     radial-gradient(circle at 85% 18%, rgba(95, 119, 81, 0.24), transparent 25rem),
     linear-gradient(135deg, #100d0c 0%, #211711 48%, #0d1210 100%);
-  font-family:
-    Georgia,
-    "Times New Roman",
-    serif;
+  font-family: var(--body-font);
 }
 
 body:has(.new-adventure-page) {
@@ -143,7 +143,7 @@ button {
 .landing-section-label,
 .landing-scroll-cue,
 .landing-author {
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
   font-weight: 800;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -285,7 +285,7 @@ button {
 .landing-scenario-grid p {
   margin-bottom: 0;
   color: rgba(255, 248, 232, 0.7);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
   font-size: 0.96rem;
   line-height: 1.6;
 }
@@ -376,11 +376,21 @@ button {
 .eyebrow {
   margin: 0 0 4px;
   color: var(--gold-bright);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
   font-size: 0.72rem;
   font-weight: 800;
   letter-spacing: 0;
   text-transform: uppercase;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--heading-font);
+  font-weight: 500;
 }
 
 h1,
@@ -421,7 +431,7 @@ h1 {
 .auth-form {
   display: grid;
   gap: 13px;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
 }
 
 .auth-form label {
@@ -623,7 +633,7 @@ h1 {
   padding-top: 10px;
   overflow: auto;
   overscroll-behavior: none;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
 }
 
 .new-adventure-flow {
@@ -1641,7 +1651,7 @@ h1 {
   min-width: 0;
   overflow: hidden;
   color: var(--ink);
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--body-font);
   font-size: 1.02rem;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1796,7 +1806,7 @@ h1 {
   min-height: 1.5em;
   margin: 0;
   color: var(--ink);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
   font-size: clamp(1rem, 2.5vw, 1.25rem);
   font-weight: 900;
   animation: loading-text-slide 2.4s ease-in-out both;
@@ -1848,7 +1858,7 @@ h1 {
   margin: 0;
   overflow: hidden;
   color: var(--ink);
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--body-font);
   font-size: 1.15rem;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2040,7 +2050,7 @@ h1 {
   padding: 0 12px;
   color: var(--gold-bright);
   background: rgba(217, 169, 74, 0.1);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
   font-size: 0.84rem;
   font-weight: 900;
   letter-spacing: 0;
@@ -2109,7 +2119,7 @@ h1 {
   outline: 0;
   color: var(--ink);
   background: transparent;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
 }
 
 .chat-search input::placeholder {
@@ -2129,7 +2139,7 @@ h1 {
   margin: 0;
   padding: 10px 2px;
   color: var(--muted);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
   font-size: 0.82rem;
 }
 
@@ -2176,7 +2186,7 @@ h1 {
 .chat-list-item small,
 .chat-list-item em {
   overflow: hidden;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
   letter-spacing: 0;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2254,7 +2264,7 @@ h1 {
   border-radius: 8px;
   color: #f2b199;
   background: rgba(173, 71, 43, 0.16);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
   font-size: 0.84rem;
   font-weight: 800;
   letter-spacing: 0;
@@ -2329,7 +2339,7 @@ h1 {
 .dnd-sheet-box span,
 .dnd-sheet-lined-panel h3 {
   color: var(--muted);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
   font-size: 0.66rem;
   font-weight: 900;
   letter-spacing: 0;
@@ -2368,7 +2378,7 @@ h1 {
 .dnd-sheet-meta-grid strong {
   overflow: hidden;
   color: var(--ink);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
   font-size: 0.84rem;
   font-weight: 900;
   text-overflow: ellipsis;
@@ -2432,7 +2442,7 @@ h1 {
 
 .dnd-sheet-box strong {
   color: var(--gold-bright);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
   font-size: 1.28rem;
   font-weight: 900;
   line-height: 1;
@@ -2465,7 +2475,7 @@ h1 {
 
 .dnd-ability-score strong {
   color: var(--ink);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
   font-size: 1.55rem;
   font-weight: 900;
   line-height: 1;
@@ -2475,7 +2485,7 @@ h1 {
 .dnd-ability-card p {
   margin: 0;
   min-width: 0;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
 }
 
 .dnd-ability-card h3 {
@@ -2524,7 +2534,7 @@ h1 {
   overflow: auto;
   padding: 10px 12px;
   color: var(--ink);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
   font-size: 0.82rem;
   line-height: 1.46;
   background-image: linear-gradient(
@@ -2580,7 +2590,7 @@ h1 {
   min-width: 520px;
   border-collapse: collapse;
   color: var(--ink);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
   font-size: 0.75rem;
   line-height: 1.25;
 }
@@ -2653,7 +2663,7 @@ h1 {
 .begin-adventure-panel p {
   margin: 0;
   color: var(--muted);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
   font-size: 0.86rem;
   font-weight: 800;
   letter-spacing: 0;
@@ -2671,7 +2681,7 @@ h1 {
 
 .game-code-callout span {
   color: var(--muted);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
   font-size: 0.62rem;
   font-weight: 900;
   text-transform: uppercase;
@@ -2679,7 +2689,7 @@ h1 {
 
 .game-code-callout strong {
   color: var(--gold-bright);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
   font-size: 1rem;
   letter-spacing: 0.08em;
 }
@@ -2695,7 +2705,7 @@ h1 {
   border-radius: 8px;
   color: #1b120b;
   background: linear-gradient(180deg, #f4cf7a, #c88731);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
   font-size: 0.82rem;
   font-weight: 900;
 }
@@ -2785,7 +2795,7 @@ h1 {
 .message-label {
   margin-bottom: 0;
   color: var(--gold-bright);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
   font-size: 0.78rem;
   font-weight: 800;
 }
@@ -2830,6 +2840,7 @@ h1 {
 .message-body {
   display: grid;
   gap: 1.15rem;
+  font-family: var(--play-text-font);
 }
 
 .message-body p {
@@ -2893,7 +2904,7 @@ h1 {
 .debug-modal-header p {
   margin-top: 4px;
   color: var(--muted);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
   font-size: 0.82rem;
 }
 
@@ -2924,7 +2935,7 @@ h1 {
 
 .debug-modal-content h3 {
   color: var(--gold-bright);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
   font-size: 0.82rem;
   font-weight: 900;
   letter-spacing: 0;
@@ -2956,7 +2967,7 @@ h1 {
   align-items: baseline;
   margin: 0;
   color: var(--gold-bright);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
   font-size: 0.94rem;
   font-weight: 900;
   letter-spacing: 0;
@@ -3042,7 +3053,7 @@ h1 {
   grid-column: 1 / -1;
   margin: 0;
   color: var(--gold-bright);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
   font-size: 0.82rem;
   font-weight: 900;
   letter-spacing: 0;
@@ -3062,6 +3073,7 @@ h1 {
   outline: 0;
   color: var(--ink);
   background: transparent;
+  font-family: var(--play-text-font);
   line-height: 1.45;
 }
 
@@ -3088,7 +3100,7 @@ h1 {
   place-items: center;
   padding: 0 14px;
   color: var(--gold-bright);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
   font-size: 0.88rem;
   font-weight: 900;
   letter-spacing: 0;
@@ -3201,7 +3213,7 @@ h1 {
   border-radius: 999px;
   color: #1b120b;
   background: var(--gold-bright);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
   font-size: 0.68rem;
   line-height: 1;
 }
@@ -3227,7 +3239,7 @@ h1 {
   border-radius: 8px;
   color: #1b120b;
   background: linear-gradient(180deg, #f4cf7a, #c88731);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
   font-weight: 900;
 }
 
@@ -3316,7 +3328,7 @@ h1 {
   box-shadow:
     0 24px 80px rgba(0, 0, 0, 0.5),
     inset 0 2px 12px rgba(255, 255, 255, 0.55);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
   font-size: clamp(1.6rem, 5vw, 3.3rem);
   font-weight: 900;
   transform: rotate(12deg);
@@ -3345,7 +3357,7 @@ h1 {
   background: rgba(12, 8, 6, 0.78);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42);
   backdrop-filter: blur(10px);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
 }
 
 .dice-reveal-summary span {
@@ -3490,7 +3502,7 @@ h1 {
   display: grid;
   gap: 7px;
   color: var(--muted);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
   font-size: 0.78rem;
   font-weight: 800;
   text-transform: uppercase;
@@ -3510,7 +3522,7 @@ h1 {
 .player-fields input {
   min-height: 42px;
   padding: 0 12px;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--body-font);
   font-size: 1rem;
   text-transform: none;
 }
@@ -3533,7 +3545,7 @@ h1 {
   border-radius: 8px;
   color: var(--gold-bright);
   background: rgba(217, 169, 74, 0.1);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
   font-weight: 900;
 }
 
@@ -3617,7 +3629,7 @@ h1 {
   gap: 10px;
   min-height: 32px;
   color: var(--muted);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--body-font);
 }
 
 .clue-box {
@@ -3648,6 +3660,16 @@ h1 {
 
 .floating-send {
   display: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--heading-font) !important;
+  font-weight: 500 !important;
 }
 
 @media (max-width: 1040px) {
