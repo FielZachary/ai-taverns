@@ -8,9 +8,11 @@ import {
   formatEldermereTurnPromptContext,
   openingSceneRequest,
   parseDmContract,
+  rollRequestDiagnostics,
   isEldermerePreset,
   buildMemoryUpdaterPrompt,
   buildRouterPrompt,
+  formatRouterCurrentTurnInput,
   jobPrompt,
   renderContextChunks,
   validateCombatEvents,
@@ -24,6 +26,7 @@ import {
   type GameMessage,
   type DmContractResponse,
   type DmContractParseOptions,
+  type DmJobName,
   type InputPolicy,
   type ValidatedRouterOutput
 } from "@ai-dnd/dm";
@@ -533,15 +536,18 @@ type DungeonMasterReply = {
 type DmPromptContext = {
   instructions: string;
   message: string;
+  jobNeeded?: DmJobName;
   sections: unknown[];
   budget: Record<string, unknown>;
+  routerDebug?: NonNullable<AiDebugInfo["router"]>;
 };
 
 const dungeonMasterContractInstructions = [
   "You are the AI Taverns DnD Dungeon Master.",
   "Return exactly one valid JSON object and no Markdown.",
   "Use public_narration for player-facing narration.",
-  "Use roll_requests for player-facing dice the website must collect.",
+  "Use roll_requests only for player-controlled dice the website must collect.",
+  "In roll_requests, dice must be bare dice notation only, such as 1d20, 3d4, or 8d6. Do not include + or - modifiers in dice; put static bonuses or penalties in modifier. Example: Magic Missile uses dice \"3d4\" and modifier 3, not dice \"3d4+3\".",
   "Use mechanics_state_update for canonical game/mechanics state changes; the website owns persistence.",
   "Required top-level keys: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update."
 ].join("\n");
@@ -552,6 +558,7 @@ export type DungeonMasterRuntime = {
     instructions: string;
     history?: GameMessage[];
     currentPlayerAction?: string;
+    dmJob?: DmJobName;
     onPublicNarrationDelta?: (text: string) => void;
   }): Promise<DungeonMasterProviderResponse>;
   emitDmStreamEvent?(event: DmStreamEvent): void;
@@ -563,6 +570,7 @@ export type DungeonMasterRuntime = {
   }): Promise<{
     instructions: string;
     message: string;
+    jobNeeded?: DmJobName;
     sections: unknown[];
     budget: Record<string, unknown>;
   }>;
@@ -1929,20 +1937,41 @@ function inferredRollRequestPlayer(label: string, id = "") {
   return rollIdTarget ? titleCaseIdentifier(rollIdTarget) : "";
 }
 
+function normalizeDiceAndModifier(dice: string, modifier: number | undefined) {
+  const match = dice.trim().match(/^(\d*d(?:4|6|8|10|12|20))\s*([+-])\s*(\d+)$/i);
+
+  if (!match) {
+    return { dice, modifier };
+  }
+
+  const diceModifier =
+    (match[2] === "-" ? -1 : 1) * Number.parseInt(match[3] ?? "0", 10);
+  const combinedModifier = (modifier ?? 0) + diceModifier;
+
+  return {
+    dice: match[1]?.toLowerCase() ?? dice,
+    modifier: combinedModifier === 0 ? undefined : combinedModifier
+  };
+}
+
 function normalizeRollRequest(value: unknown): DiceRollRequest | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
   }
 
   const candidate = value as Record<string, unknown>;
-  const dice = typeof candidate.dice === "string" ? candidate.dice.trim() : "";
+  const rawDice = typeof candidate.dice === "string" ? candidate.dice.trim() : "";
   const label = typeof candidate.label === "string" ? candidate.label.trim() : "";
 
-  if (!dice || !label) {
+  if (!rawDice || !label) {
     return null;
   }
 
-  const modifier = Number(candidate.modifier);
+  const rawModifier = Number(candidate.modifier);
+  const { dice, modifier } = normalizeDiceAndModifier(
+    rawDice,
+    Number.isFinite(rawModifier) ? rawModifier : undefined
+  );
   const advantageState =
     candidate.advantageState === "advantage" ||
     candidate.advantageState === "disadvantage" ||
@@ -1966,7 +1995,7 @@ function normalizeRollRequest(value: unknown): DiceRollRequest | null {
         ? candidate.player.trim()
         : inferredRollRequestPlayer(label, id) || undefined,
     dice,
-    modifier: Number.isFinite(modifier) ? modifier : undefined,
+    modifier,
     label,
     reason:
       typeof candidate.reason === "string" ? candidate.reason.trim() : undefined,
@@ -2621,7 +2650,7 @@ function errorSummary(error: unknown) {
 
 function providerDebugSummary(
   debug: AiDebugInfo | undefined,
-  options: { includeRawResponse?: boolean } = {}
+  options: { includeRawResponse?: boolean; includeRequestMessages?: boolean } = {}
 ) {
   if (!debug) {
     return undefined;
@@ -2642,6 +2671,9 @@ function providerDebugSummary(
     rawResponseLength: debug.rawResponse.length,
     rawResponsePreview: previewText(debug.rawResponse),
     ...(options.includeRawResponse ? { rawResponse: debug.rawResponse } : {}),
+    ...(options.includeRequestMessages
+      ? { rawRequestMessages: debug.requestMessages }
+      : {}),
     providerTimings: debug.providerTimings
   };
 }
@@ -3068,6 +3100,88 @@ function mechanicsActorsForValidation(campaign: Pick<CampaignRow, "metadata">) {
   );
 }
 
+async function getActiveCampaignPlayers(db: Queryable, campaignId: string) {
+  const result = await db.query<PlayerRow>(
+    `
+      select *
+      from players
+      where campaign_id = $1
+        and status = 'active'
+      order by slot asc nulls last, created_at asc
+    `,
+    [campaignId]
+  );
+
+  return result.rows;
+}
+
+function routerStateForCampaign(
+  campaign: Pick<CampaignRow, "metadata" | "mode">,
+  players: PlayerRow[]
+) {
+  const mechanicsState = resolveMechanicsState(campaign, players);
+  const pendingRollRequests = pendingRollRequestsFromCampaign(campaign as CampaignRow);
+  const inputTargets = inputTargetsFromCampaign(campaign as CampaignRow);
+  const inputPolicy = inputPolicyFromCampaign(campaign as CampaignRow);
+  const combat = roomCombatSnapshot(mechanicsState, players);
+
+  return {
+    campaign_mode: campaign.mode,
+    combat_active: combat.active,
+    combat,
+    input_policy: inputPolicy,
+    input_targets: inputTargets,
+    pending_roll_requests: pendingRollRequests.map((request) => ({
+      id: request.id,
+      label: request.label,
+      dice: request.dice,
+      player: request.player,
+      modifier: request.modifier
+    })),
+    active_players: players.map((player) => ({
+      actorKey: actorKeyForPlayer(player.id),
+      clientId: player.client_id,
+      username: player.username,
+      characterName: player.character_name,
+      slot: player.slot
+    }))
+  };
+}
+
+function buildRouterMessage(input: {
+  currentAction: string;
+  routerState: Record<string, unknown>;
+}) {
+  return [
+    "Routing state JSON:",
+    JSON.stringify(input.routerState, null, 2),
+    "",
+    formatRouterCurrentTurnInput(input.currentAction)
+  ].join("\n");
+}
+
+function routerFallbackJob(routerState: Record<string, unknown>): DmJobName {
+  return routerState.combat_active === true ? "combat" : "scene_director";
+}
+
+function routerDebugFromPromptContext(
+  promptContext:
+    | DmPromptContext
+    | {
+        instructions: string;
+        message: string;
+        sections: unknown[];
+        budget: Record<string, unknown>;
+      }
+    | null
+) {
+  return promptContext &&
+    "routerDebug" in promptContext &&
+    promptContext.routerDebug
+    ? promptContext.routerDebug
+    : undefined;
+}
+
 async function buildModularDmPromptContext(
   db: Queryable,
   runtime: DungeonMasterRuntime,
@@ -3080,13 +3194,23 @@ async function buildModularDmPromptContext(
     history: GameMessage[];
   }
 ): Promise<DmPromptContext> {
+  const players = await getActiveCampaignPlayers(db, campaign.id);
+  const routerState = routerStateForCampaign(campaign, players);
+  const routerInstructions = buildRouterPrompt();
+  const routerMessage = buildRouterMessage({
+    currentAction: input.currentAction,
+    routerState
+  });
   const routerStartedAt = Date.now();
   const routerData = await runtime.askProvider({
-    instructions: buildRouterPrompt(),
-    message: input.currentAction,
+    instructions: routerInstructions,
+    message: routerMessage,
     history: input.history
   });
-  const router = validateRouterOutput(routerData.content);
+  const router = validateRouterOutput(
+    routerData.content,
+    routerFallbackJob(routerState)
+  );
 
   await logDmModelCall(db, {
     campaignId: campaign.id,
@@ -3095,6 +3219,28 @@ async function buildModularDmPromptContext(
     phase: "router",
     providerData: routerData,
     durationMs: Date.now() - routerStartedAt
+  });
+
+  await logTurnDebugTrace(db, {
+    campaignId: campaign.id,
+    traceId: input.traceId,
+    phase: "router_response_received",
+    turnId: input.turnId,
+    elapsedMs: Date.now() - routerStartedAt,
+    payload: {
+      routerState,
+      router: {
+        jobNeeded: router.jobNeeded,
+        contextKeys: router.contextKeys,
+        fallbackUsed: router.fallbackUsed,
+        errors: router.errors,
+        reason: router.reason
+      },
+      provider: providerDebugSummary(routerData.debug, {
+        includeRawResponse: true,
+        includeRequestMessages: true
+      })
+    }
   });
 
   const context = await retrieveSelectedContextChunks(db, campaign.id, router);
@@ -3112,8 +3258,12 @@ async function buildModularDmPromptContext(
     instructions: [
       input.baseInstructions,
       "",
-      jobPrompt(router.jobNeeded, campaign.mode)
+      jobPrompt(router.jobNeeded, campaign.mode, {
+        routerReason:
+          router.jobNeeded === "clarification" ? router.reason : undefined
+      })
     ].join("\n"),
+    jobNeeded: router.jobNeeded,
     message: [
       "Selected context chunks:",
       renderContextChunks(context.chunks),
@@ -3127,7 +3277,9 @@ async function buildModularDmPromptContext(
         jobNeeded: router.jobNeeded,
         contextKeys: router.contextKeys,
         fallbackUsed: router.fallbackUsed,
-        errors: router.errors
+        errors: router.errors,
+        reason: router.reason,
+        routerState
       },
       {
         kind: "context_snapshot",
@@ -3141,6 +3293,24 @@ async function buildModularDmPromptContext(
         (total, chunk) => total + chunk.bodyMarkdown.length,
         0
       )
+    },
+    routerDebug: {
+      requestMessages: routerData.debug.requestMessages,
+      rawResponse: routerData.debug.rawResponse,
+      parsedOutput: {
+        jobNeeded: router.jobNeeded,
+        contextKeys: router.contextKeys,
+        fallbackUsed: router.fallbackUsed,
+        errors: router.errors,
+        reason: router.reason
+      },
+      ...(routerData.debug.model ? { model: routerData.debug.model } : {}),
+      ...(routerData.debug.temperature !== undefined
+        ? { temperature: routerData.debug.temperature }
+        : {}),
+      ...(routerData.debug.providerResponseId
+        ? { providerResponseId: routerData.debug.providerResponseId }
+        : {})
     }
   };
 }
@@ -3404,29 +3574,25 @@ function formatMechanicsPromptContext(mechanicsState: MechanicsState) {
   ].join("\n");
 }
 
-function normalizeCombatTurnOwnerForInput(
+function normalizeCombatInputControl(
   state: MechanicsState,
   input: {
     mode: CampaignMode;
     nextInputNeeded: "player_actions" | "dice_results";
+    rollRequests: DiceRollRequest[];
+    inputTargets: string[];
     inputPolicy: InputPolicy;
   }
-): MechanicsState {
+): {
+  mechanicsState: MechanicsState;
+  inputTargets: string[];
+  inputPolicy: InputPolicy;
+} {
   if (!state.combat.active || input.nextInputNeeded !== "player_actions") {
-    return state;
-  }
-
-  if (
-    input.mode === "multiplayer" &&
-    input.inputPolicy === "all_players" &&
-    state.combat.turnOwner?.startsWith("player:")
-  ) {
     return {
-      ...state,
-      combat: {
-        ...state.combat,
-        turnOwner: null
-      }
+      mechanicsState: state,
+      inputTargets: input.inputTargets,
+      inputPolicy: input.inputPolicy
     };
   }
 
@@ -3440,17 +3606,37 @@ function normalizeCombatTurnOwnerForInput(
       .map(([actorKey]) => actorKey);
 
     if (livingPlayerActorKeys.length === 1) {
-      return {
+      const mechanicsState = {
         ...state,
         combat: {
           ...state.combat,
           turnOwner: livingPlayerActorKeys[0] ?? null
         }
       };
+      return {
+        mechanicsState,
+        inputTargets: input.inputTargets,
+        inputPolicy: input.inputPolicy
+      };
     }
   }
 
-  return state;
+  if (
+    input.rollRequests.length === 0 &&
+    state.combat.turnOwner?.startsWith("player:")
+  ) {
+    return {
+      mechanicsState: state,
+      inputTargets: [state.combat.turnOwner],
+      inputPolicy: "only_targeted_players"
+    };
+  }
+
+  return {
+    mechanicsState: state,
+    inputTargets: input.inputTargets,
+    inputPolicy: input.inputPolicy
+  };
 }
 
 function formatSoloTurn(
@@ -3491,7 +3677,9 @@ function formatMultiplayerTurn(
   const turnInput = {
     type: "multiplayer_turn",
     resolution_policy:
-      "Resolve these submitted actions as one combined party turn. Account for timing, positioning, cooperation, conflict, and consequences across the whole party before asking what happens next.",
+      mechanicsState.combat.active
+        ? "Resolve active combat by canonical initiative order. The current mechanicsState.combat.turnOwner acts first. Submitted actions from non-turn owners are pending intent only unless their turn is reached."
+        : "Resolve the submitted player actions together. Account for timing, positioning, cooperation, conflict, and consequences before asking what happens next.",
     submissions: submissions.map((submission) => ({
       player: submission.username?.trim() || "Unknown player",
       character: submission.character_name?.trim() || "Unknown character",
@@ -4029,15 +4217,25 @@ const gameplayTurnOutputContractReminder = [
   "input_policy must be all_players or only_targeted_players; never use acting_player.",
   "Set resolution_mode to needs_dice whenever roll_requests is non-empty or next_input_needed is dice_results; otherwise set it to resolved_without_dice.",
   "When resolution_mode is needs_dice, public_narration must not resolve the rolled outcome.",
-  "If hostilities start while combat is inactive and enemies are ready or aware, ask the acting player for initiative in public_narration and roll_requests before resolving the attack or damage.",
-  "If the acting player clearly surprises unaware enemies, resolve the opening action's required rolls first, then ask initiative before enemy counteraction.",
+  "In roll_requests, dice must be bare dice notation only, such as 1d20, 3d4, or 8d6. Do not include + or - modifiers in dice; put static bonuses or penalties in modifier. Example: Magic Missile uses dice \"3d4\" and modifier 3, not dice \"3d4+3\".",
+  "If hostilities start while combat is inactive and enemies are ready or aware, ask player-controlled combatants for initiative in public_narration and roll_requests before resolving the attack or damage.",
+  "If the acting player clearly surprises unaware enemies, resolve the opening action's required rolls first, then ask player-controlled combatants for initiative before enemy counteraction.",
+  "Only request player-controlled initiative rolls in roll_requests.",
+  "Roll NPC and enemy initiative yourself every time, reveal each NPC/enemy initiative roll and total in public_narration, and encode the resulting order in mechanics_state_update or combat_events.",
+  "Never ask players to roll initiative, saving throws, attacks, damage, checks, or any other dice for NPCs or enemies; NPC and enemy dice are DM-side rolls that must still be visible to the players.",
   "Also include non-empty mechanics_state_update.combat with active, round, turnOwner, and provisional initiativeOrder as actor-key strings when initiative roll_requests pauses resolution.",
   "If combat turnOwner is or becomes npc:*, resolve NPC turns before returning control to players.",
+  "During active combat, if next control belongs to a player turnOwner and no roll_requests are pending, set input_policy only_targeted_players and input_targets to that player actor key only; do not use all_players for ordinary turn-based combat.",
   "Off-turn player combat declarations are only stated intent, not actions already in motion; never say they are mid-swing, following immediately, or resolving before the next initiative actor.",
   "When multiple player submissions arrive in active combat, resolve the current turn owner's valid action first, keep other submissions as pending intent, and if the next actor is an enemy resolve that enemy turn before later player intent.",
   "If the stored turnOwner is an NPC key or NPC character name, do not let submitted player attacks or spells preempt that NPC turn.",
+  "If a declared action needs a concrete tactical choice before dice can be interpreted, such as target, targets, spell area, Magic Missile dart distribution, weapon target, movement destination, or affected creatures, do not request dice yet.",
+  "For missing tactical choices, return next_input_needed player_actions, roll_requests [], input_policy only_targeted_players, input_targets set to the acting player, and ask only for the missing choice.",
+  "When a player action, spell, feature, or weapon would deal damage and that damage roll was not already submitted, do not roll damage yourself. Request the player's damage roll with next_input_needed dice_results and a structured roll_requests entry. This includes automatic-hit effects such as Magic Missile. Do not update target HP until damage is submitted.",
   "Resolve NPC attacks fully using explicit wording: 'attack roll: X vs AC Y - hit/miss'; on a hit, immediately state 'damage roll: dice = total damage', update player HP, then return control.",
   "For NPC hits, public_narration must include the words attack roll, vs AC, and damage roll before injury narration.",
+  "When a player spell or feature forces an NPC or enemy saving throw, roll that save yourself before narrating success or failure, reveal the save roll and total, compare it to the player's known spell save DC when available, and do not put the NPC/enemy save in roll_requests.",
+  "Never narrate a spell or feature as failing, succeeding, taking hold, being resisted, or being shaken off because of an NPC/enemy save unless public_narration first includes the visible save math line: '<Target> <Ability> save: X vs DC Y - success/failure'.",
   "Do not end an NPC turn with only a wind-up like lunges, swings, aims, starts casting, or bears down unless a player-facing roll or reaction is required first.",
   "When the final active enemy is defeated, set combat active false, turnOwner null, and initiativeOrder empty; do not say a specific combatant is up next after combat ends.",
   "Build combat actor names and keys only from the current scene and character sheets; never copy example NPC names into initiativeOrder.",
@@ -4052,8 +4250,10 @@ const gameplayTurnModeReminder: Record<CampaignMode, string[]> = {
   ],
   multiplayer: [
     "Multiplayer combat reminder:",
-    "Do not end with next_input_needed player_actions while turnOwner is npc:*; set turnOwner to a player actor, or null for a multiplayer all-player prompt.",
-    "For multiplayer initiative, saving throws, checks, attacks, and other targeted rolls, set each roll_requests item's player field to the targeted character's actor key or character name."
+    "In active initiative combat, do not end with next_input_needed player_actions while turnOwner is npc:*; resolve NPC turns until control reaches a player actor or combat ends.",
+    "In active initiative combat, when control reaches a player actor and no roll_requests are pending, set turnOwner to that player actor, input_policy only_targeted_players, and input_targets to that actor key.",
+    "Use turnOwner null with an all-player prompt only when combat is inactive or the scene is explicitly outside strict initiative.",
+    "For multiplayer player-controlled initiative, saving throws, checks, attacks, and other targeted player rolls, set each roll_requests item's player field to the targeted character's actor key or character name."
   ]
 };
 
@@ -4615,6 +4815,7 @@ async function askDungeonMaster(
       instructions: promptContext?.instructions ?? instructionsWithWorldContext,
       history,
       ...(currentPlayerAction ? { currentPlayerAction } : {}),
+      ...(promptContext?.jobNeeded ? { dmJob: promptContext.jobNeeded } : {}),
       ...(streamEmitter && streamTurnId
         ? {
             onPublicNarrationDelta: (text: string) => {
@@ -4682,6 +4883,7 @@ async function askDungeonMaster(
     );
 
     const rollRequests = normalizeRollRequests(contract.rollRequests);
+    const rollRequestDiagnosticsReport = rollRequestDiagnostics(rollRequests);
     const reply = contract.publicNarration;
     const combatValidation = outputEnvelope
       ? validateCombatEvents(outputEnvelope.combatEvents, {
@@ -4707,18 +4909,17 @@ async function askDungeonMaster(
         )
       : { accepted: [], discarded: [] };
     const mechanicsState = resolveMechanicsState(campaign, []);
-    const nextMechanicsState = normalizeCombatTurnOwnerForInput(
-      applyMechanicsStateUpdate(
-        mechanicsState,
-        contract.mechanicsStateUpdate,
-        nowIso()
-      ),
+    const normalizedInputControl = normalizeCombatInputControl(
+      applyMechanicsStateUpdate(mechanicsState, contract.mechanicsStateUpdate, nowIso()),
       {
         mode: campaign.mode,
         nextInputNeeded: contract.nextInputNeeded,
+        rollRequests,
+        inputTargets: contract.inputTargets,
         inputPolicy: contract.inputPolicy
       }
     );
+    const nextMechanicsState = normalizedInputControl.mechanicsState;
 
     if (nextMechanicsState !== mechanicsState) {
       await writeMechanicsStateForLockedCampaign(
@@ -4727,12 +4928,14 @@ async function askDungeonMaster(
         nextMechanicsState
       );
     }
+    const routerDebug = routerDebugFromPromptContext(promptContext);
     const debugWithCombatState: AiDebugInfo = {
       ...providerData.debug,
       combatState: {
         combat: nextMechanicsState.combat,
         actors: nextMechanicsState.actors
-      }
+      },
+      ...(routerDebug ? { router: routerDebug } : {})
     };
 
     if (!reply) {
@@ -4752,12 +4955,29 @@ async function askDungeonMaster(
           : undefined,
         rollRequestsCount: rollRequests.length,
         rollRequestLabels: rollRequests.map((request) => request.label),
+        rollRequestDiagnostics: rollRequestDiagnosticsReport,
         nextInputNeeded: contract.nextInputNeeded,
-        inputPolicy: contract.inputPolicy,
-        inputTargets: contract.inputTargets,
+        inputPolicy: normalizedInputControl.inputPolicy,
+        inputTargets: normalizedInputControl.inputTargets,
+        originalInputPolicy: contract.inputPolicy,
+        originalInputTargets: contract.inputTargets,
         resolutionMode: contract.resolutionMode
       }
     });
+
+    if (rollRequestDiagnosticsReport.length > 0) {
+      await logTurnDebugTrace(db, {
+        campaignId: campaign.id,
+        traceId,
+        phase: "dm_roll_request_diagnostics",
+        turnId,
+        elapsedMs: Date.now() - startedAt,
+        payload: {
+          diagnostics: rollRequestDiagnosticsReport,
+          rollRequests
+        }
+      });
+    }
 
     await logDmOutputReport(db, {
       campaignId: campaign.id,
@@ -4769,6 +4989,7 @@ async function askDungeonMaster(
           ? errorSummary(outputEnvelopeError)
           : undefined,
         rollRequestsCount: rollRequests.length,
+        rollRequestDiagnostics: rollRequestDiagnosticsReport,
         acceptedCombatEventsCount: combatValidation.accepted.length,
         discardedCombatEvents: combatValidation.discarded,
         acceptedImmediateContextUpdatesCount: memoryValidation.accepted.length,
@@ -4808,8 +5029,8 @@ async function askDungeonMaster(
       content: reply,
       debug: debugWithCombatState,
       rollRequests,
-      inputTargets: contract.inputTargets,
-      inputPolicy: contract.inputPolicy,
+      inputTargets: normalizedInputControl.inputTargets,
+      inputPolicy: normalizedInputControl.inputPolicy,
       resolutionMode: contract.resolutionMode,
       setting: contract.setting
     };

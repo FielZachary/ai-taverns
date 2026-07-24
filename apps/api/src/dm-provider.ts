@@ -1,6 +1,7 @@
 import type {
   AiDebugInfo,
   AiDebugMessage,
+  DmJobName,
   GameMessage
 } from "@ai-dnd/dm";
 
@@ -11,8 +12,6 @@ const deepSeekBaseUrl = (
 const deepSeekModel = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const defaultDeepSeekTemperature = 0.8;
 const combatDeepSeekTemperature = 0.2;
-const combatLanguagePattern =
-  /\b(?:ac|armor class|arrow(?:s)?|attack(?:s|ed|ing)?|battle|battleaxe(?:s)?|blade(?:s)?|blowgun(?:s)?|bow(?:s)?|cast(?:s|ed|ing)?|club(?:s)?|combat|crossbow(?:s)?|dagger(?:s)?|damage|dart(?:s)?|enemy|enemies|fight(?:s|ing)?|flail(?:s)?|foe(?:s)?|glaive(?:s)?|greataxe(?:s)?|greatclub(?:s)?|greatsword(?:s)?|halberd(?:s)?|handaxe(?:s)?|hit points?|hostile|hostilities|hp|initiative|javelin(?:s)?|kill(?:s|ed|ing)?|lance(?:s)?|longbow(?:s)?|longsword(?:s)?|mace(?:s)?|maul(?:s)?|melee|morningstar(?:s)?|net(?:s)?|npc turn|pike(?:s)?|quarterstaff|quarterstaves|rapier(?:s)?|roll(?:s|ed|ing)? initiative|saving throw|scimitar(?:s)?|shoot(?:s|ing)?|shot|shortbow(?:s)?|shortsword(?:s)?|sickle(?:s)?|sling(?:s)?|spear(?:s)?|stab(?:s|bed|bing)?|strike(?:s|ing)?|swing(?:s|ing|ung)?|sword(?:s)?|trident(?:s)?|war pick(?:s)?|warhammer(?:s)?|weapon(?:s)?|whip(?:s)?)\b/i;
 
 type DeepSeekMessage = AiDebugMessage;
 
@@ -54,6 +53,7 @@ export type DungeonMasterProviderInput = {
   instructions: string;
   history?: GameMessage[];
   currentPlayerAction?: string;
+  dmJob?: DmJobName;
   onPublicNarrationDelta?: (text: string) => void;
 };
 
@@ -276,11 +276,11 @@ function requestContentChars(messages: DeepSeekMessage[]) {
 }
 
 function providerTemperatureForInput(input: DungeonMasterProviderInput) {
-  const playerFacingContext = input.currentPlayerAction ?? input.message;
+  if (input.dmJob === "combat") {
+    return combatDeepSeekTemperature;
+  }
 
-  return combatLanguagePattern.test(playerFacingContext)
-    ? combatDeepSeekTemperature
-    : defaultDeepSeekTemperature;
+  return defaultDeepSeekTemperature;
 }
 
 function decodeJsonStringPrefix(value: string) {
@@ -592,6 +592,7 @@ export async function askDungeonMasterProvider({
   instructions,
   history = [],
   currentPlayerAction,
+  dmJob,
   onPublicNarrationDelta
 }: DungeonMasterProviderInput): Promise<DungeonMasterProviderResponse> {
   if (shouldUseTestProvider()) {
@@ -600,6 +601,7 @@ export async function askDungeonMasterProvider({
       instructions,
       history,
       ...(currentPlayerAction ? { currentPlayerAction } : {}),
+      ...(dmJob ? { dmJob } : {}),
       ...(onPublicNarrationDelta ? { onPublicNarrationDelta } : {})
     });
   }
@@ -623,7 +625,8 @@ export async function askDungeonMasterProvider({
     message,
     instructions,
     history,
-    ...(currentPlayerAction ? { currentPlayerAction } : {})
+    ...(currentPlayerAction ? { currentPlayerAction } : {}),
+    ...(dmJob ? { dmJob } : {})
   });
 
   let requestMessages = messages;

@@ -130,17 +130,36 @@ export function displayedRoomPlayersWithOptimisticSubmission(
 export function waitingPlayerStatuses({
   roomPlayers,
   hasAdventureBegun,
-  isSinglePlayer
+  isSinglePlayer,
+  inputPolicy = "all_players",
+  inputTargets = []
 }: {
   roomPlayers: RoomPlayer[];
   hasAdventureBegun: boolean;
   isSinglePlayer: boolean;
+  inputPolicy?: InputPolicy;
+  inputTargets?: string[];
 }): WaitingPlayerStatus[] {
   if (isSinglePlayer || !hasAdventureBegun) {
     return [];
   }
 
-  return roomPlayers
+  const visibleRoomPlayers =
+    inputPolicy === "only_targeted_players" && inputTargets.length > 0
+      ? roomPlayers.filter((roomPlayer) =>
+          inputTargetsCurrentPlayer(
+            inputTargets,
+            {
+              username: roomPlayer.username,
+              characterName: roomPlayer.characterName,
+              characterSheet: roomPlayer.characterSheet
+            },
+            roomPlayer
+          )
+        )
+      : roomPlayers;
+
+  return visibleRoomPlayers
     .filter((roomPlayer) => roomPlayer.status === "waiting")
     .map((roomPlayer) => ({
       id: roomPlayer.id,

@@ -323,9 +323,11 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
       waitingPlayerStatuses({
         roomPlayers: displayedRoomPlayers,
         hasAdventureBegun,
-        isSinglePlayer
+        isSinglePlayer,
+        inputPolicy,
+        inputTargets
       }),
-    [displayedRoomPlayers, hasAdventureBegun, isSinglePlayer]
+    [displayedRoomPlayers, hasAdventureBegun, inputPolicy, inputTargets, isSinglePlayer]
   );
   const activeCharacterSheet = useMemo(
     () =>
