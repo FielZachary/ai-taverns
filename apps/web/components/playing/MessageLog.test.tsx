@@ -303,6 +303,16 @@ describe("MessageLog", () => {
           }
         }
       },
+      contextStorageState: {
+        contextChunkCount: 1,
+        contextChunks: [
+          {
+            context_id: "npc:mara",
+            category: "npc_context",
+            body_markdown: "# Mara\n\n## Motivations\nProtect her crew."
+          }
+        ]
+      },
       requestMessages: [
         {
           role: "system",
@@ -338,6 +348,9 @@ describe("MessageLog", () => {
     expect(screen.getByText("Combat State")).toBeInTheDocument();
     expect(screen.getByText(/"turnOwner": "npc:mara"/)).toBeInTheDocument();
     expect(screen.getByText(/"currentHp": 33/)).toBeInTheDocument();
+    expect(screen.getByText("Context Storage")).toBeInTheDocument();
+    expect(screen.getByText(/"context_id": "npc:mara"/)).toBeInTheDocument();
+    expect(screen.getByText(/Protect her crew/)).toBeInTheDocument();
     expect(screen.getByText(/# 1\. SYSTEM/)).toBeInTheDocument();
     expect(screen.getByText(debug.rawResponse)).toBeInTheDocument();
 

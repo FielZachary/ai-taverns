@@ -31,6 +31,7 @@ export type DebugFields = {
   rawResponse?: unknown;
   temperature?: unknown;
   combatState?: unknown;
+  contextStorageState?: unknown;
   combatAdjudication?: unknown;
   router?: unknown;
 };
@@ -721,6 +722,42 @@ class FakeDatabase {
       } satisfies CampaignEventRecord;
       this.campaignEvents.push(record);
       return { rows: [{ id: record.id } as T] };
+    }
+
+    if (
+      normalizedSql.startsWith(
+        "update campaign_events set payload = jsonb_set"
+      )
+    ) {
+      const campaignId = values[0] as string;
+      const eventId = values[1] as string;
+      const contextStorageState =
+        typeof values[2] === "string"
+          ? (JSON.parse(values[2] as string) as unknown)
+          : values[2];
+      const event = this.campaignEvents.find(
+        (candidate) =>
+          candidate.campaign_id === campaignId && candidate.id === eventId
+      );
+
+      if (event) {
+        const payload = event.payload && typeof event.payload === "object"
+          ? (event.payload as Record<string, unknown>)
+          : {};
+        const aiDebug = payload.aiDebug && typeof payload.aiDebug === "object"
+          ? (payload.aiDebug as Record<string, unknown>)
+          : {};
+
+        event.payload = {
+          ...payload,
+          aiDebug: {
+            ...aiDebug,
+            contextStorageState
+          }
+        };
+      }
+
+      return { rows: [] as T[] };
     }
 
     if (normalizedSql.startsWith("select context_key from campaign_context_chunks")) {

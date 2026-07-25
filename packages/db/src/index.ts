@@ -4251,6 +4251,43 @@ async function applyAcceptedMemoryPatches(
   }
 }
 
+async function attachContextStorageStateToDmEventDebug(
+  db: Queryable,
+  input: {
+    campaignId: string;
+    dmEventId?: string | undefined;
+    contextStorageState: unknown;
+  }
+) {
+  if (!input.dmEventId) {
+    return;
+  }
+
+  await bestEffortRuntimeInsert(
+    db,
+    `
+      update campaign_events
+      set payload = jsonb_set(
+        jsonb_set(
+          payload,
+          '{aiDebug}',
+          coalesce(payload->'aiDebug', '{}'::jsonb),
+          true
+        ),
+        '{aiDebug,contextStorageState}',
+        $3::jsonb,
+        true
+      )
+      where campaign_id = $1 and id = $2
+    `,
+    [
+      input.campaignId,
+      input.dmEventId,
+      JSON.stringify(input.contextStorageState)
+    ]
+  );
+}
+
 export async function runModularPostTurnContextJobs(
   db: Queryable,
   runtime: DungeonMasterRuntime,
@@ -4259,6 +4296,7 @@ export async function runModularPostTurnContextJobs(
     turnId: string;
     currentAction: string;
     dmResponse: string;
+    dmEventId?: string | undefined;
     rollRequests?: DiceRollRequest[] | undefined;
   }
 ) {
@@ -4359,16 +4397,24 @@ export async function runModularPostTurnContextJobs(
       db,
       input.campaignId
     );
+    const contextStorageDebugState = {
+      capturedAt: nowIso(),
+      contextChunkCount: contextStorageState.length,
+      contextChunks: contextStorageState
+    };
 
     await logDmTurnTrace(db, {
       campaignId: input.campaignId,
       traceId,
       turnId: input.turnId,
       phase: "context_storage_state_snapshot",
-      payload: {
-        contextChunkCount: contextStorageState.length,
-        contextChunks: contextStorageState
-      }
+      payload: contextStorageDebugState
+    });
+
+    await attachContextStorageStateToDmEventDebug(db, {
+      campaignId: input.campaignId,
+      dmEventId: input.dmEventId,
+      contextStorageState: contextStorageDebugState
     });
 
     await logDmMemoryPatchLog(db, {

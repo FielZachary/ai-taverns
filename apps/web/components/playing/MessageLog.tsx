@@ -146,6 +146,10 @@ function MessageDebugModal({
             <h3>Combat State</h3>
             <pre>{formatDebugJson(debug.combatState)}</pre>
           </section>
+          <section>
+            <h3>Context Storage</h3>
+            <pre>{formatDebugJson(debug.contextStorageState)}</pre>
+          </section>
         </div>
       </section>
     </div>

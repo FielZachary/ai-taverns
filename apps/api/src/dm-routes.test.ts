@@ -1143,6 +1143,37 @@ test("DM runtime memory updater creates and updates NPC context cards", async ()
         /Harbor Watch station/.test(chunk.body_markdown)
     )
   );
+
+  const resolvedDmEventPayload = database.campaignEvents
+    .filter(
+      (event) =>
+        event.campaign_id === campaignId && event.type === "turn_resolved"
+    )
+    .at(-1)?.payload as
+    | {
+        aiDebug?: DebugFields;
+      }
+    | undefined;
+  const debugContextStorage =
+    resolvedDmEventPayload?.aiDebug?.contextStorageState as
+      | {
+          contextChunkCount?: unknown;
+          contextChunks?: {
+            context_id?: unknown;
+            body_markdown?: unknown;
+          }[];
+        }
+      | undefined;
+
+  assert.equal(debugContextStorage?.contextChunkCount, 1);
+  assert.ok(
+    debugContextStorage?.contextChunks?.some(
+      (chunk) =>
+        chunk.context_id === "npc:marra-vell" &&
+        typeof chunk.body_markdown === "string" &&
+        /Harbor Watch station/.test(chunk.body_markdown)
+    )
+  );
 });
 
 test("DM runtime routes require an owned session", async () => {

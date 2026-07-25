@@ -14,6 +14,7 @@ export type AiDebugInfo = {
   model?: string;
   temperature?: number;
   combatState?: unknown;
+  contextStorageState?: unknown;
   router?: {
     requestMessages: AiDebugMessage[];
     rawResponse: string;
