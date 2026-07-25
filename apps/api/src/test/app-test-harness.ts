@@ -738,6 +738,42 @@ class FakeDatabase {
 
     if (
       normalizedSql.startsWith(
+        "select context_key, title, visibility, priority, updated_at from campaign_context_chunks"
+      )
+    ) {
+      const campaignId = values[0] as string;
+      const limit = values[1] as number;
+
+      return {
+        rows: this.contextChunks
+          .filter(
+            (chunk) =>
+              chunk.campaign_id === campaignId &&
+              chunk.category === "npc_context" &&
+              chunk.archived_at === null
+          )
+          .sort((left, right) => {
+            const priorityDelta = right.priority - left.priority;
+
+            if (priorityDelta !== 0) {
+              return priorityDelta;
+            }
+
+            return right.updated_at.getTime() - left.updated_at.getTime();
+          })
+          .slice(0, limit)
+          .map((chunk) => ({
+            context_key: chunk.context_key,
+            title: chunk.title,
+            visibility: chunk.visibility,
+            priority: chunk.priority,
+            updated_at: chunk.updated_at
+          }) as T)
+      };
+    }
+
+    if (
+      normalizedSql.startsWith(
         "select context_key, category, title, visibility, priority, body_markdown, updated_at from campaign_context_chunks"
       )
     ) {
@@ -1627,11 +1663,43 @@ before(async () => {
         }
 
         if (input.instructions.includes("memory/context updater")) {
-          const content = JSON.stringify({
-            patches: [],
-            new_context_chunks: [],
-            remove_context_chunks: []
-          });
+          const shouldCreateMarra = /\bMarra Vell\b/.test(input.message);
+          const hasMarraContext = input.message.includes(
+            '"context_id": "npc:marra-vell"'
+          );
+          const content = JSON.stringify(
+            shouldCreateMarra && hasMarraContext
+              ? {
+                  patches: [
+                    {
+                      operation: "replace_section",
+                      context_id: "npc:marra-vell",
+                      markdown:
+                        "# Marra Vell\n\n## Name\nMarra Vell\n\n## Location\nHarbor Watch station.\n\n## Personality\nGuarded, quick-eyed, and newly desperate enough to negotiate.\n\n## Motivations\nStay alive and trade what she knows for protection.\n\n## Disposition Towards You\nStill wary, but more willing to talk after the party found her again.\n\n## Known History\n- First met by the party near Pier 6.\n- Later approached the party at the Harbor Watch station.\n\n## Secrets\nKnows more about the black key than she admitted.\n\n## Open Threads\n- Could reveal who sent the pursuers.\n\n## Last Seen\nAt the Harbor Watch station."
+                    }
+                  ],
+                  new_context_chunks: [],
+                  remove_context_chunks: []
+                }
+              : shouldCreateMarra
+                ? {
+                    patches: [],
+                    new_context_chunks: [
+                      {
+                        context_id: "npc:marra-vell",
+                        title: "Marra Vell",
+                        markdown:
+                          "# Marra Vell\n\n## Name\nMarra Vell\n\n## Location\nNear Pier 6.\n\n## Personality\nGuarded and quick-eyed.\n\n## Motivations\nStay alive and decide whether the party can be trusted.\n\n## Disposition Towards You\nWary but interested.\n\n## Known History\n- First met by the party near Pier 6.\n\n## Secrets\nKnows more about the black key than she admitted.\n\n## Open Threads\n- Could reveal who sent the pursuers.\n\n## Last Seen\nNear Pier 6."
+                      }
+                    ],
+                    remove_context_chunks: []
+                  }
+              : {
+                  patches: [],
+                  new_context_chunks: [],
+                  remove_context_chunks: []
+                }
+          );
 
           return {
             id: "provider-memory-updater-1",
