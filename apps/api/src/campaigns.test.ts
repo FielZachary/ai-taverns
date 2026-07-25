@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import sharp from "sharp";
 import {
   ApiErrorResponseSchema,
   CampaignInviteCreateResponseSchema,
@@ -23,6 +24,161 @@ import {
   setProviderOverride,
   signIn
 } from "./test/app-test-harness.js";
+
+test("POST /api/campaigns can generate and attach a character portrait", async () => {
+  const cookie = await signIn("portrait-owner@example.com");
+  const originalFetch = globalThis.fetch;
+  const originalQwenImageApiKey = process.env.QWEN_IMAGE_API_KEY;
+  const originalQwenImageEndpoint = process.env.QWEN_IMAGE_ENDPOINT;
+  const originalQwenImageModel = process.env.QWEN_IMAGE_MODEL;
+  const imageBuffer = await sharp({
+    create: {
+      width: 128,
+      height: 128,
+      channels: 4,
+      background: "#7c3aed"
+    }
+  })
+    .png()
+    .toBuffer();
+  const fetchCalls: string[] = [];
+
+  process.env.QWEN_IMAGE_API_KEY = "test-qwen-image-key";
+  process.env.QWEN_IMAGE_ENDPOINT = "https://qwen-image.example.test/generation";
+  process.env.QWEN_IMAGE_MODEL = "qwen-image-2.0-pro";
+  globalThis.fetch = (async (url, init) => {
+    fetchCalls.push(String(url));
+
+    if (String(url) === "https://qwen-image.example.test/generation") {
+      const headers = new Headers(init?.headers);
+      assert.equal(headers.get("authorization"), "Bearer test-qwen-image-key");
+      const body = JSON.parse(String(init?.body)) as {
+        model?: string;
+        input?: {
+          messages?: { content?: { text?: string }[] }[];
+        };
+      };
+      const prompt = body.input?.messages?.[0]?.content?.[0]?.text ?? "";
+
+      assert.equal(body.model, "qwen-image-2.0-pro");
+      assert.match(prompt, /Create a square fantasy character portrait/);
+      assert.match(prompt, /Seraphina/);
+      assert.match(prompt, /Level 5 Tiefling Warlock/);
+
+      return new Response(
+        JSON.stringify({
+          request_id: "qwen-image-request-1",
+          output: {
+            choices: [
+              {
+                message: {
+                  content: [
+                    {
+                      image: "https://qwen-image.example.test/result.png"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          usage: {
+            image_count: 1
+          }
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json"
+          }
+        }
+      );
+    }
+
+    if (String(url) === "https://qwen-image.example.test/result.png") {
+      return new Response(imageBuffer, {
+        status: 200,
+        headers: {
+          "content-type": "image/png"
+        }
+      });
+    }
+
+    throw new Error(`Unexpected fetch URL: ${String(url)}`);
+  }) as typeof fetch;
+
+  try {
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/campaigns",
+      headers: {
+        cookie
+      },
+      payload: {
+        mode: "multiplayer",
+        campaignGenreKind: "preset",
+        campaignGenrePresetId: "dark_fantasy",
+        ownerClientId: "portrait-owner-client",
+        playerName: "Portrait Owner",
+        characterName: "Seraphina",
+        characterSheet:
+          "Character Name: Seraphina\nLevel: 5\nClass: Warlock\nSpecies: Tiefling\nDM Brief: Level 5 Tiefling Warlock with a violet pact flame.",
+        generateCharacterPortrait: true
+      }
+    });
+
+    assert.equal(createResponse.statusCode, 201, createResponse.body);
+
+    const created = CampaignCreateResponseSchema.parse(createResponse.json());
+    assert.ok(created.campaign.portraitAssetId);
+    assert.match(
+      created.campaign.portraitUrl ?? "",
+      /^\/media\/campaigns\/.+\/512\.webp$/
+    );
+    assert.deepEqual(fetchCalls, [
+      "https://qwen-image.example.test/generation",
+      "https://qwen-image.example.test/result.png"
+    ]);
+    assert.equal(database.mediaAssets.length, 1);
+    assert.equal(database.mediaAssets[0]?.status, "ready");
+    assert.equal(database.mediaAssets[0]?.provider_request_id, "qwen-image-request-1");
+    assert.equal(
+      database.players.find((player) => player.client_id === "portrait-owner-client")
+        ?.portrait_asset_id,
+      created.campaign.portraitAssetId
+    );
+
+    const roomResponse = await app.inject({
+      method: "GET",
+      url: `/api/room?roomId=${encodeURIComponent(created.campaign.id)}`,
+      headers: {
+        cookie
+      }
+    });
+    assert.equal(roomResponse.statusCode, 200, roomResponse.body);
+    const room = roomResponse.json() as {
+      players: { portraitUrl?: string; portraitAssetId?: string }[];
+    };
+    assert.equal(room.players[0]?.portraitUrl, created.campaign.portraitUrl);
+    assert.equal(room.players[0]?.portraitAssetId, created.campaign.portraitAssetId);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalQwenImageApiKey === undefined) {
+      delete process.env.QWEN_IMAGE_API_KEY;
+    } else {
+      process.env.QWEN_IMAGE_API_KEY = originalQwenImageApiKey;
+    }
+    if (originalQwenImageEndpoint === undefined) {
+      delete process.env.QWEN_IMAGE_ENDPOINT;
+    } else {
+      process.env.QWEN_IMAGE_ENDPOINT = originalQwenImageEndpoint;
+    }
+    if (originalQwenImageModel === undefined) {
+      delete process.env.QWEN_IMAGE_MODEL;
+    } else {
+      process.env.QWEN_IMAGE_MODEL = originalQwenImageModel;
+    }
+  }
+});
 
 test("POST /api/campaigns seeds Eldermere world context for flagship campaigns", async () => {
   const cookie = await signIn("eldermere@example.com");

@@ -417,6 +417,8 @@ export type CampaignRow = {
 type CampaignSummaryRow = Omit<CampaignRow, "session_id"> & {
   session_id?: string;
   sessionId?: string;
+  portrait_asset_id?: string | null;
+  portrait_public_url?: string | null;
 };
 
 type PlayerRow = {
@@ -430,6 +432,60 @@ type PlayerRow = {
   slot: number | null;
   status: PlayerStatus;
   last_seen_at: Date | string;
+  portrait_asset_id?: string | null;
+  portrait_public_url?: string | null;
+};
+
+export type MediaStorageProvider = "local" | "digitalocean_spaces" | "s3";
+
+export type StoredMediaAssetObject = {
+  storageProvider: MediaStorageProvider;
+  bucket: string | null;
+  objectKey: string;
+  publicUrl: string;
+  contentType: string;
+  byteSize: number;
+  width: number | null;
+  height: number | null;
+  sha256: string;
+};
+
+export type MediaAssetRow = {
+  id: string;
+  owner_user_id: string | null;
+  campaign_id: string | null;
+  player_id: string | null;
+  kind: "character_portrait" | "campaign_cover" | "npc_portrait";
+  status: "pending" | "ready" | "failed" | "deleted";
+  storage_provider: MediaStorageProvider;
+  bucket: string | null;
+  object_key: string | null;
+  public_url: string | null;
+  content_type: string;
+  byte_size: number | null;
+  width: number | null;
+  height: number | null;
+  sha256: string | null;
+  prompt: string | null;
+  negative_prompt: string | null;
+  provider: string | null;
+  model: string | null;
+  provider_request_id: string | null;
+  generation_metadata: unknown;
+  created_at: Date | string;
+  updated_at: Date | string;
+};
+
+export type CharacterPortraitTarget = {
+  campaignId: string;
+  campaignTitle: string;
+  campaignGenre: string | null;
+  customWorldName: string | null;
+  playerId: string;
+  ownerUserId: string | null;
+  username: string;
+  characterName: string;
+  characterSheet: string;
 };
 
 type TurnRow = {
@@ -825,6 +881,12 @@ export function mapCampaignSummaryRow(
     mode: campaign.mode,
     title: characterName || playerName || campaign.title,
     ...(campaign.owner_client_id ? { ownerClientId: campaign.owner_client_id } : {}),
+    ...(campaign.portrait_asset_id
+      ? { portraitAssetId: campaign.portrait_asset_id }
+      : {}),
+    ...(campaign.portrait_public_url
+      ? { portraitUrl: campaign.portrait_public_url }
+      : {}),
     preview: campaignWorldName(campaign),
     messageCount: 0,
     ...(joinCode ? { joinCode } : {})
@@ -862,6 +924,197 @@ export async function logCampaignEvent(
   );
 
   return result.rows[0]?.id;
+}
+
+export async function getCharacterPortraitTargetForUser(
+  db: Queryable,
+  input: {
+    campaignId: string;
+    userId: string;
+  }
+): Promise<CharacterPortraitTarget> {
+  const result = await db.query<
+    PlayerRow & {
+      campaign_title: string;
+      campaign_metadata: unknown;
+      campaign_owner_user_id: string | null;
+    }
+  >(
+    `
+      select
+        players.*,
+        campaigns.title as campaign_title,
+        campaigns.metadata as campaign_metadata,
+        campaigns.owner_user_id as campaign_owner_user_id
+      from players
+      join campaigns on campaigns.id = players.campaign_id
+      where players.campaign_id = $1
+        and players.user_id = $2
+        and players.status = 'active'
+        and campaigns.status = 'active'
+      order by players.slot asc nulls last, players.created_at asc
+      limit 1
+    `,
+    [input.campaignId, input.userId]
+  );
+  const player = requireRow(
+    result.rows[0],
+    "No active character was found for portrait generation."
+  );
+  const metadata = eventPayload(player.campaign_metadata);
+  const genre = eventPayload(metadata.genre);
+
+  return {
+    campaignId: player.campaign_id,
+    campaignTitle: player.campaign_title,
+    campaignGenre: typeof genre.label === "string" ? genre.label : null,
+    customWorldName:
+      typeof genre.customWorldName === "string" ? genre.customWorldName : null,
+    playerId: player.id,
+    ownerUserId: player.campaign_owner_user_id,
+    username: player.username,
+    characterName: player.character_name,
+    characterSheet: player.character_sheet
+  };
+}
+
+export async function createPendingCharacterPortraitAsset(
+  db: Queryable,
+  input: {
+    ownerUserId: string | null;
+    campaignId: string;
+    playerId: string;
+    storageProvider: MediaStorageProvider;
+    prompt: string;
+    negativePrompt: string;
+    provider: string;
+    model: string;
+  }
+): Promise<MediaAssetRow> {
+  const result = await db.query<MediaAssetRow>(
+    `
+      insert into media_assets (
+        owner_user_id,
+        campaign_id,
+        player_id,
+        kind,
+        status,
+        storage_provider,
+        prompt,
+        negative_prompt,
+        provider,
+        model
+      )
+      values ($1, $2, $3, 'character_portrait', 'pending', $4, $5, $6, $7, $8)
+      returning *
+    `,
+    [
+      input.ownerUserId,
+      input.campaignId,
+      input.playerId,
+      input.storageProvider,
+      input.prompt,
+      input.negativePrompt,
+      input.provider,
+      input.model
+    ]
+  );
+
+  return requireRow(result.rows[0], "Failed to create media asset.");
+}
+
+export async function markCharacterPortraitAssetReady(
+  db: Queryable,
+  input: {
+    assetId: string;
+    playerId: string;
+    displayObject: StoredMediaAssetObject;
+    providerRequestId: string | null;
+    generationMetadata: Record<string, unknown>;
+  }
+): Promise<MediaAssetRow> {
+  const updated = await db.query<MediaAssetRow>(
+    `
+      update media_assets
+      set status = 'ready',
+          storage_provider = $2,
+          bucket = $3,
+          object_key = $4,
+          public_url = $5,
+          content_type = $6,
+          byte_size = $7,
+          width = $8,
+          height = $9,
+          sha256 = $10,
+          provider_request_id = $11,
+          generation_metadata = $12::jsonb
+      where id = $1
+      returning *
+    `,
+    [
+      input.assetId,
+      input.displayObject.storageProvider,
+      input.displayObject.bucket,
+      input.displayObject.objectKey,
+      input.displayObject.publicUrl,
+      input.displayObject.contentType,
+      input.displayObject.byteSize,
+      input.displayObject.width,
+      input.displayObject.height,
+      input.displayObject.sha256,
+      input.providerRequestId,
+      JSON.stringify(input.generationMetadata)
+    ]
+  );
+  const asset = requireRow(
+    updated.rows[0],
+    "Failed to mark media asset ready."
+  );
+
+  await db.query(
+    `
+      update players
+      set portrait_asset_id = $1
+      where id = $2
+    `,
+    [asset.id, input.playerId]
+  );
+
+  if (asset.campaign_id) {
+    await logCampaignEvent(db, asset.campaign_id, "media_asset_ready", {
+      mediaAssetId: asset.id,
+      playerId: input.playerId,
+      kind: asset.kind,
+      status: asset.status
+    });
+  }
+
+  return asset;
+}
+
+export async function markCharacterPortraitAssetFailed(
+  db: Queryable,
+  input: {
+    assetId: string;
+    errorMessage: string;
+    generationMetadata?: Record<string, unknown> | undefined;
+  }
+): Promise<void> {
+  await db.query(
+    `
+      update media_assets
+      set status = 'failed',
+          generation_metadata = $2::jsonb
+      where id = $1
+    `,
+    [
+      input.assetId,
+      JSON.stringify({
+        ...(input.generationMetadata ?? {}),
+        error: input.errorMessage
+      })
+    ]
+  );
 }
 
 async function writeMechanicsStateForLockedCampaign(
@@ -3055,7 +3308,13 @@ function rowToRoomPlayer(
       actor
     ),
     status: submittedPlayerIds.has(player.id) ? "submitted" : "waiting",
-    lastSeenAt: toIso(player.last_seen_at)
+    lastSeenAt: toIso(player.last_seen_at),
+    ...(player.portrait_asset_id
+      ? { portraitAssetId: player.portrait_asset_id }
+      : {}),
+    ...(player.portrait_public_url
+      ? { portraitUrl: player.portrait_public_url }
+      : {})
   };
 }
 
@@ -3117,10 +3376,16 @@ async function buildRoomSnapshot(
   );
   const playersResult = await db.query<PlayerRow>(
     `
-      select *
+      select
+        players.*,
+        media_assets.id as portrait_asset_id,
+        media_assets.public_url as portrait_public_url
       from players
-      where campaign_id = $1 and status = 'active'
-      order by slot asc nulls last, created_at asc
+      left join media_assets
+        on media_assets.id = players.portrait_asset_id
+       and media_assets.status = 'ready'
+      where players.campaign_id = $1 and players.status = 'active'
+      order by players.slot asc nulls last, players.created_at asc
     `,
     [campaign.id]
   );

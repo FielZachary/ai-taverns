@@ -333,7 +333,7 @@ describe("NewAdventureForm", () => {
       screen.getByRole("heading", { name: /ready the first page/i })
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /create campaign/i }));
+    fireEvent.click(screen.getByRole("button", { name: /generate portrait/i }));
 
     await act(async () => {});
 
@@ -341,14 +341,15 @@ describe("NewAdventureForm", () => {
       expect.objectContaining({
         mode: "single_player",
         playerName: "Mira Vale",
-        characterName: "Mira Vale"
+        characterName: "Mira Vale",
+        generateCharacterPortrait: true
       })
     );
     expect(screen.getByRole("alert")).toHaveTextContent(
       "The tavern doors jammed."
     );
     expect(
-      screen.getByRole("button", { name: /create campaign/i })
+      screen.getByRole("button", { name: /generate portrait/i })
     ).toBeEnabled();
   });
 });
