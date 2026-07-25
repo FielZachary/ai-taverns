@@ -39,6 +39,15 @@ import rogueClassArt from "../../../../assets/classes art/rogue.png";
 import sorcererClassArt from "../../../../assets/classes art/sorcerer.png";
 import warlockClassArt from "../../../../assets/classes art/warlock.png";
 import wizardClassArt from "../../../../assets/classes art/wizard.png";
+import dragonbornSpeciesArt from "../../../../assets/races art/dragonborn.png";
+import dwarfSpeciesArt from "../../../../assets/races art/dwarf.png";
+import elfSpeciesArt from "../../../../assets/races art/elf.png";
+import gnomeSpeciesArt from "../../../../assets/races art/gnome.png";
+import halfElfSpeciesArt from "../../../../assets/races art/half-elf.png";
+import halfOrcSpeciesArt from "../../../../assets/races art/half-orc.png";
+import halflingSpeciesArt from "../../../../assets/races art/halfling.png";
+import humanSpeciesArt from "../../../../assets/races art/human.png";
+import tieflingSpeciesArt from "../../../../assets/races art/tiefling.png";
 
 type CampaignMode = "single_player" | "multiplayer";
 type MultiplayerIntent = "create" | "join";
@@ -1166,6 +1175,18 @@ const classArtByClass: Record<CharacterClass, string> = {
   Sorcerer: sorcererClassArt.src,
   Warlock: warlockClassArt.src,
   Wizard: wizardClassArt.src
+};
+
+const speciesArtBySpecies: Record<CharacterSpecies, string> = {
+  Human: humanSpeciesArt.src,
+  Elf: elfSpeciesArt.src,
+  Dwarf: dwarfSpeciesArt.src,
+  Halfling: halflingSpeciesArt.src,
+  Gnome: gnomeSpeciesArt.src,
+  "Half-Elf": halfElfSpeciesArt.src,
+  "Half-Orc": halfOrcSpeciesArt.src,
+  Tiefling: tieflingSpeciesArt.src,
+  Dragonborn: dragonbornSpeciesArt.src
 };
 
 const equipmentCategoryOptions: Record<EquipmentCategory, string[]> = {
@@ -3837,7 +3858,7 @@ export function NewAdventureForm({
                 ) : null}
 
                 {currentCharacterStep === "Species" ? (
-                  <fieldset className="option-picker compact-option-picker">
+                  <fieldset className="option-picker compact-option-picker species-picker">
                     <legend>Species</legend>
                     <div>
                       {speciesOptions.map((option) => (
@@ -3847,6 +3868,11 @@ export function NewAdventureForm({
                           aria-pressed={characterSpecies === option}
                           key={option}
                           onClick={() => setCharacterSpecies(option)}
+                          style={
+                            {
+                              "--species-art-url": `url(${speciesArtBySpecies[option]})`
+                            } as CSSProperties
+                          }
                         >
                           <strong>{option}</strong>
                           <small>{formatSpeciesAbilityBonus(option)}</small>

@@ -957,6 +957,69 @@ h1 {
   min-height: 50px;
 }
 
+.species-picker > div {
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+}
+
+.species-picker button {
+  position: relative;
+  align-content: end;
+  min-height: 232px;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(8, 6, 4, 0.04), rgba(8, 6, 4, 0.78)),
+    linear-gradient(90deg, rgba(8, 6, 4, 0.62), rgba(8, 6, 4, 0.08)),
+    var(--species-art-url),
+    rgba(17, 13, 10, 0.48);
+  background-position: center 22%;
+  background-size: cover;
+  isolation: isolate;
+}
+
+.species-picker button::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(circle at 50% 12%, rgba(255, 249, 225, 0.2), transparent 34%),
+    linear-gradient(180deg, transparent 40%, rgba(0, 0, 0, 0.56));
+  content: "";
+  opacity: 0.84;
+  transition: opacity 160ms ease;
+}
+
+.species-picker button.selected,
+.species-picker button:hover,
+.species-picker button:focus-visible {
+  background:
+    linear-gradient(180deg, rgba(8, 6, 4, 0.02), rgba(8, 6, 4, 0.72)),
+    linear-gradient(90deg, rgba(173, 71, 43, 0.28), rgba(8, 6, 4, 0.08)),
+    var(--species-art-url),
+    rgba(17, 13, 10, 0.48);
+  background-position: center 22%;
+  background-size: cover;
+}
+
+.species-picker button.selected::before,
+.species-picker button:hover::before,
+.species-picker button:focus-visible::before {
+  opacity: 0.66;
+}
+
+.species-picker strong,
+.species-picker small {
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.92);
+}
+
+.species-picker strong {
+  color: #fff7df;
+  font-size: 1.05rem;
+}
+
+.species-picker small {
+  color: rgba(255, 239, 202, 0.84);
+}
+
 .spell-picker {
   display: grid;
   gap: 12px;

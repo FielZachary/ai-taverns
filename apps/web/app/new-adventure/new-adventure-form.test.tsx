@@ -275,6 +275,11 @@ describe("NewAdventureForm", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("+1 all stats")).toBeInTheDocument();
     expect(screen.getByText("+2 Strength, +1 Constitution")).toBeInTheDocument();
+    expect(
+      screen
+        .getByRole("button", { name: /human/i })
+        .style.getPropertyValue("--species-art-url")
+    ).toContain("url(");
   });
 
   it("validates identity and recovers when campaign creation fails", async () => {
