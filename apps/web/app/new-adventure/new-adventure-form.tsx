@@ -2,17 +2,13 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
-  ArrowLeft,
-  ArrowRight,
   Check,
   Dice5,
   X,
   Minus,
   Plus,
   ScrollText,
-  Sparkles,
-  Swords,
-  Users
+  Sparkles
 } from "lucide-react";
 import {
   campaignGenrePresets,
@@ -21,20 +17,28 @@ import {
 import {
   createCampaign as createCampaignViaApi,
   joinCampaign as joinCampaignViaApi,
+  joinLobbyInvite,
+  previewLobbyInvite,
   previewCampaignJoin
 } from "@/lib/campaign-api";
 import { defaultCharacterSheet } from "@/components/playing/PlayerPanel";
 import { DiceRollReveal3D } from "@/components/playing/DiceRollReveal3D";
+import type { MechanicsSeed, SpellSlotState } from "@ai-dnd/contracts";
 
 type CampaignMode = "single_player" | "multiplayer";
 type MultiplayerIntent = "create" | "join";
 type FlowTransitionState = "idle" | "exiting" | "entering";
 
 type JoinPreview = {
-  code: string;
+  code?: string;
+  source: "code" | "invite";
   campaignTitle: string;
   availableSlots: number;
   hasBegun: boolean;
+};
+
+type NewAdventureFormProps = {
+  initialInviteToken?: string;
 };
 
 type AbilityKey = "str" | "dex" | "con" | "int" | "wis" | "cha";
@@ -142,9 +146,9 @@ const campaignCreationLoadingSteps = [
 ];
 const customCharacterCreationSteps = [
   "Build",
-  "Stats",
   "Class",
   "Class Choices",
+  "Stats",
   "Species",
   "Spells",
   "Proficiencies",
@@ -156,8 +160,8 @@ const customCharacterCreationSteps = [
 ];
 const quickCharacterCreationSteps = [
   "Build",
-  "Stats",
   "Class",
+  "Stats",
   "Species",
   "Spells",
   "Equipment",
@@ -319,6 +323,25 @@ const spellSelectionRules: Record<string, SpellSelectionRule> = {
     spellSlotsText: "4 first-level, 3 second-level, 2 third-level"
   }
 };
+const fullCasterSlotTable: Record<number, Record<string, SpellSlotState>> = {
+  5: {
+    "1": { max: 4, used: 0 },
+    "2": { max: 3, used: 0 },
+    "3": { max: 2, used: 0 }
+  }
+};
+const pactMagicSlotTable: Record<number, Record<string, SpellSlotState>> = {
+  5: {
+    "3": { max: 2, used: 0 }
+  }
+};
+const fullCasterClasses = new Set([
+  "Bard",
+  "Cleric",
+  "Druid",
+  "Sorcerer",
+  "Wizard"
+]);
 const spellSourceLabels: Record<string, string> = {
   "Absorb Elements": "Xanathar's Guide to Everything",
   "Aganazzar's Scorcher": "Xanathar's Guide to Everything",
@@ -2141,6 +2164,40 @@ function spellSelectionLimitsFor(
   };
 }
 
+function deriveSpellSlotsForSheet(
+  characterClass: string,
+  level: number
+): Record<string, SpellSlotState> | undefined {
+  if (fullCasterClasses.has(characterClass)) {
+    return fullCasterSlotTable[level];
+  }
+
+  if (characterClass === "Warlock") {
+    return pactMagicSlotTable[level];
+  }
+
+  return undefined;
+}
+
+function ordinalSpellLevel(level: string) {
+  return level === "1"
+    ? "1st"
+    : level === "2"
+      ? "2nd"
+      : level === "3"
+        ? "3rd"
+        : `${level}th`;
+}
+
+function spellSlotLinesForSheet(slots: Record<string, SpellSlotState> | undefined) {
+  return slots
+    ? Object.entries(slots).map(([level, slot]) => {
+        const remaining = Math.max(0, slot.max - slot.used);
+        return `${ordinalSpellLevel(level)}-level slots: ${slot.max} total, ${slot.used} used, ${remaining} remaining`;
+      })
+    : [];
+}
+
 function spellLevelFor(
   spellGroups: readonly SpellGroup[],
   spell: string
@@ -2437,12 +2494,22 @@ function normalizeGameCodeInput(value: string) {
   );
 }
 
-export function NewAdventureForm() {
-  const [stepIndex, setStepIndex] = useState(0);
+export function NewAdventureForm({
+  initialInviteToken = ""
+}: NewAdventureFormProps) {
+  const normalizedInitialInviteToken = initialInviteToken.trim();
+  const [stepIndex, setStepIndex] = useState(
+    normalizedInitialInviteToken ? 2 : 0
+  );
   const [characterStepIndex, setCharacterStepIndex] = useState(0);
-  const [mode, setMode] = useState<CampaignMode>("single_player");
+  const [mode, setMode] = useState<CampaignMode>(
+    normalizedInitialInviteToken ? "multiplayer" : "single_player"
+  );
   const [multiplayerIntent, setMultiplayerIntent] =
-    useState<MultiplayerIntent>("create");
+    useState<MultiplayerIntent>(
+      normalizedInitialInviteToken ? "join" : "create"
+    );
+  const [inviteToken] = useState(normalizedInitialInviteToken);
   const [gameCode, setGameCode] = useState("");
   const [joinPreview, setJoinPreview] = useState<JoinPreview | null>(null);
   const [playerName, setPlayerName] = useState("");
@@ -2523,6 +2590,7 @@ export function NewAdventureForm() {
     characterStepIndex === characterCreationSteps.length - 1;
   const modeLabel = mode === "single_player" ? "Singleplayer" : "Multiplayer";
   const normalizedGameCode = normalizeGameCodeInput(gameCode);
+  const isInviteJoinFlow = isJoinFlow && Boolean(inviteToken);
   const hasRequiredIdentity =
     Boolean(characterName.trim()) && (!isJoinFlow || Boolean(playerName.trim()));
   const selectedGenre = campaignGenres.find((genre) => genre.id === campaignGenre) ?? campaignGenres[0];
@@ -2559,8 +2627,14 @@ export function NewAdventureForm() {
   );
   const pointBuyPointsRemaining =
     pointBuyBudget - getPointBuyPointsSpent(abilityScores);
-  const backgroundSkillList = backgroundSkills[characterBackground] ?? [];
-  const proficientSkills = Array.from(new Set([...selectedSkills, ...backgroundSkillList]));
+  const backgroundSkillList = useMemo(
+    () => backgroundSkills[characterBackground] ?? [],
+    [characterBackground]
+  );
+  const proficientSkills = useMemo(
+    () => Array.from(new Set([...selectedSkills, ...backgroundSkillList])),
+    [backgroundSkillList, selectedSkills]
+  );
   const constitutionModifier = getModifier(resolvedAbilityScores.con);
   const maxHp = getAverageHp(selectedClass.hitDie, constitutionModifier);
   const passivePerception = 10 + getModifier(resolvedAbilityScores.wis) + (proficientSkills.includes("Perception") ? proficiencyBonus : 0);
@@ -2593,6 +2667,17 @@ export function NewAdventureForm() {
     () => selectedSpellCountsFor(selectedClass.spellGroups, selectedSpells),
     [selectedClass.spellGroups, selectedSpells]
   );
+  const mechanicsSeed = useMemo<MechanicsSeed>(() => {
+    const spellSlots = deriveSpellSlotsForSheet(selectedClass.id, characterLevel);
+
+    return {
+      characterClass: selectedClass.id,
+      level: characterLevel,
+      maxHp,
+      currentHp: maxHp,
+      ...(spellSlots ? { spellSlots } : {})
+    };
+  }, [maxHp, selectedClass.id]);
   const hasValidSpellSelection =
     selectedSpells.length > 0 &&
     selectedSpellCounts.Cantrip <= spellSelectionLimits.cantrips &&
@@ -2662,7 +2747,8 @@ export function NewAdventureForm() {
           `Spellcasting Ability: ${abilityDefinitions.find((ability) => ability.key === spellcastingAbility)?.label}`,
           `Spell Save DC: ${spellSaveDc}`,
           `Spell Attack Bonus: ${formatModifier(spellAttackBonus)}`,
-          `Spell Slots: ${spellSelectionLimits.spellSlotsText}`,
+          "Spell Slots",
+          ...spellSlotLinesForSheet(mechanicsSeed.spellSlots),
           ...selectedSpellLines
         ]
       : ["None"];
@@ -2757,6 +2843,7 @@ export function NewAdventureForm() {
     gender,
     hasSpells,
     maxHp,
+    mechanicsSeed,
     isJoinFlow,
     mode,
     passivePerception,
@@ -2770,7 +2857,6 @@ export function NewAdventureForm() {
     playerName,
     spellAttackBonus,
     spellSaveDc,
-    spellSelectionLimits,
     spellcastingAbility,
     subclass
   ]);
@@ -2789,7 +2875,7 @@ export function NewAdventureForm() {
 
     if (isCampaignDetailsStep) {
       if (isJoinFlow) {
-        return "Enter the game code";
+        return isInviteJoinFlow ? "Review the lobby invite" : "Enter the game code";
       }
 
       return "Choose the campaign world";
@@ -2833,9 +2919,9 @@ export function NewAdventureForm() {
     isCustomWorldStep,
     isJoinFlow,
     isLastCharacterStep,
-    equipmentChoiceStepIndex,
-    equipmentChoices.length,
+    isEquipmentCharacterStep,
     isEquipmentSummaryStep,
+    isInviteJoinFlow,
     mode,
     stepIndex
   ]);
@@ -2873,8 +2959,51 @@ export function NewAdventureForm() {
   }, []);
 
   useEffect(() => {
-    setJoinPreview(null);
-  }, [normalizedGameCode]);
+    if (!isInviteJoinFlow) {
+      setJoinPreview(null);
+    }
+  }, [isInviteJoinFlow, normalizedGameCode]);
+
+  useEffect(() => {
+    if (!isInviteJoinFlow) {
+      return;
+    }
+
+    let isCurrent = true;
+
+    async function loadInvitePreview() {
+      try {
+        const data = await previewLobbyInvite(inviteToken);
+
+        if (!isCurrent) {
+          return;
+        }
+
+        setJoinPreview({
+          ...data,
+          source: "invite",
+          hasBegun: false
+        });
+        setError("");
+      } catch (caught) {
+        if (!isCurrent) {
+          return;
+        }
+
+        setError(
+          caught instanceof Error
+            ? caught.message
+            : "That invite link could not be checked."
+        );
+      }
+    }
+
+    void loadInvitePreview();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [inviteToken, isInviteJoinFlow]);
 
   useEffect(() => {
     setSelectedSpells((currentSpells) => {
@@ -3181,7 +3310,7 @@ export function NewAdventureForm() {
   function canAdvance() {
     if (isCampaignDetailsStep) {
       if (isJoinFlow) {
-        return normalizedGameCode.length === 6;
+        return isInviteJoinFlow || normalizedGameCode.length === 6;
       }
 
       return Boolean(campaignGenre);
@@ -3224,11 +3353,17 @@ export function NewAdventureForm() {
   }
 
   async function previewJoinCode() {
-    const data = await previewCampaignJoin({
-      gameCode: normalizedGameCode
-    });
+    const data = isInviteJoinFlow
+      ? await previewLobbyInvite(inviteToken)
+      : await previewCampaignJoin({
+          gameCode: normalizedGameCode
+        });
 
-    setJoinPreview(data);
+    setJoinPreview({
+      ...data,
+      source: isInviteJoinFlow ? "invite" : "code",
+      hasBegun: "hasBegun" in data ? data.hasBegun : false
+    });
   }
 
   function transitionFlow(updateFlow: () => void) {
@@ -3259,7 +3394,9 @@ export function NewAdventureForm() {
           ? "Name the world and describe it before continuing."
           : isCampaignDetailsStep
           ? isJoinFlow
-            ? "Enter the six-character game code before continuing."
+            ? isInviteJoinFlow
+              ? "This invite link could not be checked yet."
+              : "Enter the six-character game code before continuing."
             : "Choose a campaign world before continuing."
             : requiresCharacterName && currentCharacterStep === "Identity"
               ? isJoinFlow
@@ -3281,7 +3418,11 @@ export function NewAdventureForm() {
         await previewJoinCode();
       } catch (caught) {
         setError(
-          caught instanceof Error ? caught.message : "That game code could not be checked."
+          caught instanceof Error
+            ? caught.message
+            : isInviteJoinFlow
+              ? "That invite link could not be checked."
+              : "That game code could not be checked."
         );
         return;
       }
@@ -3366,7 +3507,8 @@ export function NewAdventureForm() {
             ? characterName.trim() || "Solo Player"
             : "Table Owner",
         characterName,
-        characterSheet
+        characterSheet,
+        mechanicsSeed
       });
 
       window.location.assign(
@@ -3390,13 +3532,19 @@ export function NewAdventureForm() {
     setIsCreating(true);
 
     try {
-      const campaign = await joinCampaignViaApi({
-        gameCode: normalizedGameCode,
+      const joinPayload = {
         clientId: ownerClientId,
         username: playerName.trim(),
         characterName: characterName.trim(),
-        characterSheet
-      });
+        characterSheet,
+        mechanicsSeed
+      };
+      const campaign = isInviteJoinFlow
+        ? await joinLobbyInvite(inviteToken, joinPayload)
+        : await joinCampaignViaApi({
+            gameCode: normalizedGameCode,
+            ...joinPayload
+          });
 
       window.location.assign(
         `/play?campaignId=${encodeURIComponent(campaign.id)}`
@@ -3465,9 +3613,7 @@ export function NewAdventureForm() {
                   aria-pressed={mode === "single_player"}
                   onClick={() => setMode("single_player")}
                 >
-                  <span className="mode-medallion">
-                    <Swords size={34} />
-                  </span>
+                  <span className="mode-banner-frame" aria-hidden="true" />
                   <span>
                     <strong>Singleplayer</strong>
                     <small>Private play with AI Taverns as your DM.</small>
@@ -3479,9 +3625,7 @@ export function NewAdventureForm() {
                   aria-pressed={mode === "multiplayer"}
                   onClick={() => setMode("multiplayer")}
                 >
-                  <span className="mode-medallion">
-                    <Users size={34} />
-                  </span>
+                  <span className="mode-banner-frame" aria-hidden="true" />
                   <span>
                     <strong>Multiplayer</strong>
                     <small>Invite players and resolve party turns together.</small>
@@ -3518,6 +3662,18 @@ export function NewAdventureForm() {
 
           {isCampaignDetailsStep && isJoinFlow ? (
             <div className="join-code-panel">
+              {isInviteJoinFlow ? (
+                <section className="join-preview">
+                  <span>Invite link</span>
+                  <strong>{joinPreview?.campaignTitle ?? "Checking lobby..."}</strong>
+                  {joinPreview ? (
+                    <span>
+                      {joinPreview.availableSlots}{" "}
+                      {joinPreview.availableSlots === 1 ? "seat" : "seats"} open
+                    </span>
+                  ) : null}
+                </section>
+              ) : (
                 <label>
                   <span>Game code</span>
                   <input
@@ -3530,7 +3686,8 @@ export function NewAdventureForm() {
                     autoFocus
                   />
                 </label>
-                {joinPreview ? (
+              )}
+                {joinPreview && !isInviteJoinFlow ? (
                   <section className="join-preview">
                     <strong>{joinPreview.campaignTitle}</strong>
                     <span>
@@ -3589,25 +3746,6 @@ export function NewAdventureForm() {
 
             {isCharacterStep ? (
               <div className="character-builder">
-                <ol className="character-creation-steps" aria-label="Character creation progress">
-                  {characterCreationSteps.map((step, index) => (
-                    <li
-                      className={[
-                        index === characterStepIndex ? "active" : "",
-                        index < characterStepIndex ? "complete" : ""
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
-                      key={step}
-                    >
-                      <span>
-                        {index < characterStepIndex ? <Check size={11} /> : index + 1}
-                      </span>
-                      <strong>{step}</strong>
-                    </li>
-                  ))}
-                </ol>
-
                 {characterStepIndex === 0 ? (
                   <fieldset className="option-picker build-mode-picker">
                     <legend>Build style</legend>
@@ -4240,7 +4378,8 @@ export function NewAdventureForm() {
                     <dt>{mode === "single_player" ? "Campaign" : "Table"}</dt>
                     <dd>
                       {isJoinFlow
-                        ? joinPreview?.campaignTitle ?? normalizedGameCode
+                        ? joinPreview?.campaignTitle ??
+                          (isInviteJoinFlow ? "Invited Lobby" : normalizedGameCode)
                         : campaignDisplayName}
                     </dd>
                   </div>
@@ -4258,8 +4397,8 @@ export function NewAdventureForm() {
                   ) : null}
                   {isJoinFlow ? (
                     <div>
-                      <dt>Game Code</dt>
-                      <dd>{normalizedGameCode}</dd>
+                      <dt>{isInviteJoinFlow ? "Invite" : "Game Code"}</dt>
+                      <dd>{isInviteJoinFlow ? "Invite link" : normalizedGameCode}</dd>
                     </div>
                   ) : null}
                   <div>
@@ -4325,7 +4464,7 @@ export function NewAdventureForm() {
               disabled={stepIndex === 0 || isCreating || isFlowTransitioning}
               onClick={handleBack}
             >
-              <ArrowLeft size={16} />
+              <span className="fantasy-arrow-icon fantasy-arrow-back" aria-hidden="true" />
               Back
             </button>
             <button type="submit" disabled={isCreating || isFlowTransitioning}>
@@ -4339,7 +4478,7 @@ export function NewAdventureForm() {
               ) : (
                 <>
                   {isCharacterStep ? "Next" : "Continue"}
-                  <ArrowRight size={16} />
+                  <span className="fantasy-arrow-icon fantasy-arrow-forward" aria-hidden="true" />
                 </>
               )}
             </button>

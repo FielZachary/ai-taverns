@@ -4,18 +4,21 @@ import {
   DiceRollSubmissionSchema,
   RoomSnapshotSchema
 } from "./rooms.js";
+import { AiModelIdSchema } from "./ai-models.js";
 
 export const CampaignSoloTurnRequestSchema = z.object({
   message: z.string().optional(),
   rollRequestId: z.string().optional(),
   rollResult: DiceRollResultSchema.optional(),
   clientMessageId: z.string().optional(),
+  model: AiModelIdSchema.optional(),
   rollSubmissions: z.array(DiceRollSubmissionSchema).optional()
 });
 
 export const CampaignAskDmRequestSchema = z.object({
   question: z.string().optional(),
-  clientMessageId: z.string().optional()
+  clientMessageId: z.string().optional(),
+  model: AiModelIdSchema.optional()
 });
 
 export const CampaignRegenerateRequestSchema = z.object({

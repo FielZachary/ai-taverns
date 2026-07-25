@@ -1,7 +1,8 @@
 import type {
   DiceRollRequest,
   GameMessage,
-  InputPolicy
+  InputPolicy,
+  NextInputNeeded
 } from "@/lib/game-types";
 import {
   defaultCharacterSheet,
@@ -12,6 +13,7 @@ export type CampaignMode = "single_player" | "multiplayer";
 
 export type RoomPlayer = {
   id: string;
+  actorKey?: string;
   slot: number;
   username: string;
   characterName: string;
@@ -29,8 +31,17 @@ export type RoomSnapshot = {
   hasBegun: boolean;
   pendingRollRequest: DiceRollRequest | null;
   pendingRollRequests?: DiceRollRequest[];
+  nextInputNeeded?: NextInputNeeded;
   inputTargets?: string[];
   inputPolicy?: InputPolicy;
+  combat?: {
+    active: boolean;
+    round: number;
+    turnOwner: string | null;
+    turnOwnerPlayerId: string | null;
+    turnOwnerCharacterName: string | null;
+    initiativeOrder: string[];
+  };
   updatedAt?: string;
 };
 
@@ -57,6 +68,8 @@ export function turnSubmissionValidationMessage({
   pendingRollRequests,
   currentPendingRollRequest,
   isWaitingOnTargetedInput,
+  isWaitingOnCombatTurn,
+  combatTurnOwnerName,
   isSinglePlayer,
   hasAdventureBegun,
   playerProfile
@@ -64,6 +77,8 @@ export function turnSubmissionValidationMessage({
   pendingRollRequests: DiceRollRequest[];
   currentPendingRollRequest: DiceRollRequest | null;
   isWaitingOnTargetedInput: boolean;
+  isWaitingOnCombatTurn: boolean;
+  combatTurnOwnerName?: string | undefined;
   isSinglePlayer: boolean;
   hasAdventureBegun: boolean;
   playerProfile: PlayerProfile;
@@ -76,6 +91,12 @@ export function turnSubmissionValidationMessage({
 
   if (isWaitingOnTargetedInput) {
     return "The DM is waiting on another player.";
+  }
+
+  if (isWaitingOnCombatTurn) {
+    return combatTurnOwnerName
+      ? `Waiting on ${combatTurnOwnerName}'s combat turn.`
+      : "Waiting on another combat turn.";
   }
 
   if (!isSinglePlayer && !hasAdventureBegun) {
@@ -111,17 +132,36 @@ export function displayedRoomPlayersWithOptimisticSubmission(
 export function waitingPlayerStatuses({
   roomPlayers,
   hasAdventureBegun,
-  isSinglePlayer
+  isSinglePlayer,
+  inputPolicy = "all_players",
+  inputTargets = []
 }: {
   roomPlayers: RoomPlayer[];
   hasAdventureBegun: boolean;
   isSinglePlayer: boolean;
+  inputPolicy?: InputPolicy;
+  inputTargets?: string[];
 }): WaitingPlayerStatus[] {
   if (isSinglePlayer || !hasAdventureBegun) {
     return [];
   }
 
-  return roomPlayers
+  const visibleRoomPlayers =
+    inputPolicy === "only_targeted_players" && inputTargets.length > 0
+      ? roomPlayers.filter((roomPlayer) =>
+          inputTargetsCurrentPlayer(
+            inputTargets,
+            {
+              username: roomPlayer.username,
+              characterName: roomPlayer.characterName,
+              characterSheet: roomPlayer.characterSheet
+            },
+            roomPlayer
+          )
+        )
+      : roomPlayers;
+
+  return visibleRoomPlayers
     .filter((roomPlayer) => roomPlayer.status === "waiting")
     .map((roomPlayer) => ({
       id: roomPlayer.id,
@@ -186,6 +226,32 @@ export function isWaitingOnTargetedInput({
     inputTargets.length > 0 &&
     !inputTargetsCurrentPlayer(inputTargets, playerProfile, currentRoomPlayer)
   );
+}
+
+export function combatTurnOwnerName(
+  combat: RoomSnapshot["combat"] | undefined
+) {
+  return combat?.turnOwnerCharacterName?.trim() || undefined;
+}
+
+export function isWaitingOnCombatTurn({
+  isSinglePlayer,
+  combat,
+  currentRoomPlayer
+}: {
+  isSinglePlayer: boolean;
+  combat: RoomSnapshot["combat"] | undefined;
+  currentRoomPlayer?: RoomPlayer;
+}) {
+  if (isSinglePlayer || !combat?.active || !combat.turnOwner) {
+    return false;
+  }
+
+  if (!combat.turnOwnerPlayerId) {
+    return true;
+  }
+
+  return currentRoomPlayer?.id !== combat.turnOwnerPlayerId;
 }
 
 export function hasOptimisticSubmissionForCurrentPlayer({
@@ -332,6 +398,9 @@ export function rollRequestTargetsCurrentPlayer(
   }
 
   const playerNames = [
+    roomPlayer?.actorKey,
+    roomPlayer?.id,
+    roomPlayer?.id ? `player:${roomPlayer.id}` : undefined,
     profile.username,
     profile.characterName,
     roomPlayer?.username,

@@ -22,10 +22,11 @@ import {
   CampaignRegenerateRequestSchema,
   CampaignSoloTurnRequestSchema,
   CampaignSoloTurnResponseSchema,
+  MechanicsSeedSchema,
   HealthResponseSchema,
-  HermesPrepRequestSchema,
-  HermesTurnRequestSchema,
-  HermesTurnResponseSchema,
+  DmProviderPrepRequestSchema,
+  DmProviderTurnRequestSchema,
+  DmProviderTurnResponseSchema,
   DmStreamEventSchema,
   RoomPlayerUpdateRequestSchema,
   RoomRealtimeEventSchema,
@@ -193,7 +194,7 @@ test("campaign contracts accept list, create, and join preview payloads", () => 
     campaigns: [
       {
         id: "00000000-0000-4000-8000-000000000001",
-        hermesSessionId: "ai-dnd-session",
+        sessionId: "ai-dnd-session",
         mode: "multiplayer",
         title: "Table Owner",
         preview: "Classic Fantasy",
@@ -222,6 +223,33 @@ test("campaign contracts accept list, create, and join preview payloads", () => 
   });
 
   assert.equal(preview.availableSlots, 3);
+});
+
+test("mechanics seed contract accepts structured character mechanics", () => {
+  const seed = MechanicsSeedSchema.parse({
+    characterClass: "Sorcerer",
+    level: 5,
+    maxHp: 32,
+    currentHp: 32,
+    spellSlots: {
+      "1": { max: 4, used: 0 },
+      "2": { max: 3, used: 0 },
+      "3": { max: 2, used: 0 }
+    }
+  });
+
+  assert.equal(seed.spellSlots?.["3"]?.max, 2);
+  assert.throws(() =>
+    MechanicsSeedSchema.parse({
+      characterClass: "Sorcerer",
+      level: 5,
+      maxHp: 32,
+      currentHp: 32,
+      spellSlots: {
+        cantrip: { max: 1, used: 0 }
+      }
+    })
+  );
 });
 
 test("room contracts accept snapshots and mutation payloads", () => {
@@ -253,6 +281,7 @@ test("room contracts accept snapshots and mutation payloads", () => {
     players: [
       {
         id: "client-1",
+        actorKey: "player:actor-1",
         slot: 0,
         username: "Player",
         characterName: "Stone",
@@ -276,12 +305,22 @@ test("room contracts accept snapshots and mutation payloads", () => {
     hasBegun: true,
     pendingRollRequest: null,
     pendingRollRequests: [],
+    nextInputNeeded: "player_actions",
     inputTargets: [],
     inputPolicy: "all_players",
+    combat: {
+      active: true,
+      round: 2,
+      turnOwner: "player:client-1",
+      turnOwnerPlayerId: "client-1",
+      turnOwnerCharacterName: "Stone",
+      initiativeOrder: ["player:client-1", "npc:raider"]
+    },
     updatedAt: "2026-07-05T00:00:00.000Z"
   });
 
   assert.equal(snapshot.players[0]?.status, "waiting");
+  assert.equal(snapshot.combat.turnOwnerPlayerId, "client-1");
 });
 
 test("room realtime contract accepts heartbeat and update events", () => {
@@ -371,8 +410,17 @@ test("DM route contracts accept solo, ask-DM, regenerate, and traces payloads", 
     hasBegun: true,
     pendingRollRequest: null,
     pendingRollRequests: [],
+    nextInputNeeded: "player_actions",
     inputTargets: [],
     inputPolicy: "all_players",
+    combat: {
+      active: false,
+      round: 0,
+      turnOwner: null,
+      turnOwnerPlayerId: null,
+      turnOwnerCharacterName: null,
+      initiativeOrder: []
+    },
     updatedAt: "2026-07-05T00:00:00.000Z"
   });
 
@@ -392,8 +440,8 @@ test("DM route contracts accept solo, ask-DM, regenerate, and traces payloads", 
   );
 });
 
-test("Hermes compatibility contracts accept turn and prep payloads", () => {
-  const request = HermesTurnRequestSchema.parse({
+test("DM provider contracts accept turn and prep payloads", () => {
+  const request = DmProviderTurnRequestSchema.parse({
     message: "I open the old gate.",
     history: [
       {
@@ -405,11 +453,11 @@ test("Hermes compatibility contracts accept turn and prep payloads", () => {
     ],
     sessionId: "ai-dnd-session"
   });
-  const prep = HermesPrepRequestSchema.parse({
+  const prep = DmProviderPrepRequestSchema.parse({
     sessionId: "ai-dnd-session",
     ownerClientId: "client-1"
   });
-  const response = HermesTurnResponseSchema.parse({
+  const response = DmProviderTurnResponseSchema.parse({
     message: {
       id: "dm-message-1",
       role: "dm",

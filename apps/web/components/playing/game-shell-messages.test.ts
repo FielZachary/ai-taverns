@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import type { GameMessage } from "@/lib/game-types";
 import {
   appendStreamingDmDelta,
+  completeStreamingDmMessage,
   mergeVisibleGameMessages,
+  removePersistedStreamingDmMessages,
   removeStreamingDmMessage,
   startStreamingDmMessage,
   type StreamingDmMessage
@@ -139,6 +141,53 @@ describe("game shell message helpers", () => {
     ]);
   });
 
+  it("keeps same-timestamp ask DM questions before the in-flight DM answer", () => {
+    const visibleMessages = mergeVisibleGameMessages({
+      localMessages: [
+        message(
+          "ask-dm-question",
+          "player",
+          "2026-07-20T00:48:42.000Z",
+          "Can we see them?"
+        )
+      ],
+      roomMessages: [],
+      streamingDmMessages: [
+        streamingMessage(
+          "dm-stream-ask-1",
+          "ask-1",
+          "2026-07-20T00:48:42.000Z",
+          ""
+        )
+      ]
+    });
+
+    expect(visibleMessages.map((visibleMessage) => visibleMessage.id)).toEqual([
+      "ask-dm-question",
+      "dm-stream-ask-1"
+    ]);
+  });
+
+  it("uses deterministic fallback ordering for malformed timestamps", () => {
+    const visibleMessages = mergeVisibleGameMessages({
+      localMessages: [
+        message("local-player", "player", "not-a-date"),
+        message("local-system", "system", "not-a-date")
+      ],
+      roomMessages: [message("room-dm", "dm", "not-a-date")],
+      streamingDmMessages: [
+        streamingMessage("streaming-dm", "turn-1", "not-a-date")
+      ]
+    });
+
+    expect(visibleMessages.map((visibleMessage) => visibleMessage.id)).toEqual([
+      "local-player",
+      "room-dm",
+      "streaming-dm",
+      "local-system"
+    ]);
+  });
+
   it("allows streaming updates to replace earlier streaming text for the same id", () => {
     const visibleMessages = mergeVisibleGameMessages({
       localMessages: [],
@@ -261,5 +310,40 @@ describe("game shell message helpers", () => {
     expect(removeStreamingDmMessage(currentMessages, "turn-1")).toEqual([
       streamingMessage("dm-stream-turn-2", "turn-2", "2026-07-11T10:00:01.000Z")
     ]);
+  });
+
+  it("keeps completed streaming text under the final message id until the snapshot arrives", () => {
+    const completedMessages = completeStreamingDmMessage(
+      [
+        streamingMessage(
+          "dm-stream-turn-1",
+          "turn-1",
+          "2026-07-11T10:00:00.000Z",
+          "The answer is nearly complete."
+        )
+      ],
+      "turn-1",
+      "provider-answer-1"
+    );
+
+    expect(completedMessages).toEqual([
+      streamingMessage(
+        "provider-answer-1",
+        "turn-1",
+        "2026-07-11T10:00:00.000Z",
+        "The answer is nearly complete."
+      )
+    ]);
+
+    expect(
+      removePersistedStreamingDmMessages(completedMessages, [
+        message(
+          "provider-answer-1",
+          "dm",
+          "2026-07-11T10:00:01.000Z",
+          "The persisted answer."
+        )
+      ])
+    ).toEqual([]);
   });
 });

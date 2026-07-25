@@ -8,8 +8,10 @@ import {
   displayedRoomPlayersWithOptimisticSubmission,
   getMissingPlayerProfileFields,
   hasOptimisticSubmissionForCurrentPlayer,
+  combatTurnOwnerName,
   isInputSubmittedForCurrentRoomState,
   isWaitingOnAnotherPlayerRoll,
+  isWaitingOnCombatTurn,
   isWaitingOnTargetedInput,
   inputTargetsCurrentPlayer,
   rollRequestTargetsCurrentPlayer,
@@ -30,6 +32,7 @@ const completeProfile: PlayerProfile = {
 
 const currentRoomPlayer: RoomPlayer = {
   id: "player-1",
+  actorKey: "player:actor-1",
   slot: 1,
   username: "Ada at Table",
   characterName: "Nyx the Bright",
@@ -111,6 +114,7 @@ describe("game shell state helpers", () => {
         pendingRollRequests: [rollRequest("current", "Nyx")],
         currentPendingRollRequest: rollRequest("current", "Nyx"),
         isWaitingOnTargetedInput: false,
+        isWaitingOnCombatTurn: false,
         isSinglePlayer: false,
         hasAdventureBegun: true,
         playerProfile: completeProfile
@@ -122,6 +126,7 @@ describe("game shell state helpers", () => {
         pendingRollRequests: [rollRequest("other", "Bran")],
         currentPendingRollRequest: null,
         isWaitingOnTargetedInput: false,
+        isWaitingOnCombatTurn: false,
         isSinglePlayer: false,
         hasAdventureBegun: true,
         playerProfile: completeProfile
@@ -133,6 +138,7 @@ describe("game shell state helpers", () => {
         pendingRollRequests: [],
         currentPendingRollRequest: null,
         isWaitingOnTargetedInput: true,
+        isWaitingOnCombatTurn: false,
         isSinglePlayer: false,
         hasAdventureBegun: true,
         playerProfile: completeProfile
@@ -144,6 +150,20 @@ describe("game shell state helpers", () => {
         pendingRollRequests: [],
         currentPendingRollRequest: null,
         isWaitingOnTargetedInput: false,
+        isWaitingOnCombatTurn: true,
+        combatTurnOwnerName: "Bran",
+        isSinglePlayer: false,
+        hasAdventureBegun: true,
+        playerProfile: completeProfile
+      })
+    ).toBe("Waiting on Bran's combat turn.");
+
+    expect(
+      turnSubmissionValidationMessage({
+        pendingRollRequests: [],
+        currentPendingRollRequest: null,
+        isWaitingOnTargetedInput: false,
+        isWaitingOnCombatTurn: false,
         isSinglePlayer: false,
         hasAdventureBegun: false,
         playerProfile: completeProfile
@@ -163,6 +183,7 @@ describe("game shell state helpers", () => {
         pendingRollRequests: [],
         currentPendingRollRequest: null,
         isWaitingOnTargetedInput: false,
+        isWaitingOnCombatTurn: false,
         isSinglePlayer: false,
         hasAdventureBegun: true,
         playerProfile: incompleteProfile
@@ -174,6 +195,7 @@ describe("game shell state helpers", () => {
         pendingRollRequests: [],
         currentPendingRollRequest: null,
         isWaitingOnTargetedInput: false,
+        isWaitingOnCombatTurn: false,
         isSinglePlayer: true,
         hasAdventureBegun: false,
         playerProfile: incompleteProfile
@@ -185,6 +207,7 @@ describe("game shell state helpers", () => {
         pendingRollRequests: [],
         currentPendingRollRequest: null,
         isWaitingOnTargetedInput: false,
+        isWaitingOnCombatTurn: false,
         isSinglePlayer: false,
         hasAdventureBegun: true,
         playerProfile: completeProfile
@@ -237,6 +260,20 @@ describe("game shell state helpers", () => {
     ).toBe(true);
     expect(
       inputTargetsCurrentPlayer(
+        ["player:actor-1"],
+        completeProfile,
+        currentRoomPlayer
+      )
+    ).toBe(true);
+    expect(
+      inputTargetsCurrentPlayer(
+        ["player:player-1"],
+        completeProfile,
+        currentRoomPlayer
+      )
+    ).toBe(true);
+    expect(
+      inputTargetsCurrentPlayer(
         ["Other Player"],
         completeProfile,
         currentRoomPlayer
@@ -265,6 +302,31 @@ describe("game shell state helpers", () => {
         false
       )
     ).toEqual([]);
+  });
+
+  it("does not ask one multiplayer actor to roll another actor's initiative", () => {
+    const requests = [
+      {
+        ...rollRequest("initiative-tart", "Tart"),
+        label: "Initiative (Tart)"
+      },
+      {
+        ...rollRequest("initiative-nyx", "Nyx the Bright"),
+        label: "Initiative (Nyx the Bright)"
+      }
+    ];
+
+    expect(
+      currentPlayerRollRequests(requests, completeProfile, currentRoomPlayer, false)
+    ).toEqual([]);
+    expect(
+      currentPlayerRollRequests(
+        requests.slice().reverse(),
+        completeProfile,
+        currentRoomPlayer,
+        false
+      )
+    ).toEqual([requests[1]]);
   });
 
   it("prefers batched pending roll requests over the legacy single request", () => {
@@ -540,6 +602,22 @@ describe("game shell state helpers", () => {
         detail: undefined
       }
     ]);
+    expect(
+      waitingPlayerStatuses({
+        roomPlayers: players,
+        hasAdventureBegun: true,
+        isSinglePlayer: false,
+        inputPolicy: "only_targeted_players",
+        inputTargets: ["player:player-1"]
+      })
+    ).toEqual([
+      {
+        id: "player-1",
+        status: "waiting",
+        name: "Nyx",
+        detail: "Ada"
+      }
+    ]);
   });
 
   it("selects the active character sheet from current player, room players, then profile", () => {
@@ -653,6 +731,47 @@ describe("game shell state helpers", () => {
         inputPolicy: "only_targeted_players",
         inputTargets: ["Bran"],
         playerProfile: completeProfile,
+        currentRoomPlayer
+      })
+    ).toBe(false);
+  });
+
+  it("detects when combat turn ownership excludes the current player", () => {
+    const combat = {
+      active: true,
+      round: 2,
+      turnOwner: "player:player-2",
+      turnOwnerPlayerId: "player-2",
+      turnOwnerCharacterName: "Bran",
+      initiativeOrder: ["player:player-1", "player:player-2"]
+    };
+
+    expect(combatTurnOwnerName(combat)).toBe("Bran");
+    expect(
+      isWaitingOnCombatTurn({
+        isSinglePlayer: false,
+        combat,
+        currentRoomPlayer
+      })
+    ).toBe(true);
+    expect(
+      isWaitingOnCombatTurn({
+        isSinglePlayer: false,
+        combat: { ...combat, turnOwnerPlayerId: currentRoomPlayer.id },
+        currentRoomPlayer
+      })
+    ).toBe(false);
+    expect(
+      isWaitingOnCombatTurn({
+        isSinglePlayer: false,
+        combat: { ...combat, turnOwnerPlayerId: null },
+        currentRoomPlayer
+      })
+    ).toBe(true);
+    expect(
+      isWaitingOnCombatTurn({
+        isSinglePlayer: true,
+        combat,
         currentRoomPlayer
       })
     ).toBe(false);

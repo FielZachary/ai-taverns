@@ -2,7 +2,7 @@ create extension if not exists pgcrypto;
 
 create table if not exists campaigns (
   id uuid primary key default gen_random_uuid(),
-  hermes_session_id text unique not null,
+  session_id text unique not null,
   title text not null,
   mode text not null default 'multiplayer',
   status text not null default 'active',
@@ -38,7 +38,7 @@ create table if not exists turns (
   id uuid primary key default gen_random_uuid(),
   campaign_id uuid not null references campaigns(id) on delete cascade,
   status text not null default 'collecting',
-  hermes_message_id text,
+  model_message_id text,
   error text,
   created_at timestamptz not null default now(),
   resolved_at timestamptz,

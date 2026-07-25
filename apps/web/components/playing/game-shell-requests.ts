@@ -1,8 +1,8 @@
-import type { DiceRollSubmission } from "@/lib/game-types";
+import type { AiModelId, DiceRollSubmission } from "@/lib/game-types";
 
 type CampaignRequestContext = {
   id: string;
-  hermesSessionId: string;
+  sessionId: string;
 };
 
 export type GameShellRequest = {
@@ -16,7 +16,8 @@ export function buildTurnSubmissionRequest({
   playerId,
   message,
   skipTurn,
-  clientMessageId
+  clientMessageId,
+  model
 }: {
   campaign: CampaignRequestContext;
   singlePlayer: boolean;
@@ -24,13 +25,15 @@ export function buildTurnSubmissionRequest({
   message: string;
   skipTurn: boolean;
   clientMessageId: string;
+  model: AiModelId;
 }): GameShellRequest {
   if (singlePlayer) {
     return {
       endpoint: `/api/campaigns/${encodeURIComponent(campaign.id)}/solo-turn`,
       body: {
         message,
-        clientMessageId
+        clientMessageId,
+        model
       }
     };
   }
@@ -39,11 +42,12 @@ export function buildTurnSubmissionRequest({
     endpoint: "/api/room/submit",
     body: {
       roomId: campaign.id,
-      sessionId: campaign.hermesSessionId,
+      sessionId: campaign.sessionId,
       playerId,
       message,
       skipTurn,
-      clientMessageId
+      clientMessageId,
+      model
     }
   };
 }
@@ -53,20 +57,23 @@ export function buildRollSubmissionRequest({
   singlePlayer,
   playerId,
   rollSubmissions,
-  clientMessageId
+  clientMessageId,
+  model
 }: {
   campaign: CampaignRequestContext;
   singlePlayer: boolean;
   playerId: string;
   rollSubmissions: DiceRollSubmission[];
   clientMessageId: string;
+  model: AiModelId;
 }): GameShellRequest {
   if (singlePlayer) {
     return {
       endpoint: `/api/campaigns/${encodeURIComponent(campaign.id)}/solo-turn`,
       body: {
         rollSubmissions,
-        clientMessageId
+        clientMessageId,
+        model
       }
     };
   }
@@ -75,10 +82,11 @@ export function buildRollSubmissionRequest({
     endpoint: "/api/room/submit",
     body: {
       roomId: campaign.id,
-      sessionId: campaign.hermesSessionId,
+      sessionId: campaign.sessionId,
       playerId,
       rollSubmissions,
-      clientMessageId
+      clientMessageId,
+      model
     }
   };
 }
