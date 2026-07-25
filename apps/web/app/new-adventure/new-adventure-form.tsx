@@ -171,12 +171,6 @@ const multiplayerCustomCreateSteps = [
 ];
 const joinSteps = ["Mode", "Multiplayer", "Game Code", "Character", "Review"];
 const joinCodePattern = /[A-HJ-NP-Z2-9]{6}/;
-const campaignCreationLoadingSteps = [
-  "Preparing your adventure",
-  "Painting your character portrait",
-  "Saving the final details",
-  "Setting the table"
-];
 const customCharacterCreationSteps = [
   "Build",
   "Class",
@@ -3306,7 +3300,6 @@ export function NewAdventureForm({
   const [isCreating, setIsCreating] = useState(false);
   const [createdCampaign, setCreatedCampaign] =
     useState<CampaignSummary | null>(null);
-  const [creationLoadingStep, setCreationLoadingStep] = useState(0);
   const [flowTransition, setFlowTransition] =
     useState<FlowTransitionState>("idle");
   const isFlowTransitioning = flowTransition !== "idle";
@@ -3695,21 +3688,6 @@ export function NewAdventureForm({
   useEffect(() => {
     setCharacterSheet(characterSheetPreview);
   }, [characterSheetPreview]);
-
-  useEffect(() => {
-    if (!isCreating || isJoinFlow) {
-      setCreationLoadingStep(0);
-      return;
-    }
-
-    const interval = window.setInterval(() => {
-      setCreationLoadingStep((currentStep) =>
-        Math.min(currentStep + 1, campaignCreationLoadingSteps.length - 1)
-      );
-    }, 2400);
-
-    return () => window.clearInterval(interval);
-  }, [isCreating, isJoinFlow]);
 
   useEffect(() => {
     const savedPlayerId = localStorage.getItem(playerIdStorageKey);
@@ -4342,24 +4320,16 @@ export function NewAdventureForm({
   }
 
   if (isCreating && !isJoinFlow) {
-    const isFinalCreationLoadingStep =
-      creationLoadingStep === campaignCreationLoadingSteps.length - 1;
-
     return (
       <main className="campaign-creation-screen" aria-label="Creating campaign">
         <section className="campaign-creation-center" aria-live="polite">
-          <div className="campaign-creation-loader" aria-hidden="true">
-            <Sparkles size={26} />
-          </div>
-          <p
-            key={creationLoadingStep}
-            className={
-              isFinalCreationLoadingStep
-                ? "campaign-creation-message-hold"
-                : undefined
-            }
-          >
-            {campaignCreationLoadingSteps[creationLoadingStep]}
+          <p className="rune-loader">
+            Preparing your campaign
+            <span className="rune-loader-dots" aria-hidden="true">
+              <span>.</span>
+              <span>.</span>
+              <span>.</span>
+            </span>
           </p>
         </section>
       </main>

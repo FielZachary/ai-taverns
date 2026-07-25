@@ -352,6 +352,31 @@ describe("NewAdventureForm", () => {
       screen.getByRole("button", { name: /generate portrait/i })
     ).toBeEnabled();
   });
+
+  it("uses the shared rune loader while preparing a campaign", async () => {
+    createCampaignMock.mockImplementation(
+      () => new Promise(() => undefined)
+    );
+
+    render(<NewAdventureForm />);
+
+    await advanceSingleplayerToIdentity();
+
+    fireEvent.change(screen.getByLabelText("Character name"), {
+      target: { value: "Mira Vale" }
+    });
+
+    await nextCharacterStep();
+    await nextCharacterStep();
+
+    fireEvent.click(screen.getByRole("button", { name: /generate portrait/i }));
+
+    expect(screen.getByLabelText("Creating campaign")).toBeInTheDocument();
+    expect(screen.getByText(/preparing your campaign/i)).toHaveClass(
+      "rune-loader"
+    );
+    expect(screen.queryByText(/setting the table/i)).not.toBeInTheDocument();
+  });
 });
 
 describe("spell art archetypes", () => {
