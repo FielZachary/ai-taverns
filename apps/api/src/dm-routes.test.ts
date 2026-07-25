@@ -1051,6 +1051,67 @@ test("DM runtime solo turns accept roll submissions without a message", async ()
   );
 });
 
+test("DM runtime memory updater creates and updates NPC context cards", async () => {
+  const { cookie, campaignId } = await createSinglePlayerCampaign(
+    "dm-runtime-npc-context"
+  );
+
+  const firstResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "I speak with Marra Vell near Pier 6.",
+      clientMessageId: "npc-context-first-turn"
+    }
+  });
+
+  assert.equal(firstResponse.statusCode, 200, firstResponse.body);
+  CampaignSoloTurnResponseSchema.parse(firstResponse.json());
+
+  const createdChunk = database.contextChunks.find(
+    (chunk) =>
+      chunk.campaign_id === campaignId &&
+      chunk.context_key === "npc:marra-vell"
+  );
+
+  assert.ok(createdChunk);
+  assert.equal(createdChunk.category, "npc_context");
+  assert.equal(createdChunk.visibility, "dm_only");
+  assert.match(createdChunk.body_markdown, /## Motivations/);
+  assert.match(createdChunk.body_markdown, /Wary but interested/);
+
+  const secondResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "I find Marra Vell at the Harbor Watch station.",
+      clientMessageId: "npc-context-second-turn"
+    }
+  });
+
+  assert.equal(secondResponse.statusCode, 200, secondResponse.body);
+  CampaignSoloTurnResponseSchema.parse(secondResponse.json());
+
+  const marraChunks = database.contextChunks.filter(
+    (chunk) =>
+      chunk.campaign_id === campaignId &&
+      chunk.context_key === "npc:marra-vell"
+  );
+
+  assert.equal(marraChunks.length, 1);
+  assert.match(marraChunks[0]?.body_markdown ?? "", /Harbor Watch station/);
+  assert.match(
+    marraChunks[0]?.body_markdown ?? "",
+    /more willing to talk after the party found her again/
+  );
+});
+
 test("DM runtime routes require an owned session", async () => {
   const campaignId = "00000000-0000-4000-8000-000000000001";
   const requests = [

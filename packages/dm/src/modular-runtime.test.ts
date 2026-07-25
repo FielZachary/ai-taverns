@@ -450,6 +450,12 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("clarification"), /Do not set next_input_needed to "player_actions"/);
     assert.match(jobPrompt("clarification"), /Do not reframe or soften the player's declared intent/i);
     assert.match(buildMemoryUpdaterPrompt(), /Allowed operations/);
+    assert.match(buildMemoryUpdaterPrompt(), /Create a new NPC card/i);
+    assert.match(buildMemoryUpdaterPrompt(), /Make each NPC feel like a compelling character/i);
+    assert.match(buildMemoryUpdaterPrompt(), /## Disposition Towards You/);
+    assert.match(buildMemoryUpdaterPrompt(), /Example new NPC response/);
+    assert.doesNotMatch(buildMemoryUpdaterPrompt(), /"context_type"/);
+    assert.doesNotMatch(buildMemoryUpdaterPrompt(), /"visibility"/);
   });
 
   it("renders mode-specific job guidance without duplicating job prompts", () => {

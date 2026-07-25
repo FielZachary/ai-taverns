@@ -3905,6 +3905,191 @@ async function buildModularDmPromptContext(
   };
 }
 
+type NpcContextIndexEntry = {
+  contextKey: string;
+  title: string;
+  visibility: "player_safe" | "dm_only";
+  priority: number;
+  updatedAt: string;
+};
+
+async function listCampaignNpcContextIndex(
+  db: Queryable,
+  campaignId: string,
+  limit = 80
+): Promise<NpcContextIndexEntry[]> {
+  try {
+    const result = await db.query<Record<string, unknown>>(
+      `
+        select
+          context_key,
+          title,
+          visibility,
+          priority,
+          updated_at
+        from campaign_context_chunks
+        where campaign_id = $1
+          and category = 'npc_context'
+          and archived_at is null
+        order by priority desc, updated_at desc
+        limit $2
+      `,
+      [campaignId, limit]
+    );
+
+    return result.rows.map((row) => ({
+      contextKey: String(row.context_key ?? ""),
+      title: String(row.title ?? row.context_key ?? ""),
+      visibility:
+        row.visibility === "player_safe" || row.visibility === "dm_only"
+          ? row.visibility
+          : "dm_only",
+      priority: typeof row.priority === "number" ? row.priority : 0,
+      updatedAt: row.updated_at ? toIso(row.updated_at as Date | string) : ""
+    }));
+  } catch (error) {
+    if (!isMissingRuntimeTableError(error)) {
+      throw error;
+    }
+
+    return [];
+  }
+}
+
+function npcContextSearchText(input: {
+  currentAction: string;
+  dmResponse: string;
+  history: GameMessage[];
+}) {
+  return [
+    input.currentAction,
+    input.dmResponse,
+    ...input.history.map((message) => message.content)
+  ]
+    .join("\n")
+    .toLowerCase();
+}
+
+function npcTitleTokens(entry: NpcContextIndexEntry) {
+  return entry.title
+    .toLowerCase()
+    .split(/[^a-z0-9]+/g)
+    .filter((token) => token.length >= 3);
+}
+
+function npcEntryMatchesText(entry: NpcContextIndexEntry, searchText: string) {
+  const title = entry.title.toLowerCase().trim();
+  const contextSlug = entry.contextKey
+    .replace(/^npc:/, "")
+    .toLowerCase()
+    .replace(/-/g, " ");
+
+  if (title && searchText.includes(title)) {
+    return true;
+  }
+
+  if (contextSlug && searchText.includes(contextSlug)) {
+    return true;
+  }
+
+  const tokens = npcTitleTokens(entry);
+
+  return tokens.length >= 2 && tokens.every((token) => searchText.includes(token));
+}
+
+function selectRelevantNpcContextKeys(
+  index: NpcContextIndexEntry[],
+  input: {
+    currentAction: string;
+    dmResponse: string;
+    history: GameMessage[];
+  },
+  limit = 20
+) {
+  const searchText = npcContextSearchText(input);
+  const keys = new Set<string>();
+
+  for (const entry of index) {
+    if (npcEntryMatchesText(entry, searchText)) {
+      keys.add(entry.contextKey);
+    }
+  }
+
+  for (const entry of index) {
+    if (keys.size >= limit) {
+      break;
+    }
+
+    keys.add(entry.contextKey);
+  }
+
+  return [...keys].slice(0, limit);
+}
+
+async function retrieveRelevantNpcContextChunks(
+  db: Queryable,
+  campaignId: string,
+  keys: string[],
+  maxChars = 12000
+) {
+  if (keys.length === 0) {
+    return [] as ContextChunk[];
+  }
+
+  const router: ValidatedRouterOutput = {
+    jobNeeded: "scene_director",
+    contextKeys: {
+      npc_context: keys,
+      player_character_context: [],
+      combat_context: [],
+      relevant_world_context: [],
+      quests_open_threads: [],
+      overarching_big_plot_secrets: []
+    },
+    fallbackUsed: false,
+    errors: []
+  };
+  const context = await retrieveSelectedContextChunks(
+    db,
+    campaignId,
+    router,
+    maxChars
+  );
+
+  return context.chunks;
+}
+
+function formatNpcContextIndex(index: NpcContextIndexEntry[]) {
+  if (index.length === 0) {
+    return "No existing NPC cards.";
+  }
+
+  return JSON.stringify(
+    index.map((entry) => ({
+      context_id: entry.contextKey,
+      title: entry.title,
+      updated_at: entry.updatedAt
+    })),
+    null,
+    2
+  );
+}
+
+function normalizeNewContextChunkPatch(chunk: unknown) {
+  const payload = eventPayload(chunk);
+  const contextId = String(payload.context_id ?? payload.contextId ?? "");
+  const title = String(payload.title ?? contextId);
+
+  return eventPayload({
+    ...payload,
+    operation: "create_chunk",
+    context_id: contextId,
+    context_type: payload.context_type ?? payload.contextType ?? "npc_context",
+    title,
+    visibility: payload.visibility ?? "dm_only"
+  });
+}
+
 async function listCampaignContextIds(db: Queryable, campaignId: string) {
   try {
     const result = await db.query<{ context_key: string }>(
@@ -4028,6 +4213,17 @@ export async function runModularPostTurnContextJobs(
   const traceId = randomUUID();
   const startedAt = Date.now();
   const history = await getCampaignEventMessages(db, input.campaignId, 8);
+  const npcContextIndex = await listCampaignNpcContextIndex(db, input.campaignId);
+  const relevantNpcContextKeys = selectRelevantNpcContextKeys(npcContextIndex, {
+    currentAction: input.currentAction,
+    dmResponse: input.dmResponse,
+    history
+  });
+  const relevantNpcContextChunks = await retrieveRelevantNpcContextChunks(
+    db,
+    input.campaignId,
+    relevantNpcContextKeys
+  );
   const message = [
     "Current turn input:",
     input.currentAction,
@@ -4037,6 +4233,12 @@ export async function runModularPostTurnContextJobs(
     "",
     "Roll requests:",
     JSON.stringify(input.rollRequests ?? [], null, 2),
+    "",
+    "Existing NPC context index:",
+    formatNpcContextIndex(npcContextIndex),
+    "",
+    "Relevant existing NPC cards:",
+    renderContextChunks(relevantNpcContextChunks),
     "",
     "Recent messages:",
     JSON.stringify(history, null, 2)
@@ -4050,6 +4252,8 @@ export async function runModularPostTurnContextJobs(
       phase: "memory_updater_started",
       payload: {
         historyCount: history.length,
+        npcContextIndexCount: npcContextIndex.length,
+        relevantNpcContextKeys,
         message: textStats(message)
       }
     });
@@ -4075,10 +4279,7 @@ export async function runModularPostTurnContextJobs(
       ...(Array.isArray(parsed?.patches) ? parsed.patches : []),
       ...(Array.isArray(parsed?.new_context_chunks)
         ? parsed.new_context_chunks.map((chunk) =>
-            eventPayload({
-              ...(eventPayload(chunk)),
-              operation: "create_chunk"
-            })
+            normalizeNewContextChunkPatch(chunk)
           )
         : []),
       ...(Array.isArray(parsed?.remove_context_chunks)
