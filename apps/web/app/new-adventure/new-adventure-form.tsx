@@ -4353,6 +4353,12 @@ export function NewAdventureForm({
                 <button
                   type="button"
                   className={mode === "single_player" ? "selected" : ""}
+                  style={
+                    {
+                      "--mode-banner-art-url":
+                        'url("/new-adventure/singleplayer-banner.webp")'
+                    } as CSSProperties
+                  }
                   aria-pressed={mode === "single_player"}
                   onClick={() => setMode("single_player")}
                 >
@@ -4365,6 +4371,12 @@ export function NewAdventureForm({
                 <button
                   type="button"
                   className={mode === "multiplayer" ? "selected" : ""}
+                  style={
+                    {
+                      "--mode-banner-art-url":
+                        'url("/new-adventure/multiplayer-banner.webp")'
+                    } as CSSProperties
+                  }
                   aria-pressed={mode === "multiplayer"}
                   onClick={() => setMode("multiplayer")}
                 >
