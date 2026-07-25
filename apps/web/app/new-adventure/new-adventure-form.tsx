@@ -658,7 +658,7 @@ const spellEffectSummaries: Record<string, string> = {
   "Zone of Truth": "Prevents deliberate lies inside an area."
 };
 
-function spellEffectSummaryFor(spell: string) {
+export function spellEffectSummaryFor(spell: string) {
   const knownSummary = spellEffectSummaries[spell];
 
   if (knownSummary) {
@@ -720,7 +720,7 @@ function spellEffectSummaryFor(spell: string) {
   return "Adds a flexible magical option for combat, exploration, or problem-solving.";
 }
 
-function spellArchetypeFor(spell: string) {
+export function spellArchetypeFor(spell: string) {
   if (/fire|flame|burn|scorch|bonfire|pyrotechnics|heat metal/i.test(spell)) {
     return "fire";
   }
@@ -868,7 +868,7 @@ function spellArchetypeFor(spell: string) {
   return "force";
 }
 
-function spellArtPathFor(spell: string) {
+export function spellArtPathFor(spell: string) {
   return `/spell-archetypes/${spellArchetypeFor(spell)}.webp`;
 }
 
@@ -891,7 +891,7 @@ const specificSpellSchools: Record<string, string> = {
   "Spare the Dying": "Necromancy"
 };
 
-function spellSchoolFor(spell: string) {
+export function spellSchoolFor(spell: string) {
   const specificSchool = specificSpellSchools[spell];
 
   if (specificSchool) {
@@ -933,7 +933,7 @@ function spellSchoolFor(spell: string) {
   return "Varies";
 }
 
-function spellDurationFor(spell: string, level: SpellLevelLabel | null) {
+export function spellDurationFor(spell: string, level: SpellLevelLabel | null) {
   if (/mage armor/i.test(spell)) {
     return "8 hours";
   }
@@ -965,7 +965,7 @@ function spellDurationFor(spell: string, level: SpellLevelLabel | null) {
   return "Varies by use";
 }
 
-function spellCastingTimeFor(spell: string) {
+export function spellCastingTimeFor(spell: string) {
   if (/counterspell|shield|feather fall|hellish rebuke|absorb elements|silvery barbs/i.test(spell)) {
     return "1 reaction";
   }
@@ -981,7 +981,7 @@ function spellCastingTimeFor(spell: string) {
   return "1 action";
 }
 
-function spellRangeFor(spell: string) {
+export function spellRangeFor(spell: string) {
   if (/shield$|armor of agathys|alter self|blink|blur|divine favor|expeditious retreat|false life|gaseous form|mirror image|misty step|shadow blade/i.test(spell)) {
     return "Self";
   }
@@ -1009,7 +1009,7 @@ function spellRangeFor(spell: string) {
   return "Varies";
 }
 
-function spellRollsFor(spell: string) {
+export function spellRollsFor(spell: string) {
   if (/fire bolt|eldritch blast|ray|guiding bolt|produce flame|thorn whip|shocking grasp|witch bolt|chromatic orb|scorching ray|melf/i.test(spell)) {
     return "Make a spell attack roll: d20 + your spell attack bonus. On a hit, roll the spell's damage dice.";
   }
@@ -1033,7 +1033,7 @@ function spellRollsFor(spell: string) {
   return "Resolve with your spell save DC or spell attack bonus only if the DM calls for a roll; otherwise apply the spell's described effect.";
 }
 
-function spellDetailFor(spell: string, level: SpellLevelLabel | null): SpellRuleProfile {
+export function spellDetailFor(spell: string, level: SpellLevelLabel | null): SpellRuleProfile {
   const summary = spellEffectSummaryFor(spell);
   const school = spellSchoolFor(spell);
   const duration = spellDurationFor(spell, level);
