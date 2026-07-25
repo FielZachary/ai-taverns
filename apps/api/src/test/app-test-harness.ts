@@ -31,6 +31,7 @@ export type DebugFields = {
   rawResponse?: unknown;
   temperature?: unknown;
   combatState?: unknown;
+  contextStorageState?: unknown;
   combatAdjudication?: unknown;
   router?: unknown;
 };
@@ -723,6 +724,42 @@ class FakeDatabase {
       return { rows: [{ id: record.id } as T] };
     }
 
+    if (
+      normalizedSql.startsWith(
+        "update campaign_events set payload = jsonb_set"
+      )
+    ) {
+      const campaignId = values[0] as string;
+      const eventId = values[1] as string;
+      const contextStorageState =
+        typeof values[2] === "string"
+          ? (JSON.parse(values[2] as string) as unknown)
+          : values[2];
+      const event = this.campaignEvents.find(
+        (candidate) =>
+          candidate.campaign_id === campaignId && candidate.id === eventId
+      );
+
+      if (event) {
+        const payload = event.payload && typeof event.payload === "object"
+          ? (event.payload as Record<string, unknown>)
+          : {};
+        const aiDebug = payload.aiDebug && typeof payload.aiDebug === "object"
+          ? (payload.aiDebug as Record<string, unknown>)
+          : {};
+
+        event.payload = {
+          ...payload,
+          aiDebug: {
+            ...aiDebug,
+            contextStorageState
+          }
+        };
+      }
+
+      return { rows: [] as T[] };
+    }
+
     if (normalizedSql.startsWith("select context_key from campaign_context_chunks")) {
       const campaignId = values[0] as string;
 
@@ -767,6 +804,53 @@ class FakeDatabase {
             title: chunk.title,
             visibility: chunk.visibility,
             priority: chunk.priority,
+            updated_at: chunk.updated_at
+          }) as T)
+      };
+    }
+
+    if (
+      normalizedSql.startsWith(
+        "select context_key, category, title, visibility, priority, body_markdown, archived_at, created_at, updated_at from campaign_context_chunks"
+      )
+    ) {
+      const campaignId = values[0] as string;
+
+      return {
+        rows: this.contextChunks
+          .filter((chunk) => chunk.campaign_id === campaignId)
+          .sort((left, right) => {
+            const leftArchived = left.archived_at ? 1 : 0;
+            const rightArchived = right.archived_at ? 1 : 0;
+            const archivedDelta = leftArchived - rightArchived;
+
+            if (archivedDelta !== 0) {
+              return archivedDelta;
+            }
+
+            const categoryDelta = left.category.localeCompare(right.category);
+
+            if (categoryDelta !== 0) {
+              return categoryDelta;
+            }
+
+            const priorityDelta = right.priority - left.priority;
+
+            if (priorityDelta !== 0) {
+              return priorityDelta;
+            }
+
+            return right.updated_at.getTime() - left.updated_at.getTime();
+          })
+          .map((chunk) => ({
+            context_key: chunk.context_key,
+            category: chunk.category,
+            title: chunk.title,
+            visibility: chunk.visibility,
+            priority: chunk.priority,
+            body_markdown: chunk.body_markdown,
+            archived_at: chunk.archived_at,
+            created_at: chunk.updated_at,
             updated_at: chunk.updated_at
           }) as T)
       };

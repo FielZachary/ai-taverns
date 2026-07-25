@@ -44,6 +44,7 @@ import type {
   DiceRollSubmission,
   MechanicsSeed,
   MechanicsState,
+  RoomSocketEvent,
   RoomSnapshot
 } from "@ai-dnd/contracts";
 import {
@@ -591,7 +592,7 @@ export type DungeonMasterRuntime = {
     model?: AiModelId;
     onPublicNarrationDelta?: (text: string) => void;
   }): Promise<DungeonMasterProviderResponse>;
-  emitDmStreamEvent?(event: DmStreamEvent): void;
+  emitDmStreamEvent?(event: DmStreamEvent | RoomSocketEvent): void;
   buildPromptContext?(input: {
     campaignId: string;
     turnId?: string | undefined;
@@ -3913,6 +3914,58 @@ type NpcContextIndexEntry = {
   updatedAt: string;
 };
 
+async function retrieveCampaignContextStorageState(
+  db: Queryable,
+  campaignId: string
+) {
+  try {
+    const result = await db.query<Record<string, unknown>>(
+      `
+        select
+          context_key,
+          category,
+          title,
+          visibility,
+          priority,
+          body_markdown,
+          archived_at,
+          created_at,
+          updated_at
+        from campaign_context_chunks
+        where campaign_id = $1
+        order by archived_at nulls first,
+          category asc,
+          priority desc,
+          updated_at desc
+      `,
+      [campaignId]
+    );
+
+    return result.rows.map((row) => ({
+      context_id: String(row.context_key ?? ""),
+      category: String(row.category ?? ""),
+      title: String(row.title ?? row.context_key ?? ""),
+      visibility:
+        row.visibility === "player_safe" || row.visibility === "dm_only"
+          ? row.visibility
+          : "dm_only",
+      priority: typeof row.priority === "number" ? row.priority : 0,
+      body_markdown: String(row.body_markdown ?? ""),
+      archived_at: row.archived_at
+        ? toIso(row.archived_at as Date | string)
+        : null,
+      created_at: row.created_at ? toIso(row.created_at as Date | string) : null,
+      updated_at: row.updated_at ? toIso(row.updated_at as Date | string) : null
+    }));
+  } catch (error) {
+    if (!isMissingRuntimeTableError(error)) {
+      throw error;
+    }
+
+    return [];
+  }
+}
+
 async function listCampaignNpcContextIndex(
   db: Queryable,
   campaignId: string,
@@ -4199,6 +4252,43 @@ async function applyAcceptedMemoryPatches(
   }
 }
 
+async function attachContextStorageStateToDmEventDebug(
+  db: Queryable,
+  input: {
+    campaignId: string;
+    dmEventId?: string | undefined;
+    contextStorageState: unknown;
+  }
+) {
+  if (!input.dmEventId) {
+    return;
+  }
+
+  await bestEffortRuntimeInsert(
+    db,
+    `
+      update campaign_events
+      set payload = jsonb_set(
+        jsonb_set(
+          payload,
+          '{aiDebug}',
+          coalesce(payload->'aiDebug', '{}'::jsonb),
+          true
+        ),
+        '{aiDebug,contextStorageState}',
+        $3::jsonb,
+        true
+      )
+      where campaign_id = $1 and id = $2
+    `,
+    [
+      input.campaignId,
+      input.dmEventId,
+      JSON.stringify(input.contextStorageState)
+    ]
+  );
+}
+
 export async function runModularPostTurnContextJobs(
   db: Queryable,
   runtime: DungeonMasterRuntime,
@@ -4207,6 +4297,7 @@ export async function runModularPostTurnContextJobs(
     turnId: string;
     currentAction: string;
     dmResponse: string;
+    dmEventId?: string | undefined;
     rollRequests?: DiceRollRequest[] | undefined;
   }
 ) {
@@ -4302,6 +4393,37 @@ export async function runModularPostTurnContextJobs(
       input.campaignId,
       validation.accepted
     );
+
+    const contextStorageState = await retrieveCampaignContextStorageState(
+      db,
+      input.campaignId
+    );
+    const contextStorageDebugState = {
+      capturedAt: nowIso(),
+      contextChunkCount: contextStorageState.length,
+      contextChunks: contextStorageState
+    };
+
+    await logDmTurnTrace(db, {
+      campaignId: input.campaignId,
+      traceId,
+      turnId: input.turnId,
+      phase: "context_storage_state_snapshot",
+      payload: contextStorageDebugState
+    });
+
+    await attachContextStorageStateToDmEventDebug(db, {
+      campaignId: input.campaignId,
+      dmEventId: input.dmEventId,
+      contextStorageState: contextStorageDebugState
+    });
+
+    runtime.emitDmStreamEvent?.({
+      type: "room_updated",
+      roomId: input.campaignId,
+      updatedAt: contextStorageDebugState.capturedAt,
+      ...(input.dmEventId ? { eventId: input.dmEventId } : {})
+    });
 
     await logDmMemoryPatchLog(db, {
       campaignId: input.campaignId,

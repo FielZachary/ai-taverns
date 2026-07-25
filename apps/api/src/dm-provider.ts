@@ -539,6 +539,9 @@ async function requestDeepSeek(
   const requestBody = JSON.stringify({
     model: settings.model,
     messages,
+    ...(settings.providerName === "DeepSeek"
+      ? { thinking: { type: "disabled" } }
+      : {}),
     temperature,
     max_tokens: 4096,
     ...(onPublicNarrationDelta ? { stream: true } : {})
