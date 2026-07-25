@@ -37,6 +37,7 @@ import {
   previewCampaignJoinByCode
 } from "@ai-dnd/db";
 import type { ApiConfig } from "../config.js";
+import { generateCharacterPortraitForCampaign } from "../character-portrait-generation.js";
 import { askDungeonMasterProvider } from "../dm-provider.js";
 import { requireAuthenticatedUser } from "./auth.js";
 
@@ -183,9 +184,26 @@ export async function registerCampaignRoutes(
       userId: user.id,
       runtime
     });
+    const portrait =
+      body.generateCharacterPortrait === true
+        ? await generateCharacterPortraitForCampaign({
+            db: fastify.pg,
+            config,
+            campaignId: campaign.id,
+            userId: user.id
+          })
+        : undefined;
+    const responseCampaign =
+      portrait?.status === "ready"
+        ? {
+            ...campaign,
+            portraitAssetId: portrait.assetId,
+            portraitUrl: portrait.portraitUrl
+          }
+        : campaign;
 
     reply.status(201);
-    return CampaignCreateResponseSchema.parse({ campaign });
+    return CampaignCreateResponseSchema.parse({ campaign: responseCampaign });
   });
 
   fastify.get("/campaigns/:campaignId", async (request) => {

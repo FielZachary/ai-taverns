@@ -16,12 +16,15 @@
     "@ai-dnd/contracts": "0.0.1",
     "@ai-dnd/db": "0.0.1",
     "@ai-dnd/dm": "0.0.1",
+    "@aws-sdk/client-s3": "^3.1095.0",
     "@fastify/cookie": "^11.0.0",
     "@fastify/cors": "^11.0.0",
+    "@fastify/static": "^10.1.2",
     "@fastify/websocket": "^11.2.0",
     "fastify": "^5.0.0",
     "fastify-plugin": "^5.0.0",
     "pg": "^8.22.0",
+    "sharp": "^0.35.3",
     "zod": "^3.25.0"
   },
   "devDependencies": {

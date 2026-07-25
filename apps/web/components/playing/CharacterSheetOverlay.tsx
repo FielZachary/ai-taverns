@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 
 type CharacterSheetOverlayProps = {
   characterSheet: string;
+  portraitUrl?: string;
   onClose: () => void;
 };
 
@@ -480,6 +481,7 @@ function LinedPanel({
 
 export function CharacterSheetOverlay({
   characterSheet,
+  portraitUrl,
   onClose
 }: CharacterSheetOverlayProps) {
   const sheet = parseCharacterSheet(characterSheet.trim());
@@ -513,6 +515,12 @@ export function CharacterSheetOverlay({
     >
       <div className="character-sheet-overlay-panel dnd-sheet">
         <header className="dnd-sheet-header">
+          {portraitUrl ? (
+            <div className="dnd-sheet-portrait" aria-hidden="true">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={portraitUrl} alt="" />
+            </div>
+          ) : null}
           <div className="dnd-sheet-nameplate">
             <span>Character Name</span>
             <h2 id="character-sheet-title">

@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import os from "node:os";
+import path from "node:path";
 import { after, before } from "node:test";
 import type { FastifyInstance } from "fastify";
 import { AuthPasswordlessStartResponseSchema } from "@ai-dnd/contracts";
@@ -31,6 +33,7 @@ export type DebugFields = {
   rawResponse?: unknown;
   temperature?: unknown;
   combatState?: unknown;
+  contextStorageState?: unknown;
   combatAdjudication?: unknown;
   router?: unknown;
 };
@@ -96,6 +99,34 @@ type PlayerRecord = {
   status: "active" | "left" | "kicked";
   last_seen_at: Date;
   kicked_at: Date | null;
+  created_at: Date;
+  updated_at: Date;
+  portrait_asset_id: string | null;
+  portrait_public_url?: string | null;
+};
+
+type MediaAssetRecord = {
+  id: string;
+  owner_user_id: string | null;
+  campaign_id: string | null;
+  player_id: string | null;
+  kind: "character_portrait" | "campaign_cover" | "npc_portrait";
+  status: "pending" | "ready" | "failed" | "deleted";
+  storage_provider: "local" | "digitalocean_spaces" | "s3";
+  bucket: string | null;
+  object_key: string | null;
+  public_url: string | null;
+  content_type: string;
+  byte_size: number | null;
+  width: number | null;
+  height: number | null;
+  sha256: string | null;
+  prompt: string | null;
+  negative_prompt: string | null;
+  provider: string | null;
+  model: string | null;
+  provider_request_id: string | null;
+  generation_metadata: unknown;
   created_at: Date;
   updated_at: Date;
 };
@@ -192,6 +223,7 @@ class FakeDatabase {
   campaignInvites: CampaignInviteRecord[] = [];
   campaignInviteUses: CampaignInviteUseRecord[] = [];
   campaignEvents: CampaignEventRecord[] = [];
+  mediaAssets: MediaAssetRecord[] = [];
   contextChunks: ContextChunkRecord[] = [];
   dmTurnTraces: DmTurnTraceRecord[] = [];
   turns: TurnRecord[] = [];
@@ -609,10 +641,116 @@ class FakeDatabase {
         last_seen_at: now,
         kicked_at: null,
         created_at: now,
-        updated_at: now
+        updated_at: now,
+        portrait_asset_id: null
       };
       this.players.push(record);
       return { rows: [record as T] };
+    }
+
+    if (
+      normalizedSql.startsWith("select players.*, campaigns.title as campaign_title")
+    ) {
+      const campaignId = values[0] as string;
+      const userId = values[1] as string;
+      const player = this.players.find(
+        (candidate) =>
+          candidate.campaign_id === campaignId &&
+          candidate.user_id === userId &&
+          candidate.status === "active"
+      );
+      const campaign = player
+        ? this.campaigns.find(
+            (candidate) =>
+              candidate.id === player.campaign_id &&
+              candidate.status === "active"
+          )
+        : undefined;
+
+      return {
+        rows:
+          player && campaign
+            ? ([
+                {
+                  ...player,
+                  campaign_title: campaign.title,
+                  campaign_metadata: campaign.metadata,
+                  campaign_owner_user_id: campaign.owner_user_id
+                }
+              ] as T[])
+            : ([] as T[])
+      };
+    }
+
+    if (normalizedSql.startsWith("insert into media_assets")) {
+      const now = new Date();
+      const record: MediaAssetRecord = {
+        id: `00000000-0000-4000-8000-${String(this.nextId++).padStart(12, "0")}`,
+        owner_user_id: values[0] as string | null,
+        campaign_id: values[1] as string,
+        player_id: values[2] as string,
+        kind: "character_portrait",
+        status: "pending",
+        storage_provider: values[3] as "local" | "digitalocean_spaces" | "s3",
+        bucket: null,
+        object_key: null,
+        public_url: null,
+        content_type: "image/webp",
+        byte_size: null,
+        width: null,
+        height: null,
+        sha256: null,
+        prompt: values[4] as string,
+        negative_prompt: values[5] as string,
+        provider: values[6] as string,
+        model: values[7] as string,
+        provider_request_id: null,
+        generation_metadata: {},
+        created_at: now,
+        updated_at: now
+      };
+      this.mediaAssets.push(record);
+      return { rows: [record as T] };
+    }
+
+    if (normalizedSql.startsWith("update media_assets set status = 'ready'")) {
+      const asset = this.mediaAssets.find(
+        (candidate) => candidate.id === values[0]
+      );
+
+      if (!asset) {
+        return { rows: [] as T[] };
+      }
+
+      asset.status = "ready";
+      asset.storage_provider = values[1] as "local" | "digitalocean_spaces" | "s3";
+      asset.bucket = values[2] as string | null;
+      asset.object_key = values[3] as string;
+      asset.public_url = values[4] as string;
+      asset.content_type = values[5] as string;
+      asset.byte_size = values[6] as number;
+      asset.width = values[7] as number | null;
+      asset.height = values[8] as number | null;
+      asset.sha256 = values[9] as string;
+      asset.provider_request_id = values[10] as string | null;
+      asset.generation_metadata = JSON.parse(values[11] as string) as unknown;
+      asset.updated_at = new Date();
+
+      return { rows: [asset as T] };
+    }
+
+    if (normalizedSql.startsWith("update media_assets set status = 'failed'")) {
+      const asset = this.mediaAssets.find(
+        (candidate) => candidate.id === values[0]
+      );
+
+      if (asset) {
+        asset.status = "failed";
+        asset.generation_metadata = JSON.parse(values[1] as string) as unknown;
+        asset.updated_at = new Date();
+      }
+
+      return { rows: [] as T[] };
     }
 
     if (normalizedSql.startsWith("select * from turns")) {
@@ -723,6 +861,42 @@ class FakeDatabase {
       return { rows: [{ id: record.id } as T] };
     }
 
+    if (
+      normalizedSql.startsWith(
+        "update campaign_events set payload = jsonb_set"
+      )
+    ) {
+      const campaignId = values[0] as string;
+      const eventId = values[1] as string;
+      const contextStorageState =
+        typeof values[2] === "string"
+          ? (JSON.parse(values[2] as string) as unknown)
+          : values[2];
+      const event = this.campaignEvents.find(
+        (candidate) =>
+          candidate.campaign_id === campaignId && candidate.id === eventId
+      );
+
+      if (event) {
+        const payload = event.payload && typeof event.payload === "object"
+          ? (event.payload as Record<string, unknown>)
+          : {};
+        const aiDebug = payload.aiDebug && typeof payload.aiDebug === "object"
+          ? (payload.aiDebug as Record<string, unknown>)
+          : {};
+
+        event.payload = {
+          ...payload,
+          aiDebug: {
+            ...aiDebug,
+            contextStorageState
+          }
+        };
+      }
+
+      return { rows: [] as T[] };
+    }
+
     if (normalizedSql.startsWith("select context_key from campaign_context_chunks")) {
       const campaignId = values[0] as string;
 
@@ -733,6 +907,89 @@ class FakeDatabase {
               chunk.campaign_id === campaignId && chunk.archived_at === null
           )
           .map((chunk) => ({ context_key: chunk.context_key }) as T)
+      };
+    }
+
+    if (
+      normalizedSql.startsWith(
+        "select context_key, title, visibility, priority, updated_at from campaign_context_chunks"
+      )
+    ) {
+      const campaignId = values[0] as string;
+      const limit = values[1] as number;
+
+      return {
+        rows: this.contextChunks
+          .filter(
+            (chunk) =>
+              chunk.campaign_id === campaignId &&
+              chunk.category === "npc_context" &&
+              chunk.archived_at === null
+          )
+          .sort((left, right) => {
+            const priorityDelta = right.priority - left.priority;
+
+            if (priorityDelta !== 0) {
+              return priorityDelta;
+            }
+
+            return right.updated_at.getTime() - left.updated_at.getTime();
+          })
+          .slice(0, limit)
+          .map((chunk) => ({
+            context_key: chunk.context_key,
+            title: chunk.title,
+            visibility: chunk.visibility,
+            priority: chunk.priority,
+            updated_at: chunk.updated_at
+          }) as T)
+      };
+    }
+
+    if (
+      normalizedSql.startsWith(
+        "select context_key, category, title, visibility, priority, body_markdown, archived_at, created_at, updated_at from campaign_context_chunks"
+      )
+    ) {
+      const campaignId = values[0] as string;
+
+      return {
+        rows: this.contextChunks
+          .filter((chunk) => chunk.campaign_id === campaignId)
+          .sort((left, right) => {
+            const leftArchived = left.archived_at ? 1 : 0;
+            const rightArchived = right.archived_at ? 1 : 0;
+            const archivedDelta = leftArchived - rightArchived;
+
+            if (archivedDelta !== 0) {
+              return archivedDelta;
+            }
+
+            const categoryDelta = left.category.localeCompare(right.category);
+
+            if (categoryDelta !== 0) {
+              return categoryDelta;
+            }
+
+            const priorityDelta = right.priority - left.priority;
+
+            if (priorityDelta !== 0) {
+              return priorityDelta;
+            }
+
+            return right.updated_at.getTime() - left.updated_at.getTime();
+          })
+          .map((chunk) => ({
+            context_key: chunk.context_key,
+            category: chunk.category,
+            title: chunk.title,
+            visibility: chunk.visibility,
+            priority: chunk.priority,
+            body_markdown: chunk.body_markdown,
+            archived_at: chunk.archived_at,
+            created_at: chunk.updated_at,
+            updated_at: chunk.updated_at
+          }) as T)
       };
     }
 
@@ -1294,7 +1551,10 @@ class FakeDatabase {
       };
     }
 
-    if (normalizedSql.startsWith("select * from players where campaign_id")) {
+    if (
+      normalizedSql.startsWith("select * from players where campaign_id") ||
+      normalizedSql.startsWith("select players.*, media_assets.id as portrait_asset_id")
+    ) {
       const campaignId = values[0] as string;
 
       if (normalizedSql.includes("and client_id = $2 and user_id = $3")) {
@@ -1319,12 +1579,31 @@ class FakeDatabase {
         return { rows: player ? ([player] as T[]) : ([] as T[]) };
       }
 
-      if (normalizedSql.includes("where campaign_id = $1 and status = 'active'")) {
+      if (
+        normalizedSql.includes("where campaign_id = $1 and status = 'active'") ||
+        normalizedSql.includes(
+          "where players.campaign_id = $1 and players.status = 'active'"
+        )
+      ) {
         return {
           rows: this.players.filter(
             (player) =>
               player.campaign_id === campaignId && player.status === "active"
-          ) as T[]
+          ).map((player) => {
+            const portrait = player.portrait_asset_id
+              ? this.mediaAssets.find(
+                  (asset) =>
+                    asset.id === player.portrait_asset_id &&
+                    asset.status === "ready"
+                )
+              : undefined;
+
+            return {
+              ...player,
+              portrait_asset_id: portrait?.id ?? player.portrait_asset_id,
+              portrait_public_url: portrait?.public_url ?? null
+            } as T;
+          })
         };
       }
 
@@ -1516,6 +1795,19 @@ class FakeDatabase {
       return { rows: [] as T[] };
     }
 
+    if (normalizedSql.startsWith("update players set portrait_asset_id")) {
+      const assetId = values[0] as string;
+      const playerId = values[1] as string;
+      const player = this.players.find((candidate) => candidate.id === playerId);
+
+      if (player) {
+        player.portrait_asset_id = assetId;
+        player.updated_at = new Date();
+      }
+
+      return { rows: [] as T[] };
+    }
+
     throw new Error(`Unhandled fake query: ${normalizedSql}`);
   };
 
@@ -1579,7 +1871,11 @@ before(async () => {
     config: loadConfig({
       NODE_ENV: "test",
       DATABASE_URL: "postgres://postgres:postgres@localhost:5432/ai_taverns",
-      AUTH_COOKIE_NAME: "test_session"
+      AUTH_COOKIE_NAME: "test_session",
+      MEDIA_LOCAL_DIR: path.join(
+        os.tmpdir(),
+        `ai-taverns-api-test-media-${process.pid}`
+      )
     }),
     connectToDatabase: false,
     dmRuntime: {
@@ -1627,11 +1923,43 @@ before(async () => {
         }
 
         if (input.instructions.includes("memory/context updater")) {
-          const content = JSON.stringify({
-            patches: [],
-            new_context_chunks: [],
-            remove_context_chunks: []
-          });
+          const shouldCreateMarra = /\bMarra Vell\b/.test(input.message);
+          const hasMarraContext = input.message.includes(
+            '"context_id": "npc:marra-vell"'
+          );
+          const content = JSON.stringify(
+            shouldCreateMarra && hasMarraContext
+              ? {
+                  patches: [
+                    {
+                      operation: "replace_section",
+                      context_id: "npc:marra-vell",
+                      markdown:
+                        "# Marra Vell\n\n## Name\nMarra Vell\n\n## Location\nHarbor Watch station.\n\n## Personality\nGuarded, quick-eyed, and newly desperate enough to negotiate.\n\n## Motivations\nStay alive and trade what she knows for protection.\n\n## Disposition Towards You\nStill wary, but more willing to talk after the party found her again.\n\n## Known History\n- First met by the party near Pier 6.\n- Later approached the party at the Harbor Watch station.\n\n## Secrets\nKnows more about the black key than she admitted.\n\n## Open Threads\n- Could reveal who sent the pursuers.\n\n## Last Seen\nAt the Harbor Watch station."
+                    }
+                  ],
+                  new_context_chunks: [],
+                  remove_context_chunks: []
+                }
+              : shouldCreateMarra
+                ? {
+                    patches: [],
+                    new_context_chunks: [
+                      {
+                        context_id: "npc:marra-vell",
+                        title: "Marra Vell",
+                        markdown:
+                          "# Marra Vell\n\n## Name\nMarra Vell\n\n## Location\nNear Pier 6.\n\n## Personality\nGuarded and quick-eyed.\n\n## Motivations\nStay alive and decide whether the party can be trusted.\n\n## Disposition Towards You\nWary but interested.\n\n## Known History\n- First met by the party near Pier 6.\n\n## Secrets\nKnows more about the black key than she admitted.\n\n## Open Threads\n- Could reveal who sent the pursuers.\n\n## Last Seen\nNear Pier 6."
+                      }
+                    ],
+                    remove_context_chunks: []
+                  }
+              : {
+                  patches: [],
+                  new_context_chunks: [],
+                  remove_context_chunks: []
+                }
+          );
 
           return {
             id: "provider-memory-updater-1",

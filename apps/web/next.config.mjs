@@ -20,6 +20,10 @@ const nextConfig = {
       {
         source: "/health",
         destination: `${fastifyApiOrigin}/health`
+      },
+      {
+        source: "/media/:path*",
+        destination: `${fastifyApiOrigin}/media/:path*`
       }
     ];
   }

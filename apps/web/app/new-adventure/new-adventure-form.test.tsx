@@ -1,7 +1,18 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { NewAdventureForm } from "./new-adventure-form";
+import {
+  NewAdventureForm,
+  spellArchetypeFor,
+  spellArtPathFor,
+  spellCastingTimeFor,
+  spellDetailFor,
+  spellDurationFor,
+  spellEffectSummaryFor,
+  spellRangeFor,
+  spellRollsFor,
+  spellSchoolFor
+} from "./new-adventure-form";
 
 const {
   createCampaignMock,
@@ -246,6 +257,22 @@ describe("NewAdventureForm", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders class cards with class artwork backgrounds", async () => {
+    render(<NewAdventureForm />);
+
+    await continueFlow();
+    await continueFlow();
+    await nextCharacterStep();
+
+    const fighterButton = screen.getByRole("button", {
+      name: /fighter/i
+    });
+
+    expect(fighterButton.style.getPropertyValue("--class-art-url")).toContain(
+      "url("
+    );
+  });
+
   it("shows species stat bonuses as muted subtitles", async () => {
     render(<NewAdventureForm />);
 
@@ -259,6 +286,11 @@ describe("NewAdventureForm", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("+1 all stats")).toBeInTheDocument();
     expect(screen.getByText("+2 Strength, +1 Constitution")).toBeInTheDocument();
+    expect(
+      screen
+        .getByRole("button", { name: /human/i })
+        .style.getPropertyValue("--species-art-url")
+    ).toContain("url(");
   });
 
   it("validates identity and recovers when campaign creation fails", async () => {
@@ -301,7 +333,7 @@ describe("NewAdventureForm", () => {
       screen.getByRole("heading", { name: /ready the first page/i })
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /create campaign/i }));
+    fireEvent.click(screen.getByRole("button", { name: /generate portrait/i }));
 
     await act(async () => {});
 
@@ -309,14 +341,152 @@ describe("NewAdventureForm", () => {
       expect.objectContaining({
         mode: "single_player",
         playerName: "Mira Vale",
-        characterName: "Mira Vale"
+        characterName: "Mira Vale",
+        generateCharacterPortrait: true
       })
     );
     expect(screen.getByRole("alert")).toHaveTextContent(
       "The tavern doors jammed."
     );
     expect(
-      screen.getByRole("button", { name: /create campaign/i })
+      screen.getByRole("button", { name: /generate portrait/i })
     ).toBeEnabled();
+  });
+});
+
+describe("spell art archetypes", () => {
+  it.each([
+    ["Burning Hands", "fire"],
+    ["Rime's Binding Ice", "frost"],
+    ["Call Lightning", "lightning"],
+    ["Dissonant Whispers", "sound"],
+    ["Melf's Acid Arrow", "acid"],
+    ["Ray of Sickness", "poison"],
+    ["Word of Radiance", "radiant"],
+    ["Daylight", "light"],
+    ["Toll the Dead", "necrotic"],
+    ["Telekinetic Crush", "psychic"],
+    ["Magic Missile", "force"],
+    ["Cure Wounds", "healing"],
+    ["Shield of Faith", "shield"],
+    ["Arcane Lock", "ward"],
+    ["Command", "charm"],
+    ["Cause Fear", "fear"],
+    ["Mirror Image", "illusion"],
+    ["Hunger of Hadar", "darkness"],
+    ["Detect Magic", "divination"],
+    ["Sending", "communication"],
+    ["Find Familiar", "summoning"],
+    ["Misty Step", "teleport"],
+    ["Longstrider", "movement"],
+    ["Entangle", "nature"],
+    ["Beast", "beast"],
+    ["Shape Water", "water"],
+    ["Gust of Wind", "wind"],
+    ["Mold Earth", "earth"],
+    ["Magnify Gravity", "gravity"],
+    ["Bestow Curse", "curse"],
+    ["Branding Smite", "weapon"],
+    ["Sleep", "sleep"],
+    ["Gift of Alacrity", "luck-time"],
+    ["Mending", "creation"],
+    ["Alter Self", "transformation"],
+    ["Grease", "alchemy"],
+    ["Unmatched Spell", "force"]
+  ])("maps %s to the %s art archetype", (spell, archetype) => {
+    expect(spellArchetypeFor(spell)).toBe(archetype);
+    expect(spellArtPathFor(spell)).toBe(`/spell-archetypes/${archetype}.webp`);
+  });
+});
+
+describe("spell metadata helpers", () => {
+  it.each([
+    ["Healing Hope", "Restores allies, removes harm, or keeps the party standing."],
+    ["Flame Burst", "Deals fiery damage or shapes flames on the battlefield."],
+    ["Rime Chill", "Deals cold damage or hinders movement with freezing magic."],
+    ["Storm Pulse", "Unleashes elemental force to damage, push, or disrupt foes."],
+    ["Hidden Image", "Uses deception, concealment, or false images to reshape a scene."],
+    ["Charm Aura", "Pressures a creature's emotions, choices, or behavior."],
+    ["Knowledge Sense", "Reveals hidden information, magic, creatures, or useful omens."],
+    ["Summon Helper", "Calls or creates a helper, creature, or servant."],
+    ["Binding Wall", "Controls space by restraining, blocking, or slowing enemies."],
+    ["Psychic Push", "Uses mental force to damage, protect, move, or overwhelm."],
+    ["Stride Leap", "Improves movement, positioning, or travel options."],
+    ["Protection Ward", "Protects against attacks, damage, or dangerous effects."],
+    ["Weapon Arrow", "Enhances attacks or turns a weapon hit into a stronger effect."],
+    ["Odd Utility", "Adds a flexible magical option for combat, exploration, or problem-solving."]
+  ])("summarizes %s", (spell, summary) => {
+    expect(spellEffectSummaryFor(spell)).toBe(summary);
+  });
+
+  it.each([
+    ["Shield", "Abjuration"],
+    ["Misty Step", "Conjuration"],
+    ["Detect Magic", "Divination"],
+    ["Charm Person", "Enchantment"],
+    ["Fireball", "Evocation"],
+    ["Silent Image", "Illusion"],
+    ["False Life", "Necromancy"],
+    ["Alter Self", "Transmutation"],
+    ["Prestidigitation", "Varies"]
+  ])("infers %s school", (spell, school) => {
+    expect(spellSchoolFor(spell)).toBe(school);
+  });
+
+  it.each([
+    ["Mage Armor", null, "8 hours"],
+    ["Darkvision", null, "8 hours"],
+    ["Alarm", null, "Until dispelled"],
+    ["Detect Magic", null, "Concentration, up to 10 minutes"],
+    ["Bless", null, "Concentration, up to 1 minute"],
+    ["Goodberry", null, "1 hour or longer"],
+    ["Fire Bolt", "Cantrip", "Instantaneous"],
+    ["Prestidigitation", null, "Varies by use"]
+  ] as const)("infers %s duration", (spell, level, duration) => {
+    expect(spellDurationFor(spell, level)).toBe(duration);
+  });
+
+  it.each([
+    ["Counterspell", "1 reaction"],
+    ["Misty Step", "1 bonus action"],
+    ["Find Familiar", "1 minute or longer"],
+    ["Fireball", "1 action"]
+  ])("infers %s casting time", (spell, castingTime) => {
+    expect(spellCastingTimeFor(spell)).toBe(castingTime);
+  });
+
+  it.each([
+    ["Shield", "Self"],
+    ["Burning Hands", "Self-area"],
+    ["Cure Wounds", "Touch"],
+    ["Fire Bolt", "120 feet"],
+    ["Fireball", "120 feet or more"],
+    ["Sacred Flame", "60 feet"],
+    ["Prestidigitation", "Varies"]
+  ])("infers %s range", (spell, range) => {
+    expect(spellRangeFor(spell)).toBe(range);
+  });
+
+  it.each([
+    ["Fire Bolt", "2d10 fire damage at Level 5"],
+    ["Sacred Flame", "2d8 radiant damage at Level 5"],
+    ["Cure Wounds", "1d8 + your spellcasting modifier"],
+    ["Magic Missile", "3d4 + 3 force damage"],
+    ["Fireball", "8d6 fire damage, +1d6 per slot level above 3rd"],
+    ["Bless", "add 1d4 to attack rolls and saving throws"],
+    ["Prestidigitation", "Resolve with your spell save DC"]
+  ])("describes %s roll handling", (spell, rollText) => {
+    expect(spellRollsFor(spell)).toContain(rollText);
+  });
+
+  it("builds a complete spell detail profile", () => {
+    expect(spellDetailFor("Fireball", "3rd level")).toEqual(
+      expect.objectContaining({
+        school: "Evocation",
+        duration: "Instantaneous",
+        castingTime: "1 action",
+        range: "120 feet or more"
+      })
+    );
   });
 });

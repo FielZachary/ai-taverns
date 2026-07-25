@@ -30,7 +30,17 @@ const ConfigSchema = z.object({
     .transform((value) => (value === undefined ? undefined : value === "true")),
   AUTH_PUBLIC_APP_ORIGIN: z.string().url().optional(),
   AUTH_EMAIL_FROM: z.string().min(1).optional(),
-  RESEND_API_KEY: z.string().min(1).optional()
+  RESEND_API_KEY: z.string().min(1).optional(),
+  MEDIA_STORAGE_DRIVER: z.enum(["local", "spaces", "s3"]).default("local"),
+  MEDIA_LOCAL_DIR: z.string().min(1).default(".local-media"),
+  MEDIA_PUBLIC_BASE_URL: z.string().min(1).default("/media"),
+  SPACES_ENDPOINT: z.string().url().optional(),
+  SPACES_REGION: z.string().min(1).optional(),
+  SPACES_BUCKET: z.string().min(1).optional(),
+  SPACES_ACCESS_KEY_ID: z.string().min(1).optional(),
+  SPACES_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+  DIGITALOCEAN_SPACES_ACCESS_KEY: z.string().min(1).optional(),
+  DIGITALOCEAN_SPACES_SECRET_KEY: z.string().min(1).optional()
 });
 
 export type ApiConfig = {
@@ -50,6 +60,14 @@ export type ApiConfig = {
   authPublicAppOrigin: string;
   authEmailFrom: string | undefined;
   resendApiKey: string | undefined;
+  mediaStorageDriver: "local" | "spaces" | "s3";
+  mediaLocalDir: string;
+  mediaPublicBaseUrl: string;
+  spacesEndpoint: string | undefined;
+  spacesRegion: string | undefined;
+  spacesBucket: string | undefined;
+  spacesAccessKeyId: string | undefined;
+  spacesSecretAccessKey: string | undefined;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
@@ -81,6 +99,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
         .filter(Boolean)[0] ??
       "http://localhost:3000",
     authEmailFrom: parsed.AUTH_EMAIL_FROM,
-    resendApiKey: parsed.RESEND_API_KEY
+    resendApiKey: parsed.RESEND_API_KEY,
+    mediaStorageDriver: parsed.MEDIA_STORAGE_DRIVER,
+    mediaLocalDir: parsed.MEDIA_LOCAL_DIR,
+    mediaPublicBaseUrl: parsed.MEDIA_PUBLIC_BASE_URL.replace(/\/+$/, ""),
+    spacesEndpoint: parsed.SPACES_ENDPOINT,
+    spacesRegion: parsed.SPACES_REGION,
+    spacesBucket: parsed.SPACES_BUCKET,
+    spacesAccessKeyId:
+      parsed.SPACES_ACCESS_KEY_ID ?? parsed.DIGITALOCEAN_SPACES_ACCESS_KEY,
+    spacesSecretAccessKey:
+      parsed.SPACES_SECRET_ACCESS_KEY ?? parsed.DIGITALOCEAN_SPACES_SECRET_KEY
   };
 }

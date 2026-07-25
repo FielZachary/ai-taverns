@@ -1051,6 +1051,131 @@ test("DM runtime solo turns accept roll submissions without a message", async ()
   );
 });
 
+test("DM runtime memory updater creates and updates NPC context cards", async () => {
+  const { cookie, campaignId } = await createSinglePlayerCampaign(
+    "dm-runtime-npc-context"
+  );
+
+  const firstResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "I speak with Marra Vell near Pier 6.",
+      clientMessageId: "npc-context-first-turn"
+    }
+  });
+
+  assert.equal(firstResponse.statusCode, 200, firstResponse.body);
+  CampaignSoloTurnResponseSchema.parse(firstResponse.json());
+
+  const createdChunk = database.contextChunks.find(
+    (chunk) =>
+      chunk.campaign_id === campaignId &&
+      chunk.context_key === "npc:marra-vell"
+  );
+
+  assert.ok(createdChunk);
+  assert.equal(createdChunk.category, "npc_context");
+  assert.equal(createdChunk.visibility, "dm_only");
+  assert.match(createdChunk.body_markdown, /## Motivations/);
+  assert.match(createdChunk.body_markdown, /Wary but interested/);
+
+  const secondResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "I find Marra Vell at the Harbor Watch station.",
+      clientMessageId: "npc-context-second-turn"
+    }
+  });
+
+  assert.equal(secondResponse.statusCode, 200, secondResponse.body);
+  CampaignSoloTurnResponseSchema.parse(secondResponse.json());
+
+  const marraChunks = database.contextChunks.filter(
+    (chunk) =>
+      chunk.campaign_id === campaignId &&
+      chunk.context_key === "npc:marra-vell"
+  );
+
+  assert.equal(marraChunks.length, 1);
+  assert.match(marraChunks[0]?.body_markdown ?? "", /Harbor Watch station/);
+  assert.match(
+    marraChunks[0]?.body_markdown ?? "",
+    /more willing to talk after the party found her again/
+  );
+
+  const tracesResponse = await app.inject({
+    method: "GET",
+    url: `/api/campaigns/${campaignId}/debug-traces?limit=20`,
+    headers: {
+      cookie
+    }
+  });
+
+  assert.equal(tracesResponse.statusCode, 200, tracesResponse.body);
+  const traces = CampaignDebugTracesResponseSchema.parse(tracesResponse.json());
+  const storageTrace = traces.traces.find(
+    (trace) => trace.phase === "context_storage_state_snapshot"
+  );
+  const contextChunks = storageTrace?.contextChunks as
+    | {
+        context_id?: unknown;
+        category?: unknown;
+        body_markdown?: unknown;
+      }[]
+    | undefined;
+
+  assert.ok(storageTrace);
+  assert.equal(storageTrace.contextChunkCount, 1);
+  assert.ok(
+    contextChunks?.some(
+      (chunk) =>
+        chunk.context_id === "npc:marra-vell" &&
+        chunk.category === "npc_context" &&
+        typeof chunk.body_markdown === "string" &&
+        /Harbor Watch station/.test(chunk.body_markdown)
+    )
+  );
+
+  const resolvedDmEventPayload = database.campaignEvents
+    .filter(
+      (event) =>
+        event.campaign_id === campaignId && event.type === "turn_resolved"
+    )
+    .at(-1)?.payload as
+    | {
+        aiDebug?: DebugFields;
+      }
+    | undefined;
+  const debugContextStorage =
+    resolvedDmEventPayload?.aiDebug?.contextStorageState as
+      | {
+          contextChunkCount?: unknown;
+          contextChunks?: {
+            context_id?: unknown;
+            body_markdown?: unknown;
+          }[];
+        }
+      | undefined;
+
+  assert.equal(debugContextStorage?.contextChunkCount, 1);
+  assert.ok(
+    debugContextStorage?.contextChunks?.some(
+      (chunk) =>
+        chunk.context_id === "npc:marra-vell" &&
+        typeof chunk.body_markdown === "string" &&
+        /Harbor Watch station/.test(chunk.body_markdown)
+    )
+  );
+});
+
 test("DM runtime routes require an owned session", async () => {
   const campaignId = "00000000-0000-4000-8000-000000000001";
   const requests = [

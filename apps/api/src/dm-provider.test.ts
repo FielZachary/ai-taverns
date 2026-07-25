@@ -88,6 +88,7 @@ test("DeepSeek provider sends filtered history and returns non-stream debug meta
     temperature?: number;
     stream?: boolean;
     response_format?: unknown;
+    thinking?: { type?: string };
   } | undefined;
 
   globalThis.fetch = async (_url, init) => {
@@ -160,6 +161,7 @@ test("DeepSeek provider sends filtered history and returns non-stream debug meta
   ]);
   assert.equal(requestBody?.stream, undefined);
   assert.equal(requestBody?.response_format, undefined);
+  assert.deepEqual(requestBody?.thinking, { type: "disabled" });
   assert.equal(requestBody?.temperature, 0.8);
   assert.equal(response.id, "chat-1");
   assert.equal(response.debug.providerResponseId, "chat-1");
@@ -621,6 +623,62 @@ test("DeepSeek provider falls back to configured model when responses omit optio
   assert.equal(response.id, undefined);
   assert.equal(response.debug.providerResponseId, undefined);
   assert.equal(response.debug.model, "deepseek-v4-flash");
+});
+
+test("DeepSeek provider maps the legacy chat model alias before sending requests", async () => {
+  process.env.DEEPSEEK_MODEL = "deepseek-chat";
+  let requestBody: { model?: string } | undefined;
+
+  globalThis.fetch = async (_url, init) => {
+    requestBody = JSON.parse(String(init?.body)) as typeof requestBody;
+
+    return jsonResponse({
+      choices: [
+        {
+          message: {
+            content:
+              '{"public_narration":"A quiet bell rings.","roll_requests":[],"next_input_needed":"player_actions","input_targets":[],"input_policy":"all_players"}'
+          }
+        }
+      ]
+    });
+  };
+
+  const response = await askDungeonMasterProvider({
+    instructions: "Return a JSON DM response.",
+    message: "Begin."
+  });
+
+  assert.equal(requestBody?.model, "deepseek-v4-flash");
+  assert.equal(response.debug.model, "deepseek-v4-flash");
+});
+
+test("DeepSeek provider allows the supported pro model from configuration", async () => {
+  process.env.DEEPSEEK_MODEL = "deepseek-v4-pro";
+  let requestBody: { model?: string } | undefined;
+
+  globalThis.fetch = async (_url, init) => {
+    requestBody = JSON.parse(String(init?.body)) as typeof requestBody;
+
+    return jsonResponse({
+      choices: [
+        {
+          message: {
+            content:
+              '{"public_narration":"A quiet bell rings.","roll_requests":[],"next_input_needed":"player_actions","input_targets":[],"input_policy":"all_players"}'
+          }
+        }
+      ]
+    });
+  };
+
+  const response = await askDungeonMasterProvider({
+    instructions: "Return a JSON DM response.",
+    message: "Begin."
+  });
+
+  assert.equal(requestBody?.model, "deepseek-v4-pro");
+  assert.equal(response.debug.model, "deepseek-v4-pro");
 });
 
 test("DeepSeek provider reports successful streaming responses without a body", async () => {
