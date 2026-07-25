@@ -273,6 +273,21 @@ describe("NewAdventureForm", () => {
     );
   });
 
+  it("renders mode cards with banner artwork backgrounds", () => {
+    render(<NewAdventureForm />);
+
+    expect(
+      screen
+        .getByRole("button", { name: /singleplayer/i })
+        .style.getPropertyValue("--mode-banner-art-url")
+    ).toContain("/new-adventure/singleplayer-banner.webp");
+    expect(
+      screen
+        .getByRole("button", { name: /multiplayer/i })
+        .style.getPropertyValue("--mode-banner-art-url")
+    ).toContain("/new-adventure/multiplayer-banner.webp");
+  });
+
   it("shows species stat bonuses as muted subtitles", async () => {
     render(<NewAdventureForm />);
 

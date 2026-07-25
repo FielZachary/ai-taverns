@@ -13,6 +13,8 @@ type ChatHistorySidebarProps = {
   activeChatId: string;
   isLoading: boolean;
   isCreatingChat: boolean;
+  playerPortraitAlt?: string;
+  playerPortraitUrl?: string;
   onStartNewChat: () => void;
   onDeleteChat: (chatId: string) => void;
   onRenameChat: (chatId: string) => void;
@@ -25,6 +27,8 @@ export function ChatHistorySidebar({
   activeChatId,
   isLoading,
   isCreatingChat,
+  playerPortraitAlt = "Player character portrait",
+  playerPortraitUrl,
   onStartNewChat,
   onDeleteChat,
   onRenameChat,
@@ -97,7 +101,22 @@ export function ChatHistorySidebar({
       </div>
 
       <div className="chat-sidebar-actions" aria-label="Table actions">
-        <button type="button" onClick={onViewCharacterSheet}>
+        {playerPortraitUrl ? (
+          <button
+            className="chat-sidebar-portrait"
+            type="button"
+            aria-label="Open player resources"
+            onClick={onViewCharacterSheet}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={playerPortraitUrl} alt={playerPortraitAlt} />
+          </button>
+        ) : null}
+        <button
+          className="player-resources-button"
+          type="button"
+          onClick={onViewCharacterSheet}
+        >
           Player Resources
         </button>
       </div>

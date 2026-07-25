@@ -1678,6 +1678,12 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
             onDeleteChat={(campaignId) => void handleDeleteChat(campaignId)}
             onRenameChat={(campaignId) => void handleRenameChat(campaignId)}
             onSelectChat={(campaignId) => void handleSelectChat(campaignId)}
+            playerPortraitAlt={`${
+              currentRoomPlayer?.characterName ||
+              playerProfile.characterName ||
+              "Player character"
+            } portrait`}
+            playerPortraitUrl={currentRoomPlayer?.portraitUrl}
             onViewCharacterSheet={() => setIsCharacterSheetOpen(true)}
           />
           <div className="story-column">
