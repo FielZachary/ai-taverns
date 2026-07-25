@@ -225,6 +225,9 @@ describe("modular AI DM runtime contracts", () => {
     const removedOpeningJob = ["campaign", "starter"].join("_");
 
     assert.match(routerPrompt, /select context chunk keys only/i);
+    assert.match(routerPrompt, /Only select context keys from the Available context chunk keys JSON/i);
+    assert.match(routerPrompt, /Do not invent, rename, summarize, slugify, or transform context keys/i);
+    assert.match(routerPrompt, /Copy exact key strings only/i);
     assert.match(routerPrompt, /Campaign opening scenes are handled/i);
     assert.match(routerPrompt, /combat_active is true, default to combat/i);
     assert.match(routerPrompt, /Choose clarification when the player's intended action is too underspecified/i);

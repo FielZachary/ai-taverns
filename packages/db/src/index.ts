@@ -14,6 +14,7 @@ import {
   isEldermerePreset,
   buildMemoryUpdaterPrompt,
   buildRouterPrompt,
+  contextCategories,
   formatRouterCurrentTurnInput,
   jobPrompt,
   renderContextChunks,
@@ -3740,10 +3741,14 @@ function routerStateForCampaign(
 function buildRouterMessage(input: {
   currentAction: string;
   routerState: Record<string, unknown>;
+  availableContextChunks: ContextChunkIndex;
 }) {
   return [
     "Routing state JSON:",
     JSON.stringify(input.routerState, null, 2),
+    "",
+    "Available context chunk keys JSON:",
+    formatContextChunkIndexForRouter(input.availableContextChunks),
     "",
     formatRouterCurrentTurnInput(input.currentAction)
   ].join("\n");
@@ -3771,6 +3776,80 @@ function routerDebugFromPromptContext(
     : undefined;
 }
 
+type ContextChunkIndexEntry = {
+  key: string;
+  title: string;
+  visibility: "player_safe" | "dm_only";
+  priority: number;
+  updatedAt: string;
+};
+
+type ContextChunkIndex = Record<ContextCategory, ContextChunkIndexEntry[]>;
+
+function emptyContextChunkIndex(): ContextChunkIndex {
+  return contextCategories.reduce(
+    (index, category) => ({ ...index, [category]: [] }),
+    {} as ContextChunkIndex
+  );
+}
+
+async function listCampaignContextChunkIndex(
+  db: Queryable,
+  campaignId: string,
+  limit = 200
+): Promise<ContextChunkIndex> {
+  const index = emptyContextChunkIndex();
+
+  try {
+    const result = await db.query<Record<string, unknown>>(
+      `
+        select
+          context_key,
+          category,
+          title,
+          visibility,
+          priority,
+          updated_at
+        from campaign_context_chunks
+        where campaign_id = $1
+          and archived_at is null
+        order by category asc, priority desc, updated_at desc
+        limit $2
+      `,
+      [campaignId, limit]
+    );
+
+    for (const row of result.rows) {
+      const category = String(row.category ?? "") as ContextCategory;
+
+      if (!contextCategories.includes(category)) {
+        continue;
+      }
+
+      index[category].push({
+        key: String(row.context_key ?? ""),
+        title: String(row.title ?? row.context_key ?? ""),
+        visibility:
+          row.visibility === "player_safe" || row.visibility === "dm_only"
+            ? row.visibility
+            : "dm_only",
+        priority: typeof row.priority === "number" ? row.priority : 0,
+        updatedAt: row.updated_at ? toIso(row.updated_at as Date | string) : ""
+      });
+    }
+  } catch (error) {
+    if (!isMissingRuntimeTableError(error)) {
+      throw error;
+    }
+  }
+
+  return index;
+}
+
+function formatContextChunkIndexForRouter(index: ContextChunkIndex) {
+  return JSON.stringify(index, null, 2);
+}
+
 async function buildModularDmPromptContext(
   db: Queryable,
   runtime: DungeonMasterRuntime,
@@ -3785,11 +3864,16 @@ async function buildModularDmPromptContext(
   }
 ): Promise<DmPromptContext> {
   const players = await getActiveCampaignPlayers(db, campaign.id);
+  const availableContextChunks = await listCampaignContextChunkIndex(
+    db,
+    campaign.id
+  );
   const routerState = routerStateForCampaign(campaign, players);
   const routerInstructions = buildRouterPrompt();
   const routerMessage = buildRouterMessage({
     currentAction: input.currentAction,
-    routerState
+    routerState,
+    availableContextChunks
   });
   const routerStartedAt = Date.now();
   const routerData = await runtime.askProvider({
@@ -3820,6 +3904,7 @@ async function buildModularDmPromptContext(
     elapsedMs: Date.now() - routerStartedAt,
     payload: {
       routerState,
+      availableContextChunks,
       router: {
         jobNeeded: router.jobNeeded,
         contextKeys: router.contextKeys,
@@ -3870,7 +3955,8 @@ async function buildModularDmPromptContext(
         fallbackUsed: router.fallbackUsed,
         errors: router.errors,
         reason: router.reason,
-        routerState
+        routerState,
+        availableContextChunks
       },
       {
         kind: "context_snapshot",

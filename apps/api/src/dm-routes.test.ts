@@ -1096,7 +1096,20 @@ test("DM runtime memory updater creates and updates NPC context cards", async ()
   });
 
   assert.equal(secondResponse.statusCode, 200, secondResponse.body);
-  CampaignSoloTurnResponseSchema.parse(secondResponse.json());
+  const secondTurn = CampaignSoloTurnResponseSchema.parse(secondResponse.json());
+  const secondTurnDebug = secondTurn.messages.at(-1)?.debug as
+    | DebugFields
+    | undefined;
+  const secondTurnRouterDebug = secondTurnDebug?.router as
+    | {
+        requestMessages?: { role?: string; content?: string }[];
+      }
+    | undefined;
+  const secondTurnRouterMessage =
+    secondTurnRouterDebug?.requestMessages?.at(-1)?.content ?? "";
+
+  assert.match(secondTurnRouterMessage, /Available context chunk keys JSON:/);
+  assert.match(secondTurnRouterMessage, /"key": "npc:marra-vell"/);
 
   const marraChunks = database.contextChunks.filter(
     (chunk) =>
