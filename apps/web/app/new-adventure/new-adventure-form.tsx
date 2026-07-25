@@ -96,6 +96,14 @@ type SpellSelectionLimits = {
 type SpellSelectionCounts = Record<SpellLevelLabel, number> & {
   leveledSpells: number;
 };
+type SpellRuleProfile = {
+  description: string;
+  rolls: string;
+  school: string;
+  duration: string;
+  castingTime: string;
+  range: string;
+};
 type ActiveStatRoll = {
   id: string;
   expression: string;
@@ -710,6 +718,185 @@ function spellEffectSummaryFor(spell: string) {
   }
 
   return "Adds a flexible magical option for combat, exploration, or problem-solving.";
+}
+
+const specificSpellSchools: Record<string, string> = {
+  Aid: "Abjuration",
+  Bane: "Enchantment",
+  Bless: "Enchantment",
+  "Cure Wounds": "Evocation",
+  Goodberry: "Transmutation",
+  Guidance: "Divination",
+  "Healing Word": "Evocation",
+  Heroism: "Enchantment",
+  "Lesser Restoration": "Abjuration",
+  "Mass Healing Word": "Evocation",
+  "Prayer of Healing": "Evocation",
+  Resistance: "Abjuration",
+  Revivify: "Necromancy",
+  Sanctuary: "Abjuration",
+  "Shield of Faith": "Abjuration",
+  "Spare the Dying": "Necromancy"
+};
+
+function spellSchoolFor(spell: string) {
+  const specificSchool = specificSpellSchools[spell];
+
+  if (specificSchool) {
+    return specificSchool;
+  }
+
+  if (/shield|armor|protection|ward|bond|absorb|resistance|fortress|sanctuary/i.test(spell)) {
+    return "Abjuration";
+  }
+
+  if (/summon|conjure|familiar|steed|servant|teleport|step|jaunt|vortex|misty|floating|disk/i.test(spell)) {
+    return "Conjuration";
+  }
+
+  if (/detect|identify|locate|clairvoyance|augury|thought|sense|see invisibility|tongues|comprehend/i.test(spell)) {
+    return "Divination";
+  }
+
+  if (/charm|command|suggestion|fear|bane|bless|friends|laughter|mockery|hold person|enthrall|antagonize|fast friends|heroism/i.test(spell)) {
+    return "Enchantment";
+  }
+
+  if (/cure|heal|word|fire|bolt|burn|lightning|thunder|ray|blast|shatter|wave|earth|ice|frost|acid|flame|sphere|moonbeam|radiance|sacred|storm|eruption/i.test(spell)) {
+    return "Evocation";
+  }
+
+  if (/illusion|image|disguise|invisible|shadow|blur|mirror|phantasmal|darkness|nondetection|script/i.test(spell)) {
+    return "Illusion";
+  }
+
+  if (/animate|dead|false life|vampiric|wither|inflict|curse|enfeeblement|sickness|toll|chill|life transference/i.test(spell)) {
+    return "Necromancy";
+  }
+
+  if (/alter|enlarge|reduce|haste|slow|fly|gaseous|water|stone|barkskin|darkvision|enhance|spider|longstrider|jump|mending|shape|mold|control/i.test(spell)) {
+    return "Transmutation";
+  }
+
+  return "Varies";
+}
+
+function spellDurationFor(spell: string, level: SpellLevelLabel | null) {
+  if (/mage armor/i.test(spell)) {
+    return "8 hours";
+  }
+
+  if (/darkvision|water breathing/i.test(spell)) {
+    return "8 hours";
+  }
+
+  if (/alarm|arcane lock|continual flame|glyph|illusory script|magic mouth|nystul/i.test(spell)) {
+    return "Until dispelled";
+  }
+
+  if (/detect magic|detect evil|detect poison|clairvoyance|locate|speak with|beast sense|see invisibility/i.test(spell)) {
+    return "Concentration, up to 10 minutes";
+  }
+
+  if (/bless|bane|hex|hunter|faerie|hold|suggestion|fear|fly|haste|slow|invisibility|blur|web|moonbeam|flaming sphere|spirit guardians|hypnotic|cloud|wall|entangle|silence|darkness|protection from|shield of faith|enlarge|enhance|levitate|heat metal|crown|phantasmal|call lightning|sleet|stinking|vampiric/i.test(spell)) {
+    return "Concentration, up to 1 minute";
+  }
+
+  if (/goodberry|aid|longstrider|false life|heroism|pass without trace|rope trick|tiny hut|phantom steed/i.test(spell)) {
+    return "1 hour or longer";
+  }
+
+  if (level === "Cantrip" || /bolt|ray|blast|missile|shatter|fireball|lightning bolt|thunderwave|cure wounds|healing word|inflict|guiding bolt|sacred flame|acid splash|poison spray|thorn whip/i.test(spell)) {
+    return "Instantaneous";
+  }
+
+  return "Varies by use";
+}
+
+function spellCastingTimeFor(spell: string) {
+  if (/counterspell|shield|feather fall|hellish rebuke|absorb elements|silvery barbs/i.test(spell)) {
+    return "1 reaction";
+  }
+
+  if (/healing word|misty step|spiritual weapon|shield of faith|hex|hunter|smite|divine favor|magic stone|shillelagh|zephyr strike/i.test(spell)) {
+    return "1 bonus action";
+  }
+
+  if (/find familiar|find steed|identify|alarm|augury|prayer of healing|tiny hut|phantom steed|glyph/i.test(spell)) {
+    return "1 minute or longer";
+  }
+
+  return "1 action";
+}
+
+function spellRangeFor(spell: string) {
+  if (/shield$|armor of agathys|alter self|blink|blur|divine favor|expeditious retreat|false life|gaseous form|mirror image|misty step|shadow blade/i.test(spell)) {
+    return "Self";
+  }
+
+  if (/burning hands|thunderwave|fear|color spray|cone/i.test(spell)) {
+    return "Self-area";
+  }
+
+  if (/cure wounds|guidance|resistance|spare the dying|light|mending|shocking grasp|inflict wounds|protection from poison|lesser restoration|remove curse|revivify|barkskin|enhance ability|invisibility|darkvision|fly|haste|water breathing|water walk/i.test(spell)) {
+    return "Touch";
+  }
+
+  if (/fire bolt|eldritch blast|ray|witch bolt|chill touch|message/i.test(spell)) {
+    return "120 feet";
+  }
+
+  if (/fireball|lightning bolt|counterspell|dispel magic|hypnotic pattern|major image|slow|sleet storm|stinking cloud|call lightning/i.test(spell)) {
+    return "120 feet or more";
+  }
+
+  if (/sacred flame|toll the dead|vicious mockery|healing word|guiding bolt|hold person|shatter|spiritual weapon|moonbeam|web|faerie fire|entangle|silence|darkness|command|bane|bless/i.test(spell)) {
+    return "60 feet";
+  }
+
+  return "Varies";
+}
+
+function spellRollsFor(spell: string) {
+  if (/fire bolt|eldritch blast|ray|guiding bolt|produce flame|thorn whip|shocking grasp|witch bolt|chromatic orb|scorching ray|melf/i.test(spell)) {
+    return "Make a spell attack roll: d20 + your spell attack bonus. On a hit, roll the spell's damage dice.";
+  }
+
+  if (/sacred flame|toll the dead|mind sliver|acid splash|poison spray|fireball|lightning bolt|shatter|thunderwave|burning hands|fear|hypnotic|hold person|command|bane|charm|suggestion|web|entangle|slow|stinking|sleet|faerie|dissonant|vicious|inflict|blindness/i.test(spell)) {
+    return "The target rolls a saving throw against your spell save DC. Roll damage or apply the effect after success or failure is known.";
+  }
+
+  if (/cure|healing|goodberry|aid|prayer|mass healing|false life/i.test(spell)) {
+    return "Roll the listed healing or temporary hit point dice, then apply your spellcasting modifier when the spell calls for it.";
+  }
+
+  if (/magic missile/i.test(spell)) {
+    return "No attack roll is needed. Roll the force damage dice for the darts and assign targets before damage is applied.";
+  }
+
+  if (/bless|guidance|resistance|bardic|enhance|heroism|shield|armor|protection|invisibility|fly|haste|misty|detect|identify|locate|comprehend/i.test(spell)) {
+    return "Usually no attack roll is made when cast. Track concentration when required, and roll only when a later check, save, or attack uses the benefit.";
+  }
+
+  return "Resolve with your spell save DC or spell attack bonus only if the DM calls for a roll; otherwise apply the spell's described effect.";
+}
+
+function spellDetailFor(spell: string, level: SpellLevelLabel | null): SpellRuleProfile {
+  const summary = spellEffectSummaryFor(spell);
+  const school = spellSchoolFor(spell);
+  const duration = spellDurationFor(spell, level);
+  const castingTime = spellCastingTimeFor(spell);
+  const range = spellRangeFor(spell);
+  const levelText = level ?? "spell";
+
+  return {
+    description: `${spell} is a ${levelText} ${school.toLowerCase()} option. ${summary} Use it when that effect would change the scene clearly: damage an enemy, protect an ally, reveal information, move through danger, or create a tactical opening. The DM may still ask for targets, a point of origin, or visible positioning before resolving it.`,
+    rolls: spellRollsFor(spell),
+    school,
+    duration,
+    castingTime,
+    range
+  };
 }
 const spellCatalog = {
   Artificer: [
@@ -2856,6 +3043,7 @@ export function NewAdventureForm({
   const [activeEquipmentModal, setActiveEquipmentModal] =
     useState<ActiveEquipmentModal>(null);
   const [selectedSpells, setSelectedSpells] = useState<string[]>([]);
+  const [activeSpellDetail, setActiveSpellDetail] = useState<string | null>(null);
   const [dlcSpellVisibility, setDlcSpellVisibility] = useState<DlcSpellVisibility>({});
   const [alignment, setAlignment] = useState<Alignment>("Neutral Good");
   const [gender, setGender] = useState<Gender>("Non-binary");
@@ -2977,6 +3165,12 @@ export function NewAdventureForm({
     () => selectedSpellCountsFor(selectedClass.spellGroups, selectedSpells),
     [selectedClass.spellGroups, selectedSpells]
   );
+  const activeSpellLevel = activeSpellDetail
+    ? spellLevelFor(selectedClass.spellGroups, activeSpellDetail)
+    : null;
+  const activeSpellRuleProfile = activeSpellDetail
+    ? spellDetailFor(activeSpellDetail, activeSpellLevel)
+    : null;
   const mechanicsSeed = useMemo<MechanicsSeed>(() => {
     const spellSlots = deriveSpellSlotsForSheet(selectedClass.id, characterLevel);
 
@@ -4536,23 +4730,34 @@ export function NewAdventureForm({
                                   );
 
                                   return (
-                                    <button
-                                      type="button"
+                                    <div
                                       className={[
+                                        "spell-option-card",
                                         isSelected ? "selected" : "",
                                         isDlcSpell ? "dlc-spell-option" : ""
                                       ].filter(Boolean).join(" ")}
-                                      aria-pressed={isSelected}
-                                      disabled={isAtLimit}
                                       key={option}
-                                      onClick={() => toggleSpell(option)}
                                     >
-                                      <strong>{option}</strong>
-                                      <span>{spellEffectSummaryFor(option)}</span>
-                                      {isDlcSpell ? (
-                                        <small>{spellSourceLabels[option] ?? "Expanded source"}</small>
-                                      ) : null}
-                                    </button>
+                                      <button
+                                        type="button"
+                                        className="spell-select-button"
+                                        aria-pressed={isSelected}
+                                        disabled={isAtLimit}
+                                        onClick={() => toggleSpell(option)}
+                                      >
+                                        <strong>{option}</strong>
+                                        <span>{spellEffectSummaryFor(option)}</span>
+                                        {isDlcSpell ? (
+                                          <small>{spellSourceLabels[option] ?? "Expanded source"}</small>
+                                        ) : null}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="spell-detail-button"
+                                        aria-label={`Open ${option} spell details`}
+                                        onClick={() => setActiveSpellDetail(option)}
+                                      />
+                                    </div>
                                   );
                                 })}
                               </div>
@@ -4805,6 +5010,61 @@ export function NewAdventureForm({
             </button>
           </div>
       </form>
+
+      {activeSpellDetail && activeSpellRuleProfile ? (
+        <div
+          className="spell-detail-modal-backdrop"
+          role="presentation"
+          onClick={() => setActiveSpellDetail(null)}
+        >
+          <section
+            aria-modal="true"
+            aria-labelledby="spell-detail-modal-title"
+            className="spell-detail-modal"
+            role="dialog"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="spell-detail-modal-header">
+              <div>
+                <span>{activeSpellLevel ?? "Spell"}</span>
+                <h2 id="spell-detail-modal-title">{activeSpellDetail}</h2>
+              </div>
+              <button
+                type="button"
+                aria-label="Close spell details"
+                onClick={() => setActiveSpellDetail(null)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="spell-detail-modal-body">
+              <p>{activeSpellRuleProfile.description}</p>
+              <section>
+                <h3>Rolls Involved</h3>
+                <p>{activeSpellRuleProfile.rolls}</p>
+              </section>
+            </div>
+            <dl className="spell-detail-meta">
+              <div>
+                <dt>School</dt>
+                <dd>{activeSpellRuleProfile.school}</dd>
+              </div>
+              <div>
+                <dt>Duration</dt>
+                <dd>{activeSpellRuleProfile.duration}</dd>
+              </div>
+              <div>
+                <dt>Casting Time</dt>
+                <dd>{activeSpellRuleProfile.castingTime}</dd>
+              </div>
+              <div>
+                <dt>Range</dt>
+                <dd>{activeSpellRuleProfile.range}</dd>
+              </div>
+            </dl>
+          </section>
+        </div>
+      ) : null}
 
       {activeEquipmentModal ? (
         <div

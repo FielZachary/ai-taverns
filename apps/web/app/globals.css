@@ -1129,24 +1129,77 @@ h1 {
   gap: 8px;
 }
 
-.spell-option-grid button {
+.spell-option-card {
+  position: relative;
+  display: grid;
+  height: 156px;
+  min-height: 0;
+  border: 1px solid rgba(244, 207, 122, 0.22);
+  border-radius: 8px;
+  background: rgba(17, 13, 10, 0.48);
+  overflow: hidden;
+}
+
+.spell-option-card.selected,
+.spell-option-card:hover,
+.spell-option-card:focus-within {
+  border-color: rgba(244, 207, 122, 0.72);
+  background:
+    linear-gradient(90deg, rgba(173, 71, 43, 0.16), transparent),
+    rgba(255, 255, 255, 0.05);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.2);
+}
+
+.spell-option-card.dlc-spell-option {
+  border-color: rgba(137, 189, 183, 0.32);
+}
+
+.spell-option-card.dlc-spell-option.selected {
+  border-color: rgba(244, 207, 122, 0.74);
+}
+
+.spell-option-card:has(.spell-select-button:disabled) {
+  opacity: 0.42;
+}
+
+.spell-option-card:has(.spell-select-button:disabled):hover,
+.spell-option-card:has(.spell-select-button:disabled):focus-within {
+  border-color: rgba(244, 207, 122, 0.22);
+  background: rgba(17, 13, 10, 0.48);
+  box-shadow: none;
+}
+
+.spell-option-grid .spell-select-button {
   display: grid;
   grid-template-rows: auto 1fr auto;
   align-content: center;
   justify-items: center;
   gap: 4px;
-  height: 156px;
-  min-height: 156px;
-  padding: 14px 12px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 14px 34px 14px 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   text-align: center;
+  box-shadow: none;
 }
 
-.spell-option-grid button strong {
+.spell-option-grid .spell-select-button:hover,
+.spell-option-grid .spell-select-button:focus-visible,
+.spell-option-grid .spell-select-button.selected {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.spell-option-grid .spell-select-button strong {
   line-height: 1.18;
   text-align: center;
 }
 
-.spell-option-grid button span {
+.spell-option-grid .spell-select-button span {
   align-self: center;
   color: var(--muted);
   font-size: 0.72rem;
@@ -1155,7 +1208,7 @@ h1 {
   text-align: center;
 }
 
-.spell-option-grid button small {
+.spell-option-grid .spell-select-button small {
   color: var(--muted);
   font-size: 0.64rem;
   font-weight: 900;
@@ -1164,24 +1217,50 @@ h1 {
   text-transform: uppercase;
 }
 
-.spell-option-grid button:disabled {
+.spell-option-grid .spell-select-button:disabled {
   cursor: not-allowed;
-  opacity: 0.42;
   transform: none;
   box-shadow: none;
 }
 
-.spell-option-grid button:disabled:hover,
-.spell-option-grid button:disabled:focus-visible {
+.spell-option-grid .spell-select-button:disabled:hover,
+.spell-option-grid .spell-select-button:disabled:focus-visible {
   transform: none;
 }
 
-.spell-option-grid button.dlc-spell-option {
-  border-color: rgba(137, 189, 183, 0.32);
+.spell-option-grid .spell-detail-button {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 26px;
+  height: 26px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
+  background-image:
+    url("/fantasygothicui/arrow8.png"),
+    url("/fantasygothicui/arrow4.png");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+  box-shadow: none;
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.55));
 }
 
-.spell-option-grid button.dlc-spell-option.selected {
-  border-color: rgba(244, 207, 122, 0.74);
+.spell-option-grid .spell-detail-button:hover,
+.spell-option-grid .spell-detail-button:focus-visible {
+  border: 0;
+  background-color: transparent;
+  background-image:
+    url("/fantasygothicui/arrow8.png"),
+    url("/fantasygothicui/arrow4.png");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+  box-shadow: none;
+  transform: translate(1px, 1px);
 }
 
 .build-mode-picker > div {
@@ -1337,6 +1416,153 @@ h1 {
   border-radius: 8px;
   color: var(--ink);
   background: rgba(255, 255, 255, 0.035);
+}
+
+.spell-detail-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 26;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: rgba(3, 2, 2, 0.76);
+}
+
+.spell-detail-modal {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(720px, 100%);
+  max-height: min(760px, calc(100dvh - 44px));
+  border: 1px solid rgba(244, 207, 122, 0.42);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(244, 207, 122, 0.08), transparent 34%),
+    linear-gradient(90deg, rgba(173, 71, 43, 0.12), transparent),
+    rgba(22, 16, 12, 0.98);
+  box-shadow: 0 30px 96px rgba(0, 0, 0, 0.64);
+  overflow: hidden;
+}
+
+.spell-detail-modal-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 22px 24px 18px;
+  border-bottom: 1px solid rgba(244, 207, 122, 0.18);
+}
+
+.spell-detail-modal-header > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.spell-detail-modal-header span {
+  color: var(--gold-bright);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.spell-detail-modal-header h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(1.45rem, 3vw, 2.15rem);
+  line-height: 1.05;
+}
+
+.spell-detail-modal-header button {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(244, 207, 122, 0.32);
+  border-radius: 8px;
+  color: var(--gold-bright);
+  background: rgba(17, 13, 10, 0.48);
+}
+
+.spell-detail-modal-body {
+  display: grid;
+  gap: 18px;
+  min-height: 0;
+  padding: 22px 24px;
+  overflow: auto;
+}
+
+.spell-detail-modal-body p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.98rem;
+  line-height: 1.6;
+}
+
+.spell-detail-modal-body section {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid rgba(244, 207, 122, 0.16);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.spell-detail-modal-body h3 {
+  margin: 0;
+  color: var(--gold-bright);
+  font-size: 0.76rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.spell-detail-meta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  border-top: 1px solid rgba(244, 207, 122, 0.18);
+  background: rgba(244, 207, 122, 0.16);
+}
+
+.spell-detail-meta div {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+  padding: 14px;
+  background: rgba(17, 13, 10, 0.72);
+}
+
+.spell-detail-meta dt {
+  color: var(--gold-bright);
+  font-size: 0.64rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.spell-detail-meta dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+@media (max-width: 640px) {
+  .spell-detail-modal-backdrop {
+    padding: 14px;
+  }
+
+  .spell-detail-modal-header,
+  .spell-detail-modal-body {
+    padding-inline: 18px;
+  }
+
+  .spell-detail-meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .ability-score-panel {
