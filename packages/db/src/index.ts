@@ -14,6 +14,7 @@ import {
   isEldermerePreset,
   buildMemoryUpdaterPrompt,
   buildRouterPrompt,
+  contextCategories,
   formatRouterCurrentTurnInput,
   jobPrompt,
   renderContextChunks,
@@ -31,6 +32,7 @@ import {
   type DmNextInputNeeded,
   type DmJobName,
   type InputPolicy,
+  type RouterContextKeys,
   type ValidatedRouterOutput
 } from "@ai-dnd/dm";
 import type {
@@ -1600,6 +1602,101 @@ export async function getCampaignSummaryForUser(
   }
 
   return mapCampaignSummaryRow(campaign);
+}
+
+export type CampaignNpcCard = {
+  id: string;
+  title: string;
+  markdown: string;
+  updatedAt?: string;
+};
+
+export async function listPlayerSafeNpcCardsForCampaign(
+  db: Queryable,
+  campaignId: string
+): Promise<CampaignNpcCard[]> {
+  try {
+    const result = await db.query<Record<string, unknown>>(
+      `
+        select
+          context_key,
+          title,
+          body_markdown,
+          updated_at
+        from campaign_context_chunks
+        where campaign_id = $1
+          and category = 'npc_context'
+          and archived_at is null
+        order by priority desc, updated_at desc
+        limit 120
+      `,
+      [campaignId]
+    );
+
+    return result.rows.map((row) => {
+      const updatedAt = row.updated_at
+        ? toIso(row.updated_at as Date | string)
+        : undefined;
+
+      return {
+        id: String(row.context_key ?? ""),
+        title: String(row.title ?? row.context_key ?? "NPC"),
+        markdown: String(row.body_markdown ?? ""),
+        ...(updatedAt ? { updatedAt } : {})
+      };
+    });
+  } catch (error) {
+    if (!isMissingRuntimeTableError(error)) {
+      throw error;
+    }
+
+    return [];
+  }
+}
+
+export async function updatePlayerSafeNpcCardMarkdown(
+  db: Queryable,
+  input: {
+    campaignId: string;
+    npcCardId: string;
+    markdown: string;
+  }
+): Promise<CampaignNpcCard> {
+  const result = await db.query<Record<string, unknown>>(
+    `
+      update campaign_context_chunks
+      set body_markdown = $3,
+          title = $4,
+          updated_at = now()
+      where campaign_id = $1
+        and context_key = $2
+        and category = 'npc_context'
+        and archived_at is null
+      returning context_key, title, body_markdown, updated_at
+    `,
+    [
+      input.campaignId,
+      input.npcCardId,
+      input.markdown,
+      input.markdown.match(/^#\s+(.+)$/m)?.[1]?.trim() || input.npcCardId
+    ]
+  );
+  const row = result.rows[0];
+
+  if (!row) {
+    throw createStatusError(404, "NPC card not found.");
+  }
+
+  const updatedAt = row.updated_at
+    ? toIso(row.updated_at as Date | string)
+    : undefined;
+
+  return {
+    id: String(row.context_key ?? ""),
+    title: String(row.title ?? row.context_key ?? "NPC"),
+    markdown: String(row.body_markdown ?? ""),
+    ...(updatedAt ? { updatedAt } : {})
+  };
 }
 
 export async function createCampaignForMode(
@@ -4005,10 +4102,14 @@ function routerStateForCampaign(
 function buildRouterMessage(input: {
   currentAction: string;
   routerState: Record<string, unknown>;
+  availableContextChunks: ContextChunkIndex;
 }) {
   return [
     "Routing state JSON:",
     JSON.stringify(input.routerState, null, 2),
+    "",
+    "Available context chunk keys JSON:",
+    formatContextChunkIndexForRouter(input.availableContextChunks),
     "",
     formatRouterCurrentTurnInput(input.currentAction)
   ].join("\n");
@@ -4036,6 +4137,105 @@ function routerDebugFromPromptContext(
     : undefined;
 }
 
+type ContextChunkIndexEntry = {
+  key: string;
+  title: string;
+  visibility: "player_safe" | "dm_only";
+  priority: number;
+  updatedAt: string;
+};
+
+type ContextChunkIndex = Record<ContextCategory, ContextChunkIndexEntry[]>;
+
+function emptyContextChunkIndex(): ContextChunkIndex {
+  return contextCategories.reduce(
+    (index, category) => ({ ...index, [category]: [] }),
+    {} as ContextChunkIndex
+  );
+}
+
+function emptyContextKeys(): RouterContextKeys {
+  return contextCategories.reduce(
+    (keys, category) => ({ ...keys, [category]: [] }),
+    {} as RouterContextKeys
+  );
+}
+
+async function listCampaignContextChunkIndex(
+  db: Queryable,
+  campaignId: string,
+  limit = 200
+): Promise<ContextChunkIndex> {
+  const index = emptyContextChunkIndex();
+
+  try {
+    const result = await db.query<Record<string, unknown>>(
+      `
+        select
+          context_key,
+          category,
+          title,
+          visibility,
+          priority,
+          updated_at
+        from campaign_context_chunks
+        where campaign_id = $1
+          and archived_at is null
+        order by category asc, priority desc, updated_at desc
+        limit $2
+      `,
+      [campaignId, limit]
+    );
+
+    for (const row of result.rows) {
+      const category = String(row.category ?? "") as ContextCategory;
+
+      if (!contextCategories.includes(category)) {
+        continue;
+      }
+
+      index[category].push({
+        key: String(row.context_key ?? ""),
+        title: String(row.title ?? row.context_key ?? ""),
+        visibility:
+          row.visibility === "player_safe" || row.visibility === "dm_only"
+            ? row.visibility
+            : "dm_only",
+        priority: typeof row.priority === "number" ? row.priority : 0,
+        updatedAt: row.updated_at ? toIso(row.updated_at as Date | string) : ""
+      });
+    }
+  } catch (error) {
+    if (!isMissingRuntimeTableError(error)) {
+      throw error;
+    }
+  }
+
+  return index;
+}
+
+function formatContextChunkIndexForRouter(index: ContextChunkIndex) {
+  return JSON.stringify(index, null, 2);
+}
+
+function formatContextChunkIndexForMemoryUpdater(index: ContextChunkIndex) {
+  const entries = contextCategories.flatMap((category) =>
+    index[category].map((entry) => ({
+      context_id: entry.key,
+      context_type: category,
+      title: entry.title,
+      visibility: entry.visibility,
+      updated_at: entry.updatedAt
+    }))
+  );
+
+  if (entries.length === 0) {
+    return "No existing context chunks.";
+  }
+
+  return JSON.stringify(entries, null, 2);
+}
+
 async function buildModularDmPromptContext(
   db: Queryable,
   runtime: DungeonMasterRuntime,
@@ -4050,11 +4250,16 @@ async function buildModularDmPromptContext(
   }
 ): Promise<DmPromptContext> {
   const players = await getActiveCampaignPlayers(db, campaign.id);
+  const availableContextChunks = await listCampaignContextChunkIndex(
+    db,
+    campaign.id
+  );
   const routerState = routerStateForCampaign(campaign, players);
   const routerInstructions = buildRouterPrompt();
   const routerMessage = buildRouterMessage({
     currentAction: input.currentAction,
-    routerState
+    routerState,
+    availableContextChunks
   });
   const routerStartedAt = Date.now();
   const routerData = await runtime.askProvider({
@@ -4085,6 +4290,7 @@ async function buildModularDmPromptContext(
     elapsedMs: Date.now() - routerStartedAt,
     payload: {
       routerState,
+      availableContextChunks,
       router: {
         jobNeeded: router.jobNeeded,
         contextKeys: router.contextKeys,
@@ -4135,7 +4341,8 @@ async function buildModularDmPromptContext(
         fallbackUsed: router.fallbackUsed,
         errors: router.errors,
         reason: router.reason,
-        routerState
+        routerState,
+        availableContextChunks
       },
       {
         kind: "context_snapshot",
@@ -4344,6 +4551,103 @@ function selectRelevantNpcContextKeys(
   return [...keys].slice(0, limit);
 }
 
+function contextEntryMatchesText(
+  entry: ContextChunkIndexEntry,
+  searchText: string
+) {
+  const title = entry.title.toLowerCase().trim();
+  const contextSlug = entry.key
+    .replace(/^[^:]+:/, "")
+    .toLowerCase()
+    .replace(/-/g, " ");
+
+  if (title && searchText.includes(title)) {
+    return true;
+  }
+
+  if (contextSlug && searchText.includes(contextSlug)) {
+    return true;
+  }
+
+  const tokens = title
+    .split(/[^a-z0-9]+/g)
+    .filter((token) => token.length >= 3);
+
+  return tokens.length >= 2 && tokens.every((token) => searchText.includes(token));
+}
+
+function selectRelevantContextKeys(
+  index: ContextChunkIndex,
+  input: {
+    currentAction: string;
+    dmResponse: string;
+    history: GameMessage[];
+  },
+  limit = 30
+) {
+  const searchText = npcContextSearchText(input);
+  const keys = emptyContextKeys();
+  let selectedCount = 0;
+
+  for (const category of contextCategories) {
+    for (const entry of index[category]) {
+      if (selectedCount >= limit) {
+        return keys;
+      }
+
+      if (contextEntryMatchesText(entry, searchText)) {
+        keys[category].push(entry.key);
+        selectedCount += 1;
+      }
+    }
+  }
+
+  for (const category of contextCategories) {
+    for (const entry of index[category]) {
+      if (selectedCount >= limit) {
+        return keys;
+      }
+
+      if (!keys[category].includes(entry.key)) {
+        keys[category].push(entry.key);
+        selectedCount += 1;
+      }
+    }
+  }
+
+  return keys;
+}
+
+async function retrieveRelevantContextChunks(
+  db: Queryable,
+  campaignId: string,
+  contextKeys: RouterContextKeys,
+  maxChars = 18000
+) {
+  const hasKeys = contextCategories.some(
+    (category) => contextKeys[category].length > 0
+  );
+
+  if (!hasKeys) {
+    return [] as ContextChunk[];
+  }
+
+  const router: ValidatedRouterOutput = {
+    jobNeeded: "scene_director",
+    contextKeys,
+    fallbackUsed: false,
+    errors: []
+  };
+  const context = await retrieveSelectedContextChunks(
+    db,
+    campaignId,
+    router,
+    maxChars
+  );
+
+  return context.chunks;
+}
+
 async function retrieveRelevantNpcContextChunks(
   db: Queryable,
   campaignId: string,
@@ -4404,7 +4708,7 @@ function normalizeNewContextChunkPatch(chunk: unknown) {
     context_id: contextId,
     context_type: payload.context_type ?? payload.contextType ?? "npc_context",
     title,
-    visibility: payload.visibility ?? "dm_only"
+    visibility: "player_safe"
   });
 }
 
@@ -4444,6 +4748,7 @@ async function applyAcceptedMemoryPatch(
       `
         update campaign_context_chunks
         set body_markdown = concat_ws(E'\n', body_markdown, $3),
+          visibility = 'player_safe',
           updated_at = now()
         where campaign_id = $1 and context_key = $2
       `,
@@ -4458,6 +4763,7 @@ async function applyAcceptedMemoryPatch(
       `
         update campaign_context_chunks
         set body_markdown = $3,
+          visibility = 'player_safe',
           updated_at = now()
         where campaign_id = $1 and context_key = $2
       `,
@@ -4500,7 +4806,7 @@ async function applyAcceptedMemoryPatch(
         contextId,
         String(patch.context_type ?? patch.contextType),
         String(patch.title ?? contextId),
-        String(patch.visibility ?? "dm_only"),
+        "player_safe",
         markdown
       ]
     );
@@ -4515,6 +4821,24 @@ async function applyAcceptedMemoryPatches(
   for (const patch of patches) {
     await applyAcceptedMemoryPatch(db, campaignId, patch);
   }
+}
+
+async function makeCampaignContextChunksPlayerVisible(
+  db: Queryable,
+  campaignId: string
+) {
+  await bestEffortRuntimeInsert(
+    db,
+    `
+      update campaign_context_chunks
+      set visibility = 'player_safe',
+        updated_at = now()
+      where campaign_id = $1
+        and archived_at is null
+        and visibility <> 'player_safe'
+    `,
+    [campaignId]
+  );
 }
 
 async function attachContextStorageStateToDmEventDebug(
@@ -4569,6 +4893,20 @@ export async function runModularPostTurnContextJobs(
   const traceId = randomUUID();
   const startedAt = Date.now();
   const history = await getCampaignEventMessages(db, input.campaignId, 8);
+  const contextChunkIndex = await listCampaignContextChunkIndex(
+    db,
+    input.campaignId
+  );
+  const relevantContextKeys = selectRelevantContextKeys(contextChunkIndex, {
+    currentAction: input.currentAction,
+    dmResponse: input.dmResponse,
+    history
+  });
+  const relevantContextChunks = await retrieveRelevantContextChunks(
+    db,
+    input.campaignId,
+    relevantContextKeys
+  );
   const npcContextIndex = await listCampaignNpcContextIndex(db, input.campaignId);
   const relevantNpcContextKeys = selectRelevantNpcContextKeys(npcContextIndex, {
     currentAction: input.currentAction,
@@ -4590,6 +4928,12 @@ export async function runModularPostTurnContextJobs(
     "Roll requests:",
     JSON.stringify(input.rollRequests ?? [], null, 2),
     "",
+    "Existing context chunk index:",
+    formatContextChunkIndexForMemoryUpdater(contextChunkIndex),
+    "",
+    "Relevant existing context chunks:",
+    renderContextChunks(relevantContextChunks),
+    "",
     "Existing NPC context index:",
     formatNpcContextIndex(npcContextIndex),
     "",
@@ -4608,6 +4952,11 @@ export async function runModularPostTurnContextJobs(
       phase: "memory_updater_started",
       payload: {
         historyCount: history.length,
+        contextChunkIndexCount: contextCategories.reduce(
+          (total, category) => total + contextChunkIndex[category].length,
+          0
+        ),
+        relevantContextKeys,
         npcContextIndexCount: npcContextIndex.length,
         relevantNpcContextKeys,
         message: textStats(message)
@@ -4658,6 +5007,7 @@ export async function runModularPostTurnContextJobs(
       input.campaignId,
       validation.accepted
     );
+    await makeCampaignContextChunksPlayerVisible(db, input.campaignId);
 
     const contextStorageState = await retrieveCampaignContextStorageState(
       db,
