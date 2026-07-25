@@ -80,6 +80,42 @@ test("DM runtime routes handle authorized solo, ask-DM, regenerate, and traces",
     (solo.messages.at(-1)?.debug as DebugFields | undefined)?.rawResponse,
     "{}"
   );
+  assert.equal(
+    (solo.messages.at(-1)?.debug as DebugFields | undefined)?.temperature,
+    0.8
+  );
+  const routerDebug = (solo.messages.at(-1)?.debug as DebugFields | undefined)
+    ?.router as
+    | {
+        requestMessages?: { role?: string; content?: string }[];
+        rawResponse?: string;
+        parsedOutput?: { jobNeeded?: string };
+      }
+    | undefined;
+  assert.equal(typeof routerDebug?.parsedOutput?.jobNeeded, "string");
+  assert.match(
+    routerDebug?.requestMessages?.at(-1)?.content ?? "",
+    /Routing state JSON:/
+  );
+  assert.match(routerDebug?.rawResponse ?? "", /job_needed/);
+  const combatState = (solo.messages.at(-1)?.debug as DebugFields | undefined)
+    ?.combatState as
+    | {
+        combat?: unknown;
+        actors?: Record<string, { characterName?: unknown }>;
+      }
+    | undefined;
+  assert.deepEqual(combatState?.combat, {
+    active: false,
+    round: 0,
+    turnOwner: null,
+    initiativeOrder: []
+  });
+  assert.ok(
+    Object.values(combatState?.actors ?? {}).some(
+      (actor) => actor.characterName === "Seren"
+    )
+  );
   assert.equal(solo.isResolving, false);
 
   const askResponse = await app.inject({
@@ -123,10 +159,20 @@ test("DM runtime routes handle authorized solo, ask-DM, regenerate, and traces",
     (regenerated.messages.at(-1)?.debug as DebugFields | undefined)?.model,
     "test-model"
   );
+  assert.equal(
+    regenerated.messages.some((message) =>
+      message.content.includes("Would my ranger know")
+    ),
+    false
+  );
+  assert.equal(
+    regenerated.messages.some((message) => message.kind === "ask_dm_answer"),
+    false
+  );
 
   const tracesResponse = await app.inject({
     method: "GET",
-    url: `/api/campaigns/${created.campaign.id}/debug-traces?limit=10`,
+    url: `/api/campaigns/${created.campaign.id}/debug-traces?limit=20`,
     headers: {
       cookie
     }
@@ -138,6 +184,21 @@ test("DM runtime routes handle authorized solo, ask-DM, regenerate, and traces",
   assert.ok(
     traces.traces.some((trace) => trace.phase === "provider_response_received")
   );
+  const routerTrace = traces.traces.find(
+    (trace) => trace.phase === "router_response_received"
+  );
+  assert.ok(routerTrace);
+  const routerTraceProvider = routerTrace.provider as
+    | {
+        rawResponse?: string;
+        rawRequestMessages?: { role?: string; content?: string }[];
+      }
+    | undefined;
+  assert.match(
+    routerTraceProvider?.rawRequestMessages?.at(-1)?.content ?? "",
+    /Routing state JSON:/
+  );
+  assert.match(routerTraceProvider?.rawResponse ?? "", /job_needed/);
 });
 
 test("DM runtime failure traces include provider debug diagnostics", async () => {
@@ -186,6 +247,427 @@ test("DM runtime failure traces include provider debug diagnostics", async () =>
   assert.equal(provider?.providerTimings?.[0]?.responseBytes, 0);
   assert.equal(provider?.requestMessages?.length, 2);
   assert.equal(provider?.requestMessages?.[0]?.role, "system");
+});
+
+test("DM parser failure traces keep the exact provider response", async () => {
+  const { cookie, campaignId } = await createSinglePlayerCampaign(
+    "dm-runtime-parser-debug"
+  );
+
+  const soloResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "I attack. TRIGGER_RESOLVED_COMBAT_WITHOUT_ROLLS"
+    }
+  });
+
+  assert.equal(soloResponse.statusCode, 500);
+
+  const tracesResponse = await app.inject({
+    method: "GET",
+    url: `/api/campaigns/${campaignId}/debug-traces?limit=10`,
+    headers: {
+      cookie
+    }
+  });
+
+  assert.equal(tracesResponse.statusCode, 200, tracesResponse.body);
+  const traces = CampaignDebugTracesResponseSchema.parse(tracesResponse.json());
+  const failedTrace = traces.traces.find(
+    (trace) => trace.phase === "dm_turn_failed"
+  );
+  const providerTrace = traces.traces.find(
+    (trace) =>
+      trace.phase === "provider_response_received" &&
+      trace.traceId === failedTrace?.traceId
+  );
+  const provider = providerTrace?.provider as
+    | {
+        rawResponse?: string;
+        rawResponseLength?: number;
+      }
+    | undefined;
+  const failedProvider = failedTrace?.provider as
+    | {
+        rawResponse?: string;
+        rawResponseLength?: number;
+      }
+    | undefined;
+
+  assert.ok(providerTrace);
+  assert.ok(failedTrace);
+  assert.equal(provider?.rawResponse, failedProvider?.rawResponse);
+  assert.equal(provider?.rawResponseLength, provider?.rawResponse?.length);
+  assert.match(provider?.rawResponse ?? "", /Seren lunges with her blade/);
+});
+
+test("DM contract accepts clarification as playable targeted input", async () => {
+  const { cookie, campaignId } = await createSinglePlayerCampaign(
+    "dm-runtime-contract-recovery"
+  );
+
+  const soloResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "TRIGGER_CLARIFICATION_NEXT_INPUT"
+    }
+  });
+
+  assert.equal(soloResponse.statusCode, 200, soloResponse.body);
+  const solo = CampaignSoloTurnResponseSchema.parse(soloResponse.json());
+  assert.match(
+    solo.messages.at(-1)?.content ?? "",
+    /are you casting one spell this turn/i
+  );
+  assert.equal(solo.nextInputNeeded, "clarification");
+  assert.deepEqual(solo.inputTargets, ["player:owner"]);
+  assert.equal(solo.inputPolicy, "only_targeted_players");
+
+  const tracesResponse = await app.inject({
+    method: "GET",
+    url: `/api/campaigns/${campaignId}/debug-traces?limit=10`,
+    headers: {
+      cookie
+    }
+  });
+
+  assert.equal(tracesResponse.statusCode, 200, tracesResponse.body);
+  const traces = CampaignDebugTracesResponseSchema.parse(tracesResponse.json());
+  const recoveryTrace = traces.traces.find(
+    (trace) => trace.phase === "dm_contract_parse_recovered"
+  );
+
+  assert.equal(recoveryTrace, undefined);
+});
+
+test("solo combat turn can start initiative through mechanics state update", async () => {
+  const cookie = await signIn("dm-runtime-initiative@example.com");
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: {
+      cookie
+    },
+    payload: {
+      mode: "single_player",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "high_adventure",
+      ownerClientId: "dm-runtime-initiative-client",
+      playerName: "Owner",
+      characterName: "Seren",
+      characterSheet: [
+        "Class: Sorcerer",
+        "Max HP: 32",
+        "Current HP: 32",
+        "Spell Slots",
+        "3rd-level slots: 2 total, 0 used, 2 remaining"
+      ].join("\n"),
+      mechanicsSeed: {
+        characterClass: "Sorcerer",
+        level: 5,
+        maxHp: 32,
+        currentHp: 32,
+        spellSlots: {
+          "3": { max: 2, used: 0 }
+        }
+      }
+    }
+  });
+  const created = CampaignCreateResponseSchema.parse(createResponse.json());
+  const campaignId = created.campaign.id;
+  resetProviderInputs();
+
+  const soloResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "I cast fireball on Mara",
+      clientMessageId: "initiative-fireball-action"
+    }
+  });
+
+  assert.equal(soloResponse.statusCode, 200, soloResponse.body);
+  const solo = CampaignSoloTurnResponseSchema.parse(soloResponse.json());
+  const latestDmMessage = solo.messages.at(-1);
+  const debug = latestDmMessage?.debug as DebugFields | undefined;
+  const combatState = debug?.combatState as
+    | {
+        combat?: {
+          active?: boolean;
+          round?: number;
+          turnOwner?: string | null;
+          initiativeOrder?: string[];
+        };
+        actors?: Record<string, { characterName?: string; currentHp?: number }>;
+      }
+    | undefined;
+
+  assert.equal(latestDmMessage?.role, "dm");
+  assert.match(latestDmMessage?.content ?? "", /Roll 1d20 \+ 2 for initiative/);
+  assert.equal(solo.pendingRollRequest?.dice, "1d20");
+  assert.equal(solo.pendingRollRequest?.modifier, 2);
+  assert.equal(solo.pendingRollRequest?.label, "Initiative");
+  assert.equal(combatState?.combat?.active, true);
+  assert.equal(combatState?.combat?.round, 1);
+  assert.equal(combatState?.combat?.turnOwner?.startsWith("player:"), true);
+  assert.deepEqual(combatState?.combat?.initiativeOrder?.slice(1), [
+    "npc:mara",
+    "npc:drowned-choir-raider-1",
+    "npc:drowned-choir-raider-2"
+  ]);
+  assert.equal(combatState?.actors?.["npc:mara"]?.characterName, "Mara");
+
+  assert.equal(getProviderInputs().length, 1);
+});
+
+test("surprise opening combat resolves the opening roll before initiative", async () => {
+  const cookie = await signIn("dm-runtime-surprise-initiative@example.com");
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: {
+      cookie
+    },
+    payload: {
+      mode: "single_player",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "high_adventure",
+      ownerClientId: "dm-runtime-surprise-initiative-client",
+      playerName: "Owner",
+      characterName: "Seren",
+      characterSheet: [
+        "Class: Sorcerer",
+        "Max HP: 32",
+        "Current HP: 32",
+        "Spell Slots",
+        "3rd-level slots: 2 total, 0 used, 2 remaining"
+      ].join("\n"),
+      mechanicsSeed: {
+        characterClass: "Sorcerer",
+        level: 5,
+        maxHp: 32,
+        currentHp: 32,
+        spellSlots: {
+          "3": { max: 2, used: 0 }
+        }
+      }
+    }
+  });
+  const created = CampaignCreateResponseSchema.parse(createResponse.json());
+  resetProviderInputs();
+
+  const soloResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${created.campaign.id}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "Mara has not noticed me, so I cast fireball on Mara",
+      clientMessageId: "surprise-fireball-action"
+    }
+  });
+
+  assert.equal(soloResponse.statusCode, 200, soloResponse.body);
+  const solo = CampaignSoloTurnResponseSchema.parse(soloResponse.json());
+  const latestDmMessage = solo.messages.at(-1);
+
+  assert.equal(latestDmMessage?.role, "dm");
+  assert.match(latestDmMessage?.content ?? "", /Roll 8d6 for Fireball damage/);
+  assert.equal(solo.pendingRollRequest?.dice, "8d6");
+  assert.equal(solo.pendingRollRequest?.label, "Fireball damage");
+  assert.equal(solo.pendingRollRequest?.modifier, 0);
+  assert.doesNotMatch(latestDmMessage?.content ?? "", /Roll 1d20 \+ 2 for initiative/);
+
+  assert.equal(getProviderInputs().length, 1);
+
+  assert.ok(solo.pendingRollRequest?.id);
+  const damageResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${created.campaign.id}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      rollSubmissions: [
+        {
+          rollRequestId: solo.pendingRollRequest.id,
+          rollResult: {
+            rolls: [5, 1, 4, 1, 3, 6, 4, 5],
+            total: 29
+          },
+          clientMessageId: "surprise-fireball-damage"
+        }
+      ]
+    }
+  });
+
+  assert.equal(damageResponse.statusCode, 200, damageResponse.body);
+  const afterDamage = CampaignSoloTurnResponseSchema.parse(damageResponse.json());
+  const damageDmMessage = afterDamage.messages.at(-1);
+
+  assert.equal(damageDmMessage?.role, "dm");
+  assert.match(damageDmMessage?.content ?? "", /opening strike has landed/i);
+  assert.match(damageDmMessage?.content ?? "", /roll 1d20 \+ 2 for initiative/i);
+  assert.equal(afterDamage.pendingRollRequest?.dice, "1d20");
+  assert.equal(afterDamage.pendingRollRequest?.modifier, 2);
+  assert.equal(afterDamage.pendingRollRequest?.label, "Initiative");
+});
+
+test("solo combat catches up NPC turns instead of rejecting the player", async () => {
+  const { cookie, campaignId } = await createSinglePlayerCampaign(
+    "dm-runtime-npc-catchup"
+  );
+  const playerActorKey = "player:dm-runtime-npc-catchup-client";
+  const campaign = database.campaigns.find(
+    (candidate) => candidate.id === campaignId
+  );
+
+  assert.ok(campaign);
+  campaign.metadata = {
+    ...(campaign.metadata as Record<string, unknown>),
+    mechanicsState: {
+      combat: {
+        active: true,
+        round: 1,
+        turnOwner: "npc:cutlass-raider",
+        initiativeOrder: [
+          playerActorKey,
+          "npc:cutlass-raider",
+          "npc:horn-blower"
+        ]
+      },
+      actors: {
+        [playerActorKey]: {
+          characterName: "Seren",
+          currentHp: 24,
+          maxHp: 24,
+          conditions: []
+        },
+        "npc:cutlass-raider": {
+          characterName: "Cutlass raider",
+          currentHp: 12,
+          maxHp: 12,
+          conditions: []
+        },
+        "npc:horn-blower": {
+          characterName: "Horn-blower",
+          currentHp: 10,
+          maxHp: 10,
+          conditions: []
+        }
+      }
+    }
+  };
+  resetProviderInputs();
+
+  const soloResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "I cast Scorching Ray at the cutlass raider.",
+      clientMessageId: "npc-catchup-scorching-ray"
+    }
+  });
+
+  assert.equal(soloResponse.statusCode, 200, soloResponse.body);
+  const solo = CampaignSoloTurnResponseSchema.parse(soloResponse.json());
+  const latestDmMessage = solo.messages.at(-1);
+  const debug = latestDmMessage?.debug as DebugFields | undefined;
+  const combatState = debug?.combatState as
+    | {
+        combat?: {
+          turnOwner?: string | null;
+        };
+        actors?: Record<string, { currentHp?: number }>;
+      }
+    | undefined;
+
+  assert.equal(latestDmMessage?.role, "dm");
+  assert.match(latestDmMessage?.content ?? "", /cutlass raider's turn resolves first/i);
+  assert.match(latestDmMessage?.content ?? "", /attack roll: 17 vs AC 14 - hit/i);
+  assert.match(latestDmMessage?.content ?? "", /damage roll: 1d6 \+ 2 = 6/i);
+  assert.match(latestDmMessage?.content ?? "", /6 slashing damage/i);
+  assert.match(latestDmMessage?.content ?? "", /drops from 24 HP to 18 HP/i);
+  assert.doesNotMatch(latestDmMessage?.content ?? "", /It is not your turn/i);
+  assert.doesNotMatch(latestDmMessage?.content ?? "", /lunges[^.]*What do you do/is);
+  assert.equal(combatState?.combat?.turnOwner, playerActorKey);
+  assert.equal(combatState?.actors?.[playerActorKey]?.currentHp, 18);
+
+  assert.equal(getProviderInputs().length, 1);
+
+  const updatedCampaign = database.campaigns.find(
+    (candidate) => candidate.id === campaignId
+  );
+  assert.ok(updatedCampaign);
+  updatedCampaign.metadata = {
+    ...(updatedCampaign.metadata as Record<string, unknown>),
+    mechanicsState: {
+      ...((updatedCampaign.metadata as Record<string, unknown>).mechanicsState as Record<
+        string,
+        unknown
+      >),
+      combat: {
+        active: true,
+        round: 2,
+        turnOwner: "Horn-blower",
+        initiativeOrder: [
+          playerActorKey,
+          "npc:cutlass-raider",
+          "npc:horn-blower"
+        ]
+      }
+    }
+  };
+
+  const secondSoloResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "I cast Scorching Ray at the horn-blower.",
+      clientMessageId: "npc-catchup-scorching-ray-second"
+    }
+  });
+
+  assert.equal(secondSoloResponse.statusCode, 200, secondSoloResponse.body);
+  const secondSolo = CampaignSoloTurnResponseSchema.parse(secondSoloResponse.json());
+  const secondDmMessage = secondSolo.messages.at(-1);
+  const secondDebug = secondDmMessage?.debug as DebugFields | undefined;
+  const secondCombatState = secondDebug?.combatState as
+    | {
+        combat?: {
+          turnOwner?: string | null;
+          round?: number;
+        };
+        actors?: Record<string, { currentHp?: number }>;
+      }
+    | undefined;
+
+  assert.equal(secondDmMessage?.role, "dm");
+  assert.match(secondDmMessage?.content ?? "", /attack roll: 17 vs AC 14 - hit/i);
+  assert.match(secondDmMessage?.content ?? "", /damage roll: 1d6 \+ 2 = 6/i);
+  assert.match(secondDmMessage?.content ?? "", /6 slashing damage/i);
+  assert.doesNotMatch(secondDmMessage?.content ?? "", /It is not your turn/i);
+  assert.equal(secondCombatState?.combat?.turnOwner, playerActorKey);
+  assert.equal(secondCombatState?.combat?.round, 1);
+  assert.equal(secondCombatState?.actors?.[playerActorKey]?.currentHp, 12);
 });
 
 test("solo turns send the current action once outside provider history", async () => {

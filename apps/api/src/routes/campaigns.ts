@@ -1,5 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import {
+  CampaignInviteCreateParamsSchema,
+  CampaignInviteCreateRequestSchema,
+  CampaignInviteCreateResponseSchema,
+  CampaignInviteDisableParamsSchema,
+  CampaignInviteDisableResponseSchema,
+  CampaignInviteListParamsSchema,
+  CampaignInviteListResponseSchema,
   CampaignCreateRequestSchema,
   CampaignCreateResponseSchema,
   CampaignJoinPreviewRequestSchema,
@@ -9,14 +16,24 @@ import {
   CampaignListResponseSchema,
   CampaignReadParamsSchema,
   CampaignReadResponseSchema,
+  LobbyInviteJoinParamsSchema,
+  LobbyInviteJoinRequestSchema,
+  LobbyInviteJoinResponseSchema,
+  LobbyInvitePreviewParamsSchema,
+  LobbyInvitePreviewResponseSchema,
   type CampaignMode
 } from "@ai-dnd/contracts";
 import {
+  createCampaignInvite,
   createCampaignForMode,
+  disableCampaignInvite,
   type DungeonMasterRuntime,
   getCampaignSummaryForUser,
+  joinCampaignByInvite,
   joinCampaignByCode,
+  listCampaignInvitesForOwner,
   listCampaignSummariesForUser,
+  previewLobbyInvite,
   previewCampaignJoinByCode
 } from "@ai-dnd/db";
 import type { ApiConfig } from "../config.js";
@@ -162,6 +179,7 @@ export async function registerCampaignRoutes(
       playerName,
       characterName: body.characterName?.trim(),
       characterSheet: body.characterSheet?.trim(),
+      mechanicsSeed: body.mechanicsSeed,
       userId: user.id,
       runtime
     });
@@ -183,6 +201,94 @@ export async function registerCampaignRoutes(
     });
 
     return CampaignReadResponseSchema.parse({ campaign });
+  });
+
+  fastify.get("/campaigns/:campaignId/invites", async (request) => {
+    const params = CampaignInviteListParamsSchema.parse(request.params);
+    const user = await requireAuthenticatedUser(
+      fastify,
+      config,
+      request.cookies[config.authCookieName]
+    );
+    const invites = await listCampaignInvitesForOwner(fastify.pg, {
+      campaignId: params.campaignId,
+      userId: user.id
+    });
+
+    return CampaignInviteListResponseSchema.parse({ invites });
+  });
+
+  fastify.post("/campaigns/:campaignId/invites", async (request, reply) => {
+    const params = CampaignInviteCreateParamsSchema.parse(request.params);
+    const body = CampaignInviteCreateRequestSchema.parse(request.body ?? {});
+    const user = await requireAuthenticatedUser(
+      fastify,
+      config,
+      request.cookies[config.authCookieName]
+    );
+    const response = await createCampaignInvite(fastify.pg, {
+      campaignId: params.campaignId,
+      userId: user.id,
+      maxUses: body.maxUses,
+      expiresAt: body.expiresAt
+    });
+
+    reply.status(201);
+    return CampaignInviteCreateResponseSchema.parse(response);
+  });
+
+  fastify.post(
+    "/campaigns/:campaignId/invites/:inviteId/disable",
+    async (request) => {
+      const params = CampaignInviteDisableParamsSchema.parse(request.params);
+      const user = await requireAuthenticatedUser(
+        fastify,
+        config,
+        request.cookies[config.authCookieName]
+      );
+      const invite = await disableCampaignInvite(fastify.pg, {
+        campaignId: params.campaignId,
+        inviteId: params.inviteId,
+        userId: user.id
+      });
+
+      return CampaignInviteDisableResponseSchema.parse({ invite });
+    }
+  );
+
+  fastify.get("/invites/:token/preview", async (request) => {
+    const params = LobbyInvitePreviewParamsSchema.parse(request.params);
+
+    await requireAuthenticatedUser(
+      fastify,
+      config,
+      request.cookies[config.authCookieName]
+    );
+
+    return LobbyInvitePreviewResponseSchema.parse(
+      await previewLobbyInvite(fastify.pg, params.token)
+    );
+  });
+
+  fastify.post("/invites/:token/join", async (request) => {
+    const params = LobbyInviteJoinParamsSchema.parse(request.params);
+    const body = LobbyInviteJoinRequestSchema.parse(request.body ?? {});
+    const user = await requireAuthenticatedUser(
+      fastify,
+      config,
+      request.cookies[config.authCookieName]
+    );
+    const campaign = await joinCampaignByInvite(fastify.pg, {
+      token: params.token,
+      clientId: body.clientId ?? "",
+      username: body.username ?? "",
+      characterName: body.characterName ?? "",
+      characterSheet: body.characterSheet ?? "",
+      mechanicsSeed: body.mechanicsSeed,
+      userId: user.id
+    });
+
+    return LobbyInviteJoinResponseSchema.parse({ campaign });
   });
 
   fastify.post("/campaigns/join/preview", async (request) => {
@@ -212,6 +318,7 @@ export async function registerCampaignRoutes(
       username: body.username ?? "",
       characterName: body.characterName ?? "",
       characterSheet: body.characterSheet ?? "",
+      mechanicsSeed: body.mechanicsSeed,
       userId: user.id
     });
 

@@ -98,7 +98,7 @@ Expected responsibilities:
 
 ## DM Provider Boundary
 
-The browser should not call Hermes, DeepSeek, or any model provider directly.
+The browser should not call DeepSeek or any model provider directly.
 
 Target request flow:
 
@@ -111,7 +111,7 @@ Browser
 
 The Next.js server should verify auth, subscription status, usage limits, and
 request validity before calling the configured DM provider with private
-server-side credentials. Existing `hermes_*` database names are legacy
+server-side credentials. Existing provider-specific database names are legacy
 migration details and should be renamed only in a later cleanup pass.
 
 ## Root Files

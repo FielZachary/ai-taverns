@@ -1,31 +1,59 @@
-import { randomInt, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomInt, randomUUID } from "node:crypto";
 import pg from "pg";
 import type { SessionId, UserId } from "@ai-dnd/domain";
 import {
-  debugHermesDmContractFailure,
-  dungeonMasterInstructions,
   eldermereMetadataProfile,
   eldermereRegions,
   formatEldermereOpeningPromptContext,
   formatEldermereTurnPromptContext,
   openingSceneRequest,
-  parseHermesDmContract,
+  parseDmContract,
+  recoverDmContractAfterParseFailure,
+  debugDmContractFailure,
+  rollRequestDiagnostics,
   isEldermerePreset,
+  buildMemoryUpdaterPrompt,
+  buildRouterPrompt,
+  formatRouterCurrentTurnInput,
+  jobPrompt,
+  renderContextChunks,
+  validateCombatEvents,
+  validateMainDmOutput,
+  validateMemoryPatches,
+  validateRouterOutput,
   type EldermereCampaignStart,
   type AiDebugInfo,
+  type ContextCategory,
+  type ContextChunk,
   type GameMessage,
-  type HermesDmContractParseOptions,
-  type InputPolicy
+  type DmContractResponse,
+  type DmContractParseOptions,
+  type DmNextInputNeeded,
+  type DmJobName,
+  type InputPolicy,
+  type ValidatedRouterOutput
 } from "@ai-dnd/dm";
 import type {
+  AiModelId,
+  CampaignInvite,
   CampaignMode,
   CampaignSummary,
   DmStreamEvent,
   DiceRollRequest,
   DiceRollResult,
   DiceRollSubmission,
+  MechanicsSeed,
+  MechanicsState,
   RoomSnapshot
 } from "@ai-dnd/contracts";
+import {
+  actorKeyForPlayer,
+  applyAcceptedCast,
+  assertMechanicsActionAllowed,
+  mechanicsStateWithActor,
+  projectMechanicsIntoCharacterSheet,
+  resolveMechanicsState
+} from "./mechanics.js";
 
 const { Pool } = pg;
 
@@ -118,6 +146,7 @@ type TurnStatus =
 
 const maxPlayers = 4;
 const joinCodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const inviteTokenBytes = 32;
 
 function requireRow<TRow>(row: TRow | undefined, message: string): TRow {
   if (!row) {
@@ -369,7 +398,7 @@ export async function claimGuestStateForUser(
 
 export type CampaignRow = {
   id: string;
-  hermes_session_id: string;
+  session_id: string;
   mode: CampaignMode;
   title: string;
   status: CampaignStatus;
@@ -382,6 +411,11 @@ export type CampaignRow = {
   display_character_name?: string | null;
   display_username?: string | null;
   join_code?: string | null;
+};
+
+type CampaignSummaryRow = Omit<CampaignRow, "session_id"> & {
+  session_id?: string;
+  sessionId?: string;
 };
 
 type PlayerRow = {
@@ -427,6 +461,28 @@ type JoinCodeRow = {
   status: CampaignStatus;
   mode: CampaignMode;
   has_begun: boolean;
+};
+
+type CampaignInviteRow = {
+  id: string;
+  campaign_id: string;
+  token_hash: string;
+  enabled: boolean;
+  max_uses: number | null;
+  use_count: number;
+  expires_at: Date | string | null;
+  created_by_user_id: string;
+  created_at: Date | string;
+  disabled_at: Date | string | null;
+  disabled_by_user_id: string | null;
+};
+
+type CampaignInvitePreviewRow = CampaignInviteRow & {
+  campaign_title: string;
+  campaign_status: CampaignStatus;
+  campaign_mode: CampaignMode;
+  campaign_has_begun: boolean;
+  active_players: string | number;
 };
 
 type CampaignSettingSummary = {
@@ -492,11 +548,47 @@ type DungeonMasterProviderResponse = {
   debug: AiDebugInfo;
 };
 
+type ResolutionMode = "needs_dice" | "resolved_without_dice";
+
+type DungeonMasterReply = {
+  id: string;
+  content: string;
+  debug: AiDebugInfo;
+  rollRequests: DiceRollRequest[];
+  inputTargets: string[];
+  inputPolicy: InputPolicy;
+  nextInputNeeded: DmNextInputNeeded;
+  resolutionMode: ResolutionMode;
+  setting?: CampaignSettingSummary | undefined;
+};
+
+type DmPromptContext = {
+  instructions: string;
+  message: string;
+  jobNeeded?: DmJobName;
+  sections: unknown[];
+  budget: Record<string, unknown>;
+  routerDebug?: NonNullable<AiDebugInfo["router"]>;
+};
+
+const dungeonMasterContractInstructions = [
+  "You are the AI Taverns DnD Dungeon Master.",
+  "Return exactly one valid JSON object. Do not use Markdown outside the JSON object; Markdown emphasis is allowed inside public_narration strings when the job guidance asks for it.",
+  "Use public_narration for player-facing narration.",
+  "Use roll_requests only for player-controlled dice the website must collect.",
+  "In roll_requests, dice must be bare dice notation only, such as 1d20, 3d4, or 8d6. Do not include + or - modifiers in dice; put static bonuses or penalties in modifier. Example: Magic Missile uses dice \"3d4\" and modifier 3, not dice \"3d4+3\".",
+  "Use mechanics_state_update for canonical game/mechanics state changes; the website owns persistence.",
+  "Required top-level keys: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update."
+].join("\n");
+
 export type DungeonMasterRuntime = {
   askProvider(input: {
     message: string;
     instructions: string;
     history?: GameMessage[];
+    currentPlayerAction?: string;
+    dmJob?: DmJobName;
+    model?: AiModelId;
     onPublicNarrationDelta?: (text: string) => void;
   }): Promise<DungeonMasterProviderResponse>;
   emitDmStreamEvent?(event: DmStreamEvent): void;
@@ -505,9 +597,11 @@ export type DungeonMasterRuntime = {
     turnId?: string | undefined;
     currentAction: string;
     baseInstructions: string;
+    model?: AiModelId;
   }): Promise<{
     instructions: string;
     message: string;
+    jobNeeded?: DmJobName;
     sections: unknown[];
     budget: Record<string, unknown>;
   }>;
@@ -541,13 +635,41 @@ function generateJoinCode() {
   ).join("");
 }
 
+function generateInviteToken() {
+  return randomBytes(inviteTokenBytes).toString("base64url");
+}
+
+function hashInviteToken(token: string) {
+  return createHash("sha256")
+    .update("ai-taverns-campaign-invite:")
+    .update(token)
+    .digest("hex");
+}
+
+function normalizeInviteToken(token: string | undefined) {
+  return (token ?? "").trim();
+}
+
+function mapCampaignInviteRow(row: CampaignInviteRow): CampaignInvite {
+  return {
+    id: row.id,
+    campaignId: row.campaign_id,
+    enabled: row.enabled,
+    maxUses: row.max_uses,
+    useCount: Number(row.use_count),
+    expiresAt: row.expires_at ? toIso(row.expires_at) : null,
+    createdAt: toIso(row.created_at),
+    disabledAt: row.disabled_at ? toIso(row.disabled_at) : null
+  };
+}
+
 function eventPayload(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
 }
 
-function campaignWorldName(campaign: CampaignRow) {
+function campaignWorldName(campaign: Pick<CampaignRow, "metadata" | "title">) {
   const metadata = eventPayload(campaign.metadata);
   const setting = eventPayload(metadata.setting);
   const genre = eventPayload(metadata.genre);
@@ -685,17 +807,23 @@ function normalizeCampaignTitle(title: string | undefined, sessionId: string) {
 }
 
 export function mapCampaignSummaryRow(
-  campaign: CampaignRow
+  campaign: CampaignSummaryRow
 ): CampaignSummary {
   const characterName = campaign.display_character_name?.trim();
   const playerName = campaign.display_username?.trim();
   const joinCode = campaign.join_code?.trim();
+  const sessionId = (campaign.session_id ?? campaign.sessionId)?.trim();
+
+  if (!sessionId) {
+    throw new Error("Campaign summary row is missing session_id.");
+  }
 
   return {
     id: campaign.id,
-    hermesSessionId: campaign.hermes_session_id,
+    sessionId,
     mode: campaign.mode,
     title: characterName || playerName || campaign.title,
+    ...(campaign.owner_client_id ? { ownerClientId: campaign.owner_client_id } : {}),
     preview: campaignWorldName(campaign),
     messageCount: 0,
     ...(joinCode ? { joinCode } : {})
@@ -728,11 +856,144 @@ export async function logCampaignEvent(
   payload: Record<string, unknown> = {}
 ): Promise<string | undefined> {
   const result = await db.query<{ id: string }>(
-    "insert into campaign_events (campaign_id, type, payload) values ($1, $2, $3::jsonb) returning id",
+    "insert into campaign_events (campaign_id, type, payload, created_at) values ($1, $2, $3::jsonb, clock_timestamp()) returning id",
     [campaignId, type, JSON.stringify(payload)]
   );
 
   return result.rows[0]?.id;
+}
+
+async function writeMechanicsStateForLockedCampaign(
+  db: Queryable,
+  campaignId: string,
+  mechanicsState: MechanicsState
+) {
+  await db.query(
+    `
+      update campaigns
+      set metadata = jsonb_set(metadata, '{mechanicsState}', $2::jsonb, true),
+          updated_at = now()
+      where id = $1
+    `,
+    [campaignId, JSON.stringify(mechanicsState)]
+  );
+}
+
+function numberField(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  return Number.isInteger(value) && Number(value) >= 0 ? Number(value) : undefined;
+}
+
+function stringListField(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : undefined;
+}
+
+function applyMechanicsStateUpdate(
+  state: MechanicsState,
+  update: Record<string, unknown> | undefined,
+  updatedAt?: string
+): MechanicsState {
+  if (!update || Object.keys(update).length === 0) {
+    return state;
+  }
+
+  const rawActors = isRecord(update.actors) ? update.actors : update;
+  const nextActors = { ...state.actors };
+  let changed = false;
+
+  for (const [actorKey, rawActor] of Object.entries(rawActors)) {
+    if (actorKey === "combat" || actorKey === "updatedAt" || !isRecord(rawActor)) {
+      continue;
+    }
+
+    const existing = nextActors[actorKey];
+    const characterName =
+      typeof rawActor.characterName === "string" && rawActor.characterName.trim()
+        ? rawActor.characterName
+        : existing?.characterName;
+
+    if (!existing && !characterName) {
+      continue;
+    }
+
+    nextActors[actorKey] = {
+      ...(existing ?? { characterName: characterName ?? actorKey }),
+      ...(characterName ? { characterName } : {}),
+      ...(numberField(rawActor, "currentHp") !== undefined
+        ? { currentHp: numberField(rawActor, "currentHp") }
+        : {}),
+      ...(numberField(rawActor, "maxHp") !== undefined
+        ? { maxHp: numberField(rawActor, "maxHp") }
+        : {}),
+      ...(stringListField(rawActor, "conditions") !== undefined
+        ? { conditions: stringListField(rawActor, "conditions") }
+        : {}),
+      ...(rawActor.concentration === null || isRecord(rawActor.concentration)
+        ? { concentration: rawActor.concentration as MechanicsState["actors"][string]["concentration"] }
+        : {})
+    };
+    changed = true;
+  }
+
+  const rawCombat = isRecord(update.combat) ? update.combat : undefined;
+  const nextCombat = rawCombat
+    ? {
+        ...state.combat,
+        ...(typeof rawCombat.active === "boolean" ? { active: rawCombat.active } : {}),
+        ...(numberField(rawCombat, "round") !== undefined
+          ? { round: numberField(rawCombat, "round") ?? state.combat.round }
+          : {}),
+        ...(typeof rawCombat.turnOwner === "string" || rawCombat.turnOwner === null
+          ? { turnOwner: rawCombat.turnOwner }
+          : {}),
+        ...(stringListField(rawCombat, "initiativeOrder") !== undefined
+          ? { initiativeOrder: stringListField(rawCombat, "initiativeOrder") ?? [] }
+          : {})
+      }
+    : state.combat;
+
+  changed ||= nextCombat !== state.combat;
+
+  return changed
+    ? {
+        ...state,
+        updatedAt,
+        combat: nextCombat,
+        actors: nextActors
+      }
+    : state;
+}
+
+async function addOrReplacePlayerMechanicsActor(
+  db: Queryable,
+  input: {
+    campaign: CampaignRow;
+    playerId: string;
+    characterName: string;
+    characterSheet?: string | undefined;
+    seed?: MechanicsSeed | undefined;
+  }
+) {
+  const currentState = resolveMechanicsState(input.campaign, []);
+  const nextState = mechanicsStateWithActor({
+    existing: currentState,
+    playerId: input.playerId,
+    characterName: input.characterName,
+    characterSheet: input.characterSheet,
+    seed: input.seed,
+    updatedAt: nowIso()
+  });
+
+  await writeMechanicsStateForLockedCampaign(db, input.campaign.id, nextState);
+  input.campaign.metadata = {
+    ...eventPayload(input.campaign.metadata),
+    mechanicsState: nextState
+  };
+
+  return nextState;
 }
 
 async function ensureCollectingTurn(
@@ -846,58 +1107,78 @@ async function seedEldermerePromptContextRecords(
     }
   ];
 
-  await db.query(
-    `
-      insert into campaign_current_state (
-        campaign_id,
-        style,
-        current_scene,
-        source_event_ids
-      )
-      values ($1, $2::jsonb, $3::jsonb, $4::uuid[])
-      on conflict (campaign_id) do update
-      set style = excluded.style,
-          current_scene = campaign_current_state.current_scene || excluded.current_scene,
-          source_event_ids = excluded.source_event_ids,
-          updated_at = now()
-    `,
-    [
-      campaignId,
-      JSON.stringify(style),
-      JSON.stringify(currentScene),
-      sourceEventIds
-    ]
-  );
+  const chunks = [
+    {
+      contextKey: "world:eldermere-style",
+      category: "relevant_world_context",
+      title: "Eldermere Style And Current Scene",
+      visibility: "dm_only",
+      priority: 10,
+      bodyMarkdown: [
+        "# Eldermere Style And Current Scene",
+        "",
+        "## Style",
+        JSON.stringify(style, null, 2),
+        "",
+        "## Current Scene",
+        JSON.stringify(currentScene, null, 2)
+      ].join("\n")
+    },
+    ...memories.map((memory) => ({
+      contextKey: `world:${memory.title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "")}`,
+      category: "relevant_world_context",
+      title: memory.title,
+      visibility: "dm_only",
+      priority: memory.importance,
+      bodyMarkdown: [
+        `# ${memory.title}`,
+        "",
+        memory.summary,
+        "",
+        `Entities: ${memory.entities.join(", ")}`,
+        sourceEventIds.length > 0
+          ? `Source event IDs: ${sourceEventIds.join(", ")}`
+          : ""
+      ]
+        .filter(Boolean)
+        .join("\n")
+    }))
+  ];
 
-  for (const memory of memories) {
-    await db.query(
+  for (const chunk of chunks) {
+    await bestEffortRuntimeInsert(
+      db,
       `
-        insert into campaign_memories (
+        insert into campaign_context_chunks (
           campaign_id,
-          memory_type,
+          context_key,
+          category,
           title,
-          summary,
-          entities,
-          status,
-          importance,
-          source_event_ids
+          visibility,
+          priority,
+          body_markdown
         )
-        values ($1, 'lore', $2, $3, $4::text[], 'active', $5, $6::uuid[])
-        on conflict (campaign_id, memory_type, lower(title)) do update
-        set summary = excluded.summary,
-            entities = excluded.entities,
-            status = 'active',
-            importance = excluded.importance,
-            source_event_ids = excluded.source_event_ids,
+        values ($1, $2, $3, $4, $5, $6, $7)
+        on conflict (campaign_id, context_key) do update
+        set category = excluded.category,
+            title = excluded.title,
+            visibility = excluded.visibility,
+            priority = excluded.priority,
+            body_markdown = excluded.body_markdown,
+            archived_at = null,
             updated_at = now()
       `,
       [
         campaignId,
-        memory.title,
-        memory.summary,
-        memory.entities,
-        memory.importance,
-        sourceEventIds
+        chunk.contextKey,
+        chunk.category,
+        chunk.title,
+        chunk.visibility,
+        chunk.priority,
+        chunk.bodyMarkdown
       ]
     );
   }
@@ -952,6 +1233,7 @@ export async function listCampaignSummariesForUser(
     `
       select
         campaigns.*,
+        campaigns.session_id as "sessionId",
         display_player.character_name as display_character_name,
         display_player.username as display_username,
         join_code.code as join_code
@@ -1007,6 +1289,7 @@ export async function getCampaignSummaryForUser(
     `
       select
         campaigns.*,
+        campaigns.session_id as "sessionId",
         display_player.character_name as display_character_name,
         display_player.username as display_username,
         join_code.code as join_code
@@ -1080,6 +1363,7 @@ export async function createCampaignForMode(
     playerName: string;
     characterName?: string | undefined;
     characterSheet?: string | undefined;
+    mechanicsSeed?: MechanicsSeed | undefined;
     userId: string;
     runtime?: DungeonMasterRuntime | undefined;
   }
@@ -1107,7 +1391,7 @@ export async function createCampaignForMode(
     const inserted = await client.query<CampaignRow>(
       `
         insert into campaigns (
-          hermes_session_id,
+          session_id,
           title,
           mode,
           has_begun,
@@ -1157,10 +1441,23 @@ export async function createCampaignForMode(
       ]
     );
     const playerRow = requireRow(player.rows[0], "Failed to create player.");
+    const mechanicsState = mechanicsStateWithActor({
+      playerId: playerRow.id,
+      characterName: playerRow.character_name,
+      characterSheet: playerRow.character_sheet,
+      seed: input.mechanicsSeed,
+      updatedAt: nowIso()
+    });
+
+    await writeMechanicsStateForLockedCampaign(
+      client,
+      campaign.id,
+      mechanicsState
+    );
     const turn = await ensureCollectingTurn(client, campaign.id);
 
     const createdEventId = await logCampaignEvent(client, campaign.id, "campaign_created", {
-      hermesSessionId: sessionId,
+      sessionId: sessionId,
       mode: input.mode,
       genre: input.campaignGenre,
       genreKind: input.campaignGenreKind ?? "preset"
@@ -1210,11 +1507,12 @@ export async function createCampaignForMode(
 
     return {
       campaign,
+      mechanicsState,
       player: playerRow,
       turn: openingTurn,
       summary: mapCampaignSummaryRow({
       ...campaign,
-      metadata: genreMetadata,
+      metadata: { ...genreMetadata, mechanicsState },
       display_character_name: playerRow.character_name,
       display_username: playerRow.username,
       join_code: joinCode ?? null
@@ -1229,6 +1527,7 @@ export async function createCampaignForMode(
   const runtime = input.runtime;
   const openingTurn = createdState.turn;
   const openingRequest = formatOpeningSceneRequest({
+    campaign: createdState.campaign,
     mode: "single_player",
     players: [createdState.player],
     style: {
@@ -1271,17 +1570,20 @@ export async function createCampaignForMode(
           true,
           openingTurn.id,
           undefined,
-          { allowResolvedCombatWithoutRolls: true }
+          { allowResolvedCombatWithoutRolls: true },
+          { buildPromptContext: false }
         );
     const resolvedTurn = await finishResolvedTurn(db, {
       campaignId: createdState.campaign.id,
       turnId: openingTurn.id,
-      hermesMessageId: opening.id,
+      modelMessageId: opening.id,
       reply: opening.content,
       eventType: "adventure_begun",
       pendingRollRequests: opening.rollRequests,
       inputTargets: opening.inputTargets,
       inputPolicy: opening.inputPolicy,
+      nextInputNeeded: opening.nextInputNeeded,
+      resolutionMode: opening.resolutionMode,
       setting: opening.setting,
       aiDebug: opening.debug
     });
@@ -1309,7 +1611,7 @@ export async function createCampaignForMode(
   }
 }
 
-export async function createCampaignForHermesSession(
+export async function createCampaignForSession(
   db: pg.Pool,
   input: {
     sessionId: string;
@@ -1325,14 +1627,14 @@ export async function createCampaignForHermesSession(
     const result = await client.query<CampaignRow>(
       `
         insert into campaigns (
-          hermes_session_id,
+          session_id,
           title,
           owner_client_id,
           owner_user_id,
           mode
         )
         values ($1, $2, $3, $4, $5)
-        on conflict (hermes_session_id) do update
+        on conflict (session_id) do update
         set title = excluded.title,
             mode = excluded.mode,
             status = 'active',
@@ -1353,7 +1655,7 @@ export async function createCampaignForHermesSession(
 
     await ensureCollectingTurn(client, campaign.id);
     await logCampaignEvent(client, campaign.id, "campaign_created", {
-      hermesSessionId: input.sessionId
+      sessionId: input.sessionId
     });
 
     return campaign;
@@ -1407,6 +1709,10 @@ export async function previewCampaignJoinByCode(
     throw createStatusError(409, "That game is already full.");
   }
 
+  if (campaign.has_begun) {
+    throw createStatusError(409, "That adventure has already begun.");
+  }
+
   return {
     code: campaign.code,
     campaignTitle: campaign.title,
@@ -1423,6 +1729,7 @@ export async function joinCampaignByCode(
     username: string;
     characterName: string;
     characterSheet: string;
+    mechanicsSeed?: MechanicsSeed | undefined;
     userId: string;
   }
 ): Promise<CampaignSummary> {
@@ -1459,6 +1766,10 @@ export async function joinCampaignByCode(
 
     if (!campaignRow) {
       throw createStatusError(404, "That game code was not found.");
+    }
+
+    if (campaignRow.has_begun) {
+      throw createStatusError(409, "That adventure has already begun.");
     }
 
     const existingForUser = await client.query<PlayerRow>(
@@ -1550,10 +1861,17 @@ export async function joinCampaignByCode(
           slot
         }
       );
+      await addOrReplacePlayerMechanicsActor(client, {
+        campaign: campaignRow,
+        playerId: userPlayer.id,
+        characterName,
+        characterSheet,
+        seed: input.mechanicsSeed
+      });
       return campaignRow;
     }
 
-    await client.query(
+    const insertedPlayer = await client.query<PlayerRow>(
       `
         insert into players (
           campaign_id,
@@ -1587,6 +1905,27 @@ export async function joinCampaignByCode(
         slot
       ]
     );
+    const joinedPlayer =
+      insertedPlayer.rows[0] ??
+      (await client.query<PlayerRow>(
+        `
+          select *
+          from players
+          where campaign_id = $1 and client_id = $2
+          limit 1
+        `,
+        [campaignRow.id, clientId]
+      )).rows[0];
+
+    if (joinedPlayer) {
+      await addOrReplacePlayerMechanicsActor(client, {
+        campaign: campaignRow,
+        playerId: joinedPlayer.id,
+        characterName,
+        characterSheet,
+        seed: input.mechanicsSeed
+      });
+    }
     await logCampaignEvent(client, campaignRow.id, "player_joined_by_code", {
       clientId,
       username,
@@ -1601,6 +1940,507 @@ export async function joinCampaignByCode(
     ...campaign,
     display_character_name: characterName,
     display_username: username,
+    join_code: null
+  });
+}
+
+export async function createCampaignInvite(
+  db: pg.Pool,
+  input: {
+    campaignId: string;
+    userId: string;
+    maxUses?: number | null | undefined;
+    expiresAt?: string | null | undefined;
+  }
+) {
+  const expiresAt = input.expiresAt ? new Date(input.expiresAt) : null;
+
+  if (expiresAt && Number.isNaN(expiresAt.getTime())) {
+    throw createStatusError(400, "Invite expiration is invalid.");
+  }
+
+  if (expiresAt && expiresAt <= new Date()) {
+    throw createStatusError(400, "Invite expiration must be in the future.");
+  }
+
+  if (input.maxUses !== undefined && input.maxUses !== null && input.maxUses <= 0) {
+    throw createStatusError(400, "Invite max uses must be greater than zero.");
+  }
+
+  const { invite, token } = await withTransaction(db, async (client) => {
+    const campaignResult = await client.query<CampaignRow>(
+      `
+        select *
+        from campaigns
+        where id = $1 and status = 'active'
+        limit 1
+        for update
+      `,
+      [input.campaignId]
+    );
+    const campaign = campaignResult.rows[0];
+
+    if (!campaign) {
+      throw createStatusError(404, "Campaign not found.");
+    }
+
+    if (campaign.owner_user_id !== input.userId) {
+      throw createStatusError(403, "Only the campaign owner can manage invites.");
+    }
+
+    if (campaign.mode !== "multiplayer") {
+      throw createStatusError(400, "Only multiplayer campaigns can invite players.");
+    }
+
+    if (campaign.has_begun) {
+      throw createStatusError(409, "That adventure has already begun.");
+    }
+
+    const token = generateInviteToken();
+    const inserted = await client.query<CampaignInviteRow>(
+      `
+        insert into campaign_invites (
+          campaign_id,
+          token_hash,
+          max_uses,
+          expires_at,
+          created_by_user_id
+        )
+        values ($1, $2, $3, $4, $5)
+        returning *
+      `,
+      [
+        input.campaignId,
+        hashInviteToken(token),
+        input.maxUses ?? null,
+        expiresAt,
+        input.userId
+      ]
+    );
+    const invite = requireRow(inserted.rows[0], "Failed to create invite.");
+
+    await logCampaignEvent(client, input.campaignId, "invite_created", {
+      inviteId: invite.id,
+      maxUses: invite.max_uses,
+      expiresAt: invite.expires_at ? toIso(invite.expires_at) : null
+    });
+
+    return { invite, token };
+  });
+
+  return {
+    invite: {
+      ...mapCampaignInviteRow(invite),
+      token
+    }
+  };
+}
+
+export async function listCampaignInvitesForOwner(
+  db: Queryable,
+  input: {
+    campaignId: string;
+    userId: string;
+  }
+): Promise<CampaignInvite[]> {
+  const campaignResult = await db.query<CampaignRow>(
+    `
+      select *
+      from campaigns
+      where id = $1 and status <> 'deleted'
+      limit 1
+    `,
+    [input.campaignId]
+  );
+  const campaign = campaignResult.rows[0];
+
+  if (!campaign) {
+    throw createStatusError(404, "Campaign not found.");
+  }
+
+  if (campaign.owner_user_id !== input.userId) {
+    throw createStatusError(403, "Only the campaign owner can manage invites.");
+  }
+
+  const result = await db.query<CampaignInviteRow>(
+    `
+      select *
+      from campaign_invites
+      where campaign_id = $1
+      order by created_at desc
+      limit 20
+    `,
+    [input.campaignId]
+  );
+
+  return result.rows.map(mapCampaignInviteRow);
+}
+
+export async function disableCampaignInvite(
+  db: pg.Pool,
+  input: {
+    campaignId: string;
+    inviteId: string;
+    userId: string;
+  }
+): Promise<CampaignInvite> {
+  return withTransaction(db, async (client) => {
+    const campaignResult = await client.query<CampaignRow>(
+      `
+        select *
+        from campaigns
+        where id = $1 and status <> 'deleted'
+        limit 1
+        for update
+      `,
+      [input.campaignId]
+    );
+    const campaign = campaignResult.rows[0];
+
+    if (!campaign) {
+      throw createStatusError(404, "Campaign not found.");
+    }
+
+    if (campaign.owner_user_id !== input.userId) {
+      throw createStatusError(403, "Only the campaign owner can manage invites.");
+    }
+
+    const result = await client.query<CampaignInviteRow>(
+      `
+        update campaign_invites
+        set enabled = false,
+            disabled_at = coalesce(disabled_at, now()),
+            disabled_by_user_id = $3
+        where id = $1 and campaign_id = $2
+        returning *
+      `,
+      [input.inviteId, input.campaignId, input.userId]
+    );
+    const invite = result.rows[0];
+
+    if (!invite) {
+      throw createStatusError(404, "Invite not found.");
+    }
+
+    await logCampaignEvent(client, input.campaignId, "invite_disabled", {
+      inviteId: input.inviteId
+    });
+
+    return mapCampaignInviteRow(invite);
+  });
+}
+
+function assertInviteCanJoin(invite: CampaignInvitePreviewRow) {
+  if (
+    !invite.enabled ||
+    invite.campaign_status !== "active" ||
+    invite.campaign_mode !== "multiplayer"
+  ) {
+    throw createStatusError(404, "That invite was not found.");
+  }
+
+  if (invite.expires_at && new Date(invite.expires_at) <= new Date()) {
+    throw createStatusError(410, "That invite has expired.");
+  }
+
+  if (invite.max_uses !== null && invite.use_count >= invite.max_uses) {
+    throw createStatusError(409, "That invite has already been used.");
+  }
+
+  if (invite.campaign_has_begun) {
+    throw createStatusError(409, "That adventure has already begun.");
+  }
+
+  const activePlayers = Number(invite.active_players);
+
+  if (activePlayers >= maxPlayers) {
+    throw createStatusError(409, "That game is already full.");
+  }
+}
+
+async function findLobbyInviteForToken(
+  db: Queryable,
+  token: string,
+  lockCampaign = false
+) {
+  const normalizedToken = normalizeInviteToken(token);
+
+  if (!normalizedToken) {
+    throw createStatusError(404, "That invite was not found.");
+  }
+
+  const result = await db.query<CampaignInvitePreviewRow>(
+    `
+      select
+        campaign_invites.*,
+        campaigns.title as campaign_title,
+        campaigns.status as campaign_status,
+        campaigns.mode as campaign_mode,
+        campaigns.has_begun as campaign_has_begun,
+        0 as active_players
+      from campaign_invites
+      join campaigns on campaigns.id = campaign_invites.campaign_id
+      where campaign_invites.token_hash = $1
+        and campaign_invites.enabled = true
+      limit 1
+      ${lockCampaign ? "for update of campaigns, campaign_invites" : ""}
+    `,
+    [hashInviteToken(normalizedToken)]
+  );
+  const invite = result.rows[0];
+
+  if (!invite) {
+    throw createStatusError(404, "That invite was not found.");
+  }
+
+  assertInviteCanJoin(invite);
+
+  const activePlayers = await db.query<{ active_players: string | number }>(
+    `
+      select count(*) as active_players
+      from players
+      where campaign_id = $1 and status = 'active'
+    `,
+    [invite.campaign_id]
+  );
+
+  invite.active_players = activePlayers.rows[0]?.active_players ?? 0;
+  assertInviteCanJoin(invite);
+
+  return invite;
+}
+
+export async function previewLobbyInvite(db: Queryable, token: string) {
+  const invite = await findLobbyInviteForToken(db, token);
+  const activePlayers = Number(invite.active_players);
+
+  return {
+    campaignTitle: invite.campaign_title,
+    availableSlots: Math.max(0, maxPlayers - activePlayers),
+    expiresAt: invite.expires_at ? toIso(invite.expires_at) : null
+  };
+}
+
+export async function joinCampaignByInvite(
+  db: pg.Pool,
+  input: {
+    token: string;
+    clientId: string;
+    username: string;
+    characterName: string;
+    characterSheet: string;
+    mechanicsSeed?: MechanicsSeed | undefined;
+    userId: string;
+  }
+): Promise<CampaignSummary> {
+  const clientId = input.clientId.trim();
+  const username = input.username.trim();
+  const characterName = input.characterName.trim();
+  const characterSheet = input.characterSheet.trim();
+
+  if (!clientId || !username || !characterName || !characterSheet) {
+    throw createStatusError(400, "Complete your player profile before joining.");
+  }
+
+  const { campaign, player } = await withTransaction(db, async (client) => {
+    const invite = await findLobbyInviteForToken(client, input.token, true);
+    const campaignResult = await client.query<CampaignRow>(
+      `
+        select *
+        from campaigns
+        where id = $1 and status = 'active' and mode = 'multiplayer'
+        limit 1
+      `,
+      [invite.campaign_id]
+    );
+    const campaignRow = requireRow(
+      campaignResult.rows[0],
+      "Campaign not found."
+    );
+
+    const existingForUser = await client.query<PlayerRow>(
+      `
+        select *
+        from players
+        where campaign_id = $1 and user_id = $2
+        order by
+          (status = 'active') desc,
+          created_at asc
+        limit 1
+      `,
+      [campaignRow.id, input.userId]
+    );
+    const userPlayer = existingForUser.rows[0];
+
+    if (userPlayer?.status === "kicked") {
+      throw createStatusError(403, "You cannot join this game.");
+    }
+
+    const existingForClient = await client.query<PlayerRow>(
+      `
+        select *
+        from players
+        where campaign_id = $1 and client_id = $2
+        limit 1
+      `,
+      [campaignRow.id, clientId]
+    );
+    const clientPlayer = existingForClient.rows[0];
+
+    if (clientPlayer?.status === "kicked") {
+      throw createStatusError(403, "You cannot join this game from this device.");
+    }
+
+    if (
+      clientPlayer &&
+      clientPlayer.user_id &&
+      clientPlayer.user_id !== input.userId
+    ) {
+      throw createStatusError(
+        409,
+        "This browser is already joined to that game."
+      );
+    }
+
+    const slotResult = await client.query<{ slot: number }>(
+      `
+        select slot
+        from players
+        where campaign_id = $1 and status <> 'kicked' and slot is not null
+        order by slot asc
+      `,
+      [campaignRow.id]
+    );
+    const usedSlots = new Set(slotResult.rows.map((row) => row.slot));
+    const existingSlot = userPlayer?.slot ?? clientPlayer?.slot ?? undefined;
+    const firstOpenSlot = Array.from({ length: maxPlayers }, (_, slot) =>
+      slot
+    ).find((slot) => !usedSlots.has(slot));
+    const slot = existingSlot ?? firstOpenSlot;
+
+    if (slot === undefined) {
+      throw createStatusError(409, "That game is already full.");
+    }
+
+    if (userPlayer?.status === "active") {
+      await client.query(
+        `
+          update players
+          set client_id = $2,
+              username = $3,
+              character_name = $4,
+              character_sheet = $5,
+              slot = $6,
+              last_seen_at = now()
+          where id = $1
+        `,
+        [userPlayer.id, clientId, username, characterName, characterSheet, slot]
+      );
+      await addOrReplacePlayerMechanicsActor(client, {
+        campaign: campaignRow,
+        playerId: userPlayer.id,
+        characterName,
+        characterSheet,
+        seed: input.mechanicsSeed
+      });
+      await logCampaignEvent(
+        client,
+        campaignRow.id,
+        "player_profile_updated_by_invite",
+        {
+          inviteId: invite.id,
+          clientId,
+          username,
+          characterName,
+          slot
+        }
+      );
+
+      return { campaign: campaignRow, player: userPlayer };
+    }
+
+    const insertedPlayer = await client.query<PlayerRow>(
+      `
+        insert into players (
+          campaign_id,
+          client_id,
+          user_id,
+          username,
+          character_name,
+          character_sheet,
+          slot,
+          status,
+          last_seen_at
+        )
+        values ($1, $2, $3, $4, $5, $6, $7, 'active', now())
+        on conflict (campaign_id, client_id) do update
+        set user_id = excluded.user_id,
+            username = excluded.username,
+            character_name = excluded.character_name,
+            character_sheet = excluded.character_sheet,
+            slot = excluded.slot,
+            status = 'active',
+            kicked_at = null,
+            last_seen_at = now()
+        returning *
+      `,
+      [
+        campaignRow.id,
+        clientId,
+        input.userId,
+        username,
+        characterName,
+        characterSheet,
+        slot
+      ]
+    );
+    const joinedPlayer = requireRow(
+      insertedPlayer.rows[0],
+      "Failed to join campaign."
+    );
+
+    await addOrReplacePlayerMechanicsActor(client, {
+      campaign: campaignRow,
+      playerId: joinedPlayer.id,
+      characterName,
+      characterSheet,
+      seed: input.mechanicsSeed
+    });
+    await client.query(
+      `
+        update campaign_invites
+        set use_count = use_count + 1
+        where id = $1
+      `,
+      [invite.id]
+    );
+    await client.query(
+      `
+        insert into campaign_invite_uses (
+          invite_id,
+          campaign_id,
+          joined_user_id,
+          player_id
+        )
+        values ($1, $2, $3, $4)
+      `,
+      [invite.id, campaignRow.id, input.userId, joinedPlayer.id]
+    );
+    await logCampaignEvent(client, campaignRow.id, "player_joined_by_invite", {
+      inviteId: invite.id,
+      clientId,
+      username,
+      characterName,
+      slot
+    });
+
+    return { campaign: campaignRow, player: joinedPlayer };
+  });
+
+  return mapCampaignSummaryRow({
+    ...campaign,
+    display_character_name: player.character_name,
+    display_username: player.username,
     join_code: null
   });
 }
@@ -1643,20 +2483,65 @@ function metadataStringArray(value: unknown) {
     : [];
 }
 
+function titleCaseIdentifier(value: string) {
+  return value
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function inferredRollRequestPlayer(label: string, id = "") {
+  const initiativeMatch = label.match(/^initiative\s*\(([^)]+)\)$/i);
+  const initiativeTarget = initiativeMatch?.[1]?.trim();
+
+  if (initiativeTarget) {
+    return initiativeTarget;
+  }
+
+  const rollIdTargetMatch = id.match(
+    /^([a-z][a-z0-9_-]*?)-(?:strength|dexterity|constitution|intelligence|wisdom|charisma|athletics|acrobatics|sleight|stealth|arcana|history|investigation|nature|religion|animal|insight|medicine|perception|survival|deception|intimidation|performance|persuasion|initiative|death|concentration|saving|save|check)\b/i
+  );
+  const rollIdTarget = rollIdTargetMatch?.[1]?.trim();
+
+  return rollIdTarget ? titleCaseIdentifier(rollIdTarget) : "";
+}
+
+function normalizeDiceAndModifier(dice: string, modifier: number | undefined) {
+  const match = dice.trim().match(/^(\d*d(?:4|6|8|10|12|20))\s*([+-])\s*(\d+)$/i);
+
+  if (!match) {
+    return { dice, modifier };
+  }
+
+  const diceModifier =
+    (match[2] === "-" ? -1 : 1) * Number.parseInt(match[3] ?? "0", 10);
+  const combinedModifier = (modifier ?? 0) + diceModifier;
+
+  return {
+    dice: match[1]?.toLowerCase() ?? dice,
+    modifier: combinedModifier === 0 ? undefined : combinedModifier
+  };
+}
+
 function normalizeRollRequest(value: unknown): DiceRollRequest | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
   }
 
   const candidate = value as Record<string, unknown>;
-  const dice = typeof candidate.dice === "string" ? candidate.dice.trim() : "";
+  const rawDice = typeof candidate.dice === "string" ? candidate.dice.trim() : "";
   const label = typeof candidate.label === "string" ? candidate.label.trim() : "";
 
-  if (!dice || !label) {
+  if (!rawDice || !label) {
     return null;
   }
 
-  const modifier = Number(candidate.modifier);
+  const rawModifier = Number(candidate.modifier);
+  const { dice, modifier } = normalizeDiceAndModifier(
+    rawDice,
+    Number.isFinite(rawModifier) ? rawModifier : undefined
+  );
   const advantageState =
     candidate.advantageState === "advantage" ||
     candidate.advantageState === "disadvantage" ||
@@ -1668,15 +2553,19 @@ function normalizeRollRequest(value: unknown): DiceRollRequest | null {
         ? candidate.advantage_state
         : undefined;
 
+  const id =
+    typeof candidate.id === "string" && candidate.id.trim()
+      ? candidate.id.trim()
+      : randomUUID();
+
   return {
-    id:
-      typeof candidate.id === "string" && candidate.id.trim()
-        ? candidate.id.trim()
-        : randomUUID(),
+    id,
     player:
-      typeof candidate.player === "string" ? candidate.player.trim() : undefined,
+      typeof candidate.player === "string" && candidate.player.trim()
+        ? candidate.player.trim()
+        : inferredRollRequestPlayer(label, id) || undefined,
     dice,
-    modifier: Number.isFinite(modifier) ? modifier : undefined,
+    modifier,
     label,
     reason:
       typeof candidate.reason === "string" ? candidate.reason.trim() : undefined,
@@ -1719,6 +2608,23 @@ function inputPolicyFromCampaign(
     : "all_players";
 }
 
+function nextInputNeededFromCampaign(campaign: CampaignRow): DmNextInputNeeded {
+  const metadata = eventPayload(campaign.metadata);
+  const value = metadata.nextInputNeeded;
+
+  if (
+    value === "player_actions" ||
+    value === "dice_results" ||
+    value === "clarification"
+  ) {
+    return value;
+  }
+
+  return pendingRollRequestsFromCampaign(campaign).length > 0
+    ? "dice_results"
+    : "player_actions";
+}
+
 function normalizeRollTarget(value: string | null | undefined) {
   return value
     ?.trim()
@@ -1735,7 +2641,13 @@ function rollRequestTargetsPlayer(request: DiceRollRequest, player: PlayerRow) {
     return true;
   }
 
-  const playerNames = [player.username, player.character_name]
+  const playerNames = [
+    actorKeyForPlayer(player.id),
+    `player:${player.client_id}`,
+    player.client_id,
+    player.username,
+    player.character_name
+  ]
     .map(normalizeRollTarget)
     .filter((name): name is string => Boolean(name));
 
@@ -1751,7 +2663,13 @@ function inputTargetMatchesPlayer(target: string, player: PlayerRow) {
     return false;
   }
 
-  const playerNames = [player.username, player.character_name]
+  const playerNames = [
+    actorKeyForPlayer(player.id),
+    `player:${player.client_id}`,
+    player.client_id,
+    player.username,
+    player.character_name
+  ]
     .map(normalizeRollTarget)
     .filter((name): name is string => Boolean(name));
 
@@ -1977,6 +2895,27 @@ async function setPendingRollRequests(
   );
 }
 
+function metadataWithPendingRollRequests(
+  metadata: unknown,
+  requests: DiceRollRequest[]
+) {
+  const currentRequest = requests[0] ?? null;
+
+  if (requests.length === 0) {
+    const nextMetadata = { ...eventPayload(metadata) };
+    delete nextMetadata.pendingRollRequest;
+    delete nextMetadata.pendingRollRequests;
+
+    return nextMetadata;
+  }
+
+  return {
+    ...eventPayload(metadata),
+    pendingRollRequest: currentRequest,
+    pendingRollRequests: requests
+  };
+}
+
 async function resolveRoomCampaign(
   db: Queryable,
   roomId: string,
@@ -1986,7 +2925,7 @@ async function resolveRoomCampaign(
     ? `
         select *
         from campaigns
-        where (id = $1 or hermes_session_id = $2)
+        where (id = $1 or session_id = $2)
           and status <> 'deleted'
         order by created_at desc
         limit 1
@@ -1994,7 +2933,7 @@ async function resolveRoomCampaign(
     : `
         select *
         from campaigns
-        where (hermes_session_id = $1 or hermes_session_id = $2)
+        where (session_id = $1 or session_id = $2)
           and status <> 'deleted'
         order by created_at desc
         limit 1
@@ -2099,16 +3038,49 @@ async function getTurnSubmissions(db: Queryable, turnId: string) {
 
 function rowToRoomPlayer(
   player: PlayerRow,
-  submittedPlayerIds: Set<string>
+  submittedPlayerIds: Set<string>,
+  mechanicsState?: MechanicsState
 ): RoomSnapshot["players"][number] {
+  const actor = mechanicsState?.actors[actorKeyForPlayer(player.id)];
+
   return {
     id: player.client_id,
+    actorKey: actorKeyForPlayer(player.id),
     slot: player.slot ?? 0,
     username: player.username,
     characterName: player.character_name,
-    characterSheet: player.character_sheet,
+    characterSheet: projectMechanicsIntoCharacterSheet(
+      player.character_sheet,
+      actor
+    ),
     status: submittedPlayerIds.has(player.id) ? "submitted" : "waiting",
     lastSeenAt: toIso(player.last_seen_at)
+  };
+}
+
+function roomCombatSnapshot(
+  mechanicsState: MechanicsState,
+  players: PlayerRow[]
+): RoomSnapshot["combat"] {
+  const turnOwner = mechanicsState.combat.turnOwner;
+  const turnOwnerPlayer = turnOwner
+    ? players.find(
+        (player) =>
+          actorKeyForPlayer(player.id) === turnOwner ||
+          `player:${player.client_id}` === turnOwner ||
+          player.client_id === turnOwner
+      )
+    : undefined;
+  const turnOwnerActor = turnOwner ? mechanicsState.actors[turnOwner] : undefined;
+
+  return {
+    active: mechanicsState.combat.active,
+    round: mechanicsState.combat.round,
+    turnOwner,
+    turnOwnerPlayerId: turnOwnerPlayer?.client_id ?? null,
+    turnOwnerCharacterName:
+      turnOwnerPlayer?.character_name || turnOwnerActor?.characterName || null,
+    initiativeOrder: mechanicsState.combat.initiativeOrder
   };
 }
 
@@ -2151,6 +3123,7 @@ async function buildRoomSnapshot(
     `,
     [campaign.id]
   );
+  const mechanicsState = resolveMechanicsState(campaign, playersResult.rows);
   const events = await db.query<EventRow>(
     `
       select id, type, payload, created_at
@@ -2165,10 +3138,28 @@ async function buildRoomSnapshot(
             'dm_question',
             'dm_answer'
           )
-        order by created_at desc
+        order by created_at desc,
+          case type
+            when 'dm_answer' then 0
+            when 'turn_resolved' then 1
+            when 'adventure_begun' then 1
+            when 'dm_question' then 2
+            when 'turn_submitted' then 3
+            else 4
+          end asc,
+          id desc
         limit 100
       ) recent_events
-      order by created_at asc
+      order by created_at asc,
+        case type
+          when 'turn_submitted' then 0
+          when 'dm_question' then 0
+          when 'turn_resolved' then 1
+          when 'adventure_begun' then 1
+          when 'dm_answer' then 1
+          else 2
+        end asc,
+        id asc
     `,
     [campaign.id]
   );
@@ -2207,17 +3198,19 @@ async function buildRoomSnapshot(
   return {
     roomId: campaign.id,
     mode: campaign.mode,
-    sessionId: campaign.hermes_session_id,
+    sessionId: campaign.session_id,
     players: playersResult.rows.map((player) =>
-      rowToRoomPlayer(player, submittedPlayerIds)
+      rowToRoomPlayer(player, submittedPlayerIds, mechanicsState)
     ),
     messages,
     isResolving: currentTurn?.status === "resolving",
     hasBegun: campaign.has_begun,
     pendingRollRequest: pendingRollRequests[0] ?? null,
     pendingRollRequests,
+    nextInputNeeded: nextInputNeededFromCampaign(campaign),
     inputTargets: inputTargetsFromCampaign(campaign),
     inputPolicy: inputPolicyFromCampaign(campaign),
+    combat: roomCombatSnapshot(mechanicsState, playersResult.rows),
     updatedAt: toIso(campaign.updated_at)
   };
 }
@@ -2243,7 +3236,10 @@ function errorSummary(error: unknown) {
   };
 }
 
-function providerDebugSummary(debug: AiDebugInfo | undefined) {
+function providerDebugSummary(
+  debug: AiDebugInfo | undefined,
+  options: { includeRawResponse?: boolean; includeRequestMessages?: boolean } = {}
+) {
   if (!debug) {
     return undefined;
   }
@@ -2251,6 +3247,8 @@ function providerDebugSummary(debug: AiDebugInfo | undefined) {
   return {
     providerResponseId: debug.providerResponseId,
     model: debug.model,
+    temperature: debug.temperature,
+    combatState: debug.combatState,
     requestMessageCount: debug.requestMessages.length,
     requestMessages: debug.requestMessages.map((message, index) => ({
       index,
@@ -2260,6 +3258,10 @@ function providerDebugSummary(debug: AiDebugInfo | undefined) {
     })),
     rawResponseLength: debug.rawResponse.length,
     rawResponsePreview: previewText(debug.rawResponse),
+    ...(options.includeRawResponse ? { rawResponse: debug.rawResponse } : {}),
+    ...(options.includeRequestMessages
+      ? { rawRequestMessages: debug.requestMessages }
+      : {}),
     providerTimings: debug.providerTimings
   };
 }
@@ -2297,10 +3299,840 @@ async function logTurnDebugTrace(
     ...(input.payload ?? {})
   };
 
-  await logCampaignEvent(db, input.campaignId, "turn_debug_trace", tracePayload);
+  await bestEffortRuntimeInsert(
+    db,
+    `
+      insert into dm_turn_traces (
+        campaign_id,
+        trace_id,
+        turn_id,
+        phase,
+        elapsed_ms,
+        payload
+      )
+      values ($1, $2, $3, $4, $5, $6::jsonb)
+    `,
+    [
+      input.campaignId,
+      input.traceId,
+      input.turnId ?? null,
+      input.phase,
+      input.elapsedMs ?? null,
+      JSON.stringify(tracePayload)
+    ]
+  );
 }
 
-function formatCanonicalCharacterContext(players: PlayerRow[]) {
+function isMissingRuntimeTableError(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    ((error as { code?: unknown }).code === "42P01" ||
+      (error as { code?: unknown }).code === "42703")
+  );
+}
+
+function isTransactionClient(db: Queryable): db is TransactionClient {
+  return (
+    "release" in db &&
+    typeof (db as { release?: unknown }).release === "function"
+  );
+}
+
+async function bestEffortRuntimeInsert(
+  db: Queryable,
+  sql: string,
+  values: unknown[]
+) {
+  if (isTransactionClient(db)) {
+    const savepointName = `runtime_insert_${randomUUID().replace(/-/g, "_")}`;
+
+    await db.query(`savepoint ${savepointName}`);
+
+    try {
+      await db.query(sql, values);
+      await db.query(`release savepoint ${savepointName}`);
+    } catch (error) {
+      await db.query(`rollback to savepoint ${savepointName}`);
+      await db.query(`release savepoint ${savepointName}`);
+
+      if (!isMissingRuntimeTableError(error)) {
+        throw error;
+      }
+    }
+
+    return;
+  }
+
+  try {
+    await db.query(sql, values);
+  } catch (error) {
+    if (!isMissingRuntimeTableError(error)) {
+      throw error;
+    }
+  }
+}
+
+async function logDmTurnTrace(
+  db: Queryable,
+  input: {
+    campaignId: string;
+    traceId: string;
+    turnId?: string | undefined;
+    phase: string;
+    payload: Record<string, unknown>;
+  }
+) {
+  await bestEffortRuntimeInsert(
+    db,
+    `
+      insert into dm_turn_traces (
+        campaign_id,
+        trace_id,
+        turn_id,
+        phase,
+        payload
+      )
+      values ($1, $2, $3, $4, $5::jsonb)
+    `,
+    [
+      input.campaignId,
+      input.traceId,
+      input.turnId ?? null,
+      input.phase,
+      JSON.stringify(input.payload)
+    ]
+  );
+}
+
+async function logDmContextSnapshot(
+  db: Queryable,
+  input: {
+    campaignId: string;
+    traceId: string;
+    turnId?: string | undefined;
+    router: ValidatedRouterOutput;
+    chunks: ContextChunk[];
+    omitted: unknown[];
+  }
+) {
+  await bestEffortRuntimeInsert(
+    db,
+    `
+      insert into dm_context_snapshots (
+        campaign_id,
+        trace_id,
+        turn_id,
+        selected_job,
+        requested_context_keys,
+        included_context_keys,
+        omitted_context_keys,
+        payload
+      )
+      values ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb)
+    `,
+    [
+      input.campaignId,
+      input.traceId,
+      input.turnId ?? null,
+      input.router.jobNeeded,
+      JSON.stringify(input.router.contextKeys),
+      JSON.stringify(input.chunks.map((chunk) => chunk.id)),
+      JSON.stringify(input.omitted),
+      JSON.stringify({
+        fallbackUsed: input.router.fallbackUsed,
+        errors: input.router.errors
+      })
+    ]
+  );
+}
+
+async function logDmModelCall(
+  db: Queryable,
+  input: {
+    campaignId: string;
+    traceId: string;
+    turnId?: string | undefined;
+    phase: "router" | "main" | "memory_updater";
+    providerData: DungeonMasterProviderResponse;
+    durationMs: number;
+  }
+) {
+  await bestEffortRuntimeInsert(
+    db,
+    `
+      insert into dm_model_calls (
+        campaign_id,
+        trace_id,
+        turn_id,
+        phase,
+        provider,
+        model,
+        raw_response,
+        metadata
+      )
+      values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+    `,
+    [
+      input.campaignId,
+      input.traceId,
+      input.turnId ?? null,
+      input.phase,
+      "deepseek",
+      input.providerData.debug.model ?? null,
+      input.providerData.content,
+      JSON.stringify({
+        durationMs: input.durationMs,
+        providerResponseId: input.providerData.debug.providerResponseId,
+        timings: input.providerData.debug.providerTimings
+      })
+    ]
+  );
+}
+
+async function logDmOutputReport(
+  db: Queryable,
+  input: {
+    campaignId: string;
+    traceId: string;
+    turnId?: string | undefined;
+    payload: Record<string, unknown>;
+  }
+) {
+  await bestEffortRuntimeInsert(
+    db,
+    `
+      insert into dm_output_reports (
+        campaign_id,
+        trace_id,
+        turn_id,
+        payload
+      )
+      values ($1, $2, $3, $4::jsonb)
+    `,
+    [
+      input.campaignId,
+      input.traceId,
+      input.turnId ?? null,
+      JSON.stringify(input.payload)
+    ]
+  );
+}
+
+async function logDmMemoryPatchLog(
+  db: Queryable,
+  input: {
+    campaignId: string;
+    traceId: string;
+    turnId?: string | undefined;
+    payload: Record<string, unknown>;
+  }
+) {
+  await bestEffortRuntimeInsert(
+    db,
+    `
+      insert into dm_memory_patch_logs (
+        campaign_id,
+        trace_id,
+        turn_id,
+        payload
+      )
+      values ($1, $2, $3, $4::jsonb)
+    `,
+    [
+      input.campaignId,
+      input.traceId,
+      input.turnId ?? null,
+      JSON.stringify(input.payload)
+    ]
+  );
+}
+
+function contextKeyEntries(router: ValidatedRouterOutput) {
+  return Object.entries(router.contextKeys).flatMap(([category, keys]) =>
+    keys.map((key) => ({
+      category: category as ContextCategory,
+      key
+    }))
+  );
+}
+
+function mapContextChunkRow(row: Record<string, unknown>): ContextChunk {
+  const category = String(row.category ?? row.context_type) as ContextCategory;
+  const id = String(row.context_key ?? row.key ?? row.id);
+  const title = String(row.title ?? id);
+  const visibility =
+    row.visibility === "player_safe" || row.visibility === "dm_only"
+      ? row.visibility
+      : "dm_only";
+  const priority = typeof row.priority === "number" ? row.priority : 0;
+  const bodyMarkdown = String(row.body_markdown ?? row.bodyMarkdown ?? "");
+  const updatedAt = row.updated_at ? toIso(row.updated_at as Date | string) : undefined;
+
+  return {
+    id,
+    category,
+    title,
+    visibility,
+    priority,
+    bodyMarkdown,
+    ...(updatedAt ? { updatedAt } : {})
+  };
+}
+
+async function retrieveSelectedContextChunks(
+  db: Queryable,
+  campaignId: string,
+  router: ValidatedRouterOutput,
+  maxChars = 24000
+) {
+  const requested = contextKeyEntries(router);
+  const requestedKeys = requested.map((entry) => entry.key);
+
+  if (requestedKeys.length === 0) {
+    return { chunks: [] as ContextChunk[], omitted: [] as unknown[] };
+  }
+
+  let rows: Record<string, unknown>[] = [];
+
+  try {
+    const result = await db.query<Record<string, unknown>>(
+      `
+        select
+          context_key,
+          category,
+          title,
+          visibility,
+          priority,
+          body_markdown,
+          updated_at
+        from campaign_context_chunks
+        where campaign_id = $1
+          and context_key = any($2::text[])
+          and category = any($3::text[])
+          and archived_at is null
+        order by priority desc, updated_at desc
+      `,
+      [
+        campaignId,
+        requestedKeys,
+        [...new Set(requested.map((entry) => entry.category))]
+      ]
+    );
+    rows = result.rows;
+  } catch (error) {
+    if (!isMissingRuntimeTableError(error)) {
+      throw error;
+    }
+  }
+
+  const seen = new Set<string>();
+  const found = new Map(rows.map((row) => [String(row.context_key), row]));
+  const chunks: ContextChunk[] = [];
+  const omitted: unknown[] = [];
+  let usedChars = 0;
+
+  for (const request of requested) {
+    if (seen.has(request.key)) {
+      omitted.push({ ...request, reason: "duplicate" });
+      continue;
+    }
+
+    seen.add(request.key);
+    const row = found.get(request.key);
+
+    if (!row) {
+      omitted.push({ ...request, reason: "missing" });
+      continue;
+    }
+
+    const chunk = mapContextChunkRow(row);
+    const nextChars = usedChars + chunk.bodyMarkdown.length;
+
+    if (nextChars > maxChars) {
+      omitted.push({ ...request, reason: "budget_exceeded" });
+      continue;
+    }
+
+    usedChars = nextChars;
+    chunks.push(chunk);
+  }
+
+  return { chunks, omitted };
+}
+
+function mechanicsActorsForValidation(campaign: Pick<CampaignRow, "metadata">) {
+  return Object.fromEntries(
+    Object.entries(resolveMechanicsState(campaign, []).actors).map(([key, actor]) => {
+      const state: {
+        currentHp?: number;
+        maxHp?: number;
+        conditions?: string[];
+      } = {};
+
+      if (actor.currentHp !== undefined) {
+        state.currentHp = actor.currentHp;
+      }
+
+      if (actor.maxHp !== undefined) {
+        state.maxHp = actor.maxHp;
+      }
+
+      if (actor.conditions !== undefined) {
+        state.conditions = actor.conditions;
+      }
+
+      return [key, state];
+    })
+  );
+}
+
+async function getActiveCampaignPlayers(db: Queryable, campaignId: string) {
+  const result = await db.query<PlayerRow>(
+    `
+      select *
+      from players
+      where campaign_id = $1
+        and status = 'active'
+      order by slot asc nulls last, created_at asc
+    `,
+    [campaignId]
+  );
+
+  return result.rows;
+}
+
+function routerStateForCampaign(
+  campaign: Pick<CampaignRow, "metadata" | "mode">,
+  players: PlayerRow[]
+) {
+  const mechanicsState = resolveMechanicsState(campaign, players);
+  const pendingRollRequests = pendingRollRequestsFromCampaign(campaign as CampaignRow);
+  const inputTargets = inputTargetsFromCampaign(campaign as CampaignRow);
+  const inputPolicy = inputPolicyFromCampaign(campaign as CampaignRow);
+  const combat = roomCombatSnapshot(mechanicsState, players);
+
+  return {
+    campaign_mode: campaign.mode,
+    combat_active: combat.active,
+    combat,
+    input_policy: inputPolicy,
+    input_targets: inputTargets,
+    pending_roll_requests: pendingRollRequests.map((request) => ({
+      id: request.id,
+      label: request.label,
+      dice: request.dice,
+      player: request.player,
+      modifier: request.modifier
+    })),
+    active_players: players.map((player) => ({
+      actorKey: actorKeyForPlayer(player.id),
+      clientId: player.client_id,
+      username: player.username,
+      characterName: player.character_name,
+      slot: player.slot
+    }))
+  };
+}
+
+function buildRouterMessage(input: {
+  currentAction: string;
+  routerState: Record<string, unknown>;
+}) {
+  return [
+    "Routing state JSON:",
+    JSON.stringify(input.routerState, null, 2),
+    "",
+    formatRouterCurrentTurnInput(input.currentAction)
+  ].join("\n");
+}
+
+function routerFallbackJob(routerState: Record<string, unknown>): DmJobName {
+  return routerState.combat_active === true ? "combat" : "scene_director";
+}
+
+function routerDebugFromPromptContext(
+  promptContext:
+    | DmPromptContext
+    | {
+        instructions: string;
+        message: string;
+        sections: unknown[];
+        budget: Record<string, unknown>;
+      }
+    | null
+) {
+  return promptContext &&
+    "routerDebug" in promptContext &&
+    promptContext.routerDebug
+    ? promptContext.routerDebug
+    : undefined;
+}
+
+async function buildModularDmPromptContext(
+  db: Queryable,
+  runtime: DungeonMasterRuntime,
+  campaign: Pick<CampaignRow, "id" | "metadata" | "mode">,
+  input: {
+    traceId: string;
+    turnId?: string | undefined;
+    currentAction: string;
+    baseInstructions: string;
+    history: GameMessage[];
+    model?: AiModelId;
+  }
+): Promise<DmPromptContext> {
+  const players = await getActiveCampaignPlayers(db, campaign.id);
+  const routerState = routerStateForCampaign(campaign, players);
+  const routerInstructions = buildRouterPrompt();
+  const routerMessage = buildRouterMessage({
+    currentAction: input.currentAction,
+    routerState
+  });
+  const routerStartedAt = Date.now();
+  const routerData = await runtime.askProvider({
+    instructions: routerInstructions,
+    message: routerMessage,
+    history: input.history,
+    ...(input.model ? { model: input.model } : {})
+  });
+  const router = validateRouterOutput(
+    routerData.content,
+    routerFallbackJob(routerState)
+  );
+
+  await logDmModelCall(db, {
+    campaignId: campaign.id,
+    traceId: input.traceId,
+    turnId: input.turnId,
+    phase: "router",
+    providerData: routerData,
+    durationMs: Date.now() - routerStartedAt
+  });
+
+  await logTurnDebugTrace(db, {
+    campaignId: campaign.id,
+    traceId: input.traceId,
+    phase: "router_response_received",
+    turnId: input.turnId,
+    elapsedMs: Date.now() - routerStartedAt,
+    payload: {
+      routerState,
+      router: {
+        jobNeeded: router.jobNeeded,
+        contextKeys: router.contextKeys,
+        fallbackUsed: router.fallbackUsed,
+        errors: router.errors,
+        reason: router.reason
+      },
+      provider: providerDebugSummary(routerData.debug, {
+        includeRawResponse: true,
+        includeRequestMessages: true
+      })
+    }
+  });
+
+  const context = await retrieveSelectedContextChunks(db, campaign.id, router);
+
+  await logDmContextSnapshot(db, {
+    campaignId: campaign.id,
+    traceId: input.traceId,
+    turnId: input.turnId,
+    router,
+    chunks: context.chunks,
+    omitted: context.omitted
+  });
+
+  return {
+    instructions: [
+      input.baseInstructions,
+      "",
+      jobPrompt(router.jobNeeded, campaign.mode, {
+        routerReason:
+          router.jobNeeded === "clarification" ? router.reason : undefined
+      })
+    ].join("\n"),
+    jobNeeded: router.jobNeeded,
+    message: [
+      "Selected context chunks:",
+      renderContextChunks(context.chunks),
+      "",
+      "Current turn input:",
+      input.currentAction
+    ].join("\n"),
+    sections: [
+      {
+        kind: "router",
+        jobNeeded: router.jobNeeded,
+        contextKeys: router.contextKeys,
+        fallbackUsed: router.fallbackUsed,
+        errors: router.errors,
+        reason: router.reason,
+        routerState
+      },
+      {
+        kind: "context_snapshot",
+        includedContextKeys: context.chunks.map((chunk) => chunk.id),
+        omittedContextKeys: context.omitted
+      }
+    ],
+    budget: {
+      maxContextChars: 24000,
+      includedContextChars: context.chunks.reduce(
+        (total, chunk) => total + chunk.bodyMarkdown.length,
+        0
+      )
+    },
+    routerDebug: {
+      requestMessages: routerData.debug.requestMessages,
+      rawResponse: routerData.debug.rawResponse,
+      parsedOutput: {
+        jobNeeded: router.jobNeeded,
+        contextKeys: router.contextKeys,
+        fallbackUsed: router.fallbackUsed,
+        errors: router.errors,
+        reason: router.reason
+      },
+      ...(routerData.debug.model ? { model: routerData.debug.model } : {}),
+      ...(routerData.debug.temperature !== undefined
+        ? { temperature: routerData.debug.temperature }
+        : {}),
+      ...(routerData.debug.providerResponseId
+        ? { providerResponseId: routerData.debug.providerResponseId }
+        : {})
+    }
+  };
+}
+
+async function listCampaignContextIds(db: Queryable, campaignId: string) {
+  try {
+    const result = await db.query<{ context_key: string }>(
+      `
+        select context_key
+        from campaign_context_chunks
+        where campaign_id = $1 and archived_at is null
+      `,
+      [campaignId]
+    );
+
+    return new Set(result.rows.map((row) => row.context_key));
+  } catch (error) {
+    if (!isMissingRuntimeTableError(error)) {
+      throw error;
+    }
+
+    return new Set<string>();
+  }
+}
+
+async function applyAcceptedMemoryPatch(
+  db: Queryable,
+  campaignId: string,
+  patch: Record<string, unknown>
+) {
+  const operation = patch.operation;
+  const contextId = String(patch.context_id ?? patch.contextId ?? "");
+  const markdown = String(patch.markdown ?? "");
+
+  if (operation === "append") {
+    await bestEffortRuntimeInsert(
+      db,
+      `
+        update campaign_context_chunks
+        set body_markdown = concat_ws(E'\n', body_markdown, $3),
+          updated_at = now()
+        where campaign_id = $1 and context_key = $2
+      `,
+      [campaignId, contextId, markdown]
+    );
+    return;
+  }
+
+  if (operation === "replace_section") {
+    await bestEffortRuntimeInsert(
+      db,
+      `
+        update campaign_context_chunks
+        set body_markdown = $3,
+          updated_at = now()
+        where campaign_id = $1 and context_key = $2
+      `,
+      [campaignId, contextId, markdown]
+    );
+    return;
+  }
+
+  if (operation === "archive_chunk") {
+    await bestEffortRuntimeInsert(
+      db,
+      `
+        update campaign_context_chunks
+        set archived_at = now(),
+          updated_at = now()
+        where campaign_id = $1 and context_key = $2
+      `,
+      [campaignId, contextId]
+    );
+    return;
+  }
+
+  if (operation === "create_chunk") {
+    await bestEffortRuntimeInsert(
+      db,
+      `
+        insert into campaign_context_chunks (
+          campaign_id,
+          context_key,
+          category,
+          title,
+          visibility,
+          priority,
+          body_markdown
+        )
+        values ($1, $2, $3, $4, $5, 0, $6)
+      `,
+      [
+        campaignId,
+        contextId,
+        String(patch.context_type ?? patch.contextType),
+        String(patch.title ?? contextId),
+        String(patch.visibility ?? "dm_only"),
+        markdown
+      ]
+    );
+  }
+}
+
+async function applyAcceptedMemoryPatches(
+  db: Queryable,
+  campaignId: string,
+  patches: Record<string, unknown>[]
+) {
+  for (const patch of patches) {
+    await applyAcceptedMemoryPatch(db, campaignId, patch);
+  }
+}
+
+export async function runModularPostTurnContextJobs(
+  db: Queryable,
+  runtime: DungeonMasterRuntime,
+  input: {
+    campaignId: string;
+    turnId: string;
+    currentAction: string;
+    dmResponse: string;
+    rollRequests?: DiceRollRequest[] | undefined;
+  }
+) {
+  const traceId = randomUUID();
+  const startedAt = Date.now();
+  const history = await getCampaignEventMessages(db, input.campaignId, 8);
+  const message = [
+    "Current turn input:",
+    input.currentAction,
+    "",
+    "Accepted public narration:",
+    input.dmResponse,
+    "",
+    "Roll requests:",
+    JSON.stringify(input.rollRequests ?? [], null, 2),
+    "",
+    "Recent messages:",
+    JSON.stringify(history, null, 2)
+  ].join("\n");
+
+  try {
+    await logDmTurnTrace(db, {
+      campaignId: input.campaignId,
+      traceId,
+      turnId: input.turnId,
+      phase: "memory_updater_started",
+      payload: {
+        historyCount: history.length,
+        message: textStats(message)
+      }
+    });
+
+    const providerStartedAt = Date.now();
+    const providerData = await runtime.askProvider({
+      instructions: buildMemoryUpdaterPrompt(),
+      message,
+      history: []
+    });
+
+    await logDmModelCall(db, {
+      campaignId: input.campaignId,
+      traceId,
+      turnId: input.turnId,
+      phase: "memory_updater",
+      providerData,
+      durationMs: Date.now() - providerStartedAt
+    });
+
+    const parsed = parseJsonRecord(providerData.content);
+    const proposedPatches = [
+      ...(Array.isArray(parsed?.patches) ? parsed.patches : []),
+      ...(Array.isArray(parsed?.new_context_chunks)
+        ? parsed.new_context_chunks.map((chunk) =>
+            eventPayload({
+              ...(eventPayload(chunk)),
+              operation: "create_chunk"
+            })
+          )
+        : []),
+      ...(Array.isArray(parsed?.remove_context_chunks)
+        ? parsed.remove_context_chunks.map((chunk) => ({
+            operation: "archive_chunk",
+            context_id: typeof chunk === "string"
+              ? chunk
+              : eventPayload(chunk).context_id
+          }))
+        : [])
+    ];
+    const existingContextIds = await listCampaignContextIds(db, input.campaignId);
+    const validation = validateMemoryPatches(
+      proposedPatches,
+      existingContextIds
+    );
+
+    await applyAcceptedMemoryPatches(
+      db,
+      input.campaignId,
+      validation.accepted
+    );
+
+    await logDmMemoryPatchLog(db, {
+      campaignId: input.campaignId,
+      traceId,
+      turnId: input.turnId,
+      payload: {
+        source: "memory_updater",
+        proposedPatches,
+        acceptedPatches: validation.accepted,
+        discardedPatches: validation.discarded,
+        durationMs: Date.now() - startedAt
+      }
+    });
+  } catch (error) {
+    await logDmMemoryPatchLog(db, {
+      campaignId: input.campaignId,
+      traceId,
+      turnId: input.turnId,
+      payload: {
+        source: "memory_updater",
+        failed: true,
+        error: errorSummary(error),
+        durationMs: Date.now() - startedAt
+      }
+    });
+  }
+}
+
+function formatCanonicalCharacterContext(
+  players: PlayerRow[],
+  mechanicsState: MechanicsState
+) {
   const playablePlayers = players.filter(isProfileComplete);
 
   if (playablePlayers.length === 0) {
@@ -2315,52 +4147,153 @@ function formatCanonicalCharacterContext(players: PlayerRow[]) {
       [
         `${index + 1}. ${player.username} playing ${player.character_name}`,
         "Character sheet:",
-        player.character_sheet
+        projectMechanicsIntoCharacterSheet(
+          player.character_sheet,
+          mechanicsState.actors[actorKeyForPlayer(player.id)]
+        )
       ].join("\n")
     )
   ].join("\n\n");
 }
 
-function formatSoloTurn(player: PlayerRow, content: string) {
+function formatMechanicsPromptContext(mechanicsState: MechanicsState) {
   return [
-    formatCanonicalCharacterContext([player]),
-    "",
-    "Current player action:",
-    "Only treat concrete declared actions as actions. Quoted speech, questions, promises, plans, and corrections are dialogue or intent unless the player also says they move, travel, enter, search, attack, take something, cast a spell, or otherwise change the scene.",
-    `${player.username} (${player.character_name}): ${content}`
+    "Authoritative mechanics state:",
+    "If mechanicsState conflicts with transcript history, generated character-sheet text, or model memory, mechanicsState wins.",
+    JSON.stringify(mechanicsState)
   ].join("\n");
 }
 
-function formatMultiplayerTurn(players: PlayerRow[], submissions: SubmissionRow[]) {
-  const actionLines = formatSubmissionActionLines(submissions);
+function normalizeCombatInputControl(
+  state: MechanicsState,
+  input: {
+    mode: CampaignMode;
+    nextInputNeeded: DmNextInputNeeded;
+    rollRequests: DiceRollRequest[];
+    inputTargets: string[];
+    inputPolicy: InputPolicy;
+  }
+): {
+  mechanicsState: MechanicsState;
+  inputTargets: string[];
+  inputPolicy: InputPolicy;
+} {
+  if (!state.combat.active || input.nextInputNeeded !== "player_actions") {
+    return {
+      mechanicsState: state,
+      inputTargets: input.inputTargets,
+      inputPolicy: input.inputPolicy
+    };
+  }
+
+  if (input.mode === "single_player" && state.combat.turnOwner === null) {
+    const livingPlayerActorKeys = Object.entries(state.actors)
+      .filter(
+        ([actorKey, actor]) =>
+          actorKey.startsWith("player:") &&
+          (actor.currentHp === undefined || actor.currentHp > 0)
+      )
+      .map(([actorKey]) => actorKey);
+
+    if (livingPlayerActorKeys.length === 1) {
+      const mechanicsState = {
+        ...state,
+        combat: {
+          ...state.combat,
+          turnOwner: livingPlayerActorKeys[0] ?? null
+        }
+      };
+      return {
+        mechanicsState,
+        inputTargets: input.inputTargets,
+        inputPolicy: input.inputPolicy
+      };
+    }
+  }
+
+  if (
+    input.rollRequests.length === 0 &&
+    state.combat.turnOwner?.startsWith("player:")
+  ) {
+    return {
+      mechanicsState: state,
+      inputTargets: [state.combat.turnOwner],
+      inputPolicy: "only_targeted_players"
+    };
+  }
+
+  return {
+    mechanicsState: state,
+    inputTargets: input.inputTargets,
+    inputPolicy: input.inputPolicy
+  };
+}
+
+function formatSoloTurn(
+  campaign: CampaignRow,
+  player: PlayerRow,
+  content: string
+) {
+  const mechanicsState = resolveMechanicsState(campaign, [player]);
+  const turnInput = {
+    type: "solo_turn",
+    action_policy:
+      "Only treat concrete declared actions as actions. Quoted speech, questions, promises, plans, and corrections are dialogue or intent unless the player also says they move, travel, enter, search, attack, take something, cast a spell, or otherwise change the scene.",
+    submissions: [
+      {
+        player: player.username,
+        character: player.character_name,
+        content
+      }
+    ]
+  };
 
   return [
-    formatCanonicalCharacterContext(players),
+    formatCanonicalCharacterContext([player], mechanicsState),
     "",
-    "Current party actions:",
-    "Resolve these submitted actions as one combined party turn. Account for timing, positioning, cooperation, conflict, and consequences across the whole party before asking what happens next.",
-    ...actionLines
+    formatMechanicsPromptContext(mechanicsState),
+    "",
+    "Current turn input JSON:",
+    JSON.stringify(turnInput, null, 2)
   ].join("\n");
 }
 
-function formatSubmissionActionLines(submissions: SubmissionRow[]) {
-  return submissions.map((submission) => {
-    const username = submission.username?.trim() || "Unknown player";
-    const characterName = submission.character_name?.trim() || "Unknown character";
+function formatMultiplayerTurn(
+  campaign: CampaignRow,
+  players: PlayerRow[],
+  submissions: SubmissionRow[]
+) {
+  const mechanicsState = resolveMechanicsState(campaign, players);
+  const turnInput = {
+    type: "multiplayer_turn",
+    resolution_policy:
+      mechanicsState.combat.active
+        ? "Resolve active combat by canonical initiative order. The current mechanicsState.combat.turnOwner acts first. Submitted actions from non-turn owners are pending intent only unless their turn is reached."
+        : "Resolve the submitted player actions together. Account for timing, positioning, cooperation, conflict, and consequences before asking what happens next.",
+    submissions: submissions.map((submission) => ({
+      player: submission.username?.trim() || "Unknown player",
+      character: submission.character_name?.trim() || "Unknown character",
+      content: submission.content
+    }))
+  };
 
-    return `${username} (${characterName}): ${submission.content}`;
-  });
-}
-
-function formatSubmittedActionsForCombatGuard(submissions: SubmissionRow[]) {
-  return formatSubmissionActionLines(submissions).join("\n");
+  return [
+    formatCanonicalCharacterContext(players, mechanicsState),
+    "",
+    formatMechanicsPromptContext(mechanicsState),
+    "",
+    "Current turn input JSON:",
+    JSON.stringify(turnInput, null, 2)
+  ].join("\n");
 }
 
 function formatOpeningSceneRequest(input: {
+  campaign: CampaignRow;
   mode: CampaignMode;
   players: PlayerRow[];
   style: CampaignOpeningStyle;
 }) {
+  const mechanicsState = resolveMechanicsState(input.campaign, input.players);
   const modeDirection =
     input.mode === "single_player"
       ? "This is a singleplayer campaign. Spotlight the solo character directly, tie the premise to their sheet or background when possible, and make the first choice immediately actionable for one player."
@@ -2373,7 +4306,9 @@ function formatOpeningSceneRequest(input: {
     : "";
 
   return [
-    formatCanonicalCharacterContext(input.players),
+    formatCanonicalCharacterContext(input.players, mechanicsState),
+    "",
+    formatMechanicsPromptContext(mechanicsState),
     "",
     "Current player action:",
     openingSceneRequest,
@@ -2804,7 +4739,7 @@ function openingSceneInstructions(mode: CampaignMode) {
       : "The website has provided the full current party.";
 
   return [
-    dungeonMasterInstructions,
+    dungeonMasterContractInstructions,
     modeDirection,
     "Use the campaign setup and canonical character sheets to begin with a rich campaign opener: establish named place, larger context, shared purpose, first objective, and immediate obstacle. Do not mention implementation details."
   ].join(" ");
@@ -2863,6 +4798,65 @@ function answerFromAskDmProviderResponse(content: string) {
   }
 
   throw new Error("The DM provider returned an empty answer.");
+}
+
+const gameplayTurnOutputContractReminder = [
+  "Output contract reminder:",
+  "Return only one valid JSON object. Do not include prose, Markdown, or commentary outside JSON.",
+  "Required top-level keys: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update.",
+  "input_policy must be all_players or only_targeted_players; never use acting_player.",
+  "Set resolution_mode to needs_dice whenever roll_requests is non-empty or next_input_needed is dice_results; otherwise set it to resolved_without_dice.",
+  "When resolution_mode is needs_dice, public_narration must not resolve the rolled outcome.",
+  "In roll_requests, dice must be bare dice notation only, such as 1d20, 3d4, or 8d6. Do not include + or - modifiers in dice; put static bonuses or penalties in modifier. Example: Magic Missile uses dice \"3d4\" and modifier 3, not dice \"3d4+3\".",
+  "If hostilities start while combat is inactive and enemies are ready or aware, ask player-controlled combatants for initiative in public_narration and roll_requests before resolving the attack or damage.",
+  "If the acting player clearly surprises unaware enemies, resolve the opening action's required rolls first, then ask player-controlled combatants for initiative before enemy counteraction.",
+  "Only request player-controlled initiative rolls in roll_requests.",
+  "Roll NPC and enemy initiative yourself every time, reveal each NPC/enemy initiative roll and total in public_narration, and encode the resulting order in mechanics_state_update or combat_events.",
+  "Never ask players to roll initiative, saving throws, attacks, damage, checks, or any other dice for NPCs or enemies; NPC and enemy dice are DM-side rolls that must still be visible to the players.",
+  "Also include non-empty mechanics_state_update.combat with active, round, turnOwner, and provisional initiativeOrder as actor-key strings when initiative roll_requests pauses resolution.",
+  "If combat turnOwner is or becomes npc:*, resolve NPC turns before returning control to players.",
+  "During active combat, if next control belongs to a player turnOwner and no roll_requests are pending, set input_policy only_targeted_players and input_targets to that player actor key only; do not use all_players for ordinary turn-based combat.",
+  "Off-turn player combat declarations are only stated intent, not actions already in motion; never say they are mid-swing, following immediately, or resolving before the next initiative actor.",
+  "When multiple player submissions arrive in active combat, resolve the current turn owner's valid action first, keep other submissions as pending intent, and if the next actor is an enemy resolve that enemy turn before later player intent.",
+  "If the stored turnOwner is an NPC key or NPC character name, do not let submitted player attacks or spells preempt that NPC turn.",
+  "If a declared action needs a concrete tactical choice before dice can be interpreted, such as target, targets, spell area, Magic Missile dart distribution, weapon target, movement destination, or affected creatures, do not request dice yet.",
+  "For missing tactical choices, return next_input_needed player_actions, roll_requests [], input_policy only_targeted_players, input_targets set to the acting player, and ask only for the missing choice.",
+  "When a player action, spell, feature, or weapon would deal damage and that damage roll was not already submitted, do not roll damage yourself. Request the player's damage roll with next_input_needed dice_results and a structured roll_requests entry. This includes automatic-hit effects such as Magic Missile. Do not update target HP until damage is submitted.",
+  "Resolve NPC attacks fully using explicit wording: 'attack roll: X vs AC Y - hit/miss'; on a hit, immediately state 'damage roll: dice = total damage', update player HP, then return control.",
+  "For NPC hits, public_narration must include the words attack roll, vs AC, and damage roll before injury narration.",
+  "When a player spell or feature forces an NPC or enemy saving throw, roll that save yourself before narrating success or failure, reveal the save roll and total, compare it to the player's known spell save DC when available, and do not put the NPC/enemy save in roll_requests.",
+  "Never narrate a spell or feature as failing, succeeding, taking hold, being resisted, or being shaken off because of an NPC/enemy save unless public_narration first includes the visible save math line: '<Target> <Ability> save: X vs DC Y - success/failure'.",
+  "Do not end an NPC turn with only a wind-up like lunges, swings, aims, starts casting, or bears down unless a player-facing roll or reaction is required first.",
+  "When the final active enemy is defeated, set combat active false, turnOwner null, and initiativeOrder empty; do not say a specific combatant is up next after combat ends.",
+  "Build combat actor names and keys only from the current scene and character sheets; never copy example NPC names into initiativeOrder.",
+  "initiativeOrder should include active combatants only; exclude captives, bystanders, and noncombatants unless they can act in the fight."
+];
+
+const gameplayTurnModeReminder: Record<CampaignMode, string[]> = {
+  single_player: [
+    "Singleplayer combat reminder:",
+    "Do not end with next_input_needed player_actions while turnOwner is npc:*; set turnOwner to the solo player actor key unless combat has ended.",
+    "In singleplayer active combat, return control with turnOwner set to the player actor key, not null."
+  ],
+  multiplayer: [
+    "Multiplayer combat reminder:",
+    "In active initiative combat, do not end with next_input_needed player_actions while turnOwner is npc:*; resolve NPC turns until control reaches a player actor or combat ends.",
+    "In active initiative combat, when control reaches a player actor and no roll_requests are pending, set turnOwner to that player actor, input_policy only_targeted_players, and input_targets to that actor key.",
+    "Use turnOwner null with an all-player prompt only when combat is inactive or the scene is explicitly outside strict initiative.",
+    "For multiplayer player-controlled initiative, saving throws, checks, attacks, and other targeted player rolls, set each roll_requests item's player field to the targeted character's actor key or character name."
+  ]
+};
+
+function appendGameplayTurnOutputContractReminder(
+  message: string,
+  mode: CampaignMode
+) {
+  return [
+    message,
+    "",
+    ...gameplayTurnOutputContractReminder,
+    ...gameplayTurnModeReminder[mode]
+  ].join("\n");
 }
 
 async function askEldermereOpeningPlanner(
@@ -3009,13 +5003,79 @@ function findForbiddenOpeningTerms(
   const allowedTerms = new Set(
     plan.allowedPlayerFacingTerms.map((term) => term.term.toLowerCase())
   );
-  const lowerNarration = narration.toLowerCase();
 
   return [...new Set(plan.forbiddenOpeningTerms)]
     .map((term) => term.trim())
     .filter(Boolean)
     .filter((term) => !allowedTerms.has(term.toLowerCase()))
-    .filter((term) => lowerNarration.includes(term.toLowerCase()));
+    .filter((term) => openingNarrationContainsTerm(narration, term));
+}
+
+function openingNarrationTermPattern(term: string) {
+  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  return new RegExp(
+    `(^|[^\\p{L}\\p{N}_])${escaped}(?=$|[^\\p{L}\\p{N}_])`,
+    "iu"
+  );
+}
+
+function openingNarrationContainsTerm(narration: string, term: string) {
+  return openingNarrationTermPattern(term).test(narration);
+}
+
+function plainReplacementForForbiddenOpeningTerm(term: string) {
+  switch (term.toLowerCase()) {
+    case "second dominion":
+      return "the fallen empire";
+    case "graywake":
+      return "the old catastrophe";
+    case "hush":
+      return "the long silence";
+    case "wellglass":
+      return "rare crystal";
+    default:
+      return "old lore";
+  }
+}
+
+function scrubForbiddenOpeningTerms(
+  narration: string,
+  plan: EldermereOpeningPlan
+) {
+  const allowedTerms = new Set(
+    plan.allowedPlayerFacingTerms.map((term) => term.term.toLowerCase())
+  );
+
+  return [...new Set(plan.forbiddenOpeningTerms)]
+    .map((term) => term.trim())
+    .filter(Boolean)
+    .filter((term) => !allowedTerms.has(term.toLowerCase()))
+    .reduce(
+      (current, term) =>
+        current.replace(
+          openingNarrationTermPattern(term),
+          (_match, prefix: string) =>
+            `${prefix}${plainReplacementForForbiddenOpeningTerm(term)}`
+        ),
+      narration
+    );
+}
+
+function repairEldermereOpeningReply(
+  reply: DungeonMasterReply,
+  plan: EldermereOpeningPlan
+): DungeonMasterReply {
+  return {
+    ...reply,
+    content: scrubForbiddenOpeningTerms(reply.content, plan),
+    setting: {
+      ...reply.setting,
+      worldName: "Eldermere",
+      startingLocation: plan.startingLocation.name,
+      displayLocation: plan.startingLocation.name
+    }
+  };
 }
 
 function eldermereOpeningSettingErrors(
@@ -3056,7 +5116,7 @@ async function askEldermereOpeningNarrator(
   instructions: string,
   plan: EldermereOpeningPlan,
   turnId?: string,
-  contractOptions?: HermesDmContractParseOptions
+  contractOptions?: DmContractParseOptions
 ) {
   const narratorMessage = formatEldermereNarratorOpeningRequest({
     openingRequest,
@@ -3085,13 +5145,14 @@ async function askEldermereOpeningNarrator(
     return opening;
   }
 
+  const forbiddenTermPlural = forbiddenTerms.length === 1 ? "" : "s";
   const repairMessage = [
     narratorMessage,
     "",
     "Rewrite required:",
     ...(forbiddenTerms.length > 0
       ? [
-          `The previous public_narration used forbidden opening terms: ${forbiddenTerms.join(", ")}.`
+          `The previous public_narration used ${forbiddenTerms.length} forbidden opening term${forbiddenTermPlural} from forbidden_opening_terms.`
         ]
       : []),
     ...(settingErrors.length > 0
@@ -3126,19 +5187,7 @@ async function askEldermereOpeningNarrator(
   );
 
   if (remainingForbiddenTerms.length > 0 || remainingSettingErrors.length > 0) {
-    throw new Error(
-      [
-        "Eldermere opening narrator failed validation after repair.",
-        remainingForbiddenTerms.length > 0
-          ? `Forbidden terms: ${remainingForbiddenTerms.join(", ")}.`
-          : "",
-        remainingSettingErrors.length > 0
-          ? `Setting errors: ${remainingSettingErrors.join("; ")}.`
-          : ""
-      ]
-        .filter(Boolean)
-        .join(" ")
-    );
+    return repairEldermereOpeningReply(repairedOpening, plan);
   }
 
   return repairedOpening;
@@ -3159,12 +5208,20 @@ async function getActivePlayers(db: Queryable, campaignId: string) {
 }
 
 function formatAskDmQuestion(
+  campaign: CampaignRow,
   players: PlayerRow[],
   asker: PlayerRow,
   question: string
 ) {
+  const mechanicsState = resolveMechanicsState(campaign, players.length > 0 ? players : [asker]);
+
   return [
-    formatCanonicalCharacterContext(players.length > 0 ? players : [asker]),
+    formatCanonicalCharacterContext(
+      players.length > 0 ? players : [asker],
+      mechanicsState
+    ),
+    "",
+    formatMechanicsPromptContext(mechanicsState),
     "",
     "Out-of-turn Ask DM question:",
     "The player is asking for clarification without advancing time. Answer as table guidance, not as a committed character action.",
@@ -3192,10 +5249,28 @@ async function getCampaignEventMessages(
             'dm_question',
             'dm_answer'
           )
-        order by created_at desc
+        order by created_at desc,
+          case type
+            when 'dm_answer' then 0
+            when 'turn_resolved' then 1
+            when 'adventure_begun' then 1
+            when 'dm_question' then 2
+            when 'turn_submitted' then 3
+            else 4
+          end asc,
+          id desc
         limit $2
       ) recent_events
-      order by created_at asc
+      order by created_at asc,
+        case type
+          when 'turn_submitted' then 0
+          when 'dm_question' then 0
+          when 'turn_resolved' then 1
+          when 'adventure_begun' then 1
+          when 'dm_answer' then 1
+          else 2
+        end asc,
+        id asc
     `,
     [campaignId, limit]
   );
@@ -3253,19 +5328,20 @@ async function getCampaignEventMessages(
 async function askDungeonMaster(
   db: Queryable,
   runtime: DungeonMasterRuntime,
-  campaign: Pick<CampaignRow, "id" | "hermes_session_id" | "metadata">,
+  campaign: Pick<CampaignRow, "id" | "session_id" | "metadata" | "mode">,
   message: string,
   instructions: string,
   includeHistory = true,
   turnId?: string,
   currentPlayerAction?: string,
-  contractOptions?: HermesDmContractParseOptions,
+  contractOptions?: DmContractParseOptions,
   options?: {
     buildPromptContext?: boolean;
     includeEldermereTurnContext?: boolean;
+    model?: AiModelId;
     suppressStreaming?: boolean;
   }
-) {
+): Promise<DungeonMasterReply> {
   const traceId = randomUUID();
   const startedAt = Date.now();
   const streamEmitter =
@@ -3276,6 +5352,7 @@ async function askDungeonMaster(
     options?.includeEldermereTurnContext === false
       ? instructions
       : withEldermereTurnContext(instructions, campaign);
+  let providerDebug: AiDebugInfo | undefined;
 
   if (streamEmitter && streamTurnId) {
     streamEmitter({
@@ -3292,7 +5369,7 @@ async function askDungeonMaster(
     turnId,
     elapsedMs: 0,
     payload: {
-      hermesSessionId: campaign.hermes_session_id,
+      sessionId: campaign.session_id,
       includeHistory,
       message: textStats(message),
       instructions: textStats(instructionsWithWorldContext)
@@ -3300,23 +5377,39 @@ async function askDungeonMaster(
   });
 
   try {
-    const promptContext = shouldBuildPromptContext && runtime.buildPromptContext
-      ? await runtime.buildPromptContext({
-          campaignId: campaign.id,
-          turnId,
-          currentAction: message,
-          baseInstructions: instructionsWithWorldContext
-        })
+    const history = includeHistory
+      ? await getCampaignEventMessages(db, campaign.id, 30, turnId)
+      : [];
+    const promptContext = shouldBuildPromptContext
+      ? runtime.buildPromptContext
+        ? await runtime.buildPromptContext({
+            campaignId: campaign.id,
+            turnId,
+            currentAction: message,
+            baseInstructions: instructionsWithWorldContext,
+            ...(options?.model ? { model: options.model } : {})
+          })
+        : await buildModularDmPromptContext(db, runtime, campaign, {
+            traceId,
+            turnId,
+            currentAction: message,
+            baseInstructions: instructionsWithWorldContext,
+            history,
+            ...(options?.model ? { model: options.model } : {})
+          })
       : null;
-    const history =
-      includeHistory && !promptContext
-        ? await getCampaignEventMessages(db, campaign.id, 30, turnId)
-        : [];
+    const providerMessage = appendGameplayTurnOutputContractReminder(
+      promptContext?.message ?? message,
+      campaign.mode
+    );
     const providerStartedAt = Date.now();
-    let providerData = await runtime.askProvider({
-      message: promptContext?.message ?? message,
+    const providerData = await runtime.askProvider({
+      message: providerMessage,
       instructions: promptContext?.instructions ?? instructionsWithWorldContext,
       history,
+      ...(currentPlayerAction ? { currentPlayerAction } : {}),
+      ...(promptContext?.jobNeeded ? { dmJob: promptContext.jobNeeded } : {}),
+      ...(options?.model ? { model: options.model } : {}),
       ...(streamEmitter && streamTurnId
         ? {
             onPublicNarrationDelta: (text: string) => {
@@ -3334,6 +5427,8 @@ async function askDungeonMaster(
           }
         : {})
     });
+    providerDebug = providerData.debug;
+    const providerDurationMs = Date.now() - providerStartedAt;
 
     await logTurnDebugTrace(db, {
       campaignId: campaign.id,
@@ -3342,19 +5437,130 @@ async function askDungeonMaster(
       turnId,
       elapsedMs: Date.now() - startedAt,
       payload: {
-        durationMs: Date.now() - providerStartedAt,
+        durationMs: providerDurationMs,
         historyCount: history.length,
-        provider: providerDebugSummary(providerData.debug)
+        promptContextSections: promptContext?.sections ?? [],
+        promptContextBudget: promptContext?.budget ?? {},
+        provider: providerDebugSummary(providerData.debug, {
+          includeRawResponse: true
+        })
       }
     });
 
-    const contract = parseHermesDmContract(providerData.content, {
-      ...contractOptions,
-      currentAction: message,
-      ...(currentPlayerAction ? { currentPlayerAction } : {})
+    await logDmModelCall(db, {
+      campaignId: campaign.id,
+      traceId,
+      turnId,
+      phase: "main",
+      providerData,
+      durationMs: providerDurationMs
     });
+
+    let outputEnvelope:
+      | ReturnType<typeof validateMainDmOutput>
+      | undefined;
+    let outputEnvelopeError: unknown;
+    let contractParseRecovery:
+      | ReturnType<typeof recoverDmContractAfterParseFailure>
+      | undefined;
+
+    try {
+      outputEnvelope = validateMainDmOutput(providerData.content);
+    } catch (error) {
+      outputEnvelopeError = error;
+    }
+
+    const contractParseOptions = {
+        ...contractOptions,
+        currentAction: message,
+        ...(currentPlayerAction ? { currentPlayerAction } : {})
+      };
+    let contract: DmContractResponse;
+
+    try {
+      contract = parseDmContract(providerData.content, contractParseOptions);
+    } catch (error) {
+      const recovery = recoverDmContractAfterParseFailure(providerData.content);
+
+      if (!recovery) {
+        throw error;
+      }
+
+      contractParseRecovery = recovery;
+      contract = recovery.contract;
+
+      await logTurnDebugTrace(db, {
+        campaignId: campaign.id,
+        traceId,
+        phase: "dm_contract_parse_recovered",
+        turnId,
+        elapsedMs: Date.now() - startedAt,
+        payload: {
+          error: errorSummary(error),
+          recovery: recovery.report,
+          contractFailure: debugDmContractFailure(
+            providerData.content,
+            contractParseOptions
+          )
+        }
+      });
+    }
+
     const rollRequests = normalizeRollRequests(contract.rollRequests);
+    const rollRequestDiagnosticsReport = rollRequestDiagnostics(rollRequests);
     const reply = contract.publicNarration;
+    const combatValidation = outputEnvelope
+      ? validateCombatEvents(outputEnvelope.combatEvents, {
+          actors: mechanicsActorsForValidation(campaign)
+        })
+      : { accepted: [], discarded: [] };
+    const memoryValidation = outputEnvelope
+      ? validateMemoryPatches(
+          outputEnvelope.proposedContextUpdates,
+          new Set(
+            promptContext?.sections.flatMap((section) =>
+              typeof section === "object" &&
+              section !== null &&
+              "includedContextKeys" in section &&
+              Array.isArray(
+                (section as { includedContextKeys?: unknown }).includedContextKeys
+              )
+                ? ((section as { includedContextKeys: string[] })
+                    .includedContextKeys)
+                : []
+            ) ?? []
+          )
+        )
+      : { accepted: [], discarded: [] };
+    const mechanicsState = resolveMechanicsState(campaign, []);
+    const normalizedInputControl = normalizeCombatInputControl(
+      applyMechanicsStateUpdate(mechanicsState, contract.mechanicsStateUpdate, nowIso()),
+      {
+        mode: campaign.mode,
+        nextInputNeeded: contract.nextInputNeeded,
+        rollRequests,
+        inputTargets: contract.inputTargets,
+        inputPolicy: contract.inputPolicy
+      }
+    );
+    const nextMechanicsState = normalizedInputControl.mechanicsState;
+
+    if (nextMechanicsState !== mechanicsState) {
+      await writeMechanicsStateForLockedCampaign(
+        db,
+        campaign.id,
+        nextMechanicsState
+      );
+    }
+    const routerDebug = routerDebugFromPromptContext(promptContext);
+    const debugWithCombatState: AiDebugInfo = {
+      ...providerData.debug,
+      combatState: {
+        combat: nextMechanicsState.combat,
+        actors: nextMechanicsState.actors
+      },
+      ...(routerDebug ? { router: routerDebug } : {})
+    };
 
     if (!reply) {
       throw new Error(`The DM provider returned an empty reply. Trace ID: ${traceId}`);
@@ -3367,13 +5573,71 @@ async function askDungeonMaster(
       turnId,
       elapsedMs: Date.now() - startedAt,
       payload: {
+        outputEnvelopeValidated: Boolean(outputEnvelope),
+        outputEnvelopeError: outputEnvelopeError
+          ? errorSummary(outputEnvelopeError)
+          : undefined,
         rollRequestsCount: rollRequests.length,
         rollRequestLabels: rollRequests.map((request) => request.label),
+        rollRequestDiagnostics: rollRequestDiagnosticsReport,
         nextInputNeeded: contract.nextInputNeeded,
-        inputPolicy: contract.inputPolicy,
-        inputTargets: contract.inputTargets
+        contractParseRecovered: Boolean(contractParseRecovery),
+        contractParseRecovery: contractParseRecovery?.report,
+        inputPolicy: normalizedInputControl.inputPolicy,
+        inputTargets: normalizedInputControl.inputTargets,
+        originalInputPolicy: contract.inputPolicy,
+        originalInputTargets: contract.inputTargets,
+        resolutionMode: contract.resolutionMode
       }
     });
+
+    if (rollRequestDiagnosticsReport.length > 0) {
+      await logTurnDebugTrace(db, {
+        campaignId: campaign.id,
+        traceId,
+        phase: "dm_roll_request_diagnostics",
+        turnId,
+        elapsedMs: Date.now() - startedAt,
+        payload: {
+          diagnostics: rollRequestDiagnosticsReport,
+          rollRequests
+        }
+      });
+    }
+
+    await logDmOutputReport(db, {
+      campaignId: campaign.id,
+      traceId,
+      turnId,
+      payload: {
+        outputEnvelopeValidated: Boolean(outputEnvelope),
+        outputEnvelopeError: outputEnvelopeError
+          ? errorSummary(outputEnvelopeError)
+          : undefined,
+        contractParseRecovered: Boolean(contractParseRecovery),
+        contractParseRecovery: contractParseRecovery?.report,
+        rollRequestsCount: rollRequests.length,
+        rollRequestDiagnostics: rollRequestDiagnosticsReport,
+        acceptedCombatEventsCount: combatValidation.accepted.length,
+        discardedCombatEvents: combatValidation.discarded,
+        acceptedImmediateContextUpdatesCount: memoryValidation.accepted.length,
+        discardedImmediateContextUpdates: memoryValidation.discarded
+      }
+    });
+
+    if (outputEnvelope?.proposedContextUpdates.length) {
+      await logDmMemoryPatchLog(db, {
+        campaignId: campaign.id,
+        traceId,
+        turnId,
+        payload: {
+          source: "main_dm_output",
+          proposedPatches: outputEnvelope.proposedContextUpdates,
+          acceptedPatches: memoryValidation.accepted,
+          discardedPatches: memoryValidation.discarded
+        }
+      });
+    }
 
     await logTurnDebugTrace(db, {
       campaignId: campaign.id,
@@ -3391,14 +5655,16 @@ async function askDungeonMaster(
     return {
       id: providerData.id ?? randomUUID(),
       content: reply,
-      debug: providerData.debug,
+      debug: debugWithCombatState,
       rollRequests,
-      inputTargets: contract.inputTargets,
-      inputPolicy: contract.inputPolicy,
+      inputTargets: normalizedInputControl.inputTargets,
+      inputPolicy: normalizedInputControl.inputPolicy,
+      nextInputNeeded: contract.nextInputNeeded,
+      resolutionMode: contract.resolutionMode,
       setting: contract.setting
     };
   } catch (error) {
-    const providerDebug = providerDebugFromError(error);
+    providerDebug ??= providerDebugFromError(error);
 
     await logTurnDebugTrace(db, {
       campaignId: campaign.id,
@@ -3408,11 +5674,9 @@ async function askDungeonMaster(
       elapsedMs: Date.now() - startedAt,
       payload: {
         error: errorSummary(error),
-        provider: providerDebugSummary(providerDebug),
-        diagnostics:
-          error instanceof Error
-            ? undefined
-            : debugHermesDmContractFailure(String(error), { currentAction: message })
+        provider: providerDebugSummary(providerDebug, {
+          includeRawResponse: true
+        })
       }
     });
 
@@ -3487,7 +5751,8 @@ async function setPendingInputTargets(
   db: Queryable,
   campaignId: string,
   inputTargets: string[],
-  inputPolicy: InputPolicy
+  inputPolicy: InputPolicy,
+  nextInputNeeded: DmNextInputNeeded
 ) {
   const shouldTargetPlayers =
     inputPolicy === "only_targeted_players" && inputTargets.length > 0;
@@ -3496,11 +5761,17 @@ async function setPendingInputTargets(
     `
       update campaigns
       set metadata = case
-        when $2::jsonb = '[]'::jsonb then metadata - 'inputTargets' - 'inputPolicy'
+        when $2::jsonb = '[]'::jsonb and $4::text = 'player_actions'
+          then metadata - 'inputTargets' - 'inputPolicy' - 'nextInputNeeded'
         else jsonb_set(
-          jsonb_set(metadata, '{inputTargets}', $2::jsonb, true),
-          '{inputPolicy}',
-          $3::jsonb,
+          jsonb_set(
+            jsonb_set(metadata, '{inputTargets}', $2::jsonb, true),
+            '{inputPolicy}',
+            $3::jsonb,
+            true
+          ),
+          '{nextInputNeeded}',
+          to_jsonb($4::text),
           true
         )
       end
@@ -3509,7 +5780,8 @@ async function setPendingInputTargets(
     [
       campaignId,
       JSON.stringify(shouldTargetPlayers ? inputTargets : []),
-      JSON.stringify(shouldTargetPlayers ? inputPolicy : "all_players")
+      JSON.stringify(shouldTargetPlayers ? inputPolicy : "all_players"),
+      nextInputNeeded
     ]
   );
 }
@@ -3519,12 +5791,14 @@ async function finishResolvedTurn(
   input: {
     campaignId: string;
     turnId: string;
-    hermesMessageId: string | undefined;
+    modelMessageId: string | undefined;
     reply: string;
     eventType: "adventure_begun" | "turn_resolved";
     pendingRollRequests?: DiceRollRequest[];
     inputTargets?: string[];
     inputPolicy?: InputPolicy;
+    nextInputNeeded?: DmNextInputNeeded;
+    resolutionMode?: "needs_dice" | "resolved_without_dice";
     setting?: CampaignSettingSummary | undefined;
     aiDebug?: AiDebugInfo | undefined;
   }
@@ -3538,10 +5812,10 @@ async function finishResolvedTurn(
     await client.query(
       `
         update turns
-        set status = 'resolved', hermes_message_id = $2, resolved_at = now(), error = null
+        set status = 'resolved', model_message_id = $2, resolved_at = now(), error = null
         where id = $1
       `,
-      [input.turnId, input.hermesMessageId ?? null]
+      [input.turnId, input.modelMessageId ?? null]
     );
     await client.query(
       `
@@ -3553,13 +5827,19 @@ async function finishResolvedTurn(
     );
     dmEventId = await logCampaignEvent(client, input.campaignId, input.eventType, {
       turnId: input.turnId,
-      hermesMessageId: input.hermesMessageId,
-      messageId: input.hermesMessageId ?? randomUUID(),
+      modelMessageId: input.modelMessageId,
+      messageId: input.modelMessageId ?? randomUUID(),
       role: "dm",
       content: input.reply,
       ...settingPatch,
       pendingRollRequest: currentPendingRollRequest,
       pendingRollRequests,
+      nextInputNeeded:
+        input.nextInputNeeded ??
+        (pendingRollRequests.length > 0 ? "dice_results" : "player_actions"),
+      resolutionMode:
+        input.resolutionMode ??
+        (pendingRollRequests.length > 0 ? "needs_dice" : "resolved_without_dice"),
       inputTargets: input.inputTargets ?? [],
       inputPolicy: input.inputPolicy ?? "all_players",
       aiDebug: input.aiDebug
@@ -3584,7 +5864,9 @@ async function finishResolvedTurn(
       client,
       input.campaignId,
       input.inputTargets ?? [],
-      input.inputPolicy ?? "all_players"
+      input.inputPolicy ?? "all_players",
+      input.nextInputNeeded ??
+        (pendingRollRequests.length > 0 ? "dice_results" : "player_actions")
     );
     await ensureCollectingTurn(client, input.campaignId);
   });
@@ -3646,6 +5928,7 @@ export async function registerRoomPlayerForUser(
     username: string;
     characterName: string;
     characterSheet: string;
+    mechanicsSeed?: MechanicsSeed | undefined;
     userId: string;
   }
 ): Promise<RoomSnapshot> {
@@ -3734,6 +6017,26 @@ export async function registerRoomPlayerForUser(
         slot
       }
     );
+    const savedPlayer =
+      (await client.query<PlayerRow>(
+        `
+          select *
+          from players
+          where campaign_id = $1 and client_id = $2
+          limit 1
+        `,
+        [campaignRow.id, input.playerId]
+      )).rows[0] ?? existing.rows[0];
+
+    if (savedPlayer) {
+      await addOrReplacePlayerMechanicsActor(client, {
+        campaign: campaignRow,
+        playerId: savedPlayer.id,
+        characterName: input.characterName,
+        characterSheet: input.characterSheet,
+        seed: input.mechanicsSeed
+      });
+    }
 
     return campaignRow;
   });
@@ -3857,6 +6160,7 @@ export async function beginRoomForUser(
   const runtime = input.runtime;
   const openingTurn = beginState.turn;
   const openingRequest = formatOpeningSceneRequest({
+    campaign: beginState.campaign,
     mode: "multiplayer",
     players: beginState.players,
     style: campaignOpeningStyleFromMetadata(beginState.campaign)
@@ -3894,17 +6198,20 @@ export async function beginRoomForUser(
           true,
           openingTurn.id,
           undefined,
-          { allowResolvedCombatWithoutRolls: true }
+          { allowResolvedCombatWithoutRolls: true },
+          { buildPromptContext: false }
         );
     const resolvedTurn = await finishResolvedTurn(db, {
       campaignId: beginState.campaign.id,
       turnId: openingTurn.id,
-      hermesMessageId: opening.id,
+      modelMessageId: opening.id,
       reply: opening.content,
       eventType: "adventure_begun",
       pendingRollRequests: opening.rollRequests,
       inputTargets: opening.inputTargets,
       inputPolicy: opening.inputPolicy,
+      nextInputNeeded: opening.nextInputNeeded,
+      resolutionMode: opening.resolutionMode,
       setting: opening.setting,
       aiDebug: opening.debug
     });
@@ -3940,7 +6247,7 @@ export async function beginRoomForUser(
   const updatedCampaign = await resolveRoomCampaign(
     db,
     beginState.campaign.id,
-    beginState.campaign.hermes_session_id
+    beginState.campaign.session_id
   );
 
   return buildRoomSnapshot(db, updatedCampaign ?? beginState.campaign);
@@ -4004,6 +6311,7 @@ export async function submitRoomTurnForUser(
     rollRequestId?: string;
     rollResult?: DiceRollResult;
     clientMessageId?: string;
+    model?: AiModelId;
     rollSubmissions?: DiceRollSubmission[];
   }
 ): Promise<RoomSnapshot> {
@@ -4078,6 +6386,42 @@ export async function submitRoomTurnForUser(
       throw createStatusError(400, "A player message is required.");
     }
 
+    if (!isRollSubmission && !input.skipTurn) {
+      const mechanicsState = resolveMechanicsState(campaignRow, [player]);
+
+      try {
+        assertMechanicsActionAllowed({
+          state: mechanicsState,
+          player,
+          message: trimmedContent
+        });
+      } catch (error) {
+        throw createStatusError(
+          400,
+          error instanceof Error ? error.message : "That action is not allowed."
+        );
+      }
+
+      const nextMechanicsState = applyAcceptedCast({
+        state: mechanicsState,
+        player,
+        message: trimmedContent,
+        updatedAt: nowIso()
+      });
+
+      if (nextMechanicsState !== mechanicsState) {
+        await writeMechanicsStateForLockedCampaign(
+          client,
+          campaignRow.id,
+          nextMechanicsState
+        );
+        campaignRow.metadata = {
+          ...eventPayload(campaignRow.metadata),
+          mechanicsState: nextMechanicsState
+        };
+      }
+    }
+
     await client.query(
       `
         insert into submissions (campaign_id, turn_id, player_id, content)
@@ -4096,6 +6440,10 @@ export async function submitRoomTurnForUser(
       await setPendingRollRequests(
         client,
         campaignRow.id,
+        rollSubmission.remainingRollRequests
+      );
+      campaignRow.metadata = metadataWithPendingRollRequests(
+        campaignRow.metadata,
         rollSubmission.remainingRollRequests
       );
     }
@@ -4179,6 +6527,7 @@ export async function submitRoomTurnForUser(
   if (submitState.shouldResolve) {
     try {
       const currentAction = formatMultiplayerTurn(
+        submitState.campaign,
         submitState.players,
         submitState.submissions
       );
@@ -4187,20 +6536,24 @@ export async function submitRoomTurnForUser(
         input.runtime,
         submitState.campaign,
         currentAction,
-        dungeonMasterInstructions,
+        dungeonMasterContractInstructions,
         true,
         submitState.turn.id,
-        formatSubmittedActionsForCombatGuard(submitState.submissions)
+        undefined,
+        undefined,
+        input.model ? { model: input.model } : undefined
       );
       const resolvedTurn = await finishResolvedTurn(db, {
         campaignId: submitState.campaign.id,
         turnId: submitState.turn.id,
-        hermesMessageId: reply.id,
+        modelMessageId: reply.id,
         reply: reply.content,
         eventType: "turn_resolved",
         pendingRollRequests: reply.rollRequests,
         inputTargets: reply.inputTargets,
         inputPolicy: reply.inputPolicy,
+        nextInputNeeded: reply.nextInputNeeded,
+        resolutionMode: reply.resolutionMode,
         aiDebug: reply.debug
       });
 
@@ -4232,7 +6585,7 @@ export async function submitRoomTurnForUser(
   const updatedCampaign = await resolveRoomCampaign(
     db,
     submitState.campaign.id,
-    submitState.campaign.hermes_session_id
+    submitState.campaign.session_id
   );
 
   return buildRoomSnapshot(db, updatedCampaign ?? submitState.campaign);
@@ -4267,6 +6620,7 @@ export async function askDungeonMasterQuestionForUser(
     question: string;
     userId: string;
     clientMessageId?: string;
+    model?: AiModelId;
   }
 ): Promise<RoomSnapshot> {
   const trimmedQuestion = input.question.trim();
@@ -4312,51 +6666,109 @@ export async function askDungeonMasterQuestionForUser(
   });
 
   const players = await getActivePlayers(db, campaign.id);
-  const currentAction = formatAskDmQuestion(players, player, trimmedQuestion);
+  const currentAction = formatAskDmQuestion(
+    campaign,
+    players,
+    player,
+    trimmedQuestion
+  );
+  const streamTurnId = runtime.emitDmStreamEvent ? randomUUID() : undefined;
   const instructions = withEldermereTurnContext(askDmInstructions(), campaign);
   const promptContext = runtime.buildPromptContext
-    ? await runtime.buildPromptContext({
-        campaignId: campaign.id,
-        currentAction,
-        baseInstructions: instructions
-      })
+      ? await runtime.buildPromptContext({
+          campaignId: campaign.id,
+          turnId: streamTurnId,
+          currentAction,
+          baseInstructions: instructions,
+          ...(input.model ? { model: input.model } : {})
+        })
     : null;
   const history = promptContext
     ? []
     : await getCampaignEventMessages(db, campaign.id);
-  const providerData = await runtime.askProvider({
-    message: promptContext?.message ?? currentAction,
-    instructions: promptContext?.instructions ?? instructions,
-    history
-  });
-  const answer = answerFromAskDmProviderResponse(providerData.content);
-  const questionMessageId = input.clientMessageId?.trim() || randomUUID();
-  const answerMessageId = providerData.id || randomUUID();
 
-  await withTransaction(db, async (client) => {
-    await logCampaignEvent(client, campaign.id, "dm_question", {
-      messageId: questionMessageId,
-      role: "player",
-      playerId: player.id,
-      clientId: player.client_id,
-      username: player.username,
-      characterName: player.character_name,
-      content: trimmedQuestion
+  if (streamTurnId) {
+    runtime.emitDmStreamEvent?.({
+      type: "dm_stream_started",
+      roomId: campaign.id,
+      turnId: streamTurnId
     });
-    await logCampaignEvent(client, campaign.id, "dm_answer", {
-      messageId: answerMessageId,
-      role: "dm",
-      playerId: player.id,
-      inReplyToMessageId: questionMessageId,
-      content: answer,
-      aiDebug: providerData.debug
+  }
+
+  try {
+    const providerData = await runtime.askProvider({
+      message: promptContext?.message ?? currentAction,
+      instructions: promptContext?.instructions ?? instructions,
+      history,
+      currentPlayerAction: trimmedQuestion,
+      ...(input.model ? { model: input.model } : {}),
+      ...(streamTurnId
+        ? {
+            onPublicNarrationDelta: (text: string) => {
+              if (!text) {
+                return;
+              }
+
+              runtime.emitDmStreamEvent?.({
+                type: "dm_stream_delta",
+                roomId: campaign.id,
+                turnId: streamTurnId,
+                text
+              });
+            }
+          }
+        : {})
     });
-  });
+    const answer = answerFromAskDmProviderResponse(providerData.content);
+    const questionMessageId = input.clientMessageId?.trim() || randomUUID();
+    const answerMessageId = providerData.id || randomUUID();
+
+    await withTransaction(db, async (client) => {
+      await logCampaignEvent(client, campaign.id, "dm_question", {
+        messageId: questionMessageId,
+        role: "player",
+        playerId: player.id,
+        clientId: player.client_id,
+        username: player.username,
+        characterName: player.character_name,
+        content: trimmedQuestion
+      });
+      await logCampaignEvent(client, campaign.id, "dm_answer", {
+        messageId: answerMessageId,
+        role: "dm",
+        playerId: player.id,
+        inReplyToMessageId: questionMessageId,
+        content: answer,
+        aiDebug: providerData.debug
+      });
+    });
+
+    if (streamTurnId) {
+      runtime.emitDmStreamEvent?.({
+        type: "dm_stream_done",
+        roomId: campaign.id,
+        turnId: streamTurnId,
+        messageId: answerMessageId
+      });
+    }
+  } catch (error) {
+    if (streamTurnId) {
+      runtime.emitDmStreamEvent?.({
+        type: "dm_stream_failed",
+        roomId: campaign.id,
+        turnId: streamTurnId,
+        message:
+          error instanceof Error ? error.message : "DM provider call failed."
+      });
+    }
+
+    throw error;
+  }
 
   const updatedCampaign = await resolveRoomCampaign(
     db,
     campaign.id,
-    campaign.hermes_session_id
+    campaign.session_id
   );
 
   return buildRoomSnapshot(db, updatedCampaign ?? campaign);
@@ -4372,6 +6784,7 @@ export async function submitSoloTurnForUser(
     rollRequestId?: string;
     rollResult?: DiceRollResult;
     clientMessageId?: string;
+    model?: AiModelId;
     rollSubmissions?: DiceRollSubmission[];
   }
 ): Promise<RoomSnapshot> {
@@ -4434,6 +6847,42 @@ export async function submitSoloTurnForUser(
       throw createStatusError(400, "A player message is required.");
     }
 
+    if (!isRollSubmission) {
+      const mechanicsState = resolveMechanicsState(campaign, [player]);
+
+      try {
+        assertMechanicsActionAllowed({
+          state: mechanicsState,
+          player,
+          message: trimmedContent
+        });
+      } catch (error) {
+        throw createStatusError(
+          400,
+          error instanceof Error ? error.message : "That action is not allowed."
+        );
+      }
+
+      const nextMechanicsState = applyAcceptedCast({
+        state: mechanicsState,
+        player,
+        message: trimmedContent,
+        updatedAt: nowIso()
+      });
+
+      if (nextMechanicsState !== mechanicsState) {
+        await writeMechanicsStateForLockedCampaign(
+          client,
+          campaign.id,
+          nextMechanicsState
+        );
+        campaign.metadata = {
+          ...eventPayload(campaign.metadata),
+          mechanicsState: nextMechanicsState
+        };
+      }
+    }
+
     const submissionResult = await client.query<{ content: string }>(
       `
         insert into submissions (campaign_id, turn_id, player_id, content)
@@ -4454,6 +6903,10 @@ export async function submitSoloTurnForUser(
       await setPendingRollRequests(
         client,
         campaign.id,
+        rollSubmission.remainingRollRequests
+      );
+      campaign.metadata = metadataWithPendingRollRequests(
+        campaign.metadata,
         rollSubmission.remainingRollRequests
       );
     }
@@ -4507,33 +6960,41 @@ export async function submitSoloTurnForUser(
     const updatedCampaign = await resolveRoomCampaign(
       db,
       soloState.campaign.id,
-      soloState.campaign.hermes_session_id
+      soloState.campaign.session_id
     );
 
     return buildRoomSnapshot(db, updatedCampaign ?? soloState.campaign);
   }
 
   try {
-    const currentAction = formatSoloTurn(soloState.player, soloState.content);
+    const currentAction = formatSoloTurn(
+      soloState.campaign,
+      soloState.player,
+      soloState.content
+    );
     const reply = await askDungeonMaster(
       db,
       runtime,
       soloState.campaign,
       currentAction,
-      dungeonMasterInstructions,
+      dungeonMasterContractInstructions,
       true,
       soloState.turn.id,
-      soloState.content
+      soloState.content,
+      undefined,
+      input.model ? { model: input.model } : undefined
     );
     const resolvedTurn = await finishResolvedTurn(db, {
       campaignId: soloState.campaign.id,
       turnId: soloState.turn.id,
-      hermesMessageId: reply.id,
+      modelMessageId: reply.id,
       reply: reply.content,
       eventType: "turn_resolved",
       pendingRollRequests: reply.rollRequests,
       inputTargets: reply.inputTargets,
       inputPolicy: reply.inputPolicy,
+      nextInputNeeded: reply.nextInputNeeded,
+      resolutionMode: reply.resolutionMode,
       aiDebug: reply.debug
     });
 
@@ -4564,7 +7025,7 @@ export async function submitSoloTurnForUser(
   const updatedCampaign = await resolveRoomCampaign(
     db,
     soloState.campaign.id,
-    soloState.campaign.hermes_session_id
+    soloState.campaign.session_id
   );
 
   return buildRoomSnapshot(db, updatedCampaign ?? soloState.campaign);
@@ -4602,36 +7063,67 @@ export async function regenerateCampaignResponseForUser(
 
     await assertCampaignAccessForUser(client, campaign, input.userId);
 
-    const latestVisibleEvent = (
+    const targetEvent = (
       await client.query<EventRow>(
         `
           select id, type, payload, created_at
           from campaign_events
           where campaign_id = $1
             and type in ('turn_submitted', 'turn_resolved', 'adventure_begun')
+            and payload->>'messageId' = $2
+            and payload->>'role' = 'dm'
           order by created_at desc
           limit 1
         `,
-        [campaign.id]
+        [campaign.id, input.messageId]
       )
     ).rows[0];
-    const latestPayload = eventPayload(latestVisibleEvent?.payload);
+    const targetPayload = eventPayload(targetEvent?.payload);
 
     if (
-      !latestVisibleEvent ||
-      (latestVisibleEvent.type !== "turn_resolved" &&
-        latestVisibleEvent.type !== "adventure_begun") ||
-      latestPayload.role !== "dm" ||
-      latestPayload.messageId !== input.messageId
+      !targetEvent ||
+      (targetEvent.type !== "turn_resolved" &&
+        targetEvent.type !== "adventure_begun")
     ) {
-      throw createStatusError(409, "Only the latest DM response can be regenerated.");
+      throw createStatusError(409, "That DM response cannot be regenerated.");
     }
 
-    const turnId = eventPayloadString(latestPayload.turnId);
+    const turnId = eventPayloadString(targetPayload.turnId);
 
     if (!turnId) {
       throw createStatusError(409, "That response is missing turn information.");
     }
+
+    await client.query(
+      `
+        update turns
+        set status = 'cancelled', updated_at = now()
+        where campaign_id = $1
+          and id <> $2
+          and created_at > $3
+          and status in ('collecting', 'resolving', 'resolved', 'failed')
+      `,
+      [campaign.id, turnId, targetEvent.created_at]
+    );
+    await client.query(
+      `
+        update submissions
+        set status = 'cancelled', updated_at = now()
+        where campaign_id = $1
+          and turn_id <> $2
+          and created_at > $3
+          and status in ('submitted', 'included_in_turn')
+      `,
+      [campaign.id, turnId, targetEvent.created_at]
+    );
+    await client.query(
+      `
+        delete from campaign_events
+        where campaign_id = $1
+          and created_at > $2
+      `,
+      [campaign.id, targetEvent.created_at]
+    );
 
     const resolvingTurn = (
       await client.query<TurnRow>(
@@ -4660,7 +7152,7 @@ export async function regenerateCampaignResponseForUser(
       [turnId]
     );
     await client.query("delete from campaign_events where id = $1", [
-      latestVisibleEvent.id
+      targetEvent.id
     ]);
     await logCampaignEvent(client, campaign.id, "turn_resolving", {
       turnId,
@@ -4668,7 +7160,13 @@ export async function regenerateCampaignResponseForUser(
       replacedMessageId: input.messageId
     });
     await setPendingRollRequests(client, campaign.id, []);
-    await setPendingInputTargets(client, campaign.id, [], "all_players");
+    await setPendingInputTargets(
+      client,
+      campaign.id,
+      [],
+      "all_players",
+      "player_actions"
+    );
 
     const submissions = await client.query<
       SubmissionRow & { character_sheet: string | null; slot: number | null }
@@ -4711,13 +7209,13 @@ export async function regenerateCampaignResponseForUser(
     };
 
     const eventType: "adventure_begun" | "turn_resolved" =
-      latestVisibleEvent.type === "adventure_begun"
+      targetEvent.type === "adventure_begun"
         ? "adventure_begun"
         : "turn_resolved";
 
     return {
       campaign,
-      currentAction: formatSoloTurn(player, first.content),
+      currentAction: formatSoloTurn(campaign, player, first.content),
       currentPlayerAction: first.content,
       eventType,
       turn: resolvingTurn
@@ -4730,7 +7228,7 @@ export async function regenerateCampaignResponseForUser(
       runtime,
       regenerationState.campaign,
       regenerationState.currentAction,
-      dungeonMasterInstructions,
+      dungeonMasterContractInstructions,
       true,
       regenerationState.turn.id,
       regenerationState.currentPlayerAction
@@ -4738,12 +7236,14 @@ export async function regenerateCampaignResponseForUser(
     const resolvedTurn = await finishResolvedTurn(db, {
       campaignId: regenerationState.campaign.id,
       turnId: regenerationState.turn.id,
-      hermesMessageId: reply.id,
+      modelMessageId: reply.id,
       reply: reply.content,
       eventType: regenerationState.eventType,
       pendingRollRequests: reply.rollRequests,
       inputTargets: reply.inputTargets,
       inputPolicy: reply.inputPolicy,
+      nextInputNeeded: reply.nextInputNeeded,
+      resolutionMode: reply.resolutionMode,
       setting: reply.setting,
       aiDebug: reply.debug
     });
@@ -4775,7 +7275,7 @@ export async function regenerateCampaignResponseForUser(
   const updatedCampaign = await resolveRoomCampaign(
     db,
     regenerationState.campaign.id,
-    regenerationState.campaign.hermes_session_id
+    regenerationState.campaign.session_id
   );
 
   return buildRoomSnapshot(db, updatedCampaign ?? regenerationState.campaign);
@@ -4808,23 +7308,34 @@ export async function listCampaignDebugTracesForUser(
   await assertCampaignAccessForUser(db, campaign, input.userId);
 
   const limit = Math.max(1, Math.min(input.limit ?? 50, 200));
-  const traceResult = await db.query<EventRow>(
+  const traceResult = await db.query<{
+    id: string;
+    trace_id: string;
+    turn_id: string | null;
+    phase: string;
+    elapsed_ms: number | null;
+    payload: unknown;
+    created_at: Date;
+  }>(
     `
-      select id, type, payload, created_at
-      from campaign_events
+      select id, trace_id, turn_id, phase, elapsed_ms, payload, created_at
+      from dm_turn_traces
       where campaign_id = $1
-        and type = 'turn_debug_trace'
-        and ($2::text is null or payload->>'traceId' = $2)
+        and ($2::text is null or trace_id = $2)
       order by created_at desc
       limit $3
     `,
     [input.campaignId, input.traceId ?? null, limit]
   );
 
-  return traceResult.rows.map((event) => ({
-    id: event.id,
-    createdAt: toIso(event.created_at),
-    ...eventPayload(event.payload)
+  return traceResult.rows.map((trace) => ({
+    id: trace.id,
+    traceId: trace.trace_id,
+    turnId: trace.turn_id ?? undefined,
+    phase: trace.phase,
+    elapsedMs: trace.elapsed_ms ?? undefined,
+    createdAt: toIso(trace.created_at),
+    ...eventPayload(trace.payload)
   }));
 }
 

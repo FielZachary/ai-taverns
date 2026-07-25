@@ -4,6 +4,7 @@ import type {
   FormEvent
 } from "react";
 import {
+  beforeEach,
   describe,
   expect,
   it,
@@ -50,6 +51,49 @@ function renderPlayerInput(
 }
 
 describe("PlayerInput", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("opens model settings and persists the selected model", () => {
+    renderPlayerInput();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /ai model: deepseek v4 flash/i })
+    );
+
+    expect(screen.getByRole("dialog", { name: /ai model/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Qwen 3.7 Flash" }));
+
+    expect(localStorage.getItem("ai-dnd.aiModel")).toBe("qwen-3-7-flash");
+    expect(screen.queryByRole("dialog", { name: /ai model/i })).not.toBeInTheDocument();
+  });
+
+  it("does not open model settings when model selection is disabled", () => {
+    renderPlayerInput({ canSelectAiModel: false });
+
+    const modelButton = screen.getByRole("button", {
+      name: /ai model: deepseek v4 flash/i
+    });
+
+    expect(modelButton).toBeDisabled();
+
+    fireEvent.click(modelButton);
+
+    expect(screen.queryByRole("dialog", { name: /ai model/i })).not.toBeInTheDocument();
+  });
+
+  it("ignores stale provider-level model picker values", () => {
+    localStorage.setItem("ai-dnd.aiModel", "deepseek-reasoner");
+
+    renderPlayerInput();
+
+    expect(
+      screen.getByRole("button", { name: /ai model: deepseek v4 flash/i })
+    ).toBeInTheDocument();
+  });
+
   it("shows validation messages and locks submitted turn input", () => {
     const props = renderPlayerInput({
       isSubmitted: true,
@@ -137,7 +181,7 @@ describe("PlayerInput", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /roll 1d20 \+ 2d6/i }))
-        .toHaveTextContent("3 dice");
+        .toHaveTextContent("Dice");
     });
 
     expect(screen.getByText("Roll to continue")).toBeInTheDocument();

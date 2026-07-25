@@ -1,5 +1,7 @@
 import { z } from "zod";
+import { AiModelIdSchema } from "./ai-models.js";
 import { CampaignModeSchema } from "./campaigns.js";
+import { MechanicsSeedSchema } from "./mechanics.js";
 
 export const DiceRollResultSchema = z.object({
   rolls: z.array(z.number().int().positive()),
@@ -25,8 +27,15 @@ export const DiceRollSubmissionSchema = z.object({
   clientMessageId: z.string().optional()
 });
 
+export const NextInputNeededSchema = z.enum([
+  "player_actions",
+  "dice_results",
+  "clarification"
+]);
+
 export const RoomPlayerSchema = z.object({
   id: z.string().min(1),
+  actorKey: z.string().min(1),
   slot: z.number().int().nonnegative(),
   username: z.string(),
   characterName: z.string(),
@@ -57,8 +66,17 @@ export const RoomSnapshotSchema = z.object({
   hasBegun: z.boolean(),
   pendingRollRequest: DiceRollRequestSchema.nullable(),
   pendingRollRequests: z.array(DiceRollRequestSchema),
+  nextInputNeeded: NextInputNeededSchema,
   inputTargets: z.array(z.string()),
   inputPolicy: z.enum(["all_players", "only_targeted_players"]),
+  combat: z.object({
+    active: z.boolean(),
+    round: z.number().int().nonnegative(),
+    turnOwner: z.string().nullable(),
+    turnOwnerPlayerId: z.string().nullable(),
+    turnOwnerCharacterName: z.string().nullable(),
+    initiativeOrder: z.array(z.string())
+  }),
   updatedAt: z.string().datetime()
 });
 
@@ -73,7 +91,8 @@ export const RoomPlayerUpdateRequestSchema = z.object({
   playerId: z.string().optional(),
   username: z.string().optional(),
   characterName: z.string().optional(),
-  characterSheet: z.string().optional()
+  characterSheet: z.string().optional(),
+  mechanicsSeed: MechanicsSeedSchema.optional()
 });
 
 export const RoomBeginRequestSchema = z.object({
@@ -90,6 +109,7 @@ export const RoomSubmitRequestSchema = z.object({
   rollRequestId: z.string().optional(),
   rollResult: DiceRollResultSchema.optional(),
   clientMessageId: z.string().optional(),
+  model: AiModelIdSchema.optional(),
   rollSubmissions: z.array(DiceRollSubmissionSchema).optional()
 });
 

@@ -11,6 +11,17 @@ export type AiDebugInfo = {
   rawResponse: string;
   providerResponseId?: string;
   model?: string;
+  temperature?: number;
+  combatState?: unknown;
+  combatAdjudication?: unknown;
+  router?: {
+    requestMessages: AiDebugMessage[];
+    rawResponse: string;
+    parsedOutput?: unknown;
+    model?: string;
+    temperature?: number;
+    providerResponseId?: string;
+  };
   providerTimings?: {
     attempt: number;
     requestStartedAt: string;
@@ -48,10 +59,14 @@ export type DiceRollRequest = {
   label: string;
   player?: string;
   modifier?: number;
-  advantageState?: string;
+  advantageState?: "normal" | "advantage" | "disadvantage";
 };
 
 export type InputPolicy = "all_players" | "only_targeted_players";
+export type NextInputNeeded =
+  | "player_actions"
+  | "dice_results"
+  | "clarification";
 
 export type DiceRollResult = {
   rolls: number[];
@@ -64,16 +79,17 @@ export type DiceRollSubmission = {
   clientMessageId?: string;
 };
 
-export type HermesTurnRequest = {
+export type DmProviderTurnRequest = {
   message: string;
   history: GameMessage[];
   sessionId?: string;
 };
 
-export type HermesTurnResponse = {
+export type DmProviderTurnResponse = {
   message: GameMessage;
   pendingRollRequest?: DiceRollRequest | null;
   pendingRollRequests?: DiceRollRequest[];
+  nextInputNeeded?: NextInputNeeded;
   inputTargets?: string[];
   inputPolicy?: InputPolicy;
 };

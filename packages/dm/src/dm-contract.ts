@@ -1,5 +1,4 @@
 import type { DiceRollRequest, InputPolicy } from "./game-types.js";
-export { dungeonMasterInstructions } from "./dm-prompt-layers.js";
 
 export const internalOpeningRequestPrefix = "AI_DND_INTERNAL_OPENING_REQUEST";
 export const internalPrepRequestPrefix = "AI_DND_INTERNAL_PREP_REQUEST";
@@ -36,11 +35,11 @@ export function titleFromSessionId(sessionId: string) {
     .join(" ");
 }
 
-export function isInternalHermesMessage(content: string | undefined) {
+export function isInternalDmProviderMessage(content: string | undefined) {
   return Boolean(content?.trim().startsWith("AI_DND_INTERNAL_"));
 }
 
-export function normalizeHermesContent(content: string | undefined) {
+export function normalizeDmProviderContent(content: string | undefined) {
   const text = content?.trim() ?? "";
 
   if (!text) {
@@ -48,12 +47,12 @@ export function normalizeHermesContent(content: string | undefined) {
   }
 
   try {
-    return parseHermesDmContract(text).publicNarration;
+    return parseDmContract(text).publicNarration;
   } catch {
-    // Older Hermes messages and user messages are plain text.
+    // Older provider messages and user messages are plain text.
   }
 
-  const replyMarkers = ["Dungeon Master", "Hermes"];
+  const replyMarkers = ["Dungeon Master"];
   const visibleReplyMarker = replyMarkers
     .map((marker) => ({
       marker,
@@ -132,7 +131,7 @@ function parseJsonObject(text: string) {
   }
 }
 
-export type HermesDmContractParseOptions = {
+export type DmContractParseOptions = {
   currentAction?: string;
   currentPlayerAction?: string;
   allowResolvedCombatWithoutRolls?: boolean;
@@ -142,10 +141,12 @@ function previewText(value: string, maxLength = 800) {
   return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
 }
 
-export function debugHermesDmContractFailure(
+export function debugDmContractFailure(
   content: string | undefined,
-  options?: HermesDmContractParseOptions
+  options?: DmContractParseOptions
 ) {
+  void options;
+
   const parsed = parseJsonObject(content?.trim() ?? "");
   const publicNarration = stringValue(parsed?.public_narration);
   const nextInputNeeded = stringValue(parsed?.next_input_needed);
@@ -164,12 +165,9 @@ export function debugHermesDmContractFailure(
     rollRequestsCount: rollRequests.length,
     rollRequestLabels: rollRequests.map((request) => request.label),
     mentionsPlayerFacingRoll: mentionsPlayerFacingRoll(publicNarration),
-    currentActionRequiresCombatRoll: currentActionRequiresCombatRoll(
-      combatRollActionText(options)
-    ),
-    resolvesCombatOutcome: resolvesCombatOutcome(publicNarration),
-    resolvesRequiredCombatRollWithoutRolls:
-      resolvesRequiredCombatRollWithoutRolls(publicNarration, rollRequests, options)
+    currentActionRequiresCombatRoll: false,
+    resolvesCombatOutcome: false,
+    resolvesRequiredCombatRollWithoutRolls: false
   };
 }
 
@@ -179,40 +177,38 @@ function mentionsPlayerFacingRoll(text: string) {
   );
 }
 
-function currentActionIsRollSubmission(currentAction: string | undefined) {
-  return /\bI rolled\b/i.test(currentAction ?? "");
-}
+function findAttackRollAcContradiction(text: string) {
+  const patterns = [
+    /\b(?:spell\s+)?attack roll\s*:?\s*(?:\d*d?\d+\s*(?:[+-]\s*\d+)?\s*=\s*)?(\d+)\s*(?:vs|against)\s*AC\s*(\d+)\s*[-—:;,]?\s*(hit|hits|miss|misses)\b/gi,
+    /\battack roll\s*:?\s*(\d+)\s*(?:vs|against)\s*AC\s*(\d+)\s*[-—:;,]?\s*(hit|hits|miss|misses)\b/gi,
+    /\brolls?\s+(?:a\s+)?(\d+)\s+(?:to hit|on (?:the )?attack)[^.?!;]*(?:vs|against)\s*(?:AC\s*)?(\d+)[^.?!;]*\b(hit|hits|miss|misses)\b/gi,
+    /\brolls?\s+(?:a\s+)?(\d+)[^.?!;]*(?:vs|against)\s*(?:AC\s*)?(\d+)[^.?!;]*\b(hit|hits|miss|misses)\b/gi
+  ];
 
-function currentActionRequiresCombatRoll(currentAction: string | undefined) {
-  if (!currentAction || currentActionIsRollSubmission(currentAction)) {
-    return false;
+  for (const pattern of patterns) {
+    for (const match of text.matchAll(pattern)) {
+      const attackTotal = Number.parseInt(match[1] ?? "", 10);
+      const armorClass = Number.parseInt(match[2] ?? "", 10);
+      const outcome = (match[3] ?? "").toLowerCase();
+
+      if (!Number.isFinite(attackTotal) || !Number.isFinite(armorClass)) {
+        continue;
+      }
+
+      const saysHit = outcome.startsWith("hit");
+      const shouldHit = attackTotal >= armorClass;
+
+      if (saysHit !== shouldHit) {
+        return {
+          attackTotal,
+          armorClass,
+          outcome
+        };
+      }
+    }
   }
 
-  return /\b(attack|attacks|strike|strikes|stab|stabs|shoot|shoots|slash|slashes|thrust|thrusts|swing|swings|loose|looses|fireball|fire bolt|magic missile|cast|casts)\b/i.test(
-    currentAction
-  );
-}
-
-function combatRollActionText(options: HermesDmContractParseOptions | undefined) {
-  return options?.currentPlayerAction ?? options?.currentAction;
-}
-
-function resolvesCombatOutcome(publicNarration: string) {
-  return /\b(hit|hits|struck|stabbed|wound|wounds|wounded|damage|damages|damaged|detonate|detonates|detonated|engulf|engulfs|engulfed|burn|burns|burned|blackened|split|destroy|destroys|destroyed|kill|kills|killed|dead|dies|death|goes still|convulses)\b/i.test(
-    publicNarration
-  );
-}
-
-function resolvesRequiredCombatRollWithoutRolls(
-  publicNarration: string,
-  rollRequests: DiceRollRequest[],
-  options: HermesDmContractParseOptions | undefined
-) {
-  return (
-    rollRequests.length === 0 &&
-    currentActionRequiresCombatRoll(combatRollActionText(options)) &&
-    resolvesCombatOutcome(publicNarration)
-  );
+  return null;
 }
 
 function escapeRegExp(value: string) {
@@ -256,6 +252,70 @@ function advantageText(advantageState: string | undefined) {
   }
 
   return "";
+}
+
+function normalizeAdvantageState(value: string) {
+  const normalized = value.trim().toLowerCase();
+
+  return normalized === "normal" ||
+    normalized === "advantage" ||
+    normalized === "disadvantage"
+    ? normalized
+    : "";
+}
+
+function normalizeDiceAndModifier(dice: string, modifier: number | undefined) {
+  const match = dice.trim().match(/^(\d*d(?:4|6|8|10|12|20))\s*([+-])\s*(\d+)$/i);
+
+  if (!match) {
+    return { dice, modifier };
+  }
+
+  const diceModifier =
+    (match[2] === "-" ? -1 : 1) * Number.parseInt(match[3] ?? "0", 10);
+  const combinedModifier = (modifier ?? 0) + diceModifier;
+
+  return {
+    dice: match[1]?.toLowerCase() ?? dice,
+    modifier: combinedModifier === 0 ? undefined : combinedModifier
+  };
+}
+
+function titleCaseIdentifier(value: string) {
+  return value
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function inferredRollRequestPlayer(
+  label: string,
+  id = "",
+  publicNarration = ""
+) {
+  const initiativeMatch = label.match(/^initiative\s*\(([^)]+)\)$/i);
+  const initiativeTarget = initiativeMatch?.[1]?.trim();
+
+  if (initiativeTarget) {
+    return initiativeTarget;
+  }
+
+  const namedRollMatch = publicNarration.match(
+    /\bmake\s+(?:a|an)\s+[^.?!]*(?:saving throw|save|check)\s*,\s*([A-Z][A-Za-z0-9' -]{0,40})(?=[.?!\n]|$)/i
+  );
+  const namedRollTarget = namedRollMatch?.[1]?.trim();
+
+  if (namedRollTarget) {
+    return namedRollTarget;
+  }
+
+  const rollIdTargetMatch = id.match(
+    /^([a-z][a-z0-9_-]*?)-(?:strength|dexterity|constitution|intelligence|wisdom|charisma|athletics|acrobatics|sleight|stealth|arcana|history|investigation|nature|religion|animal|insight|medicine|perception|survival|deception|intimidation|performance|persuasion|initiative|death|concentration|saving|save|check)\b/i
+  );
+  const rollIdTarget = rollIdTargetMatch?.[1]?.trim();
+
+  return rollIdTarget ? titleCaseIdentifier(rollIdTarget) : "";
 }
 
 function formatRollInstruction(request: DiceRollRequest, index: number) {
@@ -345,7 +405,10 @@ function narrationWithRollInstructions(
   return `${normalizedNarration}\n\n${rollInstructionsFromRequests(rollRequests)}`;
 }
 
-export function normalizeRollRequest(value: unknown): DiceRollRequest | null {
+export function normalizeRollRequest(
+  value: unknown,
+  publicNarration = ""
+): DiceRollRequest | null {
   const rawRequest = Array.isArray(value) ? value[0] : value;
   const request = asObject(rawRequest);
 
@@ -353,21 +416,27 @@ export function normalizeRollRequest(value: unknown): DiceRollRequest | null {
     return null;
   }
 
-  const dice = stringValue(request.dice) || "1d20";
+  const rawDice = stringValue(request.dice) || "1d20";
   const label =
     stringValue(request.label) ||
     stringValue(request.check) ||
     stringValue(request.reason) ||
     "Required roll";
 
-  const player = stringValue(request.player);
-  const modifier = numberValue(request.modifier);
+  const id = stringValue(request.id) || crypto.randomUUID();
+  const player =
+    stringValue(request.player) ||
+    inferredRollRequestPlayer(label, id, publicNarration);
+  const rawModifier = numberValue(request.modifier);
+  const { dice, modifier } = normalizeDiceAndModifier(rawDice, rawModifier);
   const advantageState =
-    stringValue(request.advantageState) ||
-    stringValue(request.advantage_state);
+    normalizeAdvantageState(
+      stringValue(request.advantageState) ||
+        stringValue(request.advantage_state)
+    );
 
   return {
-    id: stringValue(request.id) || crypto.randomUUID(),
+    id,
     dice,
     label,
     ...(player ? { player } : {}),
@@ -376,23 +445,66 @@ export function normalizeRollRequest(value: unknown): DiceRollRequest | null {
   };
 }
 
-export function normalizeRollRequests(value: unknown): DiceRollRequest[] {
+export function normalizeRollRequests(
+  value: unknown,
+  publicNarration = ""
+): DiceRollRequest[] {
   if (Array.isArray(value)) {
     return value
-      .map((request) => normalizeRollRequest(request))
+      .map((request) => normalizeRollRequest(request, publicNarration))
       .filter((request): request is DiceRollRequest => Boolean(request));
   }
 
-  const request = normalizeRollRequest(value);
+  const request = normalizeRollRequest(value, publicNarration);
   return request ? [request] : [];
 }
 
-export type HermesDmContractResponse = {
+export type RollRequestDiagnostic = {
+  severity: "error";
+  code: "unsupported_dice_notation";
+  id?: string;
+  label: string;
+  dice: string;
+  message: string;
+};
+
+export function rollRequestDiagnostics(
+  requests: Array<
+    Pick<DiceRollRequest, "dice" | "label"> & { id?: string | undefined }
+  >
+): RollRequestDiagnostic[] {
+  return requests.flatMap((request) => {
+    if (/^\d*d(?:4|6|8|10|12|20)$/i.test(request.dice.trim())) {
+      return [];
+    }
+
+    return [
+      {
+        severity: "error",
+        code: "unsupported_dice_notation",
+        ...(request.id ? { id: request.id } : {}),
+        label: request.label,
+        dice: request.dice,
+        message:
+          "Roll request dice must be bare supported dice notation so the UI can queue it."
+      }
+    ];
+  });
+}
+
+export type DmNextInputNeeded =
+  | "player_actions"
+  | "dice_results"
+  | "clarification";
+
+export type DmContractResponse = {
   publicNarration: string;
+  resolutionMode: "needs_dice" | "resolved_without_dice";
   rollRequests: DiceRollRequest[];
-  nextInputNeeded: "player_actions" | "dice_results";
+  nextInputNeeded: DmNextInputNeeded;
   inputTargets: string[];
   inputPolicy: InputPolicy;
+  mechanicsStateUpdate?: Record<string, unknown>;
   setting?: {
     displayLocation?: string;
     worldName?: string;
@@ -400,10 +512,23 @@ export type HermesDmContractResponse = {
   };
 };
 
-export function parseHermesDmContract(
+export type DmContractRecovery = {
+  contract: DmContractResponse;
+  report: {
+    originalNextInputNeeded: string;
+    recoveredNextInputNeeded: DmContractResponse["nextInputNeeded"];
+    originalResolutionMode: string;
+    recoveredResolutionMode: DmContractResponse["resolutionMode"];
+    rollRequestsCount: number;
+  };
+};
+
+export function parseDmContract(
   content: string | undefined,
-  options?: HermesDmContractParseOptions
-): HermesDmContractResponse {
+  options?: DmContractParseOptions
+): DmContractResponse {
+  void options;
+
   const parsed = parseJsonObject(content?.trim() ?? "");
 
   if (!parsed) {
@@ -412,10 +537,9 @@ export function parseHermesDmContract(
 
   let publicNarration = stringValue(parsed.public_narration);
   const nextInputNeeded = stringValue(parsed.next_input_needed);
-  const rawRollRequests = Array.isArray(parsed.roll_requests)
-    ? parsed.roll_requests
-    : [];
-  const rollRequests = normalizeRollRequests(rawRollRequests);
+  const rawResolutionMode = stringValue(
+    parsed.resolution_mode ?? parsed.resolutionMode
+  );
   const inputTargets = stringArray(parsed.input_targets ?? parsed.inputTargets);
   const rawInputPolicy = stringValue(parsed.input_policy ?? parsed.inputPolicy);
   const inputPolicy: InputPolicy =
@@ -423,6 +547,9 @@ export function parseHermesDmContract(
       ? "only_targeted_players"
       : "all_players";
   const setting = asObject(parsed.setting);
+  const mechanicsStateUpdate = asObject(
+    parsed.mechanics_state_update ?? parsed.mechanicsStateUpdate
+  );
   const displayLocation =
     stringValue(setting?.display_location) ||
     stringValue(setting?.displayLocation);
@@ -436,9 +563,15 @@ export function parseHermesDmContract(
     throw new Error("The DM provider response is missing public_narration.");
   }
 
+  const rawRollRequests = Array.isArray(parsed.roll_requests)
+    ? parsed.roll_requests
+    : [];
+  const rollRequests = normalizeRollRequests(rawRollRequests, publicNarration);
+
   if (
     nextInputNeeded !== "player_actions" &&
-    nextInputNeeded !== "dice_results"
+    nextInputNeeded !== "dice_results" &&
+    nextInputNeeded !== "clarification"
   ) {
     throw new Error("The DM provider response has an invalid next_input_needed value.");
   }
@@ -449,18 +582,32 @@ export function parseHermesDmContract(
     );
   }
 
-  if (rollRequests.length === 0 && mentionsPlayerFacingRoll(publicNarration)) {
+  const inferredResolutionMode =
+    rollRequests.length > 0 || nextInputNeeded === "dice_results"
+      ? "needs_dice"
+      : "resolved_without_dice";
+
+  if (
+    rawResolutionMode &&
+    rawResolutionMode !== "needs_dice" &&
+    rawResolutionMode !== "resolved_without_dice"
+  ) {
+    throw new Error("The DM provider response has an invalid resolution_mode value.");
+  }
+
+  const resolutionMode = inferredResolutionMode;
+
+  const attackRollContradiction = findAttackRollAcContradiction(publicNarration);
+
+  if (attackRollContradiction) {
     throw new Error(
-      "The DM provider mentioned a player-facing roll without structured roll_requests."
+      "The DM provider contradicted an attack roll and AC comparison."
     );
   }
 
-  if (
-    !options?.allowResolvedCombatWithoutRolls &&
-    resolvesRequiredCombatRollWithoutRolls(publicNarration, rollRequests, options)
-  ) {
+  if (rollRequests.length === 0 && mentionsPlayerFacingRoll(publicNarration)) {
     throw new Error(
-      "The DM provider resolved a player combat action without structured roll_requests."
+      "The DM provider mentioned a player-facing roll without structured roll_requests."
     );
   }
 
@@ -477,19 +624,100 @@ export function parseHermesDmContract(
 
   return {
     publicNarration,
+    resolutionMode,
     rollRequests,
     nextInputNeeded,
     inputTargets,
     inputPolicy,
+    ...(mechanicsStateUpdate ? { mechanicsStateUpdate } : {}),
     ...(settingValue ? { setting: settingValue } : {})
   };
 }
 
-export function normalizeHermesDmContent(content: string | undefined) {
-  return parseHermesDmContract(content).publicNarration;
+export function recoverDmContractAfterParseFailure(
+  content: string | undefined
+): DmContractRecovery | null {
+  const parsed = parseJsonObject(content?.trim() ?? "");
+
+  if (!parsed) {
+    return null;
+  }
+
+  const publicNarration = stringValue(parsed.public_narration);
+
+  if (!publicNarration) {
+    return null;
+  }
+
+  const rawRollRequests = Array.isArray(parsed.roll_requests)
+    ? parsed.roll_requests
+    : [];
+  const rollRequests = normalizeRollRequests(rawRollRequests, publicNarration);
+  const originalNextInputNeeded = stringValue(parsed.next_input_needed);
+  const originalResolutionMode = stringValue(
+    parsed.resolution_mode ?? parsed.resolutionMode
+  );
+  const nextInputNeeded: DmContractResponse["nextInputNeeded"] =
+    rollRequests.length > 0
+      ? "dice_results"
+      : originalNextInputNeeded === "clarification"
+        ? "clarification"
+        : "player_actions";
+  const resolutionMode: DmContractResponse["resolutionMode"] =
+    nextInputNeeded === "dice_results" ? "needs_dice" : "resolved_without_dice";
+  const inputTargets = stringArray(parsed.input_targets ?? parsed.inputTargets);
+  const rawInputPolicy = stringValue(parsed.input_policy ?? parsed.inputPolicy);
+  const inputPolicy: InputPolicy =
+    rawInputPolicy === "only_targeted_players" && inputTargets.length > 0
+      ? "only_targeted_players"
+      : "all_players";
+  const mechanicsStateUpdate = asObject(
+    parsed.mechanics_state_update ?? parsed.mechanicsStateUpdate
+  );
+  const setting = asObject(parsed.setting);
+  const displayLocation =
+    stringValue(setting?.display_location) ||
+    stringValue(setting?.displayLocation);
+  const worldName =
+    stringValue(setting?.world_name) || stringValue(setting?.worldName);
+  const startingLocation =
+    stringValue(setting?.starting_location) ||
+    stringValue(setting?.startingLocation);
+  const settingValue =
+    displayLocation || worldName || startingLocation
+      ? {
+          displayLocation: displayLocation || startingLocation || worldName,
+          ...(worldName ? { worldName } : {}),
+          ...(startingLocation ? { startingLocation } : {})
+        }
+      : undefined;
+
+  return {
+    contract: {
+      publicNarration: narrationWithRollInstructions(publicNarration, rollRequests),
+      resolutionMode,
+      rollRequests,
+      nextInputNeeded,
+      inputTargets,
+      inputPolicy,
+      ...(mechanicsStateUpdate ? { mechanicsStateUpdate } : {}),
+      ...(settingValue ? { setting: settingValue } : {})
+    },
+    report: {
+      originalNextInputNeeded,
+      recoveredNextInputNeeded: nextInputNeeded,
+      originalResolutionMode,
+      recoveredResolutionMode: resolutionMode,
+      rollRequestsCount: rollRequests.length
+    }
+  };
 }
 
-export function extractHermesRollRequests(value: unknown): DiceRollRequest[] {
+export function normalizeDmContractContent(content: string | undefined) {
+  return parseDmContract(content).publicNarration;
+}
+
+export function extractDmProviderRollRequests(value: unknown): DiceRollRequest[] {
   const data = asObject(value);
 
   if (!data) {
@@ -500,7 +728,7 @@ export function extractHermesRollRequests(value: unknown): DiceRollRequest[] {
 
   if (messageContent) {
     try {
-      const contract = parseHermesDmContract(messageContent);
+      const contract = parseDmContract(messageContent);
       return contract.rollRequests;
     } catch {
       // Fall through to legacy response shapes below.
@@ -527,6 +755,6 @@ export function extractHermesRollRequests(value: unknown): DiceRollRequest[] {
   return [];
 }
 
-export function extractHermesRollRequest(value: unknown): DiceRollRequest | null {
-  return extractHermesRollRequests(value)[0] ?? null;
+export function extractDmProviderRollRequest(value: unknown): DiceRollRequest | null {
+  return extractDmProviderRollRequests(value)[0] ?? null;
 }

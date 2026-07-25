@@ -1,13 +1,15 @@
 import { readdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import pg from "pg";
 
 const { Pool } = pg;
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-const migrationsDir = join(process.cwd(), "infra", "db", "migrations");
+const migrationsDir = join(repoRoot, "infra", "db", "migrations");
 
 async function loadLocalEnv() {
-  const envPath = join(process.cwd(), "apps", "web", ".env.local");
+  const envPath = join(repoRoot, "apps", "web", ".env.local");
 
   try {
     const text = await readFile(envPath, "utf8");

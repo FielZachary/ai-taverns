@@ -86,6 +86,27 @@ describe("MessageLog", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders bold markdown emphasis inside message paragraphs", () => {
+    renderMessageLog({
+      messages: [
+        gameMessage({
+          id: "dm-bold-message",
+          role: "dm",
+          content:
+            "**Attack: 14 vs AC 10 - hit.** The spearpoint drives into Klave."
+        })
+      ]
+    });
+
+    const mechanicText = screen.getByText("Attack: 14 vs AC 10 - hit.");
+
+    expect(mechanicText.tagName).toBe("STRONG");
+    expect(screen.queryByText(/\*\*Attack/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/The spearpoint drives into Klave\./)
+    ).toBeInTheDocument();
+  });
+
   it("renders ask-DM questions and waiting player status details", () => {
     renderMessageLog({
       messages: [
@@ -136,6 +157,25 @@ describe("MessageLog", () => {
 
     expect(screen.getByText("The answer is already arriving.")).toBeInTheDocument();
     expect(screen.queryByText(/reading the runes/i)).not.toBeInTheDocument();
+  });
+
+  it("shows the rune loader inside an empty streaming DM message", () => {
+    render(
+      <MessageLog
+        messages={[
+          gameMessage({
+            id: "streaming-dm",
+            role: "dm",
+            content: ""
+          })
+        ]}
+        isSending={true}
+        hideSendingIndicator={true}
+      />
+    );
+
+    expect(screen.getByText(/reading the runes/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/reading the runes/i)).toHaveLength(1);
   });
 
   it("calls regenerate only for the eligible DM message and disables while busy", () => {
@@ -198,10 +238,71 @@ describe("MessageLog", () => {
     ).toBeDisabled();
   });
 
+  it("calls rewind regeneration for older DM turn messages", () => {
+    const onRegenerateResponse = vi.fn();
+
+    renderMessageLog({
+      messages: [
+        gameMessage({
+          id: "dm-1",
+          role: "dm",
+          content: "The first answer."
+        }),
+        gameMessage({
+          id: "ask-answer",
+          role: "dm",
+          kind: "ask_dm_answer",
+          content: "A side answer."
+        }),
+        gameMessage({
+          id: "dm-2",
+          role: "dm",
+          content: "The second answer."
+        })
+      ],
+      isSending: false,
+      regeneratableMessageId: "dm-2",
+      onRegenerateResponse
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /go back to this response/i
+      })
+    );
+
+    expect(onRegenerateResponse).toHaveBeenCalledWith("dm-1");
+    expect(
+      screen.queryByRole("button", {
+        name: /go back to this response/i
+      })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /regenerate ai response/i })
+    ).toBeInTheDocument();
+  });
+
   it("opens and closes AI debug details for debugged DM messages", () => {
     const debug: AiDebugInfo = {
       model: "deepseek-chat",
       providerResponseId: "response-1",
+      temperature: 0.8,
+      combatState: {
+        combat: {
+          active: true,
+          round: 2,
+          turnOwner: "npc:mara",
+          initiativeOrder: ["player:vayne", "npc:mara"]
+        },
+        actors: {
+          "npc:mara": {
+            characterName: "Mara",
+            currentHp: 33,
+            maxHp: 45,
+            conditions: []
+          }
+        }
+      },
       requestMessages: [
         {
           role: "system",
@@ -232,6 +333,11 @@ describe("MessageLog", () => {
       screen.getByRole("dialog", { name: /ai debug/i })
     ).toBeInTheDocument();
     expect(screen.getByText("deepseek-chat / response-1")).toBeInTheDocument();
+    expect(screen.getByText("Temperature")).toBeInTheDocument();
+    expect(screen.getByText("0.8")).toBeInTheDocument();
+    expect(screen.getByText("Combat State")).toBeInTheDocument();
+    expect(screen.getByText(/"turnOwner": "npc:mara"/)).toBeInTheDocument();
+    expect(screen.getByText(/"currentHp": 33/)).toBeInTheDocument();
     expect(screen.getByText(/# 1\. SYSTEM/)).toBeInTheDocument();
     expect(screen.getByText(debug.rawResponse)).toBeInTheDocument();
 

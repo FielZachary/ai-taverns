@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { after, before } from "node:test";
 import type { FastifyInstance } from "fastify";
 import { AuthPasswordlessStartResponseSchema } from "@ai-dnd/contracts";
+import type { DungeonMasterRuntime } from "@ai-dnd/db";
 import { buildApp } from "../app.js";
 import { loadConfig } from "../config.js";
 
@@ -10,8 +11,11 @@ export let database: FakeDatabase;
 let providerInputs: {
   message: string;
   instructions: string;
+  currentPlayerAction?: string;
   history: { role: string; content: string }[];
 }[] = [];
+type AskProvider = DungeonMasterRuntime["askProvider"];
+let providerOverride: AskProvider | undefined;
 
 type QueryResult<T> = {
   rows: T[];
@@ -25,6 +29,10 @@ type QueryFn = <T = unknown>(
 export type DebugFields = {
   model?: unknown;
   rawResponse?: unknown;
+  temperature?: unknown;
+  combatState?: unknown;
+  combatAdjudication?: unknown;
+  router?: unknown;
 };
 
 type ConnectFn = () => Promise<{
@@ -61,7 +69,7 @@ type SessionRecord = {
 
 type CampaignRecord = {
   id: string;
-  hermes_session_id: string;
+  session_id: string;
   mode: "single_player" | "multiplayer";
   title: string;
   status: "active" | "archived" | "deleted";
@@ -102,10 +110,34 @@ type JoinCodeRecord = {
   disabled_at: Date | null;
 };
 
+type CampaignInviteRecord = {
+  id: string;
+  campaign_id: string;
+  token_hash: string;
+  enabled: boolean;
+  max_uses: number | null;
+  use_count: number;
+  expires_at: Date | null;
+  created_by_user_id: string;
+  created_at: Date;
+  disabled_at: Date | null;
+  disabled_by_user_id: string | null;
+};
+
+type CampaignInviteUseRecord = {
+  id: string;
+  invite_id: string;
+  campaign_id: string;
+  joined_user_id: string;
+  player_id: string;
+  used_at: Date;
+};
+
 type TurnRecord = {
   id: string;
   campaign_id: string;
   status: "collecting" | "resolving" | "resolved" | "failed" | "cancelled";
+  error?: string | null;
   created_at: Date;
   updated_at: Date;
 };
@@ -127,6 +159,29 @@ type CampaignEventRecord = {
   created_at: Date;
 };
 
+type ContextChunkRecord = {
+  campaign_id: string;
+  context_key: string;
+  category: string;
+  title: string;
+  visibility: "player_safe" | "dm_only";
+  priority: number;
+  body_markdown: string;
+  archived_at: Date | null;
+  updated_at: Date;
+};
+
+type DmTurnTraceRecord = {
+  id: string;
+  campaign_id: string;
+  trace_id: string;
+  turn_id: string | null;
+  phase: string;
+  elapsed_ms: number | null;
+  payload: unknown;
+  created_at: Date;
+};
+
 class FakeDatabase {
   loginTokens: LoginTokenRecord[] = [];
   users: UserRecord[] = [];
@@ -134,7 +189,11 @@ class FakeDatabase {
   campaigns: CampaignRecord[] = [];
   players: PlayerRecord[] = [];
   joinCodes: JoinCodeRecord[] = [];
+  campaignInvites: CampaignInviteRecord[] = [];
+  campaignInviteUses: CampaignInviteUseRecord[] = [];
   campaignEvents: CampaignEventRecord[] = [];
+  contextChunks: ContextChunkRecord[] = [];
+  dmTurnTraces: DmTurnTraceRecord[] = [];
   turns: TurnRecord[] = [];
   submissions: SubmissionRecord[] = [];
   nextId = 1;
@@ -142,7 +201,13 @@ class FakeDatabase {
   query: QueryFn = async <T>(sql: string, values: unknown[] = []) => {
     const normalizedSql = sql.replace(/\s+/g, " ").trim();
 
-    if (normalizedSql === "begin" || normalizedSql === "commit") {
+    if (
+      normalizedSql === "begin" ||
+      normalizedSql === "commit" ||
+      normalizedSql.startsWith("savepoint ") ||
+      normalizedSql.startsWith("rollback to savepoint ") ||
+      normalizedSql.startsWith("release savepoint ")
+    ) {
       return { rows: [] as T[] };
     }
 
@@ -285,7 +350,7 @@ class FakeDatabase {
       const sessionId = values[1] as string;
       const campaign = this.campaigns.find(
         (candidate) =>
-          (candidate.id === roomId || candidate.hermes_session_id === sessionId) &&
+          (candidate.id === roomId || candidate.session_id === sessionId) &&
           candidate.status !== "deleted"
       );
 
@@ -294,15 +359,15 @@ class FakeDatabase {
 
     if (
       normalizedSql.startsWith(
-        "select * from campaigns where (hermes_session_id = $1"
+        "select * from campaigns where (session_id = $1"
       )
     ) {
       const roomId = values[0] as string;
       const sessionId = values[1] as string;
       const campaign = this.campaigns.find(
         (candidate) =>
-          (candidate.hermes_session_id === roomId ||
-            candidate.hermes_session_id === sessionId) &&
+          (candidate.session_id === roomId ||
+            candidate.session_id === sessionId) &&
           candidate.status !== "deleted"
       );
 
@@ -320,10 +385,17 @@ class FakeDatabase {
     if (
       normalizedSql ===
       "select * from campaigns where id = $1 and status = 'active' limit 1"
+      || normalizedSql ===
+      "select * from campaigns where id = $1 and status = 'active' limit 1 for update"
+      || normalizedSql ===
+      "select * from campaigns where id = $1 and status = 'active' and mode = 'multiplayer' limit 1"
     ) {
       const campaign = this.campaigns.find(
         (candidate) =>
-          candidate.id === values[0] && candidate.status === "active"
+          candidate.id === values[0] &&
+          candidate.status === "active" &&
+          (!normalizedSql.includes("mode = 'multiplayer'") ||
+            candidate.mode === "multiplayer")
       );
 
       return { rows: campaign ? ([campaign] as T[]) : ([] as T[]) };
@@ -332,6 +404,8 @@ class FakeDatabase {
     if (
       normalizedSql ===
       "select * from campaigns where id = $1 and status <> 'deleted' limit 1"
+      || normalizedSql ===
+      "select * from campaigns where id = $1 and status <> 'deleted' limit 1 for update"
     ) {
       const campaign = this.campaigns.find(
         (candidate) =>
@@ -382,7 +456,10 @@ class FakeDatabase {
       return { rows: [] as T[] };
     }
 
-    if (normalizedSql.startsWith("select campaigns.*, display_player.character_name")) {
+    if (
+      normalizedSql.startsWith("select campaigns.*,") &&
+      normalizedSql.includes("display_player.character_name")
+    ) {
       if (normalizedSql.includes("where campaigns.id = $1")) {
         const campaignId = values[0] as string;
         const userId = values[1] as string;
@@ -460,23 +537,23 @@ class FakeDatabase {
 
     if (normalizedSql.startsWith("insert into campaigns")) {
       const now = new Date();
-      const isHermesCompatibilityInsert = !normalizedSql.includes("metadata");
+      const isLegacySessionInsert = !normalizedSql.includes("metadata");
       const record: CampaignRecord = {
         id: `00000000-0000-4000-8000-${String(this.nextId++).padStart(12, "0")}`,
-        hermes_session_id: values[0] as string,
+        session_id: values[0] as string,
         title: values[1] as string,
-        mode: (isHermesCompatibilityInsert ? values[4] : values[2]) as
+        mode: (isLegacySessionInsert ? values[4] : values[2]) as
           | "single_player"
           | "multiplayer",
         status: "active",
         has_begun: false,
-        owner_client_id: (isHermesCompatibilityInsert ? values[2] : values[3]) as
+        owner_client_id: (isLegacySessionInsert ? values[2] : values[3]) as
           | string
           | null,
-        owner_user_id: (isHermesCompatibilityInsert ? values[3] : values[4]) as
+        owner_user_id: (isLegacySessionInsert ? values[3] : values[4]) as
           | string
           | null,
-        metadata: isHermesCompatibilityInsert
+        metadata: isLegacySessionInsert
           ? {}
           : (JSON.parse(values[5] as string) as unknown),
         created_at: now,
@@ -569,12 +646,49 @@ class FakeDatabase {
       return { rows: [turn as T] };
     }
 
+    if (normalizedSql.startsWith("update turns set status = 'cancelled'")) {
+      const campaignId = values[0] as string;
+      const turnId = values[1] as string;
+      const createdAt = values[2] as Date;
+
+      for (const turn of this.turns) {
+        if (
+          turn.campaign_id === campaignId &&
+          turn.id !== turnId &&
+          turn.created_at > createdAt &&
+          (turn.status === "collecting" ||
+            turn.status === "resolving" ||
+            turn.status === "resolved" ||
+            turn.status === "failed")
+        ) {
+          turn.status = "cancelled";
+          turn.updated_at = new Date();
+        }
+      }
+
+      return { rows: [] as T[] };
+    }
+
     if (normalizedSql.startsWith("update turns set status = 'resolved'")) {
       const turnId = values[0] as string;
       const turn = this.turns.find((candidate) => candidate.id === turnId);
 
       if (turn) {
         turn.status = "resolved";
+        turn.updated_at = new Date();
+      }
+
+      return { rows: [] as T[] };
+    }
+
+    if (normalizedSql.startsWith("update turns set status = 'failed'")) {
+      const turnId = values[0] as string;
+      const error = values[1] as string;
+      const turn = this.turns.find((candidate) => candidate.id === turnId);
+
+      if (turn) {
+        turn.status = "failed";
+        turn.error = error;
         turn.updated_at = new Date();
       }
 
@@ -609,10 +723,162 @@ class FakeDatabase {
       return { rows: [{ id: record.id } as T] };
     }
 
+    if (normalizedSql.startsWith("select context_key from campaign_context_chunks")) {
+      const campaignId = values[0] as string;
+
+      return {
+        rows: this.contextChunks
+          .filter(
+            (chunk) =>
+              chunk.campaign_id === campaignId && chunk.archived_at === null
+          )
+          .map((chunk) => ({ context_key: chunk.context_key }) as T)
+      };
+    }
+
     if (
-      normalizedSql.startsWith("insert into campaign_current_state") ||
-      normalizedSql.startsWith("insert into campaign_memories")
+      normalizedSql.startsWith(
+        "select context_key, category, title, visibility, priority, body_markdown, updated_at from campaign_context_chunks"
+      )
     ) {
+      const campaignId = values[0] as string;
+      const requestedKeys = new Set(values[1] as string[]);
+      const requestedCategories = new Set(values[2] as string[]);
+
+      return {
+        rows: this.contextChunks
+          .filter(
+            (chunk) =>
+              chunk.campaign_id === campaignId &&
+              requestedKeys.has(chunk.context_key) &&
+              requestedCategories.has(chunk.category) &&
+              chunk.archived_at === null
+          )
+          .sort((left, right) => right.priority - left.priority)
+          .map((chunk) => ({ ...chunk }) as T)
+      };
+    }
+
+    if (normalizedSql.startsWith("insert into dm_turn_traces")) {
+      const payloadIndex = normalizedSql.includes("elapsed_ms") ? 5 : 4;
+      const record: DmTurnTraceRecord = {
+        id: `dm-trace-${this.nextId++}`,
+        campaign_id: values[0] as string,
+        trace_id: values[1] as string,
+        turn_id: (values[2] as string | null) ?? null,
+        phase: values[3] as string,
+        elapsed_ms: normalizedSql.includes("elapsed_ms")
+          ? ((values[4] as number | null) ?? null)
+          : null,
+        payload:
+          typeof values[payloadIndex] === "string"
+            ? JSON.parse(values[payloadIndex] as string)
+            : values[payloadIndex],
+        created_at: new Date()
+      };
+      this.dmTurnTraces.push(record);
+      return { rows: [] as T[] };
+    }
+
+    if (normalizedSql.startsWith("insert into dm_context_snapshots")) {
+      return { rows: [] as T[] };
+    }
+
+    if (normalizedSql.startsWith("insert into dm_model_calls")) {
+      return { rows: [] as T[] };
+    }
+
+    if (normalizedSql.startsWith("insert into dm_output_reports")) {
+      return { rows: [] as T[] };
+    }
+
+    if (normalizedSql.startsWith("insert into dm_memory_patch_logs")) {
+      return { rows: [] as T[] };
+    }
+
+    if (
+      normalizedSql.startsWith(
+        "update campaign_context_chunks set body_markdown = concat_ws"
+      )
+    ) {
+      const campaignId = values[0] as string;
+      const contextKey = values[1] as string;
+      const markdown = values[2] as string;
+      const chunk = this.contextChunks.find(
+        (candidate) =>
+          candidate.campaign_id === campaignId &&
+          candidate.context_key === contextKey
+      );
+
+      if (chunk) {
+        chunk.body_markdown = [chunk.body_markdown, markdown]
+          .filter(Boolean)
+          .join("\n");
+        chunk.updated_at = new Date();
+      }
+
+      return { rows: [] as T[] };
+    }
+
+    if (
+      normalizedSql.startsWith(
+        "update campaign_context_chunks set body_markdown = $3"
+      )
+    ) {
+      const campaignId = values[0] as string;
+      const contextKey = values[1] as string;
+      const markdown = values[2] as string;
+      const chunk = this.contextChunks.find(
+        (candidate) =>
+          candidate.campaign_id === campaignId &&
+          candidate.context_key === contextKey
+      );
+
+      if (chunk) {
+        chunk.body_markdown = markdown;
+        chunk.updated_at = new Date();
+      }
+
+      return { rows: [] as T[] };
+    }
+
+    if (
+      normalizedSql.startsWith(
+        "update campaign_context_chunks set archived_at = now()"
+      )
+    ) {
+      const campaignId = values[0] as string;
+      const contextKey = values[1] as string;
+      const chunk = this.contextChunks.find(
+        (candidate) =>
+          candidate.campaign_id === campaignId &&
+          candidate.context_key === contextKey
+      );
+
+      if (chunk) {
+        chunk.archived_at = new Date();
+        chunk.updated_at = new Date();
+      }
+
+      return { rows: [] as T[] };
+    }
+
+    if (normalizedSql.startsWith("insert into campaign_context_chunks")) {
+      this.contextChunks.push({
+        campaign_id: values[0] as string,
+        context_key: values[1] as string,
+        category: values[2] as string,
+        title: values[3] as string,
+        visibility:
+          values[4] === "player_safe" || values[4] === "dm_only"
+            ? values[4]
+            : "dm_only",
+        priority: typeof values[5] === "number" ? values[5] : 0,
+        body_markdown: (values[6] ?? values[5]) as string,
+        archived_at: null,
+        updated_at: new Date()
+      });
+
       return { rows: [] as T[] };
     }
 
@@ -643,10 +909,39 @@ class FakeDatabase {
       return { rows: [] as T[] };
     }
 
+    if (normalizedSql.startsWith("update submissions set status = 'cancelled'")) {
+      const campaignId = values[0] as string;
+      const turnId = values[1] as string;
+      const createdAt = values[2] as Date;
+
+      for (const submission of this.submissions) {
+        if (
+          submission.campaign_id === campaignId &&
+          submission.turn_id !== turnId &&
+          submission.created_at > createdAt &&
+          (submission.status === "submitted" ||
+            submission.status === "included_in_turn")
+        ) {
+          submission.status = "cancelled";
+        }
+      }
+
+      return { rows: [] as T[] };
+    }
+
     if (normalizedSql.startsWith("delete from campaign_events where id = $1")) {
       const eventId = values[0] as string;
       this.campaignEvents = this.campaignEvents.filter(
         (event) => event.id !== eventId
+      );
+      return { rows: [] as T[] };
+    }
+
+    if (normalizedSql.startsWith("delete from campaign_events where campaign_id = $1")) {
+      const campaignId = values[0] as string;
+      const createdAt = values[1] as Date;
+      this.campaignEvents = this.campaignEvents.filter(
+        (event) => event.campaign_id !== campaignId || event.created_at <= createdAt
       );
       return { rows: [] as T[] };
     }
@@ -663,6 +958,109 @@ class FakeDatabase {
           ...(campaign.metadata as Record<string, unknown>),
           ...patch
         };
+        campaign.updated_at = new Date();
+      }
+
+      return { rows: [] as T[] };
+    }
+
+    if (
+      normalizedSql.startsWith(
+        "update campaigns set metadata = jsonb_set(metadata, '{mechanicsState}'"
+      )
+    ) {
+      const campaignId = values[0] as string;
+      const mechanicsState = JSON.parse(values[1] as string) as Record<
+        string,
+        unknown
+      >;
+      const campaign = this.campaigns.find(
+        (candidate) => candidate.id === campaignId
+      );
+
+      if (campaign) {
+        campaign.metadata = {
+          ...(campaign.metadata as Record<string, unknown>),
+          mechanicsState
+        };
+        campaign.updated_at = new Date();
+      }
+
+      return { rows: [] as T[] };
+    }
+
+    if (
+      normalizedSql.startsWith("update campaigns set metadata = case") &&
+      normalizedSql.includes("pendingRollRequest")
+    ) {
+      const campaignId = values[0] as string;
+      const pendingRollRequests = JSON.parse(values[1] as string) as unknown[];
+      const pendingRollRequest = JSON.parse(values[2] as string) as unknown;
+      const campaign = this.campaigns.find(
+        (candidate) => candidate.id === campaignId
+      );
+
+      if (campaign) {
+        const metadata = campaign.metadata as Record<string, unknown>;
+
+        if (pendingRollRequests.length === 0) {
+          const {
+            pendingRollRequest: _pendingRollRequest,
+            pendingRollRequests: _pendingRollRequests,
+            ...nextMetadata
+          } = metadata;
+          void _pendingRollRequest;
+          void _pendingRollRequests;
+          campaign.metadata = nextMetadata;
+        } else {
+          campaign.metadata = {
+            ...metadata,
+            pendingRollRequest,
+            pendingRollRequests
+          };
+        }
+
+        campaign.updated_at = new Date();
+      }
+
+      return { rows: [] as T[] };
+    }
+
+    if (
+      normalizedSql.startsWith("update campaigns set metadata = case") &&
+      normalizedSql.includes("inputTargets")
+    ) {
+      const campaignId = values[0] as string;
+      const inputTargets = JSON.parse(values[1] as string) as unknown[];
+      const inputPolicy = JSON.parse(values[2] as string) as unknown;
+      const nextInputNeeded = values[3] as unknown;
+      const campaign = this.campaigns.find(
+        (candidate) => candidate.id === campaignId
+      );
+
+      if (campaign) {
+        const metadata = campaign.metadata as Record<string, unknown>;
+
+        if (inputTargets.length === 0 && nextInputNeeded === "player_actions") {
+          const {
+            inputTargets: _inputTargets,
+            inputPolicy: _inputPolicy,
+            nextInputNeeded: _nextInputNeeded,
+            ...nextMetadata
+          } = metadata;
+          void _inputTargets;
+          void _inputPolicy;
+          void _nextInputNeeded;
+          campaign.metadata = nextMetadata;
+        } else {
+          campaign.metadata = {
+            ...metadata,
+            inputTargets,
+            inputPolicy,
+            nextInputNeeded
+          };
+        }
+
         campaign.updated_at = new Date();
       }
 
@@ -727,6 +1125,116 @@ class FakeDatabase {
       };
       this.joinCodes.push(record);
       return { rows: [{ code: record.code } as T] };
+    }
+
+    if (normalizedSql.startsWith("insert into campaign_invites")) {
+      const record: CampaignInviteRecord = {
+        id: `00000000-0000-4000-8000-${String(this.nextId++).padStart(12, "0")}`,
+        campaign_id: values[0] as string,
+        token_hash: values[1] as string,
+        max_uses: (values[2] as number | null) ?? null,
+        expires_at: (values[3] as Date | null) ?? null,
+        created_by_user_id: values[4] as string,
+        enabled: true,
+        use_count: 0,
+        created_at: new Date(),
+        disabled_at: null,
+        disabled_by_user_id: null
+      };
+      this.campaignInvites.push(record);
+      return { rows: [record as T] };
+    }
+
+    if (normalizedSql.startsWith("select * from campaign_invites")) {
+      const campaignId = values[0] as string;
+      const rows = this.campaignInvites
+        .filter((invite) => invite.campaign_id === campaignId)
+        .slice()
+        .reverse()
+        .slice(0, 20);
+
+      return { rows: rows as T[] };
+    }
+
+    if (normalizedSql.startsWith("update campaign_invites set enabled = false")) {
+      const inviteId = values[0] as string;
+      const campaignId = values[1] as string;
+      const userId = values[2] as string;
+      const invite = this.campaignInvites.find(
+        (candidate) =>
+          candidate.id === inviteId && candidate.campaign_id === campaignId
+      );
+
+      if (!invite) {
+        return { rows: [] as T[] };
+      }
+
+      invite.enabled = false;
+      invite.disabled_at ??= new Date();
+      invite.disabled_by_user_id = userId;
+      return { rows: [invite as T] };
+    }
+
+    if (
+      normalizedSql.startsWith("select campaign_invites.*, campaigns.title as campaign_title")
+    ) {
+      const tokenHash = values[0] as string;
+      const invite = this.campaignInvites.find(
+        (candidate) => candidate.token_hash === tokenHash && candidate.enabled
+      );
+      const campaign = invite
+        ? this.campaigns.find(
+            (candidate) => candidate.id === invite.campaign_id
+          )
+        : undefined;
+
+      if (!invite || !campaign) {
+        return { rows: [] as T[] };
+      }
+
+      const activePlayers = this.players.filter(
+        (player) =>
+          player.campaign_id === campaign.id && player.status === "active"
+      ).length;
+
+      return {
+        rows: [
+          {
+            ...invite,
+            campaign_title: campaign.title,
+            campaign_status: campaign.status,
+            campaign_mode: campaign.mode,
+            campaign_has_begun: campaign.has_begun,
+            active_players: activePlayers
+          } as T
+        ]
+      };
+    }
+
+    if (normalizedSql.startsWith("update campaign_invites set use_count")) {
+      const inviteId = values[0] as string;
+      const invite = this.campaignInvites.find(
+        (candidate) => candidate.id === inviteId
+      );
+
+      if (invite) {
+        invite.use_count += 1;
+      }
+
+      return { rows: [] as T[] };
+    }
+
+    if (normalizedSql.startsWith("insert into campaign_invite_uses")) {
+      this.campaignInviteUses.push({
+        id: `invite-use-${this.nextId++}`,
+        invite_id: values[0] as string,
+        campaign_id: values[1] as string,
+        joined_user_id: values[2] as string,
+        player_id: values[3] as string,
+        used_at: new Date()
+      });
+
+      return { rows: [] as T[] };
     }
 
     if (normalizedSql.startsWith("select campaigns.id as campaign_id")) {
@@ -828,6 +1336,16 @@ class FakeDatabase {
       return { rows: player ? ([player] as T[]) : ([] as T[]) };
     }
 
+    if (normalizedSql.startsWith("select count(*) as active_players from players")) {
+      const campaignId = values[0] as string;
+      const activePlayers = this.players.filter(
+        (player) =>
+          player.campaign_id === campaignId && player.status === "active"
+      ).length;
+
+      return { rows: [{ active_players: activePlayers } as T] };
+    }
+
     if (normalizedSql.startsWith("select submissions.player_id")) {
       const turnId = values[0] as string;
       const rows = this.submissions
@@ -868,26 +1386,50 @@ class FakeDatabase {
       return { rows };
     }
 
+    if (
+      normalizedSql.startsWith(
+        "select id, trace_id, turn_id, phase, elapsed_ms, payload, created_at from dm_turn_traces"
+      )
+    ) {
+      const campaignId = values[0] as string;
+      const traceId = values[1] as string | null;
+      const limit = values[2] as number;
+
+      return {
+        rows: this.dmTurnTraces
+          .filter(
+            (trace) =>
+              trace.campaign_id === campaignId &&
+              (!traceId || trace.trace_id === traceId)
+          )
+          .slice()
+          .reverse()
+          .slice(0, limit) as T[]
+      };
+    }
+
     if (normalizedSql.startsWith("select id, type, payload, created_at from")) {
       const campaignId = values[0] as string;
-      if (normalizedSql.includes("and type = 'turn_debug_trace'")) {
-        const traceId = values[1] as string | null;
-        const limit = values[2] as number;
+      if (normalizedSql.includes("payload->>'messageId' = $2")) {
+        const messageId = values[1] as string;
 
         return {
           rows: this.campaignEvents
             .filter((event) => {
-              if (
-                event.campaign_id !== campaignId ||
-                event.type !== "turn_debug_trace"
-              ) {
-                return false;
-              }
-
               const payload = event.payload as Record<string, unknown>;
-              return !traceId || payload.traceId === traceId;
+
+              return (
+                event.campaign_id === campaignId &&
+                ["turn_submitted", "turn_resolved", "adventure_begun"].includes(
+                  event.type
+                ) &&
+                payload.messageId === messageId &&
+                payload.role === "dm"
+              );
             })
-            .slice(0, limit) as T[]
+            .slice()
+            .reverse()
+            .slice(0, 1) as T[]
         };
       }
 
@@ -1042,14 +1584,92 @@ before(async () => {
     connectToDatabase: false,
     dmRuntime: {
       askProvider: async (input) => {
+        if (input.instructions.includes("AI Taverns DM router")) {
+          const currentTurnInputMatch = input.message.match(
+            /(?:^|\n)Current turn input:\s*([\s\S]*)$/i
+          );
+          const currentTurnInput = currentTurnInputMatch?.[1] ?? input.message;
+          const content = JSON.stringify({
+            job_needed: /\battack\b/i.test(currentTurnInput)
+              ? "combat"
+              : "scene_director",
+            context_keys: {
+              npc_context: [],
+              player_character_context: [],
+              combat_context: [],
+              relevant_world_context: [],
+              quests_open_threads: [],
+              overarching_big_plot_secrets: []
+            },
+            reason: "Deterministic test router response."
+          });
+
+          return {
+            id: "provider-router-1",
+            content,
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: content,
+              model: "test-model",
+              temperature: 0.8,
+              providerTimings: []
+            }
+          };
+        }
+
+        if (input.instructions.includes("memory/context updater")) {
+          const content = JSON.stringify({
+            patches: [],
+            new_context_chunks: [],
+            remove_context_chunks: []
+          });
+
+          return {
+            id: "provider-memory-updater-1",
+            content,
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: content,
+              model: "test-model",
+              temperature: 0.8,
+              providerTimings: []
+            }
+          };
+        }
+
         providerInputs.push({
           message: input.message,
           instructions: input.instructions,
+          ...(input.currentPlayerAction
+            ? { currentPlayerAction: input.currentPlayerAction }
+            : {}),
           history: (input.history ?? []).map((message) => ({
             role: message.role,
             content: message.content
           }))
         });
+        if (providerOverride) {
+          return providerOverride(input);
+        }
+
         if (input.message.includes("TRIGGER_PROVIDER_DEBUG_FAILURE")) {
           const error = new Error("DeepSeek returned an empty reply.");
           (error as { debug?: unknown }).debug = {
@@ -1065,6 +1685,7 @@ before(async () => {
             ],
             rawResponse: "",
             model: "test-model",
+            temperature: 0.8,
             providerTimings: [
               {
                 attempt: 1,
@@ -1082,6 +1703,345 @@ before(async () => {
             ]
           };
           throw error;
+        }
+
+        if (
+          input.message.includes("TRIGGER_RESOLVED_COMBAT_WITHOUT_ROLLS")
+        ) {
+          const content = JSON.stringify({
+            narration_text:
+              "Seren lunges with her blade. The strike hits the bandit squarely, opening a deep wound before he staggers back.",
+            roll_requests: [],
+            next_input_needed: "player_actions",
+            input_targets: [],
+            input_policy: "all_players"
+          });
+
+          return {
+            id: "provider-combat-parse-failure",
+            content,
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: content,
+              model: "test-model",
+              temperature: 0.8,
+              providerTimings: []
+            }
+          };
+        }
+
+        if (input.message.includes("TRIGGER_CLARIFICATION_NEXT_INPUT")) {
+          const content = JSON.stringify({
+            public_narration:
+              "Seren, are you casting one spell this turn, or do you have a feature that lets you cast both? Choose the spell and target before I resolve it.",
+            resolution_mode: "needs_dice",
+            roll_requests: [],
+            next_input_needed: "clarification",
+            input_targets: ["player:owner"],
+            input_policy: "only_targeted_players",
+            mechanics_state_update: {}
+          });
+
+          return {
+            id: "provider-clarification-recovered",
+            content,
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: content,
+              model: "test-model",
+              temperature: 0.8,
+              providerTimings: []
+            }
+          };
+        }
+
+        if (
+          input.message.toLowerCase().includes("scorching ray") &&
+          (input.message.toLowerCase().includes("cutlass raider") ||
+            input.message.toLowerCase().includes("horn-blower"))
+        ) {
+          const mechanicsJson = input.message.match(
+            /If mechanicsState conflicts[\s\S]*?\n(\{[\s\S]*?\})\n\nCurrent turn input JSON:/
+          )?.[1];
+          const playerActorKeys =
+            mechanicsJson
+              ? Object.keys(
+                  (JSON.parse(mechanicsJson) as {
+                    actors?: Record<string, unknown>;
+                  }).actors ?? {}
+                ).filter((key) => key.startsWith("player:"))
+              : [];
+          const isMultiplayer = input.message.includes('"type": "multiplayer_turn"');
+          const mechanicsState = mechanicsJson
+            ? (JSON.parse(mechanicsJson) as {
+                actors?: Record<
+                  string,
+                  { characterName?: string; currentHp?: number; maxHp?: number }
+                >;
+              })
+            : undefined;
+          const targetPlayerKey = playerActorKeys[0] ?? "player:owner";
+          const targetPlayer = mechanicsState?.actors?.[targetPlayerKey];
+          const targetName = targetPlayer?.characterName ?? "the front-line hero";
+          const targetMaxHp = targetPlayer?.maxHp ?? 20;
+          const targetCurrentHp = targetPlayer?.currentHp ?? targetMaxHp;
+          const targetNextHp = Math.max(0, targetCurrentHp - 6);
+          const content = JSON.stringify({
+            public_narration:
+              `The cutlass raider's turn resolves first. Cutlass raider attack roll: 17 vs AC 14 - hit. Cutlass raider damage roll: 1d6 + 2 = 6 slashing damage.\n\nThe rusted blade bites across ${targetName}'s ribs before the raider wrenches it free. ${targetName} drops from ${targetCurrentHp} HP to ${targetNextHp} HP, still standing but hurt.\n\nControl returns to the heroes. What do you do?`,
+            roll_requests: [],
+            next_input_needed: "player_actions",
+            input_targets: [],
+            input_policy: "all_players",
+            mechanics_state_update: {
+              combat: {
+                active: true,
+                round: 1,
+                turnOwner: isMultiplayer ? playerActorKeys[0] : null,
+                initiativeOrder: [
+                  ...(playerActorKeys.length > 0 ? playerActorKeys : ["player:owner"]),
+                  "npc:cutlass-raider",
+                  "npc:horn-blower"
+                ]
+              },
+              actors: {
+                "npc:cutlass-raider": {
+                  characterName: "Cutlass raider",
+                  currentHp: 12,
+                  maxHp: 12,
+                  conditions: []
+                },
+                "npc:horn-blower": {
+                  characterName: "Horn-blower",
+                  currentHp: 10,
+                  maxHp: 10,
+                  conditions: []
+                },
+                [targetPlayerKey]: {
+                  characterName: targetName,
+                  currentHp: targetNextHp,
+                  maxHp: targetMaxHp,
+                  conditions: []
+                }
+              }
+            }
+          });
+
+          return {
+            id: "provider-npc-turn-catchup",
+            content,
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: content,
+              model: "test-model",
+              temperature: 0.8,
+              providerTimings: []
+            }
+          };
+        }
+
+        if (
+          input.message.includes("I rolled 8d6") &&
+          input.message.includes("Fireball damage")
+        ) {
+          const content = JSON.stringify({
+            public_narration:
+              "The surprise Fireball detonates across the pier. Mara staggers through the smoke, and the two raiders are thrown back by the blast.\n\nThe opening strike has landed. Now the rest of the fight catches up: roll 1d20 + 2 for initiative.",
+            roll_requests: [
+              {
+                player: "Owner",
+                dice: "1d20",
+                modifier: 2,
+                label: "Initiative",
+                advantage_state: "normal",
+                reason: "Determine turn order after the surprise opening strike"
+              }
+            ],
+            next_input_needed: "dice_results",
+            input_targets: ["Owner"],
+            input_policy: "only_targeted_players",
+            mechanics_state_update: {
+              combat: {
+                active: true,
+                round: 1,
+                turnOwner: "player:owner",
+                initiativeOrder: [
+                  "player:owner",
+                  "npc:mara",
+                  "npc:drowned-choir-raider-1",
+                  "npc:drowned-choir-raider-2"
+                ]
+              },
+              actors: {
+                "npc:mara": {
+                  characterName: "Mara",
+                  currentHp: 31,
+                  maxHp: 45,
+                  conditions: []
+                },
+                "npc:drowned-choir-raider-1": {
+                  characterName: "Drowned Choir raider",
+                  currentHp: 0,
+                  maxHp: 16,
+                  conditions: ["down"]
+                },
+                "npc:drowned-choir-raider-2": {
+                  characterName: "Drowned Choir raider",
+                  currentHp: 0,
+                  maxHp: 16,
+                  conditions: ["down"]
+                }
+              }
+            }
+          });
+
+          return {
+            id: "provider-surprise-fireball-damage",
+            content,
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: content,
+              model: "test-model",
+              temperature: 0.8,
+              providerTimings: []
+            }
+          };
+        }
+
+        if (input.message.includes("I cast fireball on Mara")) {
+          const isSurpriseOpening = input.message.includes(
+            "Mara has not noticed me"
+          );
+          const mechanicsJson = input.message.match(
+            /If mechanicsState conflicts[\s\S]*?\n(\{[\s\S]*?\})\n\nCurrent turn input JSON:/
+          )?.[1];
+          const playerActorKey =
+            mechanicsJson
+              ? Object.keys(
+                  (JSON.parse(mechanicsJson) as {
+                    actors?: Record<string, unknown>;
+                  }).actors ?? {}
+                ).find((key) => key.startsWith("player:"))
+              : undefined;
+          const content = JSON.stringify({
+            public_narration:
+              isSurpriseOpening
+                ? "Seren catches Mara before she can react. Mara and two Drowned Choir raiders are inside the spell radius.\n\nMara rolls 15 and succeeds. The first raider rolls 9 and fails. The second raider rolls 11 and fails.\n\nRoll 8d6 for Fireball damage."
+                : "Seren starts to cast Fireball, and Mara and the Drowned Choir raiders snap into motion.\n\nCombat begins. Roll 1d20 + 2 for initiative before the spell is resolved.",
+            roll_requests: [
+              isSurpriseOpening
+                ? {
+                    player: "Owner",
+                    dice: "8d6",
+                    modifier: 0,
+                    label: "Fireball damage",
+                    advantage_state: "normal",
+                    reason:
+                      "Resolve the surprise Fireball damage before initiative"
+                  }
+                : {
+                    player: "Owner",
+                    dice: "1d20",
+                    modifier: 2,
+                    label: "Initiative",
+                    advantage_state: "normal",
+                    reason: "Determine turn order as combat begins"
+                  }
+            ],
+            next_input_needed: "dice_results",
+            input_targets: ["Owner"],
+            input_policy: "only_targeted_players",
+            mechanics_state_update: {
+              combat: {
+                active: true,
+                round: 1,
+                turnOwner: playerActorKey ?? "player:owner",
+                initiativeOrder: [
+                  playerActorKey ?? "player:owner",
+                  "npc:mara",
+                  "npc:drowned-choir-raider-1",
+                  "npc:drowned-choir-raider-2"
+                ]
+              },
+              actors: {
+                "npc:mara": {
+                  characterName: "Mara",
+                  currentHp: 45,
+                  maxHp: 45,
+                  conditions: []
+                },
+                "npc:drowned-choir-raider-1": {
+                  characterName: "Drowned Choir raider",
+                  currentHp: 16,
+                  maxHp: 16,
+                  conditions: []
+                },
+                "npc:drowned-choir-raider-2": {
+                  characterName: "Drowned Choir raider",
+                  currentHp: 16,
+                  maxHp: 16,
+                  conditions: []
+                }
+              }
+            }
+          });
+
+          return {
+            id: "provider-initiative-fireball",
+            content,
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: content,
+              model: "test-model",
+              temperature: 0.8,
+              providerTimings: []
+            }
+          };
         }
 
         if (input.instructions.includes("campaign-opening planner")) {
@@ -1170,10 +2130,41 @@ before(async () => {
               requestMessages: [],
               rawResponse: "{}",
               model: "test-model",
+              temperature: 0.8,
               providerTimings: []
             }
           };
         }
+
+        if (input.instructions.includes("out-of-turn table question")) {
+          const answer =
+            "Those tracks look too broad for a wolf and too deliberate for a stray animal.";
+
+          input.onPublicNarrationDelta?.(answer.slice(0, 28));
+          input.onPublicNarrationDelta?.(answer.slice(28));
+
+          return {
+            id: "provider-ask-dm-1",
+            content: JSON.stringify({ answer }),
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: "{}",
+              model: "test-model",
+              temperature: 0.8,
+              providerTimings: []
+            }
+          };
+        }
+
         const publicNarration =
           "A lantern flickers over the old road as your adventure begins.\n\nA weathered sign points toward a ruined watchtower beyond the trees.\n\nWhat do you do?";
         const isEldermereNarrator = input.message.includes(
@@ -1209,6 +2200,7 @@ before(async () => {
             requestMessages: [],
             rawResponse: "{}",
             model: "test-model",
+            temperature: 0.8,
             providerTimings: []
           }
         };
@@ -1226,8 +2218,13 @@ after(async () => {
 
 export function resetProviderInputs() {
   providerInputs = [];
+  providerOverride = undefined;
 }
 
 export function getProviderInputs() {
   return providerInputs;
+}
+
+export function setProviderOverride(override: AskProvider | undefined) {
+  providerOverride = override;
 }

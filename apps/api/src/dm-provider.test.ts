@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { afterEach, before, test } from "node:test";
 
 process.env.DEEPSEEK_API_KEY = "test-deepseek-key";
+process.env.DEEPSEEK_MODEL = "deepseek-v4-flash";
+process.env.QWEN_API_KEY = "test-qwen-key";
+process.env.QWEN_BASE_URL = "https://qwen.example.test/v1";
 
 const { askDungeonMasterProvider, assertDungeonMasterProviderConfigured } =
   await import("./dm-provider.js");
@@ -9,6 +12,10 @@ const { askDungeonMasterProvider, assertDungeonMasterProviderConfigured } =
 const originalFetch = globalThis.fetch;
 const originalNodeEnv = process.env.NODE_ENV;
 const originalTestProvider = process.env.AI_TAVERNS_TEST_DM_PROVIDER;
+const originalDeepSeekModel = process.env.DEEPSEEK_MODEL;
+const originalQwenApiKey = process.env.QWEN_API_KEY;
+const originalQwenBaseUrl = process.env.QWEN_BASE_URL;
+const originalQwenModel = process.env.QWEN_MODEL;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
@@ -22,10 +29,31 @@ afterEach(() => {
   } else {
     process.env.AI_TAVERNS_TEST_DM_PROVIDER = originalTestProvider;
   }
+  if (originalDeepSeekModel === undefined) {
+    delete process.env.DEEPSEEK_MODEL;
+  } else {
+    process.env.DEEPSEEK_MODEL = originalDeepSeekModel;
+  }
+  if (originalQwenApiKey === undefined) {
+    delete process.env.QWEN_API_KEY;
+  } else {
+    process.env.QWEN_API_KEY = originalQwenApiKey;
+  }
+  if (originalQwenBaseUrl === undefined) {
+    delete process.env.QWEN_BASE_URL;
+  } else {
+    process.env.QWEN_BASE_URL = originalQwenBaseUrl;
+  }
+  if (originalQwenModel === undefined) {
+    delete process.env.QWEN_MODEL;
+  } else {
+    process.env.QWEN_MODEL = originalQwenModel;
+  }
 });
 
 before(() => {
   assert.ok(process.env.DEEPSEEK_API_KEY);
+  assert.ok(process.env.QWEN_API_KEY);
 });
 
 function streamResponse(chunks: string[]) {
@@ -57,6 +85,7 @@ function jsonResponse(data: unknown, status = 200) {
 test("DeepSeek provider sends filtered history and returns non-stream debug metadata", async () => {
   let requestBody: {
     messages: { role: string; content: string }[];
+    temperature?: number;
     stream?: boolean;
     response_format?: unknown;
   } | undefined;
@@ -131,15 +160,239 @@ test("DeepSeek provider sends filtered history and returns non-stream debug meta
   ]);
   assert.equal(requestBody?.stream, undefined);
   assert.equal(requestBody?.response_format, undefined);
+  assert.equal(requestBody?.temperature, 0.8);
   assert.equal(response.id, "chat-1");
   assert.equal(response.debug.providerResponseId, "chat-1");
   assert.equal(response.debug.model, "test-chat-model");
+  assert.equal(response.debug.temperature, requestBody?.temperature);
   assert.equal(response.debug.providerTimings?.[0]?.status, 200);
   assert.equal(response.debug.providerTimings?.[0]?.ok, true);
   assert.equal(
     response.debug.providerTimings?.[0]?.responseFormat,
     "json_contract_prompt"
   );
+});
+
+test("provider routes Qwen model selections to Qwen credentials", async () => {
+  process.env.QWEN_MODEL = "custom-qwen-flash";
+  let requestUrl = "";
+  let authorization = "";
+  let requestBody: {
+    model?: string;
+    messages: { role: string; content: string }[];
+  } | undefined;
+
+  globalThis.fetch = async (url, init) => {
+    requestUrl = String(url);
+    authorization = String(new Headers(init?.headers).get("Authorization"));
+    requestBody = JSON.parse(String(init?.body)) as typeof requestBody;
+
+    return jsonResponse({
+      id: "qwen-chat-1",
+      model: "custom-qwen-flash",
+      choices: [
+        {
+          finish_reason: "stop",
+          message: {
+            content:
+              '{"public_narration":"A lantern flares.","roll_requests":[],"next_input_needed":"player_actions","input_targets":[],"input_policy":"all_players"}'
+          }
+        }
+      ]
+    });
+  };
+
+  const response = await askDungeonMasterProvider({
+    instructions: "Return a JSON DM response.",
+    message: "Begin.",
+    model: "qwen-3-7-flash"
+  });
+
+  assert.equal(requestUrl, "https://qwen.example.test/v1/chat/completions");
+  assert.equal(authorization, "Bearer test-qwen-key");
+  assert.equal(requestBody?.model, "custom-qwen-flash");
+  assert.equal(response.id, "qwen-chat-1");
+  assert.equal(response.debug.model, "custom-qwen-flash");
+});
+
+test("DeepSeek provider ignores combat language without routed DM job", async () => {
+  const temperatures: Array<number | undefined> = [];
+
+  globalThis.fetch = async (_url, init) => {
+    const requestBody = JSON.parse(String(init?.body)) as {
+      temperature?: number;
+    };
+    temperatures.push(requestBody.temperature);
+
+    return jsonResponse({
+      id: `unrouted-combat-language-chat-${temperatures.length}`,
+      model: "test-chat-model",
+      choices: [
+        {
+          finish_reason: "stop",
+          message: {
+            content:
+              '{"public_narration":"The danger sharpens.","roll_requests":[],"next_input_needed":"player_actions","input_targets":[],"input_policy":"all_players"}'
+          }
+        }
+      ]
+    });
+  };
+
+  for (const currentPlayerAction of [
+    "I cast magic missile.",
+    "I stab the nearest cultist.",
+    "I swing my axe.",
+    "I shoot the lookout.",
+    "I raise my crossbow.",
+    "I draw my longsword."
+  ]) {
+    const response = await askDungeonMasterProvider({
+      instructions: "Return a JSON DM response.",
+      message:
+        "Character Sheet: Armor Class 13, HP 27, Weapons: dagger.\n\nCurrent player action: " +
+        currentPlayerAction,
+      currentPlayerAction
+    });
+
+    assert.equal(response.debug.temperature, 0.8);
+  }
+
+  assert.deepEqual(temperatures, [0.8, 0.8, 0.8, 0.8, 0.8, 0.8]);
+});
+
+test("DeepSeek provider uses routed DM job for temperature", async () => {
+  const temperatures: Array<number | undefined> = [];
+
+  globalThis.fetch = async (_url, init) => {
+    const requestBody = JSON.parse(String(init?.body)) as {
+      temperature?: number;
+    };
+    temperatures.push(requestBody.temperature);
+
+    return jsonResponse({
+      id: `job-temperature-chat-${temperatures.length}`,
+      model: "test-chat-model",
+      choices: [
+        {
+          finish_reason: "stop",
+          message: {
+            content:
+              '{"public_narration":"The scene moves.","roll_requests":[],"next_input_needed":"player_actions","input_targets":[],"input_policy":"all_players"}'
+          }
+        }
+      ]
+    });
+  };
+
+  const calls = [
+    {
+      dmJob: "combat" as const,
+      message: "I inspect the quiet mural.",
+      expectedTemperature: 0.2
+    },
+    {
+      dmJob: "scene_director" as const,
+      message: "The old mural depicts a battle and a shattered sword.",
+      expectedTemperature: 0.8
+    },
+    {
+      dmJob: "investigation" as const,
+      message: "I study the blood pattern near the spear rack.",
+      expectedTemperature: 0.8
+    },
+    {
+      dmJob: "npc_dialogue" as const,
+      message: "I ask the veteran how the fight started.",
+      expectedTemperature: 0.8
+    }
+  ];
+
+  for (const call of calls) {
+    const response = await askDungeonMasterProvider({
+      instructions: "Return a JSON DM response.",
+      message: call.message,
+      dmJob: call.dmJob
+    });
+
+    assert.equal(response.debug.temperature, call.expectedTemperature);
+  }
+
+  assert.deepEqual(
+    temperatures,
+    calls.map((call) => call.expectedTemperature)
+  );
+});
+
+test("DeepSeek provider does not lower temperature for system-only combat rules", async () => {
+  let requestBody:
+    | {
+        temperature?: number;
+      }
+    | undefined;
+
+  globalThis.fetch = async (_url, init) => {
+    requestBody = JSON.parse(String(init?.body)) as typeof requestBody;
+
+    return jsonResponse({
+      id: "noncombat-chat-1",
+      model: "test-chat-model",
+      choices: [
+        {
+          finish_reason: "stop",
+          message: {
+            content:
+              '{"public_narration":"The candle flickers.","roll_requests":[],"next_input_needed":"player_actions","input_targets":[],"input_policy":"all_players"}'
+          }
+        }
+      ]
+    });
+  };
+
+  const response = await askDungeonMasterProvider({
+    instructions:
+      "Return a JSON DM response. If combat starts, enforce initiative rules.",
+    message: "I inspect the old desk."
+  });
+
+  assert.equal(requestBody?.temperature, 0.8);
+  assert.equal(response.debug.temperature, 0.8);
+});
+
+test("DeepSeek provider defaults to high temperature without routed DM job", async () => {
+  let requestBody:
+    | {
+        temperature?: number;
+      }
+    | undefined;
+
+  globalThis.fetch = async (_url, init) => {
+    requestBody = JSON.parse(String(init?.body)) as typeof requestBody;
+
+    return jsonResponse({
+      id: "context-chat-1",
+      model: "test-chat-model",
+      choices: [
+        {
+          finish_reason: "stop",
+          message: {
+            content:
+              '{"public_narration":"There are two people beside you.","roll_requests":[],"next_input_needed":"player_actions","input_targets":[],"input_policy":"all_players"}'
+          }
+        }
+      ]
+    });
+  };
+
+  const response = await askDungeonMasterProvider({
+    instructions: "Return a JSON DM response.",
+    message:
+      "Character Sheet: Armor Class 13, HP 27, Weapons: dagger.\n\nCurrent player action: how many people are with us?",
+    currentPlayerAction: "how many people are with us?"
+  });
+
+  assert.equal(requestBody?.temperature, 0.8);
+  assert.equal(response.debug.temperature, 0.8);
 });
 
 test("test DM provider returns deterministic local contract JSON", async () => {
@@ -367,7 +620,7 @@ test("DeepSeek provider falls back to configured model when responses omit optio
 
   assert.equal(response.id, undefined);
   assert.equal(response.debug.providerResponseId, undefined);
-  assert.equal(response.debug.model, "deepseek-chat");
+  assert.equal(response.debug.model, "deepseek-v4-flash");
 });
 
 test("DeepSeek provider reports successful streaming responses without a body", async () => {
@@ -482,6 +735,52 @@ test("DeepSeek provider streams escaped narration prefixes as chunks arrive", as
   assert.deepEqual(narrationDeltas, [
     "Line one\nTab\tBell☺",
     " markq"
+  ]);
+});
+
+test("DeepSeek provider streams Ask DM answer prefixes as chunks arrive", async () => {
+  const narrationDeltas: string[] = [];
+
+  globalThis.fetch = async () =>
+    streamResponse([
+      streamData({
+        id: "ask-stream-1",
+        model: "test-model",
+        choices: [
+          {
+            delta: {
+              content: '{"answer":"Those tracks look too'
+            }
+          }
+        ]
+      }),
+      streamData({
+        id: "ask-stream-1",
+        model: "test-model",
+        choices: [
+          {
+            delta: {
+              content: ' broad for a wolf."}'
+            }
+          }
+        ]
+      }),
+      "data: [DONE]\n\n"
+    ]);
+
+  const response = await askDungeonMasterProvider({
+    instructions: "Return an Ask DM JSON answer.",
+    message: "Would I know these tracks?",
+    onPublicNarrationDelta: (delta) => narrationDeltas.push(delta)
+  });
+
+  assert.equal(
+    response.content,
+    '{"answer":"Those tracks look too broad for a wolf."}'
+  );
+  assert.deepEqual(narrationDeltas, [
+    "Those tracks look too",
+    " broad for a wolf."
   ]);
 });
 

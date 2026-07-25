@@ -1,12 +1,14 @@
 import { z } from "zod";
+import { MechanicsSeedSchema } from "./mechanics.js";
 
 export const CampaignModeSchema = z.enum(["single_player", "multiplayer"]);
 
 export const CampaignSummarySchema = z.object({
   id: z.string().uuid(),
-  hermesSessionId: z.string().min(1),
+  sessionId: z.string().min(1),
   mode: CampaignModeSchema,
   title: z.string().min(1),
+  ownerClientId: z.string().optional(),
   preview: z.string().optional(),
   time: z.string().optional(),
   messageCount: z.number().int().nonnegative().optional(),
@@ -28,7 +30,8 @@ export const CampaignCreateRequestSchema = z.object({
   ownerClientId: z.string().optional(),
   playerName: z.string().optional(),
   characterName: z.string().optional(),
-  characterSheet: z.string().optional()
+  characterSheet: z.string().optional(),
+  mechanicsSeed: MechanicsSeedSchema.optional()
 });
 
 export const CampaignCreateResponseSchema = z.object({
@@ -59,10 +62,80 @@ export const CampaignJoinRequestSchema = z.object({
   clientId: z.string().optional(),
   username: z.string().optional(),
   characterName: z.string().optional(),
-  characterSheet: z.string().optional()
+  characterSheet: z.string().optional(),
+  mechanicsSeed: MechanicsSeedSchema.optional()
 });
 
 export const CampaignJoinResponseSchema = z.object({
+  campaign: CampaignSummarySchema
+});
+
+export const CampaignInviteSchema = z.object({
+  id: z.string().uuid(),
+  campaignId: z.string().uuid(),
+  enabled: z.boolean(),
+  maxUses: z.number().int().positive().nullable(),
+  useCount: z.number().int().nonnegative(),
+  expiresAt: z.string().datetime().nullable(),
+  createdAt: z.string().datetime(),
+  disabledAt: z.string().datetime().nullable()
+});
+
+export const CampaignInviteCreateRequestSchema = z.object({
+  maxUses: z.number().int().positive().optional().nullable(),
+  expiresAt: z.string().datetime().optional().nullable()
+});
+
+export const CampaignInviteCreateParamsSchema = z.object({
+  campaignId: z.string().uuid()
+});
+
+export const CampaignInviteListParamsSchema = z.object({
+  campaignId: z.string().uuid()
+});
+
+export const CampaignInviteDisableParamsSchema = z.object({
+  campaignId: z.string().uuid(),
+  inviteId: z.string().uuid()
+});
+
+export const CampaignInviteCreateResponseSchema = z.object({
+  invite: CampaignInviteSchema.extend({
+    token: z.string().min(16)
+  })
+});
+
+export const CampaignInviteListResponseSchema = z.object({
+  invites: z.array(CampaignInviteSchema)
+});
+
+export const CampaignInviteDisableResponseSchema = z.object({
+  invite: CampaignInviteSchema
+});
+
+export const LobbyInvitePreviewParamsSchema = z.object({
+  token: z.string().min(16)
+});
+
+export const LobbyInviteJoinParamsSchema = z.object({
+  token: z.string().min(16)
+});
+
+export const LobbyInvitePreviewResponseSchema = z.object({
+  campaignTitle: z.string().min(1),
+  availableSlots: z.number().int().nonnegative(),
+  expiresAt: z.string().datetime().nullable()
+});
+
+export const LobbyInviteJoinRequestSchema = z.object({
+  clientId: z.string().optional(),
+  username: z.string().optional(),
+  characterName: z.string().optional(),
+  characterSheet: z.string().optional(),
+  mechanicsSeed: MechanicsSeedSchema.optional()
+});
+
+export const LobbyInviteJoinResponseSchema = z.object({
   campaign: CampaignSummarySchema
 });
 
@@ -83,3 +156,21 @@ export type CampaignJoinPreviewResponse = z.infer<
 >;
 export type CampaignJoinRequest = z.infer<typeof CampaignJoinRequestSchema>;
 export type CampaignJoinResponse = z.infer<typeof CampaignJoinResponseSchema>;
+export type CampaignInvite = z.infer<typeof CampaignInviteSchema>;
+export type CampaignInviteCreateRequest = z.infer<
+  typeof CampaignInviteCreateRequestSchema
+>;
+export type CampaignInviteCreateResponse = z.infer<
+  typeof CampaignInviteCreateResponseSchema
+>;
+export type CampaignInviteListResponse = z.infer<
+  typeof CampaignInviteListResponseSchema
+>;
+export type CampaignInviteDisableResponse = z.infer<
+  typeof CampaignInviteDisableResponseSchema
+>;
+export type LobbyInvitePreviewResponse = z.infer<
+  typeof LobbyInvitePreviewResponseSchema
+>;
+export type LobbyInviteJoinRequest = z.infer<typeof LobbyInviteJoinRequestSchema>;
+export type LobbyInviteJoinResponse = z.infer<typeof LobbyInviteJoinResponseSchema>;

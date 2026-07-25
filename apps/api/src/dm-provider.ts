@@ -1,14 +1,27 @@
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import type { AiModelId } from "@ai-dnd/contracts";
 import type {
   AiDebugInfo,
   AiDebugMessage,
+  DmJobName,
   GameMessage
 } from "@ai-dnd/dm";
 
-const deepSeekApiKey = process.env.DEEPSEEK_API_KEY;
-const deepSeekBaseUrl = (
-  process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com"
-).replace(/\/+$/, "");
-const deepSeekModel = process.env.DEEPSEEK_MODEL || "deepseek-chat";
+const defaultAiModel: AiModelId = "deepseek-v4-flash";
+const defaultProviderTemperature = 0.8;
+const combatProviderTemperature = 0.2;
+let localEnvCache: Record<string, string> | undefined;
+
+type ModelProviderConfig = {
+  selectedModel: AiModelId;
+  providerName: "DeepSeek" | "Qwen";
+  apiKeyEnv: string;
+  baseUrlEnv: string;
+  modelEnv: string;
+  defaultBaseUrl: string;
+  defaultModel: string;
+};
 
 type DeepSeekMessage = AiDebugMessage;
 
@@ -49,6 +62,9 @@ export type DungeonMasterProviderInput = {
   message: string;
   instructions: string;
   history?: GameMessage[];
+  currentPlayerAction?: string;
+  dmJob?: DmJobName;
+  model?: AiModelId;
   onPublicNarrationDelta?: (text: string) => void;
 };
 
@@ -60,6 +76,107 @@ class DeepSeekEmptyReplyError extends Error {
     this.name = "DeepSeekEmptyReplyError";
     this.debug = debug;
   }
+}
+
+/* c8 ignore start */
+function parseLocalEnvFile(text: string) {
+  const values: Record<string, string> = {};
+
+  for (const line of text.split(/\r?\n/)) {
+    const trimmedLine = line.trim();
+
+    if (!trimmedLine || trimmedLine.startsWith("#")) {
+      continue;
+    }
+
+    const separatorIndex = trimmedLine.indexOf("=");
+
+    if (separatorIndex === -1) {
+      continue;
+    }
+
+    const key = trimmedLine.slice(0, separatorIndex).trim();
+    const value = trimmedLine.slice(separatorIndex + 1).trim();
+
+    values[key] = value.replace(/^['"]|['"]$/g, "");
+  }
+
+  return values;
+}
+
+function loadLocalEnvCache() {
+  if (localEnvCache) {
+    return localEnvCache;
+  }
+
+  const cwd = process.cwd();
+  const repoRootFromApiWorkspace = join(cwd, "..", "..");
+  const envPaths = Array.from(
+    new Set([
+      join(repoRootFromApiWorkspace, ".env.local"),
+      join(repoRootFromApiWorkspace, "apps", "web", ".env.local"),
+      join(repoRootFromApiWorkspace, "apps", "api", ".env.local"),
+      join(cwd, ".env.local"),
+      join(cwd, "apps", "web", ".env.local"),
+      join(cwd, "apps", "api", ".env.local"),
+      join(cwd, "..", "web", ".env.local")
+    ])
+  );
+  localEnvCache = {};
+
+  for (const envPath of envPaths) {
+    if (!existsSync(envPath)) {
+      continue;
+    }
+
+    localEnvCache = {
+      ...localEnvCache,
+      ...parseLocalEnvFile(readFileSync(envPath, "utf8"))
+    };
+  }
+
+  return localEnvCache;
+}
+
+function envValue(key: string) {
+  return process.env[key] ?? loadLocalEnvCache()[key];
+}
+/* c8 ignore stop */
+
+function providerConfigForModel(model: AiModelId = defaultAiModel): ModelProviderConfig {
+  if (model === "qwen-3-7-flash") {
+    return {
+      selectedModel: model,
+      providerName: "Qwen",
+      apiKeyEnv: "QWEN_API_KEY",
+      baseUrlEnv: "QWEN_BASE_URL",
+      modelEnv: "QWEN_MODEL",
+      defaultBaseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      defaultModel: "qwen3.7-flash"
+    };
+  }
+
+  return {
+    selectedModel: "deepseek-v4-flash",
+    providerName: "DeepSeek",
+    apiKeyEnv: "DEEPSEEK_API_KEY",
+    baseUrlEnv: "DEEPSEEK_BASE_URL",
+    modelEnv: "DEEPSEEK_MODEL",
+    defaultBaseUrl: "https://api.deepseek.com",
+    defaultModel: "deepseek-v4-flash"
+  };
+}
+
+function resolvedProviderSettings(config: ModelProviderConfig) {
+  return {
+    ...config,
+    apiKey: envValue(config.apiKeyEnv),
+    baseUrl: (envValue(config.baseUrlEnv) || config.defaultBaseUrl).replace(
+      /\/+$/,
+      ""
+    ),
+    model: envValue(config.modelEnv) || config.defaultModel
+  };
 }
 
 const testOpeningNarration = [
@@ -86,6 +203,7 @@ function testProviderDebug(
     ],
     rawResponse: content,
     model: "ai-taverns-test-provider",
+    temperature: providerTemperatureForInput(input),
     providerTimings: [
       {
         attempt: 1,
@@ -225,7 +343,7 @@ async function askTestDungeonMasterProvider(
   };
 }
 
-export function assertDungeonMasterProviderConfigured() {
+export function assertDungeonMasterProviderConfigured(model: AiModelId = defaultAiModel) {
   if (shouldUseTestProvider()) {
     if (process.env.NODE_ENV === "production") {
       throw new Error("AI Taverns test DM provider is not available in production.");
@@ -234,14 +352,20 @@ export function assertDungeonMasterProviderConfigured() {
     return;
   }
 
-  if (!deepSeekApiKey) {
-    throw new Error("DeepSeek is not configured. Set DEEPSEEK_API_KEY.");
+  const settings = resolvedProviderSettings(providerConfigForModel(model));
+
+  if (!settings.apiKey) {
+    throw new Error(
+      `${settings.providerName} is not configured. Set ${settings.apiKeyEnv}.`
+    );
   }
 
   try {
-    new URL(deepSeekBaseUrl);
+    new URL(settings.baseUrl);
   } catch {
-    throw new Error("DeepSeek is not configured with a valid DEEPSEEK_BASE_URL.");
+    throw new Error(
+      `${settings.providerName} is not configured with a valid ${settings.baseUrlEnv}.`
+    );
   }
 }
 
@@ -267,6 +391,14 @@ function mapHistoryMessage(message: GameMessage): DeepSeekMessage {
 
 function requestContentChars(messages: DeepSeekMessage[]) {
   return messages.reduce((sum, message) => sum + message.content.length, 0);
+}
+
+function providerTemperatureForInput(input: DungeonMasterProviderInput) {
+  if (input.dmJob === "combat") {
+    return combatProviderTemperature;
+  }
+
+  return defaultProviderTemperature;
 }
 
 function decodeJsonStringPrefix(value: string) {
@@ -316,8 +448,8 @@ function decodeJsonStringPrefix(value: string) {
   return decoded;
 }
 
-function publicNarrationPrefix(buffer: string) {
-  const match = buffer.match(/"public_narration"\s*:\s*"/);
+function streamedDisplayTextPrefix(buffer: string) {
+  const match = buffer.match(/"(?:public_narration|answer)"\s*:\s*"/);
 
   if (!match || match.index === undefined) {
     return "";
@@ -363,7 +495,7 @@ function createPublicNarrationEmitter(
       return;
     }
 
-    const narration = publicNarrationPrefix(streamedContent);
+    const narration = streamedDisplayTextPrefix(streamedContent);
 
     if (narration.length <= emittedNarration.length) {
       return;
@@ -376,14 +508,16 @@ function createPublicNarrationEmitter(
 
 async function requestDeepSeek(
   messages: DeepSeekMessage[],
+  temperature: number,
   attempt: number,
+  settings: ReturnType<typeof resolvedProviderSettings>,
   onPublicNarrationDelta?: (text: string) => void
 ) {
   let response: Response;
   const requestBody = JSON.stringify({
-    model: deepSeekModel,
+    model: settings.model,
     messages,
-    temperature: 0.8,
+    temperature,
     max_tokens: 4096,
     ...(onPublicNarrationDelta ? { stream: true } : {})
   });
@@ -399,12 +533,26 @@ async function requestDeepSeek(
     responseFormat: "json_contract_prompt"
   };
 
+  if (!settings.apiKey) {
+    throw new Error(
+      `${settings.providerName} is not configured. Set ${settings.apiKeyEnv}.`
+    );
+  }
+
   try {
-    response = await fetch(`${deepSeekBaseUrl}/chat/completions`, {
+    new URL(settings.baseUrl);
+  } catch {
+    throw new Error(
+      `${settings.providerName} is not configured with a valid ${settings.baseUrlEnv}.`
+    );
+  }
+
+  try {
+    response = await fetch(`${settings.baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${deepSeekApiKey}`
+        Authorization: `Bearer ${settings.apiKey}`
       },
       body: requestBody,
       signal: AbortSignal.timeout(175_000)
@@ -413,7 +561,7 @@ async function requestDeepSeek(
     timing.completedAt = new Date().toISOString();
     timing.totalMs = Date.now() - requestStarted;
     throw new Error(
-      `DeepSeek could not be reached. ${
+      `${settings.providerName} could not be reached. ${
         error instanceof Error ? error.message : "Network request failed."
       }`
     );
@@ -432,7 +580,7 @@ async function requestDeepSeek(
     const reader = response.body?.getReader();
 
     if (!reader) {
-      throw new Error("DeepSeek streaming response was empty.");
+      throw new Error(`${settings.providerName} streaming response was empty.`);
     }
 
     const decoder = new TextDecoder();
@@ -506,7 +654,7 @@ async function requestDeepSeek(
 
     data = {
       ...(responseId ? { id: responseId } : {}),
-      model: responseModel ?? deepSeekModel,
+      model: responseModel ?? settings.model,
       choices: [
         {
           message: {
@@ -538,7 +686,7 @@ async function requestDeepSeek(
 
   if (!response.ok) {
     throw new Error(
-      `DeepSeek turn failed with status ${response.status}. ${
+      `${settings.providerName} turn failed with status ${response.status}. ${
         data.error?.message ?? ""
       }`.trim()
     );
@@ -547,14 +695,17 @@ async function requestDeepSeek(
   return { data, timing };
 }
 
-function emptyReplyDiagnostic(data: DeepSeekChatResponse) {
+function emptyReplyDiagnostic(
+  data: DeepSeekChatResponse,
+  settings: ReturnType<typeof resolvedProviderSettings>
+) {
   const firstChoice = data.choices?.[0];
   const message = firstChoice?.message;
   const messageKeys = message ? Object.keys(message).sort().join(",") : "none";
 
   return [
     `finish_reason=${firstChoice?.finish_reason ?? "unknown"}`,
-    `model=${data.model ?? deepSeekModel}`,
+    `model=${data.model ?? settings.model}`,
     `choices=${data.choices?.length ?? 0}`,
     `message_keys=${messageKeys}`,
     `has_reasoning=${message?.reasoning_content ? "true" : "false"}`
@@ -576,6 +727,9 @@ export async function askDungeonMasterProvider({
   message,
   instructions,
   history = [],
+  currentPlayerAction,
+  dmJob,
+  model,
   onPublicNarrationDelta
 }: DungeonMasterProviderInput): Promise<DungeonMasterProviderResponse> {
   if (shouldUseTestProvider()) {
@@ -583,11 +737,15 @@ export async function askDungeonMasterProvider({
       message,
       instructions,
       history,
+      ...(currentPlayerAction ? { currentPlayerAction } : {}),
+      ...(dmJob ? { dmJob } : {}),
+      ...(model ? { model } : {}),
       ...(onPublicNarrationDelta ? { onPublicNarrationDelta } : {})
     });
   }
 
-  assertDungeonMasterProviderConfigured();
+  assertDungeonMasterProviderConfigured(model);
+  const settings = resolvedProviderSettings(providerConfigForModel(model));
 
   const messages: DeepSeekMessage[] = [
     {
@@ -602,13 +760,22 @@ export async function askDungeonMasterProvider({
       content: message
     }
   ];
+  const temperature = providerTemperatureForInput({
+    message,
+    instructions,
+    history,
+    ...(currentPlayerAction ? { currentPlayerAction } : {}),
+    ...(dmJob ? { dmJob } : {})
+  });
 
   let requestMessages = messages;
   const timings: DeepSeekTiming[] = [];
   let fallbackBufferedAfterEmptyStream = false;
   let { data, timing } = await requestDeepSeek(
     requestMessages,
+    temperature,
     1,
+    settings,
     onPublicNarrationDelta
   );
   timings.push(timing);
@@ -618,7 +785,9 @@ export async function askDungeonMasterProvider({
     requestMessages = fullEmptyReplyRetryMessages(messages);
     ({ data, timing } = await requestDeepSeek(
       requestMessages,
+      temperature,
       2,
+      settings,
       undefined
     ));
     fallbackBufferedAfterEmptyStream = Boolean(onPublicNarrationDelta);
@@ -628,11 +797,15 @@ export async function askDungeonMasterProvider({
 
   if (!content) {
     throw new DeepSeekEmptyReplyError(
-      `DeepSeek returned an empty reply. ${emptyReplyDiagnostic(data)}`,
+      `${settings.providerName} returned an empty reply. ${emptyReplyDiagnostic(
+        data,
+        settings
+      )}`,
       {
         requestMessages,
         rawResponse: data.choices?.[0]?.message?.content ?? "",
-        model: data.model ?? deepSeekModel,
+        model: data.model ?? settings.model,
+        temperature,
         providerTimings: timings,
         ...(data.id ? { providerResponseId: data.id } : {})
       }
@@ -640,7 +813,7 @@ export async function askDungeonMasterProvider({
   }
 
   if (fallbackBufferedAfterEmptyStream && onPublicNarrationDelta) {
-    const narration = publicNarrationPrefix(content);
+    const narration = streamedDisplayTextPrefix(content);
 
     if (narration) {
       onPublicNarrationDelta(narration);
@@ -653,7 +826,8 @@ export async function askDungeonMasterProvider({
     debug: {
       requestMessages,
       rawResponse: content,
-      model: data.model ?? deepSeekModel,
+      model: data.model ?? settings.model,
+      temperature,
       providerTimings: timings,
       ...(data.id ? { providerResponseId: data.id } : {})
     }

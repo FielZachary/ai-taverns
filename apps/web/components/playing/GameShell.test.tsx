@@ -98,15 +98,16 @@ vi.mock("./PlayerInput", async () => {
       {
         draft: string;
         isSending: boolean;
+        canSelectAiModel?: boolean;
         onDraftChange: (value: string) => void;
         onSubmit: (event: FormEvent<HTMLFormElement>) => void;
       }
     >(function MockPlayerInput(
-      { draft, isSending, onDraftChange, onSubmit },
+      { draft, isSending, canSelectAiModel, onDraftChange, onSubmit },
       ref
     ) {
       return (
-        <form onSubmit={onSubmit}>
+        <form data-can-select-model={String(canSelectAiModel)} onSubmit={onSubmit}>
           <textarea
             aria-label="Turn draft"
             onChange={(event) => onDraftChange(event.target.value)}
@@ -154,7 +155,7 @@ const listCampaignsMock = vi.mocked(listCampaigns);
 
 const campaign = {
   id: "11111111-1111-4111-8111-111111111111",
-  hermesSessionId: "hermes-session-1",
+  sessionId: "provider-session-1",
   mode: "single_player",
   title: "Lantern Below",
   preview: "A damp stone stairway waits."
@@ -162,9 +163,10 @@ const campaign = {
 
 const multiplayerCampaign = {
   id: "22222222-2222-4222-8222-222222222222",
-  hermesSessionId: "hermes-session-2",
+  sessionId: "provider-session-2",
   mode: "multiplayer",
   title: "Candlekeep Circle",
+  ownerClientId: "player-1",
   preview: "Two players gather at the table.",
   joinCode: "GLOW-42"
 } satisfies CampaignSummary;
@@ -173,7 +175,7 @@ function roomSnapshot(overrides: Partial<RoomSnapshot> = {}): RoomSnapshot {
   return {
     roomId: campaign.id,
     mode: "single_player",
-    sessionId: campaign.hermesSessionId,
+    sessionId: campaign.sessionId,
     players: [],
     messages: [
       {
@@ -200,7 +202,7 @@ function multiplayerRoomSnapshot(
   return roomSnapshot({
     roomId: multiplayerCampaign.id,
     mode: "multiplayer",
-    sessionId: multiplayerCampaign.hermesSessionId,
+    sessionId: multiplayerCampaign.sessionId,
     players: [
       {
         id: "player-1",
@@ -437,7 +439,7 @@ describe("GameShell", () => {
     );
     expect(JSON.parse(String(beginCall?.[1]?.body))).toEqual({
       roomId: multiplayerCampaign.id,
-      sessionId: multiplayerCampaign.hermesSessionId
+      sessionId: multiplayerCampaign.sessionId
     });
     expect(
       screen.getByRole("button", { name: /begin adventure/i })
@@ -446,6 +448,73 @@ describe("GameShell", () => {
       "data-sending",
       "false"
     );
+  });
+
+  it("disables model selection for non-leader multiplayer players", async () => {
+    localStorage.setItem("ai-dnd.aiModel", "qwen-3-7-flash");
+    listCampaignsMock.mockResolvedValue([
+      {
+        ...multiplayerCampaign,
+        ownerClientId: "player-2"
+      }
+    ]);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url.startsWith("/api/room?")) {
+        return responseJson(multiplayerRoomSnapshot({ hasBegun: true }));
+      }
+
+      if (url === "/api/auth/claim-guest-state") {
+        return responseJson({});
+      }
+
+      if (url === "/api/room/submit" && init?.method === "POST") {
+        return responseJson(
+          multiplayerRoomSnapshot({
+            hasBegun: true,
+            messages: [
+              {
+                id: "dm-response",
+                role: "dm",
+                content: "The corridor answers with dust and silence.",
+                createdAt: "2026-07-12T00:00:01.000Z"
+              }
+            ]
+          })
+        );
+      }
+
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<GameShell initialCampaignId={multiplayerCampaign.id} />);
+
+    const inputForm = await screen.findByText("Send").then((button) =>
+      button.closest("form")
+    );
+
+    expect(inputForm).toHaveAttribute("data-can-select-model", "false");
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Turn draft" }), {
+      target: {
+        value: "I listen at the sealed door."
+      }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      const submitCall = fetchMock.mock.calls.find(
+        ([input, init]) =>
+          String(input) === "/api/room/submit" && init?.method === "POST"
+      );
+
+      expect(JSON.parse(String(submitCall?.[1]?.body))).toMatchObject({
+        message: "I listen at the sealed door.",
+        model: "deepseek-v4-flash"
+      });
+    });
   });
 
   it("shows realtime DM stream failures and refreshes the room state", async () => {
@@ -469,7 +538,9 @@ describe("GameShell", () => {
     expect(
       await screen.findByText("The lantern guttered beside the sealed door.")
     ).toBeInTheDocument();
-    expect(MockWebSocket.instances).toHaveLength(1);
+    await waitFor(() => {
+      expect(MockWebSocket.instances).toHaveLength(1);
+    });
     const roomFetchCountBeforeFailure = fetchMock.mock.calls.filter(([input]) =>
       String(input).startsWith("/api/room?")
     ).length;
@@ -499,5 +570,107 @@ describe("GameShell", () => {
       "data-sending",
       "false"
     );
+  });
+
+  it("does not overwrite an old multiplayer adventure with the previous character profile", async () => {
+    const pokeCampaign = {
+      ...multiplayerCampaign,
+      id: "33333333-3333-4333-8333-333333333333",
+      sessionId: "provider-session-poke",
+      title: "POKE"
+    } satisfies CampaignSummary;
+    const jinCampaign = {
+      ...multiplayerCampaign,
+      id: "44444444-4444-4444-8444-444444444444",
+      sessionId: "provider-session-jin",
+      title: "Jin"
+    } satisfies CampaignSummary;
+
+    listCampaignsMock.mockResolvedValue([pokeCampaign, jinCampaign]);
+
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, _init?: RequestInit) => {
+        const url = String(input);
+
+        if (url === "/api/auth/claim-guest-state") {
+          return responseJson({});
+        }
+
+        if (url.startsWith("/api/room?")) {
+          const requestUrl = new URL(url, "https://app.example");
+          const roomId = requestUrl.searchParams.get("roomId");
+
+          if (roomId === pokeCampaign.id) {
+            return responseJson(
+              multiplayerRoomSnapshot({
+                roomId: pokeCampaign.id,
+                sessionId: pokeCampaign.sessionId,
+                players: [
+                  {
+                    id: "player-1",
+                    slot: 0,
+                    username: "Current Player",
+                    characterName: "POKE",
+                    characterSheet: "Name: POKE",
+                    status: "waiting"
+                  }
+                ]
+              })
+            );
+          }
+
+          if (roomId === jinCampaign.id) {
+            return responseJson(
+              multiplayerRoomSnapshot({
+                roomId: jinCampaign.id,
+                sessionId: jinCampaign.sessionId,
+                players: [
+                  {
+                    id: "player-1",
+                    slot: 0,
+                    username: "Current Player",
+                    characterName: "Jin",
+                    characterSheet: "Name: Jin",
+                    status: "waiting"
+                  }
+                ]
+              })
+            );
+          }
+        }
+
+        throw new Error(`Unexpected fetch: ${url}`);
+      }
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<GameShell initialCampaignId={pokeCampaign.id} />);
+
+    expect(await screen.findByRole("button", { name: "POKE" })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Jin" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Jin" })).toHaveAttribute(
+        "aria-current",
+        "page"
+      );
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 450));
+
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        if (String(input) !== "/api/room/player" || init?.method !== "POST") {
+          return false;
+        }
+
+        const body = JSON.parse(String(init.body));
+        return body.roomId === jinCampaign.id && body.characterName === "POKE";
+      })
+    ).toBe(false);
   });
 });

@@ -9,17 +9,25 @@ import {
   useState
 } from "react";
 import {
+  Copy,
+  Link,
   Play,
   Send,
   X
 } from "lucide-react";
+import type { CampaignInvite } from "@ai-dnd/contracts";
 import type {
+  AiModelId,
   DiceRollRequest,
   DiceRollSubmission,
   GameMessage,
-  InputPolicy
+  InputPolicy,
+  NextInputNeeded
 } from "@/lib/game-types";
 import {
+  createCampaignInvite,
+  disableCampaignInvite,
+  listCampaignInvites,
   listCampaigns,
   type CampaignSummary as ApiCampaignSummary
 } from "@/lib/campaign-api";
@@ -45,8 +53,10 @@ import {
   displayedRoomPlayersWithOptimisticSubmission,
   getMissingPlayerProfileFields,
   hasOptimisticSubmissionForCurrentPlayer,
+  combatTurnOwnerName,
   isInputSubmittedForCurrentRoomState,
   isWaitingOnAnotherPlayerRoll,
+  isWaitingOnCombatTurn,
   isWaitingOnTargetedInput,
   rollRequestsFromRoom,
   roomSnapshotSubmissionUpdate,
@@ -70,16 +80,36 @@ import {
 } from "./game-shell-dice";
 import {
   appendStreamingDmDelta,
+  completeStreamingDmMessage,
   mergeVisibleGameMessages,
+  removePersistedStreamingDmMessages,
   removeStreamingDmMessage,
   startStreamingDmMessage,
   type StreamingDmMessage
 } from "./game-shell-messages";
 
 const openingMessages: GameMessage[] = [];
+const aiModelStorageKey = "ai-dnd.aiModel";
+const defaultAiModel: AiModelId = "deepseek-v4-flash";
 const playerIdStorageKey = "ai-dnd.playerId";
 const roomRequestTimeoutMs = 8_000;
 const fallbackRoomPollMs = 25_000;
+
+function isAiModelId(value: FormDataEntryValue | string | null): value is AiModelId {
+  return value === "deepseek-v4-flash" || value === "qwen-3-7-flash";
+}
+
+function selectedAiModelFromStorage(): AiModelId {
+  const savedAiModel = window.localStorage.getItem(aiModelStorageKey);
+
+  return isAiModelId(savedAiModel) ? savedAiModel : defaultAiModel;
+}
+
+function selectedAiModelFromForm(form: HTMLFormElement): AiModelId {
+  const submittedModel = new FormData(form).get("aiModel");
+
+  return isAiModelId(submittedModel) ? submittedModel : selectedAiModelFromStorage();
+}
 
 type CampaignSummary = ApiCampaignSummary & ChatSummary;
 
@@ -160,9 +190,13 @@ function roomSocketUrl(campaign: CampaignSummary) {
 
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   url.searchParams.set("roomId", campaign.id);
-  url.searchParams.set("sessionId", campaign.hermesSessionId);
+  url.searchParams.set("sessionId", campaign.sessionId);
 
   return url.toString();
+}
+
+function inviteUrl(token: string) {
+  return `${window.location.origin}/invite/${encodeURIComponent(token)}`;
 }
 
 function parseRoomRealtimeEvent(value: string): RoomRealtimeEvent | null {
@@ -226,14 +260,21 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
   const [pendingRollRequests, setPendingRollRequests] = useState<
     DiceRollRequest[]
   >([]);
+  const [nextInputNeeded, setNextInputNeeded] =
+    useState<NextInputNeeded>("player_actions");
   const [inputTargets, setInputTargets] = useState<string[]>([]);
   const [inputPolicy, setInputPolicy] = useState<InputPolicy>("all_players");
+  const [roomCombat, setRoomCombat] = useState<RoomSnapshot["combat"]>();
+  const [campaignInvites, setCampaignInvites] = useState<CampaignInvite[]>([]);
+  const [inviteStatus, setInviteStatus] = useState("");
+  const [inviteError, setInviteError] = useState("");
+  const [isCreatingInvite, setIsCreatingInvite] = useState(false);
+  const [isDisablingInvites, setIsDisablingInvites] = useState(false);
   const [activeDiceReveal, setActiveDiceReveal] =
     useState<ActiveDiceReveal | null>(null);
   const [isCharacterSheetOpen, setIsCharacterSheetOpen] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const roomPollInFlightRef = useRef(false);
-  const playerRegistrationInFlightRef = useRef(false);
 
   const activeCampaign = useMemo(
     () =>
@@ -242,6 +283,14 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     [activeCampaignId, availableCampaigns]
   );
   const isSinglePlayer = activeCampaign?.mode === "single_player";
+  const canManageInvites = Boolean(
+    activeCampaign?.mode === "multiplayer" &&
+      activeCampaign.joinCode &&
+      !hasAdventureBegun
+  );
+  const activeInviteCount = campaignInvites.filter(
+    (invite) => invite.enabled && !invite.disabledAt
+  ).length;
   const displayedRoomPlayers = useMemo(
     () =>
       displayedRoomPlayersWithOptimisticSubmission(
@@ -265,6 +314,8 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     [currentRoomPlayer, isSinglePlayer, pendingRollRequests, playerProfile]
   );
   const currentPendingRollRequest = currentPendingRollRequests[0] ?? null;
+  const hasPendingDiceInput =
+    nextInputNeeded === "dice_results" || pendingRollRequests.length > 0;
   const currentRequiredRollDice = useMemo(
     () => requiredDiceQueueFromRequests(currentPendingRollRequests),
     [currentPendingRollRequests]
@@ -281,6 +332,12 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     playerProfile,
     currentRoomPlayer
   });
+  const isWaitingOnCombatTurnState = isWaitingOnCombatTurn({
+    isSinglePlayer,
+    combat: roomCombat,
+    currentRoomPlayer
+  });
+  const currentCombatTurnOwnerName = combatTurnOwnerName(roomCombat);
   const hasOptimisticSubmission = hasOptimisticSubmissionForCurrentPlayer({
     isSinglePlayer,
     optimisticSubmittedPlayerId,
@@ -304,7 +361,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     [messages, roomMessages, streamingDmMessages]
   );
   const isShowingStreamingDmMessage = useMemo(
-    () => streamingDmMessages.some((message) => message.content.trim()),
+    () => streamingDmMessages.length > 0,
     [streamingDmMessages]
   );
   const waitingPlayers = useMemo(
@@ -312,9 +369,11 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
       waitingPlayerStatuses({
         roomPlayers: displayedRoomPlayers,
         hasAdventureBegun,
-        isSinglePlayer
+        isSinglePlayer,
+        inputPolicy,
+        inputTargets
       }),
-    [displayedRoomPlayers, hasAdventureBegun, isSinglePlayer]
+    [displayedRoomPlayers, hasAdventureBegun, inputPolicy, inputTargets, isSinglePlayer]
   );
   const activeCharacterSheet = useMemo(
     () =>
@@ -338,16 +397,38 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     !isSinglePlayer &&
     roomPlayers.length >= 2 &&
     !hasAdventureBegun;
+  const canSelectAiModel =
+    isSinglePlayer || Boolean(activeCampaign?.ownerClientId === playerId);
+  const playerInputLockMessage = currentPendingRollRequest
+    ? `Roll required: ${
+        currentRequiredRollDice?.expression ?? currentPendingRollRequest.label
+      }`
+    : isWaitingOnAnotherPlayerRollState
+      ? "Waiting on another player's roll"
+    : isWaitingOnTargetedInputState
+      ? "Waiting on another player"
+    : isWaitingOnCombatTurnState
+      ? currentCombatTurnOwnerName
+        ? `Waiting on ${currentCombatTurnOwnerName}'s combat turn`
+        : "Waiting on another combat turn"
+    : !isSinglePlayer && !hasAdventureBegun
+      ? "You can only start once the adventure has begun"
+    : undefined;
 
   const applyRoomSnapshot = useCallback(
     (room: RoomSnapshot) => {
       setRoomPlayers(room.players);
       setRoomMessages(room.messages);
+      setStreamingDmMessages((currentMessages) =>
+        removePersistedStreamingDmMessages(currentMessages, room.messages)
+      );
       setIsRoomResolving(room.isResolving);
       setHasAdventureBegun(room.hasBegun);
       setPendingRollRequests(rollRequestsFromRoom(room));
+      setNextInputNeeded(room.nextInputNeeded ?? "player_actions");
       setInputTargets(room.inputTargets ?? []);
       setInputPolicy(room.inputPolicy ?? "all_players");
+      setRoomCombat(room.combat);
 
       const currentPlayer = room.players.find(
         (roomPlayer) => roomPlayer.id === playerId
@@ -364,11 +445,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
           characterSheet: currentPlayer.characterSheet
         };
 
-        setPlayerProfile((currentProfile) =>
-          getMissingPlayerProfileFields(currentProfile).length === 0
-            ? currentProfile
-            : snapshotProfile
-        );
+        setPlayerProfile(snapshotProfile);
       }
 
       const submissionUpdate = roomSnapshotSubmissionUpdate({
@@ -405,7 +482,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
       const response = await fetch(
         `/api/room?roomId=${encodeURIComponent(
           campaign.id
-        )}&sessionId=${encodeURIComponent(campaign.hermesSessionId)}`
+        )}&sessionId=${encodeURIComponent(campaign.sessionId)}`
       );
 
       if (!response.ok) {
@@ -425,8 +502,10 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
         setIsRoomResolving(room.isResolving);
         setHasAdventureBegun(true);
         setPendingRollRequests(rollRequestsFromRoom(room));
+        setNextInputNeeded(room.nextInputNeeded ?? "player_actions");
         setInputTargets(room.inputTargets ?? []);
         setInputPolicy(room.inputPolicy ?? "all_players");
+        setRoomCombat(room.combat);
       } else {
         applyRoomSnapshot(room);
       }
@@ -527,107 +606,37 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
   useEffect(() => {
     let shouldIgnore = false;
 
-    async function refreshCampaigns() {
+    async function loadInvites() {
+      if (!activeCampaign || !canManageInvites) {
+        setCampaignInvites([]);
+        setInviteStatus("");
+        setInviteError("");
+        return;
+      }
+
       try {
-        const campaigns = await fetchCampaigns();
+        const invites = await listCampaignInvites(activeCampaign.id);
 
         if (!shouldIgnore) {
-          setAvailableCampaigns(campaigns);
+          setCampaignInvites(invites);
         }
-      } catch {
-        // Keep the last good sidebar list if the server is briefly unavailable.
+      } catch (caught) {
+        if (!shouldIgnore) {
+          setInviteError(
+            caught instanceof Error
+              ? caught.message
+              : "Invite links could not be loaded."
+          );
+        }
       }
     }
 
-    const interval = window.setInterval(() => {
-      void refreshCampaigns();
-    }, 3000);
+    void loadInvites();
 
     return () => {
       shouldIgnore = true;
-      window.clearInterval(interval);
     };
-  }, [fetchCampaigns]);
-
-  const registerPlayerProfile = useCallback(
-    async (profile: PlayerProfile) => {
-      if (!playerId || !activeCampaign || isSinglePlayer) {
-        return;
-      }
-
-      const missingProfileFields = getMissingPlayerProfileFields(profile);
-
-      if (missingProfileFields.length > 0) {
-        setInputValidationMessage(
-          `Finish your ${missingProfileFields.join(", ")} before updating.`
-        );
-        setInputValidationPulse((currentPulse) => currentPulse + 1);
-        return;
-      }
-
-      if (playerRegistrationInFlightRef.current) {
-        return;
-      }
-
-      playerRegistrationInFlightRef.current = true;
-
-      try {
-        const response = await fetchWithTimeout("/api/room/player", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            roomId: activeCampaign.id,
-            sessionId: activeCampaign.hermesSessionId,
-            playerId,
-            username: profile.username,
-            characterName: profile.characterName,
-            characterSheet: profile.characterSheet
-          })
-        });
-
-        if (!response.ok) {
-          throw new Error("Room registration failed.");
-        }
-
-        const room = (await response.json()) as RoomSnapshot;
-        applyRoomSnapshot(room);
-      } finally {
-        playerRegistrationInFlightRef.current = false;
-      }
-    },
-    [activeCampaign, applyRoomSnapshot, isSinglePlayer, playerId]
-  );
-
-  useEffect(() => {
-    if (
-      !activeCampaign ||
-      isSinglePlayer ||
-      !playerId ||
-      getMissingPlayerProfileFields(playerProfile).length > 0
-    ) {
-      return;
-    }
-
-    function registerPlayer() {
-      void registerPlayerProfile(playerProfile).catch(() => undefined);
-    }
-
-    const timeout = window.setTimeout(registerPlayer, 350);
-    const interval = window.setInterval(registerPlayer, 10_000);
-
-    return () => {
-      window.clearTimeout(timeout);
-      window.clearInterval(interval);
-    };
-  }, [
-    activeCampaign,
-    isSinglePlayer,
-    playerId,
-    playerProfile,
-    registerPlayerProfile
-  ]);
+  }, [activeCampaign, canManageInvites]);
 
   useEffect(() => {
     if (!activeCampaign) {
@@ -640,8 +649,10 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
       pendingSubmissionRef.current = null;
       setOptimisticSubmittedPlayerId(null);
       setPendingRollRequests([]);
+      setNextInputNeeded("player_actions");
       setInputTargets([]);
       setInputPolicy("all_players");
+      setRoomCombat(undefined);
       return;
     }
 
@@ -661,7 +672,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
         const response = await fetchWithTimeout(
           `/api/room?roomId=${encodeURIComponent(
             activeCampaign.id
-          )}&sessionId=${encodeURIComponent(activeCampaign.hermesSessionId)}`,
+          )}&sessionId=${encodeURIComponent(activeCampaign.sessionId)}`,
           { cache: "no-store" }
         );
 
@@ -676,8 +687,10 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
             setIsRoomResolving(room.isResolving);
             setHasAdventureBegun(true);
             setPendingRollRequests(rollRequestsFromRoom(room));
+            setNextInputNeeded(room.nextInputNeeded ?? "player_actions");
             setInputTargets(room.inputTargets ?? []);
             setInputPolicy(room.inputPolicy ?? "all_players");
+            setRoomCombat(room.combat);
           } else {
             applyRoomSnapshot(room);
           }
@@ -775,7 +788,11 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
           realtimeEvent.roomId === activeCampaign.id
         ) {
           setStreamingDmMessages((currentMessages) =>
-            removeStreamingDmMessage(currentMessages, realtimeEvent.turnId)
+            completeStreamingDmMessage(
+              currentMessages,
+              realtimeEvent.turnId,
+              realtimeEvent.messageId
+            )
           );
           void refreshRoom();
         }
@@ -842,8 +859,10 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     setStreamingDmMessages([]);
     setHasAdventureBegun(campaign.mode === "single_player");
     setPendingRollRequests([]);
+    setNextInputNeeded("player_actions");
     setInputTargets([]);
     setInputPolicy("all_players");
+    setRoomCombat(undefined);
     setInputValidationMessage("");
     setTableAlert("");
     setIsInputSubmitted(false);
@@ -974,6 +993,75 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     }
   }
 
+  async function handleCopyInviteLink() {
+    if (!activeCampaign || isCreatingInvite) {
+      return;
+    }
+
+    setIsCreatingInvite(true);
+    setInviteError("");
+    setInviteStatus("");
+
+    try {
+      const invite = await createCampaignInvite(activeCampaign.id);
+      const url = inviteUrl(invite.token);
+
+      await navigator.clipboard.writeText(url);
+      setCampaignInvites((currentInvites) => [invite, ...currentInvites]);
+      setInviteStatus("Invite link copied.");
+    } catch (caught) {
+      setInviteError(
+        caught instanceof Error
+          ? caught.message
+          : "The invite link could not be copied."
+      );
+    } finally {
+      setIsCreatingInvite(false);
+    }
+  }
+
+  async function handleDisableInviteLinks() {
+    if (!activeCampaign || isDisablingInvites) {
+      return;
+    }
+
+    const activeInvites = campaignInvites.filter(
+      (invite) => invite.enabled && !invite.disabledAt
+    );
+
+    if (activeInvites.length === 0) {
+      return;
+    }
+
+    setIsDisablingInvites(true);
+    setInviteError("");
+    setInviteStatus("");
+
+    try {
+      const disabledInvites = await Promise.all(
+        activeInvites.map((invite) =>
+          disableCampaignInvite(activeCampaign.id, invite.id)
+        )
+      );
+      const disabledById = new Map(
+        disabledInvites.map((invite) => [invite.id, invite])
+      );
+
+      setCampaignInvites((currentInvites) =>
+        currentInvites.map((invite) => disabledById.get(invite.id) ?? invite)
+      );
+      setInviteStatus("Invite links disabled.");
+    } catch (caught) {
+      setInviteError(
+        caught instanceof Error
+          ? caught.message
+          : "Invite links could not be disabled."
+      );
+    } finally {
+      setIsDisablingInvites(false);
+    }
+  }
+
   async function handleBeginAdventure() {
     if (!activeCampaign || !canBeginAdventure || isRoomResolving) {
       return;
@@ -991,7 +1079,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
         },
         body: JSON.stringify({
           roomId: activeCampaign.id,
-          sessionId: activeCampaign.hermesSessionId
+          sessionId: activeCampaign.sessionId
         })
       });
 
@@ -1023,7 +1111,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
 
   async function sendTurn(
     messageText: string,
-    options: { skipTurn?: boolean } = {}
+    options: { skipTurn?: boolean; model?: AiModelId } = {}
   ) {
     const skipTurn = Boolean(options.skipTurn);
     const currentPlayerName =
@@ -1042,6 +1130,8 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
       pendingRollRequests,
       currentPendingRollRequest,
       isWaitingOnTargetedInput: isWaitingOnTargetedInputState,
+      isWaitingOnCombatTurn: isWaitingOnCombatTurnState,
+      combatTurnOwnerName: currentCombatTurnOwnerName,
       isSinglePlayer,
       hasAdventureBegun,
       playerProfile
@@ -1095,7 +1185,8 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
         playerId,
         message: content,
         skipTurn,
-        clientMessageId: playerMessage.id
+        clientMessageId: playerMessage.id,
+        model: options.model ?? selectedAiModelFromStorage()
       });
       const response = await fetch(
         request.endpoint,
@@ -1222,7 +1313,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     }
   }
 
-  async function askDungeonMaster(messageText: string) {
+  async function askDungeonMaster(messageText: string, model: AiModelId) {
     const question = messageText.trim();
 
     if (!question || isSending || !activeCampaign) {
@@ -1255,7 +1346,8 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
           },
           body: JSON.stringify({
             question,
-            clientMessageId: playerMessage.id
+            clientMessageId: playerMessage.id,
+            model
           })
         }
       );
@@ -1304,16 +1396,23 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const model = canSelectAiModel
+      ? selectedAiModelFromForm(event.currentTarget)
+      : defaultAiModel;
+
     if (inputMode === "ask_dm") {
-      void askDungeonMaster(draft);
+      void askDungeonMaster(draft, model);
       return;
     }
 
-    void sendTurn(draft);
+    void sendTurn(draft, { model });
   }
 
   function handleSkipTurn() {
-    void sendTurn("", { skipTurn: true });
+    void sendTurn("", {
+      skipTurn: true,
+      model: canSelectAiModel ? selectedAiModelFromStorage() : defaultAiModel
+    });
   }
 
   async function completePendingRollBatch(
@@ -1343,7 +1442,8 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
         singlePlayer,
         playerId,
         rollSubmissions,
-        clientMessageId: rollMessage.id
+        clientMessageId: rollMessage.id,
+        model: selectedAiModelFromStorage()
       });
       const response = await fetch(
         request.endpoint,
@@ -1555,6 +1655,38 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
                     <strong>{activeCampaign.joinCode}</strong>
                   </div>
                 ) : null}
+                {canManageInvites ? (
+                  <div className="invite-link-controls">
+                    <button
+                      type="button"
+                      className="secondary-action"
+                      disabled={isCreatingInvite}
+                      onClick={() => void handleCopyInviteLink()}
+                    >
+                      <Copy size={16} />
+                      {isCreatingInvite ? "Copying..." : "Copy Invite Link"}
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-action"
+                      disabled={activeInviteCount === 0 || isDisablingInvites}
+                      onClick={() => void handleDisableInviteLinks()}
+                    >
+                      <Link size={16} />
+                      {isDisablingInvites
+                        ? "Disabling..."
+                        : `Disable Links${
+                            activeInviteCount > 0 ? ` (${activeInviteCount})` : ""
+                          }`}
+                    </button>
+                    {inviteStatus ? (
+                      <span className="invite-status">{inviteStatus}</span>
+                    ) : null}
+                    {inviteError ? (
+                      <span className="invite-error-inline">{inviteError}</span>
+                    ) : null}
+                  </div>
+                ) : null}
                 <p>
                   {roomPlayers.length >= 2
                     ? "The party is gathered. Let the DM open the campaign."
@@ -1581,20 +1713,8 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
                 Boolean(activeDiceReveal) ||
                 isInputSubmittedForCurrentState
               }
-              lockMessage={
-                currentPendingRollRequest
-                  ? `Roll required: ${
-                      currentRequiredRollDice?.expression ??
-                      currentPendingRollRequest.label
-                    }`
-                  : isWaitingOnAnotherPlayerRollState
-                    ? "Waiting on another player's roll"
-                    : isWaitingOnTargetedInputState
-                      ? "Waiting on another player"
-                  : !isSinglePlayer && !hasAdventureBegun
-                  ? "You can only start once the adventure has begun"
-                  : undefined
-              }
+              canSelectAiModel={canSelectAiModel}
+              lockMessage={playerInputLockMessage}
               requiredRoll={currentPendingRollRequest}
               requiredRollExpression={currentRequiredRollDice?.expression}
               requiredQueuedDice={currentRequiredRollDice?.queuedDice}
@@ -1633,7 +1753,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
         type="button"
         aria-label="Send turn"
         disabled={
-          pendingRollRequests.length > 0 ||
+          hasPendingDiceInput ||
           isWaitingOnTargetedInputState ||
           Boolean(activeDiceReveal) ||
           isSending ||
