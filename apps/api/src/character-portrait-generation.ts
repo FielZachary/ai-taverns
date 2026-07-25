@@ -59,6 +59,7 @@ const defaultQwenImageEndpoint =
   "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation";
 const defaultQwenImageModel = "qwen-image-2.0-pro";
 let localEnvCache: Record<string, string> | undefined;
+let localEnvCacheCwd: string | undefined;
 
 function parseLocalEnvFile(text: string) {
   const values: Record<string, string> = {};
@@ -86,11 +87,12 @@ function parseLocalEnvFile(text: string) {
 }
 
 function loadLocalEnvCache() {
-  if (localEnvCache) {
+  const cwd = process.cwd();
+
+  if (localEnvCache && localEnvCacheCwd === cwd) {
     return localEnvCache;
   }
 
-  const cwd = process.cwd();
   const repoRootFromApiWorkspace = join(cwd, "..", "..");
   const envPaths = Array.from(
     new Set([
@@ -104,6 +106,7 @@ function loadLocalEnvCache() {
     ])
   );
   localEnvCache = {};
+  localEnvCacheCwd = cwd;
 
   for (const envPath of envPaths) {
     if (!existsSync(envPath)) {
@@ -123,6 +126,24 @@ function envValue(name: string) {
   return process.env[name] || loadLocalEnvCache()[name] || "";
 }
 
+function qwenImageEndpointFromBaseUrl(baseUrl: string) {
+  if (!baseUrl.trim()) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(baseUrl);
+
+    if (!/dashscope(?:-intl)?\.aliyuncs\.com$/i.test(parsed.hostname)) {
+      return "";
+    }
+
+    return `${parsed.origin}/api/v1/services/aigc/multimodal-generation/generation`;
+  } catch {
+    return "";
+  }
+}
+
 function qwenImageSettings() {
   return {
     apiKey:
@@ -130,7 +151,9 @@ function qwenImageSettings() {
       envValue("DASHSCOPE_API_KEY") ||
       envValue("QWEN_API_KEY"),
     endpoint: (
-      envValue("QWEN_IMAGE_ENDPOINT") || defaultQwenImageEndpoint
+      envValue("QWEN_IMAGE_ENDPOINT") ||
+      qwenImageEndpointFromBaseUrl(envValue("QWEN_BASE_URL")) ||
+      defaultQwenImageEndpoint
     ).replace(/\/+$/, ""),
     model: envValue("QWEN_IMAGE_MODEL") || defaultQwenImageModel
   };

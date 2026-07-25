@@ -185,6 +185,154 @@ test("POST /api/campaigns can generate and attach a character portrait", async (
   }
 });
 
+test("POST /api/campaigns uses production Qwen base URL for character portraits", async () => {
+  const cookie = await signIn("portrait-production-env@example.com");
+  const originalFetch = globalThis.fetch;
+  const originalQwenImageApiKey = process.env.QWEN_IMAGE_API_KEY;
+  const originalDashscopeApiKey = process.env.DASHSCOPE_API_KEY;
+  const originalQwenApiKey = process.env.QWEN_API_KEY;
+  const originalQwenImageEndpoint = process.env.QWEN_IMAGE_ENDPOINT;
+  const originalQwenBaseUrl = process.env.QWEN_BASE_URL;
+  const originalQwenImageModel = process.env.QWEN_IMAGE_MODEL;
+  const imageBuffer = await sharp({
+    create: {
+      width: 128,
+      height: 128,
+      channels: 4,
+      background: "#0f766e"
+    }
+  })
+    .png()
+    .toBuffer();
+  const imageGenerationEndpoint =
+    "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation";
+  const fetchCalls: string[] = [];
+
+  delete process.env.QWEN_IMAGE_API_KEY;
+  delete process.env.DASHSCOPE_API_KEY;
+  process.env.QWEN_API_KEY = "production-qwen-key";
+  delete process.env.QWEN_IMAGE_ENDPOINT;
+  process.env.QWEN_BASE_URL =
+    "https://dashscope.aliyuncs.com/compatible-mode/v1";
+  delete process.env.QWEN_IMAGE_MODEL;
+
+  globalThis.fetch = (async (url, init) => {
+    fetchCalls.push(String(url));
+
+    if (String(url) === imageGenerationEndpoint) {
+      const headers = new Headers(init?.headers);
+      assert.equal(headers.get("authorization"), "Bearer production-qwen-key");
+      const body = JSON.parse(String(init?.body)) as {
+        model?: string;
+      };
+
+      assert.equal(body.model, "qwen-image-2.0-pro");
+
+      return new Response(
+        JSON.stringify({
+          request_id: "qwen-image-production-request",
+          output: {
+            choices: [
+              {
+                message: {
+                  content: [
+                    {
+                      image: "https://qwen-image.example.test/production.png"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json"
+          }
+        }
+      );
+    }
+
+    if (String(url) === "https://qwen-image.example.test/production.png") {
+      return new Response(imageBuffer, {
+        status: 200,
+        headers: {
+          "content-type": "image/png"
+        }
+      });
+    }
+
+    throw new Error(`Unexpected fetch URL: ${String(url)}`);
+  }) as typeof fetch;
+
+  try {
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/campaigns",
+      headers: {
+        cookie
+      },
+      payload: {
+        mode: "multiplayer",
+        campaignGenreKind: "preset",
+        campaignGenrePresetId: "classic_fantasy",
+        ownerClientId: "portrait-production-env-client",
+        playerName: "Production Portrait Owner",
+        characterName: "Thalia",
+        characterSheet:
+          "Character Name: Thalia\nLevel: 2\nClass: Fighter\nSpecies: Human\nDM Brief: A shield-bearing mercenary with sea-green armor.",
+        generateCharacterPortrait: true
+      }
+    });
+
+    assert.equal(createResponse.statusCode, 201, createResponse.body);
+
+    const created = CampaignCreateResponseSchema.parse(createResponse.json());
+    assert.ok(created.campaign.portraitAssetId);
+    assert.match(
+      created.campaign.portraitUrl ?? "",
+      /^\/media\/campaigns\/.+\/512\.webp$/
+    );
+    assert.deepEqual(fetchCalls, [
+      imageGenerationEndpoint,
+      "https://qwen-image.example.test/production.png"
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalQwenImageApiKey === undefined) {
+      delete process.env.QWEN_IMAGE_API_KEY;
+    } else {
+      process.env.QWEN_IMAGE_API_KEY = originalQwenImageApiKey;
+    }
+    if (originalDashscopeApiKey === undefined) {
+      delete process.env.DASHSCOPE_API_KEY;
+    } else {
+      process.env.DASHSCOPE_API_KEY = originalDashscopeApiKey;
+    }
+    if (originalQwenApiKey === undefined) {
+      delete process.env.QWEN_API_KEY;
+    } else {
+      process.env.QWEN_API_KEY = originalQwenApiKey;
+    }
+    if (originalQwenImageEndpoint === undefined) {
+      delete process.env.QWEN_IMAGE_ENDPOINT;
+    } else {
+      process.env.QWEN_IMAGE_ENDPOINT = originalQwenImageEndpoint;
+    }
+    if (originalQwenBaseUrl === undefined) {
+      delete process.env.QWEN_BASE_URL;
+    } else {
+      process.env.QWEN_BASE_URL = originalQwenBaseUrl;
+    }
+    if (originalQwenImageModel === undefined) {
+      delete process.env.QWEN_IMAGE_MODEL;
+    } else {
+      process.env.QWEN_IMAGE_MODEL = originalQwenImageModel;
+    }
+  }
+});
+
 test("POST /api/campaigns records failed character portrait generation", async () => {
   const cookie = await signIn("portrait-failure@example.com");
   const originalFetch = globalThis.fetch;
