@@ -36,15 +36,18 @@ const region = process.env.SPACES_REGION ?? "sgp1";
 const endpoint =
   process.env.SPACES_ENDPOINT ?? `https://${region}.digitaloceanspaces.com`;
 const bucket = process.env.SPACES_BUCKET ?? "ai-taverns-media";
-const accessKeyId = process.env.SPACES_ACCESS_KEY_ID;
-const secretAccessKey = process.env.SPACES_SECRET_ACCESS_KEY;
+const accessKeyId =
+  process.env.SPACES_ACCESS_KEY_ID ?? process.env.DIGITALOCEAN_SPACES_ACCESS_KEY;
+const secretAccessKey =
+  process.env.SPACES_SECRET_ACCESS_KEY ??
+  process.env.DIGITALOCEAN_SPACES_SECRET_KEY;
 const publicBaseUrl =
   process.env.MEDIA_PUBLIC_BASE_URL ??
   `https://${bucket}.${region}.digitaloceanspaces.com`;
 
 if (!accessKeyId || !secretAccessKey) {
   console.error(
-    "SPACES_ACCESS_KEY_ID and SPACES_SECRET_ACCESS_KEY are required. DigitalOcean account API tokens are not S3-compatible Spaces keys."
+    "SPACES_ACCESS_KEY_ID/SPACES_SECRET_ACCESS_KEY or DIGITALOCEAN_SPACES_ACCESS_KEY/DIGITALOCEAN_SPACES_SECRET_KEY are required. DigitalOcean account API tokens are not S3-compatible Spaces keys."
   );
   process.exit(1);
 }

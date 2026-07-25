@@ -64,8 +64,8 @@ test("loadConfig applies production security defaults and explicit overrides", (
     SPACES_ENDPOINT: "https://sgp1.digitaloceanspaces.com",
     SPACES_REGION: "sgp1",
     SPACES_BUCKET: "ai-taverns-media",
-    SPACES_ACCESS_KEY_ID: "spaces-key",
-    SPACES_SECRET_ACCESS_KEY: "spaces-secret"
+    DIGITALOCEAN_SPACES_ACCESS_KEY: "spaces-key",
+    DIGITALOCEAN_SPACES_SECRET_KEY: "spaces-secret"
   });
 
   assert.deepEqual(config, {
