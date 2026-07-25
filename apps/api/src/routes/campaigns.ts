@@ -199,6 +199,19 @@ export async function registerCampaignRoutes(
             userId: user.id
           })
         : undefined;
+
+    if (portrait && portrait.status !== "ready") {
+      fastify.log.warn(
+        {
+          campaignId: campaign.id,
+          userId: user.id,
+          portraitStatus: portrait.status,
+          reason: portrait.reason
+        },
+        "Character portrait generation did not complete."
+      );
+    }
+
     const responseCampaign =
       portrait?.status === "ready"
         ? {
