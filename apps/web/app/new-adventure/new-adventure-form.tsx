@@ -720,6 +720,15 @@ function spellEffectSummaryFor(spell: string) {
   return "Adds a flexible magical option for combat, exploration, or problem-solving.";
 }
 
+function spellArtPathFor(spell: string) {
+  const slug = spell
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+
+  return `/spell-art/${slug}.svg`;
+}
+
 const specificSpellSchools: Record<string, string> = {
   Aid: "Abjuration",
   Bane: "Enchantment",
@@ -4737,6 +4746,9 @@ export function NewAdventureForm({
                                         isDlcSpell ? "dlc-spell-option" : ""
                                       ].filter(Boolean).join(" ")}
                                       key={option}
+                                      style={{
+                                        "--spell-art-url": `url("${spellArtPathFor(option)}")`
+                                      } as CSSProperties}
                                     >
                                       <button
                                         type="button"

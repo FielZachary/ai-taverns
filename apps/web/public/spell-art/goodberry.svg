@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Abstract Goodberry spell art, no people">
+  <defs>
+    <radialGradient id="core" cx="49%" cy="54%" r="72%">
+      <stop offset="0" stop-color="#f4cf7a" stop-opacity="0.72"/>
+      <stop offset="0.42" stop-color="#b08cff" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#241c3f" stop-opacity="1"/>
+    </radialGradient>
+    <linearGradient id="veil" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff5cf" stop-opacity="0.16"/>
+      <stop offset="0.48" stop-color="#7f8cff" stop-opacity="0.13"/>
+      <stop offset="1" stop-color="#050302" stop-opacity="0.7"/>
+    </linearGradient>
+    <filter id="soft"><feGaussianBlur stdDeviation="6"/></filter>
+  </defs>
+  <rect width="512" height="512" fill="url(#core)"/>
+  <circle cx="384" cy="313" r="204" fill="#b08cff" opacity="0.13" filter="url(#soft)"/>
+  <circle cx="353" cy="162" r="225" fill="#f4cf7a" opacity="0.1" filter="url(#soft)"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M40 500 C72 316 124 372 96 181" fill="none" stroke="#f4cf7a" stroke-width="3" opacity="0.23"/>
+    <path d="M82 500 C90 338 146 329 126 200" fill="none" stroke="#b08cff" stroke-width="4" opacity="0.23"/>
+    <path d="M124 500 C108 314 168 307 156 210" fill="none" stroke="#f4cf7a" stroke-width="5" opacity="0.23"/>
+    <path d="M166 500 C126 337 190 296 186 215" fill="none" stroke="#b08cff" stroke-width="6" opacity="0.23"/>
+    <path d="M208 500 C144 349 212 336 216 167" fill="none" stroke="#f4cf7a" stroke-width="7" opacity="0.23"/>
+    <path d="M250 500 C162 320 234 311 246 143" fill="none" stroke="#b08cff" stroke-width="3" opacity="0.23"/>
+    <path d="M292 500 C180 340 256 343 276 181" fill="none" stroke="#f4cf7a" stroke-width="4" opacity="0.23"/>
+    <path d="M334 500 C198 315 278 359 306 150" fill="none" stroke="#b08cff" stroke-width="5" opacity="0.23"/>
+    <path d="M376 500 C216 303 300 367 336 185" fill="none" stroke="#f4cf7a" stroke-width="6" opacity="0.23"/>
+    <path d="M418 500 C234 297 322 326 366 202" fill="none" stroke="#b08cff" stroke-width="7" opacity="0.23"/>
+    <path d="M460 500 C252 329 344 351 396 161" fill="none" stroke="#f4cf7a" stroke-width="3" opacity="0.23"/>
+    <path d="M502 500 C270 310 366 318 426 190" fill="none" stroke="#b08cff" stroke-width="4" opacity="0.23"/>
+  </g>
+  <g opacity="0.16">
+    <path d="M54 82 C158 20 342 28 458 96" stroke="#fff4ce" stroke-width="2" fill="none"/>
+    <path d="M38 426 C160 470 328 490 486 388" stroke="#0b0604" stroke-width="16" fill="none" opacity="0.38"/>
+    <path d="M74 424 C174 392 298 428 430 360" stroke="#f4cf7a" stroke-width="3" fill="none"/>
+  </g>
+  <rect width="512" height="512" fill="url(#veil)"/>
+</svg>

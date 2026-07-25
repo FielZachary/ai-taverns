@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Abstract Continual Flame spell art, no people">
+  <defs>
+    <radialGradient id="core" cx="64%" cy="61%" r="72%">
+      <stop offset="0" stop-color="#ffd267" stop-opacity="0.72"/>
+      <stop offset="0.42" stop-color="#f06b31" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#5a1d18" stop-opacity="1"/>
+    </radialGradient>
+    <linearGradient id="veil" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff5cf" stop-opacity="0.16"/>
+      <stop offset="0.48" stop-color="#8b6df2" stop-opacity="0.13"/>
+      <stop offset="1" stop-color="#050302" stop-opacity="0.7"/>
+    </linearGradient>
+    <filter id="soft"><feGaussianBlur stdDeviation="6"/></filter>
+  </defs>
+  <rect width="512" height="512" fill="url(#core)"/>
+  <circle cx="339" cy="369" r="189" fill="#f06b31" opacity="0.13" filter="url(#soft)"/>
+  <circle cx="221" cy="373" r="194" fill="#ffd267" opacity="0.1" filter="url(#soft)"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M88 295 C112 186 148 256 132 169 C190 238 210 268 194 390 Z" fill="#ffd267" opacity="0.16"/>
+    <path d="M130 335 C147 185 177 244 166 150 C208 225 234 238 220 390 Z" fill="#f06b31" opacity="0.26"/>
+    <path d="M172 315 C182 184 206 265 200 141 C226 249 258 223 246 390 Z" fill="#ffd267" opacity="0.16"/>
+    <path d="M214 305 C217 231 235 275 234 136 C244 230 282 258 272 390 Z" fill="#f06b31" opacity="0.26"/>
+    <path d="M256 340 C252 207 264 280 268 156 C262 252 306 275 298 390 Z" fill="#ffd267" opacity="0.16"/>
+    <path d="M298 357 C287 243 293 256 302 166 C280 263 330 284 324 390 Z" fill="#f06b31" opacity="0.26"/>
+    <path d="M340 366 C322 261 322 271 336 171 C298 268 354 288 350 390 Z" fill="#ffd267" opacity="0.16"/>
+    <path d="M382 330 C357 222 351 278 370 173 C316 271 378 248 376 390 Z" fill="#f06b31" opacity="0.26"/>
+  </g>
+  <g opacity="0.16">
+    <path d="M54 82 C158 20 342 28 458 96" stroke="#fff4ce" stroke-width="2" fill="none"/>
+    <path d="M38 426 C160 470 328 490 486 388" stroke="#0b0604" stroke-width="16" fill="none" opacity="0.38"/>
+    <path d="M74 424 C174 392 298 428 430 360" stroke="#ffd267" stroke-width="3" fill="none"/>
+  </g>
+  <rect width="512" height="512" fill="url(#veil)"/>
+</svg>

@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Abstract Snilloc's Snowball Swarm spell art, no people">
+  <defs>
+    <radialGradient id="core" cx="60%" cy="35%" r="72%">
+      <stop offset="0" stop-color="#f4cf7a" stop-opacity="0.72"/>
+      <stop offset="0.42" stop-color="#b08cff" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#241c3f" stop-opacity="1"/>
+    </radialGradient>
+    <linearGradient id="veil" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff5cf" stop-opacity="0.16"/>
+      <stop offset="0.48" stop-color="#48c78e" stop-opacity="0.13"/>
+      <stop offset="1" stop-color="#050302" stop-opacity="0.7"/>
+    </linearGradient>
+    <filter id="soft"><feGaussianBlur stdDeviation="6"/></filter>
+  </defs>
+  <rect width="512" height="512" fill="url(#core)"/>
+  <circle cx="335" cy="306" r="185" fill="#b08cff" opacity="0.13" filter="url(#soft)"/>
+  <circle cx="338" cy="118" r="112" fill="#f4cf7a" opacity="0.1" filter="url(#soft)"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M256 256 L265 128 M280 235 L280 105" stroke="#f4cf7a" stroke-width="2" opacity="0.22"/>
+    <path d="M256 256 L167 99 M248 342 L248 277" stroke="#b08cff" stroke-width="3" opacity="0.22"/>
+    <path d="M256 256 L303 84 M232 203 L232 170" stroke="#f4cf7a" stroke-width="4" opacity="0.22"/>
+    <path d="M256 256 L186 262 M264 133 L264 309" stroke="#b08cff" stroke-width="5" opacity="0.22"/>
+    <path d="M256 256 L128 166 M280 291 L240 379" stroke="#f4cf7a" stroke-width="2" opacity="0.22"/>
+    <path d="M256 256 L99 118 M248 370 L268 221" stroke="#b08cff" stroke-width="3" opacity="0.22"/>
+    <path d="M256 256 L84 94 M272 217 L242 142" stroke="#f4cf7a" stroke-width="4" opacity="0.22"/>
+    <path d="M256 256 L262 82 M244 333 L229 295" stroke="#b08cff" stroke-width="5" opacity="0.22"/>
+    <path d="M256 256 L166 76 M270 391 L263 179" stroke="#f4cf7a" stroke-width="2" opacity="0.22"/>
+    <path d="M256 256 L118 258 M283 420 L280 121" stroke="#b08cff" stroke-width="3" opacity="0.22"/>
+  </g>
+  <g opacity="0.16">
+    <path d="M54 82 C158 20 342 28 458 96" stroke="#fff4ce" stroke-width="2" fill="none"/>
+    <path d="M38 426 C160 470 328 490 486 388" stroke="#0b0604" stroke-width="16" fill="none" opacity="0.38"/>
+    <path d="M74 424 C174 392 298 428 430 360" stroke="#f4cf7a" stroke-width="3" fill="none"/>
+  </g>
+  <rect width="512" height="512" fill="url(#veil)"/>
+</svg>

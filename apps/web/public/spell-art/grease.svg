@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Abstract Grease spell art, no people">
+  <defs>
+    <radialGradient id="core" cx="45%" cy="46%" r="72%">
+      <stop offset="0" stop-color="#f4cf7a" stop-opacity="0.72"/>
+      <stop offset="0.42" stop-color="#b08cff" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#241c3f" stop-opacity="1"/>
+    </radialGradient>
+    <linearGradient id="veil" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff5cf" stop-opacity="0.16"/>
+      <stop offset="0.48" stop-color="#f06b31" stop-opacity="0.13"/>
+      <stop offset="1" stop-color="#050302" stop-opacity="0.7"/>
+    </linearGradient>
+    <filter id="soft"><feGaussianBlur stdDeviation="6"/></filter>
+  </defs>
+  <rect width="512" height="512" fill="url(#core)"/>
+  <circle cx="350" cy="298" r="170" fill="#b08cff" opacity="0.13" filter="url(#soft)"/>
+  <circle cx="360" cy="294" r="103" fill="#f4cf7a" opacity="0.1" filter="url(#soft)"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <polygon points="256,56 298,224 456,256 304,294 256,456 214,296 56,256 216,218" fill="none" stroke="#f4cf7a" stroke-width="2" opacity="0.13" transform="rotate(68 256 256)"/>
+    <polygon points="256,74 313,219 434,256 314,302 256,438 202,303 76,256 208,214" fill="none" stroke="#b08cff" stroke-width="3" opacity="0.13" transform="rotate(79 256 256)"/>
+    <polygon points="256,92 328,214 412,256 324,310 256,420 190,310 96,256 200,210" fill="none" stroke="#f4cf7a" stroke-width="4" opacity="0.13" transform="rotate(0 256 256)"/>
+    <polygon points="256,110 343,209 390,256 334,318 256,402 178,317 116,256 192,206" fill="none" stroke="#b08cff" stroke-width="2" opacity="0.13" transform="rotate(11 256 256)"/>
+    <polygon points="256,128 358,204 368,256 344,326 256,384 166,324 136,256 184,202" fill="none" stroke="#f4cf7a" stroke-width="3" opacity="0.13" transform="rotate(22 256 256)"/>
+    <polygon points="256,146 373,199 346,256 354,334 256,366 154,331 156,256 176,198" fill="none" stroke="#b08cff" stroke-width="4" opacity="0.13" transform="rotate(33 256 256)"/>
+    <polygon points="256,164 388,194 324,256 364,342 256,348 142,338 176,256 168,194" fill="none" stroke="#f4cf7a" stroke-width="2" opacity="0.13" transform="rotate(44 256 256)"/>
+    <polygon points="256,182 403,189 302,256 374,350 256,330 130,345 196,256 160,190" fill="none" stroke="#b08cff" stroke-width="3" opacity="0.13" transform="rotate(55 256 256)"/>
+    <polygon points="256,200 418,184 280,256 384,358 256,312 118,352 216,256 152,186" fill="none" stroke="#f4cf7a" stroke-width="4" opacity="0.13" transform="rotate(66 256 256)"/>
+  </g>
+  <g opacity="0.16">
+    <path d="M54 82 C158 20 342 28 458 96" stroke="#fff4ce" stroke-width="2" fill="none"/>
+    <path d="M38 426 C160 470 328 490 486 388" stroke="#0b0604" stroke-width="16" fill="none" opacity="0.38"/>
+    <path d="M74 424 C174 392 298 428 430 360" stroke="#f4cf7a" stroke-width="3" fill="none"/>
+  </g>
+  <rect width="512" height="512" fill="url(#veil)"/>
+</svg>

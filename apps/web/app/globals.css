@@ -1138,16 +1138,48 @@ h1 {
   border-radius: 8px;
   background: rgba(17, 13, 10, 0.48);
   overflow: hidden;
+  isolation: isolate;
+}
+
+.spell-option-card::before,
+.spell-option-card::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+}
+
+.spell-option-card::before {
+  z-index: -2;
+  background-image: var(--spell-art-url);
+  background-position: center;
+  background-size: cover;
+  filter: saturate(1.04) contrast(1.04);
+  opacity: 0.76;
+  transform: scale(1.02);
+}
+
+.spell-option-card::after {
+  z-index: -1;
+  background:
+    linear-gradient(180deg, rgba(10, 7, 5, 0.5), rgba(10, 7, 5, 0.78)),
+    radial-gradient(circle at 50% 18%, rgba(255, 237, 179, 0.12), transparent 52%);
 }
 
 .spell-option-card.selected,
 .spell-option-card:hover,
 .spell-option-card:focus-within {
   border-color: rgba(244, 207, 122, 0.72);
-  background:
-    linear-gradient(90deg, rgba(173, 71, 43, 0.16), transparent),
-    rgba(255, 255, 255, 0.05);
   box-shadow: 0 14px 32px rgba(0, 0, 0, 0.2);
+}
+
+.spell-option-card.selected::after,
+.spell-option-card:hover::after,
+.spell-option-card:focus-within::after {
+  background:
+    linear-gradient(90deg, rgba(173, 71, 43, 0.2), transparent),
+    linear-gradient(180deg, rgba(10, 7, 5, 0.38), rgba(10, 7, 5, 0.72)),
+    radial-gradient(circle at 50% 18%, rgba(255, 237, 179, 0.18), transparent 52%);
 }
 
 .spell-option-card.dlc-spell-option {
@@ -1165,7 +1197,6 @@ h1 {
 .spell-option-card:has(.spell-select-button:disabled):hover,
 .spell-option-card:has(.spell-select-button:disabled):focus-within {
   border-color: rgba(244, 207, 122, 0.22);
-  background: rgba(17, 13, 10, 0.48);
   box-shadow: none;
 }
 
@@ -1195,25 +1226,29 @@ h1 {
 }
 
 .spell-option-grid .spell-select-button strong {
+  color: #fff7df;
   line-height: 1.18;
   text-align: center;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.92);
 }
 
 .spell-option-grid .spell-select-button span {
   align-self: center;
-  color: var(--muted);
+  color: rgba(255, 239, 202, 0.86);
   font-size: 0.72rem;
   font-weight: 700;
   line-height: 1.28;
   text-align: center;
+  text-shadow: 0 2px 7px rgba(0, 0, 0, 0.9);
 }
 
 .spell-option-grid .spell-select-button small {
-  color: var(--muted);
+  color: rgba(255, 239, 202, 0.78);
   font-size: 0.64rem;
   font-weight: 900;
   line-height: 1.18;
   text-align: center;
+  text-shadow: 0 2px 7px rgba(0, 0, 0, 0.9);
   text-transform: uppercase;
 }
 

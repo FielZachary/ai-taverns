@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Abstract Speak with Plants spell art, no people">
+  <defs>
+    <radialGradient id="core" cx="48%" cy="49%" r="72%">
+      <stop offset="0" stop-color="#f4cf7a" stop-opacity="0.72"/>
+      <stop offset="0.42" stop-color="#b08cff" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#241c3f" stop-opacity="1"/>
+    </radialGradient>
+    <linearGradient id="veil" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff5cf" stop-opacity="0.16"/>
+      <stop offset="0.48" stop-color="#48c78e" stop-opacity="0.13"/>
+      <stop offset="1" stop-color="#050302" stop-opacity="0.7"/>
+    </linearGradient>
+    <filter id="soft"><feGaussianBlur stdDeviation="6"/></filter>
+  </defs>
+  <rect width="512" height="512" fill="url(#core)"/>
+  <circle cx="203" cy="347" r="203" fill="#b08cff" opacity="0.13" filter="url(#soft)"/>
+  <circle cx="380" cy="186" r="132" fill="#f4cf7a" opacity="0.1" filter="url(#soft)"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M40 500 C72 317 124 371 96 138" fill="none" stroke="#f4cf7a" stroke-width="3" opacity="0.23"/>
+    <path d="M82 500 C90 339 146 373 126 129" fill="none" stroke="#b08cff" stroke-width="4" opacity="0.23"/>
+    <path d="M124 500 C108 315 168 374 156 124" fill="none" stroke="#f4cf7a" stroke-width="5" opacity="0.23"/>
+    <path d="M166 500 C126 303 190 375 186 122" fill="none" stroke="#b08cff" stroke-width="6" opacity="0.23"/>
+    <path d="M208 500 C144 332 212 330 216 121" fill="none" stroke="#f4cf7a" stroke-width="7" opacity="0.23"/>
+    <path d="M250 500 C162 311 234 308 246 120" fill="none" stroke="#b08cff" stroke-width="3" opacity="0.23"/>
+    <path d="M292 500 C180 336 256 297 276 170" fill="none" stroke="#f4cf7a" stroke-width="4" opacity="0.23"/>
+    <path d="M334 500 C198 348 278 336 306 145" fill="none" stroke="#b08cff" stroke-width="5" opacity="0.23"/>
+    <path d="M376 500 C216 319 300 356 336 132" fill="none" stroke="#f4cf7a" stroke-width="6" opacity="0.23"/>
+    <path d="M418 500 C234 340 322 321 366 126" fill="none" stroke="#b08cff" stroke-width="7" opacity="0.23"/>
+    <path d="M460 500 C252 350 344 348 396 123" fill="none" stroke="#f4cf7a" stroke-width="3" opacity="0.23"/>
+    <path d="M502 500 C270 355 366 362 426 171" fill="none" stroke="#b08cff" stroke-width="4" opacity="0.23"/>
+  </g>
+  <g opacity="0.16">
+    <path d="M54 82 C158 20 342 28 458 96" stroke="#fff4ce" stroke-width="2" fill="none"/>
+    <path d="M38 426 C160 470 328 490 486 388" stroke="#0b0604" stroke-width="16" fill="none" opacity="0.38"/>
+    <path d="M74 424 C174 392 298 428 430 360" stroke="#f4cf7a" stroke-width="3" fill="none"/>
+  </g>
+  <rect width="512" height="512" fill="url(#veil)"/>
+</svg>

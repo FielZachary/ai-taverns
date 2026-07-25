@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Abstract Darkvision spell art, no people">
+  <defs>
+    <radialGradient id="core" cx="48%" cy="54%" r="72%">
+      <stop offset="0" stop-color="#c7f083" stop-opacity="0.72"/>
+      <stop offset="0.42" stop-color="#d39c42" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#4b3516" stop-opacity="1"/>
+    </radialGradient>
+    <linearGradient id="veil" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff5cf" stop-opacity="0.16"/>
+      <stop offset="0.48" stop-color="#d39c42" stop-opacity="0.13"/>
+      <stop offset="1" stop-color="#050302" stop-opacity="0.7"/>
+    </linearGradient>
+    <filter id="soft"><feGaussianBlur stdDeviation="6"/></filter>
+  </defs>
+  <rect width="512" height="512" fill="url(#core)"/>
+  <circle cx="293" cy="279" r="173" fill="#d39c42" opacity="0.13" filter="url(#soft)"/>
+  <circle cx="321" cy="357" r="95" fill="#c7f083" opacity="0.1" filter="url(#soft)"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="123" cy="334" r="30" fill="#020402" opacity="0.08"/>
+    <circle cx="286" cy="392" r="69" fill="#d39c42" opacity="0.115"/>
+    <circle cx="368" cy="421" r="88" fill="#020402" opacity="0.15000000000000002"/>
+    <circle cx="219" cy="435" r="58" fill="#d39c42" opacity="0.185"/>
+    <circle cx="334" cy="252" r="83" fill="#020402" opacity="0.08"/>
+    <circle cx="392" cy="351" r="55" fill="#d39c42" opacity="0.115"/>
+    <circle cx="421" cy="210" r="41" fill="#020402" opacity="0.15000000000000002"/>
+    <circle cx="435" cy="140" r="74" fill="#d39c42" opacity="0.185"/>
+    <circle cx="252" cy="105" r="91" fill="#020402" opacity="0.08"/>
+    <circle cx="351" cy="277" r="59" fill="#d39c42" opacity="0.115"/>
+  </g>
+  <g opacity="0.16">
+    <path d="M54 82 C158 20 342 28 458 96" stroke="#fff4ce" stroke-width="2" fill="none"/>
+    <path d="M38 426 C160 470 328 490 486 388" stroke="#0b0604" stroke-width="16" fill="none" opacity="0.38"/>
+    <path d="M74 424 C174 392 298 428 430 360" stroke="#c7f083" stroke-width="3" fill="none"/>
+  </g>
+  <rect width="512" height="512" fill="url(#veil)"/>
+</svg>
