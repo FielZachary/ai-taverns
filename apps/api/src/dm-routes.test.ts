@@ -1079,7 +1079,7 @@ test("DM runtime memory updater creates and updates NPC context cards", async ()
 
   assert.ok(createdChunk);
   assert.equal(createdChunk.category, "npc_context");
-  assert.equal(createdChunk.visibility, "dm_only");
+  assert.equal(createdChunk.visibility, "player_safe");
   assert.match(createdChunk.body_markdown, /## Motivations/);
   assert.match(createdChunk.body_markdown, /Wary but interested/);
 
@@ -1187,6 +1187,98 @@ test("DM runtime memory updater creates and updates NPC context cards", async ()
         /Harbor Watch station/.test(chunk.body_markdown)
     )
   );
+});
+
+test("DM runtime memory updater proactively creates player-visible world story chunks", async () => {
+  const { cookie, campaignId } = await createSinglePlayerCampaign(
+    "dm-runtime-world-context"
+  );
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "I touch the amber sphere in the grove's root chamber.",
+      clientMessageId: "world-context-first-turn"
+    }
+  });
+
+  assert.equal(response.statusCode, 200, response.body);
+  CampaignSoloTurnResponseSchema.parse(response.json());
+
+  const amberChunk = database.contextChunks.find(
+    (chunk) =>
+      chunk.campaign_id === campaignId &&
+      chunk.context_key === "world:amber-sphere"
+  );
+  const amberThread = database.contextChunks.find(
+    (chunk) =>
+      chunk.campaign_id === campaignId &&
+      chunk.context_key === "thread:the-amber-sphere"
+  );
+  const groveSecret = database.contextChunks.find(
+    (chunk) =>
+      chunk.campaign_id === campaignId &&
+      chunk.context_key === "secret:the-groves-heart"
+  );
+
+  assert.ok(amberChunk);
+  assert.equal(amberChunk.category, "relevant_world_context");
+  assert.equal(amberChunk.visibility, "player_safe");
+  assert.match(amberChunk.body_markdown, /## Strong Inferences/);
+  assert.match(amberChunk.body_markdown, /## DM Seeds/);
+
+  assert.ok(amberThread);
+  assert.equal(amberThread.category, "quests_open_threads");
+  assert.equal(amberThread.visibility, "player_safe");
+  assert.match(amberThread.body_markdown, /## Current Situation/);
+
+  assert.ok(groveSecret);
+  assert.equal(groveSecret.category, "overarching_big_plot_secrets");
+  assert.equal(groveSecret.visibility, "player_safe");
+  assert.match(groveSecret.body_markdown, /## Hidden Truth/);
+
+  const secondResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "I study the amber sphere again and watch the roots.",
+      clientMessageId: "world-context-second-turn"
+    }
+  });
+
+  assert.equal(secondResponse.statusCode, 200, secondResponse.body);
+  const secondTurn = CampaignSoloTurnResponseSchema.parse(secondResponse.json());
+  const secondTurnDebug = secondTurn.messages.at(-1)?.debug as
+    | DebugFields
+    | undefined;
+  const routerMessage =
+    (
+      secondTurnDebug?.router as
+        | { requestMessages?: { role?: string; content?: string }[] }
+        | undefined
+    )?.requestMessages?.at(-1)?.content ?? "";
+
+  assert.match(routerMessage, /Available context chunk keys JSON:/);
+  assert.match(routerMessage, /"key": "world:amber-sphere"/);
+  assert.match(routerMessage, /"key": "thread:the-amber-sphere"/);
+  assert.match(routerMessage, /"key": "secret:the-groves-heart"/);
+
+  const amberChunks = database.contextChunks.filter(
+    (chunk) =>
+      chunk.campaign_id === campaignId &&
+      chunk.context_key === "world:amber-sphere"
+  );
+
+  assert.equal(amberChunks.length, 1);
+  assert.equal(amberChunks[0]?.visibility, "player_safe");
+  assert.match(amberChunks[0]?.body_markdown ?? "", /Updated after/);
 });
 
 test("DM runtime routes require an owned session", async () => {

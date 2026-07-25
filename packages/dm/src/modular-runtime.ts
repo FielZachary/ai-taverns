@@ -1164,6 +1164,43 @@ export function buildMemoryUpdaterPrompt() {
     "Return strict JSON with patches, new_context_chunks, and remove_context_chunks.",
     "Allowed operations: append, replace_section, create_chunk, archive_chunk.",
     "Do not rewrite whole campaign memory or treat minor narration as durable memory.",
+    "For now, make every created context chunk player-visible by setting visibility to \"player_safe\".",
+    "Treat campaign context as a living world bible for the AI DM. Your job is not only to record facts; it is also to maintain compelling, reusable story material that helps the DM make the world feel coherent and alive.",
+    "Be proactive when the turn reveals or strongly implies durable worldbuilding, mysteries, factions, locations, artifacts, open player-facing problems, or long-running secrets.",
+    "Do not contradict established play. Separate confirmed facts from creative inference so future DMs can use your ideas without mistaking every seed for settled truth.",
+    "Prefer updating an existing matching chunk over creating a duplicate when the same place, artifact, faction, quest, mystery, or secret is clearly referenced by name, alias, role, or scene context.",
+    "",
+    "World and story memory rules:",
+    "Create or update relevant_world_context for locations, artifacts, magic phenomena, factions, cultures, hazards, recurring symbols, world state, and scene elements that could matter again.",
+    "Create or update quests_open_threads for active player-facing objectives, unresolved choices, investigations, threats, promises, leads, stakes, and next-step hooks.",
+    "Create or update overarching_big_plot_secrets for hidden truths, ancient causes, antagonist plans, campaign-scale mysteries, prophecy logic, or reveal paths the DM should track over time.",
+    "Use stable ids with a category prefix: world:kebab-case-name, thread:kebab-case-name, or secret:kebab-case-name.",
+    "For non-NPC chunks, include context_type explicitly as one of: relevant_world_context, quests_open_threads, overarching_big_plot_secrets.",
+    "Keep these chunks useful at the table: compact enough to retrieve, vivid enough to inspire, and structured enough to edit later.",
+    "",
+    "Relevant world context markdown format:",
+    "# <World Element>",
+    "## Established Facts",
+    "## Strong Inferences",
+    "## DM Seeds",
+    "## Open Questions",
+    "## Last Touched",
+    "",
+    "Quest/open thread markdown format:",
+    "# <Open Thread>",
+    "## Current Situation",
+    "## Stakes",
+    "## Known Leads",
+    "## Possible Complications",
+    "## Resolution Signals",
+    "",
+    "Overarching secret markdown format:",
+    "# <Secret>",
+    "## Hidden Truth",
+    "## Evidence Planted",
+    "## Future Reveal Paths",
+    "## Constraints",
+    "## Open Questions",
     "",
     "NPC memory rules:",
     "Create a new NPC card when a named NPC is newly introduced, met, spoken to, fought, rescued, hired, threatened, bargained with, discovered, or otherwise becomes campaign-relevant.",
@@ -1195,6 +1232,34 @@ export function buildMemoryUpdaterPrompt() {
     "",
     "For unknown fields, write \"Unknown.\" rather than inventing unsupported facts.",
     "",
+    "Example proactive world/story response:",
+    JSON.stringify(
+      {
+        patches: [],
+        new_context_chunks: [
+          {
+            context_id: "world:amber-sphere",
+            context_type: "relevant_world_context",
+            title: "Amber Sphere",
+            visibility: "player_safe",
+            markdown:
+              "# Amber Sphere\n\n## Established Facts\n- The party found a mysterious amber sphere beneath ancient root-choked stonework.\n- Touching it caused the grove chamber to react with visible magical energy.\n\n## Strong Inferences\nThe sphere is connected to the grove's deeper life-force rather than being a loose treasure or simple trap.\n\n## DM Seeds\n- The amber light may be a memory-preserving heart, a sealed warning, or a wounded intelligence trying to communicate through sensation.\n- The grove's changes can escalate in small, observable stages after each interaction with the sphere.\n\n## Open Questions\n- Is the sphere protecting the grove, imprisoning something, or awakening something?\n- What price does the grove ask from those who touch its heart?\n\n## Last Touched\nCreated after the party touched the amber sphere in the root chamber."
+          },
+          {
+            context_id: "thread:the-amber-sphere",
+            context_type: "quests_open_threads",
+            title: "The Amber Sphere",
+            visibility: "player_safe",
+            markdown:
+              "# The Amber Sphere\n\n## Current Situation\nThe party has chosen to interact directly with the amber sphere in the grove's root chamber.\n\n## Stakes\nThe sphere may define what the grove becomes next, who controls its awakening, and whether the party is treated as intruders, helpers, or chosen witnesses.\n\n## Known Leads\n- Observe how the chamber changes after contact.\n- Ask grove-touched NPCs what the amber light means.\n- Look for matching amber signs elsewhere in Sallowholt.\n\n## Possible Complications\n- The grove may answer in visions, bargains, or physical transformation rather than clear speech.\n- Other powers may notice the sphere's awakening.\n\n## Resolution Signals\nThe thread resolves when the party learns what the sphere is, decides how to handle it, and accepts the consequence of that choice."
+          }
+        ],
+        remove_context_chunks: []
+      },
+      null,
+      2
+    ),
+    "",
     "Example new NPC response:",
     JSON.stringify(
       {
@@ -1203,6 +1268,7 @@ export function buildMemoryUpdaterPrompt() {
           {
             context_id: "npc:marra-vell",
             title: "Marra Vell",
+            visibility: "player_safe",
             markdown:
               "# Marra Vell\n\n## Name\nMarra Vell\n\n## Location\nLast seen fleeing through the fog near Pier 6.\n\n## Personality\nQuick-eyed, guarded, and restless. She speaks in short answers when frightened, but notices exits, weapons, and lies faster than most people in the room.\n\n## Motivations\nStay alive, keep the black key out of the smugglers' hands, and decide whether the party is safer than running alone.\n\n## Disposition Towards You\nWary but interested. She does not trust the party yet, but their intervention made them useful enough that she may risk another conversation.\n\n## Known History\n- First encountered near Pier 6 while being pursued.\n- Recognized the black key but avoided explaining how.\n\n## Secrets\nKnows more about the black key's origin than she admitted. She may have worked with the smugglers before betraying them.\n\n## Open Threads\n- Could reveal who sent the pursuers if convinced the party can protect her.\n- May seek the party out again once she has nowhere else to run.\n\n## Last Seen\nRunning into the fog beyond Pier 6 after the confrontation."
           }

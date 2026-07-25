@@ -975,6 +975,7 @@ class FakeDatabase {
         chunk.body_markdown = [chunk.body_markdown, markdown]
           .filter(Boolean)
           .join("\n");
+        chunk.visibility = "player_safe";
         chunk.updated_at = new Date();
       }
 
@@ -997,7 +998,25 @@ class FakeDatabase {
 
       if (chunk) {
         chunk.body_markdown = markdown;
+        chunk.visibility = "player_safe";
         chunk.updated_at = new Date();
+      }
+
+      return { rows: [] as T[] };
+    }
+
+    if (
+      normalizedSql.startsWith(
+        "update campaign_context_chunks set visibility = 'player_safe'"
+      )
+    ) {
+      const campaignId = values[0] as string;
+
+      for (const chunk of this.contextChunks) {
+        if (chunk.campaign_id === campaignId && chunk.archived_at === null) {
+          chunk.visibility = "player_safe";
+          chunk.updated_at = new Date();
+        }
       }
 
       return { rows: [] as T[] };
@@ -1792,8 +1811,56 @@ before(async () => {
           const hasMarraContext = input.message.includes(
             '"context_id": "npc:marra-vell"'
           );
+          const shouldCreateAmber = /\bamber sphere\b/i.test(input.message);
+          const hasAmberContext = input.message.includes(
+            '"context_id": "world:amber-sphere"'
+          );
           const content = JSON.stringify(
-            shouldCreateMarra && hasMarraContext
+            shouldCreateAmber && hasAmberContext
+              ? {
+                  patches: [
+                    {
+                      operation: "replace_section",
+                      context_id: "world:amber-sphere",
+                      markdown:
+                        "# Amber Sphere\n\n## Established Facts\n- The amber sphere rests in the grove's root chamber.\n- The party touched it and woke a pulse of amber light through the roots.\n- The chamber reacted again after the party kept engaging with the sphere.\n\n## Strong Inferences\nThe sphere is bound to the grove's living heart and responds to intent, contact, and memory.\n\n## DM Seeds\n- The sphere may be storing the grove's oldest warning in sensory fragments.\n- Each touch can reveal a different layer of the grove's history or desire.\n\n## Open Questions\n- Is the sphere healing the grove or preparing it to choose a new guardian?\n\n## Last Touched\nUpdated after the party returned attention to the amber sphere."
+                    }
+                  ],
+                  new_context_chunks: [],
+                  remove_context_chunks: []
+                }
+              : shouldCreateAmber
+                ? {
+                    patches: [],
+                    new_context_chunks: [
+                      {
+                        context_id: "world:amber-sphere",
+                        context_type: "relevant_world_context",
+                        title: "Amber Sphere",
+                        visibility: "dm_only",
+                        markdown:
+                          "# Amber Sphere\n\n## Established Facts\n- The amber sphere rests in the grove's root chamber.\n- Touching it woke a pulse of amber light through the roots.\n\n## Strong Inferences\nThe sphere is tied to the grove's living heart and reacts to direct contact.\n\n## DM Seeds\n- The sphere may preserve an old warning from the grove.\n- The amber light can become a recurring sign of the grove's attention.\n\n## Open Questions\n- Is the sphere protecting the grove, imprisoning something, or asking for help?\n\n## Last Touched\nCreated after the party touched the amber sphere."
+                      },
+                      {
+                        context_id: "thread:the-amber-sphere",
+                        context_type: "quests_open_threads",
+                        title: "The Amber Sphere",
+                        visibility: "dm_only",
+                        markdown:
+                          "# The Amber Sphere\n\n## Current Situation\nThe party has touched the amber sphere in the grove's root chamber.\n\n## Stakes\nThe sphere's awakening may change how the grove responds to the party.\n\n## Known Leads\n- Watch the chamber for changes after contact.\n- Ask grove-touched NPCs about the amber light.\n\n## Possible Complications\n- The grove may answer in visions or transformations instead of words.\n\n## Resolution Signals\nThe party learns what the sphere is and decides what to do with it."
+                      },
+                      {
+                        context_id: "secret:the-groves-heart",
+                        context_type: "overarching_big_plot_secrets",
+                        title: "The Grove's Heart",
+                        visibility: "dm_only",
+                        markdown:
+                          "# The Grove's Heart\n\n## Hidden Truth\nThe amber sphere may be a visible vessel for the grove's deeper heart rather than a separate relic.\n\n## Evidence Planted\nAmber light moves through roots and stone when the sphere is touched.\n\n## Future Reveal Paths\n- Visions can show earlier guardians touching the same light.\n- NPCs tied to the grove may react with reverence or fear.\n\n## Constraints\nDo not confirm the sphere's full nature until the party earns a clearer revelation.\n\n## Open Questions\n- Who first placed or grew the sphere in the root chamber?"
+                      }
+                    ],
+                    remove_context_chunks: []
+                  }
+                : shouldCreateMarra && hasMarraContext
               ? {
                   patches: [
                     {
