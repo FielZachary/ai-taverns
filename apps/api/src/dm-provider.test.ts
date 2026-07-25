@@ -88,6 +88,7 @@ test("DeepSeek provider sends filtered history and returns non-stream debug meta
     temperature?: number;
     stream?: boolean;
     response_format?: unknown;
+    thinking?: { type?: string };
   } | undefined;
 
   globalThis.fetch = async (_url, init) => {
@@ -160,6 +161,7 @@ test("DeepSeek provider sends filtered history and returns non-stream debug meta
   ]);
   assert.equal(requestBody?.stream, undefined);
   assert.equal(requestBody?.response_format, undefined);
+  assert.deepEqual(requestBody?.thinking, { type: "disabled" });
   assert.equal(requestBody?.temperature, 0.8);
   assert.equal(response.id, "chat-1");
   assert.equal(response.debug.providerResponseId, "chat-1");
