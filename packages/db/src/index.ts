@@ -1351,6 +1351,103 @@ export async function getCampaignSummaryForUser(
   return mapCampaignSummaryRow(campaign);
 }
 
+export type CampaignNpcCard = {
+  id: string;
+  title: string;
+  markdown: string;
+  updatedAt?: string;
+};
+
+export async function listPlayerSafeNpcCardsForCampaign(
+  db: Queryable,
+  campaignId: string
+): Promise<CampaignNpcCard[]> {
+  try {
+    const result = await db.query<Record<string, unknown>>(
+      `
+        select
+          context_key,
+          title,
+          body_markdown,
+          updated_at
+        from campaign_context_chunks
+        where campaign_id = $1
+          and category = 'npc_context'
+          and visibility = 'player_safe'
+          and archived_at is null
+        order by priority desc, updated_at desc
+        limit 120
+      `,
+      [campaignId]
+    );
+
+    return result.rows.map((row) => {
+      const updatedAt = row.updated_at
+        ? toIso(row.updated_at as Date | string)
+        : undefined;
+
+      return {
+        id: String(row.context_key ?? ""),
+        title: String(row.title ?? row.context_key ?? "NPC"),
+        markdown: String(row.body_markdown ?? ""),
+        ...(updatedAt ? { updatedAt } : {})
+      };
+    });
+  } catch (error) {
+    if (!isMissingRuntimeTableError(error)) {
+      throw error;
+    }
+
+    return [];
+  }
+}
+
+export async function updatePlayerSafeNpcCardMarkdown(
+  db: Queryable,
+  input: {
+    campaignId: string;
+    npcCardId: string;
+    markdown: string;
+  }
+): Promise<CampaignNpcCard> {
+  const result = await db.query<Record<string, unknown>>(
+    `
+      update campaign_context_chunks
+      set body_markdown = $3,
+          title = $4,
+          updated_at = now()
+      where campaign_id = $1
+        and context_key = $2
+        and category = 'npc_context'
+        and visibility = 'player_safe'
+        and archived_at is null
+      returning context_key, title, body_markdown, updated_at
+    `,
+    [
+      input.campaignId,
+      input.npcCardId,
+      input.markdown,
+      input.markdown.match(/^#\s+(.+)$/m)?.[1]?.trim() || input.npcCardId
+    ]
+  );
+  const row = result.rows[0];
+
+  if (!row) {
+    throw createStatusError(404, "NPC card not found.");
+  }
+
+  const updatedAt = row.updated_at
+    ? toIso(row.updated_at as Date | string)
+    : undefined;
+
+  return {
+    id: String(row.context_key ?? ""),
+    title: String(row.title ?? row.context_key ?? "NPC"),
+    markdown: String(row.body_markdown ?? ""),
+    ...(updatedAt ? { updatedAt } : {})
+  };
+}
+
 export async function createCampaignForMode(
   db: pg.Pool,
   input: {

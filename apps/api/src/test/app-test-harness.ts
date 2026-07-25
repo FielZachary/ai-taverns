@@ -775,6 +775,41 @@ class FakeDatabase {
 
     if (
       normalizedSql.startsWith(
+        "select context_key, title, body_markdown, updated_at from campaign_context_chunks"
+      )
+    ) {
+      const campaignId = values[0] as string;
+
+      return {
+        rows: this.contextChunks
+          .filter(
+            (chunk) =>
+              chunk.campaign_id === campaignId &&
+              chunk.category === "npc_context" &&
+              chunk.visibility === "player_safe" &&
+              chunk.archived_at === null
+          )
+          .sort((left, right) => {
+            const priorityDelta = right.priority - left.priority;
+
+            if (priorityDelta !== 0) {
+              return priorityDelta;
+            }
+
+            return right.updated_at.getTime() - left.updated_at.getTime();
+          })
+          .slice(0, 120)
+          .map((chunk) => ({
+            context_key: chunk.context_key,
+            title: chunk.title,
+            body_markdown: chunk.body_markdown,
+            updated_at: chunk.updated_at
+          }) as T)
+      };
+    }
+
+    if (
+      normalizedSql.startsWith(
         "select context_key, title, visibility, priority, updated_at from campaign_context_chunks"
       )
     ) {
@@ -980,6 +1015,44 @@ class FakeDatabase {
       }
 
       return { rows: [] as T[] };
+    }
+
+    if (
+      normalizedSql.startsWith(
+        "update campaign_context_chunks set body_markdown = $3, title = $4"
+      )
+    ) {
+      const campaignId = values[0] as string;
+      const contextKey = values[1] as string;
+      const markdown = values[2] as string;
+      const title = values[3] as string;
+      const chunk = this.contextChunks.find(
+        (candidate) =>
+          candidate.campaign_id === campaignId &&
+          candidate.context_key === contextKey &&
+          candidate.category === "npc_context" &&
+          candidate.visibility === "player_safe" &&
+          candidate.archived_at === null
+      );
+
+      if (!chunk) {
+        return { rows: [] as T[] };
+      }
+
+      chunk.body_markdown = markdown;
+      chunk.title = title;
+      chunk.updated_at = new Date("2026-07-20T11:00:00.000Z");
+
+      return {
+        rows: [
+          {
+            context_key: chunk.context_key,
+            title: chunk.title,
+            body_markdown: chunk.body_markdown,
+            updated_at: chunk.updated_at
+          } as T
+        ]
+      };
     }
 
     if (

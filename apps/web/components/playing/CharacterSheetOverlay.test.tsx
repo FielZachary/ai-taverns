@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within
+} from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -80,6 +86,11 @@ function renderCharacterSheetOverlay(
   const props = {
     characterSheet: fullCharacterSheet,
     onClose: vi.fn(),
+    onNpcCardUpdate: vi.fn(async ({ markdown }) => ({
+      id: "npc:marra-vell",
+      title: "Marra Vell",
+      markdown
+    })),
     ...overrides
   } satisfies ComponentProps<typeof CharacterSheetOverlay>;
 
@@ -117,7 +128,7 @@ describe("CharacterSheetOverlay", () => {
     expect(within(dialog).getByText("Always maps the exits.")).toBeInTheDocument();
     expect(within(dialog).getByText("Secret heir to the moon court.")).toBeInTheDocument();
 
-    fireEvent.click(within(dialog).getByRole("button", { name: /close character sheet/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /close player resources/i }));
 
     expect(props.onClose).toHaveBeenCalledTimes(1);
   });
@@ -144,5 +155,96 @@ None
     expect(within(dialog).getAllByText("-").length).toBeGreaterThan(0);
     expect(within(dialog).getByText("None")).toBeInTheDocument();
     expect(within(dialog).getByText("Strength:")).toBeInTheDocument();
+  });
+
+  it("renders NPC cards from context chunks and opens editable NPC fields", async () => {
+    const props = renderCharacterSheetOverlay({
+      npcCards: [
+        {
+          id: "npc:marra-vell",
+          title: "Marra Vell",
+          markdown: [
+            "# Marra Vell",
+            "",
+            "## Name",
+            "Marra Vell",
+            "",
+            "## Location",
+            "Pier 6.",
+            "",
+            "## Appearance",
+            "Fog-damp cloak and quick, watchful eyes.",
+            "",
+            "## Personality",
+            "Guarded and restless.",
+            "",
+            "## Motivations",
+            "Stay alive and keep the black key hidden.",
+            "",
+            "## Disposition Towards You",
+            "Wary but interested.",
+            "",
+            "## Known History",
+            "- First met near Pier 6.",
+            "",
+            "## Secrets",
+            "Knows more than she admitted.",
+            "",
+            "## Open Threads",
+            "- Could return with proof.",
+            "",
+            "## Last Seen",
+            "Running into the fog."
+          ].join("\n"),
+          updatedAt: "2026-07-20T10:00:00.000Z"
+        }
+      ]
+    });
+
+    fireEvent.click(screen.getByRole("tab", { name: /npc cards/i }));
+
+    const npcCardsPanel = screen.getByRole("region", { name: /npc cards/i });
+
+    expect(within(npcCardsPanel).getByText("1 known")).toBeInTheDocument();
+    expect(
+      within(npcCardsPanel).getByRole("button", { name: /marra vell/i })
+    ).toBeInTheDocument();
+    expect(within(npcCardsPanel).getByText("Pier 6.")).toBeInTheDocument();
+    expect(
+      within(npcCardsPanel).getByText("Stay alive and keep the black key hidden.")
+    ).toBeInTheDocument();
+
+    fireEvent.click(within(npcCardsPanel).getByRole("button", { name: /marra vell/i }));
+
+    const npcDialog = screen.getByRole("dialog", { name: /marra vell/i });
+
+    expect(within(npcDialog).getByLabelText("Appearance")).toHaveValue(
+      "Fog-damp cloak and quick, watchful eyes."
+    );
+    expect(within(npcDialog).getByLabelText("Location")).toHaveValue("Pier 6.");
+
+    fireEvent.change(within(npcDialog).getByLabelText("Motivations"), {
+      target: { value: "Trust the party enough to ask for help." }
+    });
+
+    expect(within(npcDialog).getByLabelText("Motivations")).toHaveValue(
+      "Trust the party enough to ask for help."
+    );
+
+    fireEvent.click(within(npcDialog).getByRole("button", { name: /save npc card/i }));
+
+    await waitFor(() => {
+      expect(props.onNpcCardUpdate).toHaveBeenCalledWith({
+        npcCardId: "npc:marra-vell",
+        markdown: expect.stringContaining(
+          "## Motivations\nTrust the party enough to ask for help."
+        )
+      });
+    });
+    expect(within(npcDialog).getByText("Saved.")).toBeInTheDocument();
+
+    fireEvent.click(within(npcDialog).getByRole("button", { name: /close npc card/i }));
+
+    expect(screen.queryByRole("dialog", { name: /marra vell/i })).not.toBeInTheDocument();
   });
 });

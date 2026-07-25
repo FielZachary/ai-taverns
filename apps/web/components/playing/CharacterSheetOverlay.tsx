@@ -1,10 +1,19 @@
 "use client";
 
-import { X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { UserRound, X } from "lucide-react";
+import type { CampaignNpcCard } from "@/lib/campaign-api";
 
 type CharacterSheetOverlayProps = {
   characterSheet: string;
+  isLoadingNpcCards?: boolean;
+  npcCards?: CampaignNpcCard[];
+  npcCardsError?: string;
   onClose: () => void;
+  onNpcCardUpdate?: (input: {
+    npcCardId: string;
+    markdown: string;
+  }) => Promise<CampaignNpcCard>;
 };
 
 type ParsedSheet = {
@@ -18,6 +27,12 @@ type SheetTableRow = {
   range: string;
   hitDc: string;
   effect: string;
+};
+
+type PlayerResourcesTab = "character_sheet" | "npc_cards";
+
+type ParsedNpcCard = CampaignNpcCard & {
+  fields: Record<string, string>;
 };
 
 const abilityNames = [
@@ -99,6 +114,21 @@ const knownSections = new Set([
   "DM Brief"
 ]);
 
+const npcFieldLabels = [
+  "Name",
+  "Location",
+  "Appearance",
+  "Personality",
+  "Motivations",
+  "Disposition Towards You",
+  "Known History",
+  "Secrets",
+  "Open Threads",
+  "Last Seen"
+];
+
+const compactNpcFields = new Set(["Name", "Location", "Last Seen"]);
+
 function parseCharacterSheet(rawSheet: string): ParsedSheet {
   const fields: Record<string, string> = {};
   const sections: Record<string, string[]> = {};
@@ -159,6 +189,70 @@ function fieldValue(sheet: ParsedSheet, labels: string[], fallback = "-") {
   }
 
   return fallback;
+}
+
+function parseNpcCard(card: CampaignNpcCard): ParsedNpcCard {
+  const fields = Object.fromEntries(
+    npcFieldLabels.map((label) => [label, "Unknown."])
+  );
+  let currentField = "";
+  const title =
+    card.markdown.match(/^#\s+(.+)$/m)?.[1]?.trim() || card.title || "NPC";
+
+  for (const rawLine of card.markdown.split(/\r?\n/)) {
+    const heading = rawLine.match(/^##\s+(.+)$/);
+
+    if (heading) {
+      currentField = heading[1]?.trim() ?? "";
+      if (npcFieldLabels.includes(currentField)) {
+        fields[currentField] = "";
+      }
+      continue;
+    }
+
+    if (!currentField || !npcFieldLabels.includes(currentField)) {
+      continue;
+    }
+
+    const line = rawLine.trimEnd();
+    fields[currentField] = fields[currentField]
+      ? `${fields[currentField]}\n${line}`.trim()
+      : line.trim();
+  }
+
+  return {
+    ...card,
+    title,
+    fields: Object.fromEntries(
+      npcFieldLabels.map((label) => [
+        label,
+        fields[label]?.trim() || "Unknown."
+      ])
+    )
+  };
+}
+
+function npcFieldPreview(value: string) {
+  const line = value
+    .split(/\r?\n/)
+    .map((part) => part.replace(/^[-*]\s*/, "").trim())
+    .find(Boolean);
+
+  return line && line !== "Unknown." ? line : "Unknown";
+}
+
+function npcMarkdownFromFields(fields: Record<string, string>) {
+  const name = fields.Name?.trim() || "Unnamed NPC";
+
+  return [
+    `# ${name}`,
+    "",
+    ...npcFieldLabels.flatMap((label) => [
+      `## ${label}`,
+      fields[label]?.trim() || "Unknown.",
+      ""
+    ])
+  ].join("\n").trim();
 }
 
 function parseScore(line: string) {
@@ -480,8 +574,26 @@ function LinedPanel({
 
 export function CharacterSheetOverlay({
   characterSheet,
-  onClose
+  isLoadingNpcCards = false,
+  npcCards = [],
+  npcCardsError = "",
+  onClose,
+  onNpcCardUpdate
 }: CharacterSheetOverlayProps) {
+  const [activeTab, setActiveTab] =
+    useState<PlayerResourcesTab>("character_sheet");
+  const [selectedNpcId, setSelectedNpcId] = useState<string | null>(null);
+  const parsedNpcCards = useMemo(
+    () => npcCards.map((card) => parseNpcCard(card)),
+    [npcCards]
+  );
+  const selectedNpc =
+    parsedNpcCards.find((card) => card.id === selectedNpcId) ?? null;
+  const [editableNpcFields, setEditableNpcFields] = useState<
+    Record<string, string>
+  >(() => Object.fromEntries(npcFieldLabels.map((label) => [label, ""])));
+  const [npcSaveStatus, setNpcSaveStatus] = useState("");
+  const [isSavingNpc, setIsSavingNpc] = useState(false);
   const sheet = parseCharacterSheet(characterSheet.trim());
   const abilityLines = abilityNames.map(
     (ability) =>
@@ -504,104 +616,284 @@ export function CharacterSheetOverlay({
   const spells = sheet.sections.Spells ?? [];
   const dmBrief = sheet.sections["DM Brief"] ?? [];
 
+  useEffect(() => {
+    if (!selectedNpc) {
+      return;
+    }
+
+    setEditableNpcFields(selectedNpc.fields);
+    setNpcSaveStatus("");
+  }, [selectedNpc]);
+
+  async function saveSelectedNpcCard() {
+    if (!selectedNpc || !onNpcCardUpdate) {
+      return;
+    }
+
+    setIsSavingNpc(true);
+    setNpcSaveStatus("");
+
+    try {
+      const updatedCard = await onNpcCardUpdate({
+        npcCardId: selectedNpc.id,
+        markdown: npcMarkdownFromFields(editableNpcFields)
+      });
+
+      setEditableNpcFields(parseNpcCard(updatedCard).fields);
+      setNpcSaveStatus("Saved.");
+    } catch (error) {
+      setNpcSaveStatus(
+        error instanceof Error ? error.message : "NPC card could not be saved."
+      );
+    } finally {
+      setIsSavingNpc(false);
+    }
+  }
+
   return (
     <section
       className="character-sheet-overlay"
       role="dialog"
       aria-modal="true"
-      aria-labelledby="character-sheet-title"
+      aria-labelledby={
+        activeTab === "character_sheet"
+          ? "character-sheet-title"
+          : "npc-cards-title"
+      }
     >
       <div className="character-sheet-overlay-panel dnd-sheet">
-        <header className="dnd-sheet-header">
-          <div className="dnd-sheet-nameplate">
-            <span>Character Name</span>
-            <h2 id="character-sheet-title">
-              {fieldValue(sheet, ["Character Name", "Name"], "Unnamed Adventurer")}
-            </h2>
-          </div>
-          <div className="dnd-sheet-meta-grid">
-            {topFields.map((field) => (
-              <div key={field.label}>
-                <strong>{field.value(sheet)}</strong>
-                <span>{field.label}</span>
-              </div>
-            ))}
-          </div>
+        <div className="player-resources-tabs" role="tablist" aria-label="Player resources">
           <button
+            aria-selected={activeTab === "character_sheet"}
+            className="player-resource-tab"
+            role="tab"
             type="button"
-            aria-label="Close character sheet"
+            onClick={() => setActiveTab("character_sheet")}
+          >
+            Character Sheet
+          </button>
+          <button
+            aria-selected={activeTab === "npc_cards"}
+            className="player-resource-tab"
+            role="tab"
+            type="button"
+            onClick={() => setActiveTab("npc_cards")}
+          >
+            NPC Cards
+          </button>
+          <button
+            className="player-resources-close"
+            type="button"
+            aria-label="Close player resources"
             onClick={onClose}
           >
             <X size={18} />
           </button>
-        </header>
-
-        <div className="dnd-sheet-body">
-          <section className="dnd-sheet-left">
-            <SheetBox
-              label="Proficiency Bonus"
-              value={statValue(sheet, "Proficiency Bonus")}
-            />
-            <div className="dnd-ability-list">
-              {abilityLines.map((line) => {
-                const ability = parseScore(line);
-                const saveLine =
-                  savingThrowLines.find((save) => save.startsWith(`${ability.label}:`)) ??
-                  "";
-
-                return (
-                  <article className="dnd-ability-card" key={ability.label}>
-                    <div className="dnd-ability-score">
-                      <strong>{ability.score}</strong>
-                    </div>
-                    <h3>{ability.label}</h3>
-                    <p>{saveLine || "Saving Throw -"}</p>
-                  </article>
-                );
-              })}
-            </div>
-            <SheetBox
-              label="Passive Wisdom (Perception)"
-              value={fieldValue(sheet, ["Passive Perception"])}
-            />
-            <LinedPanel title="Skills" lines={skillLines} />
-            <LinedPanel
-              title="Other Proficiencies & Languages"
-              lines={proficiencyLines}
-            />
-          </section>
-
-          <section className="dnd-sheet-center">
-            <div className="dnd-combat-grid">
-              <SheetBox label="Armor Class" value={statValue(sheet, "Armor Class")} />
-              <SheetBox label="Initiative" value={statValue(sheet, "Initiative")} />
-              <SheetBox label="Speed" value={statValue(sheet, "Speed")} />
-              <SheetBox
-                label="Hit Points"
-                value={`${statValue(sheet, "Current HP")} / ${statValue(sheet, "Max HP")}`}
-              />
-              <SheetBox label="Hit Dice" value={statValue(sheet, "Hit Dice")} />
-            </div>
-            <AttackPanel lines={attackLines} />
-            <SpellPanel lines={spells} />
-            <LinedPanel title="Equipment" lines={equipmentLines} />
-            <LinedPanel title="Inventory" lines={inventoryLines} />
-            <LinedPanel title="Currency" lines={currencyLines} />
-          </section>
-
-          <section className="dnd-sheet-right">
-            <LinedPanel
-              title="Personality Traits"
-              lines={listWithoutLabels(sheet.sections.Personality)}
-            />
-            <LinedPanel title="Ideals" lines={[]} />
-            <LinedPanel title="Bonds" lines={[]} />
-            <LinedPanel title="Flaws" lines={[]} />
-            <LinedPanel title="Features & Traits" lines={featureLines} />
-            <LinedPanel title="DM Brief" lines={dmBrief} />
-          </section>
         </div>
+
+        {activeTab === "character_sheet" ? (
+          <>
+            <header className="dnd-sheet-header">
+              <div className="dnd-sheet-nameplate">
+                <span>Character Name</span>
+                <h2 id="character-sheet-title">
+                  {fieldValue(sheet, ["Character Name", "Name"], "Unnamed Adventurer")}
+                </h2>
+              </div>
+              <div className="dnd-sheet-meta-grid">
+                {topFields.map((field) => (
+                  <div key={field.label}>
+                    <strong>{field.value(sheet)}</strong>
+                    <span>{field.label}</span>
+                  </div>
+                ))}
+              </div>
+            </header>
+
+            <div className="dnd-sheet-body">
+              <section className="dnd-sheet-left">
+                <SheetBox
+                  label="Proficiency Bonus"
+                  value={statValue(sheet, "Proficiency Bonus")}
+                />
+                <div className="dnd-ability-list">
+                  {abilityLines.map((line) => {
+                    const ability = parseScore(line);
+                    const saveLine =
+                      savingThrowLines.find((save) => save.startsWith(`${ability.label}:`)) ??
+                      "";
+
+                    return (
+                      <article className="dnd-ability-card" key={ability.label}>
+                        <div className="dnd-ability-score">
+                          <strong>{ability.score}</strong>
+                        </div>
+                        <h3>{ability.label}</h3>
+                        <p>{saveLine || "Saving Throw -"}</p>
+                      </article>
+                    );
+                  })}
+                </div>
+                <SheetBox
+                  label="Passive Wisdom (Perception)"
+                  value={fieldValue(sheet, ["Passive Perception"])}
+                />
+                <LinedPanel title="Skills" lines={skillLines} />
+                <LinedPanel
+                  title="Other Proficiencies & Languages"
+                  lines={proficiencyLines}
+                />
+              </section>
+
+              <section className="dnd-sheet-center">
+                <div className="dnd-combat-grid">
+                  <SheetBox label="Armor Class" value={statValue(sheet, "Armor Class")} />
+                  <SheetBox label="Initiative" value={statValue(sheet, "Initiative")} />
+                  <SheetBox label="Speed" value={statValue(sheet, "Speed")} />
+                  <SheetBox
+                    label="Hit Points"
+                    value={`${statValue(sheet, "Current HP")} / ${statValue(sheet, "Max HP")}`}
+                  />
+                  <SheetBox label="Hit Dice" value={statValue(sheet, "Hit Dice")} />
+                </div>
+                <AttackPanel lines={attackLines} />
+                <SpellPanel lines={spells} />
+                <LinedPanel title="Equipment" lines={equipmentLines} />
+                <LinedPanel title="Inventory" lines={inventoryLines} />
+                <LinedPanel title="Currency" lines={currencyLines} />
+              </section>
+
+              <section className="dnd-sheet-right">
+                <LinedPanel
+                  title="Personality Traits"
+                  lines={listWithoutLabels(sheet.sections.Personality)}
+                />
+                <LinedPanel title="Ideals" lines={[]} />
+                <LinedPanel title="Bonds" lines={[]} />
+                <LinedPanel title="Flaws" lines={[]} />
+                <LinedPanel title="Features & Traits" lines={featureLines} />
+                <LinedPanel title="DM Brief" lines={dmBrief} />
+              </section>
+            </div>
+          </>
+        ) : (
+          <section
+            aria-labelledby="npc-cards-title"
+            className="npc-cards-panel"
+            role="region"
+          >
+            <div className="npc-cards-header">
+              <div>
+                <p className="eyebrow">Player Resources</p>
+                <h2 id="npc-cards-title">NPC Cards</h2>
+              </div>
+              <span>{parsedNpcCards.length} known</span>
+            </div>
+
+            {npcCardsError ? (
+              <p className="npc-cards-status" role="alert">{npcCardsError}</p>
+            ) : null}
+            {isLoadingNpcCards ? (
+              <p className="npc-cards-status">Loading NPC cards...</p>
+            ) : null}
+            {!isLoadingNpcCards && parsedNpcCards.length === 0 ? (
+              <p className="npc-cards-status">No NPC cards yet.</p>
+            ) : null}
+
+            <div className="npc-card-grid">
+              {parsedNpcCards.map((npc) => (
+                <button
+                  className="npc-card"
+                  key={npc.id}
+                  type="button"
+                  onClick={() => setSelectedNpcId(npc.id)}
+                >
+                  <span className="npc-card-portrait" aria-hidden="true">
+                    <UserRound size={34} />
+                  </span>
+                  <span className="npc-card-copy">
+                    <strong>{npc.fields.Name || npc.title}</strong>
+                    <small>{npcFieldPreview(npc.fields.Location)}</small>
+                    <span>{npcFieldPreview(npc.fields.Motivations)}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
       </div>
+
+      {selectedNpc ? (
+        <div className="npc-detail-backdrop" role="presentation">
+          <div
+            aria-modal="true"
+            aria-labelledby="npc-detail-title"
+            className="npc-detail-modal"
+            role="dialog"
+          >
+            <div className="npc-detail-header">
+              <div>
+                <p className="eyebrow">NPC Card</p>
+                <h2 id="npc-detail-title">
+                  {editableNpcFields.Name || selectedNpc.title}
+                </h2>
+              </div>
+              <button
+                type="button"
+                aria-label="Close NPC card"
+                onClick={() => setSelectedNpcId(null)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="npc-detail-portrait" aria-hidden="true">
+              <UserRound size={58} />
+            </div>
+
+            <div className="npc-detail-fields">
+              {npcFieldLabels.map((label) => (
+                <label key={label}>
+                  <span>{label}</span>
+                  {compactNpcFields.has(label) ? (
+                    <input
+                      type="text"
+                      value={editableNpcFields[label] ?? ""}
+                      onChange={(event) =>
+                        setEditableNpcFields((fields) => ({
+                          ...fields,
+                          [label]: event.target.value
+                        }))
+                      }
+                    />
+                  ) : (
+                    <textarea
+                      value={editableNpcFields[label] ?? ""}
+                      onChange={(event) =>
+                        setEditableNpcFields((fields) => ({
+                          ...fields,
+                          [label]: event.target.value
+                        }))
+                      }
+                    />
+                  )}
+                </label>
+              ))}
+            </div>
+
+            <div className="npc-detail-actions">
+              {npcSaveStatus ? <span>{npcSaveStatus}</span> : null}
+              <button
+                type="button"
+                disabled={!onNpcCardUpdate || isSavingNpc}
+                onClick={() => void saveSelectedNpcCard()}
+              >
+                {isSavingNpc ? "Saving..." : "Save NPC Card"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

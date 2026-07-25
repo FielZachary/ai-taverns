@@ -1211,6 +1211,7 @@ export function buildMemoryUpdaterPrompt() {
     "",
     "What belongs in an NPC card:",
     "Make each NPC feel like a compelling character, not a label. Preserve details that help the DM portray them consistently in future scenes.",
+    "Track appearance as player-observable visual details: build, clothing, notable features, posture, age impression, scars, gear, or supernatural signs. Use \"Unknown.\" when not established.",
     "Give them a distinct personality: voice, mannerisms, temperament, values, fears, habits, social style, or emotional pressure.",
     "Give them strong motivations: what they want right now, what they are protecting, what they are hiding, what they fear losing, or what line they will not cross.",
     "Track their relationship to the party as a living disposition, not a static alignment. Note trust, suspicion, debts, grudges, leverage, respect, fear, attraction, rivalry, or obligation when relevant.",
@@ -1222,6 +1223,7 @@ export function buildMemoryUpdaterPrompt() {
     "# <NPC Name>",
     "## Name",
     "## Location",
+    "## Appearance",
     "## Personality",
     "## Motivations",
     "## Disposition Towards You",
@@ -1270,7 +1272,7 @@ export function buildMemoryUpdaterPrompt() {
             title: "Marra Vell",
             visibility: "player_safe",
             markdown:
-              "# Marra Vell\n\n## Name\nMarra Vell\n\n## Location\nLast seen fleeing through the fog near Pier 6.\n\n## Personality\nQuick-eyed, guarded, and restless. She speaks in short answers when frightened, but notices exits, weapons, and lies faster than most people in the room.\n\n## Motivations\nStay alive, keep the black key out of the smugglers' hands, and decide whether the party is safer than running alone.\n\n## Disposition Towards You\nWary but interested. She does not trust the party yet, but their intervention made them useful enough that she may risk another conversation.\n\n## Known History\n- First encountered near Pier 6 while being pursued.\n- Recognized the black key but avoided explaining how.\n\n## Secrets\nKnows more about the black key's origin than she admitted. She may have worked with the smugglers before betraying them.\n\n## Open Threads\n- Could reveal who sent the pursuers if convinced the party can protect her.\n- May seek the party out again once she has nowhere else to run.\n\n## Last Seen\nRunning into the fog beyond Pier 6 after the confrontation."
+              "# Marra Vell\n\n## Name\nMarra Vell\n\n## Location\nLast seen fleeing through the fog near Pier 6.\n\n## Appearance\nUnknown.\n\n## Personality\nQuick-eyed, guarded, and restless. She speaks in short answers when frightened, but notices exits, weapons, and lies faster than most people in the room.\n\n## Motivations\nStay alive, keep the black key out of the smugglers' hands, and decide whether the party is safer than running alone.\n\n## Disposition Towards You\nWary but interested. She does not trust the party yet, but their intervention made them useful enough that she may risk another conversation.\n\n## Known History\n- First encountered near Pier 6 while being pursued.\n- Recognized the black key but avoided explaining how.\n\n## Secrets\nKnows more about the black key's origin than she admitted. She may have worked with the smugglers before betraying them.\n\n## Open Threads\n- Could reveal who sent the pursuers if convinced the party can protect her.\n- May seek the party out again once she has nowhere else to run.\n\n## Last Seen\nRunning into the fog beyond Pier 6 after the confrontation."
           }
         ],
         remove_context_chunks: []
@@ -1287,7 +1289,7 @@ export function buildMemoryUpdaterPrompt() {
             operation: "replace_section",
             context_id: "npc:captain-vael",
             markdown:
-              "# Captain Vael\n\n## Name\nCaptain Vael\n\n## Location\nHarbor Watch station near Pier 6.\n\n## Personality\nTerse, disciplined, and visibly exhausted. Vael values proof over charm and gets colder when people waste time, but he is not cruel.\n\n## Motivations\nKeep the harbor calm, identify the compromised watch officer, and prevent the black key investigation from becoming public panic.\n\n## Disposition Towards You\nCautiously cooperative. He respects that the party brought him evidence, but he is still testing whether they are reckless liabilities or useful allies.\n\n## Known History\n- Met the party during the Pier 6 investigation.\n- Confirmed that the black key points toward old smuggling routes.\n- Agreed to check harbor records after the party shared Marra's warning.\n\n## Secrets\nSuspects someone inside the Harbor Watch is feeding information to the smugglers, but he has not revealed this openly.\n\n## Open Threads\n- May grant access to sealed harbor records if trust improves.\n- Could become an ally if the party protects the investigation from public exposure.\n- Could turn against the party if they endanger civilians or expose his suspicion too early.\n\n## Last Seen\nAt the Harbor Watch station, locking Marra's warning in his private case."
+              "# Captain Vael\n\n## Name\nCaptain Vael\n\n## Location\nHarbor Watch station near Pier 6.\n\n## Appearance\nUnknown.\n\n## Personality\nTerse, disciplined, and visibly exhausted. Vael values proof over charm and gets colder when people waste time, but he is not cruel.\n\n## Motivations\nKeep the harbor calm, identify the compromised watch officer, and prevent the black key investigation from becoming public panic.\n\n## Disposition Towards You\nCautiously cooperative. He respects that the party brought him evidence, but he is still testing whether they are reckless liabilities or useful allies.\n\n## Known History\n- Met the party during the Pier 6 investigation.\n- Confirmed that the black key points toward old smuggling routes.\n- Agreed to check harbor records after the party shared Marra's warning.\n\n## Secrets\nSuspects someone inside the Harbor Watch is feeding information to the smugglers, but he has not revealed this openly.\n\n## Open Threads\n- May grant access to sealed harbor records if trust improves.\n- Could become an ally if the party protects the investigation from public exposure.\n- Could turn against the party if they endanger civilians or expose his suspicion too early.\n\n## Last Seen\nAt the Harbor Watch station, locking Marra's warning in his private case."
           }
         ],
         new_context_chunks: [],

@@ -27,8 +27,11 @@ import type {
 import {
   createCampaignInvite,
   disableCampaignInvite,
+  listCampaignNpcCards,
   listCampaignInvites,
   listCampaigns,
+  updateCampaignNpcCard,
+  type CampaignNpcCard,
   type CampaignSummary as ApiCampaignSummary
 } from "@/lib/campaign-api";
 import {
@@ -273,6 +276,9 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
   const [activeDiceReveal, setActiveDiceReveal] =
     useState<ActiveDiceReveal | null>(null);
   const [isCharacterSheetOpen, setIsCharacterSheetOpen] = useState(false);
+  const [npcCards, setNpcCards] = useState<CampaignNpcCard[]>([]);
+  const [isLoadingNpcCards, setIsLoadingNpcCards] = useState(false);
+  const [npcCardsError, setNpcCardsError] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const roomPollInFlightRef = useRef(false);
 
@@ -557,6 +563,42 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
       setInputValidationMessage("");
     }
   }, [inputValidationMessage, playerProfile]);
+
+  useEffect(() => {
+    if (!isCharacterSheetOpen || !activeCampaign?.id) {
+      return;
+    }
+
+    let isCurrent = true;
+
+    setIsLoadingNpcCards(true);
+    setNpcCardsError("");
+
+    listCampaignNpcCards(activeCampaign.id)
+      .then((cards) => {
+        if (isCurrent) {
+          setNpcCards(cards);
+        }
+      })
+      .catch((error: unknown) => {
+        if (isCurrent) {
+          setNpcCardsError(
+            error instanceof Error
+              ? error.message
+              : "NPC cards could not be loaded."
+          );
+        }
+      })
+      .finally(() => {
+        if (isCurrent) {
+          setIsLoadingNpcCards(false);
+        }
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [activeCampaign?.id, isCharacterSheetOpen]);
 
   useEffect(() => {
     let shouldIgnore = false;
@@ -1582,6 +1624,27 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     });
   }
 
+  async function handleUpdateNpcCard(input: {
+    npcCardId: string;
+    markdown: string;
+  }) {
+    if (!activeCampaign?.id) {
+      throw new Error("Campaign could not be loaded.");
+    }
+
+    const updatedCard = await updateCampaignNpcCard(
+      activeCampaign.id,
+      input.npcCardId,
+      { markdown: input.markdown }
+    );
+
+    setNpcCards((cards) =>
+      cards.map((card) => (card.id === updatedCard.id ? updatedCard : card))
+    );
+
+    return updatedCard;
+  }
+
   if (!activeCampaign && isLoadingCampaigns) {
     return (
       <main className="table-page">
@@ -1744,7 +1807,11 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
       {isCharacterSheetOpen ? (
         <CharacterSheetOverlay
           characterSheet={activeCharacterSheet}
+          isLoadingNpcCards={isLoadingNpcCards}
+          npcCards={npcCards}
+          npcCardsError={npcCardsError}
           onClose={() => setIsCharacterSheetOpen(false)}
+          onNpcCardUpdate={handleUpdateNpcCard}
         />
       ) : null}
 

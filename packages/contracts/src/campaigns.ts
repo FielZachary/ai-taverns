@@ -46,6 +46,30 @@ export const CampaignReadResponseSchema = z.object({
   campaign: CampaignSummarySchema
 });
 
+export const CampaignNpcCardSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  markdown: z.string(),
+  updatedAt: z.string().datetime().optional()
+});
+
+export const CampaignNpcCardsResponseSchema = z.object({
+  npcCards: z.array(CampaignNpcCardSchema)
+});
+
+export const CampaignNpcCardUpdateParamsSchema = z.object({
+  campaignId: z.string().uuid(),
+  npcCardId: z.string().min(1)
+});
+
+export const CampaignNpcCardUpdateRequestSchema = z.object({
+  markdown: z.string().min(1)
+});
+
+export const CampaignNpcCardUpdateResponseSchema = z.object({
+  npcCard: CampaignNpcCardSchema
+});
+
 export const CampaignJoinPreviewRequestSchema = z.object({
   gameCode: z.string().optional()
 });
@@ -148,6 +172,16 @@ export type CampaignCreateResponse = z.infer<
 >;
 export type CampaignReadParams = z.infer<typeof CampaignReadParamsSchema>;
 export type CampaignReadResponse = z.infer<typeof CampaignReadResponseSchema>;
+export type CampaignNpcCard = z.infer<typeof CampaignNpcCardSchema>;
+export type CampaignNpcCardsResponse = z.infer<
+  typeof CampaignNpcCardsResponseSchema
+>;
+export type CampaignNpcCardUpdateRequest = z.infer<
+  typeof CampaignNpcCardUpdateRequestSchema
+>;
+export type CampaignNpcCardUpdateResponse = z.infer<
+  typeof CampaignNpcCardUpdateResponseSchema
+>;
 export type CampaignJoinPreviewRequest = z.infer<
   typeof CampaignJoinPreviewRequestSchema
 >;
