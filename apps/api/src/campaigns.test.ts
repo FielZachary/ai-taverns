@@ -10,6 +10,8 @@ import {
   CampaignInviteDisableResponseSchema,
   CampaignInviteListResponseSchema,
   CampaignCreateResponseSchema,
+  CampaignNpcCardUpdateResponseSchema,
+  CampaignNpcCardsResponseSchema,
   CampaignJoinPreviewResponseSchema,
   CampaignJoinResponseSchema,
   LobbyInviteJoinResponseSchema,
@@ -587,6 +589,106 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
     narratorInput.message,
     /Write the player-facing opener only from the Eldermere opening plan/
   );
+});
+
+test("GET /api/campaigns/:campaignId/npc-cards lists existing NPC context cards", async () => {
+  const cookie = await signIn("npc-cards@example.com");
+  resetProviderInputs();
+
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: {
+      cookie
+    },
+    payload: {
+      mode: "single_player",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "classic_fantasy",
+      ownerClientId: "npc-cards-client",
+      playerName: "NPC Reader",
+      characterName: "Pike",
+      characterSheet: "Name: Pike"
+    }
+  });
+
+  assert.equal(createResponse.statusCode, 201, createResponse.body);
+
+  const created = CampaignCreateResponseSchema.parse(createResponse.json());
+  const now = new Date("2026-07-20T10:00:00.000Z");
+
+  database.contextChunks.push(
+    {
+      campaign_id: created.campaign.id,
+      context_key: "npc:marra-vell",
+      category: "npc_context",
+      title: "Marra Vell",
+      visibility: "player_safe",
+      priority: 4,
+      body_markdown:
+        "# Marra Vell\n\n## Name\nMarra Vell\n\n## Location\nPier 6.\n\n## Appearance\nUnknown.",
+      archived_at: null,
+      updated_at: now
+    },
+    {
+      campaign_id: created.campaign.id,
+      context_key: "npc:hidden-informant",
+      category: "npc_context",
+      title: "Hidden Informant",
+      visibility: "dm_only",
+      priority: 10,
+      body_markdown: "# Hidden Informant",
+      archived_at: null,
+      updated_at: now
+    }
+  );
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/campaigns/${created.campaign.id}/npc-cards`,
+    headers: {
+      cookie
+    }
+  });
+
+  assert.equal(response.statusCode, 200, response.body);
+
+  const body = CampaignNpcCardsResponseSchema.parse(response.json());
+
+  assert.deepEqual(
+    body.npcCards.map((card) => card.id).sort(),
+    ["npc:hidden-informant", "npc:marra-vell"]
+  );
+  const marraCard = body.npcCards.find((card) => card.id === "npc:marra-vell");
+
+  assert.equal(marraCard?.title, "Marra Vell");
+  assert.match(marraCard?.markdown ?? "", /## Appearance/);
+  assert.equal(marraCard?.updatedAt, "2026-07-20T10:00:00.000Z");
+
+  const updateResponse = await app.inject({
+    method: "PATCH",
+    url: `/api/campaigns/${created.campaign.id}/npc-cards/${encodeURIComponent(
+      "npc:marra-vell"
+    )}`,
+    headers: {
+      cookie
+    },
+    payload: {
+      markdown:
+        "# Marra Vell\n\n## Name\nMarra Vell\n\n## Location\nPier 7.\n\n## Appearance\nA fog-damp cloak."
+    }
+  });
+
+  assert.equal(updateResponse.statusCode, 200, updateResponse.body);
+
+  const updateBody = CampaignNpcCardUpdateResponseSchema.parse(
+    updateResponse.json()
+  );
+
+  assert.equal(updateBody.npcCard.id, "npc:marra-vell");
+  assert.equal(updateBody.npcCard.title, "Marra Vell");
+  assert.match(updateBody.npcCard.markdown, /Pier 7/);
+  assert.equal(updateBody.npcCard.updatedAt, "2026-07-20T11:00:00.000Z");
 });
 
 test("POST /api/campaigns scrubs forbidden Eldermere opening terms after narrator repair", async () => {

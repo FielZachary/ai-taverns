@@ -13,7 +13,9 @@ import type { GameMessage } from "@/lib/game-types";
 import type { RoomSnapshot } from "./game-shell-state";
 
 vi.mock("@/lib/campaign-api", () => ({
-  listCampaigns: vi.fn()
+  listCampaignNpcCards: vi.fn(),
+  listCampaigns: vi.fn(),
+  updateCampaignNpcCard: vi.fn()
 }));
 
 vi.mock("./ChatHistorySidebar", () => ({
@@ -148,9 +150,10 @@ vi.mock("./CharacterSheetOverlay", () => ({
   )
 }));
 
-import { listCampaigns } from "@/lib/campaign-api";
+import { listCampaignNpcCards, listCampaigns } from "@/lib/campaign-api";
 import { GameShell } from "./GameShell";
 
+const listCampaignNpcCardsMock = vi.mocked(listCampaignNpcCards);
 const listCampaignsMock = vi.mocked(listCampaigns);
 
 const campaign = {
@@ -266,6 +269,7 @@ beforeEach(() => {
   localStorage.setItem("ai-dnd.playerId", "player-1");
   MockWebSocket.instances = [];
   vi.stubGlobal("WebSocket", MockWebSocket);
+  listCampaignNpcCardsMock.mockResolvedValue([]);
   listCampaignsMock.mockResolvedValue([campaign]);
 });
 

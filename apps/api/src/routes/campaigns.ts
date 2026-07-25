@@ -9,6 +9,10 @@ import {
   CampaignInviteListResponseSchema,
   CampaignCreateRequestSchema,
   CampaignCreateResponseSchema,
+  CampaignNpcCardUpdateParamsSchema,
+  CampaignNpcCardUpdateRequestSchema,
+  CampaignNpcCardUpdateResponseSchema,
+  CampaignNpcCardsResponseSchema,
   CampaignJoinPreviewRequestSchema,
   CampaignJoinPreviewResponseSchema,
   CampaignJoinRequestSchema,
@@ -31,8 +35,10 @@ import {
   getCampaignSummaryForUser,
   joinCampaignByInvite,
   joinCampaignByCode,
+  listPlayerSafeNpcCardsForCampaign,
   listCampaignInvitesForOwner,
   listCampaignSummariesForUser,
+  updatePlayerSafeNpcCardMarkdown,
   previewLobbyInvite,
   previewCampaignJoinByCode
 } from "@ai-dnd/db";
@@ -219,6 +225,50 @@ export async function registerCampaignRoutes(
     });
 
     return CampaignReadResponseSchema.parse({ campaign });
+  });
+
+  fastify.get("/campaigns/:campaignId/npc-cards", async (request) => {
+    const params = CampaignReadParamsSchema.parse(request.params);
+    const user = await requireAuthenticatedUser(
+      fastify,
+      config,
+      request.cookies[config.authCookieName]
+    );
+
+    await getCampaignSummaryForUser(fastify.pg, {
+      campaignId: params.campaignId,
+      userId: user.id
+    });
+
+    const npcCards = await listPlayerSafeNpcCardsForCampaign(
+      fastify.pg,
+      params.campaignId
+    );
+
+    return CampaignNpcCardsResponseSchema.parse({ npcCards });
+  });
+
+  fastify.patch("/campaigns/:campaignId/npc-cards/:npcCardId", async (request) => {
+    const params = CampaignNpcCardUpdateParamsSchema.parse(request.params);
+    const body = CampaignNpcCardUpdateRequestSchema.parse(request.body);
+    const user = await requireAuthenticatedUser(
+      fastify,
+      config,
+      request.cookies[config.authCookieName]
+    );
+
+    await getCampaignSummaryForUser(fastify.pg, {
+      campaignId: params.campaignId,
+      userId: user.id
+    });
+
+    const npcCard = await updatePlayerSafeNpcCardMarkdown(fastify.pg, {
+      campaignId: params.campaignId,
+      npcCardId: params.npcCardId,
+      markdown: body.markdown
+    });
+
+    return CampaignNpcCardUpdateResponseSchema.parse({ npcCard });
   });
 
   fastify.get("/campaigns/:campaignId/invites", async (request) => {

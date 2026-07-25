@@ -3,6 +3,8 @@ import {
   CampaignInviteDisableResponseSchema,
   CampaignInviteListResponseSchema,
   CampaignCreateResponseSchema,
+  CampaignNpcCardUpdateResponseSchema,
+  CampaignNpcCardsResponseSchema,
   CampaignJoinPreviewResponseSchema,
   CampaignJoinResponseSchema,
   CampaignListResponseSchema,
@@ -11,6 +13,8 @@ import {
   LobbyInvitePreviewResponseSchema,
   type CampaignInviteCreateRequest,
   type CampaignCreateRequest,
+  type CampaignNpcCard,
+  type CampaignNpcCardUpdateRequest,
   type CampaignJoinPreviewRequest,
   type CampaignJoinRequest,
   type CampaignSummary,
@@ -57,7 +61,7 @@ async function parseJsonResponse<T>(
   return schema.parse(await response.json());
 }
 
-export type { CampaignSummary };
+export type { CampaignNpcCard, CampaignSummary };
 
 export async function listCampaigns() {
   const response = await fetch("/api/campaigns");
@@ -96,6 +100,45 @@ export async function readCampaign(campaignId: string) {
   );
 
   return data.campaign;
+}
+
+export async function listCampaignNpcCards(campaignId: string) {
+  const response = await fetch(
+    `/api/campaigns/${encodeURIComponent(campaignId)}/npc-cards`
+  );
+  const data = await parseJsonResponse(
+    response,
+    CampaignNpcCardsResponseSchema,
+    "NPC cards could not be loaded."
+  );
+
+  return data.npcCards;
+}
+
+export async function updateCampaignNpcCard(
+  campaignId: string,
+  npcCardId: string,
+  input: CampaignNpcCardUpdateRequest
+) {
+  const response = await fetch(
+    `/api/campaigns/${encodeURIComponent(
+      campaignId
+    )}/npc-cards/${encodeURIComponent(npcCardId)}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(input)
+    }
+  );
+  const data = await parseJsonResponse(
+    response,
+    CampaignNpcCardUpdateResponseSchema,
+    "NPC card could not be saved."
+  );
+
+  return data.npcCard;
 }
 
 export async function previewCampaignJoin(input: CampaignJoinPreviewRequest) {
