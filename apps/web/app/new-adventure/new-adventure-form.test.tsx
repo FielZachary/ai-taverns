@@ -16,18 +16,24 @@ import {
 
 const {
   createCampaignMock,
+  generateCharacterPortraitMock,
   joinCampaignMock,
-  previewCampaignJoinMock
+  previewCampaignJoinMock,
+  uploadCharacterPortraitMock
 } = vi.hoisted(() => ({
   createCampaignMock: vi.fn(),
+  generateCharacterPortraitMock: vi.fn(),
   joinCampaignMock: vi.fn(),
-  previewCampaignJoinMock: vi.fn()
+  previewCampaignJoinMock: vi.fn(),
+  uploadCharacterPortraitMock: vi.fn()
 }));
 
 vi.mock("@/lib/campaign-api", () => ({
   createCampaign: createCampaignMock,
+  generateCharacterPortrait: generateCharacterPortraitMock,
   joinCampaign: joinCampaignMock,
-  previewCampaignJoin: previewCampaignJoinMock
+  previewCampaignJoin: previewCampaignJoinMock,
+  uploadCharacterPortrait: uploadCharacterPortraitMock
 }));
 
 async function finishFlowTransition() {
@@ -345,10 +351,10 @@ describe("NewAdventureForm", () => {
     await nextCharacterStep();
 
     expect(
-      screen.getByRole("heading", { name: /ready the first page/i })
+      screen.getByRole("heading", { name: /create your character art/i })
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /generate portrait/i }));
+    fireEvent.click(screen.getByRole("button", { name: /create art/i }));
 
     await act(async () => {});
 
@@ -356,16 +362,14 @@ describe("NewAdventureForm", () => {
       expect.objectContaining({
         mode: "single_player",
         playerName: "Mira Vale",
-        characterName: "Mira Vale",
-        generateCharacterPortrait: true
+        characterName: "Mira Vale"
       })
     );
+    expect(generateCharacterPortraitMock).not.toHaveBeenCalled();
     expect(screen.getByRole("alert")).toHaveTextContent(
       "The tavern doors jammed."
     );
-    expect(
-      screen.getByRole("button", { name: /generate portrait/i })
-    ).toBeEnabled();
+    expect(screen.getByRole("button", { name: /create art/i })).toBeEnabled();
   });
 });
 

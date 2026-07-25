@@ -2245,6 +2245,15 @@ h1 {
   white-space: nowrap;
 }
 
+.character-art-step {
+  display: grid;
+  grid-template-columns: minmax(190px, 280px) minmax(0, 1fr);
+  gap: clamp(18px, 4vw, 30px);
+  align-items: start;
+  width: min(100%, 760px);
+  margin: 0 auto;
+}
+
 .portrait-final-step {
   display: grid;
   gap: 18px;
@@ -2280,6 +2289,88 @@ h1 {
 
 .generated-character-portrait.empty {
   border-style: dashed;
+}
+
+.portrait-placeholder {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 18px;
+}
+
+.portrait-placeholder span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.character-art-controls {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.character-art-selectors {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 14px;
+}
+
+.new-adventure-form select {
+  width: 100%;
+  min-height: 52px;
+  border: 1px solid rgba(244, 207, 122, 0.28);
+  border-radius: 8px;
+  outline: 0;
+  padding: 0 38px 0 14px;
+  color: var(--ink);
+  background:
+    linear-gradient(45deg, transparent 50%, rgba(244, 207, 122, 0.78) 50%)
+      calc(100% - 19px) 22px / 7px 7px no-repeat,
+    linear-gradient(135deg, rgba(244, 207, 122, 0.78) 50%, transparent 50%)
+      calc(100% - 14px) 22px / 7px 7px no-repeat,
+    rgba(17, 13, 10, 0.56);
+  font: inherit;
+  appearance: none;
+}
+
+.new-adventure-form select:focus {
+  border-color: rgba(244, 207, 122, 0.72);
+}
+
+.character-art-upload {
+  border: 1px dashed rgba(244, 207, 122, 0.3);
+  border-radius: 8px;
+  padding: 14px;
+  background: rgba(12, 9, 7, 0.35);
+}
+
+.character-art-upload input {
+  min-height: auto;
+  padding: 10px 0 0;
+  border: 0;
+  background: transparent;
+}
+
+.character-art-upload small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.character-art-regenerate {
+  justify-self: start;
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(244, 207, 122, 0.28);
+  border-radius: 8px;
+  padding: 0 14px;
+  color: var(--gold-bright);
+  background: rgba(17, 13, 10, 0.54);
+  font-weight: 900;
 }
 
 .portrait-final-copy {
@@ -4725,6 +4816,15 @@ h6 {
 
   .new-adventure-heading h1 {
     max-width: 16ch;
+  }
+
+  .character-art-step {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+
+  .character-art-controls {
+    width: min(100%, 520px);
   }
 
   .session-panel {

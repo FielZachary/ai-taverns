@@ -185,6 +185,127 @@ test("POST /api/campaigns can generate and attach a character portrait", async (
   }
 });
 
+test("POST /api/campaigns/:campaignId/portrait/generate creates art after campaign setup", async () => {
+  const cookie = await signIn("portrait-route-owner@example.com");
+  const originalFetch = globalThis.fetch;
+  const originalQwenImageApiKey = process.env.QWEN_IMAGE_API_KEY;
+  const originalQwenImageEndpoint = process.env.QWEN_IMAGE_ENDPOINT;
+  const originalQwenImageModel = process.env.QWEN_IMAGE_MODEL;
+  const imageBuffer = await sharp({
+    create: {
+      width: 128,
+      height: 128,
+      channels: 4,
+      background: "#0f766e"
+    }
+  })
+    .png()
+    .toBuffer();
+
+  process.env.QWEN_IMAGE_API_KEY = "test-qwen-route-key";
+  process.env.QWEN_IMAGE_ENDPOINT = "https://qwen-image.example.test/route";
+  process.env.QWEN_IMAGE_MODEL = "qwen-image-route-model";
+  globalThis.fetch = (async (url, init) => {
+    if (String(url) === "https://qwen-image.example.test/route") {
+      const headers = new Headers(init?.headers);
+      assert.equal(headers.get("authorization"), "Bearer test-qwen-route-key");
+      const body = JSON.parse(String(init?.body)) as {
+        model?: string;
+        input?: {
+          messages?: { content?: { text?: string }[] }[];
+        };
+      };
+      const prompt = body.input?.messages?.[0]?.content?.[0]?.text ?? "";
+
+      assert.equal(body.model, "qwen-image-route-model");
+      assert.match(prompt, /silver cloak and a wary half-smile/);
+      assert.match(prompt, /cinematic fantasy concept art/i);
+
+      return new Response(
+        JSON.stringify({
+          request_id: "qwen-image-route-request",
+          output: {
+            choices: [
+              {
+                message: {
+                  content: [
+                    {
+                      image: "https://qwen-image.example.test/route-result.png"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        }
+      );
+    }
+
+    if (String(url) === "https://qwen-image.example.test/route-result.png") {
+      return new Response(imageBuffer, {
+        status: 200,
+        headers: { "Content-Type": "image/png" }
+      });
+    }
+
+    throw new Error(`Unexpected fetch URL ${String(url)}`);
+  }) as typeof fetch;
+
+  try {
+    const createdResponse = await app.inject({
+      method: "POST",
+      url: "/api/campaigns",
+      headers: {
+        cookie
+      },
+      payload: {
+        mode: "single_player",
+        title: "Route Portrait Campaign",
+        campaignGenre: "Classic Fantasy",
+        campaignGenreKind: "preset",
+        campaignGenrePresetId: "classic_fantasy",
+        ownerClientId: "portrait-route-owner-client",
+        playerName: "Nyra",
+        characterName: "Nyra",
+        characterSheet: "Level 5 Human Rogue"
+      }
+    });
+
+    assert.equal(createdResponse.statusCode, 201, createdResponse.body);
+    const created = CampaignCreateResponseSchema.parse(createdResponse.json());
+    assert.equal(created.campaign.portraitUrl, undefined);
+
+    const portraitResponse = await app.inject({
+      method: "POST",
+      url: `/api/campaigns/${created.campaign.id}/portrait/generate`,
+      headers: {
+        cookie
+      },
+      payload: {
+        guidelines: "silver cloak and a wary half-smile",
+        artStyle: "cinematic_concept_art",
+        imageModel: "qwen"
+      }
+    });
+    const withPortrait = CampaignCreateResponseSchema.parse(
+      portraitResponse.json()
+    );
+
+    assert.equal(portraitResponse.statusCode, 200, portraitResponse.body);
+    assert.ok(withPortrait.campaign.portraitAssetId);
+    assert.match(withPortrait.campaign.portraitUrl ?? "", /\/media\/campaigns\//);
+  } finally {
+    globalThis.fetch = originalFetch;
+    process.env.QWEN_IMAGE_API_KEY = originalQwenImageApiKey;
+    process.env.QWEN_IMAGE_ENDPOINT = originalQwenImageEndpoint;
+    process.env.QWEN_IMAGE_MODEL = originalQwenImageModel;
+  }
+});
+
 test("POST /api/campaigns uses production Qwen base URL for character portraits", async () => {
   const cookie = await signIn("portrait-production-env@example.com");
   const originalFetch = globalThis.fetch;

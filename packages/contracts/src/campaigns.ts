@@ -49,6 +49,40 @@ export const CampaignReadResponseSchema = z.object({
   campaign: CampaignSummarySchema
 });
 
+export const CharacterPortraitArtStyleSchema = z.enum([
+  "painterly_fantasy",
+  "storybook_illustration",
+  "ink_and_watercolor",
+  "cinematic_concept_art"
+]);
+
+export const CharacterPortraitImageModelSchema = z.enum(["qwen"]);
+
+export const CharacterPortraitGenerateParamsSchema = z.object({
+  campaignId: z.string().uuid()
+});
+
+export const CharacterPortraitGenerateRequestSchema = z.object({
+  guidelines: z.string().optional(),
+  artStyle: CharacterPortraitArtStyleSchema.optional(),
+  imageModel: CharacterPortraitImageModelSchema.optional()
+});
+
+export const CharacterPortraitUploadParamsSchema = z.object({
+  campaignId: z.string().uuid()
+});
+
+export const CharacterPortraitUploadRequestSchema = z.object({
+  imageDataUrl: z.string().min(1),
+  fileName: z.string().optional(),
+  guidelines: z.string().optional(),
+  artStyle: CharacterPortraitArtStyleSchema.optional()
+});
+
+export const CharacterPortraitResponseSchema = z.object({
+  campaign: CampaignSummarySchema
+});
+
 export const CampaignNpcCardSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
@@ -175,6 +209,21 @@ export type CampaignCreateResponse = z.infer<
 >;
 export type CampaignReadParams = z.infer<typeof CampaignReadParamsSchema>;
 export type CampaignReadResponse = z.infer<typeof CampaignReadResponseSchema>;
+export type CharacterPortraitArtStyle = z.infer<
+  typeof CharacterPortraitArtStyleSchema
+>;
+export type CharacterPortraitImageModel = z.infer<
+  typeof CharacterPortraitImageModelSchema
+>;
+export type CharacterPortraitGenerateRequest = z.infer<
+  typeof CharacterPortraitGenerateRequestSchema
+>;
+export type CharacterPortraitUploadRequest = z.infer<
+  typeof CharacterPortraitUploadRequestSchema
+>;
+export type CharacterPortraitResponse = z.infer<
+  typeof CharacterPortraitResponseSchema
+>;
 export type CampaignNpcCard = z.infer<typeof CampaignNpcCardSchema>;
 export type CampaignNpcCardsResponse = z.infer<
   typeof CampaignNpcCardsResponseSchema
