@@ -9,6 +9,8 @@ export const CampaignSummarySchema = z.object({
   mode: CampaignModeSchema,
   title: z.string().min(1),
   ownerClientId: z.string().optional(),
+  portraitAssetId: z.string().uuid().optional(),
+  portraitUrl: z.string().min(1).optional(),
   preview: z.string().optional(),
   time: z.string().optional(),
   messageCount: z.number().int().nonnegative().optional(),
@@ -31,7 +33,8 @@ export const CampaignCreateRequestSchema = z.object({
   playerName: z.string().optional(),
   characterName: z.string().optional(),
   characterSheet: z.string().optional(),
-  mechanicsSeed: MechanicsSeedSchema.optional()
+  mechanicsSeed: MechanicsSeedSchema.optional(),
+  generateCharacterPortrait: z.boolean().optional()
 });
 
 export const CampaignCreateResponseSchema = z.object({

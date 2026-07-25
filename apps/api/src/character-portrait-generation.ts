@@ -1,0 +1,399 @@
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import sharp from "sharp";
+import {
+  createPendingCharacterPortraitAsset,
+  getCharacterPortraitTargetForUser,
+  markCharacterPortraitAssetFailed,
+  markCharacterPortraitAssetReady,
+  type StoredMediaAssetObject
+} from "@ai-dnd/db";
+import type pg from "pg";
+import type { ApiConfig } from "./config.js";
+import {
+  createCharacterPortraitVariants,
+  createMediaStorage,
+  type MediaStorage
+} from "./media-storage.js";
+
+type QwenImageContent = {
+  image?: string;
+  text?: string;
+};
+
+type QwenImageResponse = {
+  request_id?: string;
+  output?: {
+    choices?: {
+      message?: {
+        content?: QwenImageContent[];
+      };
+    }[];
+  };
+  usage?: unknown;
+  code?: string;
+  message?: string;
+};
+
+type CharacterPortraitGenerationResult =
+  | {
+      status: "ready";
+      assetId: string;
+      portraitUrl: string;
+    }
+  | {
+      status: "skipped" | "failed";
+      reason: string;
+    };
+
+type GenerateCharacterPortraitInput = {
+  db: pg.Pool;
+  config: ApiConfig;
+  campaignId: string;
+  userId: string;
+  fetchImpl?: typeof fetch;
+  storage?: MediaStorage;
+};
+
+const defaultQwenImageEndpoint =
+  "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation";
+const defaultQwenImageModel = "qwen-image-2.0-pro";
+let localEnvCache: Record<string, string> | undefined;
+
+function parseLocalEnvFile(text: string) {
+  const values: Record<string, string> = {};
+
+  for (const line of text.split(/\r?\n/)) {
+    const trimmedLine = line.trim();
+
+    if (!trimmedLine || trimmedLine.startsWith("#")) {
+      continue;
+    }
+
+    const separatorIndex = trimmedLine.indexOf("=");
+
+    if (separatorIndex === -1) {
+      continue;
+    }
+
+    const key = trimmedLine.slice(0, separatorIndex).trim();
+    const value = trimmedLine.slice(separatorIndex + 1).trim();
+
+    values[key] = value.replace(/^['"]|['"]$/g, "");
+  }
+
+  return values;
+}
+
+function loadLocalEnvCache() {
+  if (localEnvCache) {
+    return localEnvCache;
+  }
+
+  const cwd = process.cwd();
+  const repoRootFromApiWorkspace = join(cwd, "..", "..");
+  const envPaths = Array.from(
+    new Set([
+      join(repoRootFromApiWorkspace, ".env.local"),
+      join(repoRootFromApiWorkspace, "apps", "web", ".env.local"),
+      join(repoRootFromApiWorkspace, "apps", "api", ".env.local"),
+      join(cwd, ".env.local"),
+      join(cwd, "apps", "web", ".env.local"),
+      join(cwd, "apps", "api", ".env.local"),
+      join(cwd, "..", "web", ".env.local")
+    ])
+  );
+  localEnvCache = {};
+
+  for (const envPath of envPaths) {
+    if (!existsSync(envPath)) {
+      continue;
+    }
+
+    localEnvCache = {
+      ...localEnvCache,
+      ...parseLocalEnvFile(readFileSync(envPath, "utf8"))
+    };
+  }
+
+  return localEnvCache;
+}
+
+function envValue(name: string) {
+  return process.env[name] || loadLocalEnvCache()[name] || "";
+}
+
+function qwenImageSettings() {
+  return {
+    apiKey:
+      envValue("QWEN_IMAGE_API_KEY") ||
+      envValue("DASHSCOPE_API_KEY") ||
+      envValue("QWEN_API_KEY"),
+    endpoint: (
+      envValue("QWEN_IMAGE_ENDPOINT") || defaultQwenImageEndpoint
+    ).replace(/\/+$/, ""),
+    model: envValue("QWEN_IMAGE_MODEL") || defaultQwenImageModel
+  };
+}
+
+function compactText(value: string, maxLength: number) {
+  return value.replace(/\s+/g, " ").trim().slice(0, maxLength);
+}
+
+function characterPortraitPrompt(input: {
+  characterName: string;
+  username: string;
+  characterSheet: string;
+  campaignGenre: string | null;
+  customWorldName: string | null;
+}) {
+  const characterName =
+    input.characterName.trim() || input.username.trim() || "Adventurer";
+  const world = input.customWorldName?.trim() || input.campaignGenre || "fantasy";
+  const characterSheet = compactText(input.characterSheet, 2200);
+
+  return [
+    `Create a square fantasy character portrait for ${characterName}.`,
+    `Campaign world or genre: ${world}.`,
+    "Use the character sheet details below for class, species, gear, mood, age, gender presentation, alignment, and magical flavor.",
+    "",
+    characterSheet,
+    "",
+    "Art direction: premium tabletop RPG character portrait, waist-up heroic composition, expressive face, readable silhouette, detailed clothing and equipment, painterly fantasy realism, dramatic tavern-and-adventure lighting, subtle background atmosphere, no frame, no UI, no text, no logo, no watermark."
+  ].join("\n");
+}
+
+function characterPortraitNegativePrompt() {
+  return [
+    "text",
+    "logo",
+    "watermark",
+    "caption",
+    "extra limbs",
+    "extra fingers",
+    "malformed hands",
+    "distorted face",
+    "duplicate character",
+    "blurry",
+    "low quality",
+    "cropped head",
+    "modern clothing",
+    "photorealistic selfie"
+  ].join(", ");
+}
+
+async function fetchQwenImage(input: {
+  fetchImpl: typeof fetch;
+  apiKey: string;
+  endpoint: string;
+  model: string;
+  prompt: string;
+  negativePrompt: string;
+}) {
+  const response = await input.fetchImpl(input.endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${input.apiKey}`
+    },
+    body: JSON.stringify({
+      model: input.model,
+      input: {
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                text: input.prompt
+              }
+            ]
+          }
+        ]
+      },
+      parameters: {
+        prompt_extend: true,
+        watermark: false,
+        n: 1,
+        size: "1024*1024",
+        negative_prompt: input.negativePrompt
+      }
+    })
+  });
+  const body = (await response.json()) as QwenImageResponse;
+
+  if (!response.ok || body.code) {
+    throw new Error(
+      body.message || `Qwen image generation failed with ${response.status}.`
+    );
+  }
+
+  const imageUrl = body.output?.choices?.[0]?.message?.content?.find(
+    (content) => typeof content.image === "string" && content.image
+  )?.image;
+
+  if (!imageUrl) {
+    throw new Error("Qwen image generation returned no image URL.");
+  }
+
+  return {
+    imageUrl,
+    requestId: body.request_id ?? null,
+    usage: body.usage
+  };
+}
+
+async function downloadImage(fetchImpl: typeof fetch, imageUrl: string) {
+  const response = await fetchImpl(imageUrl);
+
+  if (!response.ok) {
+    throw new Error(`Generated image download failed with ${response.status}.`);
+  }
+
+  return Buffer.from(await response.arrayBuffer());
+}
+
+function portraitObjectKey(input: {
+  campaignId: string;
+  playerId: string;
+  assetId: string;
+  variant: string;
+}) {
+  return [
+    "campaigns",
+    input.campaignId,
+    "players",
+    input.playerId,
+    "portraits",
+    input.assetId,
+    input.variant
+  ].join("/");
+}
+
+export async function generateCharacterPortraitForCampaign(
+  input: GenerateCharacterPortraitInput
+): Promise<CharacterPortraitGenerationResult> {
+  const settings = qwenImageSettings();
+
+  if (!settings.apiKey) {
+    return {
+      status: "skipped",
+      reason: "Qwen image generation is not configured."
+    };
+  }
+
+  const fetchImpl = input.fetchImpl ?? fetch;
+  const storage = input.storage ?? createMediaStorage(input.config);
+  const target = await getCharacterPortraitTargetForUser(input.db, {
+    campaignId: input.campaignId,
+    userId: input.userId
+  });
+  const prompt = characterPortraitPrompt(target);
+  const negativePrompt = characterPortraitNegativePrompt();
+  const pendingAsset = await createPendingCharacterPortraitAsset(input.db, {
+    ownerUserId: target.ownerUserId,
+    campaignId: target.campaignId,
+    playerId: target.playerId,
+    storageProvider:
+      input.config.mediaStorageDriver === "spaces"
+        ? "digitalocean_spaces"
+        : input.config.mediaStorageDriver,
+    prompt,
+    negativePrompt,
+    provider: "qwen",
+    model: settings.model
+  });
+
+  try {
+    const generated = await fetchQwenImage({
+      fetchImpl,
+      apiKey: settings.apiKey,
+      endpoint: settings.endpoint,
+      model: settings.model,
+      prompt,
+      negativePrompt
+    });
+    const source = await downloadImage(fetchImpl, generated.imageUrl);
+    const originalPng = await sharp(source).png().toBuffer();
+    const variants = await createCharacterPortraitVariants(source);
+    const storedObjects: StoredMediaAssetObject[] = [];
+
+    storedObjects.push(
+      await storage.putObject({
+        objectKey: portraitObjectKey({
+          campaignId: target.campaignId,
+          playerId: target.playerId,
+          assetId: pendingAsset.id,
+          variant: "original.png"
+        }),
+        body: originalPng,
+        contentType: "image/png"
+      })
+    );
+
+    for (const variant of variants) {
+      storedObjects.push(
+        await storage.putObject({
+          objectKey: portraitObjectKey({
+            campaignId: target.campaignId,
+            playerId: target.playerId,
+            assetId: pendingAsset.id,
+            variant: `${variant.name}.webp`
+          }),
+          body: variant.buffer,
+          contentType: variant.contentType
+        })
+      );
+    }
+
+    const displayObject =
+      storedObjects.find((object) => object.objectKey.endsWith("/512.webp")) ??
+      storedObjects.at(-1);
+
+    if (!displayObject) {
+      throw new Error("No portrait objects were stored.");
+    }
+
+    const readyAsset = await markCharacterPortraitAssetReady(input.db, {
+      assetId: pendingAsset.id,
+      playerId: target.playerId,
+      displayObject,
+      providerRequestId: generated.requestId,
+      generationMetadata: {
+        sourceImageUrl: generated.imageUrl,
+        usage: generated.usage ?? null,
+        variants: storedObjects.map((object) => ({
+          objectKey: object.objectKey,
+          publicUrl: object.publicUrl,
+          contentType: object.contentType,
+          byteSize: object.byteSize,
+          width: object.width,
+          height: object.height,
+          sha256: object.sha256
+        }))
+      }
+    });
+
+    return {
+      status: "ready",
+      assetId: readyAsset.id,
+      portraitUrl: readyAsset.public_url ?? displayObject.publicUrl
+    };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Portrait generation failed.";
+
+    await markCharacterPortraitAssetFailed(input.db, {
+      assetId: pendingAsset.id,
+      errorMessage: message,
+      generationMetadata: {
+        endpoint: settings.endpoint,
+        model: settings.model
+      }
+    });
+
+    return {
+      status: "failed",
+      reason: message
+    };
+  }
+}

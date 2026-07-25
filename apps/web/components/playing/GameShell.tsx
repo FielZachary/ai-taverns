@@ -1744,6 +1744,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
       {isCharacterSheetOpen ? (
         <CharacterSheetOverlay
           characterSheet={activeCharacterSheet}
+          portraitUrl={currentRoomPlayer?.portraitUrl}
           onClose={() => setIsCharacterSheetOpen(false)}
         />
       ) : null}

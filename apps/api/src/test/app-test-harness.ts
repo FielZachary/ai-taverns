@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import os from "node:os";
+import path from "node:path";
 import { after, before } from "node:test";
 import type { FastifyInstance } from "fastify";
 import { AuthPasswordlessStartResponseSchema } from "@ai-dnd/contracts";
@@ -99,6 +101,34 @@ type PlayerRecord = {
   kicked_at: Date | null;
   created_at: Date;
   updated_at: Date;
+  portrait_asset_id: string | null;
+  portrait_public_url?: string | null;
+};
+
+type MediaAssetRecord = {
+  id: string;
+  owner_user_id: string | null;
+  campaign_id: string | null;
+  player_id: string | null;
+  kind: "character_portrait" | "campaign_cover" | "npc_portrait";
+  status: "pending" | "ready" | "failed" | "deleted";
+  storage_provider: "local" | "digitalocean_spaces" | "s3";
+  bucket: string | null;
+  object_key: string | null;
+  public_url: string | null;
+  content_type: string;
+  byte_size: number | null;
+  width: number | null;
+  height: number | null;
+  sha256: string | null;
+  prompt: string | null;
+  negative_prompt: string | null;
+  provider: string | null;
+  model: string | null;
+  provider_request_id: string | null;
+  generation_metadata: unknown;
+  created_at: Date;
+  updated_at: Date;
 };
 
 type JoinCodeRecord = {
@@ -193,6 +223,7 @@ class FakeDatabase {
   campaignInvites: CampaignInviteRecord[] = [];
   campaignInviteUses: CampaignInviteUseRecord[] = [];
   campaignEvents: CampaignEventRecord[] = [];
+  mediaAssets: MediaAssetRecord[] = [];
   contextChunks: ContextChunkRecord[] = [];
   dmTurnTraces: DmTurnTraceRecord[] = [];
   turns: TurnRecord[] = [];
@@ -610,10 +641,116 @@ class FakeDatabase {
         last_seen_at: now,
         kicked_at: null,
         created_at: now,
-        updated_at: now
+        updated_at: now,
+        portrait_asset_id: null
       };
       this.players.push(record);
       return { rows: [record as T] };
+    }
+
+    if (
+      normalizedSql.startsWith("select players.*, campaigns.title as campaign_title")
+    ) {
+      const campaignId = values[0] as string;
+      const userId = values[1] as string;
+      const player = this.players.find(
+        (candidate) =>
+          candidate.campaign_id === campaignId &&
+          candidate.user_id === userId &&
+          candidate.status === "active"
+      );
+      const campaign = player
+        ? this.campaigns.find(
+            (candidate) =>
+              candidate.id === player.campaign_id &&
+              candidate.status === "active"
+          )
+        : undefined;
+
+      return {
+        rows:
+          player && campaign
+            ? ([
+                {
+                  ...player,
+                  campaign_title: campaign.title,
+                  campaign_metadata: campaign.metadata,
+                  campaign_owner_user_id: campaign.owner_user_id
+                }
+              ] as T[])
+            : ([] as T[])
+      };
+    }
+
+    if (normalizedSql.startsWith("insert into media_assets")) {
+      const now = new Date();
+      const record: MediaAssetRecord = {
+        id: `00000000-0000-4000-8000-${String(this.nextId++).padStart(12, "0")}`,
+        owner_user_id: values[0] as string | null,
+        campaign_id: values[1] as string,
+        player_id: values[2] as string,
+        kind: "character_portrait",
+        status: "pending",
+        storage_provider: values[3] as "local" | "digitalocean_spaces" | "s3",
+        bucket: null,
+        object_key: null,
+        public_url: null,
+        content_type: "image/webp",
+        byte_size: null,
+        width: null,
+        height: null,
+        sha256: null,
+        prompt: values[4] as string,
+        negative_prompt: values[5] as string,
+        provider: values[6] as string,
+        model: values[7] as string,
+        provider_request_id: null,
+        generation_metadata: {},
+        created_at: now,
+        updated_at: now
+      };
+      this.mediaAssets.push(record);
+      return { rows: [record as T] };
+    }
+
+    if (normalizedSql.startsWith("update media_assets set status = 'ready'")) {
+      const asset = this.mediaAssets.find(
+        (candidate) => candidate.id === values[0]
+      );
+
+      if (!asset) {
+        return { rows: [] as T[] };
+      }
+
+      asset.status = "ready";
+      asset.storage_provider = values[1] as "local" | "digitalocean_spaces" | "s3";
+      asset.bucket = values[2] as string | null;
+      asset.object_key = values[3] as string;
+      asset.public_url = values[4] as string;
+      asset.content_type = values[5] as string;
+      asset.byte_size = values[6] as number;
+      asset.width = values[7] as number | null;
+      asset.height = values[8] as number | null;
+      asset.sha256 = values[9] as string;
+      asset.provider_request_id = values[10] as string | null;
+      asset.generation_metadata = JSON.parse(values[11] as string) as unknown;
+      asset.updated_at = new Date();
+
+      return { rows: [asset as T] };
+    }
+
+    if (normalizedSql.startsWith("update media_assets set status = 'failed'")) {
+      const asset = this.mediaAssets.find(
+        (candidate) => candidate.id === values[0]
+      );
+
+      if (asset) {
+        asset.status = "failed";
+        asset.generation_metadata = JSON.parse(values[1] as string) as unknown;
+        asset.updated_at = new Date();
+      }
+
+      return { rows: [] as T[] };
     }
 
     if (normalizedSql.startsWith("select * from turns")) {
@@ -1414,7 +1551,10 @@ class FakeDatabase {
       };
     }
 
-    if (normalizedSql.startsWith("select * from players where campaign_id")) {
+    if (
+      normalizedSql.startsWith("select * from players where campaign_id") ||
+      normalizedSql.startsWith("select players.*, media_assets.id as portrait_asset_id")
+    ) {
       const campaignId = values[0] as string;
 
       if (normalizedSql.includes("and client_id = $2 and user_id = $3")) {
@@ -1439,12 +1579,31 @@ class FakeDatabase {
         return { rows: player ? ([player] as T[]) : ([] as T[]) };
       }
 
-      if (normalizedSql.includes("where campaign_id = $1 and status = 'active'")) {
+      if (
+        normalizedSql.includes("where campaign_id = $1 and status = 'active'") ||
+        normalizedSql.includes(
+          "where players.campaign_id = $1 and players.status = 'active'"
+        )
+      ) {
         return {
           rows: this.players.filter(
             (player) =>
               player.campaign_id === campaignId && player.status === "active"
-          ) as T[]
+          ).map((player) => {
+            const portrait = player.portrait_asset_id
+              ? this.mediaAssets.find(
+                  (asset) =>
+                    asset.id === player.portrait_asset_id &&
+                    asset.status === "ready"
+                )
+              : undefined;
+
+            return {
+              ...player,
+              portrait_asset_id: portrait?.id ?? player.portrait_asset_id,
+              portrait_public_url: portrait?.public_url ?? null
+            } as T;
+          })
         };
       }
 
@@ -1636,6 +1795,19 @@ class FakeDatabase {
       return { rows: [] as T[] };
     }
 
+    if (normalizedSql.startsWith("update players set portrait_asset_id")) {
+      const assetId = values[0] as string;
+      const playerId = values[1] as string;
+      const player = this.players.find((candidate) => candidate.id === playerId);
+
+      if (player) {
+        player.portrait_asset_id = assetId;
+        player.updated_at = new Date();
+      }
+
+      return { rows: [] as T[] };
+    }
+
     throw new Error(`Unhandled fake query: ${normalizedSql}`);
   };
 
@@ -1699,7 +1871,11 @@ before(async () => {
     config: loadConfig({
       NODE_ENV: "test",
       DATABASE_URL: "postgres://postgres:postgres@localhost:5432/ai_taverns",
-      AUTH_COOKIE_NAME: "test_session"
+      AUTH_COOKIE_NAME: "test_session",
+      MEDIA_LOCAL_DIR: path.join(
+        os.tmpdir(),
+        `ai-taverns-api-test-media-${process.pid}`
+      )
     }),
     connectToDatabase: false,
     dmRuntime: {

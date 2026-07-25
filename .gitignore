@@ -13,6 +13,7 @@ test-results/
 infra/staging.env
 infra/production.env
 infra/backups/
+.local-media/
 *.tsbuildinfo
 npm-debug.log*
 .vercel

@@ -19,7 +19,8 @@ import {
   joinCampaign as joinCampaignViaApi,
   joinLobbyInvite,
   previewLobbyInvite,
-  previewCampaignJoin
+  previewCampaignJoin,
+  type CampaignSummary
 } from "@/lib/campaign-api";
 import { defaultCharacterSheet } from "@/components/playing/PlayerPanel";
 import { DiceRollReveal3D } from "@/components/playing/DiceRollReveal3D";
@@ -171,9 +172,9 @@ const multiplayerCustomCreateSteps = [
 const joinSteps = ["Mode", "Multiplayer", "Game Code", "Character", "Review"];
 const joinCodePattern = /[A-HJ-NP-Z2-9]{6}/;
 const campaignCreationLoadingSteps = [
-  "Choosing where the story begins",
-  "Finding the first spark",
-  "Writing your opening scene",
+  "Preparing your adventure",
+  "Painting your character portrait",
+  "Saving the final details",
   "Setting the table"
 ];
 const customCharacterCreationSteps = [
@@ -3303,6 +3304,8 @@ export function NewAdventureForm({
   const [ownerClientId, setOwnerClientId] = useState("");
   const [error, setError] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+  const [createdCampaign, setCreatedCampaign] =
+    useState<CampaignSummary | null>(null);
   const [creationLoadingStep, setCreationLoadingStep] = useState(0);
   const [flowTransition, setFlowTransition] =
     useState<FlowTransitionState>("idle");
@@ -3617,6 +3620,12 @@ export function NewAdventureForm({
     subclass
   ]);
   const stepTitle = useMemo(() => {
+    if (createdCampaign) {
+      return createdCampaign.portraitUrl
+        ? "Your portrait is ready"
+        : "Your adventure is ready";
+    }
+
     if (stepIndex === 0) {
       return "Choose your game mode";
     }
@@ -3679,7 +3688,8 @@ export function NewAdventureForm({
     isEquipmentSummaryStep,
     isInviteJoinFlow,
     mode,
-    stepIndex
+    stepIndex,
+    createdCampaign
   ]);
 
   useEffect(() => {
@@ -4210,7 +4220,7 @@ export function NewAdventureForm({
   }
 
   function handleBack() {
-    if (isFlowTransitioning) {
+    if (isFlowTransitioning || createdCampaign) {
       return;
     }
 
@@ -4240,6 +4250,13 @@ export function NewAdventureForm({
   }
 
   async function createCampaign() {
+    if (createdCampaign) {
+      window.location.assign(
+        `/play?campaignId=${encodeURIComponent(createdCampaign.id)}`
+      );
+      return;
+    }
+
     if (isCreating) {
       return;
     }
@@ -4264,12 +4281,12 @@ export function NewAdventureForm({
             : "Table Owner",
         characterName,
         characterSheet,
-        mechanicsSeed
+        mechanicsSeed,
+        generateCharacterPortrait: true
       });
 
-      window.location.assign(
-        `/play?campaignId=${encodeURIComponent(campaign.id)}`
-      );
+      setCreatedCampaign(campaign);
+      setIsCreating(false);
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -5147,7 +5164,42 @@ export function NewAdventureForm({
               </div>
             ) : null}
 
-            {stepIndex === reviewStepIndex ? (
+            {stepIndex === reviewStepIndex && createdCampaign ? (
+              <div className="portrait-final-step">
+                <div
+                  className={
+                    createdCampaign.portraitUrl
+                      ? "generated-character-portrait"
+                      : "generated-character-portrait empty"
+                  }
+                  aria-label={`${characterName || "Character"} portrait`}
+                >
+                  {createdCampaign.portraitUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={createdCampaign.portraitUrl}
+                      alt={`${characterName || "Character"} portrait`}
+                    />
+                  ) : (
+                    <Sparkles size={42} />
+                  )}
+                </div>
+                <div className="portrait-final-copy">
+                  <strong>
+                    {createdCampaign.portraitUrl
+                      ? characterName || "Your character"
+                      : "Portrait skipped"}
+                  </strong>
+                  <span>
+                    {createdCampaign.portraitUrl
+                      ? "Your character portrait is saved to this adventure."
+                      : "Your campaign is ready. You can start now and add a portrait later."}
+                  </span>
+                </div>
+              </div>
+            ) : null}
+
+            {stepIndex === reviewStepIndex && !createdCampaign ? (
               <div className="creation-review">
                 <ScrollText size={28} />
                 <dl>
@@ -5242,7 +5294,12 @@ export function NewAdventureForm({
             <button
               type="button"
               className="creation-secondary"
-              disabled={stepIndex === 0 || isCreating || isFlowTransitioning}
+              disabled={
+                stepIndex === 0 ||
+                isCreating ||
+                isFlowTransitioning ||
+                Boolean(createdCampaign)
+              }
               onClick={handleBack}
             >
               <span className="fantasy-arrow-icon fantasy-arrow-back" aria-hidden="true" />
@@ -5251,10 +5308,15 @@ export function NewAdventureForm({
             <button type="submit" disabled={isCreating || isFlowTransitioning}>
               {isCreating ? (
                 isJoinFlow ? "Joining..." : "Creating..."
+              ) : createdCampaign ? (
+                <>
+                  Enter Adventure
+                  <span className="fantasy-arrow-icon fantasy-arrow-forward" aria-hidden="true" />
+                </>
               ) : isLastStep ? (
                 <>
-                  {isJoinFlow ? "Join Game" : "Create Campaign"}
-                  <Check size={16} />
+                  {isJoinFlow ? "Join Game" : "Generate Portrait"}
+                  {isJoinFlow ? <Check size={16} /> : <Sparkles size={16} />}
                 </>
               ) : (
                 <>
