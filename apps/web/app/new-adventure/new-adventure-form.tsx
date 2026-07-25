@@ -1009,7 +1009,107 @@ export function spellRangeFor(spell: string) {
   return "Varies";
 }
 
+const spellRollDetails: Record<string, string> = {
+  "acid splash":
+    "Dexterity saving throw against your spell save DC; on a failed save, roll 2d6 acid damage at Level 5.",
+  aid: "No roll when cast. Three creatures gain 5 current and maximum hit points; add +5 hit points per slot level above 2nd.",
+  bane: "Charisma saving throw against your spell save DC. Affected targets subtract 1d4 from attack rolls and saving throws.",
+  bless:
+    "No attack or damage roll when cast. Affected creatures add 1d4 to attack rolls and saving throws.",
+  "burning hands":
+    "Dexterity saving throw against your spell save DC; roll 3d6 fire damage, +1d6 per slot level above 1st.",
+  "call lightning":
+    "Dexterity saving throw against your spell save DC; roll 3d10 lightning damage each bolt, +1d10 per slot level above 3rd.",
+  "chromatic orb":
+    "Make a spell attack roll: d20 + your spell attack bonus. On a hit, roll 3d8 damage, +1d8 per slot level above 1st.",
+  "cloud of daggers":
+    "No attack roll. Roll 4d4 slashing damage when a creature enters the area or starts its turn there, +2d4 per slot level above 2nd.",
+  "color spray":
+    "No attack roll or saving throw. Roll 6d10 to determine total hit points affected, +2d10 per slot level above 1st.",
+  "cure wounds":
+    "Roll 1d8 + your spellcasting modifier for healing, +1d8 per slot level above 1st.",
+  "dissonant whispers":
+    "Wisdom saving throw against your spell save DC; roll 3d6 psychic damage, +1d6 per slot level above 1st.",
+  "earth tremor":
+    "Dexterity saving throw against your spell save DC; roll 1d6 bludgeoning damage, +1d6 per slot level above 1st.",
+  "eldritch blast":
+    "Make two spell attack rolls at Level 5: each beam is d20 + your spell attack bonus. On a hit, roll 1d10 force damage per beam.",
+  "false life":
+    "Roll 1d4 + 4 temporary hit points, +5 temporary hit points per slot level above 1st.",
+  "fire bolt":
+    "Make a spell attack roll: d20 + your spell attack bonus. On a hit, roll 2d10 fire damage at Level 5.",
+  fireball:
+    "Dexterity saving throw against your spell save DC; roll 8d6 fire damage, +1d6 per slot level above 3rd.",
+  "flame blade":
+    "Make a melee spell attack roll: d20 + your spell attack bonus. On a hit, roll 3d6 fire damage, +1d6 per two slot levels above 2nd.",
+  "flaming sphere":
+    "Dexterity saving throw against your spell save DC; roll 2d6 fire damage, +1d6 per slot level above 2nd.",
+  "frost fingers":
+    "Constitution saving throw against your spell save DC; roll 2d8 cold damage, +1d8 per slot level above 1st.",
+  goodberry: "No roll when cast. Creates 10 berries; each berry restores 1 hit point.",
+  "guiding bolt":
+    "Make a spell attack roll: d20 + your spell attack bonus. On a hit, roll 4d6 radiant damage, +1d6 per slot level above 1st.",
+  "healing word":
+    "Roll 1d4 + your spellcasting modifier for healing, +1d4 per slot level above 1st.",
+  "hellish rebuke":
+    "Dexterity saving throw against your spell save DC; roll 2d10 fire damage, +1d10 per slot level above 1st.",
+  "ice knife":
+    "Make a spell attack roll: d20 + your spell attack bonus. On a hit, roll 1d10 piercing damage; then nearby creatures make Dexterity saves against 2d6 cold damage, +1d6 cold per slot level above 1st.",
+  "inflict wounds":
+    "Make a melee spell attack roll: d20 + your spell attack bonus. On a hit, roll 3d10 necrotic damage, +1d10 per slot level above 1st.",
+  "lightning bolt":
+    "Dexterity saving throw against your spell save DC; roll 8d6 lightning damage, +1d6 per slot level above 3rd.",
+  "magic missile":
+    "No attack roll or saving throw. Roll 3d4 + 3 force damage for the darts, +1d4 + 1 per slot level above 1st.",
+  "melf's acid arrow":
+    "Make a spell attack roll: d20 + your spell attack bonus. On a hit, roll 4d4 acid damage now and 2d4 acid damage at the end of the target's next turn, +1d4 initial damage per slot level above 2nd.",
+  "mind sliver":
+    "Intelligence saving throw against your spell save DC; on a failed save, roll 2d6 psychic damage at Level 5 and subtract 1d4 from the target's next saving throw.",
+  "moonbeam":
+    "Constitution saving throw against your spell save DC; roll 2d10 radiant damage, +1d10 per slot level above 2nd.",
+  "poison spray":
+    "Constitution saving throw against your spell save DC; on a failed save, roll 2d12 poison damage at Level 5.",
+  "prayer of healing":
+    "Roll 2d8 + your spellcasting modifier for each chosen creature's healing, +1d8 per slot level above 2nd.",
+  "produce flame":
+    "Make a spell attack roll: d20 + your spell attack bonus. On a hit, roll 2d8 fire damage at Level 5.",
+  "ray of frost":
+    "Make a spell attack roll: d20 + your spell attack bonus. On a hit, roll 2d8 cold damage at Level 5.",
+  "ray of sickness":
+    "Make a spell attack roll: d20 + your spell attack bonus. On a hit, roll 2d8 poison damage, +1d8 per slot level above 1st.",
+  "sacred flame":
+    "Dexterity saving throw against your spell save DC; on a failed save, roll 2d8 radiant damage at Level 5.",
+  "scorching ray":
+    "Make three spell attack rolls: each ray is d20 + your spell attack bonus. On a hit, roll 2d6 fire damage per ray; add one ray per slot level above 2nd.",
+  shatter:
+    "Constitution saving throw against your spell save DC; roll 3d8 thunder damage, +1d8 per slot level above 2nd.",
+  "shocking grasp":
+    "Make a melee spell attack roll: d20 + your spell attack bonus. On a hit, roll 2d8 lightning damage at Level 5.",
+  sleep:
+    "No saving throw. Roll 5d8 to determine total hit points affected, +2d8 per slot level above 1st.",
+  "spiritual weapon":
+    "Make a melee spell attack roll: d20 + your spell attack bonus. On a hit, roll 1d8 + your spellcasting modifier force damage, +1d8 per two slot levels above 2nd.",
+  "thorn whip":
+    "Make a melee spell attack roll: d20 + your spell attack bonus. On a hit, roll 2d6 piercing damage at Level 5.",
+  "thunderwave":
+    "Constitution saving throw against your spell save DC; roll 2d8 thunder damage, +1d8 per slot level above 1st.",
+  "toll the dead":
+    "Wisdom saving throw against your spell save DC; on a failed save, roll 2d8 necrotic damage at Level 5, or 2d12 if the target is missing hit points.",
+  "vampiric touch":
+    "Make a melee spell attack roll: d20 + your spell attack bonus. On a hit, roll 3d6 necrotic damage, +1d6 per slot level above 3rd, and heal for half the necrotic damage dealt.",
+  "vicious mockery":
+    "Wisdom saving throw against your spell save DC; on a failed save, roll 2d4 psychic damage at Level 5.",
+  "witch bolt":
+    "Make a spell attack roll: d20 + your spell attack bonus. On a hit, roll 1d12 lightning damage, +1d12 initial damage per slot level above 1st."
+};
+
 export function spellRollsFor(spell: string) {
+  const exactRollDetails = spellRollDetails[spell.trim().toLowerCase()];
+
+  if (exactRollDetails) {
+    return exactRollDetails;
+  }
+
   if (/fire bolt|eldritch blast|ray|guiding bolt|produce flame|thorn whip|shocking grasp|witch bolt|chromatic orb|scorching ray|melf/i.test(spell)) {
     return "Make a spell attack roll: d20 + your spell attack bonus. On a hit, roll the spell's damage dice.";
   }
