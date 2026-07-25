@@ -358,4 +358,64 @@ describe("MessageLog", () => {
 
     expect(screen.queryByRole("dialog", { name: /ai debug/i })).not.toBeInTheDocument();
   });
+
+  it("updates an open AI debug modal when message debug data refreshes", () => {
+    const baseDebug: AiDebugInfo = {
+      model: "deepseek-chat",
+      temperature: 0.8,
+      combatState: {
+        combat: {
+          active: false
+        }
+      },
+      requestMessages: [
+        {
+          role: "system",
+          content: "Stay in character."
+        }
+      ],
+      rawResponse: "{\"message\":\"The dock creaks.\"}"
+    };
+    const message = gameMessage({
+      id: "debug-refresh-dm",
+      role: "dm",
+      content: "The dock creaks.",
+      debug: baseDebug
+    });
+    const { rerender } = render(
+      <MessageLog messages={[message]} isSending={false} />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /show ai debug details/i }));
+
+    expect(screen.getByRole("dialog", { name: /ai debug/i })).toBeInTheDocument();
+    expect(screen.getByText("Context Storage")).toBeInTheDocument();
+    expect(screen.getByText("Not recorded")).toBeInTheDocument();
+
+    rerender(
+      <MessageLog
+        messages={[
+          {
+            ...message,
+            debug: {
+              ...baseDebug,
+              contextStorageState: {
+                contextChunkCount: 1,
+                contextChunks: [
+                  {
+                    context_id: "npc:marra-vell",
+                    body_markdown: "# Marra Vell"
+                  }
+                ]
+              }
+            }
+          }
+        ]}
+        isSending={false}
+      />
+    );
+
+    expect(screen.getByText(/"context_id": "npc:marra-vell"/)).toBeInTheDocument();
+    expect(screen.queryByText("Not recorded")).not.toBeInTheDocument();
+  });
 });

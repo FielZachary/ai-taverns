@@ -184,13 +184,22 @@ export function MessageLog({
   onRegenerateResponse
 }: MessageLogProps) {
   const logRef = useRef<HTMLDivElement>(null);
-  const [openDebug, setOpenDebug] = useState<AiDebugInfo | null>(null);
+  const [openDebugMessageId, setOpenDebugMessageId] = useState<string | null>(
+    null
+  );
   const scrollKey = useMemo(
     () =>
       messages
         .map((message) => `${message.id}:${message.content.length}`)
         .join("|"),
     [messages]
+  );
+  const openDebug = useMemo(
+    () =>
+      openDebugMessageId
+        ? messages.find((message) => message.id === openDebugMessageId)?.debug ?? null
+        : null,
+    [messages, openDebugMessageId]
   );
 
   useLayoutEffect(() => {
@@ -249,7 +258,7 @@ export function MessageLog({
                       <button
                         type="button"
                         className="message-action-button"
-                        onClick={() => setOpenDebug(message.debug ?? null)}
+                        onClick={() => setOpenDebugMessageId(message.id)}
                         aria-label="Show AI debug details"
                         title="Show AI debug details"
                       >
@@ -332,7 +341,10 @@ export function MessageLog({
       ) : null}
       <div aria-hidden="true" className="message-end" />
       {openDebug ? (
-        <MessageDebugModal debug={openDebug} onClose={() => setOpenDebug(null)} />
+        <MessageDebugModal
+          debug={openDebug}
+          onClose={() => setOpenDebugMessageId(null)}
+        />
       ) : null}
     </div>
   );
