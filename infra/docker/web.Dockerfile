@@ -5,6 +5,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 COPY package.json package-lock.json ./
 COPY apps ./apps
+COPY assets ./assets
 COPY packages ./packages
 
 RUN npm ci
