@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Abstract Create or Destroy Water spell art, no people">
+  <defs>
+    <radialGradient id="core" cx="64%" cy="40%" r="72%">
+      <stop offset="0" stop-color="#c7f083" stop-opacity="0.72"/>
+      <stop offset="0.42" stop-color="#d39c42" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#4b3516" stop-opacity="1"/>
+    </radialGradient>
+    <linearGradient id="veil" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff5cf" stop-opacity="0.16"/>
+      <stop offset="0.48" stop-color="#7f8cff" stop-opacity="0.13"/>
+      <stop offset="1" stop-color="#050302" stop-opacity="0.7"/>
+    </linearGradient>
+    <filter id="soft"><feGaussianBlur stdDeviation="6"/></filter>
+  </defs>
+  <rect width="512" height="512" fill="url(#core)"/>
+  <circle cx="399" cy="387" r="159" fill="#d39c42" opacity="0.13" filter="url(#soft)"/>
+  <circle cx="348" cy="337" r="204" fill="#c7f083" opacity="0.1" filter="url(#soft)"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M-20 120 C80 78 152 178 250 126 S420 110 540 138" fill="none" stroke="#c7f083" stroke-width="8" opacity="0.18"/>
+    <path d="M-20 156 C80 106 152 200 250 160 S420 140 540 170" fill="none" stroke="#d39c42" stroke-width="9" opacity="0.18"/>
+    <path d="M-20 192 C80 134 152 222 250 194 S420 170 540 202" fill="none" stroke="#c7f083" stroke-width="10" opacity="0.18"/>
+    <path d="M-20 228 C80 162 152 244 250 228 S420 200 540 234" fill="none" stroke="#d39c42" stroke-width="11" opacity="0.18"/>
+    <path d="M-20 264 C80 190 152 266 250 262 S420 230 540 266" fill="none" stroke="#c7f083" stroke-width="8" opacity="0.18"/>
+    <path d="M-20 300 C80 218 152 288 250 296 S420 260 540 298" fill="none" stroke="#d39c42" stroke-width="9" opacity="0.18"/>
+    <path d="M-20 336 C80 246 152 310 250 330 S420 290 540 330" fill="none" stroke="#c7f083" stroke-width="10" opacity="0.18"/>
+    <path d="M-20 372 C80 274 152 332 250 364 S420 320 540 362" fill="none" stroke="#d39c42" stroke-width="11" opacity="0.18"/>
+    <path d="M-20 408 C80 302 152 354 250 398 S420 350 540 394" fill="none" stroke="#c7f083" stroke-width="8" opacity="0.18"/>
+  </g>
+  <g opacity="0.16">
+    <path d="M54 82 C158 20 342 28 458 96" stroke="#fff4ce" stroke-width="2" fill="none"/>
+    <path d="M38 426 C160 470 328 490 486 388" stroke="#0b0604" stroke-width="16" fill="none" opacity="0.38"/>
+    <path d="M74 424 C174 392 298 428 430 360" stroke="#c7f083" stroke-width="3" fill="none"/>
+  </g>
+  <rect width="512" height="512" fill="url(#veil)"/>
+</svg>

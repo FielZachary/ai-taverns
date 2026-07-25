@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Abstract Barkskin spell art, no people">
+  <defs>
+    <radialGradient id="core" cx="53%" cy="46%" r="72%">
+      <stop offset="0" stop-color="#c7f083" stop-opacity="0.72"/>
+      <stop offset="0.42" stop-color="#d39c42" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#4b3516" stop-opacity="1"/>
+    </radialGradient>
+    <linearGradient id="veil" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff5cf" stop-opacity="0.16"/>
+      <stop offset="0.48" stop-color="#dc78c8" stop-opacity="0.13"/>
+      <stop offset="1" stop-color="#050302" stop-opacity="0.7"/>
+    </linearGradient>
+    <filter id="soft"><feGaussianBlur stdDeviation="6"/></filter>
+  </defs>
+  <rect width="512" height="512" fill="url(#core)"/>
+  <circle cx="298" cy="302" r="178" fill="#d39c42" opacity="0.13" filter="url(#soft)"/>
+  <circle cx="359" cy="403" r="149" fill="#c7f083" opacity="0.1" filter="url(#soft)"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M40 500 C72 352 124 320 96 176" fill="none" stroke="#c7f083" stroke-width="3" opacity="0.23"/>
+    <path d="M82 500 C90 321 146 348 126 198" fill="none" stroke="#d39c42" stroke-width="4" opacity="0.23"/>
+    <path d="M124 500 C108 306 168 362 156 159" fill="none" stroke="#c7f083" stroke-width="5" opacity="0.23"/>
+    <path d="M166 500 C126 298 190 324 186 139" fill="none" stroke="#d39c42" stroke-width="6" opacity="0.23"/>
+    <path d="M208 500 C144 294 212 305 216 179" fill="none" stroke="#c7f083" stroke-width="7" opacity="0.23"/>
+    <path d="M250 500 C162 292 234 295 246 199" fill="none" stroke="#d39c42" stroke-width="3" opacity="0.23"/>
+    <path d="M292 500 C180 291 256 335 276 209" fill="none" stroke="#c7f083" stroke-width="4" opacity="0.23"/>
+    <path d="M334 500 C198 291 278 355 306 214" fill="none" stroke="#d39c42" stroke-width="5" opacity="0.23"/>
+    <path d="M376 500 C216 291 300 365 336 167" fill="none" stroke="#c7f083" stroke-width="6" opacity="0.23"/>
+    <path d="M418 500 C234 291 322 370 366 143" fill="none" stroke="#d39c42" stroke-width="7" opacity="0.23"/>
+    <path d="M460 500 C252 291 344 373 396 131" fill="none" stroke="#c7f083" stroke-width="3" opacity="0.23"/>
+    <path d="M502 500 C270 326 366 329 426 175" fill="none" stroke="#d39c42" stroke-width="4" opacity="0.23"/>
+  </g>
+  <g opacity="0.16">
+    <path d="M54 82 C158 20 342 28 458 96" stroke="#fff4ce" stroke-width="2" fill="none"/>
+    <path d="M38 426 C160 470 328 490 486 388" stroke="#0b0604" stroke-width="16" fill="none" opacity="0.38"/>
+    <path d="M74 424 C174 392 298 428 430 360" stroke="#c7f083" stroke-width="3" fill="none"/>
+  </g>
+  <rect width="512" height="512" fill="url(#veil)"/>
+</svg>

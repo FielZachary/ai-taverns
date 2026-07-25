@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Abstract Unseen Servant spell art, no people">
+  <defs>
+    <radialGradient id="core" cx="49%" cy="31%" r="72%">
+      <stop offset="0" stop-color="#d8f7ba" stop-opacity="0.72"/>
+      <stop offset="0.42" stop-color="#48c78e" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#203d2e" stop-opacity="1"/>
+    </radialGradient>
+    <linearGradient id="veil" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff5cf" stop-opacity="0.16"/>
+      <stop offset="0.48" stop-color="#7f8cff" stop-opacity="0.13"/>
+      <stop offset="1" stop-color="#050302" stop-opacity="0.7"/>
+    </linearGradient>
+    <filter id="soft"><feGaussianBlur stdDeviation="6"/></filter>
+  </defs>
+  <rect width="512" height="512" fill="url(#core)"/>
+  <circle cx="144" cy="335" r="204" fill="#48c78e" opacity="0.13" filter="url(#soft)"/>
+  <circle cx="417" cy="385" r="80" fill="#d8f7ba" opacity="0.1" filter="url(#soft)"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M256 256 m-38,0 a38,38 0 1,0 76,0 a38,38 0 1,0 -76,0" fill="none" stroke="#d8f7ba" stroke-width="3" stroke-dasharray="10 12" opacity="0.2"/>
+    <path d="M256 256 m-52,0 a52,52 0 1,0 104,0 a52,52 0 1,0 -104,0" fill="none" stroke="#48c78e" stroke-width="4" stroke-dasharray="12 13" opacity="0.2"/>
+    <path d="M256 256 m-66,0 a66,66 0 1,0 132,0 a66,66 0 1,0 -132,0" fill="none" stroke="#d8f7ba" stroke-width="5" stroke-dasharray="14 14" opacity="0.2"/>
+    <path d="M256 256 m-80,0 a80,80 0 1,0 160,0 a80,80 0 1,0 -160,0" fill="none" stroke="#48c78e" stroke-width="6" stroke-dasharray="16 15" opacity="0.2"/>
+    <path d="M256 256 m-94,0 a94,94 0 1,0 188,0 a94,94 0 1,0 -188,0" fill="none" stroke="#d8f7ba" stroke-width="3" stroke-dasharray="18 16" opacity="0.2"/>
+    <path d="M256 256 m-108,0 a108,108 0 1,0 216,0 a108,108 0 1,0 -216,0" fill="none" stroke="#48c78e" stroke-width="4" stroke-dasharray="20 17" opacity="0.2"/>
+    <path d="M256 256 m-122,0 a122,122 0 1,0 244,0 a122,122 0 1,0 -244,0" fill="none" stroke="#d8f7ba" stroke-width="5" stroke-dasharray="22 18" opacity="0.2"/>
+    <path d="M256 256 m-136,0 a136,136 0 1,0 272,0 a136,136 0 1,0 -272,0" fill="none" stroke="#48c78e" stroke-width="6" stroke-dasharray="24 19" opacity="0.2"/>
+  </g>
+  <g opacity="0.16">
+    <path d="M54 82 C158 20 342 28 458 96" stroke="#fff4ce" stroke-width="2" fill="none"/>
+    <path d="M38 426 C160 470 328 490 486 388" stroke="#0b0604" stroke-width="16" fill="none" opacity="0.38"/>
+    <path d="M74 424 C174 392 298 428 430 360" stroke="#d8f7ba" stroke-width="3" fill="none"/>
+  </g>
+  <rect width="512" height="512" fill="url(#veil)"/>
+</svg>

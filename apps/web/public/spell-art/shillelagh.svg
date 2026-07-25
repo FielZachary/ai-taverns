@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Abstract Shillelagh spell art, no people">
+  <defs>
+    <radialGradient id="core" cx="59%" cy="39%" r="72%">
+      <stop offset="0" stop-color="#f4cf7a" stop-opacity="0.72"/>
+      <stop offset="0.42" stop-color="#b08cff" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#241c3f" stop-opacity="1"/>
+    </radialGradient>
+    <linearGradient id="veil" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff5cf" stop-opacity="0.16"/>
+      <stop offset="0.48" stop-color="#dc78c8" stop-opacity="0.13"/>
+      <stop offset="1" stop-color="#050302" stop-opacity="0.7"/>
+    </linearGradient>
+    <filter id="soft"><feGaussianBlur stdDeviation="6"/></filter>
+  </defs>
+  <rect width="512" height="512" fill="url(#core)"/>
+  <circle cx="304" cy="298" r="214" fill="#b08cff" opacity="0.13" filter="url(#soft)"/>
+  <circle cx="324" cy="270" r="107" fill="#f4cf7a" opacity="0.1" filter="url(#soft)"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M40 500 C72 346 124 352 96 139" fill="none" stroke="#f4cf7a" stroke-width="3" opacity="0.23"/>
+    <path d="M82 500 C90 318 146 364 126 129" fill="none" stroke="#b08cff" stroke-width="4" opacity="0.23"/>
+    <path d="M124 500 C108 304 168 325 156 174" fill="none" stroke="#f4cf7a" stroke-width="5" opacity="0.23"/>
+    <path d="M166 500 C126 332 190 305 186 197" fill="none" stroke="#b08cff" stroke-width="6" opacity="0.23"/>
+    <path d="M208 500 C144 311 212 340 216 208" fill="none" stroke="#f4cf7a" stroke-width="7" opacity="0.23"/>
+    <path d="M250 500 C162 301 234 313 246 164" fill="none" stroke="#b08cff" stroke-width="3" opacity="0.23"/>
+    <path d="M292 500 C180 296 256 344 276 142" fill="none" stroke="#f4cf7a" stroke-width="4" opacity="0.23"/>
+    <path d="M334 500 C198 293 278 360 306 181" fill="none" stroke="#b08cff" stroke-width="5" opacity="0.23"/>
+    <path d="M376 500 C216 292 300 368 336 200" fill="none" stroke="#f4cf7a" stroke-width="6" opacity="0.23"/>
+    <path d="M418 500 C234 326 322 327 366 210" fill="none" stroke="#b08cff" stroke-width="7" opacity="0.23"/>
+    <path d="M460 500 C252 308 344 306 396 215" fill="none" stroke="#f4cf7a" stroke-width="3" opacity="0.23"/>
+    <path d="M502 500 C270 299 366 296 426 167" fill="none" stroke="#b08cff" stroke-width="4" opacity="0.23"/>
+  </g>
+  <g opacity="0.16">
+    <path d="M54 82 C158 20 342 28 458 96" stroke="#fff4ce" stroke-width="2" fill="none"/>
+    <path d="M38 426 C160 470 328 490 486 388" stroke="#0b0604" stroke-width="16" fill="none" opacity="0.38"/>
+    <path d="M74 424 C174 392 298 428 430 360" stroke="#f4cf7a" stroke-width="3" fill="none"/>
+  </g>
+  <rect width="512" height="512" fill="url(#veil)"/>
+</svg>
