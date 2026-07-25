@@ -774,6 +774,53 @@ class FakeDatabase {
 
     if (
       normalizedSql.startsWith(
+        "select context_key, category, title, visibility, priority, body_markdown, archived_at, created_at, updated_at from campaign_context_chunks"
+      )
+    ) {
+      const campaignId = values[0] as string;
+
+      return {
+        rows: this.contextChunks
+          .filter((chunk) => chunk.campaign_id === campaignId)
+          .sort((left, right) => {
+            const leftArchived = left.archived_at ? 1 : 0;
+            const rightArchived = right.archived_at ? 1 : 0;
+            const archivedDelta = leftArchived - rightArchived;
+
+            if (archivedDelta !== 0) {
+              return archivedDelta;
+            }
+
+            const categoryDelta = left.category.localeCompare(right.category);
+
+            if (categoryDelta !== 0) {
+              return categoryDelta;
+            }
+
+            const priorityDelta = right.priority - left.priority;
+
+            if (priorityDelta !== 0) {
+              return priorityDelta;
+            }
+
+            return right.updated_at.getTime() - left.updated_at.getTime();
+          })
+          .map((chunk) => ({
+            context_key: chunk.context_key,
+            category: chunk.category,
+            title: chunk.title,
+            visibility: chunk.visibility,
+            priority: chunk.priority,
+            body_markdown: chunk.body_markdown,
+            archived_at: chunk.archived_at,
+            created_at: chunk.updated_at,
+            updated_at: chunk.updated_at
+          }) as T)
+      };
+    }
+
+    if (
+      normalizedSql.startsWith(
         "select context_key, category, title, visibility, priority, body_markdown, updated_at from campaign_context_chunks"
       )
     ) {

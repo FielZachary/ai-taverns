@@ -3913,6 +3913,58 @@ type NpcContextIndexEntry = {
   updatedAt: string;
 };
 
+async function retrieveCampaignContextStorageState(
+  db: Queryable,
+  campaignId: string
+) {
+  try {
+    const result = await db.query<Record<string, unknown>>(
+      `
+        select
+          context_key,
+          category,
+          title,
+          visibility,
+          priority,
+          body_markdown,
+          archived_at,
+          created_at,
+          updated_at
+        from campaign_context_chunks
+        where campaign_id = $1
+        order by archived_at nulls first,
+          category asc,
+          priority desc,
+          updated_at desc
+      `,
+      [campaignId]
+    );
+
+    return result.rows.map((row) => ({
+      context_id: String(row.context_key ?? ""),
+      category: String(row.category ?? ""),
+      title: String(row.title ?? row.context_key ?? ""),
+      visibility:
+        row.visibility === "player_safe" || row.visibility === "dm_only"
+          ? row.visibility
+          : "dm_only",
+      priority: typeof row.priority === "number" ? row.priority : 0,
+      body_markdown: String(row.body_markdown ?? ""),
+      archived_at: row.archived_at
+        ? toIso(row.archived_at as Date | string)
+        : null,
+      created_at: row.created_at ? toIso(row.created_at as Date | string) : null,
+      updated_at: row.updated_at ? toIso(row.updated_at as Date | string) : null
+    }));
+  } catch (error) {
+    if (!isMissingRuntimeTableError(error)) {
+      throw error;
+    }
+
+    return [];
+  }
+}
+
 async function listCampaignNpcContextIndex(
   db: Queryable,
   campaignId: string,
@@ -4302,6 +4354,22 @@ export async function runModularPostTurnContextJobs(
       input.campaignId,
       validation.accepted
     );
+
+    const contextStorageState = await retrieveCampaignContextStorageState(
+      db,
+      input.campaignId
+    );
+
+    await logDmTurnTrace(db, {
+      campaignId: input.campaignId,
+      traceId,
+      turnId: input.turnId,
+      phase: "context_storage_state_snapshot",
+      payload: {
+        contextChunkCount: contextStorageState.length,
+        contextChunks: contextStorageState
+      }
+    });
 
     await logDmMemoryPatchLog(db, {
       campaignId: input.campaignId,
