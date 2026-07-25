@@ -30,6 +30,14 @@ test("loadConfig applies development defaults and trims web origins", () => {
   assert.equal(config.authPublicAppOrigin, "http://localhost:3000");
   assert.equal(config.authEmailFrom, undefined);
   assert.equal(config.resendApiKey, undefined);
+  assert.equal(config.mediaStorageDriver, "local");
+  assert.equal(config.mediaLocalDir, ".local-media");
+  assert.equal(config.mediaPublicBaseUrl, "/media");
+  assert.equal(config.spacesEndpoint, undefined);
+  assert.equal(config.spacesRegion, undefined);
+  assert.equal(config.spacesBucket, undefined);
+  assert.equal(config.spacesAccessKeyId, undefined);
+  assert.equal(config.spacesSecretAccessKey, undefined);
 });
 
 test("loadConfig applies production security defaults and explicit overrides", () => {
@@ -49,7 +57,15 @@ test("loadConfig applies production security defaults and explicit overrides", (
     AUTH_EXPOSE_LOCAL_LOGIN_TOKENS: "true",
     AUTH_PUBLIC_APP_ORIGIN: "https://public.example.com",
     AUTH_EMAIL_FROM: "AI Taverns <hello@example.com>",
-    RESEND_API_KEY: "resend-test-key"
+    RESEND_API_KEY: "resend-test-key",
+    MEDIA_STORAGE_DRIVER: "spaces",
+    MEDIA_LOCAL_DIR: "/tmp/media",
+    MEDIA_PUBLIC_BASE_URL: "https://cdn.example.com/media/",
+    SPACES_ENDPOINT: "https://sgp1.digitaloceanspaces.com",
+    SPACES_REGION: "sgp1",
+    SPACES_BUCKET: "ai-taverns-media",
+    SPACES_ACCESS_KEY_ID: "spaces-key",
+    SPACES_SECRET_ACCESS_KEY: "spaces-secret"
   });
 
   assert.deepEqual(config, {
@@ -68,7 +84,15 @@ test("loadConfig applies production security defaults and explicit overrides", (
     authExposeLocalLoginTokens: true,
     authPublicAppOrigin: "https://public.example.com",
     authEmailFrom: "AI Taverns <hello@example.com>",
-    resendApiKey: "resend-test-key"
+    resendApiKey: "resend-test-key",
+    mediaStorageDriver: "spaces",
+    mediaLocalDir: "/tmp/media",
+    mediaPublicBaseUrl: "https://cdn.example.com/media",
+    spacesEndpoint: "https://sgp1.digitaloceanspaces.com",
+    spacesRegion: "sgp1",
+    spacesBucket: "ai-taverns-media",
+    spacesAccessKeyId: "spaces-key",
+    spacesSecretAccessKey: "spaces-secret"
   });
 });
 

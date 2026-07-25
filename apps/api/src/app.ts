@@ -1,7 +1,10 @@
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
+import fastifyStatic from "@fastify/static";
 import websocket from "@fastify/websocket";
 import Fastify, { type FastifyInstance } from "fastify";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { DungeonMasterRuntime } from "@ai-dnd/db";
 import { loadConfig, type ApiConfig } from "./config.js";
 import { handleRouteError } from "./errors.js";
@@ -20,10 +23,20 @@ export type BuildAppOptions = {
   dmRuntime?: DungeonMasterRuntime;
 };
 
+function localMediaRoutePrefix(publicBaseUrl: string) {
+  const pathPrefix = publicBaseUrl.startsWith("http")
+    ? new URL(publicBaseUrl).pathname
+    : publicBaseUrl;
+
+  return `${pathPrefix.replace(/\/+$/, "")}/`;
+}
+
 export async function buildApp(
   options: BuildAppOptions = {}
 ): Promise<FastifyInstance> {
   const config = options.config ?? loadConfig();
+  const apiDir = path.dirname(fileURLToPath(import.meta.url));
+  const repoRoot = path.resolve(apiDir, "../../..");
   const fastify = Fastify({
     logger:
       config.nodeEnv === "test"
@@ -49,6 +62,13 @@ export async function buildApp(
     credentials: true
   });
   await fastify.register(cookie);
+  if (config.mediaStorageDriver === "local") {
+    await fastify.register(fastifyStatic, {
+      root: path.resolve(repoRoot, config.mediaLocalDir),
+      prefix: localMediaRoutePrefix(config.mediaPublicBaseUrl),
+      decorateReply: false
+    });
+  }
   await fastify.register(websocket);
   await fastify.register(postgresPlugin, {
     config,
