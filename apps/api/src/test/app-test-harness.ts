@@ -786,7 +786,6 @@ class FakeDatabase {
             (chunk) =>
               chunk.campaign_id === campaignId &&
               chunk.category === "npc_context" &&
-              chunk.visibility === "player_safe" &&
               chunk.archived_at === null
           )
           .sort((left, right) => {
@@ -1031,7 +1030,6 @@ class FakeDatabase {
           candidate.campaign_id === campaignId &&
           candidate.context_key === contextKey &&
           candidate.category === "npc_context" &&
-          candidate.visibility === "player_safe" &&
           candidate.archived_at === null
       );
 

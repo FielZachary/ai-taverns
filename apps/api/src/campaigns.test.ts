@@ -139,7 +139,7 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   );
 });
 
-test("GET /api/campaigns/:campaignId/npc-cards lists player-safe NPC cards", async () => {
+test("GET /api/campaigns/:campaignId/npc-cards lists existing NPC context cards", async () => {
   const cookie = await signIn("npc-cards@example.com");
   resetProviderInputs();
 
@@ -204,12 +204,14 @@ test("GET /api/campaigns/:campaignId/npc-cards lists player-safe NPC cards", asy
   const body = CampaignNpcCardsResponseSchema.parse(response.json());
 
   assert.deepEqual(
-    body.npcCards.map((card) => card.id),
-    ["npc:marra-vell"]
+    body.npcCards.map((card) => card.id).sort(),
+    ["npc:hidden-informant", "npc:marra-vell"]
   );
-  assert.equal(body.npcCards[0]?.title, "Marra Vell");
-  assert.match(body.npcCards[0]?.markdown ?? "", /## Appearance/);
-  assert.equal(body.npcCards[0]?.updatedAt, "2026-07-20T10:00:00.000Z");
+  const marraCard = body.npcCards.find((card) => card.id === "npc:marra-vell");
+
+  assert.equal(marraCard?.title, "Marra Vell");
+  assert.match(marraCard?.markdown ?? "", /## Appearance/);
+  assert.equal(marraCard?.updatedAt, "2026-07-20T10:00:00.000Z");
 
   const updateResponse = await app.inject({
     method: "PATCH",

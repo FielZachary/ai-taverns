@@ -1373,7 +1373,6 @@ export async function listPlayerSafeNpcCardsForCampaign(
         from campaign_context_chunks
         where campaign_id = $1
           and category = 'npc_context'
-          and visibility = 'player_safe'
           and archived_at is null
         order by priority desc, updated_at desc
         limit 120
@@ -1419,7 +1418,6 @@ export async function updatePlayerSafeNpcCardMarkdown(
       where campaign_id = $1
         and context_key = $2
         and category = 'npc_context'
-        and visibility = 'player_safe'
         and archived_at is null
       returning context_key, title, body_markdown, updated_at
     `,
