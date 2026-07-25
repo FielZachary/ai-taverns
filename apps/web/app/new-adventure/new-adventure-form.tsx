@@ -455,6 +455,262 @@ const spellSourceLabels: Record<string, string> = {
   Wristpocket: "Explorer's Guide to Wildemount",
   "Zephyr Strike": "Xanathar's Guide to Everything"
 };
+const spellEffectSummaries: Record<string, string> = {
+  "Acid Splash": "Splashes acid onto one or two nearby foes.",
+  "Aid": "Raises allies' toughness and maximum hit points.",
+  "Alarm": "Wards an area and alerts you to intruders.",
+  "Alter Self": "Changes your body for disguise, movement, or natural attacks.",
+  "Animal Friendship": "Calms a beast and makes it regard you as friendly.",
+  "Animal Messenger": "Sends a short message through a small beast.",
+  "Animate Dead": "Raises a corpse as an undead servant.",
+  "Arcane Lock": "Magically seals a door, chest, or similar entry.",
+  "Armor of Agathys": "Wraps you in frost that protects and punishes attackers.",
+  "Augury": "Asks an omen about whether a plan is wise.",
+  "Bane": "Curses enemies so their attacks and saves falter.",
+  "Barkskin": "Hardens a creature's skin into bark-like armor.",
+  "Beacon of Hope": "Bolsters allies, making healing and resolve stronger.",
+  "Beast Sense": "Lets you see and hear through a willing beast.",
+  "Bestow Curse": "Afflicts a creature with a debilitating magical curse.",
+  "Blade Ward": "Briefly guards you against weapon damage.",
+  "Bless": "Boosts allies' attacks and saving throws.",
+  "Blindness/Deafness": "Blinds or deafens a creature.",
+  "Blink": "Phases you in and out of the Ethereal Plane.",
+  "Blur": "Makes you harder to hit with a shimmering outline.",
+  "Branding Smite": "Empowers a weapon hit with radiant damage and reveals invisibility.",
+  "Burning Hands": "Unleashes a close cone of flame.",
+  "Call Lightning": "Calls storm bolts down on a chosen point.",
+  "Calm Emotions": "Suppresses strong fear, charm, or hostility.",
+  "Charm Person": "Makes a humanoid temporarily regard you as friendly.",
+  "Chill Touch": "Deals necrotic damage and hampers healing.",
+  "Chromatic Orb": "Hurls an elemental orb of your chosen damage type.",
+  "Clairvoyance": "Creates a distant magical sensor for sight or hearing.",
+  "Cloud of Daggers": "Fills a small area with whirling blades.",
+  "Color Spray": "Blinds nearby creatures with dazzling color.",
+  "Command": "Forces a creature to follow a brief one-word order.",
+  "Comprehend Languages": "Lets you understand spoken and written languages.",
+  "Conjure Animals": "Summons beasts to fight or help.",
+  "Conjure Barrage": "Sprays spectral ammunition or weapons in a cone.",
+  "Continual Flame": "Creates a lasting magical flame that sheds light.",
+  "Counterspell": "Interrupts another creature's spell as it is cast.",
+  "Create Food and Water": "Conjures enough food and water for a group.",
+  "Create or Destroy Water": "Creates water, destroys water, or alters rain and fog.",
+  "Crown of Madness": "Forces a humanoid to strike where you direct.",
+  "Cure Wounds": "Restores hit points with a touch.",
+  "Dancing Lights": "Creates small moving lights.",
+  "Darkness": "Fills an area with magical darkness.",
+  "Darkvision": "Grants sight in darkness.",
+  "Daylight": "Fills an area with bright magical light.",
+  "Detect Evil and Good": "Senses nearby celestials, fiends, undead, and similar forces.",
+  "Detect Magic": "Reveals magical auras nearby.",
+  "Detect Poison and Disease": "Finds poison, disease, and poisonous creatures nearby.",
+  "Detect Thoughts": "Reads surface thoughts and can probe deeper.",
+  "Disguise Self": "Creates an illusory disguise around you.",
+  "Dispel Magic": "Ends magical effects on a creature, object, or area.",
+  "Dissonant Whispers": "Psychically harms a creature and drives it away.",
+  "Divine Favor": "Adds radiant power to your weapon strikes.",
+  "Druidcraft": "Creates tiny nature signs, sensory effects, or plant tricks.",
+  "Eldritch Blast": "Fires force beams at one or more targets.",
+  "Elemental Weapon": "Makes a weapon magical and elemental.",
+  "Enhance Ability": "Boosts one kind of ability check and grants a related benefit.",
+  "Enlarge/Reduce": "Changes a creature or object's size.",
+  "Ensnaring Strike": "Turns your next weapon hit into binding vines.",
+  "Entangle": "Creates grasping plants that restrain creatures.",
+  "Enthrall": "Distracts creatures with compelling words.",
+  "Expeditious Retreat": "Lets you move quickly with repeated dashes.",
+  "Faerie Fire": "Outlines creatures, revealing them and helping attacks land.",
+  "False Life": "Grants temporary hit points with necromantic vigor.",
+  "Fear": "Frightens creatures in a cone and makes them flee.",
+  "Feather Fall": "Slows falling creatures to a safe descent.",
+  "Feign Death": "Makes a willing creature appear dead.",
+  "Find Familiar": "Summons a spirit companion in animal form.",
+  "Find Steed": "Summons a loyal magical mount.",
+  "Find Traps": "Reveals the presence of nearby traps.",
+  "Fire Bolt": "Hurls a ranged bolt of fire.",
+  "Fireball": "Explodes in a wide burst of fire.",
+  "Flame Blade": "Creates a fiery blade in your hand.",
+  "Flaming Sphere": "Rolls a burning sphere around the battlefield.",
+  "Fly": "Grants magical flight.",
+  "Fog Cloud": "Creates a heavy obscuring fog.",
+  "Friends": "Gives you brief social advantage over one creature.",
+  "Gaseous Form": "Turns a willing creature into mist.",
+  "Gentle Repose": "Preserves a corpse and delays undeath.",
+  "Glyph of Warding": "Stores a magical trap or spell trigger.",
+  "Goodberry": "Creates nourishing berries that heal lightly.",
+  "Grease": "Coats the ground and makes creatures slip.",
+  "Guidance": "Adds a small divine boost to an ability check.",
+  "Guiding Bolt": "Blasts radiant damage and marks the target for an ally.",
+  "Gust of Wind": "Pushes creatures with a strong line of wind.",
+  "Hail of Thorns": "Makes your next ranged hit burst into thorns.",
+  "Haste": "Greatly speeds and sharpens a creature.",
+  "Healing Word": "Heals a creature at range with a quick word.",
+  "Heat Metal": "Makes metal painfully hot and hard to hold.",
+  "Hellish Rebuke": "Burns a creature that just damaged you.",
+  "Heroism": "Makes a creature brave and steadily protected.",
+  "Hex": "Curses a target for extra damage and weakened checks.",
+  "Hold Person": "Paralyzes a humanoid.",
+  "Hunger of Hadar": "Opens a dark, damaging void of cold and acid.",
+  "Hunter's Mark": "Marks prey so your weapon hits hurt more.",
+  "Hypnotic Pattern": "Charms and incapacitates creatures with a dazzling pattern.",
+  "Identify": "Reveals what a magic item or spell effect does.",
+  "Illusory Script": "Hides a written message behind magical script.",
+  "Inflict Wounds": "Delivers heavy necrotic damage by touch.",
+  "Invisibility": "Turns a creature invisible until it attacks or casts.",
+  "Jump": "Triples a creature's jump distance.",
+  "Knock": "Opens locked, barred, or stuck objects loudly.",
+  "Leomund's Tiny Hut": "Creates a safe magical shelter dome.",
+  "Lesser Restoration": "Ends one common condition, disease, or poison.",
+  "Levitate": "Raises a creature or object vertically.",
+  "Light": "Makes an object glow brightly.",
+  "Lightning Bolt": "Blasts a long line of lightning.",
+  "Locate Animals or Plants": "Finds a kind of beast or plant nearby.",
+  "Locate Object": "Finds a specific object or kind of object nearby.",
+  "Longstrider": "Increases a creature's speed.",
+  "Mage Armor": "Protects an unarmored creature with magical force.",
+  "Mage Hand": "Creates a small spectral hand for simple tasks.",
+  "Magic Circle": "Creates a protective circle against supernatural creatures.",
+  "Magic Missile": "Fires force darts that hit automatically.",
+  "Magic Mouth": "Stores a spoken message on an object.",
+  "Magic Weapon": "Makes a weapon magical and more accurate.",
+  "Major Image": "Creates a large sensory illusion.",
+  "Mass Healing Word": "Heals several allies at range.",
+  "Meld into Stone": "Lets you merge into a stone surface.",
+  "Melf's Acid Arrow": "Launches acid that damages now and later.",
+  "Mending": "Repairs a small break or tear.",
+  "Message": "Whispers a private magical message at range.",
+  "Mind Sliver": "Cuts a mind with psychic damage and weakens its next save.",
+  "Minor Illusion": "Creates a small sound or image illusion.",
+  "Mirror Image": "Creates illusory duplicates that absorb attacks.",
+  "Misty Step": "Teleports you a short distance.",
+  "Moonbeam": "Burns creatures in a moving column of moonlight.",
+  "Nondetection": "Hides a creature or object from divination.",
+  "Pass without Trace": "Cloaks a group in shadow for stealth.",
+  "Phantasmal Force": "Plants a damaging illusion in a creature's mind.",
+  "Phantom Steed": "Creates a fast temporary mount.",
+  "Plant Growth": "Enriches plants or creates thick overgrowth.",
+  "Poison Spray": "Sprays poison at a nearby creature.",
+  "Prayer of Healing": "Heals several allies after a short prayer.",
+  "Prestidigitation": "Performs small magical tricks and sensory effects.",
+  "Produce Flame": "Creates flame for light or a ranged attack.",
+  "Protection from Energy": "Grants resistance to one energy type.",
+  "Protection from Evil and Good": "Protects against aberrations, celestials, fiends, undead, and more.",
+  "Protection from Poison": "Neutralizes poison and guards against more.",
+  "Purify Food and Drink": "Removes poison and disease from food or drink.",
+  "Ray of Enfeeblement": "Weakens a creature's weapon damage.",
+  "Ray of Frost": "Deals cold damage and slows a target.",
+  "Ray of Sickness": "Poisons a creature with a sickening ray.",
+  "Remove Curse": "Ends curses on a creature or object.",
+  "Resistance": "Adds a small protective boost to a saving throw.",
+  "Revivify": "Returns a recently dead creature to life.",
+  "Rope Trick": "Creates a hidden extradimensional refuge.",
+  "Sacred Flame": "Calls radiant fire onto a target.",
+  "Sanctuary": "Makes enemies hesitate before attacking a protected creature.",
+  "Scorching Ray": "Fires multiple rays of flame.",
+  "Searing Smite": "Sets your next weapon hit ablaze.",
+  "See Invisibility": "Lets you see invisible creatures and objects.",
+  "Sending": "Sends a short message across any distance.",
+  "Shadow Blade": "Creates a weapon of solid shadow.",
+  "Shatter": "Blasts an area with concussive sound.",
+  "Shield": "Briefly raises your armor against an incoming hit.",
+  "Shield of Faith": "Raises a creature's Armor Class.",
+  "Shillelagh": "Empowers a club or staff with nature magic.",
+  "Shocking Grasp": "Shocks a nearby target and blocks reactions.",
+  "Silence": "Creates an area where sound and verbal spells fail.",
+  "Silent Image": "Creates a visual illusion.",
+  "Silvery Barbs": "Twists luck against one roll and aids an ally.",
+  "Sleep": "Magically knocks weaker creatures unconscious.",
+  "Sleet Storm": "Creates icy, obscuring, concentration-breaking weather.",
+  "Slow": "Hinders creatures' speed, defenses, and actions.",
+  "Spare the Dying": "Stabilizes a dying creature.",
+  "Speak with Animals": "Lets you communicate with beasts.",
+  "Speak with Dead": "Lets a corpse answer a few questions.",
+  "Speak with Plants": "Communicates with plants and can shape terrain.",
+  "Spider Climb": "Lets a creature climb walls and ceilings.",
+  "Spike Growth": "Turns ground into hidden damaging spikes.",
+  "Spirit Guardians": "Summons spirits that protect you and harm foes.",
+  "Spiritual Weapon": "Creates a floating weapon that strikes for you.",
+  "Stinking Cloud": "Creates nauseating gas that disrupts actions.",
+  "Suggestion": "Magically pushes a creature toward a reasonable course.",
+  "Tasha's Hideous Laughter": "Drops a creature into helpless magical laughter.",
+  "Tenser's Floating Disk": "Creates a floating platform that carries gear.",
+  "Thaumaturgy": "Creates small divine signs and dramatic effects.",
+  "Thorn Whip": "Lashes a target with thorns and pulls it closer.",
+  "Thunderous Smite": "Adds thunder damage and can knock a target away.",
+  "Thunderwave": "Blasts nearby creatures with thunder force.",
+  "Toll the Dead": "Rings necrotic damage into an injured target.",
+  "Tongues": "Lets a creature understand and speak any language.",
+  "True Strike": "Studies a foe to guide a later attack.",
+  "Unseen Servant": "Creates an invisible helper for simple tasks.",
+  "Vampiric Touch": "Damages by touch and heals you.",
+  "Vicious Mockery": "Psychically insults a foe and hinders its next attack.",
+  "Water Breathing": "Lets several creatures breathe underwater.",
+  "Water Walk": "Lets creatures move across liquid surfaces.",
+  "Web": "Fills an area with restraining webs.",
+  "Wind Wall": "Creates a wall of wind that blocks arrows and gas.",
+  "Witch Bolt": "Links lightning to a target for repeat damage.",
+  "Zone of Truth": "Prevents deliberate lies inside an area."
+};
+
+function spellEffectSummaryFor(spell: string) {
+  const knownSummary = spellEffectSummaries[spell];
+
+  if (knownSummary) {
+    return knownSummary;
+  }
+
+  if (/heal|cure|restoration|revivify|vitality|hope|word/i.test(spell)) {
+    return "Restores allies, removes harm, or keeps the party standing.";
+  }
+
+  if (/fire|flame|burn|scorcher|scorching|bonfire|bolt/i.test(spell)) {
+    return "Deals fiery damage or shapes flames on the battlefield.";
+  }
+
+  if (/ice|frost|snow|cold|rime/i.test(spell)) {
+    return "Deals cold damage or hinders movement with freezing magic.";
+  }
+
+  if (/lightning|thunder|storm|wave|tidal/i.test(spell)) {
+    return "Unleashes elemental force to damage, push, or disrupt foes.";
+  }
+
+  if (/illusion|image|disguise|invisible|shadow|darkness/i.test(spell)) {
+    return "Uses deception, concealment, or false images to reshape a scene.";
+  }
+
+  if (/charm|fear|friends|suggestion|command|antagonize/i.test(spell)) {
+    return "Pressures a creature's emotions, choices, or behavior.";
+  }
+
+  if (/detect|locate|identify|clairvoyance|augury|sense|knowledge/i.test(spell)) {
+    return "Reveals hidden information, magic, creatures, or useful omens.";
+  }
+
+  if (/summon|conjure|familiar|steed|servant|animate/i.test(spell)) {
+    return "Calls or creates a helper, creature, or servant.";
+  }
+
+  if (/wall|growth|snare|bind|lock|hold|slow|web|grasp|fortress/i.test(spell)) {
+    return "Controls space by restraining, blocking, or slowing enemies.";
+  }
+
+  if (/telekinetic|mind|psychic|psion|intellect/i.test(spell)) {
+    return "Uses mental force to damage, protect, move, or overwhelm.";
+  }
+
+  if (/step|stride|jaunt|fly|jump|longstrider|levitate|walk|breathing/i.test(spell)) {
+    return "Improves movement, positioning, or travel options.";
+  }
+
+  if (/shield|armor|protection|ward|bond|absorb|resistance/i.test(spell)) {
+    return "Protects against attacks, damage, or dangerous effects.";
+  }
+
+  if (/weapon|smite|strike|blade|arrow|mark|barrage/i.test(spell)) {
+    return "Enhances attacks or turns a weapon hit into a stronger effect.";
+  }
+
+  return "Adds a flexible magical option for combat, exploration, or problem-solving.";
+}
 const spellCatalog = {
   Artificer: [
     {
@@ -4292,6 +4548,7 @@ export function NewAdventureForm({
                                       onClick={() => toggleSpell(option)}
                                     >
                                       <strong>{option}</strong>
+                                      <span>{spellEffectSummaryFor(option)}</span>
                                       {isDlcSpell ? (
                                         <small>{spellSourceLabels[option] ?? "Expanded source"}</small>
                                       ) : null}
