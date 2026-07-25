@@ -44,6 +44,7 @@ import type {
   DiceRollSubmission,
   MechanicsSeed,
   MechanicsState,
+  RoomSocketEvent,
   RoomSnapshot
 } from "@ai-dnd/contracts";
 import {
@@ -591,7 +592,7 @@ export type DungeonMasterRuntime = {
     model?: AiModelId;
     onPublicNarrationDelta?: (text: string) => void;
   }): Promise<DungeonMasterProviderResponse>;
-  emitDmStreamEvent?(event: DmStreamEvent): void;
+  emitDmStreamEvent?(event: DmStreamEvent | RoomSocketEvent): void;
   buildPromptContext?(input: {
     campaignId: string;
     turnId?: string | undefined;
@@ -4415,6 +4416,13 @@ export async function runModularPostTurnContextJobs(
       campaignId: input.campaignId,
       dmEventId: input.dmEventId,
       contextStorageState: contextStorageDebugState
+    });
+
+    runtime.emitDmStreamEvent?.({
+      type: "room_updated",
+      roomId: input.campaignId,
+      updatedAt: contextStorageDebugState.capturedAt,
+      ...(input.dmEventId ? { eventId: input.dmEventId } : {})
     });
 
     await logDmMemoryPatchLog(db, {
