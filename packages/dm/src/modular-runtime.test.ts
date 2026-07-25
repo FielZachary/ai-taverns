@@ -225,6 +225,9 @@ describe("modular AI DM runtime contracts", () => {
     const removedOpeningJob = ["campaign", "starter"].join("_");
 
     assert.match(routerPrompt, /select context chunk keys only/i);
+    assert.match(routerPrompt, /Only select context keys from the Available context chunk keys JSON/i);
+    assert.match(routerPrompt, /Do not invent, rename, summarize, slugify, or transform context keys/i);
+    assert.match(routerPrompt, /Copy exact key strings only/i);
     assert.match(routerPrompt, /Campaign opening scenes are handled/i);
     assert.match(routerPrompt, /combat_active is true, default to combat/i);
     assert.match(routerPrompt, /Choose clarification when the player's intended action is too underspecified/i);
@@ -453,9 +456,15 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(buildMemoryUpdaterPrompt(), /Create a new NPC card/i);
     assert.match(buildMemoryUpdaterPrompt(), /Make each NPC feel like a compelling character/i);
     assert.match(buildMemoryUpdaterPrompt(), /## Disposition Towards You/);
+    assert.match(buildMemoryUpdaterPrompt(), /campaign context as a living world bible/i);
+    assert.match(buildMemoryUpdaterPrompt(), /Create or update relevant_world_context/i);
+    assert.match(buildMemoryUpdaterPrompt(), /Create or update quests_open_threads/i);
+    assert.match(buildMemoryUpdaterPrompt(), /Create or update overarching_big_plot_secrets/i);
+    assert.match(buildMemoryUpdaterPrompt(), /## Strong Inferences/);
+    assert.match(buildMemoryUpdaterPrompt(), /## DM Seeds/);
     assert.match(buildMemoryUpdaterPrompt(), /Example new NPC response/);
-    assert.doesNotMatch(buildMemoryUpdaterPrompt(), /"context_type"/);
-    assert.doesNotMatch(buildMemoryUpdaterPrompt(), /"visibility"/);
+    assert.match(buildMemoryUpdaterPrompt(), /Example proactive world\/story response/);
+    assert.match(buildMemoryUpdaterPrompt(), /"visibility": "player_safe"/);
   });
 
   it("renders mode-specific job guidance without duplicating job prompts", () => {
