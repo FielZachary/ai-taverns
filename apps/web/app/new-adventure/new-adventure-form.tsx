@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { CSSProperties, FormEvent, useEffect, useMemo, useState } from "react";
 import {
   Check,
   Dice5,
@@ -19,11 +19,36 @@ import {
   joinCampaign as joinCampaignViaApi,
   joinLobbyInvite,
   previewLobbyInvite,
-  previewCampaignJoin
+  previewCampaignJoin,
+  type CampaignSummary
 } from "@/lib/campaign-api";
 import { defaultCharacterSheet } from "@/components/playing/PlayerPanel";
 import { DiceRollReveal3D } from "@/components/playing/DiceRollReveal3D";
 import type { MechanicsSeed, SpellSlotState } from "@ai-dnd/contracts";
+import artificerClassArt from "../../../../assets/classes art/artificer.png";
+import barbarianClassArt from "../../../../assets/classes art/barbarian.png";
+import bardClassArt from "../../../../assets/classes art/bard.png";
+import bloodHunterClassArt from "../../../../assets/classes art/blood-hunter.png";
+import clericClassArt from "../../../../assets/classes art/cleric.png";
+import druidClassArt from "../../../../assets/classes art/druid.png";
+import fighterClassArt from "../../../../assets/classes art/fighter.png";
+import monkClassArt from "../../../../assets/classes art/monk.png";
+import paladinClassArt from "../../../../assets/classes art/paladin.png";
+import psionClassArt from "../../../../assets/classes art/psion.png";
+import rangerClassArt from "../../../../assets/classes art/ranger.png";
+import rogueClassArt from "../../../../assets/classes art/rogue.png";
+import sorcererClassArt from "../../../../assets/classes art/sorcerer.png";
+import warlockClassArt from "../../../../assets/classes art/warlock.png";
+import wizardClassArt from "../../../../assets/classes art/wizard.png";
+import dragonbornSpeciesArt from "../../../../assets/races art/dragonborn.png";
+import dwarfSpeciesArt from "../../../../assets/races art/dwarf.png";
+import elfSpeciesArt from "../../../../assets/races art/elf.png";
+import gnomeSpeciesArt from "../../../../assets/races art/gnome.png";
+import halfElfSpeciesArt from "../../../../assets/races art/half-elf.png";
+import halfOrcSpeciesArt from "../../../../assets/races art/half-orc.png";
+import halflingSpeciesArt from "../../../../assets/races art/halfling.png";
+import humanSpeciesArt from "../../../../assets/races art/human.png";
+import tieflingSpeciesArt from "../../../../assets/races art/tiefling.png";
 
 type CampaignMode = "single_player" | "multiplayer";
 type MultiplayerIntent = "create" | "join";
@@ -71,6 +96,14 @@ type SpellSelectionLimits = {
 };
 type SpellSelectionCounts = Record<SpellLevelLabel, number> & {
   leveledSpells: number;
+};
+type SpellRuleProfile = {
+  description: string;
+  rolls: string;
+  school: string;
+  duration: string;
+  castingTime: string;
+  range: string;
 };
 type ActiveStatRoll = {
   id: string;
@@ -139,9 +172,9 @@ const multiplayerCustomCreateSteps = [
 const joinSteps = ["Mode", "Multiplayer", "Game Code", "Character", "Review"];
 const joinCodePattern = /[A-HJ-NP-Z2-9]{6}/;
 const campaignCreationLoadingSteps = [
-  "Choosing where the story begins",
-  "Finding the first spark",
-  "Writing your opening scene",
+  "Preparing your adventure",
+  "Painting your character portrait",
+  "Saving the final details",
   "Setting the table"
 ];
 const customCharacterCreationSteps = [
@@ -431,6 +464,693 @@ const spellSourceLabels: Record<string, string> = {
   Wristpocket: "Explorer's Guide to Wildemount",
   "Zephyr Strike": "Xanathar's Guide to Everything"
 };
+const spellEffectSummaries: Record<string, string> = {
+  "Acid Splash": "Splashes acid onto one or two nearby foes.",
+  "Aid": "Raises allies' toughness and maximum hit points.",
+  "Alarm": "Wards an area and alerts you to intruders.",
+  "Alter Self": "Changes your body for disguise, movement, or natural attacks.",
+  "Animal Friendship": "Calms a beast and makes it regard you as friendly.",
+  "Animal Messenger": "Sends a short message through a small beast.",
+  "Animate Dead": "Raises a corpse as an undead servant.",
+  "Arcane Lock": "Magically seals a door, chest, or similar entry.",
+  "Armor of Agathys": "Wraps you in frost that protects and punishes attackers.",
+  "Augury": "Asks an omen about whether a plan is wise.",
+  "Bane": "Curses enemies so their attacks and saves falter.",
+  "Barkskin": "Hardens a creature's skin into bark-like armor.",
+  "Beacon of Hope": "Bolsters allies, making healing and resolve stronger.",
+  "Beast Sense": "Lets you see and hear through a willing beast.",
+  "Bestow Curse": "Afflicts a creature with a debilitating magical curse.",
+  "Blade Ward": "Briefly guards you against weapon damage.",
+  "Bless": "Boosts allies' attacks and saving throws.",
+  "Blindness/Deafness": "Blinds or deafens a creature.",
+  "Blink": "Phases you in and out of the Ethereal Plane.",
+  "Blur": "Makes you harder to hit with a shimmering outline.",
+  "Branding Smite": "Empowers a weapon hit with radiant damage and reveals invisibility.",
+  "Burning Hands": "Unleashes a close cone of flame.",
+  "Call Lightning": "Calls storm bolts down on a chosen point.",
+  "Calm Emotions": "Suppresses strong fear, charm, or hostility.",
+  "Charm Person": "Makes a humanoid temporarily regard you as friendly.",
+  "Chill Touch": "Deals necrotic damage and hampers healing.",
+  "Chromatic Orb": "Hurls an elemental orb of your chosen damage type.",
+  "Clairvoyance": "Creates a distant magical sensor for sight or hearing.",
+  "Cloud of Daggers": "Fills a small area with whirling blades.",
+  "Color Spray": "Blinds nearby creatures with dazzling color.",
+  "Command": "Forces a creature to follow a brief one-word order.",
+  "Comprehend Languages": "Lets you understand spoken and written languages.",
+  "Conjure Animals": "Summons beasts to fight or help.",
+  "Conjure Barrage": "Sprays spectral ammunition or weapons in a cone.",
+  "Continual Flame": "Creates a lasting magical flame that sheds light.",
+  "Counterspell": "Interrupts another creature's spell as it is cast.",
+  "Create Food and Water": "Conjures enough food and water for a group.",
+  "Create or Destroy Water": "Creates water, destroys water, or alters rain and fog.",
+  "Crown of Madness": "Forces a humanoid to strike where you direct.",
+  "Cure Wounds": "Restores hit points with a touch.",
+  "Dancing Lights": "Creates small moving lights.",
+  "Darkness": "Fills an area with magical darkness.",
+  "Darkvision": "Grants sight in darkness.",
+  "Daylight": "Fills an area with bright magical light.",
+  "Detect Evil and Good": "Senses nearby celestials, fiends, undead, and similar forces.",
+  "Detect Magic": "Reveals magical auras nearby.",
+  "Detect Poison and Disease": "Finds poison, disease, and poisonous creatures nearby.",
+  "Detect Thoughts": "Reads surface thoughts and can probe deeper.",
+  "Disguise Self": "Creates an illusory disguise around you.",
+  "Dispel Magic": "Ends magical effects on a creature, object, or area.",
+  "Dissonant Whispers": "Psychically harms a creature and drives it away.",
+  "Divine Favor": "Adds radiant power to your weapon strikes.",
+  "Druidcraft": "Creates tiny nature signs, sensory effects, or plant tricks.",
+  "Eldritch Blast": "Fires force beams at one or more targets.",
+  "Elemental Weapon": "Makes a weapon magical and elemental.",
+  "Enhance Ability": "Boosts one kind of ability check and grants a related benefit.",
+  "Enlarge/Reduce": "Changes a creature or object's size.",
+  "Ensnaring Strike": "Turns your next weapon hit into binding vines.",
+  "Entangle": "Creates grasping plants that restrain creatures.",
+  "Enthrall": "Distracts creatures with compelling words.",
+  "Expeditious Retreat": "Lets you move quickly with repeated dashes.",
+  "Faerie Fire": "Outlines creatures, revealing them and helping attacks land.",
+  "False Life": "Grants temporary hit points with necromantic vigor.",
+  "Fear": "Frightens creatures in a cone and makes them flee.",
+  "Feather Fall": "Slows falling creatures to a safe descent.",
+  "Feign Death": "Makes a willing creature appear dead.",
+  "Find Familiar": "Summons a spirit companion in animal form.",
+  "Find Steed": "Summons a loyal magical mount.",
+  "Find Traps": "Reveals the presence of nearby traps.",
+  "Fire Bolt": "Hurls a ranged bolt of fire.",
+  "Fireball": "Explodes in a wide burst of fire.",
+  "Flame Blade": "Creates a fiery blade in your hand.",
+  "Flaming Sphere": "Rolls a burning sphere around the battlefield.",
+  "Fly": "Grants magical flight.",
+  "Fog Cloud": "Creates a heavy obscuring fog.",
+  "Friends": "Gives you brief social advantage over one creature.",
+  "Gaseous Form": "Turns a willing creature into mist.",
+  "Gentle Repose": "Preserves a corpse and delays undeath.",
+  "Glyph of Warding": "Stores a magical trap or spell trigger.",
+  "Goodberry": "Creates nourishing berries that heal lightly.",
+  "Grease": "Coats the ground and makes creatures slip.",
+  "Guidance": "Adds a small divine boost to an ability check.",
+  "Guiding Bolt": "Blasts radiant damage and marks the target for an ally.",
+  "Gust of Wind": "Pushes creatures with a strong line of wind.",
+  "Hail of Thorns": "Makes your next ranged hit burst into thorns.",
+  "Haste": "Greatly speeds and sharpens a creature.",
+  "Healing Word": "Heals a creature at range with a quick word.",
+  "Heat Metal": "Makes metal painfully hot and hard to hold.",
+  "Hellish Rebuke": "Burns a creature that just damaged you.",
+  "Heroism": "Makes a creature brave and steadily protected.",
+  "Hex": "Curses a target for extra damage and weakened checks.",
+  "Hold Person": "Paralyzes a humanoid.",
+  "Hunger of Hadar": "Opens a dark, damaging void of cold and acid.",
+  "Hunter's Mark": "Marks prey so your weapon hits hurt more.",
+  "Hypnotic Pattern": "Charms and incapacitates creatures with a dazzling pattern.",
+  "Identify": "Reveals what a magic item or spell effect does.",
+  "Illusory Script": "Hides a written message behind magical script.",
+  "Inflict Wounds": "Delivers heavy necrotic damage by touch.",
+  "Invisibility": "Turns a creature invisible until it attacks or casts.",
+  "Jump": "Triples a creature's jump distance.",
+  "Knock": "Opens locked, barred, or stuck objects loudly.",
+  "Leomund's Tiny Hut": "Creates a safe magical shelter dome.",
+  "Lesser Restoration": "Ends one common condition, disease, or poison.",
+  "Levitate": "Raises a creature or object vertically.",
+  "Light": "Makes an object glow brightly.",
+  "Lightning Bolt": "Blasts a long line of lightning.",
+  "Locate Animals or Plants": "Finds a kind of beast or plant nearby.",
+  "Locate Object": "Finds a specific object or kind of object nearby.",
+  "Longstrider": "Increases a creature's speed.",
+  "Mage Armor": "Protects an unarmored creature with magical force.",
+  "Mage Hand": "Creates a small spectral hand for simple tasks.",
+  "Magic Circle": "Creates a protective circle against supernatural creatures.",
+  "Magic Missile": "Fires force darts that hit automatically.",
+  "Magic Mouth": "Stores a spoken message on an object.",
+  "Magic Weapon": "Makes a weapon magical and more accurate.",
+  "Major Image": "Creates a large sensory illusion.",
+  "Mass Healing Word": "Heals several allies at range.",
+  "Meld into Stone": "Lets you merge into a stone surface.",
+  "Melf's Acid Arrow": "Launches acid that damages now and later.",
+  "Mending": "Repairs a small break or tear.",
+  "Message": "Whispers a private magical message at range.",
+  "Mind Sliver": "Cuts a mind with psychic damage and weakens its next save.",
+  "Minor Illusion": "Creates a small sound or image illusion.",
+  "Mirror Image": "Creates illusory duplicates that absorb attacks.",
+  "Misty Step": "Teleports you a short distance.",
+  "Moonbeam": "Burns creatures in a moving column of moonlight.",
+  "Nondetection": "Hides a creature or object from divination.",
+  "Pass without Trace": "Cloaks a group in shadow for stealth.",
+  "Phantasmal Force": "Plants a damaging illusion in a creature's mind.",
+  "Phantom Steed": "Creates a fast temporary mount.",
+  "Plant Growth": "Enriches plants or creates thick overgrowth.",
+  "Poison Spray": "Sprays poison at a nearby creature.",
+  "Prayer of Healing": "Heals several allies after a short prayer.",
+  "Prestidigitation": "Performs small magical tricks and sensory effects.",
+  "Produce Flame": "Creates flame for light or a ranged attack.",
+  "Protection from Energy": "Grants resistance to one energy type.",
+  "Protection from Evil and Good": "Protects against aberrations, celestials, fiends, undead, and more.",
+  "Protection from Poison": "Neutralizes poison and guards against more.",
+  "Purify Food and Drink": "Removes poison and disease from food or drink.",
+  "Ray of Enfeeblement": "Weakens a creature's weapon damage.",
+  "Ray of Frost": "Deals cold damage and slows a target.",
+  "Ray of Sickness": "Poisons a creature with a sickening ray.",
+  "Remove Curse": "Ends curses on a creature or object.",
+  "Resistance": "Adds a small protective boost to a saving throw.",
+  "Revivify": "Returns a recently dead creature to life.",
+  "Rope Trick": "Creates a hidden extradimensional refuge.",
+  "Sacred Flame": "Calls radiant fire onto a target.",
+  "Sanctuary": "Makes enemies hesitate before attacking a protected creature.",
+  "Scorching Ray": "Fires multiple rays of flame.",
+  "Searing Smite": "Sets your next weapon hit ablaze.",
+  "See Invisibility": "Lets you see invisible creatures and objects.",
+  "Sending": "Sends a short message across any distance.",
+  "Shadow Blade": "Creates a weapon of solid shadow.",
+  "Shatter": "Blasts an area with concussive sound.",
+  "Shield": "Briefly raises your armor against an incoming hit.",
+  "Shield of Faith": "Raises a creature's Armor Class.",
+  "Shillelagh": "Empowers a club or staff with nature magic.",
+  "Shocking Grasp": "Shocks a nearby target and blocks reactions.",
+  "Silence": "Creates an area where sound and verbal spells fail.",
+  "Silent Image": "Creates a visual illusion.",
+  "Silvery Barbs": "Twists luck against one roll and aids an ally.",
+  "Sleep": "Magically knocks weaker creatures unconscious.",
+  "Sleet Storm": "Creates icy, obscuring, concentration-breaking weather.",
+  "Slow": "Hinders creatures' speed, defenses, and actions.",
+  "Spare the Dying": "Stabilizes a dying creature.",
+  "Speak with Animals": "Lets you communicate with beasts.",
+  "Speak with Dead": "Lets a corpse answer a few questions.",
+  "Speak with Plants": "Communicates with plants and can shape terrain.",
+  "Spider Climb": "Lets a creature climb walls and ceilings.",
+  "Spike Growth": "Turns ground into hidden damaging spikes.",
+  "Spirit Guardians": "Summons spirits that protect you and harm foes.",
+  "Spiritual Weapon": "Creates a floating weapon that strikes for you.",
+  "Stinking Cloud": "Creates nauseating gas that disrupts actions.",
+  "Suggestion": "Magically pushes a creature toward a reasonable course.",
+  "Tasha's Hideous Laughter": "Drops a creature into helpless magical laughter.",
+  "Tenser's Floating Disk": "Creates a floating platform that carries gear.",
+  "Thaumaturgy": "Creates small divine signs and dramatic effects.",
+  "Thorn Whip": "Lashes a target with thorns and pulls it closer.",
+  "Thunderous Smite": "Adds thunder damage and can knock a target away.",
+  "Thunderwave": "Blasts nearby creatures with thunder force.",
+  "Toll the Dead": "Rings necrotic damage into an injured target.",
+  "Tongues": "Lets a creature understand and speak any language.",
+  "True Strike": "Studies a foe to guide a later attack.",
+  "Unseen Servant": "Creates an invisible helper for simple tasks.",
+  "Vampiric Touch": "Damages by touch and heals you.",
+  "Vicious Mockery": "Psychically insults a foe and hinders its next attack.",
+  "Water Breathing": "Lets several creatures breathe underwater.",
+  "Water Walk": "Lets creatures move across liquid surfaces.",
+  "Web": "Fills an area with restraining webs.",
+  "Wind Wall": "Creates a wall of wind that blocks arrows and gas.",
+  "Witch Bolt": "Links lightning to a target for repeat damage.",
+  "Zone of Truth": "Prevents deliberate lies inside an area."
+};
+
+export function spellEffectSummaryFor(spell: string) {
+  const knownSummary = spellEffectSummaries[spell];
+
+  if (knownSummary) {
+    return knownSummary;
+  }
+
+  if (/heal|cure|restoration|revivify|vitality|hope|word/i.test(spell)) {
+    return "Restores allies, removes harm, or keeps the party standing.";
+  }
+
+  if (/fire|flame|burn|scorcher|scorching|bonfire|bolt/i.test(spell)) {
+    return "Deals fiery damage or shapes flames on the battlefield.";
+  }
+
+  if (/ice|frost|snow|cold|rime/i.test(spell)) {
+    return "Deals cold damage or hinders movement with freezing magic.";
+  }
+
+  if (/lightning|thunder|storm|wave|tidal/i.test(spell)) {
+    return "Unleashes elemental force to damage, push, or disrupt foes.";
+  }
+
+  if (/illusion|image|disguise|invisible|shadow|darkness/i.test(spell)) {
+    return "Uses deception, concealment, or false images to reshape a scene.";
+  }
+
+  if (/charm|fear|friends|suggestion|command|antagonize/i.test(spell)) {
+    return "Pressures a creature's emotions, choices, or behavior.";
+  }
+
+  if (/detect|locate|identify|clairvoyance|augury|sense|knowledge/i.test(spell)) {
+    return "Reveals hidden information, magic, creatures, or useful omens.";
+  }
+
+  if (/summon|conjure|familiar|steed|servant|animate/i.test(spell)) {
+    return "Calls or creates a helper, creature, or servant.";
+  }
+
+  if (/wall|growth|snare|bind|lock|hold|slow|web|grasp|fortress/i.test(spell)) {
+    return "Controls space by restraining, blocking, or slowing enemies.";
+  }
+
+  if (/telekinetic|mind|psychic|psion|intellect/i.test(spell)) {
+    return "Uses mental force to damage, protect, move, or overwhelm.";
+  }
+
+  if (/step|stride|jaunt|fly|jump|longstrider|levitate|walk|breathing/i.test(spell)) {
+    return "Improves movement, positioning, or travel options.";
+  }
+
+  if (/shield|armor|protection|ward|bond|absorb|resistance/i.test(spell)) {
+    return "Protects against attacks, damage, or dangerous effects.";
+  }
+
+  if (/weapon|smite|strike|blade|arrow|mark|barrage/i.test(spell)) {
+    return "Enhances attacks or turns a weapon hit into a stronger effect.";
+  }
+
+  return "Adds a flexible magical option for combat, exploration, or problem-solving.";
+}
+
+export function spellArchetypeFor(spell: string) {
+  if (/fire|flame|burn|scorch|bonfire|pyrotechnics|heat metal/i.test(spell)) {
+    return "fire";
+  }
+
+  if (/ice|frost|snow|cold|rime|sleet/i.test(spell)) {
+    return "frost";
+  }
+
+  if (/lightning|storm|witch bolt|call lightning/i.test(spell)) {
+    return "lightning";
+  }
+
+  if (/thunder|shatter|silence|dissonant|mockery|laughter/i.test(spell)) {
+    return "sound";
+  }
+
+  if (/acid|caustic|corros/i.test(spell)) {
+    return "acid";
+  }
+
+  if (/poison|venom|sickness|infestation|stinking cloud/i.test(spell)) {
+    return "poison";
+  }
+
+  if (/radiant|sacred|guiding bolt|moonbeam|word of radiance/i.test(spell)) {
+    return "radiant";
+  }
+
+  if (/daylight|light|continual flame/i.test(spell)) {
+    return "light";
+  }
+
+  if (/dead|false life|vampiric|wither|inflict|toll|chill|life transference|animate dead|speak with dead|spare the dying/i.test(spell)) {
+    return "necrotic";
+  }
+
+  if (/mind|psychic|psion|intellect|phantasmal|synaptic|telekinetic/i.test(spell)) {
+    return "psychic";
+  }
+
+  if (/missile|force|eldritch blast|blast|unseen servant|floating disk/i.test(spell)) {
+    return "force";
+  }
+
+  if (/heal|cure|restoration|revivify|goodberry|aid|prayer|beacon|vitality|hope/i.test(spell)) {
+    return "healing";
+  }
+
+  if (/shield|armor|protection|ward|bond|absorb|sanctuary|counterspell|dispel|resistance|fortress/i.test(spell)) {
+    return "shield";
+  }
+
+  if (/alarm|lock|glyph|snare|binding|circle|private sanctum|nystul/i.test(spell)) {
+    return "ward";
+  }
+
+  if (/charm|suggestion|friends|heroism|command|enthrall|fast friends|motivation|bless|bane/i.test(spell)) {
+    return "charm";
+  }
+
+  if (/fear|cause fear|antagonize|wrathful/i.test(spell)) {
+    return "fear";
+  }
+
+  if (/illusion|image|disguise|invisible|blur|mirror|phantom|hypnotic|color spray/i.test(spell)) {
+    return "illusion";
+  }
+
+  if (/dark|shadow|hunger of hadar|nondetection/i.test(spell)) {
+    return "darkness";
+  }
+
+  if (/detect|identify|locate|clairvoyance|augury|thought|sense|comprehend|see invisibility|true strike|zone of truth/i.test(spell)) {
+    return "divination";
+  }
+
+  if (/tongues|message|sending|speak with/i.test(spell)) {
+    return "communication";
+  }
+
+  if (/summon|conjure|familiar|steed|servant|spirit guardians/i.test(spell)) {
+    return "summoning";
+  }
+
+  if (/step|teleport|vortex|misty|warp|jaunt/i.test(spell)) {
+    return "teleport";
+  }
+
+  if (/fly|jump|longstrider|levitate|haste|slow|walk|spider climb|expeditious|retreat|feather fall|zephyr/i.test(spell)) {
+    return "movement";
+  }
+
+  if (/plant|thorn|vine|growth|entangle|bark|shillelagh|druidcraft|nature|faerie|pass without trace|spike growth/i.test(spell)) {
+    return "nature";
+  }
+
+  if (/beast|animal/i.test(spell)) {
+    return "beast";
+  }
+
+  if (/water|tidal|wave|fog|cloud|breathing|shape water|create or destroy water/i.test(spell)) {
+    return "water";
+  }
+
+  if (/wind|gust|air|skywrite/i.test(spell)) {
+    return "wind";
+  }
+
+  if (/earth|stone|mold|erupting|catapult|maximilian|meld/i.test(spell)) {
+    return "earth";
+  }
+
+  if (/gravity|pulse wave/i.test(spell)) {
+    return "gravity";
+  }
+
+  if (/curse|hex|enfeeblement|bestow curse/i.test(spell)) {
+    return "curse";
+  }
+
+  if (/weapon|smite|strike|blade|arrow|mark|barrage|magic stone|magic weapon/i.test(spell)) {
+    return "weapon";
+  }
+
+  if (/sleep|catnap|tiny hut|rope trick/i.test(spell)) {
+    return "sleep";
+  }
+
+  if (/silvery|fortune|gift of alacrity|time/i.test(spell)) {
+    return "luck-time";
+  }
+
+  if (/create|creation|mending|purify|prestidigitation|thaumaturgy|floating disk|tiny servant/i.test(spell)) {
+    return "creation";
+  }
+
+  if (/alter|enlarge|reduce|gaseous|enhance|darkvision|shape|polymorph|transmut/i.test(spell)) {
+    return "transformation";
+  }
+
+  if (/alchemy|potion|grease|knock|magic mouth|silent image/i.test(spell)) {
+    return "alchemy";
+  }
+
+  return "force";
+}
+
+export function spellArtPathFor(spell: string) {
+  return `/spell-archetypes/${spellArchetypeFor(spell)}.webp`;
+}
+
+const specificSpellSchools: Record<string, string> = {
+  Aid: "Abjuration",
+  Bane: "Enchantment",
+  Bless: "Enchantment",
+  "Cure Wounds": "Evocation",
+  Goodberry: "Transmutation",
+  Guidance: "Divination",
+  "Healing Word": "Evocation",
+  Heroism: "Enchantment",
+  "Lesser Restoration": "Abjuration",
+  "Mass Healing Word": "Evocation",
+  "Prayer of Healing": "Evocation",
+  Resistance: "Abjuration",
+  Revivify: "Necromancy",
+  Sanctuary: "Abjuration",
+  "Shield of Faith": "Abjuration",
+  "Spare the Dying": "Necromancy"
+};
+
+export function spellSchoolFor(spell: string) {
+  const specificSchool = specificSpellSchools[spell];
+
+  if (specificSchool) {
+    return specificSchool;
+  }
+
+  if (/shield|armor|protection|ward|bond|absorb|resistance|fortress|sanctuary/i.test(spell)) {
+    return "Abjuration";
+  }
+
+  if (/summon|conjure|familiar|steed|servant|teleport|step|jaunt|vortex|misty|floating|disk/i.test(spell)) {
+    return "Conjuration";
+  }
+
+  if (/detect|identify|locate|clairvoyance|augury|thought|sense|see invisibility|tongues|comprehend/i.test(spell)) {
+    return "Divination";
+  }
+
+  if (/charm|command|suggestion|fear|bane|bless|friends|laughter|mockery|hold person|enthrall|antagonize|fast friends|heroism/i.test(spell)) {
+    return "Enchantment";
+  }
+
+  if (/cure|heal|word|fire|bolt|burn|lightning|thunder|ray|blast|shatter|wave|earth|ice|frost|acid|flame|sphere|moonbeam|radiance|sacred|storm|eruption/i.test(spell)) {
+    return "Evocation";
+  }
+
+  if (/illusion|image|disguise|invisible|shadow|blur|mirror|phantasmal|darkness|nondetection|script/i.test(spell)) {
+    return "Illusion";
+  }
+
+  if (/animate|dead|false life|vampiric|wither|inflict|curse|enfeeblement|sickness|toll|chill|life transference/i.test(spell)) {
+    return "Necromancy";
+  }
+
+  if (/alter|enlarge|reduce|haste|slow|fly|gaseous|water|stone|barkskin|darkvision|enhance|spider|longstrider|jump|mending|shape|mold|control/i.test(spell)) {
+    return "Transmutation";
+  }
+
+  return "Varies";
+}
+
+export function spellDurationFor(spell: string, level: SpellLevelLabel | null) {
+  if (/mage armor/i.test(spell)) {
+    return "8 hours";
+  }
+
+  if (/darkvision|water breathing/i.test(spell)) {
+    return "8 hours";
+  }
+
+  if (/alarm|arcane lock|continual flame|glyph|illusory script|magic mouth|nystul/i.test(spell)) {
+    return "Until dispelled";
+  }
+
+  if (/detect magic|detect evil|detect poison|clairvoyance|locate|speak with|beast sense|see invisibility/i.test(spell)) {
+    return "Concentration, up to 10 minutes";
+  }
+
+  if (/bless|bane|hex|hunter|faerie|hold|suggestion|fear|fly|haste|slow|invisibility|blur|web|moonbeam|flaming sphere|spirit guardians|hypnotic|cloud|wall|entangle|silence|darkness|protection from|shield of faith|enlarge|enhance|levitate|heat metal|crown|phantasmal|call lightning|sleet|stinking|vampiric/i.test(spell)) {
+    return "Concentration, up to 1 minute";
+  }
+
+  if (/goodberry|aid|longstrider|false life|heroism|pass without trace|rope trick|tiny hut|phantom steed/i.test(spell)) {
+    return "1 hour or longer";
+  }
+
+  if (level === "Cantrip" || /bolt|ray|blast|missile|shatter|fireball|lightning bolt|thunderwave|cure wounds|healing word|inflict|guiding bolt|sacred flame|acid splash|poison spray|thorn whip/i.test(spell)) {
+    return "Instantaneous";
+  }
+
+  return "Varies by use";
+}
+
+export function spellCastingTimeFor(spell: string) {
+  if (/counterspell|shield|feather fall|hellish rebuke|absorb elements|silvery barbs/i.test(spell)) {
+    return "1 reaction";
+  }
+
+  if (/healing word|misty step|spiritual weapon|shield of faith|hex|hunter|smite|divine favor|magic stone|shillelagh|zephyr strike/i.test(spell)) {
+    return "1 bonus action";
+  }
+
+  if (/find familiar|find steed|identify|alarm|augury|prayer of healing|tiny hut|phantom steed|glyph/i.test(spell)) {
+    return "1 minute or longer";
+  }
+
+  return "1 action";
+}
+
+export function spellRangeFor(spell: string) {
+  if (/shield$|armor of agathys|alter self|blink|blur|divine favor|expeditious retreat|false life|gaseous form|mirror image|misty step|shadow blade/i.test(spell)) {
+    return "Self";
+  }
+
+  if (/burning hands|thunderwave|fear|color spray|cone/i.test(spell)) {
+    return "Self-area";
+  }
+
+  if (/cure wounds|guidance|resistance|spare the dying|light|mending|shocking grasp|inflict wounds|protection from poison|lesser restoration|remove curse|revivify|barkskin|enhance ability|invisibility|darkvision|fly|haste|water breathing|water walk/i.test(spell)) {
+    return "Touch";
+  }
+
+  if (/fire bolt|eldritch blast|ray|witch bolt|chill touch|message/i.test(spell)) {
+    return "120 feet";
+  }
+
+  if (/fireball|lightning bolt|counterspell|dispel magic|hypnotic pattern|major image|slow|sleet storm|stinking cloud|call lightning/i.test(spell)) {
+    return "120 feet or more";
+  }
+
+  if (/sacred flame|toll the dead|vicious mockery|healing word|guiding bolt|hold person|shatter|spiritual weapon|moonbeam|web|faerie fire|entangle|silence|darkness|command|bane|bless/i.test(spell)) {
+    return "60 feet";
+  }
+
+  return "Varies";
+}
+
+const spellRollDetails: Record<string, string> = {
+  "acid splash":
+    "Dexterity saving throw against your spell save DC; on a failed save, roll 2d6 acid damage at Level 5.",
+  aid: "No roll when cast. Three creatures gain 5 current and maximum hit points; add +5 hit points per slot level above 2nd.",
+  bane: "Charisma saving throw against your spell save DC. Affected targets subtract 1d4 from attack rolls and saving throws.",
+  bless:
+    "No attack or damage roll when cast. Affected creatures add 1d4 to attack rolls and saving throws.",
+  "burning hands":
+    "Dexterity saving throw against your spell save DC; roll 3d6 fire damage, +1d6 per slot level above 1st.",
+  "call lightning":
+    "Dexterity saving throw against your spell save DC; roll 3d10 lightning damage each bolt, +1d10 per slot level above 3rd.",
+  "chromatic orb":
+    "Make a spell attack roll: d20 + your spell attack bonus. On a hit, roll 3d8 damage, +1d8 per slot level above 1st.",
+  "cloud of daggers":
+    "No attack roll. Roll 4d4 slashing damage when a creature enters the area or starts its turn there, +2d4 per slot level above 2nd.",
+  "color spray":
+    "No attack roll or saving throw. Roll 6d10 to determine total hit points affected, +2d10 per slot level above 1st.",
+  "cure wounds":
+    "Roll 1d8 + your spellcasting modifier for healing, +1d8 per slot level above 1st.",
+  "dissonant whispers":
+    "Wisdom saving throw against your spell save DC; roll 3d6 psychic damage, +1d6 per slot level above 1st.",
+  "earth tremor":
+    "Dexterity saving throw against your spell save DC; roll 1d6 bludgeoning damage, +1d6 per slot level above 1st.",
+  "eldritch blast":
+    "Make two spell attack rolls at Level 5: each beam is d20 + your spell attack bonus. On a hit, roll 1d10 force damage per beam.",
+  "false life":
+    "Roll 1d4 + 4 temporary hit points, +5 temporary hit points per slot level above 1st.",
+  "fire bolt":
+    "Make a spell attack roll: d20 + your spell attack bonus. On a hit, roll 2d10 fire damage at Level 5.",
+  fireball:
+    "Dexterity saving throw against your spell save DC; roll 8d6 fire damage, +1d6 per slot level above 3rd.",
+  "flame blade":
+    "Make a melee spell attack roll: d20 + your spell attack bonus. On a hit, roll 3d6 fire damage, +1d6 per two slot levels above 2nd.",
+  "flaming sphere":
+    "Dexterity saving throw against your spell save DC; roll 2d6 fire damage, +1d6 per slot level above 2nd.",
+  "frost fingers":
+    "Constitution saving throw against your spell save DC; roll 2d8 cold damage, +1d8 per slot level above 1st.",
+  goodberry: "No roll when cast. Creates 10 berries; each berry restores 1 hit point.",
+  "guiding bolt":
+    "Make a spell attack roll: d20 + your spell attack bonus. On a hit, roll 4d6 radiant damage, +1d6 per slot level above 1st.",
+  "healing word":
+    "Roll 1d4 + your spellcasting modifier for healing, +1d4 per slot level above 1st.",
+  "hellish rebuke":
+    "Dexterity saving throw against your spell save DC; roll 2d10 fire damage, +1d10 per slot level above 1st.",
+  "ice knife":
+    "Make a spell attack roll: d20 + your spell attack bonus. On a hit, roll 1d10 piercing damage; then nearby creatures make Dexterity saves against 2d6 cold damage, +1d6 cold per slot level above 1st.",
+  "inflict wounds":
+    "Make a melee spell attack roll: d20 + your spell attack bonus. On a hit, roll 3d10 necrotic damage, +1d10 per slot level above 1st.",
+  "lightning bolt":
+    "Dexterity saving throw against your spell save DC; roll 8d6 lightning damage, +1d6 per slot level above 3rd.",
+  "magic missile":
+    "No attack roll or saving throw. Roll 3d4 + 3 force damage for the darts, +1d4 + 1 per slot level above 1st.",
+  "melf's acid arrow":
+    "Make a spell attack roll: d20 + your spell attack bonus. On a hit, roll 4d4 acid damage now and 2d4 acid damage at the end of the target's next turn, +1d4 initial damage per slot level above 2nd.",
+  "mind sliver":
+    "Intelligence saving throw against your spell save DC; on a failed save, roll 2d6 psychic damage at Level 5 and subtract 1d4 from the target's next saving throw.",
+  "moonbeam":
+    "Constitution saving throw against your spell save DC; roll 2d10 radiant damage, +1d10 per slot level above 2nd.",
+  "poison spray":
+    "Constitution saving throw against your spell save DC; on a failed save, roll 2d12 poison damage at Level 5.",
+  "prayer of healing":
+    "Roll 2d8 + your spellcasting modifier for each chosen creature's healing, +1d8 per slot level above 2nd.",
+  "produce flame":
+    "Make a spell attack roll: d20 + your spell attack bonus. On a hit, roll 2d8 fire damage at Level 5.",
+  "ray of frost":
+    "Make a spell attack roll: d20 + your spell attack bonus. On a hit, roll 2d8 cold damage at Level 5.",
+  "ray of sickness":
+    "Make a spell attack roll: d20 + your spell attack bonus. On a hit, roll 2d8 poison damage, +1d8 per slot level above 1st.",
+  "sacred flame":
+    "Dexterity saving throw against your spell save DC; on a failed save, roll 2d8 radiant damage at Level 5.",
+  "scorching ray":
+    "Make three spell attack rolls: each ray is d20 + your spell attack bonus. On a hit, roll 2d6 fire damage per ray; add one ray per slot level above 2nd.",
+  shatter:
+    "Constitution saving throw against your spell save DC; roll 3d8 thunder damage, +1d8 per slot level above 2nd.",
+  "shocking grasp":
+    "Make a melee spell attack roll: d20 + your spell attack bonus. On a hit, roll 2d8 lightning damage at Level 5.",
+  sleep:
+    "No saving throw. Roll 5d8 to determine total hit points affected, +2d8 per slot level above 1st.",
+  "spiritual weapon":
+    "Make a melee spell attack roll: d20 + your spell attack bonus. On a hit, roll 1d8 + your spellcasting modifier force damage, +1d8 per two slot levels above 2nd.",
+  "thorn whip":
+    "Make a melee spell attack roll: d20 + your spell attack bonus. On a hit, roll 2d6 piercing damage at Level 5.",
+  "thunderwave":
+    "Constitution saving throw against your spell save DC; roll 2d8 thunder damage, +1d8 per slot level above 1st.",
+  "toll the dead":
+    "Wisdom saving throw against your spell save DC; on a failed save, roll 2d8 necrotic damage at Level 5, or 2d12 if the target is missing hit points.",
+  "vampiric touch":
+    "Make a melee spell attack roll: d20 + your spell attack bonus. On a hit, roll 3d6 necrotic damage, +1d6 per slot level above 3rd, and heal for half the necrotic damage dealt.",
+  "vicious mockery":
+    "Wisdom saving throw against your spell save DC; on a failed save, roll 2d4 psychic damage at Level 5.",
+  "witch bolt":
+    "Make a spell attack roll: d20 + your spell attack bonus. On a hit, roll 1d12 lightning damage, +1d12 initial damage per slot level above 1st."
+};
+
+export function spellRollsFor(spell: string) {
+  const exactRollDetails = spellRollDetails[spell.trim().toLowerCase()];
+
+  if (exactRollDetails) {
+    return exactRollDetails;
+  }
+
+  if (/fire bolt|eldritch blast|ray|guiding bolt|produce flame|thorn whip|shocking grasp|witch bolt|chromatic orb|scorching ray|melf/i.test(spell)) {
+    return "Make a spell attack roll: d20 + your spell attack bonus. On a hit, roll the spell's damage dice.";
+  }
+
+  if (/sacred flame|toll the dead|mind sliver|acid splash|poison spray|fireball|lightning bolt|shatter|thunderwave|burning hands|fear|hypnotic|hold person|command|bane|charm|suggestion|web|entangle|slow|stinking|sleet|faerie|dissonant|vicious|inflict|blindness/i.test(spell)) {
+    return "The target rolls a saving throw against your spell save DC. Roll damage or apply the effect after success or failure is known.";
+  }
+
+  if (/cure|healing|goodberry|aid|prayer|mass healing|false life/i.test(spell)) {
+    return "Roll the listed healing or temporary hit point dice, then apply your spellcasting modifier when the spell calls for it.";
+  }
+
+  if (/magic missile/i.test(spell)) {
+    return "No attack roll is needed. Roll the force damage dice for the darts and assign targets before damage is applied.";
+  }
+
+  if (/bless|guidance|resistance|bardic|enhance|heroism|shield|armor|protection|invisibility|fly|haste|misty|detect|identify|locate|comprehend/i.test(spell)) {
+    return "Usually no attack roll is made when cast. Track concentration when required, and roll only when a later check, save, or attack uses the benefit.";
+  }
+
+  return "Resolve with your spell save DC or spell attack bonus only if the DM calls for a roll; otherwise apply the spell's described effect.";
+}
+
+export function spellDetailFor(spell: string, level: SpellLevelLabel | null): SpellRuleProfile {
+  const summary = spellEffectSummaryFor(spell);
+  const school = spellSchoolFor(spell);
+  const duration = spellDurationFor(spell, level);
+  const castingTime = spellCastingTimeFor(spell);
+  const range = spellRangeFor(spell);
+  const levelText = level ?? "spell";
+
+  return {
+    description: `${spell} is a ${levelText} ${school.toLowerCase()} option. ${summary} Use it when that effect would change the scene clearly: damage an enemy, protect an ally, reveal information, move through danger, or create a tactical opening. The DM may still ask for targets, a point of origin, or visible positioning before resolving it.`,
+    rolls: spellRollsFor(spell),
+    school,
+    duration,
+    castingTime,
+    range
+  };
+}
 const spellCatalog = {
   Artificer: [
     {
@@ -1134,6 +1854,36 @@ type CharacterSpecies = (typeof speciesOptions)[number];
 type CharacterBackground = (typeof backgroundOptions)[number];
 type Alignment = (typeof alignmentOptions)[number];
 type Gender = (typeof genderOptions)[number];
+
+const classArtByClass: Record<CharacterClass, string> = {
+  Artificer: artificerClassArt.src,
+  Barbarian: barbarianClassArt.src,
+  Bard: bardClassArt.src,
+  "Blood Hunter": bloodHunterClassArt.src,
+  Cleric: clericClassArt.src,
+  Druid: druidClassArt.src,
+  Fighter: fighterClassArt.src,
+  Monk: monkClassArt.src,
+  Paladin: paladinClassArt.src,
+  Psion: psionClassArt.src,
+  Ranger: rangerClassArt.src,
+  Rogue: rogueClassArt.src,
+  Sorcerer: sorcererClassArt.src,
+  Warlock: warlockClassArt.src,
+  Wizard: wizardClassArt.src
+};
+
+const speciesArtBySpecies: Record<CharacterSpecies, string> = {
+  Human: humanSpeciesArt.src,
+  Elf: elfSpeciesArt.src,
+  Dwarf: dwarfSpeciesArt.src,
+  Halfling: halflingSpeciesArt.src,
+  Gnome: gnomeSpeciesArt.src,
+  "Half-Elf": halfElfSpeciesArt.src,
+  "Half-Orc": halfOrcSpeciesArt.src,
+  Tiefling: tieflingSpeciesArt.src,
+  Dragonborn: dragonbornSpeciesArt.src
+};
 
 const equipmentCategoryOptions: Record<EquipmentCategory, string[]> = {
   simpleWeapon: [
@@ -2546,6 +3296,7 @@ export function NewAdventureForm({
   const [activeEquipmentModal, setActiveEquipmentModal] =
     useState<ActiveEquipmentModal>(null);
   const [selectedSpells, setSelectedSpells] = useState<string[]>([]);
+  const [activeSpellDetail, setActiveSpellDetail] = useState<string | null>(null);
   const [dlcSpellVisibility, setDlcSpellVisibility] = useState<DlcSpellVisibility>({});
   const [alignment, setAlignment] = useState<Alignment>("Neutral Good");
   const [gender, setGender] = useState<Gender>("Non-binary");
@@ -2553,6 +3304,8 @@ export function NewAdventureForm({
   const [ownerClientId, setOwnerClientId] = useState("");
   const [error, setError] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+  const [createdCampaign, setCreatedCampaign] =
+    useState<CampaignSummary | null>(null);
   const [creationLoadingStep, setCreationLoadingStep] = useState(0);
   const [flowTransition, setFlowTransition] =
     useState<FlowTransitionState>("idle");
@@ -2667,6 +3420,12 @@ export function NewAdventureForm({
     () => selectedSpellCountsFor(selectedClass.spellGroups, selectedSpells),
     [selectedClass.spellGroups, selectedSpells]
   );
+  const activeSpellLevel = activeSpellDetail
+    ? spellLevelFor(selectedClass.spellGroups, activeSpellDetail)
+    : null;
+  const activeSpellRuleProfile = activeSpellDetail
+    ? spellDetailFor(activeSpellDetail, activeSpellLevel)
+    : null;
   const mechanicsSeed = useMemo<MechanicsSeed>(() => {
     const spellSlots = deriveSpellSlotsForSheet(selectedClass.id, characterLevel);
 
@@ -2861,6 +3620,12 @@ export function NewAdventureForm({
     subclass
   ]);
   const stepTitle = useMemo(() => {
+    if (createdCampaign) {
+      return createdCampaign.portraitUrl
+        ? "Your portrait is ready"
+        : "Your adventure is ready";
+    }
+
     if (stepIndex === 0) {
       return "Choose your game mode";
     }
@@ -2923,7 +3688,8 @@ export function NewAdventureForm({
     isEquipmentSummaryStep,
     isInviteJoinFlow,
     mode,
-    stepIndex
+    stepIndex,
+    createdCampaign
   ]);
 
   useEffect(() => {
@@ -3454,7 +4220,7 @@ export function NewAdventureForm({
   }
 
   function handleBack() {
-    if (isFlowTransitioning) {
+    if (isFlowTransitioning || createdCampaign) {
       return;
     }
 
@@ -3484,6 +4250,13 @@ export function NewAdventureForm({
   }
 
   async function createCampaign() {
+    if (createdCampaign) {
+      window.location.assign(
+        `/play?campaignId=${encodeURIComponent(createdCampaign.id)}`
+      );
+      return;
+    }
+
     if (isCreating) {
       return;
     }
@@ -3508,12 +4281,12 @@ export function NewAdventureForm({
             : "Table Owner",
         characterName,
         characterSheet,
-        mechanicsSeed
+        mechanicsSeed,
+        generateCharacterPortrait: true
       });
 
-      window.location.assign(
-        `/play?campaignId=${encodeURIComponent(campaign.id)}`
-      );
+      setCreatedCampaign(campaign);
+      setIsCreating(false);
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -3789,6 +4562,11 @@ export function NewAdventureForm({
                           aria-pressed={characterClass === option.id}
                           key={option.id}
                           onClick={() => handleClassChange(option.id)}
+                          style={
+                            {
+                              "--class-art-url": `url(${classArtByClass[option.id]})`
+                            } as CSSProperties
+                          }
                         >
                           <strong>{option.id}</strong>
                           <small>{option.summary}</small>
@@ -3799,7 +4577,7 @@ export function NewAdventureForm({
                 ) : null}
 
                 {currentCharacterStep === "Species" ? (
-                  <fieldset className="option-picker compact-option-picker">
+                  <fieldset className="option-picker compact-option-picker species-picker">
                     <legend>Species</legend>
                     <div>
                       {speciesOptions.map((option) => (
@@ -3809,6 +4587,11 @@ export function NewAdventureForm({
                           aria-pressed={characterSpecies === option}
                           key={option}
                           onClick={() => setCharacterSpecies(option)}
+                          style={
+                            {
+                              "--species-art-url": `url(${speciesArtBySpecies[option]})`
+                            } as CSSProperties
+                          }
                         >
                           <strong>{option}</strong>
                           <small>{formatSpeciesAbilityBonus(option)}</small>
@@ -4216,22 +4999,37 @@ export function NewAdventureForm({
                                   );
 
                                   return (
-                                    <button
-                                      type="button"
+                                    <div
                                       className={[
+                                        "spell-option-card",
                                         isSelected ? "selected" : "",
                                         isDlcSpell ? "dlc-spell-option" : ""
                                       ].filter(Boolean).join(" ")}
-                                      aria-pressed={isSelected}
-                                      disabled={isAtLimit}
                                       key={option}
-                                      onClick={() => toggleSpell(option)}
+                                      style={{
+                                        "--spell-art-url": `url("${spellArtPathFor(option)}")`
+                                      } as CSSProperties}
                                     >
-                                      <strong>{option}</strong>
-                                      {isDlcSpell ? (
-                                        <small>{spellSourceLabels[option] ?? "Expanded source"}</small>
-                                      ) : null}
-                                    </button>
+                                      <button
+                                        type="button"
+                                        className="spell-select-button"
+                                        aria-pressed={isSelected}
+                                        disabled={isAtLimit}
+                                        onClick={() => toggleSpell(option)}
+                                      >
+                                        <strong>{option}</strong>
+                                        <span>{spellEffectSummaryFor(option)}</span>
+                                        {isDlcSpell ? (
+                                          <small>{spellSourceLabels[option] ?? "Expanded source"}</small>
+                                        ) : null}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="spell-detail-button"
+                                        aria-label={`Open ${option} spell details`}
+                                        onClick={() => setActiveSpellDetail(option)}
+                                      />
+                                    </div>
                                   );
                                 })}
                               </div>
@@ -4366,7 +5164,42 @@ export function NewAdventureForm({
               </div>
             ) : null}
 
-            {stepIndex === reviewStepIndex ? (
+            {stepIndex === reviewStepIndex && createdCampaign ? (
+              <div className="portrait-final-step">
+                <div
+                  className={
+                    createdCampaign.portraitUrl
+                      ? "generated-character-portrait"
+                      : "generated-character-portrait empty"
+                  }
+                  aria-label={`${characterName || "Character"} portrait`}
+                >
+                  {createdCampaign.portraitUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={createdCampaign.portraitUrl}
+                      alt={`${characterName || "Character"} portrait`}
+                    />
+                  ) : (
+                    <Sparkles size={42} />
+                  )}
+                </div>
+                <div className="portrait-final-copy">
+                  <strong>
+                    {createdCampaign.portraitUrl
+                      ? characterName || "Your character"
+                      : "Portrait skipped"}
+                  </strong>
+                  <span>
+                    {createdCampaign.portraitUrl
+                      ? "Your character portrait is saved to this adventure."
+                      : "Your campaign is ready. You can start now and add a portrait later."}
+                  </span>
+                </div>
+              </div>
+            ) : null}
+
+            {stepIndex === reviewStepIndex && !createdCampaign ? (
               <div className="creation-review">
                 <ScrollText size={28} />
                 <dl>
@@ -4461,7 +5294,12 @@ export function NewAdventureForm({
             <button
               type="button"
               className="creation-secondary"
-              disabled={stepIndex === 0 || isCreating || isFlowTransitioning}
+              disabled={
+                stepIndex === 0 ||
+                isCreating ||
+                isFlowTransitioning ||
+                Boolean(createdCampaign)
+              }
               onClick={handleBack}
             >
               <span className="fantasy-arrow-icon fantasy-arrow-back" aria-hidden="true" />
@@ -4470,10 +5308,15 @@ export function NewAdventureForm({
             <button type="submit" disabled={isCreating || isFlowTransitioning}>
               {isCreating ? (
                 isJoinFlow ? "Joining..." : "Creating..."
+              ) : createdCampaign ? (
+                <>
+                  Enter Adventure
+                  <span className="fantasy-arrow-icon fantasy-arrow-forward" aria-hidden="true" />
+                </>
               ) : isLastStep ? (
                 <>
-                  {isJoinFlow ? "Join Game" : "Create Campaign"}
-                  <Check size={16} />
+                  {isJoinFlow ? "Join Game" : "Generate Portrait"}
+                  {isJoinFlow ? <Check size={16} /> : <Sparkles size={16} />}
                 </>
               ) : (
                 <>
@@ -4484,6 +5327,61 @@ export function NewAdventureForm({
             </button>
           </div>
       </form>
+
+      {activeSpellDetail && activeSpellRuleProfile ? (
+        <div
+          className="spell-detail-modal-backdrop"
+          role="presentation"
+          onClick={() => setActiveSpellDetail(null)}
+        >
+          <section
+            aria-modal="true"
+            aria-labelledby="spell-detail-modal-title"
+            className="spell-detail-modal"
+            role="dialog"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="spell-detail-modal-header">
+              <div>
+                <span>{activeSpellLevel ?? "Spell"}</span>
+                <h2 id="spell-detail-modal-title">{activeSpellDetail}</h2>
+              </div>
+              <button
+                type="button"
+                aria-label="Close spell details"
+                onClick={() => setActiveSpellDetail(null)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="spell-detail-modal-body">
+              <p>{activeSpellRuleProfile.description}</p>
+              <section>
+                <h3>Rolls Involved</h3>
+                <p>{activeSpellRuleProfile.rolls}</p>
+              </section>
+            </div>
+            <dl className="spell-detail-meta">
+              <div>
+                <dt>School</dt>
+                <dd>{activeSpellRuleProfile.school}</dd>
+              </div>
+              <div>
+                <dt>Duration</dt>
+                <dd>{activeSpellRuleProfile.duration}</dd>
+              </div>
+              <div>
+                <dt>Casting Time</dt>
+                <dd>{activeSpellRuleProfile.castingTime}</dd>
+              </div>
+              <div>
+                <dt>Range</dt>
+                <dd>{activeSpellRuleProfile.range}</dd>
+              </div>
+            </dl>
+          </section>
+        </div>
+      ) : null}
 
       {activeEquipmentModal ? (
         <div

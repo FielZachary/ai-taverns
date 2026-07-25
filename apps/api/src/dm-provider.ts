@@ -9,6 +9,10 @@ import type {
 } from "@ai-dnd/dm";
 
 const defaultAiModel: AiModelId = "deepseek-v4-flash";
+const supportedDeepSeekModels = new Set([
+  "deepseek-v4-flash",
+  "deepseek-v4-pro"
+]);
 const defaultProviderTemperature = 0.8;
 const combatProviderTemperature = 0.2;
 let localEnvCache: Record<string, string> | undefined;
@@ -143,6 +147,24 @@ function envValue(key: string) {
 }
 /* c8 ignore stop */
 
+function providerModelForSettings(config: ModelProviderConfig) {
+  const configuredModel = envValue(config.modelEnv);
+
+  if (config.providerName !== "DeepSeek") {
+    return configuredModel || config.defaultModel;
+  }
+
+  if (configuredModel === "deepseek-chat") {
+    return "deepseek-v4-flash";
+  }
+
+  if (configuredModel && supportedDeepSeekModels.has(configuredModel)) {
+    return configuredModel;
+  }
+
+  return config.defaultModel;
+}
+
 function providerConfigForModel(model: AiModelId = defaultAiModel): ModelProviderConfig {
   if (model === "qwen-3-7-flash") {
     return {
@@ -175,7 +197,7 @@ function resolvedProviderSettings(config: ModelProviderConfig) {
       /\/+$/,
       ""
     ),
-    model: envValue(config.modelEnv) || config.defaultModel
+    model: providerModelForSettings(config)
   };
 }
 
@@ -517,6 +539,9 @@ async function requestDeepSeek(
   const requestBody = JSON.stringify({
     model: settings.model,
     messages,
+    ...(settings.providerName === "DeepSeek"
+      ? { thinking: { type: "disabled" } }
+      : {}),
     temperature,
     max_tokens: 4096,
     ...(onPublicNarrationDelta ? { stream: true } : {})

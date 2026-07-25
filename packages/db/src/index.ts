@@ -44,6 +44,7 @@ import type {
   DiceRollSubmission,
   MechanicsSeed,
   MechanicsState,
+  RoomSocketEvent,
   RoomSnapshot
 } from "@ai-dnd/contracts";
 import {
@@ -416,6 +417,8 @@ export type CampaignRow = {
 type CampaignSummaryRow = Omit<CampaignRow, "session_id"> & {
   session_id?: string;
   sessionId?: string;
+  portrait_asset_id?: string | null;
+  portrait_public_url?: string | null;
 };
 
 type PlayerRow = {
@@ -429,6 +432,60 @@ type PlayerRow = {
   slot: number | null;
   status: PlayerStatus;
   last_seen_at: Date | string;
+  portrait_asset_id?: string | null;
+  portrait_public_url?: string | null;
+};
+
+export type MediaStorageProvider = "local" | "digitalocean_spaces" | "s3";
+
+export type StoredMediaAssetObject = {
+  storageProvider: MediaStorageProvider;
+  bucket: string | null;
+  objectKey: string;
+  publicUrl: string;
+  contentType: string;
+  byteSize: number;
+  width: number | null;
+  height: number | null;
+  sha256: string;
+};
+
+export type MediaAssetRow = {
+  id: string;
+  owner_user_id: string | null;
+  campaign_id: string | null;
+  player_id: string | null;
+  kind: "character_portrait" | "campaign_cover" | "npc_portrait";
+  status: "pending" | "ready" | "failed" | "deleted";
+  storage_provider: MediaStorageProvider;
+  bucket: string | null;
+  object_key: string | null;
+  public_url: string | null;
+  content_type: string;
+  byte_size: number | null;
+  width: number | null;
+  height: number | null;
+  sha256: string | null;
+  prompt: string | null;
+  negative_prompt: string | null;
+  provider: string | null;
+  model: string | null;
+  provider_request_id: string | null;
+  generation_metadata: unknown;
+  created_at: Date | string;
+  updated_at: Date | string;
+};
+
+export type CharacterPortraitTarget = {
+  campaignId: string;
+  campaignTitle: string;
+  campaignGenre: string | null;
+  customWorldName: string | null;
+  playerId: string;
+  ownerUserId: string | null;
+  username: string;
+  characterName: string;
+  characterSheet: string;
 };
 
 type TurnRow = {
@@ -591,7 +648,7 @@ export type DungeonMasterRuntime = {
     model?: AiModelId;
     onPublicNarrationDelta?: (text: string) => void;
   }): Promise<DungeonMasterProviderResponse>;
-  emitDmStreamEvent?(event: DmStreamEvent): void;
+  emitDmStreamEvent?(event: DmStreamEvent | RoomSocketEvent): void;
   buildPromptContext?(input: {
     campaignId: string;
     turnId?: string | undefined;
@@ -824,6 +881,12 @@ export function mapCampaignSummaryRow(
     mode: campaign.mode,
     title: characterName || playerName || campaign.title,
     ...(campaign.owner_client_id ? { ownerClientId: campaign.owner_client_id } : {}),
+    ...(campaign.portrait_asset_id
+      ? { portraitAssetId: campaign.portrait_asset_id }
+      : {}),
+    ...(campaign.portrait_public_url
+      ? { portraitUrl: campaign.portrait_public_url }
+      : {}),
     preview: campaignWorldName(campaign),
     messageCount: 0,
     ...(joinCode ? { joinCode } : {})
@@ -861,6 +924,197 @@ export async function logCampaignEvent(
   );
 
   return result.rows[0]?.id;
+}
+
+export async function getCharacterPortraitTargetForUser(
+  db: Queryable,
+  input: {
+    campaignId: string;
+    userId: string;
+  }
+): Promise<CharacterPortraitTarget> {
+  const result = await db.query<
+    PlayerRow & {
+      campaign_title: string;
+      campaign_metadata: unknown;
+      campaign_owner_user_id: string | null;
+    }
+  >(
+    `
+      select
+        players.*,
+        campaigns.title as campaign_title,
+        campaigns.metadata as campaign_metadata,
+        campaigns.owner_user_id as campaign_owner_user_id
+      from players
+      join campaigns on campaigns.id = players.campaign_id
+      where players.campaign_id = $1
+        and players.user_id = $2
+        and players.status = 'active'
+        and campaigns.status = 'active'
+      order by players.slot asc nulls last, players.created_at asc
+      limit 1
+    `,
+    [input.campaignId, input.userId]
+  );
+  const player = requireRow(
+    result.rows[0],
+    "No active character was found for portrait generation."
+  );
+  const metadata = eventPayload(player.campaign_metadata);
+  const genre = eventPayload(metadata.genre);
+
+  return {
+    campaignId: player.campaign_id,
+    campaignTitle: player.campaign_title,
+    campaignGenre: typeof genre.label === "string" ? genre.label : null,
+    customWorldName:
+      typeof genre.customWorldName === "string" ? genre.customWorldName : null,
+    playerId: player.id,
+    ownerUserId: player.campaign_owner_user_id,
+    username: player.username,
+    characterName: player.character_name,
+    characterSheet: player.character_sheet
+  };
+}
+
+export async function createPendingCharacterPortraitAsset(
+  db: Queryable,
+  input: {
+    ownerUserId: string | null;
+    campaignId: string;
+    playerId: string;
+    storageProvider: MediaStorageProvider;
+    prompt: string;
+    negativePrompt: string;
+    provider: string;
+    model: string;
+  }
+): Promise<MediaAssetRow> {
+  const result = await db.query<MediaAssetRow>(
+    `
+      insert into media_assets (
+        owner_user_id,
+        campaign_id,
+        player_id,
+        kind,
+        status,
+        storage_provider,
+        prompt,
+        negative_prompt,
+        provider,
+        model
+      )
+      values ($1, $2, $3, 'character_portrait', 'pending', $4, $5, $6, $7, $8)
+      returning *
+    `,
+    [
+      input.ownerUserId,
+      input.campaignId,
+      input.playerId,
+      input.storageProvider,
+      input.prompt,
+      input.negativePrompt,
+      input.provider,
+      input.model
+    ]
+  );
+
+  return requireRow(result.rows[0], "Failed to create media asset.");
+}
+
+export async function markCharacterPortraitAssetReady(
+  db: Queryable,
+  input: {
+    assetId: string;
+    playerId: string;
+    displayObject: StoredMediaAssetObject;
+    providerRequestId: string | null;
+    generationMetadata: Record<string, unknown>;
+  }
+): Promise<MediaAssetRow> {
+  const updated = await db.query<MediaAssetRow>(
+    `
+      update media_assets
+      set status = 'ready',
+          storage_provider = $2,
+          bucket = $3,
+          object_key = $4,
+          public_url = $5,
+          content_type = $6,
+          byte_size = $7,
+          width = $8,
+          height = $9,
+          sha256 = $10,
+          provider_request_id = $11,
+          generation_metadata = $12::jsonb
+      where id = $1
+      returning *
+    `,
+    [
+      input.assetId,
+      input.displayObject.storageProvider,
+      input.displayObject.bucket,
+      input.displayObject.objectKey,
+      input.displayObject.publicUrl,
+      input.displayObject.contentType,
+      input.displayObject.byteSize,
+      input.displayObject.width,
+      input.displayObject.height,
+      input.displayObject.sha256,
+      input.providerRequestId,
+      JSON.stringify(input.generationMetadata)
+    ]
+  );
+  const asset = requireRow(
+    updated.rows[0],
+    "Failed to mark media asset ready."
+  );
+
+  await db.query(
+    `
+      update players
+      set portrait_asset_id = $1
+      where id = $2
+    `,
+    [asset.id, input.playerId]
+  );
+
+  if (asset.campaign_id) {
+    await logCampaignEvent(db, asset.campaign_id, "media_asset_ready", {
+      mediaAssetId: asset.id,
+      playerId: input.playerId,
+      kind: asset.kind,
+      status: asset.status
+    });
+  }
+
+  return asset;
+}
+
+export async function markCharacterPortraitAssetFailed(
+  db: Queryable,
+  input: {
+    assetId: string;
+    errorMessage: string;
+    generationMetadata?: Record<string, unknown> | undefined;
+  }
+): Promise<void> {
+  await db.query(
+    `
+      update media_assets
+      set status = 'failed',
+          generation_metadata = $2::jsonb
+      where id = $1
+    `,
+    [
+      input.assetId,
+      JSON.stringify({
+        ...(input.generationMetadata ?? {}),
+        error: input.errorMessage
+      })
+    ]
+  );
 }
 
 async function writeMechanicsStateForLockedCampaign(
@@ -3054,7 +3308,13 @@ function rowToRoomPlayer(
       actor
     ),
     status: submittedPlayerIds.has(player.id) ? "submitted" : "waiting",
-    lastSeenAt: toIso(player.last_seen_at)
+    lastSeenAt: toIso(player.last_seen_at),
+    ...(player.portrait_asset_id
+      ? { portraitAssetId: player.portrait_asset_id }
+      : {}),
+    ...(player.portrait_public_url
+      ? { portraitUrl: player.portrait_public_url }
+      : {})
   };
 }
 
@@ -3116,10 +3376,16 @@ async function buildRoomSnapshot(
   );
   const playersResult = await db.query<PlayerRow>(
     `
-      select *
+      select
+        players.*,
+        media_assets.id as portrait_asset_id,
+        media_assets.public_url as portrait_public_url
       from players
-      where campaign_id = $1 and status = 'active'
-      order by slot asc nulls last, created_at asc
+      left join media_assets
+        on media_assets.id = players.portrait_asset_id
+       and media_assets.status = 'ready'
+      where players.campaign_id = $1 and players.status = 'active'
+      order by players.slot asc nulls last, players.created_at asc
     `,
     [campaign.id]
   );
@@ -3905,6 +4171,243 @@ async function buildModularDmPromptContext(
   };
 }
 
+type NpcContextIndexEntry = {
+  contextKey: string;
+  title: string;
+  visibility: "player_safe" | "dm_only";
+  priority: number;
+  updatedAt: string;
+};
+
+async function retrieveCampaignContextStorageState(
+  db: Queryable,
+  campaignId: string
+) {
+  try {
+    const result = await db.query<Record<string, unknown>>(
+      `
+        select
+          context_key,
+          category,
+          title,
+          visibility,
+          priority,
+          body_markdown,
+          archived_at,
+          created_at,
+          updated_at
+        from campaign_context_chunks
+        where campaign_id = $1
+        order by archived_at nulls first,
+          category asc,
+          priority desc,
+          updated_at desc
+      `,
+      [campaignId]
+    );
+
+    return result.rows.map((row) => ({
+      context_id: String(row.context_key ?? ""),
+      category: String(row.category ?? ""),
+      title: String(row.title ?? row.context_key ?? ""),
+      visibility:
+        row.visibility === "player_safe" || row.visibility === "dm_only"
+          ? row.visibility
+          : "dm_only",
+      priority: typeof row.priority === "number" ? row.priority : 0,
+      body_markdown: String(row.body_markdown ?? ""),
+      archived_at: row.archived_at
+        ? toIso(row.archived_at as Date | string)
+        : null,
+      created_at: row.created_at ? toIso(row.created_at as Date | string) : null,
+      updated_at: row.updated_at ? toIso(row.updated_at as Date | string) : null
+    }));
+  } catch (error) {
+    if (!isMissingRuntimeTableError(error)) {
+      throw error;
+    }
+
+    return [];
+  }
+}
+
+async function listCampaignNpcContextIndex(
+  db: Queryable,
+  campaignId: string,
+  limit = 80
+): Promise<NpcContextIndexEntry[]> {
+  try {
+    const result = await db.query<Record<string, unknown>>(
+      `
+        select
+          context_key,
+          title,
+          visibility,
+          priority,
+          updated_at
+        from campaign_context_chunks
+        where campaign_id = $1
+          and category = 'npc_context'
+          and archived_at is null
+        order by priority desc, updated_at desc
+        limit $2
+      `,
+      [campaignId, limit]
+    );
+
+    return result.rows.map((row) => ({
+      contextKey: String(row.context_key ?? ""),
+      title: String(row.title ?? row.context_key ?? ""),
+      visibility:
+        row.visibility === "player_safe" || row.visibility === "dm_only"
+          ? row.visibility
+          : "dm_only",
+      priority: typeof row.priority === "number" ? row.priority : 0,
+      updatedAt: row.updated_at ? toIso(row.updated_at as Date | string) : ""
+    }));
+  } catch (error) {
+    if (!isMissingRuntimeTableError(error)) {
+      throw error;
+    }
+
+    return [];
+  }
+}
+
+function npcContextSearchText(input: {
+  currentAction: string;
+  dmResponse: string;
+  history: GameMessage[];
+}) {
+  return [
+    input.currentAction,
+    input.dmResponse,
+    ...input.history.map((message) => message.content)
+  ]
+    .join("\n")
+    .toLowerCase();
+}
+
+function npcTitleTokens(entry: NpcContextIndexEntry) {
+  return entry.title
+    .toLowerCase()
+    .split(/[^a-z0-9]+/g)
+    .filter((token) => token.length >= 3);
+}
+
+function npcEntryMatchesText(entry: NpcContextIndexEntry, searchText: string) {
+  const title = entry.title.toLowerCase().trim();
+  const contextSlug = entry.contextKey
+    .replace(/^npc:/, "")
+    .toLowerCase()
+    .replace(/-/g, " ");
+
+  if (title && searchText.includes(title)) {
+    return true;
+  }
+
+  if (contextSlug && searchText.includes(contextSlug)) {
+    return true;
+  }
+
+  const tokens = npcTitleTokens(entry);
+
+  return tokens.length >= 2 && tokens.every((token) => searchText.includes(token));
+}
+
+function selectRelevantNpcContextKeys(
+  index: NpcContextIndexEntry[],
+  input: {
+    currentAction: string;
+    dmResponse: string;
+    history: GameMessage[];
+  },
+  limit = 20
+) {
+  const searchText = npcContextSearchText(input);
+  const keys = new Set<string>();
+
+  for (const entry of index) {
+    if (npcEntryMatchesText(entry, searchText)) {
+      keys.add(entry.contextKey);
+    }
+  }
+
+  for (const entry of index) {
+    if (keys.size >= limit) {
+      break;
+    }
+
+    keys.add(entry.contextKey);
+  }
+
+  return [...keys].slice(0, limit);
+}
+
+async function retrieveRelevantNpcContextChunks(
+  db: Queryable,
+  campaignId: string,
+  keys: string[],
+  maxChars = 12000
+) {
+  if (keys.length === 0) {
+    return [] as ContextChunk[];
+  }
+
+  const router: ValidatedRouterOutput = {
+    jobNeeded: "scene_director",
+    contextKeys: {
+      npc_context: keys,
+      player_character_context: [],
+      combat_context: [],
+      relevant_world_context: [],
+      quests_open_threads: [],
+      overarching_big_plot_secrets: []
+    },
+    fallbackUsed: false,
+    errors: []
+  };
+  const context = await retrieveSelectedContextChunks(
+    db,
+    campaignId,
+    router,
+    maxChars
+  );
+
+  return context.chunks;
+}
+
+function formatNpcContextIndex(index: NpcContextIndexEntry[]) {
+  if (index.length === 0) {
+    return "No existing NPC cards.";
+  }
+
+  return JSON.stringify(
+    index.map((entry) => ({
+      context_id: entry.contextKey,
+      title: entry.title,
+      updated_at: entry.updatedAt
+    })),
+    null,
+    2
+  );
+}
+
+function normalizeNewContextChunkPatch(chunk: unknown) {
+  const payload = eventPayload(chunk);
+  const contextId = String(payload.context_id ?? payload.contextId ?? "");
+  const title = String(payload.title ?? contextId);
+
+  return eventPayload({
+    ...payload,
+    operation: "create_chunk",
+    context_id: contextId,
+    context_type: payload.context_type ?? payload.contextType ?? "npc_context",
+    title,
+    visibility: payload.visibility ?? "dm_only"
+  });
+}
+
 async function listCampaignContextIds(db: Queryable, campaignId: string) {
   try {
     const result = await db.query<{ context_key: string }>(
@@ -4014,6 +4517,43 @@ async function applyAcceptedMemoryPatches(
   }
 }
 
+async function attachContextStorageStateToDmEventDebug(
+  db: Queryable,
+  input: {
+    campaignId: string;
+    dmEventId?: string | undefined;
+    contextStorageState: unknown;
+  }
+) {
+  if (!input.dmEventId) {
+    return;
+  }
+
+  await bestEffortRuntimeInsert(
+    db,
+    `
+      update campaign_events
+      set payload = jsonb_set(
+        jsonb_set(
+          payload,
+          '{aiDebug}',
+          coalesce(payload->'aiDebug', '{}'::jsonb),
+          true
+        ),
+        '{aiDebug,contextStorageState}',
+        $3::jsonb,
+        true
+      )
+      where campaign_id = $1 and id = $2
+    `,
+    [
+      input.campaignId,
+      input.dmEventId,
+      JSON.stringify(input.contextStorageState)
+    ]
+  );
+}
+
 export async function runModularPostTurnContextJobs(
   db: Queryable,
   runtime: DungeonMasterRuntime,
@@ -4022,12 +4562,24 @@ export async function runModularPostTurnContextJobs(
     turnId: string;
     currentAction: string;
     dmResponse: string;
+    dmEventId?: string | undefined;
     rollRequests?: DiceRollRequest[] | undefined;
   }
 ) {
   const traceId = randomUUID();
   const startedAt = Date.now();
   const history = await getCampaignEventMessages(db, input.campaignId, 8);
+  const npcContextIndex = await listCampaignNpcContextIndex(db, input.campaignId);
+  const relevantNpcContextKeys = selectRelevantNpcContextKeys(npcContextIndex, {
+    currentAction: input.currentAction,
+    dmResponse: input.dmResponse,
+    history
+  });
+  const relevantNpcContextChunks = await retrieveRelevantNpcContextChunks(
+    db,
+    input.campaignId,
+    relevantNpcContextKeys
+  );
   const message = [
     "Current turn input:",
     input.currentAction,
@@ -4037,6 +4589,12 @@ export async function runModularPostTurnContextJobs(
     "",
     "Roll requests:",
     JSON.stringify(input.rollRequests ?? [], null, 2),
+    "",
+    "Existing NPC context index:",
+    formatNpcContextIndex(npcContextIndex),
+    "",
+    "Relevant existing NPC cards:",
+    renderContextChunks(relevantNpcContextChunks),
     "",
     "Recent messages:",
     JSON.stringify(history, null, 2)
@@ -4050,6 +4608,8 @@ export async function runModularPostTurnContextJobs(
       phase: "memory_updater_started",
       payload: {
         historyCount: history.length,
+        npcContextIndexCount: npcContextIndex.length,
+        relevantNpcContextKeys,
         message: textStats(message)
       }
     });
@@ -4075,10 +4635,7 @@ export async function runModularPostTurnContextJobs(
       ...(Array.isArray(parsed?.patches) ? parsed.patches : []),
       ...(Array.isArray(parsed?.new_context_chunks)
         ? parsed.new_context_chunks.map((chunk) =>
-            eventPayload({
-              ...(eventPayload(chunk)),
-              operation: "create_chunk"
-            })
+            normalizeNewContextChunkPatch(chunk)
           )
         : []),
       ...(Array.isArray(parsed?.remove_context_chunks)
@@ -4101,6 +4658,37 @@ export async function runModularPostTurnContextJobs(
       input.campaignId,
       validation.accepted
     );
+
+    const contextStorageState = await retrieveCampaignContextStorageState(
+      db,
+      input.campaignId
+    );
+    const contextStorageDebugState = {
+      capturedAt: nowIso(),
+      contextChunkCount: contextStorageState.length,
+      contextChunks: contextStorageState
+    };
+
+    await logDmTurnTrace(db, {
+      campaignId: input.campaignId,
+      traceId,
+      turnId: input.turnId,
+      phase: "context_storage_state_snapshot",
+      payload: contextStorageDebugState
+    });
+
+    await attachContextStorageStateToDmEventDebug(db, {
+      campaignId: input.campaignId,
+      dmEventId: input.dmEventId,
+      contextStorageState: contextStorageDebugState
+    });
+
+    runtime.emitDmStreamEvent?.({
+      type: "room_updated",
+      roomId: input.campaignId,
+      updatedAt: contextStorageDebugState.capturedAt,
+      ...(input.dmEventId ? { eventId: input.dmEventId } : {})
+    });
 
     await logDmMemoryPatchLog(db, {
       campaignId: input.campaignId,

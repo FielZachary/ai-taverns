@@ -18,6 +18,8 @@ export type RoomPlayer = {
   username: string;
   characterName: string;
   characterSheet: string;
+  portraitAssetId?: string;
+  portraitUrl?: string;
   status: "waiting" | "submitted";
 };
 
