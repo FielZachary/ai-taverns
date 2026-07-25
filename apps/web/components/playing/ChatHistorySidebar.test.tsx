@@ -63,6 +63,34 @@ describe("ChatHistorySidebar", () => {
     expect(props.onViewCharacterSheet).toHaveBeenCalledTimes(1);
   });
 
+  it("shows the player portrait above the resources button", () => {
+    const props = renderChatHistorySidebar({
+      playerPortraitAlt: "Seraphina portrait",
+      playerPortraitUrl: "/media/campaigns/campaign-1/players/player-1/portraits/asset-1/128.webp"
+    });
+
+    const portrait = screen.getByRole("img", { name: /seraphina portrait/i });
+    const portraitButton = screen.getByRole("button", {
+      name: /open player resources/i
+    });
+    const resourcesButton = screen.getByRole("button", {
+      name: "Player Resources"
+    });
+
+    expect(portrait).toHaveAttribute(
+      "src",
+      "/media/campaigns/campaign-1/players/player-1/portraits/asset-1/128.webp"
+    );
+    expect(
+      portraitButton.compareDocumentPosition(resourcesButton) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+
+    fireEvent.click(portraitButton);
+
+    expect(props.onViewCharacterSheet).toHaveBeenCalledTimes(1);
+  });
+
   it("renders chats with previews and marks the active chat", () => {
     renderChatHistorySidebar({
       activeChatId: "chat-2",

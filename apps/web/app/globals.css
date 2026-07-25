@@ -699,18 +699,41 @@ h1 {
 }
 
 .mode-banner-frame {
+  position: relative;
   display: block;
   width: clamp(86px, 15vw, 118px);
   aspect-ratio: 451.92 / 1156.67;
-  background: var(--gold-bright);
   filter: drop-shadow(0 18px 34px rgba(0, 0, 0, 0.34));
-  opacity: 0.48;
-  -webkit-mask: url("/new-adventure/banner-frame-1.svg") center / contain no-repeat;
-  mask: url("/new-adventure/banner-frame-1.svg") center / contain no-repeat;
+  opacity: 0.74;
   transition:
     filter 320ms ease,
     opacity 320ms ease,
     transform 320ms ease;
+}
+
+.mode-banner-frame::before,
+.mode-banner-frame::after {
+  position: absolute;
+  content: "";
+}
+
+.mode-banner-frame::before {
+  inset: 1.2% 2.8% 1%;
+  background:
+    linear-gradient(180deg, rgba(255, 239, 184, 0.08), rgba(14, 10, 7, 0.26)),
+    var(--mode-banner-art-url, linear-gradient(180deg, var(--gold-bright), var(--gold)));
+  background-position: center;
+  background-size: cover;
+  clip-path: polygon(50% 0%, 74% 9%, 93% 24%, 99% 33%, 99% 100%, 1% 100%, 1% 33%, 7% 24%, 26% 9%);
+}
+
+.mode-banner-frame::after {
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(255, 239, 184, 0.9), rgba(161, 121, 64, 0.72)),
+    var(--gold-bright);
+  -webkit-mask: url("/new-adventure/banner-frame-1.svg") center / contain no-repeat;
+  mask: url("/new-adventure/banner-frame-1.svg") center / contain no-repeat;
 }
 
 .mode-picker button.selected .mode-banner-frame,
@@ -723,7 +746,7 @@ h1 {
   transform: translateY(-2px);
 }
 
-.mode-picker span,
+.mode-picker button > span:not(.mode-banner-frame),
 .new-adventure-form label {
   display: grid;
   gap: 11px;
@@ -2482,7 +2505,7 @@ h1 {
   padding-top: 14px;
 }
 
-.chat-sidebar-actions button {
+.player-resources-button {
   position: relative;
   isolation: isolate;
   display: inline-flex;
@@ -2502,7 +2525,7 @@ h1 {
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.86);
 }
 
-.chat-sidebar-actions button::before {
+.player-resources-button::before {
   position: absolute;
   inset: 0;
   z-index: -1;
@@ -2513,10 +2536,44 @@ h1 {
   mask: url("/fantasygothicui/button9.png") center / 100% 100% no-repeat;
 }
 
-.chat-sidebar-actions button:hover,
-.chat-sidebar-actions button:focus-visible {
+.player-resources-button:hover,
+.player-resources-button:focus-visible {
   opacity: 1;
   filter: drop-shadow(0 0 8px rgba(244, 207, 122, 0.18));
+}
+
+.chat-sidebar-portrait {
+  display: block;
+  align-self: center;
+  width: min(142px, 100%);
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  border: 1px solid rgba(244, 207, 122, 0.38);
+  border-radius: 8px;
+  padding: 0;
+  cursor: pointer;
+  background:
+    radial-gradient(circle at 50% 28%, rgba(244, 207, 122, 0.14), transparent 42%),
+    rgba(12, 9, 7, 0.88);
+  box-shadow:
+    inset 0 0 34px rgba(0, 0, 0, 0.38),
+    0 18px 48px rgba(0, 0, 0, 0.26);
+}
+
+.chat-sidebar-portrait:hover,
+.chat-sidebar-portrait:focus-visible {
+  border-color: rgba(244, 207, 122, 0.68);
+  box-shadow:
+    inset 0 0 34px rgba(0, 0, 0, 0.38),
+    0 0 0 2px rgba(244, 207, 122, 0.12),
+    0 18px 48px rgba(0, 0, 0, 0.32);
+}
+
+.chat-sidebar-portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
 }
 
 .chat-sidebar-header {
@@ -2875,6 +2932,266 @@ h1 {
 .character-sheet-overlay-panel button:focus-visible {
   border-color: rgba(244, 207, 122, 0.62);
   background: rgba(217, 169, 74, 0.14);
+}
+
+.player-resources-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.character-sheet-overlay-panel .player-resource-tab {
+  width: auto;
+  height: 36px;
+  min-width: 136px;
+  padding: 0 14px;
+  color: var(--muted);
+  font-family: var(--body-font);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.character-sheet-overlay-panel .player-resource-tab[aria-selected="true"] {
+  border-color: rgba(244, 207, 122, 0.68);
+  color: var(--gold-bright);
+  background: rgba(217, 169, 74, 0.14);
+}
+
+.character-sheet-overlay-panel .player-resources-close {
+  margin-left: auto;
+}
+
+.npc-cards-panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px;
+}
+
+.npc-cards-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(244, 207, 122, 0.16);
+}
+
+.npc-cards-header h2,
+.npc-detail-header h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1.7rem;
+  line-height: 1;
+}
+
+.npc-cards-header span {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.npc-cards-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.npc-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+}
+
+.character-sheet-overlay-panel .npc-card {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 12px;
+  width: 100%;
+  height: auto;
+  min-height: 112px;
+  padding: 10px;
+  text-align: left;
+}
+
+.npc-card-portrait,
+.npc-detail-portrait {
+  display: grid;
+  place-items: center;
+  border: 1px dashed rgba(244, 207, 122, 0.32);
+  color: rgba(244, 207, 122, 0.54);
+  background:
+    linear-gradient(180deg, rgba(255, 248, 220, 0.035), transparent),
+    rgba(10, 8, 7, 0.36);
+}
+
+.npc-card-portrait {
+  width: 74px;
+  height: 92px;
+}
+
+.npc-card-copy {
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.npc-card-copy strong,
+.npc-card-copy small,
+.npc-card-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.npc-card-copy strong {
+  color: var(--ink);
+  font-size: 1rem;
+  white-space: nowrap;
+}
+
+.npc-card-copy small {
+  color: var(--gold-bright);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.npc-card-copy span {
+  display: -webkit-box;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.3;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.npc-detail-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(3, 2, 2, 0.68);
+}
+
+.npc-detail-modal {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 14px;
+  width: min(760px, 100%);
+  max-height: min(760px, calc(100dvh - 36px));
+  min-height: 0;
+  border: 1px solid var(--line);
+  padding: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 248, 220, 0.045), transparent 28%),
+    rgba(26, 19, 15, 0.99);
+  box-shadow: 0 26px 90px rgba(0, 0, 0, 0.58);
+}
+
+.npc-detail-header {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.npc-detail-header h2 {
+  overflow: hidden;
+  max-width: 580px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.npc-detail-header button {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(244, 207, 122, 0.32);
+  color: var(--gold-bright);
+  background: rgba(17, 13, 10, 0.48);
+}
+
+.npc-detail-portrait {
+  width: 150px;
+  min-height: 190px;
+}
+
+.npc-detail-fields {
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.npc-detail-fields label {
+  display: grid;
+  gap: 5px;
+}
+
+.npc-detail-fields span {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.npc-detail-fields input,
+.npc-detail-fields textarea {
+  width: 100%;
+  border: 1px solid rgba(244, 207, 122, 0.2);
+  padding: 9px 10px;
+  color: var(--ink);
+  background: rgba(10, 8, 7, 0.34);
+  font: inherit;
+}
+
+.npc-detail-fields textarea {
+  min-height: 82px;
+  resize: vertical;
+}
+
+.npc-detail-actions {
+  display: flex;
+  grid-column: 2;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.npc-detail-actions span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.npc-detail-actions button {
+  min-width: 150px;
+  min-height: 40px;
+  border: 1px solid rgba(244, 207, 122, 0.34);
+  color: var(--gold-bright);
+  background: rgba(17, 13, 10, 0.58);
+  font-weight: 900;
+}
+
+.npc-detail-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
 }
 
 .dnd-sheet-body {
@@ -4513,6 +4830,23 @@ h6 {
     height: calc(100dvh - 20px);
   }
 
+  .player-resources-tabs {
+    padding: 8px 10px;
+  }
+
+  .character-sheet-overlay-panel .player-resource-tab {
+    min-width: 0;
+    flex: 1 1 0;
+    padding: 0 8px;
+    font-size: 0.66rem;
+  }
+
+  .character-sheet-overlay-panel .player-resources-close {
+    flex: 0 0 38px;
+    width: 38px;
+    height: 38px;
+  }
+
   .dnd-sheet-header {
     gap: 10px;
     padding: 10px;
@@ -4546,6 +4880,25 @@ h6 {
     grid-template-columns: 1fr;
   }
 
+  .npc-detail-modal {
+    grid-template-columns: 1fr;
+    overflow: auto;
+  }
+
+  .npc-detail-portrait {
+    width: 100%;
+    min-height: 150px;
+  }
+
+  .npc-detail-actions {
+    grid-column: 1;
+    justify-content: stretch;
+  }
+
+  .npc-detail-actions button {
+    flex: 1;
+  }
+
   .table-grid {
     grid-template-columns: 1fr;
     grid-template-rows: auto minmax(0, 1fr);
@@ -4573,7 +4926,11 @@ h6 {
     padding-top: 10px;
   }
 
-  .chat-sidebar-actions button {
+  .chat-sidebar-portrait {
+    width: 72px;
+  }
+
+  .player-resources-button {
     min-height: 42px;
   }
 
