@@ -467,11 +467,12 @@ describe("spell metadata helpers", () => {
   });
 
   it.each([
-    ["Fire Bolt", "Make a spell attack roll"],
-    ["Sacred Flame", "The target rolls a saving throw"],
-    ["Cure Wounds", "Roll the listed healing"],
-    ["Magic Missile", "No attack roll is needed"],
-    ["Bless", "Usually no attack roll is made"],
+    ["Fire Bolt", "2d10 fire damage at Level 5"],
+    ["Sacred Flame", "2d8 radiant damage at Level 5"],
+    ["Cure Wounds", "1d8 + your spellcasting modifier"],
+    ["Magic Missile", "3d4 + 3 force damage"],
+    ["Fireball", "8d6 fire damage, +1d6 per slot level above 3rd"],
+    ["Bless", "add 1d4 to attack rolls and saving throws"],
     ["Prestidigitation", "Resolve with your spell save DC"]
   ])("describes %s roll handling", (spell, rollText) => {
     expect(spellRollsFor(spell)).toContain(rollText);
