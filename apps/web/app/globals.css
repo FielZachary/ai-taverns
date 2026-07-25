@@ -900,7 +900,7 @@ h1 {
     linear-gradient(90deg, rgba(8, 6, 4, 0.74), rgba(8, 6, 4, 0.18)),
     var(--class-art-url),
     rgba(17, 13, 10, 0.48);
-  background-position: center;
+  background-position: center 28%;
   background-size: cover;
   isolation: isolate;
 }
@@ -925,7 +925,7 @@ h1 {
     linear-gradient(90deg, rgba(173, 71, 43, 0.32), rgba(8, 6, 4, 0.1)),
     var(--class-art-url),
     rgba(17, 13, 10, 0.48);
-  background-position: center;
+  background-position: center 28%;
   background-size: cover;
 }
 
