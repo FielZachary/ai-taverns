@@ -3311,6 +3311,8 @@ export function NewAdventureForm({
   const [dlcSpellVisibility, setDlcSpellVisibility] = useState<DlcSpellVisibility>({});
   const [alignment, setAlignment] = useState<Alignment>("Neutral Good");
   const [gender, setGender] = useState<Gender>("Non-binary");
+  const [backstory, setBackstory] = useState("");
+  const [canAiExpandBackstory, setCanAiExpandBackstory] = useState(false);
   const [characterSheet, setCharacterSheet] = useState(defaultCharacterSheet);
   const [ownerClientId, setOwnerClientId] = useState("");
   const [error, setError] = useState("");
@@ -3530,6 +3532,19 @@ export function NewAdventureForm({
         ]
       : ["None"];
     const name = characterName.trim() || "Unnamed adventurer";
+    const trimmedBackstory = backstory.trim();
+    const backstoryLines = trimmedBackstory
+      ? [
+          "Backstory",
+          trimmedBackstory,
+          canAiExpandBackstory
+            ? "Backstory Expansion: AI Taverns may add unto this backstory while preserving the player's core details."
+            : "Backstory Expansion: Preserve this backstory as written unless the player changes it."
+        ]
+      : [
+          "Backstory",
+          "AI Taverns should generate a fitting backstory for this character."
+        ];
 
     return [
       `Character Name: ${name}`,
@@ -3548,6 +3563,8 @@ export function NewAdventureForm({
       `Background: ${characterBackground}`,
       `Alignment: ${alignment}`,
       `Gender: ${gender}`,
+      "",
+      ...backstoryLines,
       "",
       "Core Stats",
       `Armor Class: ${selectedEquipmentProfile.armorClass}`,
@@ -3604,14 +3621,16 @@ export function NewAdventureForm({
       ...spells,
       "",
       "DM Brief",
-      `${name} is a Level ${characterLevel} ${alignment} ${gender.toLowerCase()} ${characterSpecies} ${selectedClass.id} (${subclass}) with the ${characterBackground} background. Use their proficient skills (${formatList(proficientSkills)}) and key class choices to frame checks, spotlight moments, and opening-scene hooks.`
+      `${name} is a Level ${characterLevel} ${alignment} ${gender.toLowerCase()} ${characterSpecies} ${selectedClass.id} (${subclass}) with the ${characterBackground} background. Use their proficient skills (${formatList(proficientSkills)}) and key class choices to frame checks, spotlight moments, opening-scene hooks, and ${trimmedBackstory ? "the player's backstory" : "a generated backstory"}.`
     ]
       .filter((line): line is string => line !== null)
       .join("\n");
   }, [
     abilityScores,
     alignment,
+    backstory,
     backgroundSkillList,
+    canAiExpandBackstory,
     characterBackground,
     characterBuildMode,
     characterName,
@@ -5219,6 +5238,30 @@ export function NewAdventureForm({
                         ))}
                       </div>
                     </fieldset>
+
+                    <label className="backstory-field">
+                      <span>Backstory</span>
+                      <small>
+                        Feel free to leave it blank and let AI Taverns generate the
+                        backstory for you.
+                      </small>
+                      <textarea
+                        value={backstory}
+                        onChange={(event) => setBackstory(event.target.value)}
+                        placeholder="Optional: Write Backstory"
+                      />
+                    </label>
+
+                    <label className="backstory-expand-toggle">
+                      <input
+                        type="checkbox"
+                        checked={canAiExpandBackstory}
+                        onChange={(event) =>
+                          setCanAiExpandBackstory(event.target.checked)
+                        }
+                      />
+                      <span>Let AI Taverns add unto my backstory</span>
+                    </label>
                   </div>
                 ) : null}
 
