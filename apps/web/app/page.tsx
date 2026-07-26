@@ -72,7 +72,7 @@ export default function HomePage() {
           <p className="landing-lede">
             Sit down, play, and let AI Taverns direct a masterfully orchestrated
             campaign for you to play in. No fuss. No friction. Just some pure
-            D&amp;D (without needing friends)
+            D&amp;D.
           </p>
           <div className="landing-actions" aria-label="Start playing">
             <Link className="landing-button landing-button-primary" href="/play">
@@ -91,7 +91,9 @@ export default function HomePage() {
 
       <section className="landing-section" aria-labelledby="gameplay-title">
         <p className="landing-section-label">Gameplay</p>
-        <h2 id="gameplay-title">No railroad. No waiting room. Just the next choice.</h2>
+        <h2 id="gameplay-title">
+          No getting pushed around. AI Taverns knows when to say no.
+        </h2>
         <p className="landing-section-lede">
           Start with a scene, speak in your own voice, and let the AI dungeon
           master answer with consequences, characters, and trouble worth leaning
