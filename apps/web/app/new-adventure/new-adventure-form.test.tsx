@@ -314,6 +314,64 @@ describe("NewAdventureForm", () => {
     ).toContain("url(");
   });
 
+  it("renders art-backed tools, backgrounds, skills, and weapon damage choices", async () => {
+    render(<NewAdventureForm />);
+
+    await continueFlow();
+    await continueFlow();
+    await choosePointBuyStats();
+    await nextCharacterStep();
+    await nextCharacterStep();
+    await nextCharacterStep();
+
+    expect(
+      screen.getByRole("heading", { name: /choose your proficiencies/i })
+    ).toBeInTheDocument();
+    expect(
+      screen
+        .getByRole("button", { name: /dice set/i })
+        .style.getPropertyValue("--option-art-url")
+    ).toContain("/new-adventure/options/tools/dice-set.jpg");
+
+    await nextCharacterStep();
+
+    expect(
+      screen.getByRole("heading", { name: /choose your background/i })
+    ).toBeInTheDocument();
+    expect(
+      screen
+        .getByRole("button", { name: /folk hero/i })
+        .style.getPropertyValue("--option-art-url")
+    ).toContain("/new-adventure/options/backgrounds/folk-hero.jpg");
+
+    await nextCharacterStep();
+
+    expect(
+      screen.getByRole("heading", { name: /choose your skills/i })
+    ).toBeInTheDocument();
+    expect(
+      screen
+        .getByRole("button", { name: /athletics/i })
+        .style.getPropertyValue("--option-art-url")
+    ).toContain("/new-adventure/options/skills/athletics.jpg");
+
+    await nextCharacterStep();
+
+    fireEvent.click(screen.getByRole("button", { name: /chain mail/i }));
+    await nextCharacterStep();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /one martial weapon and a shield/i })
+    );
+
+    const battleaxe = screen.getByRole("button", { name: /battleaxe/i });
+
+    expect(battleaxe.style.getPropertyValue("--option-art-url")).toContain(
+      "/new-adventure/options/weapons/battleaxe.jpg"
+    );
+    expect(battleaxe).toHaveTextContent("1d8 slashing");
+  });
+
   it("validates identity and recovers when campaign creation fails", async () => {
     createCampaignMock.mockRejectedValue(new Error("The tavern doors jammed."));
 

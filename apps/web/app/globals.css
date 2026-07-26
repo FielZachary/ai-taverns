@@ -1132,6 +1132,123 @@ h1 {
   min-height: 50px;
 }
 
+.tool-picker > div,
+.skill-picker > div {
+  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+}
+
+.tool-picker button,
+.skill-picker button {
+  position: relative;
+  isolation: isolate;
+  align-content: end;
+  aspect-ratio: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 12px;
+  background:
+    linear-gradient(180deg, rgba(8, 6, 4, 0.02), rgba(8, 6, 4, 0.82)),
+    var(--option-art-url),
+    rgba(17, 13, 10, 0.48);
+  background-position: center;
+  background-size: cover;
+}
+
+.tool-picker button::before,
+.skill-picker button::before,
+.background-picker button::before,
+.equipment-modal-options .equipment-weapon-option::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(circle at 50% 14%, rgba(255, 249, 225, 0.16), transparent 38%),
+    linear-gradient(180deg, transparent 36%, rgba(0, 0, 0, 0.66));
+  content: "";
+  opacity: 0.82;
+  transition: opacity 160ms ease;
+}
+
+.tool-picker button.selected,
+.tool-picker button:hover,
+.tool-picker button:focus-visible,
+.skill-picker button.selected,
+.skill-picker button:hover,
+.skill-picker button:focus-visible {
+  background:
+    linear-gradient(180deg, rgba(8, 6, 4, 0.02), rgba(8, 6, 4, 0.76)),
+    linear-gradient(90deg, rgba(173, 71, 43, 0.28), rgba(8, 6, 4, 0.08)),
+    var(--option-art-url),
+    rgba(17, 13, 10, 0.48);
+  background-position: center;
+  background-size: cover;
+}
+
+.tool-picker button.selected::before,
+.tool-picker button:hover::before,
+.tool-picker button:focus-visible::before,
+.skill-picker button.selected::before,
+.skill-picker button:hover::before,
+.skill-picker button:focus-visible::before,
+.background-picker button.selected::before,
+.background-picker button:hover::before,
+.background-picker button:focus-visible::before,
+.equipment-modal-options .equipment-weapon-option:hover::before,
+.equipment-modal-options .equipment-weapon-option:focus-visible::before {
+  opacity: 0.62;
+}
+
+.tool-picker strong,
+.skill-picker strong,
+.background-picker strong,
+.background-picker small,
+.equipment-modal-options .equipment-weapon-option strong,
+.equipment-modal-options .equipment-weapon-option small {
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.92);
+}
+
+.tool-picker strong,
+.skill-picker strong,
+.background-picker strong,
+.equipment-modal-options .equipment-weapon-option strong {
+  color: #fff7df;
+}
+
+.background-picker > div {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.background-picker button {
+  position: relative;
+  isolation: isolate;
+  align-content: end;
+  min-height: 156px;
+  overflow: hidden;
+  padding: 18px;
+  background:
+    linear-gradient(90deg, rgba(8, 6, 5, 0.86), rgba(8, 6, 5, 0.28) 64%, rgba(8, 6, 5, 0.12)),
+    var(--option-art-url),
+    rgba(17, 13, 10, 0.48);
+  background-position: center;
+  background-size: cover;
+}
+
+.background-picker button.selected,
+.background-picker button:hover,
+.background-picker button:focus-visible {
+  background:
+    linear-gradient(90deg, rgba(8, 6, 5, 0.84), rgba(8, 6, 5, 0.22) 64%, rgba(8, 6, 5, 0.1)),
+    linear-gradient(90deg, rgba(173, 71, 43, 0.26), transparent),
+    var(--option-art-url),
+    rgba(17, 13, 10, 0.48);
+  background-position: center;
+  background-size: cover;
+}
+
+.background-picker small {
+  color: rgba(255, 239, 202, 0.84);
+}
+
 .species-picker > div {
   grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
 }
@@ -1626,6 +1743,42 @@ h1 {
   border-radius: 8px;
   color: var(--ink);
   background: rgba(255, 255, 255, 0.035);
+}
+
+.equipment-modal-options .equipment-weapon-option {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  align-content: end;
+  aspect-ratio: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 12px;
+  background:
+    linear-gradient(180deg, rgba(8, 6, 4, 0.02), rgba(8, 6, 4, 0.84)),
+    var(--option-art-url),
+    rgba(17, 13, 10, 0.48);
+  background-position: center;
+  background-size: cover;
+}
+
+.equipment-modal-options .equipment-weapon-option:hover,
+.equipment-modal-options .equipment-weapon-option:focus-visible {
+  border-color: rgba(244, 207, 122, 0.72);
+  background:
+    linear-gradient(180deg, rgba(8, 6, 4, 0.02), rgba(8, 6, 4, 0.78)),
+    linear-gradient(90deg, rgba(173, 71, 43, 0.28), rgba(8, 6, 4, 0.08)),
+    var(--option-art-url),
+    rgba(17, 13, 10, 0.48);
+  background-position: center;
+  background-size: cover;
+}
+
+.equipment-modal-options .equipment-weapon-option small {
+  color: rgba(255, 239, 202, 0.84);
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.25;
 }
 
 .spell-detail-modal-backdrop {

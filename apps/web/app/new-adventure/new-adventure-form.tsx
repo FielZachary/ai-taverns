@@ -215,6 +215,32 @@ const campaignWorldOptions = [
   campaignGenrePresets[0],
   customCampaignGenre
 ];
+const optionArtRoot = "/new-adventure/options";
+const weaponCategories: EquipmentCategory[] = [
+  "simpleWeapon",
+  "simpleMeleeWeapon",
+  "martialWeapon",
+  "martialMeleeWeapon"
+];
+
+function optionArtSlug(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+function optionArtUrl(category: "tools" | "backgrounds" | "skills" | "weapons", value: string) {
+  return `${optionArtRoot}/${category}/${optionArtSlug(value)}.jpg`;
+}
+
+function optionArtStyle(url: string) {
+  return {
+    "--option-art-url": `url("${url}")`
+  } as CSSProperties;
+}
+
+function isWeaponCategory(category: EquipmentCategory) {
+  return weaponCategories.includes(category);
+}
+
 const abilityDefinitions = [
   { key: "str", label: "Strength" },
   { key: "dex", label: "Dexterity" },
@@ -2788,6 +2814,7 @@ function armorClassForEquipment(
 
 const weaponAttackDetails: Record<string, { damage: string; ability: AbilityKey; range?: string }> = {
   battleaxe: { damage: "1d8 slashing", ability: "str" },
+  blowgun: { damage: "1 piercing", ability: "dex", range: "range 25/100 ft" },
   club: { damage: "1d4 bludgeoning", ability: "str" },
   dagger: { damage: "1d4 piercing", ability: "dex", range: "thrown 20/60 ft" },
   dart: { damage: "1d4 piercing", ability: "dex", range: "range 20/60 ft" },
@@ -2809,6 +2836,7 @@ const weaponAttackDetails: Record<string, { damage: string; ability: AbilityKey;
   mace: { damage: "1d6 bludgeoning", ability: "str" },
   maul: { damage: "2d6 bludgeoning", ability: "str" },
   morningstar: { damage: "1d8 piercing", ability: "str" },
+  net: { damage: "No damage", ability: "dex", range: "thrown 5/15 ft" },
   pike: { damage: "1d10 piercing", ability: "str" },
   quarterstaff: { damage: "1d6 bludgeoning", ability: "str" },
   rapier: { damage: "1d8 piercing", ability: "dex" },
@@ -2823,6 +2851,20 @@ const weaponAttackDetails: Record<string, { damage: string; ability: AbilityKey;
   warhammer: { damage: "1d8 bludgeoning", ability: "str" },
   whip: { damage: "1d4 slashing", ability: "dex" }
 };
+
+function weaponDetailsForItem(item: string) {
+  return weaponAttackDetails[normalizeEquipmentName(item)];
+}
+
+function weaponSubtextForItem(item: string) {
+  const details = weaponDetailsForItem(item);
+
+  if (!details) {
+    return "";
+  }
+
+  return details.range ? `${details.damage}, ${details.range}` : details.damage;
+}
 
 function attackLinesForEquipment(
   gear: readonly string[],
@@ -4695,7 +4737,7 @@ export function NewAdventureForm({
                 ) : null}
 
                 {currentCharacterStep === "Background" ? (
-                  <fieldset className="option-picker compact-option-picker">
+                  <fieldset className="option-picker background-picker">
                     <legend>Background</legend>
                     <div>
                       {backgroundOptions.map((option) => (
@@ -4705,6 +4747,7 @@ export function NewAdventureForm({
                           aria-pressed={characterBackground === option}
                           key={option}
                           onClick={() => setCharacterBackground(option)}
+                          style={optionArtStyle(optionArtUrl("backgrounds", option))}
                         >
                           <strong>{option}</strong>
                           <small>{formatList(backgroundSkills[option])}</small>
@@ -4927,7 +4970,7 @@ export function NewAdventureForm({
                 ) : null}
 
                 {currentCharacterStep === "Skills" ? (
-                  <fieldset className="option-picker compact-option-picker">
+                  <fieldset className="option-picker skill-picker">
                     <legend>Skills</legend>
                     <div>
                       {selectedClass.skillChoices.map((option) => (
@@ -4937,6 +4980,7 @@ export function NewAdventureForm({
                           aria-pressed={selectedSkills.includes(option)}
                           key={option}
                           onClick={() => toggleSkill(option)}
+                          style={optionArtStyle(optionArtUrl("skills", option))}
                         >
                           <strong>{option}</strong>
                         </button>
@@ -4950,7 +4994,7 @@ export function NewAdventureForm({
 
                 {currentCharacterStep === "Proficiencies" ? (
                   <div className="character-builder-stack">
-                    <fieldset className="option-picker compact-option-picker">
+                    <fieldset className="option-picker tool-picker">
                       <legend>Tool proficiency</legend>
                       <div>
                         {toolOptions.map((option) => (
@@ -4960,6 +5004,7 @@ export function NewAdventureForm({
                             aria-pressed={selectedTool === option}
                             key={option}
                             onClick={() => setSelectedTool(option)}
+                            style={optionArtStyle(optionArtUrl("tools", option))}
                           >
                             <strong>{option}</strong>
                           </button>
@@ -5518,15 +5563,27 @@ export function NewAdventureForm({
               </button>
             </div>
             <div className="equipment-modal-options">
-              {equipmentCategoryOptions[activeEquipmentModal.category].map((item) => (
-                <button
-                  type="button"
-                  key={item}
-                  onClick={() => chooseEquipmentModalItem(item)}
-                >
-                  <strong>{item}</strong>
-                </button>
-              ))}
+              {equipmentCategoryOptions[activeEquipmentModal.category].map((item) => {
+                const isWeapon = isWeaponCategory(activeEquipmentModal.category);
+                const weaponSubtext = isWeapon ? weaponSubtextForItem(item) : "";
+
+                return (
+                  <button
+                    type="button"
+                    className={isWeapon ? "equipment-weapon-option" : ""}
+                    key={item}
+                    onClick={() => chooseEquipmentModalItem(item)}
+                    style={
+                      isWeapon
+                        ? optionArtStyle(optionArtUrl("weapons", item))
+                        : undefined
+                    }
+                  >
+                    <strong>{item}</strong>
+                    {weaponSubtext ? <small>{weaponSubtext}</small> : null}
+                  </button>
+                );
+              })}
             </div>
           </section>
         </div>
