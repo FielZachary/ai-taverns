@@ -217,6 +217,10 @@ const campaignWorldOptions = [
   campaignGenrePresets[0],
   customCampaignGenre
 ];
+const campaignWorldBannerUrls: Record<string, string> = {
+  eldermere: "/new-adventure/eldermere-banner.jpg",
+  custom: "/new-adventure/custom-world-banner.jpg"
+};
 const abilityDefinitions = [
   { key: "str", label: "Strength" },
   { key: "dex", label: "Dexterity" },
@@ -4584,6 +4588,9 @@ export function NewAdventureForm({
                       aria-pressed={campaignGenre === genre.id}
                       disabled={genre.id === customCampaignGenre.id}
                       key={genre.id}
+                      style={{
+                        "--genre-banner-url": `url("${campaignWorldBannerUrls[genre.id]}")`
+                      } as CSSProperties}
                       onClick={() => setCampaignGenre(genre.id)}
                     >
                       <strong>{genre.label}</strong>

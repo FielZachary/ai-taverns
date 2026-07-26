@@ -953,7 +953,7 @@ h1 {
 
 .genre-picker {
   min-width: 0;
-  width: min(100%, 680px);
+  width: min(100%, 900px);
   margin: 0;
   padding: 0;
   border: 0;
@@ -970,8 +970,8 @@ h1 {
 
 .genre-picker > div {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
 }
 
 .genre-picker button,
@@ -988,23 +988,53 @@ h1 {
 }
 
 .genre-picker button {
-  align-content: center;
-  min-height: 150px;
-  padding: 22px;
+  position: relative;
+  isolation: isolate;
+  align-content: end;
+  min-height: 210px;
+  overflow: hidden;
+  padding: 24px;
+  background:
+    linear-gradient(90deg, rgba(8, 6, 5, 0.82), rgba(8, 6, 5, 0.34) 58%, rgba(8, 6, 5, 0.18)),
+    var(--genre-banner-url),
+    rgba(17, 13, 10, 0.48);
+  background-position: center;
+  background-size: cover;
 }
 
-.genre-picker strong {
-  font-size: 1.12rem;
+.genre-picker button::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(180deg, transparent 24%, rgba(3, 2, 2, 0.76)),
+    radial-gradient(circle at 22% 78%, rgba(244, 207, 122, 0.14), transparent 38%);
+  content: "";
 }
 
-.genre-picker small {
-  font-size: 0.9rem;
-  line-height: 1.45;
+.genre-picker button::after {
+  position: absolute;
+  inset: 10px;
+  z-index: -1;
+  border: 1px solid rgba(244, 207, 122, 0.16);
+  content: "";
+  pointer-events: none;
 }
 
 .genre-picker button.selected,
 .genre-picker button:hover,
-.genre-picker button:focus-visible,
+.genre-picker button:focus-visible {
+  border-color: rgba(244, 207, 122, 0.72);
+  background:
+    linear-gradient(90deg, rgba(8, 6, 5, 0.82), rgba(8, 6, 5, 0.28) 58%, rgba(8, 6, 5, 0.12)),
+    var(--genre-banner-url),
+    linear-gradient(90deg, rgba(173, 71, 43, 0.16), transparent),
+    rgba(255, 255, 255, 0.05);
+  background-position: center;
+  background-size: cover;
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.2);
+}
+
 .option-picker button.selected,
 .option-picker button:hover,
 .option-picker button:focus-visible {
@@ -1022,7 +1052,17 @@ h1 {
   transform: none;
 }
 
-.genre-picker button:disabled:hover,
+.genre-picker button:disabled:hover {
+  border-color: rgba(244, 207, 122, 0.22);
+  background:
+    linear-gradient(90deg, rgba(8, 6, 5, 0.82), rgba(8, 6, 5, 0.34) 58%, rgba(8, 6, 5, 0.18)),
+    var(--genre-banner-url),
+    rgba(17, 13, 10, 0.48);
+  background-position: center;
+  background-size: cover;
+  box-shadow: none;
+}
+
 .option-picker button:disabled:hover {
   border-color: rgba(244, 207, 122, 0.22);
   background: rgba(17, 13, 10, 0.48);
@@ -1042,6 +1082,21 @@ h1 {
   font-size: 0.78rem;
   font-weight: 700;
   line-height: 1.35;
+}
+
+.genre-picker strong {
+  max-width: 24ch;
+  color: var(--ink);
+  font-size: 1.34rem;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.92);
+}
+
+.genre-picker small {
+  max-width: 54ch;
+  color: rgba(249, 237, 214, 0.82);
+  font-size: 0.9rem;
+  line-height: 1.45;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
 }
 
 .character-builder {

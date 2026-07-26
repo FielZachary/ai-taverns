@@ -177,6 +177,27 @@ describe("NewAdventureForm", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows campaign worlds as banner choices with generated art", async () => {
+    render(<NewAdventureForm />);
+
+    await continueFlow();
+
+    expect(
+      screen.getByRole("heading", { name: /choose the campaign world/i })
+    ).toBeInTheDocument();
+
+    expect(
+      screen
+        .getByRole("button", { name: /eldermere/i })
+        .style.getPropertyValue("--genre-banner-url")
+    ).toContain("/new-adventure/eldermere-banner.jpg");
+    expect(
+      screen
+        .getByRole("button", { name: /custom world/i })
+        .style.getPropertyValue("--genre-banner-url")
+    ).toContain("/new-adventure/custom-world-banner.jpg");
+  });
+
   it("lets point-buy stats spend points and advance from valid stats", async () => {
     render(<NewAdventureForm />);
 
