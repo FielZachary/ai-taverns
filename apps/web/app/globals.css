@@ -134,7 +134,7 @@ button {
 
 .landing-hero-copy {
   width: min(100%, 520px);
-  margin-top: clamp(24px, 7vh, 72px);
+  margin-top: clamp(0px, 3.5vh, 36px);
   margin-right: clamp(-56px, -3vw, -24px);
   text-align: left;
 }
