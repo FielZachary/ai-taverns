@@ -89,7 +89,7 @@ export default function HomePage() {
         </span>
       </section>
 
-      <section className="landing-section" aria-labelledby="gameplay-title">
+      <section className="landing-section landing-gameplay" aria-labelledby="gameplay-title">
         <p className="landing-section-label">Gameplay</p>
         <h2 id="gameplay-title">
           No getting pushed around. AI Taverns knows when to say no.

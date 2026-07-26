@@ -276,6 +276,30 @@ button {
   border-top: 1px solid rgba(201, 164, 92, 0.12);
 }
 
+.landing-gameplay,
+.landing-scenarios {
+  position: relative;
+  background-repeat: no-repeat;
+}
+
+.landing-gameplay {
+  background-image:
+    linear-gradient(90deg, #070503 0%, rgba(7, 5, 3, 0.82) 34%, rgba(7, 5, 3, 0.08) 68%, #070503 100%),
+    linear-gradient(180deg, #070503 0%, rgba(7, 5, 3, 0) 20%, rgba(7, 5, 3, 0) 72%, #070503 100%),
+    url("/landing/gameplay-d20-camp.jpg");
+  background-position: right top clamp(52px, 7vw, 86px);
+  background-size: min(660px, 58vw) auto;
+}
+
+.landing-scenarios {
+  background-image:
+    linear-gradient(90deg, #070503 0%, rgba(7, 5, 3, 0.78) 35%, rgba(7, 5, 3, 0.16) 72%, #070503 100%),
+    linear-gradient(180deg, #070503 0%, rgba(7, 5, 3, 0) 24%, rgba(7, 5, 3, 0.04) 66%, #070503 100%),
+    url("/landing/rules-wizard-fire.jpg");
+  background-position: right top clamp(40px, 6vw, 78px);
+  background-size: min(720px, 62vw) auto;
+}
+
 .landing-section h2 {
   margin: 0 0 20px;
   max-width: 22ch;
