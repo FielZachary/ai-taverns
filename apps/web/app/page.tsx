@@ -67,7 +67,7 @@ export default function HomePage() {
         <div className="landing-hero-copy">
           <p className="landing-kicker">AI-powered tabletop adventures</p>
           <h1 id="landing-title">
-            A fantasy tavern where every rumor becomes a campaign.
+            A dungeon master that <span>actually</span> remembers.
           </h1>
           <p className="landing-lede">
             Sit down, speak, and let an AI dungeon master carry your story into
