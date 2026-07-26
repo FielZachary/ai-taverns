@@ -5557,7 +5557,11 @@ export function NewAdventureForm({
         >
           <section
             aria-modal="true"
-            className="equipment-modal"
+            className={`equipment-modal ${
+              isWeaponCategory(activeEquipmentModal.category)
+                ? "weapon-equipment-modal"
+                : ""
+            }`}
             role="dialog"
             onClick={(event) => event.stopPropagation()}
           >

@@ -387,10 +387,12 @@ describe("NewAdventureForm", () => {
 
     const battleaxe = screen.getByRole("button", { name: /battleaxe/i });
     const weaponGrid = battleaxe.closest(".equipment-modal-options");
+    const weaponModal = battleaxe.closest(".equipment-modal");
 
     expect(battleaxe.style.getPropertyValue("--option-art-url")).toContain(
       "/new-adventure/options/weapons/battleaxe.jpg"
     );
+    expect(weaponModal).toHaveClass("weapon-equipment-modal");
     expect(weaponGrid).toHaveClass("weapon-equipment-modal-options");
     expect(battleaxe).toHaveTextContent("1d8 slashing");
   });

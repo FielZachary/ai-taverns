@@ -1758,6 +1758,11 @@ h1 {
   box-shadow: 0 26px 90px rgba(0, 0, 0, 0.58);
 }
 
+.weapon-equipment-modal {
+  width: min(940px, 100%);
+  max-height: min(820px, calc(100dvh - 44px));
+}
+
 .equipment-modal-header {
   display: flex;
   align-items: center;
@@ -1793,8 +1798,11 @@ h1 {
 }
 
 .weapon-equipment-modal-options {
-  grid-template-columns: repeat(auto-fit, minmax(156px, 1fr));
-  align-items: start;
+  grid-template-columns: repeat(auto-fill, 150px);
+  grid-auto-rows: 150px;
+  align-items: stretch;
+  justify-content: center;
+  gap: 12px;
 }
 
 .equipment-modal-options button {
@@ -1811,10 +1819,11 @@ h1 {
   display: grid;
   align-content: end;
   justify-items: start;
-  align-self: start;
-  aspect-ratio: 1;
+  align-self: stretch;
+  aspect-ratio: auto;
   width: 100%;
-  min-height: 156px;
+  height: 150px;
+  min-height: 150px;
   overflow: hidden;
   padding: 12px;
   background:
@@ -1838,8 +1847,9 @@ h1 {
 }
 
 .equipment-modal-options .equipment-weapon-option small {
+  width: 100%;
   color: rgba(255, 239, 202, 0.84);
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 800;
   line-height: 1.25;
 }
@@ -1871,7 +1881,7 @@ h1 {
 
 .spell-detail-modal-header {
   display: flex;
-  align-items: start;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
   padding: 22px 24px 18px;
