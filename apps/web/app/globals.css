@@ -2121,46 +2121,6 @@ h1 {
   padding-top: 2px;
 }
 
-.character-sheet-preview {
-  display: grid;
-  gap: 12px;
-  min-width: 0;
-  padding: 14px;
-  border: 1px solid rgba(95, 119, 81, 0.42);
-  border-radius: 8px;
-  background:
-    linear-gradient(90deg, rgba(95, 119, 81, 0.18), transparent),
-    rgba(10, 8, 7, 0.36);
-}
-
-.character-sheet-preview > div {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--gold-bright);
-  font-size: 0.78rem;
-  font-weight: 900;
-  text-transform: uppercase;
-}
-
-.character-sheet-preview pre {
-  max-height: 260px;
-  margin: 0;
-  overflow: auto;
-  white-space: pre-wrap;
-  color: rgba(249, 237, 214, 0.88);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.82rem;
-  line-height: 1.5;
-}
-
-.character-summary-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.character-summary-grid div,
 .character-current-pick {
   display: grid;
   gap: 5px;
@@ -2171,7 +2131,6 @@ h1 {
   background: rgba(17, 13, 10, 0.4);
 }
 
-.character-summary-grid span,
 .character-current-pick span {
   color: var(--gold-bright);
   font-size: 0.68rem;
@@ -2179,7 +2138,6 @@ h1 {
   text-transform: uppercase;
 }
 
-.character-summary-grid strong,
 .character-current-pick strong {
   min-width: 0;
   overflow: hidden;
@@ -5137,8 +5095,7 @@ h6 {
   .build-mode-picker > div,
   .character-builder-grid,
   .stat-roll-pool,
-  .ability-score-grid,
-  .character-summary-grid {
+  .ability-score-grid {
     grid-template-columns: 1fr;
   }
 
