@@ -380,26 +380,66 @@ button {
 .landing-final {
   display: grid;
   justify-items: center;
+  position: relative;
+  isolation: isolate;
   width: min(100% - 48px, 1120px);
   margin: 0 auto;
-  padding: clamp(88px, 11vw, 152px) 0;
+  min-height: clamp(520px, 54vw, 680px);
+  overflow: hidden;
+  padding: clamp(250px, 28vw, 350px) 0 clamp(84px, 9vw, 128px);
   border-top: 1px solid rgba(201, 164, 92, 0.12);
   text-align: center;
 }
 
+.landing-final::before,
+.landing-final::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-repeat: no-repeat;
+  background-position: center top;
+  background-size: min(1120px, 110vw) auto;
+}
+
 .landing-final::before {
-  content: "\25C6";
-  margin-bottom: 28px;
-  color: rgba(201, 164, 92, 0.55);
-  font-size: 0.55rem;
+  z-index: 0;
+  background-image:
+    linear-gradient(90deg, #070503 0%, rgba(7, 5, 3, 0.12) 26%, rgba(7, 5, 3, 0.08) 70%, #070503 100%),
+    linear-gradient(180deg, rgba(7, 5, 3, 0.08) 0%, rgba(7, 5, 3, 0.2) 58%, #070503 100%),
+    url("/landing/final-hooded-fire.jpg");
+}
+
+.landing-final::after {
+  z-index: 2;
+  opacity: 0.58;
+  background-image: url("/landing/final-hooded-fire.jpg");
+  -webkit-mask-image: radial-gradient(ellipse 20% 20% at 32% 63%, #000 0%, #000 36%, transparent 72%);
+  mask-image: radial-gradient(ellipse 20% 20% at 32% 63%, #000 0%, #000 36%, transparent 72%);
 }
 
 .landing-final h2 {
+  position: relative;
+  z-index: 1;
   margin: 0 0 36px;
   max-width: 18ch;
   color: #f2e8d5;
   font-size: clamp(1.9rem, 3.4vw, 3rem);
   line-height: 1.12;
+  text-shadow:
+    0 2px 24px rgba(0, 0, 0, 0.95),
+    0 0 42px rgba(0, 0, 0, 0.9);
+  transform: translateX(clamp(0px, 5vw, 72px));
+}
+
+.landing-final .landing-button {
+  position: relative;
+  z-index: 1;
+  transform: translateX(clamp(0px, 5vw, 72px));
+}
+
+.landing-final .landing-button:hover {
+  transform: translateX(clamp(0px, 5vw, 72px)) translateY(-1px);
 }
 
 .landing-footer {
@@ -4999,6 +5039,12 @@ h6 {
   .landing-final,
   .landing-footer {
     width: min(100% - 40px, 1120px);
+  }
+
+  .landing-final h2,
+  .landing-final .landing-button,
+  .landing-final .landing-button:hover {
+    transform: none;
   }
 
   .table-page {
