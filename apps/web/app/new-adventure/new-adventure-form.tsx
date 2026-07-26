@@ -215,6 +215,10 @@ const campaignWorldOptions = [
   campaignGenrePresets[0],
   customCampaignGenre
 ];
+const campaignWorldBannerUrls: Record<string, string> = {
+  eldermere: "/new-adventure/eldermere-banner.jpg",
+  custom: "/new-adventure/custom-world-banner.jpg"
+};
 const optionArtRoot = "/new-adventure/options";
 const weaponCategories: EquipmentCategory[] = [
   "simpleWeapon",
@@ -4620,6 +4624,11 @@ export function NewAdventureForm({
                       disabled={genre.id === customCampaignGenre.id}
                       key={genre.id}
                       onClick={() => setCampaignGenre(genre.id)}
+                      style={
+                        {
+                          "--genre-banner-url": `url("${campaignWorldBannerUrls[genre.id]}")`
+                        } as CSSProperties
+                      }
                     >
                       <strong>{genre.label}</strong>
                       <small>{genre.uiDescription}</small>
@@ -5562,7 +5571,13 @@ export function NewAdventureForm({
                 <X size={18} />
               </button>
             </div>
-            <div className="equipment-modal-options">
+            <div
+              className={`equipment-modal-options ${
+                isWeaponCategory(activeEquipmentModal.category)
+                  ? "weapon-equipment-modal-options"
+                  : ""
+              }`}
+            >
               {equipmentCategoryOptions[activeEquipmentModal.category].map((item) => {
                 const isWeapon = isWeaponCategory(activeEquipmentModal.category);
                 const weaponSubtext = isWeapon ? weaponSubtextForItem(item) : "";

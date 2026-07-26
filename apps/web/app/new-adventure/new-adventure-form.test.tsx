@@ -294,6 +294,27 @@ describe("NewAdventureForm", () => {
     ).toContain("/new-adventure/multiplayer-banner.webp");
   });
 
+  it("shows campaign worlds as banner choices with generated art", async () => {
+    render(<NewAdventureForm />);
+
+    await continueFlow();
+
+    expect(
+      screen.getByRole("heading", { name: /choose the campaign world/i })
+    ).toBeInTheDocument();
+
+    expect(
+      screen
+        .getByRole("button", { name: /eldermere/i })
+        .style.getPropertyValue("--genre-banner-url")
+    ).toContain("/new-adventure/eldermere-banner.jpg");
+    expect(
+      screen
+        .getByRole("button", { name: /custom world/i })
+        .style.getPropertyValue("--genre-banner-url")
+    ).toContain("/new-adventure/custom-world-banner.jpg");
+  });
+
   it("shows species stat bonuses as muted subtitles", async () => {
     render(<NewAdventureForm />);
 
@@ -365,10 +386,12 @@ describe("NewAdventureForm", () => {
     );
 
     const battleaxe = screen.getByRole("button", { name: /battleaxe/i });
+    const weaponGrid = battleaxe.closest(".equipment-modal-options");
 
     expect(battleaxe.style.getPropertyValue("--option-art-url")).toContain(
       "/new-adventure/options/weapons/battleaxe.jpg"
     );
+    expect(weaponGrid).toHaveClass("weapon-equipment-modal-options");
     expect(battleaxe).toHaveTextContent("1d8 slashing");
   });
 
