@@ -199,8 +199,7 @@ const customCharacterCreationSteps = [
   "Background",
   "Skills",
   "Equipment",
-  "Identity",
-  "Sheet"
+  "Identity"
 ];
 const quickCharacterCreationSteps = [
   "Build",
@@ -209,8 +208,7 @@ const quickCharacterCreationSteps = [
   "Species",
   "Spells",
   "Equipment",
-  "Identity",
-  "Sheet"
+  "Identity"
 ];
 const campaignGenres = [...campaignGenrePresets, customCampaignGenre];
 const campaignWorldOptions = [
@@ -3669,10 +3667,6 @@ export function NewAdventureForm({
     }
 
     if (isCharacterStep) {
-      if (isLastCharacterStep) {
-        return "Review your character";
-      }
-
       if (characterStepIndex === 0) {
         return "Choose your character build";
       }
@@ -3701,7 +3695,6 @@ export function NewAdventureForm({
     isCharacterStep,
     isCustomWorldStep,
     isJoinFlow,
-    isLastCharacterStep,
     isEquipmentCharacterStep,
     isEquipmentSummaryStep,
     isInviteJoinFlow,
@@ -5220,45 +5213,6 @@ export function NewAdventureForm({
                       </div>
                     </fieldset>
                   </div>
-                ) : null}
-
-                {currentCharacterStep === "Sheet" ? (
-                  <>
-                    <div className="character-summary-grid">
-                      <div>
-                        <span>Level</span>
-                        <strong>{characterLevel}</strong>
-                      </div>
-                      <div>
-                        <span>Class</span>
-                        <strong>{characterClass}</strong>
-                      </div>
-                      <div>
-                        <span>Species</span>
-                        <strong>{characterSpecies}</strong>
-                      </div>
-                      <div>
-                        <span>Background</span>
-                        <strong>{characterBackground}</strong>
-                      </div>
-                      <div>
-                        <span>Armor Class</span>
-                        <strong>{selectedEquipmentProfile.armorClass}</strong>
-                      </div>
-                      <div>
-                        <span>Hit Points</span>
-                        <strong>{maxHp}</strong>
-                      </div>
-                    </div>
-
-                    <section className="character-sheet-preview">
-                      <div>
-                        <Sparkles size={18} />
-                        <strong>Generated character sheet</strong>
-                      </div>
-                      <pre>{characterSheet}</pre>
-                    </section>
-                  </>
                 ) : null}
 
               </div>

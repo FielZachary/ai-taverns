@@ -345,12 +345,6 @@ describe("NewAdventureForm", () => {
     await nextCharacterStep();
 
     expect(
-      screen.getByRole("heading", { name: /review your character/i })
-    ).toBeInTheDocument();
-
-    await nextCharacterStep();
-
-    expect(
       screen.getByRole("heading", { name: /create your character art/i })
     ).toBeInTheDocument();
 
