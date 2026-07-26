@@ -19,11 +19,11 @@ import {
 } from "@/lib/campaign-genres";
 import {
   createCampaign as createCampaignViaApi,
-  generateCharacterPortrait,
   joinCampaign as joinCampaignViaApi,
   joinLobbyInvite,
   previewLobbyInvite,
   previewCampaignJoin,
+  previewCharacterPortrait,
   uploadCharacterPortrait,
   type CampaignSummary
 } from "@/lib/campaign-api";
@@ -3362,6 +3362,7 @@ export function NewAdventureForm({
   const [isCreatingArt, setIsCreatingArt] = useState(false);
   const [createdCampaign, setCreatedCampaign] =
     useState<CampaignSummary | null>(null);
+  const [portraitPreviewDataUrl, setPortraitPreviewDataUrl] = useState("");
   const [characterArtGuidelines, setCharacterArtGuidelines] = useState("");
   const [characterArtStyle, setCharacterArtStyle] =
     useState<CharacterArtStyle>("painterly_fantasy");
@@ -3683,7 +3684,7 @@ export function NewAdventureForm({
   ]);
   const stepTitle = useMemo(() => {
     if (stepIndex === reviewStepIndex && !isJoinFlow) {
-      return createdCampaign?.portraitUrl
+      return portraitPreviewDataUrl
         ? "Your portrait is ready"
         : "Create your character art";
     }
@@ -3747,7 +3748,7 @@ export function NewAdventureForm({
     mode,
     reviewStepIndex,
     stepIndex,
-    createdCampaign
+    portraitPreviewDataUrl
   ]);
 
   useEffect(() => {
@@ -4307,29 +4308,29 @@ export function NewAdventureForm({
     );
   }
 
-  async function createCampaignForArt() {
+  async function createCampaignFromSetup() {
     if (createdCampaign) {
       return createdCampaign;
     }
 
     return createCampaignViaApi({
-        mode,
-        title: campaignDisplayName,
-        campaignGenre: selectedGenre.label,
-        campaignGenreKind: isCustomGenre ? "custom" : "preset",
-        campaignGenrePresetId: isCustomGenre ? undefined : selectedGenre.id,
-        customWorldName: isCustomGenre ? customWorldName.trim() : undefined,
-        customWorldDescription: isCustomGenre
-          ? customWorldDescription.trim()
-          : undefined,
-        ownerClientId,
-        playerName:
-          mode === "single_player"
-            ? characterName.trim() || "Solo Player"
-            : "Table Owner",
-        characterName,
-        characterSheet,
-        mechanicsSeed
+      mode,
+      title: campaignDisplayName,
+      campaignGenre: selectedGenre.label,
+      campaignGenreKind: isCustomGenre ? "custom" : "preset",
+      campaignGenrePresetId: isCustomGenre ? undefined : selectedGenre.id,
+      customWorldName: isCustomGenre ? customWorldName.trim() : undefined,
+      customWorldDescription: isCustomGenre
+        ? customWorldDescription.trim()
+        : undefined,
+      ownerClientId,
+      playerName:
+        mode === "single_player"
+          ? characterName.trim() || "Solo Player"
+          : "Table Owner",
+      characterName,
+      characterSheet,
+      mechanicsSeed
     });
   }
 
@@ -4342,15 +4343,21 @@ export function NewAdventureForm({
     setIsCreatingArt(true);
 
     try {
-      const campaign = await createCampaignForArt();
-      setCreatedCampaign(campaign);
-      const campaignWithPortrait = await generateCharacterPortrait(campaign.id, {
+      const preview = await previewCharacterPortrait({
+        characterName,
+        playerName:
+          mode === "single_player"
+            ? characterName.trim() || "Solo Player"
+            : "Table Owner",
+        characterSheet,
+        campaignGenre: selectedGenre.label,
+        customWorldName: isCustomGenre ? customWorldName.trim() : undefined,
         guidelines: characterArtGuidelines,
         artStyle: characterArtStyle,
         imageModel: characterImageModel
       });
 
-      setCreatedCampaign(campaignWithPortrait);
+      setPortraitPreviewDataUrl(preview.imageDataUrl);
       setUploadedPortraitFileName("");
       setIsCreatingArt(false);
     } catch (caught) {
@@ -4391,17 +4398,10 @@ export function NewAdventureForm({
     setIsCreatingArt(true);
 
     try {
-      const campaign = await createCampaignForArt();
-      setCreatedCampaign(campaign);
-      const campaignWithPortrait = await uploadCharacterPortrait(campaign.id, {
-        imageDataUrl: await readImageFileAsDataUrl(file),
-        fileName: file.name,
-        guidelines: characterArtGuidelines,
-        artStyle: characterArtStyle
-      });
+      const imageDataUrl = await readImageFileAsDataUrl(file);
 
+      setPortraitPreviewDataUrl(imageDataUrl);
       setUploadedPortraitFileName(file.name);
-      setCreatedCampaign(campaignWithPortrait);
       setIsCreatingArt(false);
     } catch (caught) {
       setError(
@@ -4413,15 +4413,41 @@ export function NewAdventureForm({
     }
   }
 
-  function continueToCampaign() {
-    if (!createdCampaign?.portraitUrl) {
+  async function continueToCampaign() {
+    if (isCreating) {
+      return;
+    }
+
+    if (!portraitPreviewDataUrl) {
       void createCharacterArt();
       return;
     }
 
-    window.location.assign(
-      `/play?campaignId=${encodeURIComponent(createdCampaign.id)}`
-    );
+    setError("");
+    setIsCreating(true);
+
+    try {
+      const campaign = await createCampaignFromSetup();
+      setCreatedCampaign(campaign);
+      const campaignWithPortrait = await uploadCharacterPortrait(campaign.id, {
+        imageDataUrl: portraitPreviewDataUrl,
+        fileName: uploadedPortraitFileName || "generated-character-portrait.png",
+        guidelines: characterArtGuidelines,
+        artStyle: characterArtStyle
+      });
+
+      setCreatedCampaign(campaignWithPortrait);
+      window.location.assign(
+        `/play?campaignId=${encodeURIComponent(campaignWithPortrait.id)}`
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "The campaign could not be created."
+      );
+      setIsCreating(false);
+    }
   }
 
   async function joinCampaign() {
@@ -5276,16 +5302,16 @@ export function NewAdventureForm({
               <div className="character-art-step">
                 <div
                   className={
-                    createdCampaign?.portraitUrl
+                    portraitPreviewDataUrl
                       ? "generated-character-portrait"
                       : "generated-character-portrait empty"
                   }
                   aria-label={`${characterName || "Character"} portrait`}
                 >
-                  {createdCampaign?.portraitUrl ? (
+                  {portraitPreviewDataUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={createdCampaign.portraitUrl}
+                      src={portraitPreviewDataUrl}
                       alt={`${characterName || "Character"} portrait`}
                     />
                   ) : (
@@ -5360,7 +5386,7 @@ export function NewAdventureForm({
                     ) : null}
                   </label>
 
-                  {createdCampaign?.portraitUrl ? (
+                  {portraitPreviewDataUrl ? (
                     <button
                       type="button"
                       className="character-art-regenerate"
@@ -5474,7 +5500,7 @@ export function NewAdventureForm({
                 isJoinFlow ? "Joining..." : "Creating..."
               ) : isCreatingArt ? (
                 "Creating art..."
-              ) : createdCampaign?.portraitUrl ? (
+              ) : portraitPreviewDataUrl ? (
                 <>
                   Continue
                   <span className="fantasy-arrow-icon fantasy-arrow-forward" aria-hidden="true" />

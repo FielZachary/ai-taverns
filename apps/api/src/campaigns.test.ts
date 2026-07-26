@@ -14,6 +14,7 @@ import {
   CampaignNpcCardsResponseSchema,
   CampaignJoinPreviewResponseSchema,
   CampaignJoinResponseSchema,
+  CharacterPortraitPreviewResponseSchema,
   LobbyInviteJoinResponseSchema,
   LobbyInvitePreviewResponseSchema,
   CampaignListResponseSchema,
@@ -45,6 +46,104 @@ test("character portrait generation rejects unsupported model selections early",
     status: "skipped",
     reason: "That character portrait model is not supported yet."
   });
+});
+
+test("POST /api/campaigns/portrait/preview generates transient art without campaign rows", async () => {
+  const cookie = await signIn("portrait-preview-owner@example.com");
+  const originalFetch = globalThis.fetch;
+  const originalQwenImageApiKey = process.env.QWEN_IMAGE_API_KEY;
+  const originalQwenImageEndpoint = process.env.QWEN_IMAGE_ENDPOINT;
+  const originalQwenImageModel = process.env.QWEN_IMAGE_MODEL;
+  const imageBuffer = await sharp({
+    create: {
+      width: 96,
+      height: 96,
+      channels: 4,
+      background: "#0f766e"
+    }
+  })
+    .png()
+    .toBuffer();
+  const campaignsBefore = database.campaigns.length;
+  const mediaAssetsBefore = database.mediaAssets.length;
+
+  process.env.QWEN_IMAGE_API_KEY = "test-qwen-image-key";
+  process.env.QWEN_IMAGE_ENDPOINT = "https://qwen-image.example.test/generation";
+  process.env.QWEN_IMAGE_MODEL = "qwen-image-2.0-pro";
+  globalThis.fetch = (async (url, init) => {
+    if (String(url) === "https://qwen-image.example.test/generation") {
+      const headers = new Headers(init?.headers);
+      assert.equal(headers.get("authorization"), "Bearer test-qwen-image-key");
+
+      return new Response(
+        JSON.stringify({
+          request_id: "qwen-image-preview-request-1",
+          output: {
+            choices: [
+              {
+                message: {
+                  content: [
+                    {
+                      image: "https://qwen-image.example.test/preview.png"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json"
+          }
+        }
+      );
+    }
+
+    if (String(url) === "https://qwen-image.example.test/preview.png") {
+      return new Response(imageBuffer, {
+        status: 200,
+        headers: {
+          "content-type": "image/png"
+        }
+      });
+    }
+
+    throw new Error(`Unexpected fetch URL: ${String(url)}`);
+  }) as typeof fetch;
+
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/campaigns/portrait/preview",
+      headers: {
+        cookie
+      },
+      payload: {
+        characterName: "Mira Vale",
+        playerName: "Mira",
+        characterSheet: "Level 5 Human Fighter carrying a silver shield.",
+        campaignGenre: "Eldermere",
+        guidelines: "warm tavern light",
+        artStyle: "painterly_fantasy",
+        imageModel: "qwen"
+      }
+    });
+
+    assert.equal(response.statusCode, 200, response.body);
+
+    const preview = CharacterPortraitPreviewResponseSchema.parse(response.json());
+    assert.equal(preview.contentType, "image/png");
+    assert.match(preview.imageDataUrl, /^data:image\/png;base64,/);
+    assert.equal(database.campaigns.length, campaignsBefore);
+    assert.equal(database.mediaAssets.length, mediaAssetsBefore);
+  } finally {
+    globalThis.fetch = originalFetch;
+    process.env.QWEN_IMAGE_API_KEY = originalQwenImageApiKey;
+    process.env.QWEN_IMAGE_ENDPOINT = originalQwenImageEndpoint;
+    process.env.QWEN_IMAGE_MODEL = originalQwenImageModel;
+  }
 });
 
 test("POST /api/campaigns can generate and attach a character portrait", async () => {

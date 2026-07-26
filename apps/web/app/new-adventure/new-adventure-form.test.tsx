@@ -19,12 +19,14 @@ const {
   generateCharacterPortraitMock,
   joinCampaignMock,
   previewCampaignJoinMock,
+  previewCharacterPortraitMock,
   uploadCharacterPortraitMock
 } = vi.hoisted(() => ({
   createCampaignMock: vi.fn(),
   generateCharacterPortraitMock: vi.fn(),
   joinCampaignMock: vi.fn(),
   previewCampaignJoinMock: vi.fn(),
+  previewCharacterPortraitMock: vi.fn(),
   uploadCharacterPortraitMock: vi.fn()
 }));
 
@@ -33,6 +35,7 @@ vi.mock("@/lib/campaign-api", () => ({
   generateCharacterPortrait: generateCharacterPortraitMock,
   joinCampaign: joinCampaignMock,
   previewCampaignJoin: previewCampaignJoinMock,
+  previewCharacterPortrait: previewCharacterPortraitMock,
   uploadCharacterPortrait: uploadCharacterPortraitMock
 }));
 
@@ -121,6 +124,23 @@ describe("NewAdventureForm", () => {
       campaignTitle: "Crystal Caves",
       availableSlots: 2,
       hasBegun: false
+    });
+    previewCharacterPortraitMock.mockResolvedValue({
+      imageDataUrl: "data:image/png;base64,preview",
+      contentType: "image/png"
+    });
+    createCampaignMock.mockResolvedValue({
+      id: "11111111-1111-4111-8111-111111111111",
+      sessionId: "provider-session",
+      mode: "single_player",
+      title: "Eldermere Adventure"
+    });
+    uploadCharacterPortraitMock.mockResolvedValue({
+      id: "11111111-1111-4111-8111-111111111111",
+      sessionId: "provider-session",
+      mode: "single_player",
+      title: "Eldermere Adventure",
+      portraitUrl: "/media/campaigns/portrait.webp"
     });
   });
 
@@ -397,9 +417,7 @@ describe("NewAdventureForm", () => {
     expect(battleaxe).toHaveTextContent("1d8 slashing");
   });
 
-  it("validates identity and recovers when campaign creation fails", async () => {
-    createCampaignMock.mockRejectedValue(new Error("The tavern doors jammed."));
-
+  it("validates identity and keeps campaign creation behind Continue", async () => {
     render(<NewAdventureForm />);
 
     await advanceSingleplayerToIdentity();
@@ -435,6 +453,21 @@ describe("NewAdventureForm", () => {
 
     await act(async () => {});
 
+    expect(previewCharacterPortraitMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        characterName: "Mira Vale",
+        campaignGenre: "Eldermere",
+        imageModel: "qwen"
+      })
+    );
+    expect(createCampaignMock).not.toHaveBeenCalled();
+    expect(uploadCharacterPortraitMock).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+
+    await act(async () => {});
+
     expect(createCampaignMock).toHaveBeenCalledWith(
       expect.objectContaining({
         mode: "single_player",
@@ -442,9 +475,38 @@ describe("NewAdventureForm", () => {
         characterName: "Mira Vale"
       })
     );
+    expect(uploadCharacterPortraitMock).toHaveBeenCalledWith(
+      "11111111-1111-4111-8111-111111111111",
+      expect.objectContaining({
+        imageDataUrl: "data:image/png;base64,preview"
+      })
+    );
     expect(generateCharacterPortraitMock).not.toHaveBeenCalled();
+  });
+
+  it("recovers when art preview fails without creating a campaign", async () => {
+    previewCharacterPortraitMock.mockRejectedValue(
+      new Error("The portrait easel cracked.")
+    );
+
+    render(<NewAdventureForm />);
+
+    await advanceSingleplayerToIdentity();
+
+    fireEvent.change(screen.getByLabelText("Character name"), {
+      target: { value: "Mira Vale" }
+    });
+
+    await nextCharacterStep();
+
+    fireEvent.click(screen.getByRole("button", { name: /create art/i }));
+
+    await act(async () => {});
+
+    expect(createCampaignMock).not.toHaveBeenCalled();
+    expect(uploadCharacterPortraitMock).not.toHaveBeenCalled();
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "The tavern doors jammed."
+      "The portrait easel cracked."
     );
     expect(screen.getByRole("button", { name: /create art/i })).toBeEnabled();
   });

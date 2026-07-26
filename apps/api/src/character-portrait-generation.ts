@@ -58,6 +58,18 @@ type GenerateCharacterPortraitInput = {
   storage?: MediaStorage;
 };
 
+type PreviewCharacterPortraitInput = {
+  characterName?: string | undefined;
+  playerName?: string | undefined;
+  characterSheet?: string | undefined;
+  campaignGenre?: string | undefined;
+  customWorldName?: string | undefined;
+  guidelines?: string | undefined;
+  artStyle?: string | undefined;
+  imageModel?: "qwen" | undefined;
+  fetchImpl?: typeof fetch;
+};
+
 const defaultQwenImageEndpoint =
   "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation";
 const defaultQwenImageModel = "qwen-image-2.0-pro";
@@ -294,7 +306,10 @@ async function downloadImage(fetchImpl: typeof fetch, imageUrl: string) {
     throw new Error(`Generated image download failed with ${response.status}.`);
   }
 
-  return Buffer.from(await response.arrayBuffer());
+  return {
+    buffer: Buffer.from(await response.arrayBuffer()),
+    contentType: response.headers.get("content-type")?.split(";")[0]?.trim() || "image/png"
+  };
 }
 
 function portraitObjectKey(input: {
@@ -421,7 +436,7 @@ export async function generateCharacterPortraitForCampaign(
       prompt,
       negativePrompt
     });
-    const source = await downloadImage(fetchImpl, generated.imageUrl);
+    const source = (await downloadImage(fetchImpl, generated.imageUrl)).buffer;
     const { displayObject, storedObjects } = await storePortraitSource({
       source,
       storage,
@@ -471,6 +486,72 @@ export async function generateCharacterPortraitForCampaign(
     return {
       status: "failed",
       reason: message
+    };
+  }
+}
+
+export async function generateCharacterPortraitPreview(
+  input: PreviewCharacterPortraitInput
+): Promise<
+  | {
+      status: "ready";
+      imageDataUrl: string;
+      contentType: string;
+    }
+  | {
+      status: "skipped" | "failed";
+      reason: string;
+    }
+> {
+  if (input.imageModel && input.imageModel !== "qwen") {
+    return {
+      status: "skipped",
+      reason: "That character portrait model is not supported yet."
+    };
+  }
+
+  const settings = qwenImageSettings();
+
+  if (!settings.apiKey) {
+    return {
+      status: "skipped",
+      reason: "Qwen image generation is not configured."
+    };
+  }
+
+  const fetchImpl = input.fetchImpl ?? fetch;
+  const prompt = characterPortraitPrompt({
+    characterName: input.characterName ?? "",
+    username: input.playerName ?? "",
+    characterSheet: input.characterSheet ?? "",
+    campaignGenre: input.campaignGenre ?? null,
+    customWorldName: input.customWorldName ?? null,
+    guidelines: input.guidelines,
+    artStyle: input.artStyle
+  });
+  const negativePrompt = characterPortraitNegativePrompt();
+
+  try {
+    const generated = await fetchQwenImage({
+      fetchImpl,
+      apiKey: settings.apiKey,
+      endpoint: settings.endpoint,
+      model: settings.model,
+      prompt,
+      negativePrompt
+    });
+    const downloaded = await downloadImage(fetchImpl, generated.imageUrl);
+    const png = await sharp(downloaded.buffer).png().toBuffer();
+
+    return {
+      status: "ready",
+      imageDataUrl: `data:image/png;base64,${png.toString("base64")}`,
+      contentType: "image/png"
+    };
+  } catch (error) {
+    return {
+      status: "failed",
+      reason: error instanceof Error ? error.message : "Portrait generation failed."
     };
   }
 }

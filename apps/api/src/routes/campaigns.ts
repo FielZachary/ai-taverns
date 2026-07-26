@@ -22,6 +22,8 @@ import {
   CampaignReadResponseSchema,
   CharacterPortraitGenerateParamsSchema,
   CharacterPortraitGenerateRequestSchema,
+  CharacterPortraitPreviewRequestSchema,
+  CharacterPortraitPreviewResponseSchema,
   CharacterPortraitResponseSchema,
   CharacterPortraitUploadParamsSchema,
   CharacterPortraitUploadRequestSchema,
@@ -49,6 +51,7 @@ import {
 } from "@ai-dnd/db";
 import type { ApiConfig } from "../config.js";
 import {
+  generateCharacterPortraitPreview,
   generateCharacterPortraitForCampaign,
   storeUploadedCharacterPortraitForCampaign
 } from "../character-portrait-generation.js";
@@ -260,6 +263,36 @@ export async function registerCampaignRoutes(
 
     reply.status(201);
     return CampaignCreateResponseSchema.parse({ campaign: responseCampaign });
+  });
+
+  fastify.post("/campaigns/portrait/preview", async (request) => {
+    const body = CharacterPortraitPreviewRequestSchema.parse(request.body);
+
+    await requireAuthenticatedUser(
+      fastify,
+      config,
+      request.cookies[config.authCookieName]
+    );
+
+    const portrait = await generateCharacterPortraitPreview({
+      characterName: body.characterName,
+      playerName: body.playerName,
+      characterSheet: body.characterSheet,
+      campaignGenre: body.campaignGenre,
+      customWorldName: body.customWorldName,
+      guidelines: body.guidelines,
+      artStyle: body.artStyle,
+      imageModel: body.imageModel
+    });
+
+    if (portrait.status !== "ready") {
+      throw createHttpError(502, portrait.reason);
+    }
+
+    return CharacterPortraitPreviewResponseSchema.parse({
+      imageDataUrl: portrait.imageDataUrl,
+      contentType: portrait.contentType
+    });
   });
 
   fastify.get("/campaigns/:campaignId", async (request) => {

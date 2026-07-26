@@ -5,6 +5,7 @@ import {
   CampaignCreateResponseSchema,
   CampaignNpcCardUpdateResponseSchema,
   CampaignNpcCardsResponseSchema,
+  CharacterPortraitPreviewResponseSchema,
   CharacterPortraitResponseSchema,
   CampaignJoinPreviewResponseSchema,
   CampaignJoinResponseSchema,
@@ -17,6 +18,7 @@ import {
   type CampaignNpcCard,
   type CampaignNpcCardUpdateRequest,
   type CharacterPortraitGenerateRequest,
+  type CharacterPortraitPreviewRequest,
   type CharacterPortraitUploadRequest,
   type CampaignJoinPreviewRequest,
   type CampaignJoinRequest,
@@ -126,6 +128,25 @@ export async function generateCharacterPortrait(
   );
 
   return data.campaign;
+}
+
+export async function previewCharacterPortrait(
+  input: CharacterPortraitPreviewRequest
+) {
+  const response = await fetch("/api/campaigns/portrait/preview", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(input)
+  });
+  const data = await parseJsonResponse(
+    response,
+    CharacterPortraitPreviewResponseSchema,
+    "Character art could not be created."
+  );
+
+  return data;
 }
 
 export async function uploadCharacterPortrait(
