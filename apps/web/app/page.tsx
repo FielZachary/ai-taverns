@@ -65,13 +65,14 @@ export default function HomePage() {
         </header>
 
         <div className="landing-hero-copy">
-          <p className="landing-kicker">AI-powered tabletop adventures</p>
+          <p className="landing-kicker">Text-based tabletop adventures</p>
           <h1 id="landing-title">
             A dungeon master that <span>actually</span> remembers.
           </h1>
           <p className="landing-lede">
-            Sit down, speak, and let an AI dungeon master carry your story into
-            the dark. No rulebooks. No waiting room. Just the next choice.
+            Sit down, play, and let AI Taverns direct a masterfully orchestrated
+            campaign for you to play in. No fuss. No friction. Just some pure
+            D&amp;D (without needing friends)
           </p>
           <div className="landing-actions" aria-label="Start playing">
             <Link className="landing-button landing-button-primary" href="/play">
