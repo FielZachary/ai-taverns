@@ -95,9 +95,9 @@ export default function HomePage() {
           No getting pushed around. AI Taverns knows when to say no.
         </h2>
         <p className="landing-section-lede">
-          Start with a scene, speak in your own voice, and let the AI dungeon
-          master answer with consequences, characters, and trouble worth leaning
-          into.
+          AI Taverns is built for real play, not wish fulfillment. Say what you
+          do, and the world answers with stakes, limits, consequences, and
+          openings worth chasing.
         </p>
 
         <div className="landing-pillars" aria-label="What AI Taverns offers">
