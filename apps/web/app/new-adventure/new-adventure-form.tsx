@@ -3705,7 +3705,6 @@ export function NewAdventureForm({
     isEquipmentCharacterStep,
     isEquipmentSummaryStep,
     isInviteJoinFlow,
-    isJoinFlow,
     mode,
     reviewStepIndex,
     stepIndex,
