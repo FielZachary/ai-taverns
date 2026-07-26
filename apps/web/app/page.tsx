@@ -23,22 +23,22 @@ const pillars = [
 
 const scenarios = [
   {
-    title: "Moonlit Parley",
-    author: "The Barmaid",
+    title: "5e Rules, Ready",
+    author: "The Rules",
     description:
-      "A masked envoy has booked the dragon alcove, and every toast in the room sounds like a coded threat."
+      "Ability checks, saves, attacks, and consequences stay close to familiar D&D rhythm without making you manage the whole table."
   },
   {
-    title: "The Cellar Below",
-    author: "Old Rusk",
+    title: "Your D&D Fix",
+    author: "The Empty Chair",
     description:
-      "Something under the ale barrels is answering questions in voices it has no right to know."
+      "When the group chat stalls or the next session slips, AI Taverns keeps a campaign moving whenever you are ready to play."
   },
   {
-    title: "Crown of Ash",
-    author: "The Hearth",
+    title: "No Party Required",
+    author: "The Table",
     description:
-      "A royal heir arrives soaked in rain, carrying a broken crown and a story that keeps changing."
+      "Get the feel of a real adventure between party nights, with a DM that tracks the scene, remembers the stakes, and calls for rolls."
   }
 ];
 
@@ -112,8 +112,10 @@ export default function HomePage() {
       </section>
 
       <section className="landing-section landing-scenarios" aria-labelledby="scenario-title">
-        <p className="landing-section-label">Table Rumors</p>
-        <h2 id="scenario-title">Three doors are already open.</h2>
+        <p className="landing-section-label">Rules & 5e</p>
+        <h2 id="scenario-title">
+          Get your D&D fix when your real party is not available.
+        </h2>
         <div className="landing-scenario-grid">
           {scenarios.map((scenario) => (
             <article key={scenario.title}>
