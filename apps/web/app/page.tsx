@@ -3,21 +3,21 @@ import Link from "next/link";
 const pillars = [
   {
     label: "The Table",
-    title: "An AI dungeon master that answers in consequences",
+    title: "A DM that challenges bad ideas",
     description:
-      "Speak in your own voice. The world responds with characters, complications, and trouble worth leaning into."
+      "Try anything, but not everything works. AI Taverns weighs the world, the stakes, and your character before answering."
   },
   {
     label: "The Campaign",
-    title: "Stories that remember what you did",
+    title: "A story with memory and consequences",
     description:
-      "Every session builds on the last. Your choices persist, your allies age, and your debts come due."
+      "Choices stick. Allies remember. Enemies adapt. The campaign moves forward because the world is keeping score."
   },
   {
     label: "The Company",
-    title: "Play alone or gather a party",
+    title: "Solo now, party later",
     description:
-      "Run a solo tale by candlelight or invite friends to the same table and let the rumor grow between you."
+      "Play a full D&D-style campaign on your own, then bring friends in when the table gets crowded."
   }
 ];
 
