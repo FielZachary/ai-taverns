@@ -29,6 +29,23 @@ import {
   setProviderOverride,
   signIn
 } from "./test/app-test-harness.js";
+import { generateCharacterPortraitForCampaign } from "./character-portrait-generation.js";
+import { loadConfig } from "./config.js";
+
+test("character portrait generation rejects unsupported model selections early", async () => {
+  const result = await generateCharacterPortraitForCampaign({
+    db: {} as never,
+    config: loadConfig({ NODE_ENV: "test" }),
+    campaignId: "11111111-1111-4111-8111-111111111111",
+    userId: "22222222-2222-4222-8222-222222222222",
+    imageModel: "not-qwen" as never
+  });
+
+  assert.deepEqual(result, {
+    status: "skipped",
+    reason: "That character portrait model is not supported yet."
+  });
+});
 
 test("POST /api/campaigns can generate and attach a character portrait", async () => {
   const cookie = await signIn("portrait-owner@example.com");
@@ -183,6 +200,276 @@ test("POST /api/campaigns can generate and attach a character portrait", async (
       process.env.QWEN_IMAGE_MODEL = originalQwenImageModel;
     }
   }
+});
+
+test("POST /api/campaigns/:campaignId/portrait/generate creates art after campaign setup", async () => {
+  const cookie = await signIn("portrait-route-owner@example.com");
+  const originalFetch = globalThis.fetch;
+  const originalQwenImageApiKey = process.env.QWEN_IMAGE_API_KEY;
+  const originalQwenImageEndpoint = process.env.QWEN_IMAGE_ENDPOINT;
+  const originalQwenImageModel = process.env.QWEN_IMAGE_MODEL;
+  const imageBuffer = await sharp({
+    create: {
+      width: 128,
+      height: 128,
+      channels: 4,
+      background: "#0f766e"
+    }
+  })
+    .png()
+    .toBuffer();
+
+  process.env.QWEN_IMAGE_API_KEY = "test-qwen-route-key";
+  process.env.QWEN_IMAGE_ENDPOINT = "https://qwen-image.example.test/route";
+  process.env.QWEN_IMAGE_MODEL = "qwen-image-route-model";
+  globalThis.fetch = (async (url, init) => {
+    if (String(url) === "https://qwen-image.example.test/route") {
+      const headers = new Headers(init?.headers);
+      assert.equal(headers.get("authorization"), "Bearer test-qwen-route-key");
+      const body = JSON.parse(String(init?.body)) as {
+        model?: string;
+        input?: {
+          messages?: { content?: { text?: string }[] }[];
+        };
+      };
+      const prompt = body.input?.messages?.[0]?.content?.[0]?.text ?? "";
+
+      assert.equal(body.model, "qwen-image-route-model");
+      assert.match(prompt, /silver cloak and a wary half-smile/);
+      assert.match(prompt, /cinematic fantasy concept art/i);
+
+      return new Response(
+        JSON.stringify({
+          request_id: "qwen-image-route-request",
+          output: {
+            choices: [
+              {
+                message: {
+                  content: [
+                    {
+                      image: "https://qwen-image.example.test/route-result.png"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        }
+      );
+    }
+
+    if (String(url) === "https://qwen-image.example.test/route-result.png") {
+      return new Response(imageBuffer, {
+        status: 200,
+        headers: { "Content-Type": "image/png" }
+      });
+    }
+
+    throw new Error(`Unexpected fetch URL ${String(url)}`);
+  }) as typeof fetch;
+
+  try {
+    const createdResponse = await app.inject({
+      method: "POST",
+      url: "/api/campaigns",
+      headers: {
+        cookie
+      },
+      payload: {
+        mode: "single_player",
+        title: "Route Portrait Campaign",
+        campaignGenre: "Classic Fantasy",
+        campaignGenreKind: "preset",
+        campaignGenrePresetId: "classic_fantasy",
+        ownerClientId: "portrait-route-owner-client",
+        playerName: "Nyra",
+        characterName: "Nyra",
+        characterSheet: "Level 5 Human Rogue"
+      }
+    });
+
+    assert.equal(createdResponse.statusCode, 201, createdResponse.body);
+    const created = CampaignCreateResponseSchema.parse(createdResponse.json());
+    assert.equal(created.campaign.portraitUrl, undefined);
+
+    const portraitResponse = await app.inject({
+      method: "POST",
+      url: `/api/campaigns/${created.campaign.id}/portrait/generate`,
+      headers: {
+        cookie
+      },
+      payload: {
+        guidelines: "silver cloak and a wary half-smile",
+        artStyle: "cinematic_concept_art",
+        imageModel: "qwen"
+      }
+    });
+    const withPortrait = CampaignCreateResponseSchema.parse(
+      portraitResponse.json()
+    );
+
+    assert.equal(portraitResponse.statusCode, 200, portraitResponse.body);
+    assert.ok(withPortrait.campaign.portraitAssetId);
+    assert.match(withPortrait.campaign.portraitUrl ?? "", /\/media\/campaigns\//);
+  } finally {
+    globalThis.fetch = originalFetch;
+    process.env.QWEN_IMAGE_API_KEY = originalQwenImageApiKey;
+    process.env.QWEN_IMAGE_ENDPOINT = originalQwenImageEndpoint;
+    process.env.QWEN_IMAGE_MODEL = originalQwenImageModel;
+  }
+});
+
+test("POST /api/campaigns/:campaignId/portrait/upload stores user character art", async () => {
+  const cookie = await signIn("portrait-upload-owner@example.com");
+  const imageBuffer = await sharp({
+    create: {
+      width: 128,
+      height: 128,
+      channels: 4,
+      background: "#92400e"
+    }
+  })
+    .png()
+    .toBuffer();
+  const createdResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: {
+      cookie
+    },
+    payload: {
+      mode: "single_player",
+      title: "Uploaded Portrait Campaign",
+      campaignGenre: "Classic Fantasy",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "classic_fantasy",
+      ownerClientId: "portrait-upload-owner-client",
+      playerName: "Orrin",
+      characterName: "Orrin",
+      characterSheet: "Level 5 Dwarf Cleric"
+    }
+  });
+
+  assert.equal(createdResponse.statusCode, 201, createdResponse.body);
+  const created = CampaignCreateResponseSchema.parse(createdResponse.json());
+  const uploadResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${created.campaign.id}/portrait/upload`,
+    headers: {
+      cookie
+    },
+    payload: {
+      imageDataUrl: `data:image/png;base64,${imageBuffer.toString("base64")}`,
+      fileName: "orrin.png",
+      guidelines: "keep the amber cloak and holy symbol",
+      artStyle: "ink_and_watercolor"
+    }
+  });
+  const uploaded = CampaignCreateResponseSchema.parse(uploadResponse.json());
+
+  assert.equal(uploadResponse.statusCode, 200, uploadResponse.body);
+  assert.ok(uploaded.campaign.portraitAssetId);
+  assert.match(uploaded.campaign.portraitUrl ?? "", /\/media\/campaigns\//);
+  const asset = database.mediaAssets.find(
+    (candidate) => candidate.id === uploaded.campaign.portraitAssetId
+  );
+
+  assert.equal(asset?.provider, "upload");
+  assert.equal(asset?.model, "user-upload");
+  assert.match(asset?.prompt ?? "", /amber cloak and holy symbol/);
+  assert.equal(
+    database.players.find(
+      (player) => player.client_id === "portrait-upload-owner-client"
+    )?.portrait_asset_id,
+    uploaded.campaign.portraitAssetId
+  );
+});
+
+test("POST /api/campaigns/:campaignId/portrait/upload reports invalid image bytes", async () => {
+  const cookie = await signIn("portrait-invalid-upload-owner@example.com");
+  const createdResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: {
+      cookie
+    },
+    payload: {
+      mode: "single_player",
+      title: "Invalid Upload Campaign",
+      campaignGenre: "Classic Fantasy",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "classic_fantasy",
+      ownerClientId: "portrait-invalid-upload-client",
+      playerName: "Ira",
+      characterName: "Ira",
+      characterSheet: "Level 5 Human Wizard"
+    }
+  });
+
+  assert.equal(createdResponse.statusCode, 201, createdResponse.body);
+  const created = CampaignCreateResponseSchema.parse(createdResponse.json());
+  const uploadResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${created.campaign.id}/portrait/upload`,
+    headers: {
+      cookie
+    },
+    payload: {
+      imageDataUrl: `data:image/png;base64,${Buffer.from("not an image").toString(
+        "base64"
+      )}`,
+      fileName: "broken.png"
+    }
+  });
+  const error = ApiErrorResponseSchema.parse(uploadResponse.json()).error;
+
+  assert.equal(uploadResponse.statusCode, 400);
+  assert.equal(error.code, "BAD_REQUEST");
+  assert.match(error.message, /Input buffer contains unsupported image format/);
+});
+
+test("POST /api/campaigns/:campaignId/portrait/upload rejects unsupported image MIME types", async () => {
+  const cookie = await signIn("portrait-gif-upload-owner@example.com");
+  const createdResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: {
+      cookie
+    },
+    payload: {
+      mode: "single_player",
+      title: "Unsupported Upload Campaign",
+      campaignGenre: "Classic Fantasy",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "classic_fantasy",
+      ownerClientId: "portrait-gif-upload-client",
+      playerName: "Gia",
+      characterName: "Gia",
+      characterSheet: "Level 5 Elf Ranger"
+    }
+  });
+
+  assert.equal(createdResponse.statusCode, 201, createdResponse.body);
+  const created = CampaignCreateResponseSchema.parse(createdResponse.json());
+  const uploadResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${created.campaign.id}/portrait/upload`,
+    headers: {
+      cookie
+    },
+    payload: {
+      imageDataUrl: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
+    }
+  });
+  const error = ApiErrorResponseSchema.parse(uploadResponse.json()).error;
+
+  assert.equal(uploadResponse.statusCode, 400);
+  assert.equal(error.code, "BAD_REQUEST");
+  assert.equal(error.message, "Upload a PNG, JPEG, or WebP image.");
 });
 
 test("POST /api/campaigns uses production Qwen base URL for character portraits", async () => {

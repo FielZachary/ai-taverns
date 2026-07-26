@@ -4,11 +4,14 @@ import { CSSProperties, FormEvent, useEffect, useMemo, useState } from "react";
 import {
   Check,
   Dice5,
+  ImagePlus,
   X,
   Minus,
   Plus,
+  RefreshCw,
   ScrollText,
-  Sparkles
+  Sparkles,
+  Wand2
 } from "lucide-react";
 import {
   campaignGenrePresets,
@@ -16,10 +19,12 @@ import {
 } from "@/lib/campaign-genres";
 import {
   createCampaign as createCampaignViaApi,
+  generateCharacterPortrait,
   joinCampaign as joinCampaignViaApi,
   joinLobbyInvite,
   previewLobbyInvite,
   previewCampaignJoin,
+  uploadCharacterPortrait,
   type CampaignSummary
 } from "@/lib/campaign-api";
 import { defaultCharacterSheet } from "@/components/playing/PlayerPanel";
@@ -73,6 +78,12 @@ type SpeciesAbilityBonuses = Partial<Record<AbilityKey, number>>;
 type SkillName = (typeof skillDefinitions)[number]["name"];
 type CharacterBuildMode = "quick" | "custom";
 type StatGenerationMode = "roll" | "point_buy";
+type CharacterArtStyle =
+  | "painterly_fantasy"
+  | "storybook_illustration"
+  | "ink_and_watercolor"
+  | "cinematic_concept_art";
+type CharacterImageModel = "qwen";
 type SpellLevelLabel = "Cantrip" | "1st level" | "2nd level" | "3rd level";
 type SpellGroup = {
   level: SpellLevelLabel;
@@ -3304,8 +3315,15 @@ export function NewAdventureForm({
   const [ownerClientId, setOwnerClientId] = useState("");
   const [error, setError] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+  const [isCreatingArt, setIsCreatingArt] = useState(false);
   const [createdCampaign, setCreatedCampaign] =
     useState<CampaignSummary | null>(null);
+  const [characterArtGuidelines, setCharacterArtGuidelines] = useState("");
+  const [characterArtStyle, setCharacterArtStyle] =
+    useState<CharacterArtStyle>("painterly_fantasy");
+  const [characterImageModel, setCharacterImageModel] =
+    useState<CharacterImageModel>("qwen");
+  const [uploadedPortraitFileName, setUploadedPortraitFileName] = useState("");
   const [creationLoadingStep, setCreationLoadingStep] = useState(0);
   const [flowTransition, setFlowTransition] =
     useState<FlowTransitionState>("idle");
@@ -3620,10 +3638,10 @@ export function NewAdventureForm({
     subclass
   ]);
   const stepTitle = useMemo(() => {
-    if (createdCampaign) {
-      return createdCampaign.portraitUrl
+    if (stepIndex === reviewStepIndex && !isJoinFlow) {
+      return createdCampaign?.portraitUrl
         ? "Your portrait is ready"
-        : "Your adventure is ready";
+        : "Create your character art";
     }
 
     if (stepIndex === 0) {
@@ -3688,6 +3706,7 @@ export function NewAdventureForm({
     isEquipmentSummaryStep,
     isInviteJoinFlow,
     mode,
+    reviewStepIndex,
     stepIndex,
     createdCampaign
   ]);
@@ -4249,22 +4268,12 @@ export function NewAdventureForm({
     );
   }
 
-  async function createCampaign() {
+  async function createCampaignForArt() {
     if (createdCampaign) {
-      window.location.assign(
-        `/play?campaignId=${encodeURIComponent(createdCampaign.id)}`
-      );
-      return;
+      return createdCampaign;
     }
 
-    if (isCreating) {
-      return;
-    }
-
-    setIsCreating(true);
-
-    try {
-      const campaign = await createCampaignViaApi({
+    return createCampaignViaApi({
         mode,
         title: campaignDisplayName,
         campaignGenre: selectedGenre.label,
@@ -4281,20 +4290,99 @@ export function NewAdventureForm({
             : "Table Owner",
         characterName,
         characterSheet,
-        mechanicsSeed,
-        generateCharacterPortrait: true
+        mechanicsSeed
+    });
+  }
+
+  async function createCharacterArt() {
+    if (isCreatingArt) {
+      return;
+    }
+
+    setError("");
+    setIsCreatingArt(true);
+
+    try {
+      const campaign = await createCampaignForArt();
+      setCreatedCampaign(campaign);
+      const campaignWithPortrait = await generateCharacterPortrait(campaign.id, {
+        guidelines: characterArtGuidelines,
+        artStyle: characterArtStyle,
+        imageModel: characterImageModel
       });
 
-      setCreatedCampaign(campaign);
-      setIsCreating(false);
+      setCreatedCampaign(campaignWithPortrait);
+      setUploadedPortraitFileName("");
+      setIsCreatingArt(false);
     } catch (caught) {
       setError(
         caught instanceof Error
           ? caught.message
-          : "The campaign could not be created."
+          : "Character art could not be created."
       );
-      setIsCreating(false);
+      setIsCreatingArt(false);
     }
+  }
+
+  function readImageFileAsDataUrl(file: File) {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+
+      reader.addEventListener("load", () => {
+        if (typeof reader.result === "string") {
+          resolve(reader.result);
+          return;
+        }
+
+        reject(new Error("The selected image could not be read."));
+      });
+      reader.addEventListener("error", () =>
+        reject(new Error("The selected image could not be read."))
+      );
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handlePortraitUpload(file: File | undefined) {
+    if (!file || isCreatingArt) {
+      return;
+    }
+
+    setError("");
+    setIsCreatingArt(true);
+
+    try {
+      const campaign = await createCampaignForArt();
+      setCreatedCampaign(campaign);
+      const campaignWithPortrait = await uploadCharacterPortrait(campaign.id, {
+        imageDataUrl: await readImageFileAsDataUrl(file),
+        fileName: file.name,
+        guidelines: characterArtGuidelines,
+        artStyle: characterArtStyle
+      });
+
+      setUploadedPortraitFileName(file.name);
+      setCreatedCampaign(campaignWithPortrait);
+      setIsCreatingArt(false);
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Character art could not be uploaded."
+      );
+      setIsCreatingArt(false);
+    }
+  }
+
+  function continueToCampaign() {
+    if (!createdCampaign?.portraitUrl) {
+      void createCharacterArt();
+      return;
+    }
+
+    window.location.assign(
+      `/play?campaignId=${encodeURIComponent(createdCampaign.id)}`
+    );
   }
 
   async function joinCampaign() {
@@ -4334,7 +4422,7 @@ export function NewAdventureForm({
     event.preventDefault();
 
     if (isLastStep) {
-      void (isJoinFlow ? joinCampaign() : createCampaign());
+      void (isJoinFlow ? joinCampaign() : continueToCampaign());
       return;
     }
 
@@ -5176,42 +5264,110 @@ export function NewAdventureForm({
               </div>
             ) : null}
 
-            {stepIndex === reviewStepIndex && createdCampaign ? (
-              <div className="portrait-final-step">
+            {stepIndex === reviewStepIndex && !isJoinFlow ? (
+              <div className="character-art-step">
                 <div
                   className={
-                    createdCampaign.portraitUrl
+                    createdCampaign?.portraitUrl
                       ? "generated-character-portrait"
                       : "generated-character-portrait empty"
                   }
                   aria-label={`${characterName || "Character"} portrait`}
                 >
-                  {createdCampaign.portraitUrl ? (
+                  {createdCampaign?.portraitUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={createdCampaign.portraitUrl}
                       alt={`${characterName || "Character"} portrait`}
                     />
                   ) : (
-                    <Sparkles size={42} />
+                    <div className="portrait-placeholder">
+                      {isCreatingArt ? <Wand2 size={42} /> : <ImagePlus size={42} />}
+                      <span>
+                        {isCreatingArt ? "Creating art..." : "Portrait placeholder"}
+                      </span>
+                    </div>
                   )}
                 </div>
-                <div className="portrait-final-copy">
-                  <strong>
-                    {createdCampaign.portraitUrl
-                      ? characterName || "Your character"
-                      : "Portrait skipped"}
-                  </strong>
-                  <span>
-                    {createdCampaign.portraitUrl
-                      ? "Your character portrait is saved to this adventure."
-                      : "Your campaign is ready. You can start now and add a portrait later."}
-                  </span>
+
+                <div className="character-art-controls">
+                  <label>
+                    <span>Character art guidelines</span>
+                    <textarea
+                      value={characterArtGuidelines}
+                      onChange={(event) =>
+                        setCharacterArtGuidelines(event.target.value)
+                      }
+                      placeholder="Describe pose, expression, outfit details, color mood, or anything the portrait should avoid."
+                    />
+                  </label>
+
+                  <div className="character-art-selectors">
+                    <label>
+                      <span>Image model</span>
+                      <select
+                        value={characterImageModel}
+                        onChange={(event) =>
+                          setCharacterImageModel(
+                            event.target.value as CharacterImageModel
+                          )
+                        }
+                      >
+                        <option value="qwen">Qwen</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>Art style</span>
+                      <select
+                        value={characterArtStyle}
+                        onChange={(event) =>
+                          setCharacterArtStyle(event.target.value as CharacterArtStyle)
+                        }
+                      >
+                        <option value="painterly_fantasy">Painterly fantasy</option>
+                        <option value="storybook_illustration">
+                          Storybook illustration
+                        </option>
+                        <option value="ink_and_watercolor">Ink and watercolor</option>
+                        <option value="cinematic_concept_art">
+                          Cinematic concept art
+                        </option>
+                      </select>
+                    </label>
+                  </div>
+
+                  <label className="character-art-upload">
+                    <span>Upload your own image</span>
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      disabled={isCreatingArt}
+                      onChange={(event) => {
+                        void handlePortraitUpload(event.target.files?.[0]);
+                        event.currentTarget.value = "";
+                      }}
+                    />
+                    {uploadedPortraitFileName ? (
+                      <small>{uploadedPortraitFileName}</small>
+                    ) : null}
+                  </label>
+
+                  {createdCampaign?.portraitUrl ? (
+                    <button
+                      type="button"
+                      className="character-art-regenerate"
+                      disabled={isCreatingArt}
+                      onClick={() => void createCharacterArt()}
+                    >
+                      <RefreshCw size={16} />
+                      Regenerate
+                    </button>
+                  ) : null}
                 </div>
               </div>
             ) : null}
 
-            {stepIndex === reviewStepIndex && !createdCampaign ? (
+            {stepIndex === reviewStepIndex && isJoinFlow ? (
               <div className="creation-review">
                 <ScrollText size={28} />
                 <dl>
@@ -5220,32 +5376,16 @@ export function NewAdventureForm({
                     <dd>{modeLabel}</dd>
                   </div>
                   <div>
-                    <dt>{mode === "single_player" ? "Campaign" : "Table"}</dt>
+                    <dt>Table</dt>
                     <dd>
-                      {isJoinFlow
-                        ? joinPreview?.campaignTitle ??
-                          (isInviteJoinFlow ? "Invited Lobby" : normalizedGameCode)
-                        : campaignDisplayName}
+                      {joinPreview?.campaignTitle ??
+                        (isInviteJoinFlow ? "Invited Lobby" : normalizedGameCode)}
                     </dd>
                   </div>
-                  {!isJoinFlow ? (
-                    <div>
-                      <dt>Genre</dt>
-                      <dd>{selectedGenre.label}</dd>
-                    </div>
-                  ) : null}
-                  {isCustomGenre && !isJoinFlow ? (
-                    <div>
-                      <dt>World</dt>
-                      <dd>{customWorldDescription}</dd>
-                    </div>
-                  ) : null}
-                  {isJoinFlow ? (
-                    <div>
-                      <dt>{isInviteJoinFlow ? "Invite" : "Game Code"}</dt>
-                      <dd>{isInviteJoinFlow ? "Invite link" : normalizedGameCode}</dd>
-                    </div>
-                  ) : null}
+                  <div>
+                    <dt>{isInviteJoinFlow ? "Invite" : "Game Code"}</dt>
+                    <dd>{isInviteJoinFlow ? "Invite link" : normalizedGameCode}</dd>
+                  </div>
                   <div>
                     <dt>Build</dt>
                     <dd>
@@ -5309,6 +5449,7 @@ export function NewAdventureForm({
               disabled={
                 stepIndex === 0 ||
                 isCreating ||
+                isCreatingArt ||
                 isFlowTransitioning ||
                 Boolean(createdCampaign)
               }
@@ -5317,18 +5458,23 @@ export function NewAdventureForm({
               <span className="fantasy-arrow-icon fantasy-arrow-back" aria-hidden="true" />
               Back
             </button>
-            <button type="submit" disabled={isCreating || isFlowTransitioning}>
+            <button
+              type="submit"
+              disabled={isCreating || isCreatingArt || isFlowTransitioning}
+            >
               {isCreating ? (
                 isJoinFlow ? "Joining..." : "Creating..."
-              ) : createdCampaign ? (
+              ) : isCreatingArt ? (
+                "Creating art..."
+              ) : createdCampaign?.portraitUrl ? (
                 <>
-                  Enter Adventure
+                  Continue
                   <span className="fantasy-arrow-icon fantasy-arrow-forward" aria-hidden="true" />
                 </>
               ) : isLastStep ? (
                 <>
-                  {isJoinFlow ? "Join Game" : "Generate Portrait"}
-                  {isJoinFlow ? <Check size={16} /> : <Sparkles size={16} />}
+                  {isJoinFlow ? "Join Game" : "Create art"}
+                  {isJoinFlow ? <Check size={16} /> : <Wand2 size={16} />}
                 </>
               ) : (
                 <>

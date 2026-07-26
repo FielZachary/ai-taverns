@@ -2,10 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createCampaign,
+  generateCharacterPortrait,
   joinCampaign,
   listCampaigns,
   previewCampaignJoin,
-  readCampaign
+  readCampaign,
+  uploadCharacterPortrait
 } from "./campaign-api";
 
 const campaign = {
@@ -65,6 +67,61 @@ describe("campaign API client", () => {
     await expect(readCampaign("campaign/with spaces")).resolves.toEqual(campaign);
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/campaigns/campaign%2Fwith%20spaces"
+    );
+  });
+
+  it("generates and uploads character portraits with JSON payloads", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json({ campaign }))
+      .mockResolvedValueOnce(Response.json({ campaign }));
+
+    await expect(
+      generateCharacterPortrait("campaign/with spaces", {
+        guidelines: "silver cloak",
+        artStyle: "cinematic_concept_art",
+        imageModel: "qwen"
+      })
+    ).resolves.toEqual(campaign);
+    await expect(
+      uploadCharacterPortrait("campaign/with spaces", {
+        imageDataUrl: "data:image/png;base64,abc",
+        fileName: "portrait.png",
+        guidelines: "match the scar",
+        artStyle: "ink_and_watercolor"
+      })
+    ).resolves.toEqual(campaign);
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/campaigns/campaign%2Fwith%20spaces/portrait/generate",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          guidelines: "silver cloak",
+          artStyle: "cinematic_concept_art",
+          imageModel: "qwen"
+        })
+      }
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/campaigns/campaign%2Fwith%20spaces/portrait/upload",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          imageDataUrl: "data:image/png;base64,abc",
+          fileName: "portrait.png",
+          guidelines: "match the scar",
+          artStyle: "ink_and_watercolor"
+        })
+      }
     );
   });
 

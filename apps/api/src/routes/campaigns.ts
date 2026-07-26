@@ -20,6 +20,11 @@ import {
   CampaignListResponseSchema,
   CampaignReadParamsSchema,
   CampaignReadResponseSchema,
+  CharacterPortraitGenerateParamsSchema,
+  CharacterPortraitGenerateRequestSchema,
+  CharacterPortraitResponseSchema,
+  CharacterPortraitUploadParamsSchema,
+  CharacterPortraitUploadRequestSchema,
   LobbyInviteJoinParamsSchema,
   LobbyInviteJoinRequestSchema,
   LobbyInviteJoinResponseSchema,
@@ -43,7 +48,10 @@ import {
   previewCampaignJoinByCode
 } from "@ai-dnd/db";
 import type { ApiConfig } from "../config.js";
-import { generateCharacterPortraitForCampaign } from "../character-portrait-generation.js";
+import {
+  generateCharacterPortraitForCampaign,
+  storeUploadedCharacterPortraitForCampaign
+} from "../character-portrait-generation.js";
 import { askDungeonMasterProvider } from "../dm-provider.js";
 import { requireAuthenticatedUser } from "./auth.js";
 
@@ -89,6 +97,35 @@ function createHttpError(statusCode: number, message: string): Error {
   const error = new Error(message) as Error & { statusCode: number };
   error.statusCode = statusCode;
   return error;
+}
+
+function imageBufferFromDataUrl(dataUrl: string) {
+  const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=\s]+)$/.exec(
+    dataUrl.trim()
+  );
+
+  if (!match) {
+    throw createHttpError(400, "Upload a valid image file.");
+  }
+
+  const contentType = match[1]?.toLowerCase();
+
+  if (
+    contentType !== "image/png" &&
+    contentType !== "image/jpeg" &&
+    contentType !== "image/jpg" &&
+    contentType !== "image/webp"
+  ) {
+    throw createHttpError(400, "Upload a PNG, JPEG, or WebP image.");
+  }
+
+  const buffer = Buffer.from(match[2]?.replace(/\s+/g, "") ?? "", "base64");
+
+  if (buffer.byteLength === 0) {
+    throw createHttpError(400, "The uploaded image was empty.");
+  }
+
+  return buffer;
 }
 
 function getCampaignGenrePreset(presetId: string | undefined) {
@@ -238,6 +275,91 @@ export async function registerCampaignRoutes(
     });
 
     return CampaignReadResponseSchema.parse({ campaign });
+  });
+
+  fastify.post("/campaigns/:campaignId/portrait/generate", async (request) => {
+    const params = CharacterPortraitGenerateParamsSchema.parse(request.params);
+    const body = CharacterPortraitGenerateRequestSchema.parse(request.body);
+    const user = await requireAuthenticatedUser(
+      fastify,
+      config,
+      request.cookies[config.authCookieName]
+    );
+
+    await getCampaignSummaryForUser(fastify.pg, {
+      campaignId: params.campaignId,
+      userId: user.id
+    });
+
+    const portrait = await generateCharacterPortraitForCampaign({
+      db: fastify.pg,
+      config,
+      campaignId: params.campaignId,
+      userId: user.id,
+      guidelines: body.guidelines,
+      artStyle: body.artStyle,
+      imageModel: body.imageModel
+    });
+
+    if (portrait.status !== "ready") {
+      throw createHttpError(502, portrait.reason);
+    }
+
+    const campaign = await getCampaignSummaryForUser(fastify.pg, {
+      campaignId: params.campaignId,
+      userId: user.id
+    });
+
+    return CharacterPortraitResponseSchema.parse({
+      campaign: {
+        ...campaign,
+        portraitAssetId: portrait.assetId,
+        portraitUrl: portrait.portraitUrl
+      }
+    });
+  });
+
+  fastify.post("/campaigns/:campaignId/portrait/upload", async (request) => {
+    const params = CharacterPortraitUploadParamsSchema.parse(request.params);
+    const body = CharacterPortraitUploadRequestSchema.parse(request.body);
+    const user = await requireAuthenticatedUser(
+      fastify,
+      config,
+      request.cookies[config.authCookieName]
+    );
+
+    await getCampaignSummaryForUser(fastify.pg, {
+      campaignId: params.campaignId,
+      userId: user.id
+    });
+
+    const portrait = await storeUploadedCharacterPortraitForCampaign({
+      db: fastify.pg,
+      config,
+      campaignId: params.campaignId,
+      userId: user.id,
+      image: imageBufferFromDataUrl(body.imageDataUrl),
+      fileName: body.fileName,
+      guidelines: body.guidelines,
+      artStyle: body.artStyle
+    });
+
+    if (portrait.status !== "ready") {
+      throw createHttpError(400, portrait.reason);
+    }
+
+    const campaign = await getCampaignSummaryForUser(fastify.pg, {
+      campaignId: params.campaignId,
+      userId: user.id
+    });
+
+    return CharacterPortraitResponseSchema.parse({
+      campaign: {
+        ...campaign,
+        portraitAssetId: portrait.assetId,
+        portraitUrl: portrait.portraitUrl
+      }
+    });
   });
 
   fastify.get("/campaigns/:campaignId/npc-cards", async (request) => {

@@ -51,6 +51,9 @@ type GenerateCharacterPortraitInput = {
   config: ApiConfig;
   campaignId: string;
   userId: string;
+  guidelines?: string | undefined;
+  artStyle?: string | undefined;
+  imageModel?: "qwen" | undefined;
   fetchImpl?: typeof fetch;
   storage?: MediaStorage;
 };
@@ -163,17 +166,34 @@ function compactText(value: string, maxLength: number) {
   return value.replace(/\s+/g, " ").trim().slice(0, maxLength);
 }
 
+function artStyleDirection(artStyle: string | undefined) {
+  switch (artStyle) {
+    case "storybook_illustration":
+      return "Art style: richly textured fantasy storybook illustration, warm shapes, clear character readability, polished but hand-made.";
+    case "ink_and_watercolor":
+      return "Art style: expressive ink lines with layered watercolor washes, elegant paper texture, strong facial silhouette.";
+    case "cinematic_concept_art":
+      return "Art style: cinematic fantasy concept art, dramatic lighting, grounded materials, production-ready character key art.";
+    case "painterly_fantasy":
+    default:
+      return "Art style: premium painterly tabletop RPG fantasy realism with refined brushwork and dramatic tavern-and-adventure lighting.";
+  }
+}
+
 function characterPortraitPrompt(input: {
   characterName: string;
   username: string;
   characterSheet: string;
   campaignGenre: string | null;
   customWorldName: string | null;
+  guidelines?: string | undefined;
+  artStyle?: string | undefined;
 }) {
   const characterName =
     input.characterName.trim() || input.username.trim() || "Adventurer";
   const world = input.customWorldName?.trim() || input.campaignGenre || "fantasy";
   const characterSheet = compactText(input.characterSheet, 2200);
+  const guidelines = compactText(input.guidelines ?? "", 900);
 
   return [
     `Create a square fantasy character portrait for ${characterName}.`,
@@ -182,7 +202,9 @@ function characterPortraitPrompt(input: {
     "",
     characterSheet,
     "",
-    "Art direction: premium tabletop RPG character portrait, waist-up heroic composition, expressive face, readable silhouette, detailed clothing and equipment, painterly fantasy realism, dramatic tavern-and-adventure lighting, subtle background atmosphere, no frame, no UI, no text, no logo, no watermark."
+    artStyleDirection(input.artStyle),
+    guidelines ? `User art guidelines: ${guidelines}` : "",
+    "Composition: waist-up heroic portrait, expressive face, readable silhouette, detailed clothing and equipment, subtle background atmosphere, no frame, no UI, no text, no logo, no watermark."
   ].join("\n");
 }
 
@@ -292,9 +314,72 @@ function portraitObjectKey(input: {
   ].join("/");
 }
 
+function configuredStorageProvider(config: ApiConfig) {
+  return config.mediaStorageDriver === "spaces"
+    ? "digitalocean_spaces"
+    : config.mediaStorageDriver;
+}
+
+async function storePortraitSource(input: {
+  source: Buffer;
+  storage: MediaStorage;
+  campaignId: string;
+  playerId: string;
+  assetId: string;
+}) {
+  const originalPng = await sharp(input.source).png().toBuffer();
+  const variants = await createCharacterPortraitVariants(input.source);
+  const storedObjects: StoredMediaAssetObject[] = [];
+
+  storedObjects.push(
+    await input.storage.putObject({
+      objectKey: portraitObjectKey({
+        campaignId: input.campaignId,
+        playerId: input.playerId,
+        assetId: input.assetId,
+        variant: "original.png"
+      }),
+      body: originalPng,
+      contentType: "image/png"
+    })
+  );
+
+  for (const variant of variants) {
+    storedObjects.push(
+      await input.storage.putObject({
+        objectKey: portraitObjectKey({
+          campaignId: input.campaignId,
+          playerId: input.playerId,
+          assetId: input.assetId,
+          variant: `${variant.name}.webp`
+        }),
+        body: variant.buffer,
+        contentType: variant.contentType
+      })
+    );
+  }
+
+  const displayObject =
+    storedObjects.find((object) => object.objectKey.endsWith("/512.webp")) ??
+    storedObjects.at(-1);
+
+  if (!displayObject) {
+    throw new Error("No portrait objects were stored.");
+  }
+
+  return { displayObject, storedObjects };
+}
+
 export async function generateCharacterPortraitForCampaign(
   input: GenerateCharacterPortraitInput
 ): Promise<CharacterPortraitGenerationResult> {
+  if (input.imageModel && input.imageModel !== "qwen") {
+    return {
+      status: "skipped",
+      reason: "That character portrait model is not supported yet."
+    };
+  }
+
   const settings = qwenImageSettings();
 
   if (!settings.apiKey) {
@@ -310,16 +395,17 @@ export async function generateCharacterPortraitForCampaign(
     campaignId: input.campaignId,
     userId: input.userId
   });
-  const prompt = characterPortraitPrompt(target);
+  const prompt = characterPortraitPrompt({
+    ...target,
+    guidelines: input.guidelines,
+    artStyle: input.artStyle
+  });
   const negativePrompt = characterPortraitNegativePrompt();
   const pendingAsset = await createPendingCharacterPortraitAsset(input.db, {
     ownerUserId: target.ownerUserId,
     campaignId: target.campaignId,
     playerId: target.playerId,
-    storageProvider:
-      input.config.mediaStorageDriver === "spaces"
-        ? "digitalocean_spaces"
-        : input.config.mediaStorageDriver,
+    storageProvider: configuredStorageProvider(input.config),
     prompt,
     negativePrompt,
     provider: "qwen",
@@ -336,45 +422,13 @@ export async function generateCharacterPortraitForCampaign(
       negativePrompt
     });
     const source = await downloadImage(fetchImpl, generated.imageUrl);
-    const originalPng = await sharp(source).png().toBuffer();
-    const variants = await createCharacterPortraitVariants(source);
-    const storedObjects: StoredMediaAssetObject[] = [];
-
-    storedObjects.push(
-      await storage.putObject({
-        objectKey: portraitObjectKey({
-          campaignId: target.campaignId,
-          playerId: target.playerId,
-          assetId: pendingAsset.id,
-          variant: "original.png"
-        }),
-        body: originalPng,
-        contentType: "image/png"
-      })
-    );
-
-    for (const variant of variants) {
-      storedObjects.push(
-        await storage.putObject({
-          objectKey: portraitObjectKey({
-            campaignId: target.campaignId,
-            playerId: target.playerId,
-            assetId: pendingAsset.id,
-            variant: `${variant.name}.webp`
-          }),
-          body: variant.buffer,
-          contentType: variant.contentType
-        })
-      );
-    }
-
-    const displayObject =
-      storedObjects.find((object) => object.objectKey.endsWith("/512.webp")) ??
-      storedObjects.at(-1);
-
-    if (!displayObject) {
-      throw new Error("No portrait objects were stored.");
-    }
+    const { displayObject, storedObjects } = await storePortraitSource({
+      source,
+      storage,
+      campaignId: target.campaignId,
+      playerId: target.playerId,
+      assetId: pendingAsset.id
+    });
 
     const readyAsset = await markCharacterPortraitAssetReady(input.db, {
       assetId: pendingAsset.id,
@@ -412,6 +466,88 @@ export async function generateCharacterPortraitForCampaign(
         endpoint: settings.endpoint,
         model: settings.model
       }
+    });
+
+    return {
+      status: "failed",
+      reason: message
+    };
+  }
+}
+
+export async function storeUploadedCharacterPortraitForCampaign(input: {
+  db: pg.Pool;
+  config: ApiConfig;
+  campaignId: string;
+  userId: string;
+  image: Buffer;
+  fileName?: string | undefined;
+  guidelines?: string | undefined;
+  artStyle?: string | undefined;
+  storage?: MediaStorage;
+}): Promise<CharacterPortraitGenerationResult> {
+  const storage = input.storage ?? createMediaStorage(input.config);
+  const target = await getCharacterPortraitTargetForUser(input.db, {
+    campaignId: input.campaignId,
+    userId: input.userId
+  });
+  const prompt = [
+    `Uploaded character portrait for ${target.characterName || target.username || "Adventurer"}.`,
+    artStyleDirection(input.artStyle),
+    compactText(input.guidelines ?? "", 900)
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const pendingAsset = await createPendingCharacterPortraitAsset(input.db, {
+    ownerUserId: target.ownerUserId,
+    campaignId: target.campaignId,
+    playerId: target.playerId,
+    storageProvider: configuredStorageProvider(input.config),
+    prompt,
+    negativePrompt: "",
+    provider: "upload",
+    model: "user-upload"
+  });
+
+  try {
+    const { displayObject, storedObjects } = await storePortraitSource({
+      source: input.image,
+      storage,
+      campaignId: target.campaignId,
+      playerId: target.playerId,
+      assetId: pendingAsset.id
+    });
+    const readyAsset = await markCharacterPortraitAssetReady(input.db, {
+      assetId: pendingAsset.id,
+      playerId: target.playerId,
+      displayObject,
+      providerRequestId: null,
+      generationMetadata: {
+        fileName: input.fileName ?? null,
+        variants: storedObjects.map((object) => ({
+          objectKey: object.objectKey,
+          publicUrl: object.publicUrl,
+          contentType: object.contentType,
+          byteSize: object.byteSize,
+          width: object.width,
+          height: object.height,
+          sha256: object.sha256
+        }))
+      }
+    });
+
+    return {
+      status: "ready",
+      assetId: readyAsset.id,
+      portraitUrl: readyAsset.public_url ?? displayObject.publicUrl
+    };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Portrait upload failed.";
+
+    await markCharacterPortraitAssetFailed(input.db, {
+      assetId: pendingAsset.id,
+      errorMessage: message
     });
 
     return {

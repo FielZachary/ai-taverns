@@ -5,6 +5,7 @@ import {
   CampaignCreateResponseSchema,
   CampaignNpcCardUpdateResponseSchema,
   CampaignNpcCardsResponseSchema,
+  CharacterPortraitResponseSchema,
   CampaignJoinPreviewResponseSchema,
   CampaignJoinResponseSchema,
   CampaignListResponseSchema,
@@ -15,6 +16,8 @@ import {
   type CampaignCreateRequest,
   type CampaignNpcCard,
   type CampaignNpcCardUpdateRequest,
+  type CharacterPortraitGenerateRequest,
+  type CharacterPortraitUploadRequest,
   type CampaignJoinPreviewRequest,
   type CampaignJoinRequest,
   type CampaignSummary,
@@ -97,6 +100,52 @@ export async function readCampaign(campaignId: string) {
     response,
     CampaignReadResponseSchema,
     "Campaign could not be loaded."
+  );
+
+  return data.campaign;
+}
+
+export async function generateCharacterPortrait(
+  campaignId: string,
+  input: CharacterPortraitGenerateRequest
+) {
+  const response = await fetch(
+    `/api/campaigns/${encodeURIComponent(campaignId)}/portrait/generate`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(input)
+    }
+  );
+  const data = await parseJsonResponse(
+    response,
+    CharacterPortraitResponseSchema,
+    "Character art could not be created."
+  );
+
+  return data.campaign;
+}
+
+export async function uploadCharacterPortrait(
+  campaignId: string,
+  input: CharacterPortraitUploadRequest
+) {
+  const response = await fetch(
+    `/api/campaigns/${encodeURIComponent(campaignId)}/portrait/upload`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(input)
+    }
+  );
+  const data = await parseJsonResponse(
+    response,
+    CharacterPortraitResponseSchema,
+    "Character art could not be uploaded."
   );
 
   return data.campaign;
