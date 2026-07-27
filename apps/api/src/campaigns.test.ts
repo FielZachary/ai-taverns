@@ -1444,6 +1444,14 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
     narratorInput.message,
     /Make at least one player backstory anchor visible in the first scene/
   );
+  assert.match(narratorInput.message, /arrival runway into the first live scene/);
+  assert.match(narratorInput.message, /Paragraph 1 must explain why/);
+  assert.match(narratorInput.message, /The first sentence must be about/);
+  assert.match(narratorInput.message, /You stand at/);
+  assert.match(narratorInput.message, /Paragraph 2 must describe what/);
+  assert.match(narratorInput.message, /personal urgency beat/);
+  assert.match(narratorInput.message, /grounded, direct fantasy prose/);
+  assert.match(narratorInput.message, /do not say they disappeared/);
   assert.doesNotMatch(narratorInput.message, /Flagship world context:/);
   assert.doesNotMatch(narratorInput.message, /Seven regions available for the opener:/);
   assert.doesNotMatch(narratorInput.instructions, /World Context:/);
