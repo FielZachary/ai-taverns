@@ -442,6 +442,20 @@ describe("NewAdventureForm", () => {
     fireEvent.change(screen.getByLabelText("Character name"), {
       target: { value: "Mira Vale" }
     });
+    expect(
+      screen.getByText(
+        "Feel free to leave it blank and let AI Taverns generate the backstory for you."
+      )
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText("Optional: Write Backstory"), {
+      target: { value: "Raised among lighthouse keepers beneath twin moons." }
+    });
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: /let ai taverns add unto my backstory/i
+      })
+    );
 
     await nextCharacterStep();
 
@@ -472,7 +486,10 @@ describe("NewAdventureForm", () => {
       expect.objectContaining({
         mode: "single_player",
         playerName: "Mira Vale",
-        characterName: "Mira Vale"
+        characterName: "Mira Vale",
+        characterSheet: expect.stringContaining(
+          "Raised among lighthouse keepers beneath twin moons.\nBackstory Expansion: AI Taverns may add unto this backstory"
+        )
       })
     );
     expect(uploadCharacterPortraitMock).toHaveBeenCalledWith(
@@ -482,6 +499,47 @@ describe("NewAdventureForm", () => {
       })
     );
     expect(generateCharacterPortraitMock).not.toHaveBeenCalled();
+  });
+
+  it("uses the shared rune loader for portrait and campaign preparation", async () => {
+    let resolvePreview:
+      | ((value: { imageDataUrl: string; contentType: string }) => void)
+      | undefined;
+    previewCharacterPortraitMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolvePreview = resolve;
+      })
+    );
+
+    render(<NewAdventureForm />);
+
+    await advanceSingleplayerToIdentity();
+
+    fireEvent.change(screen.getByLabelText("Character name"), {
+      target: { value: "Mira Vale" }
+    });
+
+    await nextCharacterStep();
+
+    fireEvent.click(screen.getByRole("button", { name: /create art/i }));
+
+    expect(screen.getByText("Preparing your campaign")).toHaveClass(
+      "rune-loader"
+    );
+
+    await act(async () => {
+      resolvePreview?.({
+        imageDataUrl: "data:image/png;base64,preview",
+        contentType: "image/png"
+      });
+    });
+
+    uploadCharacterPortraitMock.mockReturnValue(new Promise(() => {}));
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+
+    expect(screen.getByText("Preparing your campaign")).toHaveClass(
+      "rune-loader"
+    );
   });
 
   it("recovers when art preview fails without creating a campaign", async () => {
