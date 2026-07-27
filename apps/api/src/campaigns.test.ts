@@ -7,6 +7,7 @@ import { test } from "node:test";
 import sharp from "sharp";
 import {
   ApiErrorResponseSchema,
+  CharacterBackstoryGenerateResponseSchema,
   CampaignInviteCreateResponseSchema,
   CampaignInviteDisableResponseSchema,
   CampaignInviteListResponseSchema,
@@ -111,6 +112,60 @@ test("character portrait preview reports unconfigured image generation", async (
     process.chdir(originalCwd);
     await rm(emptyCwd, { recursive: true, force: true });
   }
+});
+
+test("POST /api/campaigns/backstory generates a world-grounded character backstory", async () => {
+  resetProviderInputs();
+  setProviderOverride(async () => {
+    const content = JSON.stringify({
+      backstory:
+        "Mira Vale learned the sea keeps better records than any court, especially when Ilyra Fen vanished with a tide-priest's ledger."
+    });
+
+    return {
+      id: "provider-backstory-1",
+      content,
+      debug: {
+        requestMessages: [],
+        rawResponse: content,
+        model: "test-model",
+        temperature: 0.8,
+        providerTimings: []
+      }
+    };
+  });
+  const cookie = await signIn("backstory-writer@example.com");
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/campaigns/backstory",
+    headers: {
+      cookie
+    },
+    payload: {
+      mode: "generate",
+      characterSheet: "Character Name: Mira Vale\nClass: Fighter",
+      campaignGenre: "Eldermere",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "eldermere"
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(CharacterBackstoryGenerateResponseSchema.parse(response.json()), {
+    backstory:
+      "Mira Vale learned the sea keeps better records than any court, especially when Ilyra Fen vanished with a tide-priest's ledger."
+  });
+
+  const providerInput = getProviderInputs().at(-1);
+
+  assert.match(providerInput?.message ?? "", /Character Name: Mira Vale/);
+  assert.match(providerInput?.message ?? "", /World: Eldermere/);
+  assert.match(
+    providerInput?.message ?? "",
+    /why those people matter not only to the player character, but also to the living world/i
+  );
+  assert.doesNotMatch(providerInput?.message ?? "", /Current backstory field/i);
+  resetProviderInputs();
 });
 
 test("character portrait preview reports provider failures", async () => {

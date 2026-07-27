@@ -9,6 +9,8 @@ import {
   CampaignInviteListResponseSchema,
   CampaignCreateRequestSchema,
   CampaignCreateResponseSchema,
+  CharacterBackstoryGenerateRequestSchema,
+  CharacterBackstoryGenerateResponseSchema,
   CampaignNpcCardUpdateParamsSchema,
   CampaignNpcCardUpdateRequestSchema,
   CampaignNpcCardUpdateResponseSchema,
@@ -34,6 +36,7 @@ import {
   LobbyInvitePreviewResponseSchema,
   type CampaignMode
 } from "@ai-dnd/contracts";
+import { formatEldermereOpeningPromptContext } from "@ai-dnd/dm";
 import {
   createCampaignInvite,
   createCampaignForMode,
@@ -137,6 +140,127 @@ function getCampaignGenrePreset(presetId: string | undefined) {
   return campaignGenrePresets.find((preset) => preset.id === presetId);
 }
 
+type BackstoryPromptInput = {
+  characterSheet: string;
+  currentBackstory?: string | undefined;
+  worldContext: string;
+};
+
+const backstoryJsonInstructions = [
+  "You are AI Taverns, a fantasy tabletop character backstory writer and editor.",
+  "Return exactly one valid JSON object with this shape: {\"backstory\":\"...\"}.",
+  "The backstory value must be plain player-facing prose only. Do not include markdown headings, bullet points, stat blocks, explanations, or surrounding commentary."
+].join("\n");
+
+function characterBackstoryWorldContext(input: {
+  campaignGenreKind?: "preset" | "custom" | undefined;
+  campaignGenrePresetId?: string | undefined;
+  campaignGenre?: string | undefined;
+  customWorldName?: string | undefined;
+  customWorldDescription?: string | undefined;
+}) {
+  if (input.campaignGenreKind === "custom") {
+    return [
+      `World: ${input.customWorldName?.trim() || input.campaignGenre?.trim() || "Custom World"}.`,
+      input.customWorldDescription?.trim() || "No custom world description was supplied."
+    ].join("\n");
+  }
+
+  const preset = getCampaignGenrePreset(input.campaignGenrePresetId?.trim());
+
+  if (preset?.id === "eldermere") {
+    return formatEldermereOpeningPromptContext();
+  }
+
+  return [
+    `World or genre: ${preset?.label ?? input.campaignGenre?.trim() ?? "Fantasy"}.`,
+    preset?.promptBrief ??
+      "Use a coherent fantasy world with concrete people, places, factions, tensions, and future story hooks."
+  ].join("\n");
+}
+
+function buildGenerateBackstoryPrompt(input: BackstoryPromptInput) {
+  return [
+    "Write a player-facing character backstory for the character below. The backstory must feel native to the provided world context and should give the AI DM excellent hooks for the opening adventure and later campaign play.",
+    "",
+    "Rules:",
+    "- Use the character sheet as authoritative. Do not change class, species, background, alignment, gender, level, stats, proficiencies, equipment, or spells.",
+    "- Use the full world context as canon. Include concrete world details, factions, places, conflicts, beliefs, customs, threats, or tensions where they naturally fit.",
+    "- Make the backstory unique, interesting, and specific. Avoid generic fantasy biography, vague tragedy, empty prophecy, or interchangeable \"chosen one\" framing.",
+    "- Include important people from the character's past or present. These people should have names, clear relationships to the character, and reasons they matter.",
+    "- Explain why those people matter not only to the player character, but also to the living world: what they know, control, protect, threaten, need, believe, owe, hide, or could change.",
+    "- Make these people useful for the AI DM to bring back later as allies, rivals, patrons, family, witnesses, enemies, missing persons, debt-holders, mentors, or complications.",
+    "- Do not reveal secret DM-only information unless the world context explicitly says it is player-safe.",
+    "- Keep the character as someone with unresolved motivation, not someone whose story is already complete.",
+    "- Include 2-4 usable story hooks: a personal want, a complication, a connection to the world, and something the DM can bring into play later.",
+    "- Do not write in second person.",
+    "",
+    "Length: 250-450 words.",
+    "Tone: evocative, grounded, playable, mysterious but not melodramatic.",
+    "",
+    "Character sheet:",
+    input.characterSheet,
+    "",
+    "World context:",
+    input.worldContext
+  ].join("\n");
+}
+
+function buildAddBackstoryDetailsPrompt(input: BackstoryPromptInput) {
+  return [
+    "Expand and enrich the player-written backstory below. Preserve the player's core ideas, events, relationships, tone, and intent. Your job is to add vivid, useful detail that makes the backstory feel specific to the provided world context and gives the AI DM excellent material to bring into the story later.",
+    "",
+    "Rules:",
+    "- Treat the existing backstory as authoritative. Do not remove, contradict, rename, or overwrite any player-authored details.",
+    "- Use the character sheet as authoritative. Do not change class, species, background, alignment, gender, level, stats, proficiencies, equipment, or spells.",
+    "- Use the full world context as canon. Add concrete world details, factions, places, conflicts, beliefs, customs, threats, or tensions where they naturally fit.",
+    "- Make the enriched backstory unique, interesting, and specific. Avoid generic fantasy biography, vague tragedy, empty prophecy, or interchangeable \"chosen one\" framing.",
+    "- Add or deepen important people from the character's past or present. These people should have names, clear relationships to the character, and reasons they matter.",
+    "- Explain why those people matter not only to the player character, but also to the living world: what they know, control, protect, threaten, need, believe, owe, hide, or could change.",
+    "- Make these people useful for the AI DM to bring back later as allies, rivals, patrons, family, witnesses, enemies, missing persons, debt-holders, mentors, or complications.",
+    "- Keep the character as someone with unresolved motivation, not someone whose story is already complete.",
+    "- Include 2-4 usable story hooks: a personal want, a complication, a connection to the world, and something the DM can bring into play later.",
+    "- Do not reveal secret DM-only information unless the world context explicitly says it is player-safe.",
+    "- Do not write in second person.",
+    "",
+    "Length: 300-550 words.",
+    "Tone: evocative, grounded, playable, mysterious but not melodramatic.",
+    "",
+    "Character sheet:",
+    input.characterSheet,
+    "",
+    "Player-written backstory:",
+    input.currentBackstory ?? "",
+    "",
+    "World context:",
+    input.worldContext
+  ].join("\n");
+}
+
+function parseBackstoryProviderResponse(content: string) {
+  const trimmed = content.trim();
+  const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(trimmed);
+  const jsonText = fenced?.[1] ?? trimmed;
+
+  try {
+    const parsed = JSON.parse(jsonText) as { backstory?: unknown };
+    const backstory =
+      typeof parsed.backstory === "string" ? parsed.backstory.trim() : "";
+
+    if (backstory) {
+      return backstory;
+    }
+  } catch {
+    // Some providers may still return plain prose. Fall through and use it.
+  }
+
+  if (!trimmed) {
+    throw createHttpError(502, "AI Taverns returned an empty backstory.");
+  }
+
+  return trimmed;
+}
+
 export async function registerCampaignRoutes(
   fastify: FastifyInstance,
   options: CampaignRouteOptions
@@ -157,6 +281,46 @@ export async function registerCampaignRoutes(
     };
 
     return CampaignListResponseSchema.parse(response);
+  });
+
+  fastify.post("/campaigns/backstory", async (request) => {
+    const body = CharacterBackstoryGenerateRequestSchema.parse(request.body);
+    const characterSheet = body.characterSheet.trim();
+    const currentBackstory = body.currentBackstory?.trim();
+
+    await requireAuthenticatedUser(
+      fastify,
+      config,
+      request.cookies[config.authCookieName]
+    );
+
+    if (body.mode === "add_details" && !currentBackstory) {
+      throw createHttpError(400, "Write a backstory before adding details.");
+    }
+
+    const worldContext = characterBackstoryWorldContext({
+      campaignGenreKind: body.campaignGenreKind,
+      campaignGenrePresetId: body.campaignGenrePresetId,
+      campaignGenre: body.campaignGenre,
+      customWorldName: body.customWorldName,
+      customWorldDescription: body.customWorldDescription
+    });
+    const message =
+      body.mode === "generate"
+        ? buildGenerateBackstoryPrompt({ characterSheet, worldContext })
+        : buildAddBackstoryDetailsPrompt({
+            characterSheet,
+            currentBackstory,
+            worldContext
+          });
+    const providerResponse = await runtime.askProvider({
+      instructions: backstoryJsonInstructions,
+      message
+    });
+
+    return CharacterBackstoryGenerateResponseSchema.parse({
+      backstory: parseBackstoryProviderResponse(providerResponse.content)
+    });
   });
 
   fastify.post("/campaigns", async (request, reply) => {

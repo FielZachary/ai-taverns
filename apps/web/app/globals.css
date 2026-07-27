@@ -2363,6 +2363,27 @@ h1 {
   min-height: 190px;
 }
 
+.new-adventure-form .backstory-input-shell {
+  position: relative;
+  display: grid;
+}
+
+.new-adventure-form .backstory-input-shell textarea[aria-busy="true"] {
+  padding-bottom: 48px;
+}
+
+.new-adventure-form .backstory-loader {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  max-width: calc(100% - 28px);
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(12, 9, 8, 0.86);
+  font-size: 0.76rem;
+  pointer-events: none;
+}
+
 .new-adventure-form .backstory-actions {
   display: flex;
   flex-wrap: wrap;

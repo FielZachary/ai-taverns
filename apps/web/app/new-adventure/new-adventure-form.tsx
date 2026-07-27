@@ -18,6 +18,7 @@ import {
 } from "@/lib/campaign-genres";
 import {
   createCampaign as createCampaignViaApi,
+  generateCharacterBackstory,
   joinCampaign as joinCampaignViaApi,
   joinLobbyInvite,
   previewLobbyInvite,
@@ -3352,6 +3353,7 @@ export function NewAdventureForm({
   const [characterSheet, setCharacterSheet] = useState(defaultCharacterSheet);
   const [ownerClientId, setOwnerClientId] = useState("");
   const [error, setError] = useState("");
+  const [isGeneratingBackstory, setIsGeneratingBackstory] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [isCreatingArt, setIsCreatingArt] = useState(false);
   const [createdCampaign, setCreatedCampaign] =
@@ -4405,6 +4407,47 @@ export function NewAdventureForm({
     }
   }
 
+  async function writeBackstory(mode: "generate" | "add_details") {
+    if (isGeneratingBackstory) {
+      return;
+    }
+
+    const currentBackstory = backstory.trim();
+
+    if (mode === "add_details" && !currentBackstory) {
+      setError("Write a backstory before adding details.");
+      return;
+    }
+
+    setError("");
+    setIsGeneratingBackstory(true);
+
+    try {
+      const generatedBackstory = await generateCharacterBackstory({
+        mode,
+        characterSheet: characterSheetPreview,
+        ...(mode === "add_details" ? { currentBackstory } : {}),
+        campaignGenre: selectedGenre.label,
+        campaignGenreKind: isCustomGenre ? "custom" : "preset",
+        campaignGenrePresetId: isCustomGenre ? undefined : selectedGenre.id,
+        customWorldName: isCustomGenre ? customWorldName.trim() : undefined,
+        customWorldDescription: isCustomGenre
+          ? customWorldDescription.trim()
+          : undefined
+      });
+
+      setBackstory(generatedBackstory);
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Backstory could not be created."
+      );
+    } finally {
+      setIsGeneratingBackstory(false);
+    }
+  }
+
   async function continueToCampaign() {
     if (isCreating) {
       return;
@@ -5283,16 +5326,42 @@ export function NewAdventureForm({
                         Feel free to leave it blank and let AI Taverns generate the
                         backstory for you.
                       </small>
-                      <textarea
-                        value={backstory}
-                        onChange={(event) => setBackstory(event.target.value)}
-                        placeholder="Optional: Write Backstory"
-                      />
+                      <div className="backstory-input-shell">
+                        <textarea
+                          value={backstory}
+                          onChange={(event) => setBackstory(event.target.value)}
+                          placeholder="Optional: Write Backstory"
+                          readOnly={isGeneratingBackstory}
+                          aria-busy={isGeneratingBackstory}
+                        />
+                        {isGeneratingBackstory ? (
+                          <p className="rune-loader backstory-loader">
+                            Writing your backstory
+                            <span className="rune-loader-dots" aria-hidden="true">
+                              <span>.</span>
+                              <span>.</span>
+                              <span>.</span>
+                            </span>
+                          </p>
+                        ) : null}
+                      </div>
                     </label>
 
                     <div className="backstory-actions" aria-label="Backstory actions">
-                      <button type="button">Generate story</button>
-                      <button type="button">Add details</button>
+                      <button
+                        type="button"
+                        onClick={() => void writeBackstory("generate")}
+                        disabled={isGeneratingBackstory}
+                      >
+                        Generate story
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void writeBackstory("add_details")}
+                        disabled={isGeneratingBackstory || !backstory.trim()}
+                      >
+                        Add details
+                      </button>
                     </div>
                   </div>
                 ) : null}

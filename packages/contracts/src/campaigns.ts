@@ -84,6 +84,23 @@ export const CharacterPortraitPreviewResponseSchema = z.object({
   contentType: z.string().min(1)
 });
 
+export const CharacterBackstoryModeSchema = z.enum(["generate", "add_details"]);
+
+export const CharacterBackstoryGenerateRequestSchema = z.object({
+  mode: CharacterBackstoryModeSchema,
+  characterSheet: z.string().min(1),
+  currentBackstory: z.string().optional(),
+  campaignGenre: z.string().optional(),
+  campaignGenreKind: z.enum(["preset", "custom"]).optional(),
+  campaignGenrePresetId: z.string().optional(),
+  customWorldName: z.string().optional(),
+  customWorldDescription: z.string().optional()
+});
+
+export const CharacterBackstoryGenerateResponseSchema = z.object({
+  backstory: z.string().min(1)
+});
+
 export const CharacterPortraitUploadParamsSchema = z.object({
   campaignId: z.string().uuid()
 });
@@ -239,6 +256,12 @@ export type CharacterPortraitPreviewRequest = z.infer<
 >;
 export type CharacterPortraitPreviewResponse = z.infer<
   typeof CharacterPortraitPreviewResponseSchema
+>;
+export type CharacterBackstoryGenerateRequest = z.infer<
+  typeof CharacterBackstoryGenerateRequestSchema
+>;
+export type CharacterBackstoryGenerateResponse = z.infer<
+  typeof CharacterBackstoryGenerateResponseSchema
 >;
 export type CharacterPortraitUploadRequest = z.infer<
   typeof CharacterPortraitUploadRequestSchema

@@ -16,6 +16,7 @@ import {
 
 const {
   createCampaignMock,
+  generateCharacterBackstoryMock,
   generateCharacterPortraitMock,
   joinCampaignMock,
   previewCampaignJoinMock,
@@ -23,6 +24,7 @@ const {
   uploadCharacterPortraitMock
 } = vi.hoisted(() => ({
   createCampaignMock: vi.fn(),
+  generateCharacterBackstoryMock: vi.fn(),
   generateCharacterPortraitMock: vi.fn(),
   joinCampaignMock: vi.fn(),
   previewCampaignJoinMock: vi.fn(),
@@ -32,6 +34,7 @@ const {
 
 vi.mock("@/lib/campaign-api", () => ({
   createCampaign: createCampaignMock,
+  generateCharacterBackstory: generateCharacterBackstoryMock,
   generateCharacterPortrait: generateCharacterPortraitMock,
   joinCampaign: joinCampaignMock,
   previewCampaignJoin: previewCampaignJoinMock,
@@ -125,6 +128,9 @@ describe("NewAdventureForm", () => {
       availableSlots: 2,
       hasBegun: false
     });
+    generateCharacterBackstoryMock.mockResolvedValue(
+      "Mira's life changed when the lighthouse bell rang at noon."
+    );
     previewCharacterPortraitMock.mockResolvedValue({
       imageDataUrl: "data:image/png;base64,preview",
       contentType: "image/png"
@@ -505,6 +511,67 @@ describe("NewAdventureForm", () => {
       })
     );
     expect(generateCharacterPortraitMock).not.toHaveBeenCalled();
+  });
+
+  it("generates and enriches backstory from the identity step", async () => {
+    let resolveBackstory:
+      | ((value: string | PromiseLike<string>) => void)
+      | undefined;
+    generateCharacterBackstoryMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveBackstory = resolve;
+      })
+    );
+
+    render(<NewAdventureForm />);
+
+    await advanceSingleplayerToIdentity();
+
+    fireEvent.change(screen.getByLabelText("Character name"), {
+      target: { value: "Mira Vale" }
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /generate story/i }));
+
+    expect(screen.getByText("Writing your backstory")).toHaveClass(
+      "rune-loader"
+    );
+    expect(screen.getByPlaceholderText("Optional: Write Backstory")).toHaveAttribute(
+      "aria-busy",
+      "true"
+    );
+    expect(generateCharacterBackstoryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: "generate",
+        campaignGenre: "Eldermere",
+        campaignGenreKind: "preset",
+        campaignGenrePresetId: "eldermere",
+        characterSheet: expect.stringContaining("Character Name: Mira Vale")
+      })
+    );
+    expect(generateCharacterBackstoryMock.mock.calls[0]?.[0]).not.toHaveProperty(
+      "currentBackstory"
+    );
+
+    await act(async () => {
+      resolveBackstory?.("Mira once guarded a lantern no storm could drown.");
+    });
+
+    expect(screen.getByPlaceholderText("Optional: Write Backstory")).toHaveValue(
+      "Mira once guarded a lantern no storm could drown."
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /add details/i }));
+
+    expect(generateCharacterBackstoryMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        mode: "add_details",
+        currentBackstory: "Mira once guarded a lantern no storm could drown.",
+        characterSheet: expect.stringContaining(
+          "Mira once guarded a lantern no storm could drown."
+        )
+      })
+    );
   });
 
   it("uses the shared rune loader for portrait and campaign preparation", async () => {
