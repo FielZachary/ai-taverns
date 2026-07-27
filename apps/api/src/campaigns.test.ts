@@ -1344,6 +1344,27 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.equal(openingPlan.campaign_title, "The Quiet Road");
   assert.equal(openingPayload?.content, "A lantern flickers over the old road as your adventure begins.\n\nA weathered sign points toward a ruined watchtower beyond the trees.\n\nWhat do you do?");
   assert.equal(getProviderInputs().length, 2);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const foundationChunk = database.contextChunks.find(
+    (chunk) =>
+      chunk.campaign_id === created.campaign.id &&
+      chunk.context_key === "world:opening-foundation"
+  );
+  const foundationSecret = database.contextChunks.find(
+    (chunk) =>
+      chunk.campaign_id === created.campaign.id &&
+      chunk.context_key === "secret:opening-foundation"
+  );
+
+  assert.ok(foundationChunk);
+  assert.equal(foundationChunk.category, "relevant_world_context");
+  assert.equal(foundationChunk.visibility, "player_safe");
+  assert.match(foundationChunk.body_markdown, /## Canonical Grounding/);
+  assert.ok(foundationSecret);
+  assert.equal(foundationSecret.category, "overarching_big_plot_secrets");
+  assert.equal(foundationSecret.visibility, "dm_only");
+  assert.match(foundationSecret.body_markdown, /## Hidden Truth/);
 
   assert.ok(plannerInput);
   assert.match(plannerInput.instructions, /campaign-opening planner/);

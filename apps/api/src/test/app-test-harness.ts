@@ -2054,6 +2054,52 @@ before(async () => {
           };
         }
 
+        if (input.instructions.includes("campaign foundation compiler")) {
+          const content = JSON.stringify({
+            patches: [],
+            new_context_chunks: [
+              {
+                context_id: "world:opening-foundation",
+                context_type: "relevant_world_context",
+                title: "Opening Foundation",
+                visibility: "player_safe",
+                markdown:
+                  "# Opening Foundation\n\n## Canonical Grounding\n- The campaign begins in the selected Eldermere start.\n\n## Campaign-Local Premise\n- The opening problem has local pressure that can recur.\n\n## DM Seeds\n- Let the first lead point toward a larger regional pattern.\n\n## Open Questions\n- Which local pressure will the party choose to engage first?"
+              },
+              {
+                context_id: "secret:opening-foundation",
+                context_type: "overarching_big_plot_secrets",
+                title: "Opening Foundation Secret",
+                visibility: "dm_only",
+                markdown:
+                  "# Opening Foundation Secret\n\n## Hidden Truth\nThe first scene is tied to a deeper campaign-local secret.\n\n## Evidence Planted\n- The opening NPC knows more than they safely admit.\n\n## Future Reveal Paths\n- Reveal the truth only after the party follows local leads.\n\n## Constraints\nDo not resolve the campaign-scale truth in the opener.\n\n## Open Questions\n- What cost will the truth demand?"
+              }
+            ],
+            remove_context_chunks: []
+          });
+
+          return {
+            id: "provider-foundation-compiler-1",
+            content,
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: content,
+              model: "test-model",
+              temperature: 0.8,
+              providerTimings: []
+            }
+          };
+        }
+
         if (input.instructions.includes("memory/context updater")) {
           const shouldCreateMarra = /\bMarra Vell\b/.test(input.message);
           const hasMarraContext = input.message.includes(
@@ -2085,7 +2131,7 @@ before(async () => {
                         context_id: "world:amber-sphere",
                         context_type: "relevant_world_context",
                         title: "Amber Sphere",
-                        visibility: "dm_only",
+                        visibility: "player_safe",
                         markdown:
                           "# Amber Sphere\n\n## Established Facts\n- The amber sphere rests in the grove's root chamber.\n- Touching it woke a pulse of amber light through the roots.\n\n## Strong Inferences\nThe sphere is tied to the grove's living heart and reacts to direct contact.\n\n## DM Seeds\n- The sphere may preserve an old warning from the grove.\n- The amber light can become a recurring sign of the grove's attention.\n\n## Open Questions\n- Is the sphere protecting the grove, imprisoning something, or asking for help?\n\n## Last Touched\nCreated after the party touched the amber sphere."
                       },
@@ -2093,7 +2139,7 @@ before(async () => {
                         context_id: "thread:the-amber-sphere",
                         context_type: "quests_open_threads",
                         title: "The Amber Sphere",
-                        visibility: "dm_only",
+                        visibility: "player_safe",
                         markdown:
                           "# The Amber Sphere\n\n## Current Situation\nThe party has touched the amber sphere in the grove's root chamber.\n\n## Stakes\nThe sphere's awakening may change how the grove responds to the party.\n\n## Known Leads\n- Watch the chamber for changes after contact.\n- Ask grove-touched NPCs about the amber light.\n\n## Possible Complications\n- The grove may answer in visions or transformations instead of words.\n\n## Resolution Signals\nThe party learns what the sphere is and decides what to do with it."
                       },

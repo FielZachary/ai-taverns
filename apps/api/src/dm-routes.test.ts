@@ -1189,7 +1189,7 @@ test("DM runtime memory updater creates and updates NPC context cards", async ()
   );
 });
 
-test("DM runtime memory updater proactively creates player-visible world story chunks", async () => {
+test("DM runtime memory updater preserves visibility for world story chunks", async () => {
   const { cookie, campaignId } = await createSinglePlayerCampaign(
     "dm-runtime-world-context"
   );
@@ -1238,7 +1238,7 @@ test("DM runtime memory updater proactively creates player-visible world story c
 
   assert.ok(groveSecret);
   assert.equal(groveSecret.category, "overarching_big_plot_secrets");
-  assert.equal(groveSecret.visibility, "player_safe");
+  assert.equal(groveSecret.visibility, "dm_only");
   assert.match(groveSecret.body_markdown, /## Hidden Truth/);
 
   const secondResponse = await app.inject({
