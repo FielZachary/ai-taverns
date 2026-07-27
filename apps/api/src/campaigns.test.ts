@@ -31,7 +31,10 @@ import {
   setProviderOverride,
   signIn
 } from "./test/app-test-harness.js";
-import { generateCharacterPortraitForCampaign } from "./character-portrait-generation.js";
+import {
+  generateCharacterPortraitForCampaign,
+  generateCharacterPortraitPreview
+} from "./character-portrait-generation.js";
 import { loadConfig } from "./config.js";
 
 test("character portrait generation rejects unsupported model selections early", async () => {
@@ -47,6 +50,121 @@ test("character portrait generation rejects unsupported model selections early",
     status: "skipped",
     reason: "That character portrait model is not supported yet."
   });
+});
+
+test("character portrait preview rejects unsupported model selections early", async () => {
+  const result = await generateCharacterPortraitPreview({
+    characterName: "Mira",
+    characterSheet: "Level 5 Fighter",
+    imageModel: "not-qwen" as never
+  });
+
+  assert.deepEqual(result, {
+    status: "skipped",
+    reason: "That character portrait model is not supported yet."
+  });
+});
+
+test("character portrait preview reports unconfigured image generation", async () => {
+  const originalQwenImageApiKey = process.env.QWEN_IMAGE_API_KEY;
+  const originalDashscopeApiKey = process.env.DASHSCOPE_API_KEY;
+  const originalQwenApiKey = process.env.QWEN_API_KEY;
+  const originalCwd = process.cwd();
+  const emptyCwd = await mkdtemp(join(tmpdir(), "portrait-preview-unconfigured-"));
+
+  delete process.env.QWEN_IMAGE_API_KEY;
+  delete process.env.DASHSCOPE_API_KEY;
+  delete process.env.QWEN_API_KEY;
+
+  try {
+    process.chdir(emptyCwd);
+
+    const result = await generateCharacterPortraitPreview({
+      characterName: "Mira",
+      characterSheet: "Level 5 Fighter",
+      imageModel: "qwen"
+    });
+
+    assert.deepEqual(result, {
+      status: "skipped",
+      reason: "Qwen image generation is not configured."
+    });
+  } finally {
+    if (originalQwenImageApiKey === undefined) {
+      delete process.env.QWEN_IMAGE_API_KEY;
+    } else {
+      process.env.QWEN_IMAGE_API_KEY = originalQwenImageApiKey;
+    }
+
+    if (originalDashscopeApiKey === undefined) {
+      delete process.env.DASHSCOPE_API_KEY;
+    } else {
+      process.env.DASHSCOPE_API_KEY = originalDashscopeApiKey;
+    }
+
+    if (originalQwenApiKey === undefined) {
+      delete process.env.QWEN_API_KEY;
+    } else {
+      process.env.QWEN_API_KEY = originalQwenApiKey;
+    }
+
+    process.chdir(originalCwd);
+    await rm(emptyCwd, { recursive: true, force: true });
+  }
+});
+
+test("character portrait preview reports provider failures", async () => {
+  const originalQwenImageApiKey = process.env.QWEN_IMAGE_API_KEY;
+  const originalQwenImageEndpoint = process.env.QWEN_IMAGE_ENDPOINT;
+  const originalQwenImageModel = process.env.QWEN_IMAGE_MODEL;
+
+  process.env.QWEN_IMAGE_API_KEY = "test-qwen-image-key";
+  process.env.QWEN_IMAGE_ENDPOINT = "https://qwen-image.example.test/failure";
+  process.env.QWEN_IMAGE_MODEL = "qwen-image-failure-model";
+
+  try {
+    const result = await generateCharacterPortraitPreview({
+      characterName: "Mira",
+      characterSheet: "Level 5 Fighter",
+      imageModel: "qwen",
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            code: "BadRequest",
+            message: "preview prompt rejected"
+          }),
+          {
+            status: 400,
+            headers: {
+              "content-type": "application/json"
+            }
+          }
+        )
+    });
+
+    assert.deepEqual(result, {
+      status: "failed",
+      reason: "preview prompt rejected"
+    });
+  } finally {
+    if (originalQwenImageApiKey === undefined) {
+      delete process.env.QWEN_IMAGE_API_KEY;
+    } else {
+      process.env.QWEN_IMAGE_API_KEY = originalQwenImageApiKey;
+    }
+
+    if (originalQwenImageEndpoint === undefined) {
+      delete process.env.QWEN_IMAGE_ENDPOINT;
+    } else {
+      process.env.QWEN_IMAGE_ENDPOINT = originalQwenImageEndpoint;
+    }
+
+    if (originalQwenImageModel === undefined) {
+      delete process.env.QWEN_IMAGE_MODEL;
+    } else {
+      process.env.QWEN_IMAGE_MODEL = originalQwenImageModel;
+    }
+  }
 });
 
 test("POST /api/campaigns/portrait/preview generates transient art without campaign rows", async () => {
