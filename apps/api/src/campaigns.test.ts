@@ -1324,6 +1324,16 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   const openingPlan = metadata.eldermereOpeningPlan as Record<string, unknown>;
   const plannerInput = getProviderInputs().at(0);
   const narratorInput = getProviderInputs().at(1);
+  const openingEvent = database.campaignEvents.find(
+    (event) =>
+      event.campaign_id === created.campaign.id &&
+      event.type === "adventure_begun"
+  );
+  const openingPayload = openingEvent?.payload as Record<string, unknown> | undefined;
+  const aiDebug = openingPayload?.aiDebug as Record<string, unknown> | undefined;
+  const plannerDebug = aiDebug?.eldermereOpeningPlanner as
+    | Record<string, unknown>
+    | undefined;
 
   assert.equal(worldProfile.worldName, "Eldermere");
   assert.equal(worldProfile.source, "flagship_world");
@@ -1332,6 +1342,7 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.equal(startingLocation.displayLocation, startingLocation.name);
   assert.equal(metadata.eldermereOpeningPlanVersion, 1);
   assert.equal(openingPlan.campaign_title, "The Quiet Road");
+  assert.equal(openingPayload?.content, "A lantern flickers over the old road as your adventure begins.\n\nA weathered sign points toward a ruined watchtower beyond the trees.\n\nWhat do you do?");
   assert.equal(getProviderInputs().length, 2);
 
   assert.ok(plannerInput);
@@ -1420,6 +1431,19 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
     narratorInput.message,
     /Write the player-facing opener only from the Eldermere opening plan/
   );
+
+  assert.ok(plannerDebug);
+  assert.equal(plannerDebug.rawResponse, JSON.stringify(openingPlan));
+  assert.deepEqual(plannerDebug.parsedOutput, openingPlan);
+  assert.match(
+    JSON.stringify(plannerDebug.requestMessages),
+    /campaign-opening planner/
+  );
+  assert.match(
+    JSON.stringify(plannerDebug.requestMessages),
+    /Selected opener region and settlement/
+  );
+  assert.match(JSON.stringify(plannerDebug.requestMessages), /Captain Saela/);
 });
 
 test("GET /api/campaigns/:campaignId/npc-cards lists existing NPC context cards", async () => {

@@ -35,6 +35,7 @@ export type DebugFields = {
   combatState?: unknown;
   contextStorageState?: unknown;
   combatAdjudication?: unknown;
+  eldermereOpeningPlanner?: unknown;
   router?: unknown;
 };
 

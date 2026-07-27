@@ -637,6 +637,14 @@ type DungeonMasterReply = {
   setting?: CampaignSettingSummary | undefined;
 };
 
+type EldermereOpeningPlannerDebug =
+  NonNullable<AiDebugInfo["eldermereOpeningPlanner"]>;
+
+type EldermereOpeningPlannerResult = {
+  plan: EldermereOpeningPlan;
+  debug: EldermereOpeningPlannerDebug;
+};
+
 type DmPromptContext = {
   instructions: string;
   message: string;
@@ -1918,18 +1926,30 @@ export async function createCampaignForMode(
             openingRequest,
             openingTurn.id
           );
-          await persistEldermereOpeningPlan(db, createdState.campaign.id, plan);
+          await persistEldermereOpeningPlan(
+            db,
+            createdState.campaign.id,
+            plan.plan
+          );
 
-          return askEldermereOpeningNarrator(
+          const opening = await askEldermereOpeningNarrator(
             db,
             runtime,
             createdState.campaign,
             openingRequest,
             openingSceneInstructions("single_player"),
-            plan,
+            plan.plan,
             openingTurn.id,
             { allowResolvedCombatWithoutRolls: true }
           );
+
+          return {
+            ...opening,
+            debug: {
+              ...opening.debug,
+              eldermereOpeningPlanner: plan.debug
+            }
+          };
         })()
       : await askDungeonMaster(
           db,
@@ -5478,6 +5498,39 @@ function formatEldermereNarratorOpeningRequest(input: {
   ].join("\n");
 }
 
+function eldermereOpeningPlannerDebug(input: {
+  instructions: string;
+  message: string;
+  providerData: DungeonMasterProviderResponse;
+  plan: EldermereOpeningPlan;
+}): EldermereOpeningPlannerDebug {
+  const requestMessages =
+    input.providerData.debug.requestMessages.length > 0
+      ? input.providerData.debug.requestMessages
+      : [
+          { role: "system" as const, content: input.instructions },
+          { role: "user" as const, content: input.message }
+        ];
+
+  return {
+    requestMessages,
+    rawResponse: input.providerData.content,
+    parsedOutput: openingPlanToJson(input.plan),
+    ...(input.providerData.debug.providerResponseId
+      ? { providerResponseId: input.providerData.debug.providerResponseId }
+      : {}),
+    ...(input.providerData.debug.model
+      ? { model: input.providerData.debug.model }
+      : {}),
+    ...(typeof input.providerData.debug.temperature === "number"
+      ? { temperature: input.providerData.debug.temperature }
+      : {}),
+    ...(input.providerData.debug.providerTimings
+      ? { providerTimings: input.providerData.debug.providerTimings }
+      : {})
+  };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -5931,7 +5984,7 @@ async function askEldermereOpeningPlanner(
   campaign: CampaignRow,
   openingRequest: string,
   turnId?: string
-) {
+): Promise<EldermereOpeningPlannerResult> {
   const traceId = randomUUID();
   const startedAt = Date.now();
   const instructions = eldermereOpeningPlannerInstructions();
@@ -6008,7 +6061,15 @@ async function askEldermereOpeningPlanner(
       }
     });
 
-    return plan;
+    return {
+      plan,
+      debug: eldermereOpeningPlannerDebug({
+        instructions,
+        message,
+        providerData: initialData,
+        plan
+      })
+    };
   } catch (initialError) {
     await logTurnDebugTrace(db, {
       campaignId: campaign.id,
@@ -6041,7 +6102,24 @@ async function askEldermereOpeningPlanner(
         }
       });
 
-      return plan;
+      const repairMessage = [
+        "The previous Eldermere opening planner response failed validation.",
+        "Return a corrected response using exactly the required JSON shape.",
+        "Do not include Markdown or commentary.",
+        "",
+        "Original planner request:",
+        message
+      ].join("\n");
+
+      return {
+        plan,
+        debug: eldermereOpeningPlannerDebug({
+          instructions,
+          message: repairMessage,
+          providerData: repairData,
+          plan
+        })
+      };
     } catch (repairError) {
       await logTurnDebugTrace(db, {
         campaignId: campaign.id,
@@ -7242,18 +7320,30 @@ export async function beginRoomForUser(
             openingRequest,
             openingTurn.id
           );
-          await persistEldermereOpeningPlan(db, beginState.campaign.id, plan);
+          await persistEldermereOpeningPlan(
+            db,
+            beginState.campaign.id,
+            plan.plan
+          );
 
-          return askEldermereOpeningNarrator(
+          const opening = await askEldermereOpeningNarrator(
             db,
             runtime,
             beginState.campaign,
             openingRequest,
             openingSceneInstructions("multiplayer"),
-            plan,
+            plan.plan,
             openingTurn.id,
             { allowResolvedCombatWithoutRolls: true }
           );
+
+          return {
+            ...opening,
+            debug: {
+              ...opening.debug,
+              eldermereOpeningPlanner: plan.debug
+            }
+          };
         })()
       : await askDungeonMaster(
           db,
