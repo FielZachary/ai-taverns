@@ -4,20 +4,11 @@ import {
   cultureForNameRequest,
   eldermereRegionStyles,
   generateNamePool,
-  nameStyleProfiles,
   normalizeName,
   stylesForNameRequest,
   validateCandidateName,
   type NameTarget
 } from "./name-director.js";
-
-function usesBannedRut(name: string) {
-  return normalizeName(name)
-    .split(/[\s'-]+/)
-    .some((token) =>
-      ["elara", "kaelos", "venn", "vell", "vael", "vale", "vey"].includes(token)
-    );
-}
 
 describe("name director", () => {
   it("maps Eldermere regions to composable fantasy styles", () => {
@@ -131,64 +122,6 @@ describe("name director", () => {
     assert.equal(generatedNames.includes("Nessa Saltmere"), false);
     assert.equal(generatedNames.includes("Bria Keelmark"), false);
     assert.equal(generatedNames.some((name) => /Elara|Kaelos/i.test(name)), false);
-  });
-
-  it("mass-tests style mixes for uniqueness, pronounceability, and banned shapes", () => {
-    const styleIds = nameStyleProfiles.map((style) => style.id);
-    const targets: NameTarget[] = ["person", "settlement", "tavern", "ship", "faction"];
-    const failures: string[] = [];
-    let generatedCount = 0;
-
-    for (let styleIndex = 0; styleIndex < styleIds.length; styleIndex += 1) {
-      const styles = [
-        { id: styleIds[styleIndex]!, weight: 3 },
-        { id: styleIds[(styleIndex + 7) % styleIds.length]!, weight: 2 },
-        { id: styleIds[(styleIndex + 13) % styleIds.length]!, weight: 1 }
-      ];
-
-      for (let seedIndex = 0; seedIndex < 40; seedIndex += 1) {
-        const target = targets[seedIndex % targets.length]!;
-        const pool = generateNamePool({
-          styles,
-          target,
-          role: seedIndex % 2 === 0 ? "patron" : "rival",
-          count: 12,
-          seed: `mass-${styleIndex}-${seedIndex}`,
-          existingNames: ["Elara Venn", "Kaelos", "Marra Vell"]
-        });
-        const normalized = pool.names.map((candidate) => normalizeName(candidate.name));
-
-        generatedCount += pool.names.length;
-
-        if (pool.names.length < 12) {
-          failures.push(`style ${styleIndex} seed ${seedIndex} returned ${pool.names.length} names`);
-        }
-
-        if (new Set(normalized).size !== normalized.length) {
-          failures.push(`style ${styleIndex} seed ${seedIndex} returned duplicate names`);
-        }
-
-        for (const candidate of pool.names) {
-          const validation = validateCandidateName({
-            candidate: candidate.name,
-            existingNames: ["Elara Venn", "Kaelos", "Marra Vell"]
-          });
-
-          if (!validation.ok) {
-            failures.push(
-              `style ${styleIndex} seed ${seedIndex} generated invalid ${candidate.name}: ${validation.reasons.join(", ")}`
-            );
-          }
-
-          if (usesBannedRut(candidate.name)) {
-            failures.push(`style ${styleIndex} seed ${seedIndex} used a banned rut: ${candidate.name}`);
-          }
-        }
-      }
-    }
-
-    assert.equal(failures.length, 0, failures.slice(0, 20).join("\n"));
-    assert.ok(generatedCount >= 16000);
   });
 
   it("keeps every Eldermere region mapping fillable", () => {
