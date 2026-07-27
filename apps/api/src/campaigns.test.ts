@@ -1375,6 +1375,8 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.equal(foundationThread.category, "quests_open_threads");
   assert.equal(foundationThread.visibility, "player_safe");
   assert.doesNotMatch(foundationThread.body_markdown, /DM Eyes Only|Hidden Truth/i);
+  assert.doesNotMatch(foundationThread.body_markdown, /duplicate ledger/i);
+  assert.doesNotMatch(foundationThread.body_markdown, /Garrick Vaultgate/i);
 
   assert.ok(plannerInput);
   assert.match(plannerInput.instructions, /campaign-opening planner/);

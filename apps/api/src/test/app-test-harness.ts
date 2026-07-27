@@ -2080,7 +2080,15 @@ before(async () => {
                 title: "Lysa's Trail",
                 visibility: "player_safe",
                 markdown:
-                  "# Lysa's Trail\n\n## Established Facts\n- Lysa is missing after taking a private ruin contract.\n\n## Player-Safe Leads\n- Question witnesses.\n- Search public claim records.\n- Follow rumors of strange ruin signs.\n\n## Escalation\n- If Yiller waits too long, the unknown buyer may act first and the trail may grow colder.\n\n## Open Questions\n- Who hired Lysa?\n- Is she still alive?"
+                  "# Lysa's Trail\n\n## Established Facts\n- Lysa is missing after taking a private ruin contract.\n\n## Player-Safe Leads\n- Question witnesses.\n- Search public claim records.\n- Follow rumors of strange ruin signs.\n- Find the duplicate ledger hidden in the clerk's room.\n\n## Escalation\n- If Yiller waits too long, the unknown buyer may act first and the trail may grow colder.\n- Garrick Vaultgate sends a second team.\n\n## Open Questions\n- Who hired Lysa?\n- Is she still alive?"
+              },
+              {
+                context_id: "npc:garrick-vaultgate",
+                context_type: "npc_context",
+                title: "Garrick Vaultgate",
+                visibility: "dm_only",
+                markdown:
+                  "# Garrick Vaultgate\n\n## Hidden Truth\n- Garrick is the private buyer behind the opening pressure."
               },
               {
                 context_id: "secret:sunder-kiln",

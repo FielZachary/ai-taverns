@@ -4745,10 +4745,15 @@ function formatNpcContextIndex(index: NpcContextIndexEntry[]) {
 
 function normalizeNewContextChunkPatch(chunk: unknown) {
   const payload = eventPayload(chunk);
-  const contextId = String(
+  const rawContextId = String(
     payload.context_id ?? payload.contextId ?? payload.chunk_id ?? payload.chunkId ?? ""
   );
-  const title = String(payload.title ?? contextId);
+  const title = String(payload.title ?? rawContextId);
+  const contextType = payload.context_type ?? payload.contextType ?? "npc_context";
+  const contextId =
+    contextType === "npc_context"
+      ? normalizeNpcContextId(rawContextId, title)
+      : rawContextId;
   const visibility = payload.visibility === "dm_only" ? "dm_only" : "player_safe";
   const markdown =
     typeof payload.markdown === "string"
@@ -4763,11 +4768,101 @@ function normalizeNewContextChunkPatch(chunk: unknown) {
     ...payload,
     operation: "create_chunk",
     context_id: contextId,
-    context_type: payload.context_type ?? payload.contextType ?? "npc_context",
+    context_type: contextType,
     title,
     visibility,
     markdown
   });
+}
+
+function sanitizeCampaignFoundationCompilerChunks(
+  chunks: Record<string, unknown>[]
+) {
+  const dmOnlyNpcNames = chunks
+    .filter(
+      (chunk) =>
+        chunk.visibility === "dm_only" &&
+        typeof chunk.context_id === "string" &&
+        chunk.context_id.startsWith("npc:")
+    )
+    .map((chunk) =>
+      String(chunk.title ?? "")
+        .replace(/^NPC:\s*/i, "")
+        .trim()
+    )
+    .filter(Boolean);
+
+  return chunks.map((chunk) => {
+    const markdown =
+      typeof chunk.markdown === "string" ? chunk.markdown : "";
+    let visibility = chunk.visibility;
+
+    if (
+      visibility === "player_safe" &&
+      typeof chunk.context_id === "string" &&
+      chunk.context_id.startsWith("npc:") &&
+      /not yet met|private buyer|secret employer|hidden patron|antagonist/i.test(
+        `${chunk.title ?? ""}\n${markdown}`
+      )
+    ) {
+      visibility = "dm_only";
+    }
+
+    if (visibility !== "player_safe" || !markdown.trim()) {
+      return { ...chunk, visibility };
+    }
+
+    const sanitizedMarkdown = markdown
+      .split("\n")
+      .filter((line) => !isCampaignFoundationHiddenLine(line, dmOnlyNpcNames))
+      .join("\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+
+    return {
+      ...chunk,
+      visibility,
+      markdown: sanitizedMarkdown || markdown
+    };
+  });
+}
+
+function isCampaignFoundationHiddenLine(line: string, dmOnlyNpcNames: string[]) {
+  const hiddenPattern =
+    /duplicate ledger|hidden under|half-burned map|time-loop|Second Dominion|Ashen Scholar|buyer'?s agent|secret agent|second team|paid in Wellglass|Fara .*Garrick|Garrick .*buyer|alive.*trapped/i;
+
+  return (
+    hiddenPattern.test(line) ||
+    dmOnlyNpcNames.some((name) => name && line.includes(name))
+  );
+}
+
+function normalizeNpcContextId(contextId: string, title: string) {
+  if (!contextId.startsWith("npc:")) {
+    return contextId;
+  }
+
+  const slug = contextId.slice("npc:".length);
+  const titleSlug = kebabCaseContextSlug(title.replace(/^NPC:\s*/i, ""));
+
+  if (!titleSlug || slug.includes("-") || slug === titleSlug) {
+    return contextId;
+  }
+
+  if (slug.replace(/-/g, "") === titleSlug.replace(/-/g, "")) {
+    return `npc:${titleSlug}`;
+  }
+
+  return contextId;
+}
+
+function kebabCaseContextSlug(value: string) {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 function headingFromObjectKey(key: string) {
@@ -6292,23 +6387,36 @@ function buildCampaignFoundationCompilerPrompt() {
     "Set visibility intentionally: player_safe only for facts, leads, pressures, or NPC details that can safely guide player-facing continuity; dm_only for hidden motives, reveal ladders, antagonist plans, true causes, secret clocks, and future twists.",
     "Visibility applies to the entire markdown string. If any bullet, parenthetical, section, clue answer, private motive, true cause, future reveal, or DM-only fact appears in the chunk, the chunk must be dm_only.",
     "Player-safe chunks must not include hidden answers in parentheses, private agendas, true culprit identities, not-yet-discovered locations, future betrayals, secret relationships, time-loop truths, divine fragments, fabricated-debt confirmations, or the actual answer to an open question.",
+    "Player-safe chunks must not include parenthetical corrections that reveal the truth of a rumor, such as '(false - ...)' or '(actually ...)'. Keep rumor truth values in dm_only secret chunks.",
     "Player-safe chunks must not name not-yet-discovered hidden actors, employers, buyers, locations, ledgers, agents, or culprits. Use 'an unknown buyer', 'an undiscovered lead', or 'a hidden record' until the player discovers the name or object.",
+    "Do not launder hidden facts into player_safe chunks by marking them 'rumored', 'unconfirmed', 'possible', or as a question. If the detail is a hidden ledger, secret agent, true culprit, exact hidden location, private employer, or true motive from the planner, it belongs in dm_only.",
     "Player-safe thread chunks may list immediate playable choices and unconfirmed rumors, but their Escalation sections must not name hidden antagonists, hidden destinations, or future secret events. Either make the thread dm_only or describe escalation generically, such as 'the unknown buyer acts first' or 'the trail grows colder'.",
     "Never put a section labeled DM Eyes Only, Hidden Truth, Future Reveal Paths, true cause, private motive, or secret clock inside a player_safe chunk. If that section is needed, move it to a secret:* dm_only chunk or make the entire chunk dm_only.",
-    "For an anchor with both public continuity and hidden truth, split it into a player_safe parent chunk and a dm_only secret chunk, or make the whole chunk dm_only if the anchor itself is not yet safely known.",
+    "For an anchor with both public continuity and hidden truth, split it into a player_safe parent chunk and a dm_only secret chunk. Only make the parent chunk dm_only when there is no player-safe rumor, lead, place-name, symbol, or local pressure to preserve yet.",
     "Player-safe chunks may include mysteries as mysteries: use 'Unknown', 'rumored', 'unconfirmed', or 'not yet discovered' instead of revealing the true answer.",
     "Treat Pageden/canonical Eldermere material as source-grounded world truth. Treat planner-created links, motives, clocks, and secrets as campaign-local premises until established through play.",
     "Every chunk should label its epistemic status with sections or bullets such as Canonical Grounding, Campaign-Local Premise, Established Facts, Strong Inferences, DM Seeds, Hidden Truth, Future Reveal Paths, Constraints, or Open Questions.",
-    "When an anchor has both player-safe continuity and hidden truth, create a public/world or NPC chunk plus a DM-only secret chunk only when both need independent retrieval. Example: world:sunder-kiln for known leads and playable local context, secret:sunder-kiln for the time-loop truth and reveal ladder.",
+    "When an anchor has both player-safe continuity and hidden truth, create a public/world or NPC chunk plus a DM-only secret chunk only when both need independent retrieval. Example: world:sunder-kiln for known leads, rumors, local pressures, and playable context, plus secret:sunder-kiln for the time-loop truth and reveal ladder.",
     "Do not resolve long-term secrets immediately. Preserve a long runway for discovery, player choice, and the player leaving a mark on Eldermere.",
     "Use stable ids with prefixes: npc:kebab-case-name, world:kebab-case-name, faction:kebab-case-name, thread:kebab-case-name, secret:kebab-case-name, or pc:kebab-case-name.",
     "Do not create secret companion chunks with npc:* or thread:* ids such as npc:name-secrets or thread:name-secrets. If the chunk is mainly hidden truth, private motive, or reveal ladder, its context_id must start with secret: and its context_type must be overarching_big_plot_secrets.",
     "NPC chunks must use context_type npc_context and the NPC card section structure from the memory updater where possible.",
+    "Every campaign-important named NPC from the planner must receive an npc:* chunk, including missing mentors, off-screen patrons, not-yet-met antagonists, and dead or endangered anchors. Do not replace an important NPC chunk with only a thread, faction, world, or secret chunk.",
+    "NPC id slugs must preserve word boundaries with hyphens, especially personal names: use npc:lysa-marvelbridge, not npc:lysamarvelbridge.",
+    "For a missing NPC, create a player_safe npc:* chunk with what is known, rumors, relationships, and open questions. Put their true fate, secret location, private discoveries, or reveal ladder in a paired secret:* chunk if needed.",
+    "For a not-yet-met antagonist, private buyer, secret employer, or hidden patron whose name has not been discovered in play, create the npc:* chunk as dm_only. Do not make a player_safe NPC chunk that names the hidden antagonist as a rumor or open question.",
     "World chunks should cover living local context, locations, factions, hazards, artifacts, or recurring symbols.",
-    "Major hidden places, artifacts, or institutions named by the planner should usually receive a relevant_world_context chunk even if that chunk must be dm_only. If that anchor also has a campaign-scale hidden truth or reveal ladder, create a separate dm_only secret chunk too.",
-    "If the planner names a major hidden ruin, dungeon, artifact, chamber, or location as a destination or long-term anchor, create a world:<anchor> chunk with context_type relevant_world_context. If that anchor has hidden truth or a reveal ladder, also create secret:<anchor> with context_type overarching_big_plot_secrets.",
+    "Major hidden places, artifacts, or institutions named by the planner should usually receive a relevant_world_context chunk. If player-facing rumors, leads, symbols, missing-person clues, or local pressures point toward that anchor, make the world chunk player_safe and keep it mystery-forward.",
+    "A world:* chunk for a hidden place must not contain the true nature, private location, reveal ladder, bound entities, antagonist plan, or final answer. Put those in the paired secret:* chunk.",
+    "If the planner names a major hidden ruin, dungeon, artifact, chamber, or location as a destination or long-term anchor, create a world:<anchor> chunk with context_type relevant_world_context. If that anchor has hidden truth or a reveal ladder, also create secret:<same-anchor> with context_type overarching_big_plot_secrets, using the exact same kebab-case slug after the prefix. Do not add suffixes like -truth, -secrets, -mystery, or -reveal to the paired secret id.",
+    "Do not satisfy a named major anchor with only a broader region, faction, or thread chunk. If the planner names the Sunder Kiln, create world:sunder-kiln and secret:sunder-kiln specifically.",
     "Thread chunks should cover active objectives, mysteries, obligations, faction pressures, or choice points only when the thread cuts across multiple anchors. Otherwise embed the thread inside the relevant parent chunk.",
     "Secret chunks should cover reveal ladders, hidden truths, long-term antagonistic plans, or campaign-scale mysteries.",
+    "Required invariant: if a player_safe world:<anchor> chunk exists for a major hidden place with campaign-scale truth, a dm_only secret:<same-anchor> chunk must also exist. For Sunder Kiln specifically, world:sunder-kiln and secret:sunder-kiln must both exist.",
+    "Do not use a catch-all secret such as secret:campaign-core, secret:hidden-agendas, or secret:revelation-ladder as a substitute for a required named secret anchor. Catch-all secret chunks are allowed only after all required named secret anchors have been created.",
+    "Before returning, audit every player_safe chunk and remove or move any of these examples to dm_only: 'duplicate ledger hidden in his room', 'half-burned map in her room', 'the buyer's agent will retrieve notes', 'Garrick is the buyer', 'Fara works for Garrick', 'Lysa is alive/trapped', 'the ruin is a time-loop chamber', or any equivalent hidden-answer wording.",
+    "Safe public rewrites are acceptable: 'a missing record may exist', 'Lysa's lodging may contain a lead', 'an unknown buyer may act first', 'someone is destroying evidence', 'the ruin may hold old imperial machinery', 'the sinkhole may be connected'.",
+    "If you cannot make a player_safe chunk useful without those hidden facts, set that chunk visibility to dm_only instead.",
     "For Eldermere campaign foundations, ensure the output covers the player character, every important NPC including missing or not-yet-met anchors, the starting place, major local institutions or factions, major hidden places or artifacts, the primary active thread, and the major DM-only secrets.",
     "If the planner names a missing mentor, patron, antagonist, key faction, major ruin, or collapse clock, that anchor should appear either as its own chunk or as a clearly labeled section inside a richer parent chunk.",
     "Return new_context_chunks as an array. Each item must use exactly these fields: context_id, context_type, title, visibility, markdown.",
@@ -6432,13 +6540,16 @@ async function runEldermereCampaignFoundationCompiler(
     });
 
     const parsed = parseJsonRecord(providerData.content);
-    const proposedPatches = [
-      ...(Array.isArray(parsed?.patches) ? parsed.patches : []),
-      ...(Array.isArray(parsed?.new_context_chunks)
-        ? parsed.new_context_chunks.map((chunk) =>
+    const foundationChunkPatches = Array.isArray(parsed?.new_context_chunks)
+      ? sanitizeCampaignFoundationCompilerChunks(
+          parsed.new_context_chunks.map((chunk) =>
             normalizeNewContextChunkPatch(chunk)
           )
-        : []),
+        )
+      : [];
+    const proposedPatches = [
+      ...(Array.isArray(parsed?.patches) ? parsed.patches : []),
+      ...foundationChunkPatches,
       ...(Array.isArray(parsed?.remove_context_chunks)
         ? parsed.remove_context_chunks.map((chunk) => ({
             operation: "archive_chunk",
