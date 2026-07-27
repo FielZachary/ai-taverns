@@ -2059,20 +2059,36 @@ before(async () => {
             patches: [],
             new_context_chunks: [
               {
-                context_id: "world:opening-foundation",
-                context_type: "relevant_world_context",
-                title: "Opening Foundation",
+                context_id: "pc:yiller",
+                context_type: "player_character_context",
+                title: "Yiller",
                 visibility: "player_safe",
                 markdown:
-                  "# Opening Foundation\n\n## Canonical Grounding\n- The campaign begins in the selected Eldermere start.\n\n## Campaign-Local Premise\n- The opening problem has local pressure that can recur.\n\n## DM Seeds\n- Let the first lead point toward a larger regional pattern.\n\n## Open Questions\n- Which local pressure will the party choose to engage first?"
+                  "# Yiller\n\n## Established Facts\n- Yiller is searching for Lysa after her trail went quiet.\n\n## Embedded Threads\n- The first playable leads should keep the search personal without resolving Lysa's fate."
               },
               {
-                context_id: "secret:opening-foundation",
+                context_id: "world:sunder-kiln",
+                context_type: "relevant_world_context",
+                title: "Sunder Kiln",
+                visibility: "player_safe",
+                markdown:
+                  "# Sunder Kiln\n\n## Canonical Grounding\n- A major campaign-local ruin anchor in the Sundered Vale.\n\n## Campaign-Local Premise\n- Local rumors, missing expeditions, and claim disputes point toward a dangerous ruin whose truth is not public.\n\n## Embedded Threads\n- Lysa's trail, local claim violence, and strange ruin signs can all point here over time.\n\n## Open Questions\n- What did Lysa find?\n- Who else wants the ruin claimed?"
+              },
+              {
+                context_id: "thread:lysa-trail",
+                context_type: "quests_open_threads",
+                title: "Lysa's Trail",
+                visibility: "player_safe",
+                markdown:
+                  "# Lysa's Trail\n\n## Established Facts\n- Lysa is missing after taking a private ruin contract.\n\n## Player-Safe Leads\n- Question witnesses.\n- Search public claim records.\n- Follow rumors of strange ruin signs.\n\n## Escalation\n- If Yiller waits too long, the unknown buyer may act first and the trail may grow colder.\n\n## Open Questions\n- Who hired Lysa?\n- Is she still alive?"
+              },
+              {
+                context_id: "secret:sunder-kiln",
                 context_type: "overarching_big_plot_secrets",
-                title: "Opening Foundation Secret",
+                title: "Sunder Kiln Secret",
                 visibility: "dm_only",
                 markdown:
-                  "# Opening Foundation Secret\n\n## Hidden Truth\nThe first scene is tied to a deeper campaign-local secret.\n\n## Evidence Planted\n- The opening NPC knows more than they safely admit.\n\n## Future Reveal Paths\n- Reveal the truth only after the party follows local leads.\n\n## Constraints\nDo not resolve the campaign-scale truth in the opener.\n\n## Open Questions\n- What cost will the truth demand?"
+                  "# Sunder Kiln Secret\n\n## Hidden Truth\n- The ruin's deeper behavior and the missing mentor's fate are campaign-scale secrets.\n\n## Evidence Planted\n- Witness contradictions, damaged records, and impossible ruin signs can point toward the truth.\n\n## Future Reveal Paths\n- Reveal the truth only after Yiller follows local leads and makes choices that affect Stakehold.\n\n## Constraints\n- Do not resolve the campaign-scale truth in the opener."
               }
             ],
             remove_context_chunks: []

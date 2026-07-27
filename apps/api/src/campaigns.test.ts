@@ -1349,22 +1349,32 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   const foundationChunk = database.contextChunks.find(
     (chunk) =>
       chunk.campaign_id === created.campaign.id &&
-      chunk.context_key === "world:opening-foundation"
+      chunk.context_key === "world:sunder-kiln"
   );
   const foundationSecret = database.contextChunks.find(
     (chunk) =>
       chunk.campaign_id === created.campaign.id &&
-      chunk.context_key === "secret:opening-foundation"
+      chunk.context_key === "secret:sunder-kiln"
+  );
+  const foundationThread = database.contextChunks.find(
+    (chunk) =>
+      chunk.campaign_id === created.campaign.id &&
+      chunk.context_key === "thread:lysa-trail"
   );
 
   assert.ok(foundationChunk);
   assert.equal(foundationChunk.category, "relevant_world_context");
   assert.equal(foundationChunk.visibility, "player_safe");
   assert.match(foundationChunk.body_markdown, /## Canonical Grounding/);
+  assert.match(foundationChunk.body_markdown, /## Embedded Threads/);
   assert.ok(foundationSecret);
   assert.equal(foundationSecret.category, "overarching_big_plot_secrets");
   assert.equal(foundationSecret.visibility, "dm_only");
   assert.match(foundationSecret.body_markdown, /## Hidden Truth/);
+  assert.ok(foundationThread);
+  assert.equal(foundationThread.category, "quests_open_threads");
+  assert.equal(foundationThread.visibility, "player_safe");
+  assert.doesNotMatch(foundationThread.body_markdown, /DM Eyes Only|Hidden Truth/i);
 
   assert.ok(plannerInput);
   assert.match(plannerInput.instructions, /campaign-opening planner/);
