@@ -29,7 +29,11 @@ import {
 } from "@/lib/campaign-api";
 import { defaultCharacterSheet } from "@/components/playing/PlayerPanel";
 import { DiceRollReveal3D } from "@/components/playing/DiceRollReveal3D";
-import type { MechanicsSeed, SpellSlotState } from "@ai-dnd/contracts";
+import type {
+  EldermereCampaignStart,
+  MechanicsSeed,
+  SpellSlotState
+} from "@ai-dnd/contracts";
 import artificerClassArt from "../../../../assets/classes art/artificer.png";
 import barbarianClassArt from "../../../../assets/classes art/barbarian.png";
 import bardClassArt from "../../../../assets/classes art/bard.png";
@@ -3350,6 +3354,8 @@ export function NewAdventureForm({
   const [alignment, setAlignment] = useState<Alignment>("Neutral Good");
   const [gender, setGender] = useState<Gender>("Non-binary");
   const [backstory, setBackstory] = useState("");
+  const [eldermereStart, setEldermereStart] =
+    useState<EldermereCampaignStart | null>(null);
   const [characterSheet, setCharacterSheet] = useState(defaultCharacterSheet);
   const [ownerClientId, setOwnerClientId] = useState("");
   const [error, setError] = useState("");
@@ -4324,7 +4330,10 @@ export function NewAdventureForm({
           : "Table Owner",
       characterName,
       characterSheet,
-      mechanicsSeed
+      mechanicsSeed,
+      ...(eldermereStart && !isCustomGenre && selectedGenre.id === "eldermere"
+        ? { eldermereStart }
+        : {})
     });
   }
 
@@ -4436,7 +4445,8 @@ export function NewAdventureForm({
           : undefined
       });
 
-      setBackstory(generatedBackstory);
+      setBackstory(generatedBackstory.backstory);
+      setEldermereStart(generatedBackstory.eldermereStart ?? null);
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -4676,7 +4686,10 @@ export function NewAdventureForm({
                       aria-pressed={campaignGenre === genre.id}
                       disabled={genre.id === customCampaignGenre.id}
                       key={genre.id}
-                      onClick={() => setCampaignGenre(genre.id)}
+                      onClick={() => {
+                        setCampaignGenre(genre.id);
+                        setEldermereStart(null);
+                      }}
                       style={
                         {
                           "--genre-banner-url": `url("${campaignWorldBannerUrls[genre.id]}")`
@@ -5329,7 +5342,10 @@ export function NewAdventureForm({
                       <div className="backstory-input-shell">
                         <textarea
                           value={backstory}
-                          onChange={(event) => setBackstory(event.target.value)}
+                          onChange={(event) => {
+                            setBackstory(event.target.value);
+                            setEldermereStart(null);
+                          }}
                           placeholder="Optional: Write Backstory"
                           readOnly={isGeneratingBackstory}
                           aria-busy={isGeneratingBackstory}

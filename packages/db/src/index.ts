@@ -1732,13 +1732,14 @@ export async function createCampaignForMode(
     characterName?: string | undefined;
     characterSheet?: string | undefined;
     mechanicsSeed?: MechanicsSeed | undefined;
+    eldermereStart?: EldermereCampaignStart | undefined;
     userId: string;
     runtime?: DungeonMasterRuntime | undefined;
   }
 ): Promise<CampaignSummary> {
   const sessionId = `ai-dnd-${randomUUID()}`;
   const eldermereStart = isEldermerePreset(input.campaignGenrePresetId)
-    ? randomEldermereCampaignStart()
+    ? input.eldermereStart ?? randomEldermereCampaignStart()
     : undefined;
   const genreMetadata = {
     genre: {

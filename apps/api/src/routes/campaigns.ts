@@ -37,8 +37,10 @@ import {
   type CampaignMode
 } from "@ai-dnd/contracts";
 import {
+  eldermereRegions,
   formatEldermereOpeningPromptContext,
   generateNamePool,
+  type EldermereCampaignStart as DmEldermereCampaignStart,
   type NameGender
 } from "@ai-dnd/dm";
 import {
@@ -147,13 +149,15 @@ function getCampaignGenrePreset(presetId: string | undefined) {
 type BackstoryPromptInput = {
   characterSheet: string;
   currentBackstory?: string | undefined;
+  includeEldermereStart?: boolean | undefined;
   nameBank: string;
   worldContext: string;
 };
 
 const backstoryJsonInstructions = [
   "You are AI Taverns, a fantasy tabletop character backstory writer and editor.",
-  "Return exactly one valid JSON object with this shape: {\"backstory\":\"...\"}.",
+  "Return exactly one valid JSON object with this shape: {\"backstory\":\"...\",\"eldermereStart\":{\"regionName\":\"...\",\"settlementName\":\"...\",\"reason\":\"...\"}}.",
+  "Only include eldermereStart when the prompt provides canonical Eldermere start options. Otherwise return only {\"backstory\":\"...\"}.",
   "The backstory value must be plain player-facing prose only. Do not include markdown headings, bullet points, stat blocks, hook labels, explanations, or surrounding commentary.",
   "For backstories, invented proper nouns are allowed only for people. Do not invent named non-person entities."
 ].join("\n");
@@ -248,6 +252,44 @@ function backstoryNameBank(input: {
   ].join("\n");
 }
 
+function isEldermereBackstoryRequest(input: {
+  campaignGenrePresetId?: string | undefined;
+}) {
+  return input.campaignGenrePresetId?.trim() === "eldermere";
+}
+
+function formatEldermereStartOptions() {
+  return [
+    "Canonical Eldermere start options:",
+    "Choose exactly one region and one settlement from this list for eldermereStart. The settlement must belong to the chosen region.",
+    ...eldermereRegions.flatMap((region) => [
+      `Region: ${region.name}`,
+      `Settlements: ${region.settlements.map((settlement) => settlement.name).join(", ")}`
+    ])
+  ].join("\n");
+}
+
+function resolveEldermereCampaignStart(input: {
+  regionName?: string | undefined;
+  settlementName?: string | undefined;
+}): DmEldermereCampaignStart | undefined {
+  const regionName = input.regionName?.trim();
+  const settlementName = input.settlementName?.trim();
+
+  if (!regionName || !settlementName) {
+    return undefined;
+  }
+
+  const region = eldermereRegions.find(
+    (candidate) => candidate.name === regionName
+  );
+  const settlement = region?.settlements.find(
+    (candidate) => candidate.name === settlementName
+  );
+
+  return region && settlement ? { region, settlement } : undefined;
+}
+
 function buildGenerateBackstoryPrompt(input: BackstoryPromptInput) {
   return [
     "Write a player-facing character backstory for the character below. The backstory must feel native to the provided world context and should give the AI DM excellent hooks for the opening adventure and later campaign play.",
@@ -272,6 +314,12 @@ function buildGenerateBackstoryPrompt(input: BackstoryPromptInput) {
     "- Include 2-4 usable story hooks: a personal want, a complication, a connection to the world, and something the DM can bring into play later.",
     "- Weave hooks into the prose. Do not add a 'Hooks:' label or any other labeled section.",
     "- Before returning JSON, silently remove any invented non-person proper noun and replace it with a plain description.",
+    ...(input.includeEldermereStart
+      ? [
+          "- Also choose the best Eldermere campaign starting region and settlement for this character. Return them in eldermereStart.regionName and eldermereStart.settlementName using exact names from the canonical start options below.",
+          "- Choose the starting settlement that best turns the backstory's unresolved trouble into the opening scene. The backstory itself may mention a broader region or city-state without starting there."
+        ]
+      : []),
     "- Do not write in second person.",
     "",
     "Length: 250-450 words.",
@@ -282,6 +330,9 @@ function buildGenerateBackstoryPrompt(input: BackstoryPromptInput) {
     "",
     input.nameBank,
     "",
+    ...(input.includeEldermereStart
+      ? [formatEldermereStartOptions(), ""]
+      : []),
     "World context:",
     input.worldContext
   ].join("\n");
@@ -312,6 +363,12 @@ function buildAddBackstoryDetailsPrompt(input: BackstoryPromptInput) {
     "- Weave hooks into the prose. Do not add a 'Hooks:' label or any other labeled section.",
     "- Before returning JSON, silently remove any invented non-person proper noun and replace it with a plain description.",
     "- Do not reveal secret DM-only information unless the world context explicitly says it is player-safe.",
+    ...(input.includeEldermereStart
+      ? [
+          "- Also choose the best Eldermere campaign starting region and settlement for this character. Return them in eldermereStart.regionName and eldermereStart.settlementName using exact names from the canonical start options below.",
+          "- Choose the starting settlement that best turns the enriched backstory's unresolved trouble into the opening scene. The backstory itself may mention a broader region or city-state without starting there."
+        ]
+      : []),
     "- Do not write in second person.",
     "",
     "Length: 300-550 words.",
@@ -325,6 +382,9 @@ function buildAddBackstoryDetailsPrompt(input: BackstoryPromptInput) {
     "",
     input.nameBank,
     "",
+    ...(input.includeEldermereStart
+      ? [formatEldermereStartOptions(), ""]
+      : []),
     "World context:",
     input.worldContext
   ].join("\n");
@@ -336,12 +396,42 @@ function parseBackstoryProviderResponse(content: string) {
   const jsonText = fenced?.[1] ?? trimmed;
 
   try {
-    const parsed = JSON.parse(jsonText) as { backstory?: unknown };
+    const parsed = JSON.parse(jsonText) as {
+      backstory?: unknown;
+      eldermereStart?: unknown;
+    };
     const backstory =
       typeof parsed.backstory === "string" ? parsed.backstory.trim() : "";
+    const rawStart =
+      parsed.eldermereStart &&
+      typeof parsed.eldermereStart === "object" &&
+      !Array.isArray(parsed.eldermereStart)
+        ? (parsed.eldermereStart as Record<string, unknown>)
+        : undefined;
+    const eldermereStart = rawStart
+      ? {
+          regionName:
+            typeof rawStart.regionName === "string"
+              ? rawStart.regionName.trim()
+              : "",
+          settlementName:
+            typeof rawStart.settlementName === "string"
+              ? rawStart.settlementName.trim()
+              : "",
+          reason:
+            typeof rawStart.reason === "string"
+              ? rawStart.reason.trim()
+              : undefined
+        }
+      : undefined;
 
     if (backstory) {
-      return backstory;
+      return {
+        backstory,
+        ...(eldermereStart?.regionName && eldermereStart.settlementName
+          ? { eldermereStart }
+          : {})
+      };
     }
   } catch {
     // Some providers may still return plain prose. Fall through and use it.
@@ -351,7 +441,7 @@ function parseBackstoryProviderResponse(content: string) {
     throw createHttpError(502, "AI Taverns returned an empty backstory.");
   }
 
-  return trimmed;
+  return { backstory: trimmed };
 }
 
 export async function registerCampaignRoutes(
@@ -406,12 +496,21 @@ export async function registerCampaignRoutes(
       campaignGenre: body.campaignGenre,
       customWorldName: body.customWorldName
     });
+    const includeEldermereStart = isEldermereBackstoryRequest({
+      campaignGenrePresetId: body.campaignGenrePresetId
+    });
     const message =
       body.mode === "generate"
-        ? buildGenerateBackstoryPrompt({ characterSheet, nameBank, worldContext })
+        ? buildGenerateBackstoryPrompt({
+            characterSheet,
+            includeEldermereStart,
+            nameBank,
+            worldContext
+          })
         : buildAddBackstoryDetailsPrompt({
             characterSheet,
             currentBackstory,
+            includeEldermereStart,
             nameBank,
             worldContext
           });
@@ -419,9 +518,25 @@ export async function registerCampaignRoutes(
       instructions: backstoryJsonInstructions,
       message
     });
+    const generated = parseBackstoryProviderResponse(providerResponse.content);
+    const validatedStart =
+      includeEldermereStart && generated.eldermereStart
+        ? resolveEldermereCampaignStart(generated.eldermereStart)
+        : undefined;
 
     return CharacterBackstoryGenerateResponseSchema.parse({
-      backstory: parseBackstoryProviderResponse(providerResponse.content)
+      backstory: generated.backstory,
+      ...(validatedStart
+        ? {
+            eldermereStart: {
+              regionName: validatedStart.region.name,
+              settlementName: validatedStart.settlement.name,
+              ...(generated.eldermereStart?.reason
+                ? { reason: generated.eldermereStart.reason }
+                : {})
+            }
+          }
+        : {})
     });
   });
 
@@ -495,6 +610,10 @@ export async function registerCampaignRoutes(
       characterName: body.characterName?.trim(),
       characterSheet: body.characterSheet?.trim(),
       mechanicsSeed: body.mechanicsSeed,
+      eldermereStart: resolveEldermereCampaignStart({
+        regionName: body.eldermereStart?.regionName,
+        settlementName: body.eldermereStart?.settlementName
+      }),
       userId: user.id,
       runtime
     });

@@ -119,7 +119,12 @@ test("POST /api/campaigns/backstory generates a world-grounded character backsto
   setProviderOverride(async () => {
     const content = JSON.stringify({
       backstory:
-        "Mira Vale learned the sea keeps better records than any court, especially when Ilyra Fen vanished with a tide-priest's ledger."
+        "Mira Vale learned the sea keeps better records than any court, especially when Ilyra Fen vanished with a tide-priest's ledger.",
+      eldermereStart: {
+        regionName: "The Salt Concordat",
+        settlementName: "Selwick",
+        reason: "The backstory centers on ports, ledgers, and sea debts."
+      }
     });
 
     return {
@@ -153,7 +158,12 @@ test("POST /api/campaigns/backstory generates a world-grounded character backsto
   assert.equal(response.statusCode, 200);
   assert.deepEqual(CharacterBackstoryGenerateResponseSchema.parse(response.json()), {
     backstory:
-      "Mira Vale learned the sea keeps better records than any court, especially when Ilyra Fen vanished with a tide-priest's ledger."
+      "Mira Vale learned the sea keeps better records than any court, especially when Ilyra Fen vanished with a tide-priest's ledger.",
+    eldermereStart: {
+      regionName: "The Salt Concordat",
+      settlementName: "Selwick",
+      reason: "The backstory centers on ports, ledgers, and sea debts."
+    }
   });
 
   const providerInput = getProviderInputs().at(-1);
@@ -168,6 +178,10 @@ test("POST /api/campaigns/backstory generates a world-grounded character backsto
   assert.doesNotMatch(providerInput?.message ?? "", /Factions and organizations:/);
   assert.doesNotMatch(providerInput?.message ?? "", /inventing new people, families, places/);
   assert.match(providerInput?.message ?? "", /World: Eldermere/);
+  assert.match(providerInput?.message ?? "", /Canonical Eldermere start options:/);
+  assert.match(providerInput?.message ?? "", /Region: The Salt Concordat/);
+  assert.match(providerInput?.message ?? "", /Settlements: Corvane, Selwick, Skerrywatch/);
+  assert.match(providerInput?.message ?? "", /eldermereStart\.regionName/);
   assert.match(providerInput?.message ?? "", /Use generated names only for people/i);
   assert.match(providerInput?.message ?? "", /only newly invented proper nouns allowed are people names/i);
   assert.match(providerInput?.message ?? "", /Do not give names to ships, taverns, guilds/i);
@@ -1276,7 +1290,12 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
       ownerClientId: "eldermere-client",
       playerName: "Eldermere Player",
       characterName: "Mira",
-      characterSheet: "A ruin-delver who follows old glowing roads."
+      characterSheet: "A ruin-delver who follows old glowing roads.",
+      eldermereStart: {
+        regionName: "The Salt Concordat",
+        settlementName: "Selwick",
+        reason: "Mira's generated backstory points toward port trouble."
+      }
     }
   });
 
@@ -1299,8 +1318,8 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
 
   assert.equal(worldProfile.worldName, "Eldermere");
   assert.equal(worldProfile.source, "flagship_world");
-  assert.equal(typeof selectedRegion.name, "string");
-  assert.equal(typeof startingLocation.name, "string");
+  assert.equal(selectedRegion.name, "The Salt Concordat");
+  assert.equal(startingLocation.name, "Selwick");
   assert.equal(startingLocation.displayLocation, startingLocation.name);
   assert.equal(metadata.eldermereOpeningPlanVersion, 1);
   assert.equal(openingPlan.campaign_title, "The Quiet Road");

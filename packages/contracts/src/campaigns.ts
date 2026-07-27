@@ -21,6 +21,12 @@ export const CampaignListResponseSchema = z.object({
   campaigns: z.array(CampaignSummarySchema)
 });
 
+export const EldermereCampaignStartSchema = z.object({
+  regionName: z.string().min(1),
+  settlementName: z.string().min(1),
+  reason: z.string().optional()
+});
+
 export const CampaignCreateRequestSchema = z.object({
   mode: CampaignModeSchema.optional(),
   title: z.string().optional(),
@@ -34,6 +40,7 @@ export const CampaignCreateRequestSchema = z.object({
   characterName: z.string().optional(),
   characterSheet: z.string().optional(),
   mechanicsSeed: MechanicsSeedSchema.optional(),
+  eldermereStart: EldermereCampaignStartSchema.optional(),
   generateCharacterPortrait: z.boolean().optional()
 });
 
@@ -98,7 +105,8 @@ export const CharacterBackstoryGenerateRequestSchema = z.object({
 });
 
 export const CharacterBackstoryGenerateResponseSchema = z.object({
-  backstory: z.string().min(1)
+  backstory: z.string().min(1),
+  eldermereStart: EldermereCampaignStartSchema.optional()
 });
 
 export const CharacterPortraitUploadParamsSchema = z.object({
@@ -236,6 +244,9 @@ export const LobbyInviteJoinResponseSchema = z.object({
 export type CampaignMode = z.infer<typeof CampaignModeSchema>;
 export type CampaignSummary = z.infer<typeof CampaignSummarySchema>;
 export type CampaignListResponse = z.infer<typeof CampaignListResponseSchema>;
+export type EldermereCampaignStart = z.infer<
+  typeof EldermereCampaignStartSchema
+>;
 export type CampaignCreateRequest = z.infer<typeof CampaignCreateRequestSchema>;
 export type CampaignCreateResponse = z.infer<
   typeof CampaignCreateResponseSchema

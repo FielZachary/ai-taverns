@@ -167,7 +167,7 @@ export async function generateCharacterBackstory(
     "Backstory could not be created."
   );
 
-  return data.backstory;
+  return data;
 }
 
 export async function uploadCharacterPortrait(

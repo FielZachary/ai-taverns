@@ -128,9 +128,9 @@ describe("NewAdventureForm", () => {
       availableSlots: 2,
       hasBegun: false
     });
-    generateCharacterBackstoryMock.mockResolvedValue(
-      "Mira's life changed when the lighthouse bell rang at noon."
-    );
+    generateCharacterBackstoryMock.mockResolvedValue({
+      backstory: "Mira's life changed when the lighthouse bell rang at noon."
+    });
     previewCharacterPortraitMock.mockResolvedValue({
       imageDataUrl: "data:image/png;base64,preview",
       contentType: "image/png"
@@ -515,7 +515,25 @@ describe("NewAdventureForm", () => {
 
   it("generates and enriches backstory from the identity step", async () => {
     let resolveBackstory:
-      | ((value: string | PromiseLike<string>) => void)
+      | ((
+          value:
+            | {
+                backstory: string;
+                eldermereStart?: {
+                  regionName: string;
+                  settlementName: string;
+                  reason?: string;
+                };
+              }
+            | PromiseLike<{
+                backstory: string;
+                eldermereStart?: {
+                  regionName: string;
+                  settlementName: string;
+                  reason?: string;
+                };
+              }>
+        ) => void)
       | undefined;
     generateCharacterBackstoryMock.mockReturnValueOnce(
       new Promise((resolve) => {
@@ -554,7 +572,13 @@ describe("NewAdventureForm", () => {
     );
 
     await act(async () => {
-      resolveBackstory?.("Mira once guarded a lantern no storm could drown.");
+      resolveBackstory?.({
+        backstory: "Mira once guarded a lantern no storm could drown.",
+        eldermereStart: {
+          regionName: "The Salt Concordat",
+          settlementName: "Selwick"
+        }
+      });
     });
 
     expect(screen.getByPlaceholderText("Optional: Write Backstory")).toHaveValue(
@@ -569,6 +593,55 @@ describe("NewAdventureForm", () => {
         currentBackstory: "Mira once guarded a lantern no storm could drown.",
         characterSheet: expect.stringContaining(
           "Mira once guarded a lantern no storm could drown."
+        )
+      })
+    );
+  });
+
+  it("passes generated Eldermere start into campaign creation", async () => {
+    generateCharacterBackstoryMock.mockResolvedValueOnce({
+      backstory: "Mira owes a debt to a Selwick shipwright.",
+      eldermereStart: {
+        regionName: "The Salt Concordat",
+        settlementName: "Selwick",
+        reason: "The generated backstory centers on Selwick maritime debt."
+      }
+    });
+
+    render(<NewAdventureForm />);
+
+    await advanceSingleplayerToIdentity();
+
+    fireEvent.change(screen.getByLabelText("Character name"), {
+      target: { value: "Mira Vale" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: /generate story/i }));
+
+    await act(async () => {});
+
+    expect(screen.getByPlaceholderText("Optional: Write Backstory")).toHaveValue(
+      "Mira owes a debt to a Selwick shipwright."
+    );
+
+    await nextCharacterStep();
+
+    fireEvent.click(screen.getByRole("button", { name: /create art/i }));
+
+    await act(async () => {});
+
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+
+    await act(async () => {});
+
+    expect(createCampaignMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eldermereStart: {
+          regionName: "The Salt Concordat",
+          settlementName: "Selwick",
+          reason: "The generated backstory centers on Selwick maritime debt."
+        },
+        characterSheet: expect.stringContaining(
+          "Mira owes a debt to a Selwick shipwright."
         )
       })
     );
