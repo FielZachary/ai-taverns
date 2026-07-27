@@ -107,15 +107,15 @@ describe("name director", () => {
       assert.equal(pool.names.every((candidate) => candidate.target === target), true);
     }
 
-    assert.equal(
-      generateNamePool({
-        styles: ["coastal", "seafaring"],
-        target: "tavern",
-        count: 4,
-        seed: "tavern-shape"
-      }).names.every((candidate) => candidate.name.startsWith("The ")),
-      true
-    );
+    const taverns = generateNamePool({
+      styles: ["coastal", "seafaring"],
+      target: "tavern",
+      count: 8,
+      seed: "tavern-shape"
+    }).names;
+
+    assert.equal(taverns.length, 8);
+    assert.ok(taverns.some((candidate) => !candidate.name.startsWith("The ")));
   });
 
   it("honors existing and avoided names", () => {

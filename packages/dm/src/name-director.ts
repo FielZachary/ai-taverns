@@ -969,6 +969,7 @@ const structuralNameTokens = new Set([
   "the",
   "of",
   "and",
+  "at",
   "order",
   "company",
   "league",
@@ -984,6 +985,68 @@ const structuralNameTokens = new Set([
   "fellowship",
   "brotherhood",
   "sisterhood",
+  "inn",
+  "tavern",
+  "house",
+  "hall",
+  "rest",
+  "black",
+  "ashen",
+  "bleak",
+  "bone",
+  "briar",
+  "bright",
+  "brined",
+  "broken",
+  "buried",
+  "cinder",
+  "cool",
+  "crooked",
+  "crowded",
+  "crowned",
+  "dusk",
+  "fogbound",
+  "frost",
+  "frosted",
+  "hidden",
+  "hollow",
+  "iron",
+  "last",
+  "lucky",
+  "mired",
+  "moon",
+  "mossy",
+  "open",
+  "pale",
+  "red",
+  "root",
+  "rootbound",
+  "running",
+  "salt",
+  "salted",
+  "shard",
+  "silver",
+  "singing",
+  "storm",
+  "old",
+  "low",
+  "deep",
+  "white",
+  "blue",
+  "green",
+  "golden",
+  "gilded",
+  "brass",
+  "stormy",
+  "sunlit",
+  "thorned",
+  "tideworn",
+  "veil",
+  "verdant",
+  "weathered",
+  "wayward",
+  "wandering",
+  "one",
   "wardens",
   "keepers",
   "speakers"
@@ -1414,6 +1477,62 @@ function makeTheName(adjectives: string[], nouns: string[], random: RandomSource
   };
 }
 
+function makeTavernName(pool: BlendedStylePool, random: RandomSource) {
+  const adjective = choose(pool.tavernAdjectives, random);
+  const noun = choose(pool.tavernNouns, random);
+  const secondNoun = choose([...pool.tavernNouns, ...pool.artifactRoots], random);
+  const placeRoot = choose(pool.placeRoots, random);
+  const form = Math.floor(random.next() * 7);
+  const name =
+    form === 0
+      ? `The ${adjective} ${noun}`
+      : form === 1
+        ? `The ${noun} and ${secondNoun}`
+        : form === 2
+          ? `${adjective} ${noun} Inn`
+          : form === 3
+            ? `${placeRoot} ${noun}`
+            : form === 4
+              ? `The ${noun} at ${placeRoot}`
+              : form === 5
+                ? `${placeRoot} Rest`
+                : `The ${adjective} ${secondNoun}`;
+
+  return {
+    name: compactSpaces(name),
+    givenName: adjective,
+    familyName: noun
+  };
+}
+
+function makeShipName(pool: BlendedStylePool, random: RandomSource) {
+  const adjective = choose([...pool.tavernAdjectives, "Wandering", "Storm", "Silver"], random);
+  const noun = choose([...pool.tavernNouns, "Promise", "Wager", "Wake", "Star"], random);
+  const placeRoot = choose(pool.placeRoots, random);
+  const artifactRoot = choose(pool.artifactRoots, random);
+  const form = Math.floor(random.next() * 7);
+  const name =
+    form === 0
+      ? `The ${adjective} ${noun}`
+      : form === 1
+        ? `${placeRoot}'s ${noun}`
+        : form === 2
+          ? `The ${noun} of ${placeRoot}`
+          : form === 3
+            ? `${adjective} ${artifactRoot}`
+            : form === 4
+              ? `The ${artifactRoot} Wake`
+              : form === 5
+                ? `${placeRoot} Promise`
+                : `The ${adjective} ${placeRoot}`;
+
+  return {
+    name: compactSpaces(name),
+    givenName: adjective,
+    familyName: noun
+  };
+}
+
 function makeFactionName(pool: BlendedStylePool, random: RandomSource) {
   const root = choose(pool.factionRoots, random);
   const descriptor = choose(
@@ -1478,6 +1597,136 @@ function makeFactionName(pool: BlendedStylePool, random: RandomSource) {
   };
 }
 
+function makeArtifactName(pool: BlendedStylePool, random: RandomSource) {
+  const adjective = choose(
+    [
+      "Ashen",
+      "Black",
+      "Bright",
+      "Broken",
+      "Buried",
+      "Hidden",
+      "Last",
+      "Pale",
+      "Red",
+      "Silver",
+      ...pool.tavernAdjectives
+    ],
+    random
+  );
+  const artifact = choose(pool.artifactRoots, random);
+  const placeRoot = choose(pool.placeRoots, random);
+  const familyRoot = choose(pool.surnameRoots, random);
+  const suffix = choose(["Blade", "Charm", "Codex", "Crown", "Lens", "Mark", "Seal", "Stone", "Vessel"], random);
+  const form = Math.floor(random.next() * 8);
+  const name =
+    form === 0
+      ? `The ${adjective} ${artifact}`
+      : form === 1
+        ? `${artifact} of ${placeRoot}`
+        : form === 2
+          ? `The ${placeRoot} ${artifact}`
+          : form === 3
+            ? `${familyRoot}${suffix}`
+            : form === 4
+              ? `The ${artifact} ${suffix}`
+              : form === 5
+                ? `${adjective} ${placeRoot} ${suffix}`
+                : form === 6
+                  ? `The ${familyRoot} ${suffix}`
+                  : `${placeRoot}'s ${artifact}`;
+
+  return {
+    name: compactSpaces(name),
+    givenName: artifact,
+    familyName: placeRoot
+  };
+}
+
+function makeMonsterName(pool: BlendedStylePool, random: RandomSource) {
+  const descriptor = choose(
+    [
+      "Ashen",
+      "Bleak",
+      "Bone",
+      "Briar",
+      "Cinder",
+      "Crowned",
+      "Dusk",
+      "Frost",
+      "Hollow",
+      "Iron",
+      "Moon",
+      "Pale",
+      "Red",
+      "Root",
+      "Salt",
+      "Shard",
+      "Storm",
+      "Thorn",
+      "Veil",
+      ...pool.tavernAdjectives
+    ],
+    random
+  );
+  const creature = choose(
+    [
+      "Apparition",
+      "Basilisk",
+      "Beast",
+      "Caller",
+      "Crawler",
+      "Drake",
+      "Eater",
+      "Fiend",
+      "Gazer",
+      "Giant",
+      "Hound",
+      "Hunter",
+      "Lurker",
+      "Maw",
+      "Oracle",
+      "Prince",
+      "Queen",
+      "Revenant",
+      "Rider",
+      "Serpent",
+      "Shade",
+      "Shrieker",
+      "Sleeper",
+      "Stalker",
+      "Thing",
+      "Wight",
+      "Wraith",
+      "Wyrm"
+    ],
+    random
+  );
+  const placeRoot = choose(pool.placeRoots, random);
+  const artifactRoot = choose(pool.artifactRoots, random);
+  const form = Math.floor(random.next() * 7);
+  const name =
+    form === 0
+      ? `The ${descriptor} ${creature}`
+      : form === 1
+        ? `${placeRoot} ${creature}`
+      : form === 2
+          ? `The ${creature} of ${placeRoot}`
+          : form === 3
+            ? `${descriptor} ${artifactRoot} ${creature}`
+            : form === 4
+              ? `The ${placeRoot} Maw`
+            : form === 5
+              ? `${artifactRoot} Stalker`
+              : `${placeRoot}'s ${descriptor} ${creature}`;
+
+  return {
+    name: compactSpaces(name),
+    givenName: creature,
+    familyName: placeRoot
+  };
+}
+
 function makeCandidateName(
   pool: BlendedStylePool,
   random: RandomSource,
@@ -1488,21 +1737,15 @@ function makeCandidateName(
     target === "person" || target === "family" || target === "title"
       ? makePersonName(pool, random, role)
       : target === "tavern"
-        ? makeTheName(pool.tavernAdjectives, pool.tavernNouns, random)
+        ? makeTavernName(pool, random)
         : target === "ship"
-          ? makeTheName(
-              [...pool.tavernAdjectives, "Wandering", "Storm", "Silver"],
-              [...pool.tavernNouns, "Promise", "Wager", "Wake", "Star"],
-              random
-            )
+          ? makeShipName(pool, random)
           : target === "faction"
             ? makeFactionName(pool, random)
-            : target === "artifact" || target === "monster"
-              ? makeTheName(
-                  ["Black", "Bright", "Broken", "Hidden", "Last", "Pale", "Red", "Silver"],
-                  pool.artifactRoots,
-                  random
-                )
+            : target === "artifact"
+              ? makeArtifactName(pool, random)
+              : target === "monster"
+                ? makeMonsterName(pool, random)
               : makePlaceName(pool, random, target);
   const name = target === "family" ? parts.familyName || parts.name : parts.name;
 
