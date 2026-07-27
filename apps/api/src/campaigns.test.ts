@@ -1452,6 +1452,7 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(narratorInput.message, /personal urgency beat/);
   assert.match(narratorInput.message, /grounded, direct fantasy prose/);
   assert.match(narratorInput.message, /do not say they disappeared/);
+  assert.match(narratorInput.message, /Do not invent new circumstances/);
   assert.doesNotMatch(narratorInput.message, /Flagship world context:/);
   assert.doesNotMatch(narratorInput.message, /Seven regions available for the opener:/);
   assert.doesNotMatch(narratorInput.instructions, /World Context:/);
