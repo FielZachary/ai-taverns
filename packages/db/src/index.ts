@@ -5,6 +5,7 @@ import {
   eldermereMetadataProfile,
   eldermereRegions,
   formatEldermereOpeningPromptContext,
+  formatNameDirectorPromptContext,
   formatEldermereTurnPromptContext,
   openingSceneRequest,
   parseDmContract,
@@ -552,6 +553,7 @@ type CampaignSettingSummary = {
 
 type CampaignOpeningStyle = {
   campaignGenre?: string | undefined;
+  campaignGenrePresetId?: string | undefined;
   campaignGenrePromptBrief?: string | undefined;
   customWorldName?: string | undefined;
   customWorldDescription?: string | undefined;
@@ -600,6 +602,20 @@ type EldermereOpeningPlan = {
   narratorInstructions: string[];
   openingQualityChecks: string[];
 };
+
+function extractExistingPromptNames(...values: Array<string | undefined>) {
+  return [
+    ...new Set(
+      values
+        .flatMap((value) =>
+          value?.match(/\b[A-Z][a-z]+(?:\s+(?:of|the|and|[A-Z][a-z]+)){0,3}\b/g) ??
+          []
+        )
+        .map((name) => name.trim())
+        .filter((name) => name.length >= 3)
+    )
+  ];
+}
 
 type DungeonMasterProviderResponse = {
   id?: string;
@@ -772,6 +788,7 @@ function campaignOpeningStyleFromMetadata(campaign: CampaignRow): CampaignOpenin
 
   return {
     campaignGenre: eventPayloadString(genre.label),
+    campaignGenrePresetId: eventPayloadString(genre.presetId),
     campaignGenrePromptBrief: eventPayloadString(genre.promptBrief),
     customWorldName: eventPayloadString(genre.customWorldName),
     customWorldDescription: eventPayloadString(genre.customWorldDescription)
@@ -1883,6 +1900,7 @@ export async function createCampaignForMode(
     players: [createdState.player],
     style: {
       campaignGenre: input.campaignGenre,
+      campaignGenrePresetId: input.campaignGenrePresetId,
       campaignGenrePromptBrief: input.campaignGenrePromptBrief,
       customWorldName: input.customWorldName,
       customWorldDescription: input.customWorldDescription
@@ -5242,6 +5260,11 @@ function formatOpeningSceneRequest(input: {
   const customWorldDescription = input.style.customWorldDescription
     ? `Custom world description: ${input.style.customWorldDescription}`
     : "";
+  const nameBank = formatCampaignOpeningNameBank({
+    campaign: input.campaign,
+    players: input.players,
+    style: input.style
+  });
 
   return [
     formatCanonicalCharacterContext(input.players, mechanicsState),
@@ -5261,9 +5284,12 @@ function formatOpeningSceneRequest(input: {
     customWorldName,
     customWorldDescription,
     "",
+    nameBank,
+    "",
     "Campaign opener requirements:",
     "Write a true campaign opener, not only a room description, road encounter, or local hazard.",
     "Establish a named starting place and a named larger region, realm, frontier, city, or world. If the setup does not provide names, invent strong fantasy names.",
+    "When inventing new NPCs, places, taverns, factions, objects, or threats for the opener, prefer the validated name bank above. Do not force every candidate into the scene, and do not rename player characters or established names.",
     "Establish why the character or party is here now and what set them on this path.",
     "Give the character a concrete first objective, destination, mystery, obligation, rescue, delivery, investigation, or promise that can drive the next several scenes.",
     "Introduce an immediate obstacle, threat, discovery, or NPC demand that blocks or complicates that objective right now.",
@@ -5668,6 +5694,50 @@ function openingPlanToJson(plan: EldermereOpeningPlan) {
     narrator_instructions: plan.narratorInstructions,
     opening_quality_checks: plan.openingQualityChecks
   };
+}
+
+function formatCampaignOpeningNameBank(input: {
+  campaign: CampaignRow;
+  players: PlayerRow[];
+  style: CampaignOpeningStyle;
+}) {
+  const eldermereStart = isEldermerePreset(input.style.campaignGenrePresetId)
+    ? eldermereCampaignStartFromMetadata(input.campaign)
+    : undefined;
+  const world =
+    input.style.customWorldName ??
+    input.style.campaignGenre ??
+    (eldermereStart ? "Eldermere" : undefined);
+
+  return formatNameDirectorPromptContext({
+    world,
+    region: eldermereStart?.region.name,
+    seed: [
+      "campaign-opening",
+      input.campaign.id,
+      input.style.campaignGenrePresetId ?? "",
+      world ?? "",
+      eldermereStart?.region.name ?? "",
+      input.players.map((player) => player.character_name).join("|")
+    ].join("|"),
+    targets: [
+      "person",
+      "settlement",
+      "district",
+      "tavern",
+      "faction",
+      "artifact",
+      "monster"
+    ],
+    perTargetCount: 8,
+    existingNames: extractExistingPromptNames(
+      ...input.players.flatMap((player) => [
+        player.character_name,
+        player.character_sheet
+      ])
+    ),
+    heading: "Validated name bank for this campaign opener:"
+  });
 }
 
 function openingSceneInstructions(mode: CampaignMode) {

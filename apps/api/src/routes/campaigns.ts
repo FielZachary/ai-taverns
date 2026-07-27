@@ -36,7 +36,10 @@ import {
   LobbyInvitePreviewResponseSchema,
   type CampaignMode
 } from "@ai-dnd/contracts";
-import { formatEldermereOpeningPromptContext } from "@ai-dnd/dm";
+import {
+  formatEldermereOpeningPromptContext,
+  formatNameDirectorPromptContext
+} from "@ai-dnd/dm";
 import {
   createCampaignInvite,
   createCampaignForMode,
@@ -143,6 +146,7 @@ function getCampaignGenrePreset(presetId: string | undefined) {
 type BackstoryPromptInput = {
   characterSheet: string;
   currentBackstory?: string | undefined;
+  nameBank: string;
   worldContext: string;
 };
 
@@ -179,6 +183,50 @@ function characterBackstoryWorldContext(input: {
   ].join("\n");
 }
 
+function extractExistingPromptNames(...values: Array<string | undefined>) {
+  return [
+    ...new Set(
+      values
+        .flatMap((value) =>
+          value?.match(/\b[A-Z][a-z]+(?:\s+(?:of|the|and|[A-Z][a-z]+)){0,3}\b/g) ??
+          []
+        )
+        .map((name) => name.trim())
+        .filter((name) => name.length >= 3)
+    )
+  ];
+}
+
+function backstoryNameBank(input: {
+  characterSheet: string;
+  currentBackstory?: string | undefined;
+  campaignGenreKind?: "preset" | "custom" | undefined;
+  campaignGenrePresetId?: string | undefined;
+  campaignGenre?: string | undefined;
+  customWorldName?: string | undefined;
+}) {
+  const world = input.customWorldName?.trim() || input.campaignGenre?.trim();
+
+  return formatNameDirectorPromptContext({
+    world,
+    seed: [
+      "backstory",
+      input.campaignGenreKind ?? "preset",
+      input.campaignGenrePresetId ?? "",
+      world ?? "",
+      input.characterSheet,
+      input.currentBackstory ?? ""
+    ].join("|"),
+    targets: ["person", "family", "settlement", "tavern", "faction", "artifact"],
+    perTargetCount: 8,
+    existingNames: extractExistingPromptNames(
+      input.characterSheet,
+      input.currentBackstory
+    ),
+    heading: "Validated name bank for this backstory:"
+  });
+}
+
 function buildGenerateBackstoryPrompt(input: BackstoryPromptInput) {
   return [
     "Write a player-facing character backstory for the character below. The backstory must feel native to the provided world context and should give the AI DM excellent hooks for the opening adventure and later campaign play.",
@@ -188,6 +236,7 @@ function buildGenerateBackstoryPrompt(input: BackstoryPromptInput) {
     "- Use the full world context as canon. Include concrete world details, factions, places, conflicts, beliefs, customs, threats, or tensions where they naturally fit.",
     "- Make the backstory unique, interesting, and specific. Avoid generic fantasy biography, vague tragedy, empty prophecy, or interchangeable \"chosen one\" framing.",
     "- Include important people from the character's past or present. These people should have names, clear relationships to the character, and reasons they matter.",
+    "- When naming newly invented people, places, factions, taverns, families, or objects, prefer the validated name bank below. You may omit unused candidates. Do not rename the player character or any established player-written names.",
     "- Explain why those people matter not only to the player character, but also to the living world: what they know, control, protect, threaten, need, believe, owe, hide, or could change.",
     "- Make these people useful for the AI DM to bring back later as allies, rivals, patrons, family, witnesses, enemies, missing persons, debt-holders, mentors, or complications.",
     "- Do not reveal secret DM-only information unless the world context explicitly says it is player-safe.",
@@ -200,6 +249,8 @@ function buildGenerateBackstoryPrompt(input: BackstoryPromptInput) {
     "",
     "Character sheet:",
     input.characterSheet,
+    "",
+    input.nameBank,
     "",
     "World context:",
     input.worldContext
@@ -216,6 +267,7 @@ function buildAddBackstoryDetailsPrompt(input: BackstoryPromptInput) {
     "- Use the full world context as canon. Add concrete world details, factions, places, conflicts, beliefs, customs, threats, or tensions where they naturally fit.",
     "- Make the enriched backstory unique, interesting, and specific. Avoid generic fantasy biography, vague tragedy, empty prophecy, or interchangeable \"chosen one\" framing.",
     "- Add or deepen important people from the character's past or present. These people should have names, clear relationships to the character, and reasons they matter.",
+    "- When naming newly invented people, places, factions, taverns, families, or objects, prefer the validated name bank below. You may omit unused candidates. Do not rename the player character or any established player-written names.",
     "- Explain why those people matter not only to the player character, but also to the living world: what they know, control, protect, threaten, need, believe, owe, hide, or could change.",
     "- Make these people useful for the AI DM to bring back later as allies, rivals, patrons, family, witnesses, enemies, missing persons, debt-holders, mentors, or complications.",
     "- Keep the character as someone with unresolved motivation, not someone whose story is already complete.",
@@ -231,6 +283,8 @@ function buildAddBackstoryDetailsPrompt(input: BackstoryPromptInput) {
     "",
     "Player-written backstory:",
     input.currentBackstory ?? "",
+    "",
+    input.nameBank,
     "",
     "World context:",
     input.worldContext
@@ -305,12 +359,21 @@ export async function registerCampaignRoutes(
       customWorldName: body.customWorldName,
       customWorldDescription: body.customWorldDescription
     });
+    const nameBank = backstoryNameBank({
+      characterSheet,
+      currentBackstory,
+      campaignGenreKind: body.campaignGenreKind,
+      campaignGenrePresetId: body.campaignGenrePresetId,
+      campaignGenre: body.campaignGenre,
+      customWorldName: body.customWorldName
+    });
     const message =
       body.mode === "generate"
-        ? buildGenerateBackstoryPrompt({ characterSheet, worldContext })
+        ? buildGenerateBackstoryPrompt({ characterSheet, nameBank, worldContext })
         : buildAddBackstoryDetailsPrompt({
             characterSheet,
             currentBackstory,
+            nameBank,
             worldContext
           });
     const providerResponse = await runtime.askProvider({

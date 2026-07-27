@@ -159,6 +159,9 @@ test("POST /api/campaigns/backstory generates a world-grounded character backsto
   const providerInput = getProviderInputs().at(-1);
 
   assert.match(providerInput?.message ?? "", /Character Name: Mira Vale/);
+  assert.match(providerInput?.message ?? "", /Validated name bank for this backstory:/);
+  assert.match(providerInput?.message ?? "", /People:/);
+  assert.match(providerInput?.message ?? "", /Factions and organizations:/);
   assert.match(providerInput?.message ?? "", /World: Eldermere/);
   assert.match(
     providerInput?.message ?? "",
@@ -1307,6 +1310,11 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.doesNotMatch(plannerInput.message, /Recurring live conflicts:/);
   assert.match(plannerInput.message, /Selected opener region and settlement:/);
   assert.match(plannerInput.message, /use this selected region and settlement/);
+  assert.match(plannerInput.message, /Validated name bank for this campaign opener:/);
+  assert.match(plannerInput.message, /People:/);
+  assert.match(plannerInput.message, /Settlements and landmarks:/);
+  assert.match(plannerInput.message, /Threats and creatures:/);
+  assert.match(plannerInput.message, /prefer the validated name bank above/i);
   assert.match(plannerInput.message, /Opening lore clarity rule:/);
   assert.match(
     plannerInput.message,

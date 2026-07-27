@@ -135,6 +135,15 @@ export type GenerateNamePoolInput = {
   avoidNames?: string[] | undefined;
 };
 
+export type NameDirectorPromptContextInput = Omit<
+  GenerateNamePoolInput,
+  "target" | "kind" | "count"
+> & {
+  targets?: NameTarget[] | undefined;
+  perTargetCount?: number | undefined;
+  heading?: string | undefined;
+};
+
 type RandomSource = {
   next(): number;
 };
@@ -1888,4 +1897,71 @@ export function generateNamePool(input: GenerateNamePoolInput = {}) {
     names: accepted.sort((left, right) => right.score - left.score),
     rejected
   };
+}
+
+const promptTargetLabels: Record<NameTarget, string> = {
+  person: "People",
+  family: "Families",
+  settlement: "Settlements and landmarks",
+  district: "Districts",
+  tavern: "Taverns and inns",
+  ship: "Ships",
+  road: "Roads",
+  ruin: "Ruins",
+  temple: "Temples and shrines",
+  faction: "Factions and organizations",
+  artifact: "Artifacts and objects",
+  monster: "Threats and creatures",
+  title: "Titles"
+};
+
+const defaultPromptNameTargets: NameTarget[] = [
+  "person",
+  "family",
+  "settlement",
+  "tavern",
+  "faction",
+  "artifact",
+  "monster"
+];
+
+export function formatNameDirectorPromptContext(
+  input: NameDirectorPromptContextInput = {}
+) {
+  const targets = input.targets?.length ? input.targets : defaultPromptNameTargets;
+  const perTargetCount = Math.max(2, Math.min(input.perTargetCount ?? 8, 16));
+  const existingNames = input.existingNames ?? [];
+  const sections = targets
+    .map((target) => {
+      const pool = generateNamePool({
+        ...input,
+        target,
+        count: perTargetCount,
+        seed: [
+          input.seed ?? "prompt-name-bank",
+          target,
+          input.world ?? "",
+          input.region ?? ""
+        ].join("|"),
+        existingNames
+      });
+      const names = pool.names.map((candidate) => candidate.name);
+
+      if (names.length === 0) {
+        return "";
+      }
+
+      return `${promptTargetLabels[target]}: ${names.join(", ")}`;
+    })
+    .filter(Boolean);
+
+  if (sections.length === 0) {
+    return "";
+  }
+
+  return [
+    input.heading ?? "Suggested name bank:",
+    "Use these validated candidate names preferentially when inventing new people, families, places, factions, taverns, objects, or threats. Do not force every name into the output. Do not rename any player-authored or already established names.",
+    ...sections
+  ].join("\n");
 }

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   cultureForNameRequest,
+  formatNameDirectorPromptContext,
   eldermereRegionStyles,
   generateNamePool,
   normalizeName,
@@ -122,6 +123,22 @@ describe("name director", () => {
     assert.equal(generatedNames.includes("Nessa Saltmere"), false);
     assert.equal(generatedNames.includes("Bria Keelmark"), false);
     assert.equal(generatedNames.some((name) => /Elara|Kaelos/i.test(name)), false);
+  });
+
+  it("formats a validated prompt name bank for model calls", () => {
+    const context = formatNameDirectorPromptContext({
+      styles: ["coastal", "mercantile"],
+      targets: ["person", "settlement", "faction"],
+      perTargetCount: 3,
+      seed: "prompt-bank",
+      existingNames: ["Mira Vale"]
+    });
+
+    assert.match(context, /Suggested name bank:/);
+    assert.match(context, /People:/);
+    assert.match(context, /Settlements and landmarks:/);
+    assert.match(context, /Factions and organizations:/);
+    assert.doesNotMatch(context, /Mira Vale/);
   });
 
   it("keeps every Eldermere region mapping fillable", () => {
