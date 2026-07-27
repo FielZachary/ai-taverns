@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -486,6 +487,64 @@ test("POST /api/campaigns/:campaignId/portrait/upload stores user character art"
     )?.portrait_asset_id,
     uploaded.campaign.portraitAssetId
   );
+});
+
+test("POST /api/campaigns/:campaignId/portrait/upload accepts generated preview-sized payloads", async () => {
+  const cookie = await signIn("large-portrait-upload-owner@example.com");
+  const width = 800;
+  const height = 800;
+  const imageBuffer = await sharp(randomBytes(width * height * 3), {
+    raw: {
+      width,
+      height,
+      channels: 3
+    }
+  })
+    .png()
+    .toBuffer();
+
+  assert.ok(imageBuffer.byteLength > 1_000_000);
+
+  const createdResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: {
+      cookie
+    },
+    payload: {
+      mode: "single_player",
+      title: "Large Portrait Campaign",
+      campaignGenre: "Classic Fantasy",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "classic_fantasy",
+      ownerClientId: "large-portrait-owner-client",
+      playerName: "Liora",
+      characterName: "Liora",
+      characterSheet: "Level 5 Elf Wizard"
+    }
+  });
+
+  assert.equal(createdResponse.statusCode, 201, createdResponse.body);
+  const created = CampaignCreateResponseSchema.parse(createdResponse.json());
+  const uploadResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${created.campaign.id}/portrait/upload`,
+    headers: {
+      cookie
+    },
+    payload: {
+      imageDataUrl: `data:image/png;base64,${imageBuffer.toString("base64")}`,
+      fileName: "generated-character-portrait.png",
+      guidelines: "generated preview image from the create-art step",
+      artStyle: "painterly_fantasy"
+    }
+  });
+
+  assert.equal(uploadResponse.statusCode, 200, uploadResponse.body);
+  const uploaded = CampaignCreateResponseSchema.parse(uploadResponse.json());
+
+  assert.ok(uploaded.campaign.portraitAssetId);
+  assert.match(uploaded.campaign.portraitUrl ?? "", /\/media\/campaigns\//);
 });
 
 test("POST /api/campaigns/:campaignId/portrait/upload reports invalid image bytes", async () => {
