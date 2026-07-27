@@ -68,6 +68,22 @@ export const CharacterPortraitGenerateRequestSchema = z.object({
   imageModel: CharacterPortraitImageModelSchema.optional()
 });
 
+export const CharacterPortraitPreviewRequestSchema = z.object({
+  characterName: z.string().optional(),
+  playerName: z.string().optional(),
+  characterSheet: z.string().optional(),
+  campaignGenre: z.string().optional(),
+  customWorldName: z.string().optional(),
+  guidelines: z.string().optional(),
+  artStyle: CharacterPortraitArtStyleSchema.optional(),
+  imageModel: CharacterPortraitImageModelSchema.optional()
+});
+
+export const CharacterPortraitPreviewResponseSchema = z.object({
+  imageDataUrl: z.string().min(1),
+  contentType: z.string().min(1)
+});
+
 export const CharacterPortraitUploadParamsSchema = z.object({
   campaignId: z.string().uuid()
 });
@@ -217,6 +233,12 @@ export type CharacterPortraitImageModel = z.infer<
 >;
 export type CharacterPortraitGenerateRequest = z.infer<
   typeof CharacterPortraitGenerateRequestSchema
+>;
+export type CharacterPortraitPreviewRequest = z.infer<
+  typeof CharacterPortraitPreviewRequestSchema
+>;
+export type CharacterPortraitPreviewResponse = z.infer<
+  typeof CharacterPortraitPreviewResponseSchema
 >;
 export type CharacterPortraitUploadRequest = z.infer<
   typeof CharacterPortraitUploadRequestSchema

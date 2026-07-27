@@ -5,6 +5,7 @@ import {
   generateCharacterPortrait,
   joinCampaign,
   listCampaigns,
+  previewCharacterPortrait,
   previewCampaignJoin,
   readCampaign,
   uploadCharacterPortrait
@@ -70,12 +71,31 @@ describe("campaign API client", () => {
     );
   });
 
-  it("generates and uploads character portraits with JSON payloads", async () => {
+  it("previews, generates, and uploads character portraits with JSON payloads", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        Response.json({
+          imageDataUrl: "data:image/png;base64,preview",
+          contentType: "image/png"
+        })
+      )
       .mockResolvedValueOnce(Response.json({ campaign }))
       .mockResolvedValueOnce(Response.json({ campaign }));
 
+    await expect(
+      previewCharacterPortrait({
+        characterName: "Mira",
+        characterSheet: "Level 5 fighter",
+        campaignGenre: "Eldermere",
+        guidelines: "silver cloak",
+        artStyle: "cinematic_concept_art",
+        imageModel: "qwen"
+      })
+    ).resolves.toEqual({
+      imageDataUrl: "data:image/png;base64,preview",
+      contentType: "image/png"
+    });
     await expect(
       generateCharacterPortrait("campaign/with spaces", {
         guidelines: "silver cloak",
@@ -94,6 +114,24 @@ describe("campaign API client", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
+      "/api/campaigns/portrait/preview",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          characterName: "Mira",
+          characterSheet: "Level 5 fighter",
+          campaignGenre: "Eldermere",
+          guidelines: "silver cloak",
+          artStyle: "cinematic_concept_art",
+          imageModel: "qwen"
+        })
+      }
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
       "/api/campaigns/campaign%2Fwith%20spaces/portrait/generate",
       {
         method: "POST",
@@ -108,7 +146,7 @@ describe("campaign API client", () => {
       }
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
+      3,
       "/api/campaigns/campaign%2Fwith%20spaces/portrait/upload",
       {
         method: "POST",

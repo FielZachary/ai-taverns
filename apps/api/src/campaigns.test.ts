@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -14,6 +15,7 @@ import {
   CampaignNpcCardsResponseSchema,
   CampaignJoinPreviewResponseSchema,
   CampaignJoinResponseSchema,
+  CharacterPortraitPreviewResponseSchema,
   LobbyInviteJoinResponseSchema,
   LobbyInvitePreviewResponseSchema,
   CampaignListResponseSchema,
@@ -29,7 +31,10 @@ import {
   setProviderOverride,
   signIn
 } from "./test/app-test-harness.js";
-import { generateCharacterPortraitForCampaign } from "./character-portrait-generation.js";
+import {
+  generateCharacterPortraitForCampaign,
+  generateCharacterPortraitPreview
+} from "./character-portrait-generation.js";
 import { loadConfig } from "./config.js";
 
 test("character portrait generation rejects unsupported model selections early", async () => {
@@ -45,6 +50,219 @@ test("character portrait generation rejects unsupported model selections early",
     status: "skipped",
     reason: "That character portrait model is not supported yet."
   });
+});
+
+test("character portrait preview rejects unsupported model selections early", async () => {
+  const result = await generateCharacterPortraitPreview({
+    characterName: "Mira",
+    characterSheet: "Level 5 Fighter",
+    imageModel: "not-qwen" as never
+  });
+
+  assert.deepEqual(result, {
+    status: "skipped",
+    reason: "That character portrait model is not supported yet."
+  });
+});
+
+test("character portrait preview reports unconfigured image generation", async () => {
+  const originalQwenImageApiKey = process.env.QWEN_IMAGE_API_KEY;
+  const originalDashscopeApiKey = process.env.DASHSCOPE_API_KEY;
+  const originalQwenApiKey = process.env.QWEN_API_KEY;
+  const originalCwd = process.cwd();
+  const emptyCwd = await mkdtemp(join(tmpdir(), "portrait-preview-unconfigured-"));
+
+  delete process.env.QWEN_IMAGE_API_KEY;
+  delete process.env.DASHSCOPE_API_KEY;
+  delete process.env.QWEN_API_KEY;
+
+  try {
+    process.chdir(emptyCwd);
+
+    const result = await generateCharacterPortraitPreview({
+      characterName: "Mira",
+      characterSheet: "Level 5 Fighter",
+      imageModel: "qwen"
+    });
+
+    assert.deepEqual(result, {
+      status: "skipped",
+      reason: "Qwen image generation is not configured."
+    });
+  } finally {
+    if (originalQwenImageApiKey === undefined) {
+      delete process.env.QWEN_IMAGE_API_KEY;
+    } else {
+      process.env.QWEN_IMAGE_API_KEY = originalQwenImageApiKey;
+    }
+
+    if (originalDashscopeApiKey === undefined) {
+      delete process.env.DASHSCOPE_API_KEY;
+    } else {
+      process.env.DASHSCOPE_API_KEY = originalDashscopeApiKey;
+    }
+
+    if (originalQwenApiKey === undefined) {
+      delete process.env.QWEN_API_KEY;
+    } else {
+      process.env.QWEN_API_KEY = originalQwenApiKey;
+    }
+
+    process.chdir(originalCwd);
+    await rm(emptyCwd, { recursive: true, force: true });
+  }
+});
+
+test("character portrait preview reports provider failures", async () => {
+  const originalQwenImageApiKey = process.env.QWEN_IMAGE_API_KEY;
+  const originalQwenImageEndpoint = process.env.QWEN_IMAGE_ENDPOINT;
+  const originalQwenImageModel = process.env.QWEN_IMAGE_MODEL;
+
+  process.env.QWEN_IMAGE_API_KEY = "test-qwen-image-key";
+  process.env.QWEN_IMAGE_ENDPOINT = "https://qwen-image.example.test/failure";
+  process.env.QWEN_IMAGE_MODEL = "qwen-image-failure-model";
+
+  try {
+    const result = await generateCharacterPortraitPreview({
+      characterName: "Mira",
+      characterSheet: "Level 5 Fighter",
+      imageModel: "qwen",
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            code: "BadRequest",
+            message: "preview prompt rejected"
+          }),
+          {
+            status: 400,
+            headers: {
+              "content-type": "application/json"
+            }
+          }
+        )
+    });
+
+    assert.deepEqual(result, {
+      status: "failed",
+      reason: "preview prompt rejected"
+    });
+  } finally {
+    if (originalQwenImageApiKey === undefined) {
+      delete process.env.QWEN_IMAGE_API_KEY;
+    } else {
+      process.env.QWEN_IMAGE_API_KEY = originalQwenImageApiKey;
+    }
+
+    if (originalQwenImageEndpoint === undefined) {
+      delete process.env.QWEN_IMAGE_ENDPOINT;
+    } else {
+      process.env.QWEN_IMAGE_ENDPOINT = originalQwenImageEndpoint;
+    }
+
+    if (originalQwenImageModel === undefined) {
+      delete process.env.QWEN_IMAGE_MODEL;
+    } else {
+      process.env.QWEN_IMAGE_MODEL = originalQwenImageModel;
+    }
+  }
+});
+
+test("POST /api/campaigns/portrait/preview generates transient art without campaign rows", async () => {
+  const cookie = await signIn("portrait-preview-owner@example.com");
+  const originalFetch = globalThis.fetch;
+  const originalQwenImageApiKey = process.env.QWEN_IMAGE_API_KEY;
+  const originalQwenImageEndpoint = process.env.QWEN_IMAGE_ENDPOINT;
+  const originalQwenImageModel = process.env.QWEN_IMAGE_MODEL;
+  const imageBuffer = await sharp({
+    create: {
+      width: 96,
+      height: 96,
+      channels: 4,
+      background: "#0f766e"
+    }
+  })
+    .png()
+    .toBuffer();
+  const campaignsBefore = database.campaigns.length;
+  const mediaAssetsBefore = database.mediaAssets.length;
+
+  process.env.QWEN_IMAGE_API_KEY = "test-qwen-image-key";
+  process.env.QWEN_IMAGE_ENDPOINT = "https://qwen-image.example.test/generation";
+  process.env.QWEN_IMAGE_MODEL = "qwen-image-2.0-pro";
+  globalThis.fetch = (async (url, init) => {
+    if (String(url) === "https://qwen-image.example.test/generation") {
+      const headers = new Headers(init?.headers);
+      assert.equal(headers.get("authorization"), "Bearer test-qwen-image-key");
+
+      return new Response(
+        JSON.stringify({
+          request_id: "qwen-image-preview-request-1",
+          output: {
+            choices: [
+              {
+                message: {
+                  content: [
+                    {
+                      image: "https://qwen-image.example.test/preview.png"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json"
+          }
+        }
+      );
+    }
+
+    if (String(url) === "https://qwen-image.example.test/preview.png") {
+      return new Response(imageBuffer, {
+        status: 200,
+        headers: {
+          "content-type": "image/png"
+        }
+      });
+    }
+
+    throw new Error(`Unexpected fetch URL: ${String(url)}`);
+  }) as typeof fetch;
+
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/campaigns/portrait/preview",
+      headers: {
+        cookie
+      },
+      payload: {
+        characterName: "Mira Vale",
+        playerName: "Mira",
+        characterSheet: "Level 5 Human Fighter carrying a silver shield.",
+        campaignGenre: "Eldermere",
+        guidelines: "warm tavern light",
+        artStyle: "painterly_fantasy",
+        imageModel: "qwen"
+      }
+    });
+
+    assert.equal(response.statusCode, 200, response.body);
+
+    const preview = CharacterPortraitPreviewResponseSchema.parse(response.json());
+    assert.equal(preview.contentType, "image/png");
+    assert.match(preview.imageDataUrl, /^data:image\/png;base64,/);
+    assert.equal(database.campaigns.length, campaignsBefore);
+    assert.equal(database.mediaAssets.length, mediaAssetsBefore);
+  } finally {
+    globalThis.fetch = originalFetch;
+    process.env.QWEN_IMAGE_API_KEY = originalQwenImageApiKey;
+    process.env.QWEN_IMAGE_ENDPOINT = originalQwenImageEndpoint;
+    process.env.QWEN_IMAGE_MODEL = originalQwenImageModel;
+  }
 });
 
 test("POST /api/campaigns can generate and attach a character portrait", async () => {
@@ -387,6 +605,64 @@ test("POST /api/campaigns/:campaignId/portrait/upload stores user character art"
     )?.portrait_asset_id,
     uploaded.campaign.portraitAssetId
   );
+});
+
+test("POST /api/campaigns/:campaignId/portrait/upload accepts generated preview-sized payloads", async () => {
+  const cookie = await signIn("large-portrait-upload-owner@example.com");
+  const width = 800;
+  const height = 800;
+  const imageBuffer = await sharp(randomBytes(width * height * 3), {
+    raw: {
+      width,
+      height,
+      channels: 3
+    }
+  })
+    .png()
+    .toBuffer();
+
+  assert.ok(imageBuffer.byteLength > 1_000_000);
+
+  const createdResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: {
+      cookie
+    },
+    payload: {
+      mode: "single_player",
+      title: "Large Portrait Campaign",
+      campaignGenre: "Classic Fantasy",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "classic_fantasy",
+      ownerClientId: "large-portrait-owner-client",
+      playerName: "Liora",
+      characterName: "Liora",
+      characterSheet: "Level 5 Elf Wizard"
+    }
+  });
+
+  assert.equal(createdResponse.statusCode, 201, createdResponse.body);
+  const created = CampaignCreateResponseSchema.parse(createdResponse.json());
+  const uploadResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${created.campaign.id}/portrait/upload`,
+    headers: {
+      cookie
+    },
+    payload: {
+      imageDataUrl: `data:image/png;base64,${imageBuffer.toString("base64")}`,
+      fileName: "generated-character-portrait.png",
+      guidelines: "generated preview image from the create-art step",
+      artStyle: "painterly_fantasy"
+    }
+  });
+
+  assert.equal(uploadResponse.statusCode, 200, uploadResponse.body);
+  const uploaded = CampaignCreateResponseSchema.parse(uploadResponse.json());
+
+  assert.ok(uploaded.campaign.portraitAssetId);
+  assert.match(uploaded.campaign.portraitUrl ?? "", /\/media\/campaigns\//);
 });
 
 test("POST /api/campaigns/:campaignId/portrait/upload reports invalid image bytes", async () => {
