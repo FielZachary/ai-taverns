@@ -451,11 +451,17 @@ describe("NewAdventureForm", () => {
     fireEvent.change(screen.getByPlaceholderText("Optional: Write Backstory"), {
       target: { value: "Raised among lighthouse keepers beneath twin moons." }
     });
-    fireEvent.click(
-      screen.getByRole("checkbox", {
+    expect(
+      screen.getByRole("button", { name: /generate story/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /add details/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("checkbox", {
         name: /let ai taverns add unto my backstory/i
       })
-    );
+    ).not.toBeInTheDocument();
 
     await nextCharacterStep();
 
@@ -488,7 +494,7 @@ describe("NewAdventureForm", () => {
         playerName: "Mira Vale",
         characterName: "Mira Vale",
         characterSheet: expect.stringContaining(
-          "Raised among lighthouse keepers beneath twin moons.\nBackstory Expansion: AI Taverns may add unto this backstory"
+          "Raised among lighthouse keepers beneath twin moons.\nBackstory Expansion: Preserve this backstory as written"
         )
       })
     );

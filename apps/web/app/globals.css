@@ -2363,52 +2363,34 @@ h1 {
   min-height: 190px;
 }
 
-.new-adventure-form .backstory-expand-toggle {
-  display: inline-flex;
-  align-items: center;
+.new-adventure-form .backstory-actions {
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   justify-self: start;
-  color: var(--muted);
+}
+
+.new-adventure-form .backstory-actions button {
+  min-height: 40px;
+  padding: 10px 14px;
+  border: 1px solid rgba(244, 207, 122, 0.3);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(31, 23, 16, 0.9), rgba(12, 9, 8, 0.92));
+  color: var(--gold-bright);
   font-size: 0.82rem;
   font-weight: 850;
-}
-
-.new-adventure-form .backstory-expand-toggle input {
-  appearance: none;
-  display: grid;
-  flex: 0 0 auto;
-  width: 18px;
-  min-width: 18px;
-  height: 18px;
-  min-height: 18px;
-  place-items: center;
-  padding: 0;
-  border: 1px solid rgba(244, 207, 122, 0.38);
-  border-radius: 4px;
-  background:
-    linear-gradient(180deg, rgba(31, 23, 16, 0.96), rgba(12, 9, 8, 0.96));
+  letter-spacing: 0;
   box-shadow:
-    inset 0 0 0 1px rgba(0, 0, 0, 0.24),
-    0 8px 18px rgba(0, 0, 0, 0.22);
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 10px 20px rgba(0, 0, 0, 0.18);
 }
 
-.new-adventure-form .backstory-expand-toggle input::after {
-  width: 9px;
-  height: 9px;
-  border-radius: 2px;
-  background: var(--gold-bright);
-  opacity: 0;
-  content: "";
-}
-
-.new-adventure-form .backstory-expand-toggle input:checked {
-  border-color: rgba(244, 207, 122, 0.72);
+.new-adventure-form .backstory-actions button:hover,
+.new-adventure-form .backstory-actions button:focus-visible {
+  border-color: rgba(244, 207, 122, 0.58);
   background:
-    linear-gradient(180deg, rgba(64, 43, 21, 0.96), rgba(20, 14, 9, 0.96));
-}
-
-.new-adventure-form .backstory-expand-toggle input:checked::after {
-  opacity: 1;
+    linear-gradient(180deg, rgba(64, 43, 21, 0.94), rgba(20, 14, 9, 0.96));
 }
 
 .character-current-pick {

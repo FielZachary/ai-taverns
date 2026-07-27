@@ -3349,7 +3349,6 @@ export function NewAdventureForm({
   const [alignment, setAlignment] = useState<Alignment>("Neutral Good");
   const [gender, setGender] = useState<Gender>("Non-binary");
   const [backstory, setBackstory] = useState("");
-  const [canAiExpandBackstory, setCanAiExpandBackstory] = useState(false);
   const [characterSheet, setCharacterSheet] = useState(defaultCharacterSheet);
   const [ownerClientId, setOwnerClientId] = useState("");
   const [error, setError] = useState("");
@@ -3574,9 +3573,7 @@ export function NewAdventureForm({
       ? [
           "Backstory",
           trimmedBackstory,
-          canAiExpandBackstory
-            ? "Backstory Expansion: AI Taverns may add unto this backstory while preserving the player's core details."
-            : "Backstory Expansion: Preserve this backstory as written unless the player changes it."
+          "Backstory Expansion: Preserve this backstory as written unless the player changes it."
         ]
       : [
           "Backstory",
@@ -3667,7 +3664,6 @@ export function NewAdventureForm({
     alignment,
     backstory,
     backgroundSkillList,
-    canAiExpandBackstory,
     characterBackground,
     characterBuildMode,
     characterName,
@@ -5294,16 +5290,10 @@ export function NewAdventureForm({
                       />
                     </label>
 
-                    <label className="backstory-expand-toggle">
-                      <input
-                        type="checkbox"
-                        checked={canAiExpandBackstory}
-                        onChange={(event) =>
-                          setCanAiExpandBackstory(event.target.checked)
-                        }
-                      />
-                      <span>Let AI Taverns add unto my backstory</span>
-                    </label>
+                    <div className="backstory-actions" aria-label="Backstory actions">
+                      <button type="button">Generate story</button>
+                      <button type="button">Add details</button>
+                    </div>
                   </div>
                 ) : null}
 
