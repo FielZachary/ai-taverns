@@ -159,10 +159,19 @@ test("POST /api/campaigns/backstory generates a world-grounded character backsto
   const providerInput = getProviderInputs().at(-1);
 
   assert.match(providerInput?.message ?? "", /Character Name: Mira Vale/);
-  assert.match(providerInput?.message ?? "", /Validated name bank for this backstory:/);
+  assert.match(providerInput?.message ?? "", /Validated people names for this backstory:/);
+  assert.match(providerInput?.message ?? "", /Use these validated candidate names only when inventing people/);
   assert.match(providerInput?.message ?? "", /People:/);
-  assert.match(providerInput?.message ?? "", /Factions and organizations:/);
+  assert.doesNotMatch(providerInput?.message ?? "", /Factions and organizations:/);
+  assert.doesNotMatch(providerInput?.message ?? "", /inventing new people, families, places/);
   assert.match(providerInput?.message ?? "", /World: Eldermere/);
+  assert.match(providerInput?.message ?? "", /Use generated names only for people/i);
+  assert.match(providerInput?.message ?? "", /only newly invented proper nouns allowed are people names/i);
+  assert.match(providerInput?.message ?? "", /Do not give names to ships, taverns, guilds/i);
+  assert.match(providerInput?.instructions ?? "", /invented proper nouns are allowed only for people/i);
+  assert.match(providerInput?.message ?? "", /Backstory override for Eldermere opener context/i);
+  assert.match(providerInput?.message ?? "", /Do not add a 'Hooks:' label/i);
+  assert.match(providerInput?.message ?? "", /at most two other canonical setting proper nouns/i);
   assert.match(
     providerInput?.message ?? "",
     /why those people matter not only to the player character, but also to the living world/i

@@ -153,7 +153,8 @@ type BackstoryPromptInput = {
 const backstoryJsonInstructions = [
   "You are AI Taverns, a fantasy tabletop character backstory writer and editor.",
   "Return exactly one valid JSON object with this shape: {\"backstory\":\"...\"}.",
-  "The backstory value must be plain player-facing prose only. Do not include markdown headings, bullet points, stat blocks, explanations, or surrounding commentary."
+  "The backstory value must be plain player-facing prose only. Do not include markdown headings, bullet points, stat blocks, hook labels, explanations, or surrounding commentary.",
+  "For backstories, invented proper nouns are allowed only for people. Do not invent named non-person entities."
 ].join("\n");
 
 function characterBackstoryWorldContext(input: {
@@ -217,14 +218,17 @@ function backstoryNameBank(input: {
       input.characterSheet,
       input.currentBackstory ?? ""
     ].join("|"),
-    targets: ["person", "family", "settlement", "tavern", "faction", "artifact"],
+    targets: ["person"],
     perTargetCount: 8,
     existingNames: extractExistingPromptNames(
       input.characterSheet,
       input.currentBackstory
     ),
-    heading: "Validated name bank for this backstory:"
-  });
+    heading: "Validated people names for this backstory:"
+  }).replace(
+    "Use these validated candidate names preferentially when inventing new people, families, places, factions, taverns, objects, or threats. Do not force every name into the output. Do not rename any player-authored or already established names.",
+    "Use these validated candidate names only when inventing people. Do not force every name into the output. Do not use these names for families, places, factions, taverns, objects, ships, roads, organizations, or threats. Do not rename any player-authored or already established names."
+  );
 }
 
 function buildGenerateBackstoryPrompt(input: BackstoryPromptInput) {
@@ -234,14 +238,23 @@ function buildGenerateBackstoryPrompt(input: BackstoryPromptInput) {
     "Rules:",
     "- Use the character sheet as authoritative. Do not change class, species, background, alignment, gender, level, stats, proficiencies, equipment, or spells.",
     "- Use the full world context as canon. Include concrete world details, factions, places, conflicts, beliefs, customs, threats, or tensions where they naturally fit.",
+    "- Use generated names only for people. Do not use generated names for settlements, landmarks, taverns, factions, families, artifacts, ships, roads, objects, or organizations.",
+    "- The only newly invented proper nouns allowed are people names. Do not invent new proper nouns for any non-person entity.",
+    "- Do not give names to ships, taverns, guilds, companies, ruins, roads, artifacts, books, ledgers, weapons, or family lines. Refer to those as plain descriptions, such as 'her mother's fishing boat' or 'a ruined observatory'.",
+    "- Never write phrases like 'called the [Name]' or 'named the [Name]' for a non-person entity.",
+    "- Use places, factions, faiths, threats, historical events, and magic terms only when they come from the world context or the player-authored character sheet. If the world context does not supply a specific proper noun, use a plain description instead of inventing one.",
+    "- Backstory override for Eldermere opener context: do not invent named starting places or named local anchors. Use only region, city-state, faction, threat, history, or magic names already present in the world context.",
+    "- Keep the setting texture focused: choose one primary region or local anchor from the world context, include at most two other canonical setting proper nouns, and explain lore through personal stakes rather than listing canon.",
     "- Make the backstory unique, interesting, and specific. Avoid generic fantasy biography, vague tragedy, empty prophecy, or interchangeable \"chosen one\" framing.",
     "- Include important people from the character's past or present. These people should have names, clear relationships to the character, and reasons they matter.",
-    "- When naming newly invented people, places, factions, taverns, families, or objects, prefer the validated name bank below. You may omit unused candidates. Do not rename the player character or any established player-written names.",
+    "- When naming newly invented people, prefer the validated people names below. Use only 1-2 new named people unless the character sheet already establishes more. Do not rename the player character or any established player-written names.",
     "- Explain why those people matter not only to the player character, but also to the living world: what they know, control, protect, threaten, need, believe, owe, hide, or could change.",
     "- Make these people useful for the AI DM to bring back later as allies, rivals, patrons, family, witnesses, enemies, missing persons, debt-holders, mentors, or complications.",
     "- Do not reveal secret DM-only information unless the world context explicitly says it is player-safe.",
     "- Keep the character as someone with unresolved motivation, not someone whose story is already complete.",
     "- Include 2-4 usable story hooks: a personal want, a complication, a connection to the world, and something the DM can bring into play later.",
+    "- Weave hooks into the prose. Do not add a 'Hooks:' label or any other labeled section.",
+    "- Before returning JSON, silently remove any invented non-person proper noun and replace it with a plain description.",
     "- Do not write in second person.",
     "",
     "Length: 250-450 words.",
@@ -265,13 +278,22 @@ function buildAddBackstoryDetailsPrompt(input: BackstoryPromptInput) {
     "- Treat the existing backstory as authoritative. Do not remove, contradict, rename, or overwrite any player-authored details.",
     "- Use the character sheet as authoritative. Do not change class, species, background, alignment, gender, level, stats, proficiencies, equipment, or spells.",
     "- Use the full world context as canon. Add concrete world details, factions, places, conflicts, beliefs, customs, threats, or tensions where they naturally fit.",
+    "- Use generated names only for people. Do not use generated names for settlements, landmarks, taverns, factions, families, artifacts, ships, roads, objects, or organizations.",
+    "- The only newly invented proper nouns allowed are people names. Do not invent new proper nouns for any non-person entity.",
+    "- Do not give names to ships, taverns, guilds, companies, ruins, roads, artifacts, books, ledgers, weapons, or family lines unless the player already named them. Refer to those as plain descriptions, such as 'her mother's fishing boat' or 'a ruined observatory'.",
+    "- Never write phrases like 'called the [Name]' or 'named the [Name]' for a non-person entity unless the player already named it.",
+    "- Use places, factions, faiths, threats, historical events, and magic terms only when they come from the world context, the player-written backstory, or the character sheet. If the world context does not supply a specific proper noun, use a plain description instead of inventing one.",
+    "- Backstory override for Eldermere opener context: do not invent named starting places or named local anchors. Use only region, city-state, faction, threat, history, or magic names already present in the world context.",
+    "- Keep the setting texture focused: choose one primary region or local anchor from the world context, include at most two other canonical setting proper nouns, and explain lore through personal stakes rather than listing canon.",
     "- Make the enriched backstory unique, interesting, and specific. Avoid generic fantasy biography, vague tragedy, empty prophecy, or interchangeable \"chosen one\" framing.",
     "- Add or deepen important people from the character's past or present. These people should have names, clear relationships to the character, and reasons they matter.",
-    "- When naming newly invented people, places, factions, taverns, families, or objects, prefer the validated name bank below. You may omit unused candidates. Do not rename the player character or any established player-written names.",
+    "- When naming newly invented people, prefer the validated people names below. Use only 1-2 new named people unless the player-written backstory already establishes more. Do not rename the player character or any established player-written names.",
     "- Explain why those people matter not only to the player character, but also to the living world: what they know, control, protect, threaten, need, believe, owe, hide, or could change.",
     "- Make these people useful for the AI DM to bring back later as allies, rivals, patrons, family, witnesses, enemies, missing persons, debt-holders, mentors, or complications.",
     "- Keep the character as someone with unresolved motivation, not someone whose story is already complete.",
     "- Include 2-4 usable story hooks: a personal want, a complication, a connection to the world, and something the DM can bring into play later.",
+    "- Weave hooks into the prose. Do not add a 'Hooks:' label or any other labeled section.",
+    "- Before returning JSON, silently remove any invented non-person proper noun and replace it with a plain description.",
     "- Do not reveal secret DM-only information unless the world context explicitly says it is player-safe.",
     "- Do not write in second person.",
     "",
