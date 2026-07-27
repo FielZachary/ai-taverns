@@ -5113,6 +5113,56 @@ function formatCanonicalCharacterContext(
   ].join("\n\n");
 }
 
+function compactPromptText(value: string) {
+  return value
+    .replace(/\r\n/g, "\n")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function extractCharacterBackstory(characterSheet: string) {
+  const normalized = characterSheet.replace(/\r\n/g, "\n");
+  const labelledBackstory = normalized.match(
+    /(?:^|\n)(?:#{1,6}\s*)?Backstory\s*\n([\s\S]*?)(?=\n(?:#{1,6}\s*)?(?:Backstory Expansion|Core Stats|Ability Scores|Saving Throws|Skills|Proficiencies and Languages|Attacks|Features and Traits|Equipment|Inventory|Currency|Spells|DM Brief|Level Progression|Appearance)\b|$)/i
+  );
+
+  if (labelledBackstory?.[1]) {
+    return compactPromptText(labelledBackstory[1]);
+  }
+
+  const inlineBackstory = normalized.match(
+    /(?:^|\n)(?:Backstory|Background)\s*:\s*([^\n]+(?:\n(?![A-Z][A-Za-z ]+:\s).+)*)/i
+  );
+
+  return inlineBackstory?.[1] ? compactPromptText(inlineBackstory[1]) : "";
+}
+
+function formatOpeningBackstoryAnchors(players: PlayerRow[]) {
+  const anchors = players
+    .filter(isProfileComplete)
+    .map((player) => {
+      const backstory = extractCharacterBackstory(player.character_sheet);
+
+      if (!backstory) {
+        return "";
+      }
+
+      return `- ${player.character_name}: ${previewText(backstory, 900)}`;
+    })
+    .filter(Boolean);
+
+  if (anchors.length === 0) {
+    return "";
+  }
+
+  return [
+    "Player backstory anchors for the opening scene:",
+    "Treat these as authoritative personal story ingredients. The opener must connect at least one immediate clue, NPC demand, debt, danger, opportunity, or emotional pressure to these anchors while staying in the selected starting place. Do not rewrite, resolve, or contradict the backstory.",
+    ...anchors
+  ].join("\n");
+}
+
 function formatMechanicsPromptContext(mechanicsState: MechanicsState) {
   return [
     "Authoritative mechanics state:",
@@ -5270,6 +5320,8 @@ function formatOpeningSceneRequest(input: {
   return [
     formatCanonicalCharacterContext(input.players, mechanicsState),
     "",
+    formatOpeningBackstoryAnchors(input.players),
+    "",
     formatMechanicsPromptContext(mechanicsState),
     "",
     "Current player action:",
@@ -5290,8 +5342,10 @@ function formatOpeningSceneRequest(input: {
     "Campaign opener requirements:",
     "Write a true campaign opener, not only a room description, road encounter, or local hazard.",
     "Establish a named starting place and a named larger region, realm, frontier, city, or world. If the setup does not provide names, invent strong fantasy names.",
+    "When the setup provides a selected canonical region and settlement, use those exact places as the opener's primary region and starting location instead of picking or inventing replacements.",
     "When inventing new NPCs, places, taverns, factions, objects, or threats for the opener, prefer the validated name bank above. Do not force every candidate into the scene, and do not rename player characters or established names.",
     "Establish why the character or party is here now and what set them on this path.",
+    "For completed character backstories, make the opening premise visibly grow out of at least one unresolved relationship, obligation, fear, promise, loss, secret, or ambition from the player backstory.",
     "Give the character a concrete first objective, destination, mystery, obligation, rescue, delivery, investigation, or promise that can drive the next several scenes.",
     "Introduce an immediate obstacle, threat, discovery, or NPC demand that blocks or complicates that objective right now.",
     "Make the campaign promise legible: what kind of adventure this is, what larger problem is stirring, and why the character should care.",
@@ -5315,6 +5369,7 @@ function eldermereOpeningPlannerInstructions() {
     "Create a compact structured campaign opener seed that a separate narrator will turn into the opening scene.",
     "The narrator will not receive the full world lore, so separate player-safe facts, private DM context, allowed opening terms, and forbidden opening terms.",
     "Use the selected Eldermere region and settlement when provided. Do not choose a different primary region or starting settlement.",
+    "Use the player backstory anchors from the opening request as core premise material: the opener must make at least one unresolved backstory relationship, obligation, loss, secret, fear, promise, or ambition immediately relevant.",
     "Make the opener specific, playable, and mysterious. Let the narrator start with a human-scale scene, not a history lecture.",
     "The player-facing opening should use at most 3 Eldermere-specific setting proper nouns total, not counting ordinary NPC names. The chosen region and starting location count toward this limit.",
     "Prefer plain descriptions over official names: use concrete meaning before setting terminology.",
@@ -5413,6 +5468,8 @@ function formatEldermereNarratorOpeningRequest(input: {
     "Narrator boundary:",
     "Write the player-facing opener only from the Eldermere opening plan above, the canonical character sheets, and the website DM instructions.",
     "Do not use the full Eldermere world bible. Do not introduce extra Eldermere lore, factions, institutions, ancient ages, regions, gods, magic resources, or historical terms beyond the allowed_player_facing_terms.",
+    "Keep the first scene anchored in the planned region and starting location; do not relocate the opener to another settlement, region, road, tavern, faction hall, or invented landmark unless the plan explicitly places it inside the starting location.",
+    "Make at least one player backstory anchor visible in the first scene through a clue, NPC demand, debt, danger, opportunity, sensory trigger, or emotional pressure. Do not retell the whole backstory.",
     "If a useful idea appears in dm_private_context, imply it only through concrete visible facts or pressure; do not reveal it as confirmed exposition.",
     "Forbidden opening terms must not appear in public_narration.",
     "Allowed player-facing terms must be explained plainly on first use.",

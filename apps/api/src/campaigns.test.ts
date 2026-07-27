@@ -1290,7 +1290,16 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
       ownerClientId: "eldermere-client",
       playerName: "Eldermere Player",
       characterName: "Mira",
-      characterSheet: "A ruin-delver who follows old glowing roads.",
+      characterSheet: [
+        "Character Name: Mira",
+        "",
+        "Backstory",
+        "Mira is a ruin-delver who follows old glowing roads after her missing mentor, Captain Saela, left her a brass compass that points toward Selwick only during stormlight.",
+        "",
+        "Core Stats",
+        "Class: Rogue",
+        "Background: Archaeologist"
+      ].join("\n"),
       eldermereStart: {
         regionName: "The Salt Concordat",
         settlementName: "Selwick",
@@ -1347,6 +1356,13 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(plannerInput.message, /Threats and creatures:/);
   assert.match(plannerInput.message, /prefer the validated name bank above/i);
   assert.match(plannerInput.message, /Opening lore clarity rule:/);
+  assert.match(plannerInput.message, /Player backstory anchors for the opening scene:/);
+  assert.match(plannerInput.message, /Captain Saela/);
+  assert.match(plannerInput.message, /compass that points toward Selwick/);
+  assert.match(
+    plannerInput.instructions,
+    /Use the player backstory anchors from the opening request/
+  );
   assert.match(
     plannerInput.message,
     /use no more than 2-3 new Eldermere-specific proper nouns/
@@ -1374,6 +1390,16 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(narratorInput.message, /allowed_player_facing_terms/);
   assert.match(narratorInput.message, /forbidden_opening_terms/);
   assert.match(narratorInput.message, /Second Dominion/);
+  assert.match(narratorInput.message, /Player backstory anchors for the opening scene:/);
+  assert.match(narratorInput.message, /Captain Saela/);
+  assert.match(
+    narratorInput.message,
+    /Keep the first scene anchored in the planned region and starting location/
+  );
+  assert.match(
+    narratorInput.message,
+    /Make at least one player backstory anchor visible in the first scene/
+  );
   assert.doesNotMatch(narratorInput.message, /Flagship world context:/);
   assert.doesNotMatch(narratorInput.message, /Seven regions available for the opener:/);
   assert.doesNotMatch(narratorInput.instructions, /World Context:/);
