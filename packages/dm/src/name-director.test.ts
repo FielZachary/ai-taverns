@@ -78,6 +78,41 @@ describe("name director", () => {
     );
   });
 
+  it("supports gendered person-name pools", () => {
+    const masculine = generateNamePool({
+      styles: ["coastal", "mercantile"],
+      target: "person",
+      gender: "masculine",
+      count: 8,
+      seed: "gendered-people"
+    });
+    const feminine = generateNamePool({
+      styles: ["coastal", "mercantile"],
+      target: "person",
+      gender: "feminine",
+      count: 8,
+      seed: "gendered-people"
+    });
+    const neutral = generateNamePool({
+      styles: ["coastal", "mercantile"],
+      target: "person",
+      gender: "neutral",
+      count: 8,
+      seed: "gendered-people"
+    });
+
+    assert.equal(masculine.names.length, 8);
+    assert.equal(feminine.names.length, 8);
+    assert.equal(neutral.names.length, 8);
+    assert.equal(masculine.names.every((candidate) => candidate.gender === "masculine"), true);
+    assert.equal(feminine.names.every((candidate) => candidate.gender === "feminine"), true);
+    assert.equal(neutral.names.every((candidate) => candidate.gender === "neutral"), true);
+    assert.notDeepEqual(
+      masculine.names.map((candidate) => candidate.givenName),
+      feminine.names.map((candidate) => candidate.givenName)
+    );
+  });
+
   it("generates target-specific names from the same styles", () => {
     const targets: NameTarget[] = [
       "settlement",

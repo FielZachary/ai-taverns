@@ -161,7 +161,10 @@ test("POST /api/campaigns/backstory generates a world-grounded character backsto
   assert.match(providerInput?.message ?? "", /Character Name: Mira Vale/);
   assert.match(providerInput?.message ?? "", /Validated people names for this backstory:/);
   assert.match(providerInput?.message ?? "", /Use these validated candidate names only when inventing people/);
-  assert.match(providerInput?.message ?? "", /People:/);
+  assert.match(providerInput?.message ?? "", /Masculine people:/);
+  assert.match(providerInput?.message ?? "", /Feminine people:/);
+  assert.match(providerInput?.message ?? "", /Neutral people:/);
+  assert.match(providerInput?.message ?? "", /gender group that fits the person's stated role or gender/);
   assert.doesNotMatch(providerInput?.message ?? "", /Factions and organizations:/);
   assert.doesNotMatch(providerInput?.message ?? "", /inventing new people, families, places/);
   assert.match(providerInput?.message ?? "", /World: Eldermere/);

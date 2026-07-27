@@ -38,7 +38,8 @@ import {
 } from "@ai-dnd/contracts";
 import {
   formatEldermereOpeningPromptContext,
-  formatNameDirectorPromptContext
+  generateNamePool,
+  type NameGender
 } from "@ai-dnd/dm";
 import {
   createCampaignInvite,
@@ -207,28 +208,44 @@ function backstoryNameBank(input: {
   customWorldName?: string | undefined;
 }) {
   const world = input.customWorldName?.trim() || input.campaignGenre?.trim();
-
-  return formatNameDirectorPromptContext({
-    world,
-    seed: [
-      "backstory",
-      input.campaignGenreKind ?? "preset",
-      input.campaignGenrePresetId ?? "",
-      world ?? "",
-      input.characterSheet,
-      input.currentBackstory ?? ""
-    ].join("|"),
-    targets: ["person"],
-    perTargetCount: 8,
-    existingNames: extractExistingPromptNames(
-      input.characterSheet,
-      input.currentBackstory
-    ),
-    heading: "Validated people names for this backstory:"
-  }).replace(
-    "Use these validated candidate names preferentially when inventing new people, families, places, factions, taverns, objects, or threats. Do not force every name into the output. Do not rename any player-authored or already established names.",
-    "Use these validated candidate names only when inventing people. Do not force every name into the output. Do not use these names for families, places, factions, taverns, objects, ships, roads, organizations, or threats. Do not rename any player-authored or already established names."
+  const seed = [
+    "backstory",
+    input.campaignGenreKind ?? "preset",
+    input.campaignGenrePresetId ?? "",
+    world ?? "",
+    input.characterSheet,
+    input.currentBackstory ?? ""
+  ].join("|");
+  const existingNames = extractExistingPromptNames(
+    input.characterSheet,
+    input.currentBackstory
   );
+  const genderGroups: Array<{ gender: NameGender; label: string }> = [
+    { gender: "masculine", label: "Masculine people" },
+    { gender: "feminine", label: "Feminine people" },
+    { gender: "neutral", label: "Neutral people" }
+  ];
+  const sections = genderGroups
+    .map(({ gender, label }) => {
+      const pool = generateNamePool({
+        world,
+        seed,
+        target: "person",
+        gender,
+        count: 5,
+        existingNames
+      });
+      const names = pool.names.map((candidate) => candidate.name);
+
+      return names.length ? `${label}: ${names.join(", ")}` : "";
+    })
+    .filter(Boolean);
+
+  return [
+    "Validated people names for this backstory:",
+    "Use these validated candidate names only when inventing people. Choose a name from the gender group that fits the person's stated role or gender. Do not force every name into the output. Do not use these names for families, places, factions, taverns, objects, ships, roads, organizations, or threats. Do not rename any player-authored or already established names.",
+    ...sections
+  ].join("\n");
 }
 
 function buildGenerateBackstoryPrompt(input: BackstoryPromptInput) {

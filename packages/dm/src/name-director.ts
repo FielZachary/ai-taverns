@@ -28,6 +28,8 @@ export type NameRole =
   | "mystic"
   | "commoner";
 
+export type NameGender = "masculine" | "feminine" | "neutral" | "any";
+
 export type NameStyleId =
   | "coastal"
   | "riverlands"
@@ -109,6 +111,7 @@ export type NameCandidate = {
   name: string;
   givenName: string;
   familyName: string;
+  gender?: NameGender | undefined;
   cultureId: string;
   cultureLabel: string;
   target: NameTarget;
@@ -128,6 +131,7 @@ export type GenerateNamePoolInput = {
   styles?: WeightedNameStyle[] | undefined;
   target?: NameTarget | undefined;
   role?: NameRole | undefined;
+  gender?: NameGender | undefined;
   kind?: NameKind | undefined;
   count?: number | undefined;
   seed?: string | undefined;
@@ -146,6 +150,13 @@ export type NameDirectorPromptContextInput = Omit<
 
 type RandomSource = {
   next(): number;
+};
+
+type CandidateNameParts = {
+  name: string;
+  givenName: string;
+  familyName: string;
+  gender?: NameGender | undefined;
 };
 
 type BlendedStylePool = {
@@ -269,6 +280,76 @@ const commonStandaloneGiven = [
   "Torren",
   "Vessa",
   "Willa"
+];
+
+const masculineGivenNames = [
+  "Ansel",
+  "Bram",
+  "Calder",
+  "Corin",
+  "Dain",
+  "Edrin",
+  "Garrick",
+  "Harlan",
+  "Ilan",
+  "Iven",
+  "Joren",
+  "Kellan",
+  "Lorn",
+  "Marenus",
+  "Nessaus",
+  "Orin",
+  "Orrin",
+  "Perrin",
+  "Soren",
+  "Teren",
+  "Torran",
+  "Varric"
+];
+
+const feminineGivenNames = [
+  "Arda",
+  "Bellin",
+  "Bria",
+  "Brynn",
+  "Calla",
+  "Cora",
+  "Dessa",
+  "Edda",
+  "Fara",
+  "Hessa",
+  "Jessa",
+  "Kessa",
+  "Kethra",
+  "Lenna",
+  "Lysa",
+  "Nessara",
+  "Pella",
+  "Rotha",
+  "Sella",
+  "Tilda",
+  "Vara",
+  "Vessa",
+  "Willa"
+];
+
+const neutralGivenNames = [
+  "Alder",
+  "Arlen",
+  "Ash",
+  "Bell",
+  "Bren",
+  "Cairn",
+  "Fenn",
+  "Harth",
+  "Keth",
+  "Merrit",
+  "Noll",
+  "Quin",
+  "Reed",
+  "Rill",
+  "Tams",
+  "Wren"
 ];
 
 const commonProfileParts = {
@@ -1437,14 +1518,39 @@ function roleBiasedParts(pool: BlendedStylePool, role: NameRole | undefined) {
   };
 }
 
+function normalizeNameGender(gender: NameGender | undefined): NameGender {
+  return gender ?? "any";
+}
+
+function genderedGivenNamePool(pool: BlendedStylePool, gender: NameGender | undefined) {
+  const normalizedGender = normalizeNameGender(gender);
+
+  if (normalizedGender === "masculine") {
+    return masculineGivenNames;
+  }
+
+  if (normalizedGender === "feminine") {
+    return feminineGivenNames;
+  }
+
+  if (normalizedGender === "neutral") {
+    return neutralGivenNames;
+  }
+
+  return pool.standaloneGiven;
+}
+
 function makePersonName(
   pool: BlendedStylePool,
   random: RandomSource,
-  role: NameRole | undefined
+  role: NameRole | undefined,
+  gender: NameGender | undefined
 ) {
-  const useStandaloneGiven = random.next() < 0.34;
+  const normalizedGender = normalizeNameGender(gender);
+  const useGenderedGiven = normalizedGender !== "any";
+  const useStandaloneGiven = useGenderedGiven || random.next() < 0.34;
   const givenName = useStandaloneGiven
-    ? choose(pool.standaloneGiven, random)
+    ? choose(genderedGivenNamePool(pool, normalizedGender), random)
     : `${choose(pool.givenPrefixes, random)}${choose(pool.givenSuffixes, random)}`;
   const surnameParts = roleBiasedParts(pool, role);
   const useStandaloneSurname = random.next() < 0.42;
@@ -1455,7 +1561,8 @@ function makePersonName(
   return {
     name: compactSpaces(`${givenName} ${familyName}`),
     givenName,
-    familyName
+    familyName,
+    gender: normalizedGender
   };
 }
 
@@ -1740,11 +1847,12 @@ function makeCandidateName(
   pool: BlendedStylePool,
   random: RandomSource,
   role: NameRole | undefined,
-  target: NameTarget
+  target: NameTarget,
+  gender: NameGender | undefined
 ): NameCandidate {
-  const parts =
+  const parts: CandidateNameParts =
     target === "person" || target === "family" || target === "title"
-      ? makePersonName(pool, random, role)
+      ? makePersonName(pool, random, role, target === "person" ? gender : undefined)
       : target === "tavern"
         ? makeTavernName(pool, random)
         : target === "ship"
@@ -1762,6 +1870,7 @@ function makeCandidateName(
     name,
     givenName: parts.givenName,
     familyName: parts.familyName,
+    ...(target === "person" && parts.gender ? { gender: parts.gender } : {}),
     cultureId: pool.id,
     cultureLabel: pool.label,
     target,
@@ -1862,6 +1971,7 @@ export function generateNamePool(input: GenerateNamePoolInput = {}) {
       target,
       input.region ?? "",
       input.role ?? "",
+      input.gender ?? "",
       input.kind ?? "",
       count
     ].join("|")
@@ -1874,7 +1984,13 @@ export function generateNamePool(input: GenerateNamePoolInput = {}) {
     attempt < maxGeneratedNameAttempts && accepted.length < count;
     attempt += 1
   ) {
-    const candidate = makeCandidateName(pool, random, input.role, target);
+    const candidate = makeCandidateName(
+      pool,
+      random,
+      input.role,
+      target,
+      input.gender
+    );
     const validation = validateCandidateName({
       candidate: candidate.name,
       existingNames: input.existingNames,
