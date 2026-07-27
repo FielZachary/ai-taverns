@@ -1,6 +1,19 @@
-import { eldermereRegions } from "./flagship-world.js";
-
 export type NameKind = "npc" | "place" | "faction" | "family" | "title";
+
+export type NameTarget =
+  | "person"
+  | "family"
+  | "settlement"
+  | "district"
+  | "tavern"
+  | "ship"
+  | "road"
+  | "ruin"
+  | "temple"
+  | "faction"
+  | "artifact"
+  | "monster"
+  | "title";
 
 export type NameRole =
   | "ally"
@@ -15,11 +28,74 @@ export type NameRole =
   | "mystic"
   | "commoner";
 
+export type NameStyleId =
+  | "coastal"
+  | "riverlands"
+  | "forest"
+  | "mountain"
+  | "plains"
+  | "desert"
+  | "marsh"
+  | "island"
+  | "frontier"
+  | "ruinlands"
+  | "underground"
+  | "arctic"
+  | "rural"
+  | "urban"
+  | "mercantile"
+  | "scholastic"
+  | "religious"
+  | "martial"
+  | "noble"
+  | "criminal"
+  | "nomadic"
+  | "industrial"
+  | "agrarian"
+  | "seafaring"
+  | "old_faith"
+  | "arcane"
+  | "divine"
+  | "haunted"
+  | "fey"
+  | "infernal"
+  | "celestial"
+  | "shadowed"
+  | "ancient"
+  | "wondrous"
+  | "grim";
+
+export type WeightedNameStyle =
+  | NameStyleId
+  | {
+      id: NameStyleId;
+      weight?: number | undefined;
+    };
+
+export type NameStyleProfile = {
+  id: NameStyleId;
+  label: string;
+  givenPrefixes: string[];
+  givenSuffixes: string[];
+  standaloneGiven: string[];
+  familyRoots: string[];
+  familySuffixes: string[];
+  standaloneFamilies: string[];
+  placeRoots: string[];
+  placeSuffixes: string[];
+  tavernAdjectives: string[];
+  tavernNouns: string[];
+  factionRoots: string[];
+  artifactRoots: string[];
+  roleHints?: Partial<Record<NameRole, string[]>> | undefined;
+};
+
 export type NameCulture = {
   id: string;
   label: string;
   world: string;
   regions: string[];
+  styleIds: NameStyleId[];
   givenPrefixes: string[];
   givenSuffixes: string[];
   standaloneGiven: string[];
@@ -35,6 +111,8 @@ export type NameCandidate = {
   familyName: string;
   cultureId: string;
   cultureLabel: string;
+  target: NameTarget;
+  styleIds: NameStyleId[];
   score: number;
 };
 
@@ -47,6 +125,8 @@ export type GenerateNamePoolInput = {
   world?: string | undefined;
   region?: string | undefined;
   cultureId?: string | undefined;
+  styles?: WeightedNameStyle[] | undefined;
+  target?: NameTarget | undefined;
   role?: NameRole | undefined;
   kind?: NameKind | undefined;
   count?: number | undefined;
@@ -57,6 +137,27 @@ export type GenerateNamePoolInput = {
 
 type RandomSource = {
   next(): number;
+};
+
+type BlendedStylePool = {
+  id: string;
+  label: string;
+  world: string;
+  regions: string[];
+  styleIds: NameStyleId[];
+  givenPrefixes: string[];
+  givenSuffixes: string[];
+  standaloneGiven: string[];
+  surnameRoots: string[];
+  surnameSuffixes: string[];
+  standaloneSurnames: string[];
+  placeRoots: string[];
+  placeSuffixes: string[];
+  tavernAdjectives: string[];
+  tavernNouns: string[];
+  factionRoots: string[];
+  artifactRoots: string[];
+  roleHints: Partial<Record<NameRole, string[]>>;
 };
 
 const globalBannedNames = [
@@ -72,110 +173,100 @@ const globalBannedNames = [
   "Marra Vell"
 ];
 
-const globalBannedSurnameParts = [
-  "Vael",
-  "Vale",
-  "Vell",
-  "Venn",
-  "Vey"
-];
+const globalBannedSurnameParts = ["Vael", "Vale", "Vell", "Venn", "Vey"];
 
-const causticClusters = [
-  "aa",
-  "aei",
-  "rrx",
-  "xq",
-  "qx",
-  "kkk",
-  "rrr",
-  "'''",
-  "--"
-];
+const causticClusters = ["aa", "aei", "rrx", "xq", "qx", "kkk", "rrr", "'''", "--"];
 
 const defaultNameCount = 12;
-const maxGeneratedNameAttempts = 260;
+const maxGeneratedNameAttempts = 320;
 
-const baseCulture: NameCulture = {
-  id: "eldermere-general",
-  label: "Eldermere Common",
-  world: "Eldermere",
-  regions: eldermereRegions.map((region) => region.name),
-  givenPrefixes: [
-    "Ald",
-    "Arlen",
-    "Bell",
-    "Bren",
-    "Cal",
-    "Cor",
-    "Dessa",
-    "Edr",
-    "Eld",
-    "Fenn",
-    "Garr",
-    "Harl",
-    "Iven",
-    "Jessa",
-    "Keth",
-    "Lorn",
-    "Maren",
-    "Nessa",
-    "Orin",
-    "Pella",
-    "Quin",
-    "Rusk",
-    "Sella",
-    "Tams",
-    "Teren",
-    "Vara",
-    "Wren"
-  ],
-  givenSuffixes: [
-    "a",
-    "an",
-    "ard",
-    "el",
-    "en",
-    "eth",
-    "ia",
-    "ic",
-    "in",
-    "or",
-    "ra",
-    "ren",
-    "us",
-    "wen"
-  ],
-  standaloneGiven: [
-    "Ansel",
-    "Arda",
-    "Bellin",
-    "Bram",
-    "Brynn",
-    "Calla",
-    "Cora",
-    "Dain",
-    "Edda",
-    "Fara",
-    "Garrick",
-    "Hessa",
-    "Ilan",
-    "Joren",
-    "Kellan",
-    "Lenna",
-    "Lysa",
-    "Merrit",
-    "Noll",
-    "Orrin",
-    "Perrin",
-    "Quilla",
-    "Rotha",
-    "Soren",
-    "Tilda",
-    "Torren",
-    "Vessa",
-    "Willa"
-  ],
-  surnameRoots: [
+function profile(
+  id: NameStyleId,
+  label: string,
+  parts: Omit<NameStyleProfile, "id" | "label">
+): NameStyleProfile {
+  return { id, label, ...parts };
+}
+
+const commonGivenPrefixes = [
+  "Ald",
+  "Arlen",
+  "Bell",
+  "Bren",
+  "Cal",
+  "Cor",
+  "Dessa",
+  "Edr",
+  "Fenn",
+  "Garr",
+  "Harl",
+  "Iven",
+  "Jessa",
+  "Keth",
+  "Lorn",
+  "Maren",
+  "Nessa",
+  "Orin",
+  "Pella",
+  "Quin",
+  "Sella",
+  "Tams",
+  "Teren",
+  "Vara",
+  "Wren"
+];
+
+const commonGivenSuffixes = [
+  "a",
+  "an",
+  "ard",
+  "el",
+  "en",
+  "eth",
+  "ia",
+  "ic",
+  "in",
+  "or",
+  "ra",
+  "ren",
+  "us",
+  "wen"
+];
+
+const commonStandaloneGiven = [
+  "Ansel",
+  "Arda",
+  "Bram",
+  "Brynn",
+  "Calla",
+  "Cora",
+  "Dain",
+  "Edda",
+  "Fara",
+  "Garrick",
+  "Hessa",
+  "Ilan",
+  "Joren",
+  "Kellan",
+  "Lenna",
+  "Lysa",
+  "Merrit",
+  "Noll",
+  "Orrin",
+  "Perrin",
+  "Rotha",
+  "Soren",
+  "Tilda",
+  "Torren",
+  "Vessa",
+  "Willa"
+];
+
+const commonProfileParts = {
+  givenPrefixes: commonGivenPrefixes,
+  givenSuffixes: commonGivenSuffixes,
+  standaloneGiven: commonStandaloneGiven,
+  familyRoots: [
     "Ash",
     "Bell",
     "Cairn",
@@ -188,7 +279,6 @@ const baseCulture: NameCulture = {
     "Hearth",
     "Iron",
     "Lantern",
-    "Miller",
     "Morrow",
     "Oak",
     "Reed",
@@ -196,10 +286,9 @@ const baseCulture: NameCulture = {
     "Rook",
     "Stone",
     "Thorn",
-    "Toll",
     "Ward"
   ],
-  surnameSuffixes: [
+  familySuffixes: [
     "brook",
     "cross",
     "dale",
@@ -213,654 +302,621 @@ const baseCulture: NameCulture = {
     "row",
     "ridge",
     "stead",
-    "thorn",
     "ward"
   ],
-  standaloneSurnames: [
+  standaloneFamilies: [
     "Ashbrook",
     "Bellweather",
-    "Cairnrow",
     "Dawnglass",
     "Emberhall",
-    "Fenkeeper",
     "Gateward",
     "Hearthcross",
-    "Lanternmere",
-    "Millerstead",
     "Morrowmark",
-    "Oakthorn",
     "Reedholt",
     "Roadkeeper",
-    "Rookridge",
-    "Stoneford",
-    "Tollward"
+    "Stoneford"
+  ],
+  placeRoots: [
+    "Bell",
+    "Cairn",
+    "Dawn",
+    "Ember",
+    "Gate",
+    "Hearth",
+    "Lantern",
+    "Morrow",
+    "Stone",
+    "Ward"
+  ],
+  placeSuffixes: [
+    "bridge",
+    "cross",
+    "ford",
+    "hall",
+    "haven",
+    "hold",
+    "rest",
+    "stead",
+    "watch",
+    "wick"
+  ],
+  tavernAdjectives: [
+    "Amber",
+    "Bent",
+    "Brass",
+    "Crowned",
+    "Gilded",
+    "Last",
+    "Old",
+    "Red",
+    "Silver",
+    "Wayward"
+  ],
+  tavernNouns: [
+    "Bell",
+    "Boar",
+    "Candle",
+    "Cup",
+    "Gate",
+    "Lantern",
+    "Road",
+    "Rose",
+    "Shield",
+    "Wagon"
+  ],
+  factionRoots: [
+    "Accord",
+    "Circle",
+    "Compact",
+    "Company",
+    "Guild",
+    "House",
+    "League",
+    "Order",
+    "Pact",
+    "Watch"
+  ],
+  artifactRoots: [
+    "Bell",
+    "Crown",
+    "Flame",
+    "Glass",
+    "Key",
+    "Lantern",
+    "Mask",
+    "Mirror",
+    "Seal",
+    "Stone"
   ],
   roleHints: {
-    authority: ["Iron", "Ward", "Hall", "Mark"],
+    authority: ["Iron", "Ward", "Hall", "Order"],
     family: ["Hearth", "Reed", "Brook", "Morrow"],
-    merchant: ["Gate", "Road", "Cross", "Mark"],
+    merchant: ["Gate", "Road", "Cross", "Guild"],
     mystic: ["Ash", "Dawn", "Glass", "Ember"],
     patron: ["Lantern", "Ward", "Hearth", "Road"],
     rival: ["Iron", "Thorn", "Cairn", "Frost"]
-  }
+  } satisfies Partial<Record<NameRole, string[]>>
 };
 
-const eldermereCultures: NameCulture[] = [
-  {
-    ...baseCulture,
-    id: "eldermere-cael-ambrose",
-    label: "Cael Ambrose",
-    regions: ["Cael Ambrose"],
-    givenPrefixes: [
-      "Ald",
-      "Bren",
-      "Cai",
-      "Car",
-      "Dessa",
-      "Edric",
-      "Farren",
-      "Garr",
-      "Hal",
-      "Joss",
-      "Lorn",
-      "Merr",
-      "Ostel",
-      "Ren",
-      "Sern",
-      "Tovin",
-      "Wester"
-    ],
-    givenSuffixes: [
-      "a",
-      "an",
-      "ard",
-      "el",
-      "en",
-      "ia",
-      "ic",
-      "or",
-      "ren",
-      "yn"
-    ],
-    standaloneGiven: [
-      "Ansel",
-      "Bram",
-      "Cora",
-      "Dain",
-      "Edda",
-      "Garrick",
-      "Hessa",
-      "Ilan",
-      "Joren",
-      "Lysa",
-      "Marta",
-      "Noll",
-      "Perrin",
-      "Rotha",
-      "Soren",
-      "Tilda",
-      "Willa",
-      "Yorren"
-    ],
-    surnameRoots: [
-      "Chapel",
-      "Crown",
-      "Field",
-      "Guest",
-      "Harvest",
-      "Hearth",
-      "Miller",
-      "Road",
-      "Sern",
-      "Sun",
-      "Thistle",
-      "Wain",
-      "Warden",
-      "Wheat"
-    ],
-    surnameSuffixes: [
-      "bridge",
-      "cross",
-      "field",
-      "ford",
-      "hall",
-      "mark",
-      "row",
-      "stead",
-      "ward",
-      "wick"
-    ],
-    standaloneSurnames: [
-      "Chapelrow",
-      "Crownford",
-      "Guestward",
-      "Harvestwick",
-      "Hearthford",
-      "Millerstead",
-      "Roadhall",
-      "Suncross",
-      "Thistlemark",
-      "Wainstead",
-      "Wheatford"
-    ]
-  },
-  {
-    ...baseCulture,
-    id: "eldermere-thornwake-vale",
-    label: "Thornwake Vale",
-    regions: ["Thornwake Vale"],
-    givenPrefixes: [
-      "Bria",
-      "Erl",
-      "Fern",
-      "Hessa",
-      "Ivr",
-      "Leth",
-      "Moss",
-      "Nara",
-      "Orrel",
-      "Pike",
-      "Rill",
-      "Sylla",
-      "Tovin",
-      "Vera",
-      "Wick"
-    ],
-    givenSuffixes: [
-      "a",
-      "an",
-      "el",
-      "eth",
-      "ia",
-      "in",
-      "ra",
-      "ren",
-      "un"
-    ],
-    standaloneGiven: [
-      "Briar",
-      "Celand",
-      "Edda",
-      "Fenna",
-      "Hessa",
-      "Ilan",
-      "Juniper",
-      "Lysa",
-      "Noll",
-      "Oren",
-      "Rotha",
-      "Salla",
-      "Tilda",
-      "Willa"
-    ],
-    surnameRoots: [
-      "Bramble",
-      "Cedar",
-      "Elder",
-      "Fern",
-      "Grove",
-      "Moss",
-      "Root",
-      "Sallow",
-      "Thorn",
-      "Willow",
-      "Yew"
-    ],
-    surnameSuffixes: [
-      "bark",
-      "brook",
-      "hollow",
-      "holt",
-      "root",
-      "shade",
-      "song",
-      "wake",
-      "wood",
-      "wold"
-    ],
-    standaloneSurnames: [
-      "Brambleholt",
-      "Cedarwold",
-      "Elderroot",
-      "Fernhollow",
-      "Grovesong",
-      "Mossbrook",
-      "Sallowshade",
-      "Thornwood",
-      "Willowwake",
-      "Yewbark"
-    ]
-  },
-  {
-    ...baseCulture,
-    id: "eldermere-ferrant-concord",
-    label: "Ferrant Concord",
-    regions: ["The Ferrant Concord"],
-    givenPrefixes: [
-      "Beld",
-      "Cort",
-      "Durn",
-      "Farr",
-      "Gris",
-      "Halk",
-      "Jor",
-      "Kessa",
-      "Marn",
-      "Orr",
-      "Pold",
-      "Rusk",
-      "Tarn",
-      "Vorr"
-    ],
-    givenSuffixes: [
-      "a",
-      "an",
-      "ek",
-      "en",
-      "ic",
-      "in",
-      "or",
-      "um",
-      "us"
-    ],
-    standaloneGiven: [
-      "Bram",
-      "Corta",
-      "Dain",
-      "Edda",
-      "Fennic",
-      "Garrick",
-      "Hessa",
-      "Joren",
-      "Kellan",
-      "Noll",
-      "Orrin",
-      "Perrin",
-      "Rotha",
-      "Tilda"
-    ],
-    surnameRoots: [
-      "Anvil",
-      "Bellows",
-      "Crag",
-      "Dredge",
-      "Forge",
-      "Gear",
-      "Iron",
-      "Kiln",
-      "Quarry",
-      "Rivet",
-      "Steel",
-      "Trestle"
-    ],
-    surnameSuffixes: [
-      "brand",
-      "hall",
-      "hold",
-      "mark",
-      "shaft",
-      "spur",
-      "ward",
-      "wright",
-      "yard"
-    ],
-    standaloneSurnames: [
-      "Anvilmark",
-      "Bellowsward",
-      "Cragspur",
-      "Dredgehall",
-      "Forgeyard",
-      "Gearwright",
-      "Ironwright",
-      "Kilnbrand",
-      "Quarryhold",
-      "Rivetmark",
-      "Trestleshaft"
-    ]
-  },
-  {
-    ...baseCulture,
-    id: "eldermere-salt-concordat",
-    label: "Salt Concordat",
-    regions: ["The Salt Concordat"],
-    givenPrefixes: [
-      "Bria",
-      "Cor",
-      "Dessa",
-      "Harr",
-      "Ivr",
-      "Jessa",
-      "Mael",
-      "Nessa",
-      "Os",
-      "Perr",
-      "Sella",
-      "Torr",
-      "Yrin"
-    ],
-    givenSuffixes: [
-      "a",
-      "an",
-      "el",
-      "en",
-      "ic",
-      "in",
-      "or",
-      "ra",
-      "ren"
-    ],
-    standaloneGiven: [
-      "Ansel",
-      "Bria",
-      "Cora",
-      "Dain",
-      "Hessa",
-      "Ilan",
-      "Joren",
-      "Maela",
-      "Noll",
-      "Orrin",
-      "Perrin",
-      "Salla",
-      "Tilda",
-      "Willa",
-      "Yorra"
-    ],
-    surnameRoots: [
-      "Anchor",
-      "Brine",
-      "Harbor",
-      "Keel",
-      "Ledger",
-      "Net",
-      "Quay",
-      "Salt",
-      "Skerry",
-      "Tide",
-      "Wake",
-      "Wharf"
-    ],
-    surnameSuffixes: [
-      "hook",
-      "lock",
-      "mark",
-      "mere",
-      "scribe",
-      "tide",
-      "ward",
-      "watch",
-      "wright"
-    ],
-    standaloneSurnames: [
-      "Anchorward",
-      "Brinehook",
-      "Harborscribe",
-      "Keelmark",
-      "Ledgerlock",
-      "Netwright",
-      "Quaywatch",
-      "Saltmere",
-      "Skerrywatch",
-      "Tidelock",
-      "Wharfmark"
-    ]
-  },
-  {
-    ...baseCulture,
-    id: "eldermere-ashfell-marches",
-    label: "Ashfell Marches",
-    regions: ["Ashfell Marches"],
-    givenPrefixes: [
-      "Ard",
-      "Bar",
-      "Drok",
-      "Edda",
-      "Falk",
-      "Grim",
-      "Harl",
-      "Korr",
-      "Marn",
-      "Runa",
-      "Skor",
-      "Tor",
-      "Vosk",
-      "Yrsa"
-    ],
-    givenSuffixes: [
-      "a",
-      "an",
-      "ek",
-      "en",
-      "eth",
-      "or",
-      "ra",
-      "un"
-    ],
-    standaloneGiven: [
-      "Arda",
-      "Bram",
-      "Dain",
-      "Edda",
-      "Falka",
-      "Grima",
-      "Hessa",
-      "Kellan",
-      "Noll",
-      "Rotha",
-      "Runa",
-      "Tilda",
-      "Torren",
-      "Willa"
-    ],
-    surnameRoots: [
-      "Ash",
-      "Barrow",
-      "Bone",
-      "Cinder",
-      "Grey",
-      "Mare",
-      "Oath",
-      "Ridge",
-      "Spear",
-      "Storm",
-      "Ward",
-      "Wolf"
-    ],
-    surnameSuffixes: [
-      "fell",
-      "grip",
-      "hollow",
-      "mane",
-      "rider",
-      "ring",
-      "stone",
-      "watch",
-      "ward"
-    ],
-    standaloneSurnames: [
-      "Ashring",
-      "Barrowfell",
-      "Bonehollow",
-      "Cinderwatch",
-      "Greystone",
-      "Maremane",
-      "Oathrider",
-      "Ridgegrip",
-      "Spearward",
-      "Stormring",
-      "Wolfwatch"
-    ]
-  },
-  {
-    ...baseCulture,
-    id: "eldermere-veiled-reach",
-    label: "Veiled Reach",
-    regions: ["The Veiled Reach"],
-    givenPrefixes: [
-      "Asha",
-      "Dalim",
-      "Eris",
-      "Hale",
-      "Ishan",
-      "Lira",
-      "Mira",
-      "Nadir",
-      "Oren",
-      "Rasil",
-      "Selis",
-      "Talim",
-      "Vora",
-      "Zerin"
-    ],
-    givenSuffixes: [
-      "a",
-      "an",
-      "el",
-      "im",
-      "ir",
-      "or",
-      "ra",
-      "us"
-    ],
-    standaloneGiven: [
-      "Ansel",
-      "Asha",
-      "Dalim",
-      "Edda",
-      "Hessa",
-      "Ilan",
-      "Liora",
-      "Mira",
-      "Noll",
-      "Oren",
-      "Rotha",
-      "Selia",
-      "Tilda",
-      "Zora"
-    ],
-    surnameRoots: [
-      "Archive",
-      "Ashen",
-      "Candle",
-      "Cipher",
-      "Dream",
-      "Ink",
-      "Mask",
-      "Script",
-      "Thanewell",
-      "Veil",
-      "Votive"
-    ],
-    surnameSuffixes: [
-      "bind",
-      "glass",
-      "keeper",
-      "rest",
-      "scribe",
-      "shade",
-      "thread",
-      "well",
-      "wright"
-    ],
-    standaloneSurnames: [
-      "Archivebind",
-      "Ashenscribe",
-      "Candlekeeper",
-      "Cipherglass",
-      "Dreamthread",
-      "Inkshade",
-      "Maskshade",
-      "Scriptwell",
-      "Thanewell",
-      "Veilrest",
-      "Votivekeeper"
-    ]
-  },
-  {
-    ...baseCulture,
-    id: "eldermere-sundered-vale",
-    label: "Sundered Vale",
-    regions: ["The Sundered Vale"],
-    givenPrefixes: [
-      "Amm",
-      "Cask",
-      "Dren",
-      "Elda",
-      "Holl",
-      "Korr",
-      "Lysk",
-      "Nim",
-      "Perr",
-      "Rill",
-      "Sable",
-      "Tarn",
-      "Yesk"
-    ],
-    givenSuffixes: [
-      "a",
-      "an",
-      "el",
-      "et",
-      "ic",
-      "in",
-      "or",
-      "ra"
-    ],
-    standaloneGiven: [
-      "Ammel",
-      "Bram",
-      "Cora",
-      "Dain",
-      "Edda",
-      "Hessa",
-      "Kellan",
-      "Lysa",
-      "Noll",
-      "Perrin",
-      "Rotha",
-      "Sable",
-      "Tilda",
-      "Willa"
-    ],
-    surnameRoots: [
-      "Claim",
-      "Glass",
-      "Gulch",
-      "Rim",
-      "Shard",
-      "Stake",
-      "Sunder",
-      "Vail",
-      "Well",
-      "Winch"
-    ],
-    surnameSuffixes: [
-      "choir",
-      "gate",
-      "hold",
-      "mark",
-      "shaft",
-      "stake",
-      "watch",
-      "wright"
-    ],
-    standaloneSurnames: [
-      "Claimstake",
-      "Glassmark",
-      "Gulchwatch",
-      "Rimshaft",
-      "Shardwatch",
-      "Stakehold",
-      "Sunderhold",
-      "Vailchoir",
-      "Wellmark",
-      "Winchwright"
-    ]
-  },
-  baseCulture
+export const nameStyleProfiles: NameStyleProfile[] = [
+  profile("coastal", "Coastal", {
+    ...commonProfileParts,
+    givenPrefixes: ["Bria", "Cor", "Dessa", "Harr", "Ivr", "Mael", "Nessa", "Os", "Sella", "Torr", "Yrin"],
+    familyRoots: ["Anchor", "Brine", "Harbor", "Keel", "Ledger", "Net", "Quay", "Salt", "Skerry", "Tide", "Wake", "Wharf"],
+    familySuffixes: ["hook", "lock", "mark", "mere", "scribe", "tide", "ward", "watch", "wright"],
+    standaloneFamilies: ["Anchorward", "Brinehook", "Keelmark", "Ledgerlock", "Quaywatch", "Saltmere", "Skerrywatch", "Tidelock"],
+    placeRoots: ["Anchor", "Brine", "Harbor", "Keel", "Quay", "Salt", "Skerry", "Tide", "Wake", "Wharf"],
+    placeSuffixes: ["bay", "harbor", "haven", "hook", "port", "quay", "strand", "watch"],
+    tavernAdjectives: ["Brass", "Brined", "Gilded", "Low", "Salted", "Stormy", "Tideworn"],
+    tavernNouns: ["Anchor", "Gull", "Keel", "Lantern", "Net", "Oar", "Pearl", "Whale"],
+    factionRoots: ["Concord", "Fleet", "Harborwatch", "Ledger", "Pilots", "Quaywardens"],
+    artifactRoots: ["Anchor", "Compass", "Pearl", "Shell", "Tideglass", "Wakebell"]
+  }),
+  profile("forest", "Forest", {
+    ...commonProfileParts,
+    givenPrefixes: ["Bria", "Erl", "Fern", "Hessa", "Ivr", "Leth", "Moss", "Nara", "Pike", "Rill", "Sylla", "Tovin"],
+    standaloneGiven: ["Briar", "Celand", "Fenna", "Juniper", "Lysa", "Oren", "Rotha", "Salla", "Tilda", "Willa"],
+    familyRoots: ["Bramble", "Cedar", "Elder", "Fern", "Grove", "Moss", "Root", "Sallow", "Thorn", "Willow", "Yew"],
+    familySuffixes: ["bark", "brook", "hollow", "holt", "root", "shade", "song", "wake", "wood", "wold"],
+    standaloneFamilies: ["Brambleholt", "Cedarwold", "Elderroot", "Fernhollow", "Grovesong", "Sallowshade", "Willowwake"],
+    placeRoots: ["Bramble", "Cedar", "Elder", "Fern", "Grove", "Root", "Sallow", "Thorn", "Willow", "Yew"],
+    placeSuffixes: ["bower", "grove", "hollow", "holt", "shade", "thicket", "wood", "wold"],
+    tavernAdjectives: ["Green", "Mossy", "Rootbound", "Singing", "Thorned", "Verdant"],
+    tavernNouns: ["Acorn", "Bough", "Hart", "Leaf", "Root", "Stag", "Thorn"],
+    factionRoots: ["Choir", "Circle", "Grove", "Rootwardens", "Thornspeakers"],
+    artifactRoots: ["Acorn", "Bough", "Greenmask", "Rootstone", "Thorncrown"]
+  }),
+  profile("mountain", "Mountain", {
+    ...commonProfileParts,
+    givenPrefixes: ["Beld", "Cort", "Durn", "Farr", "Gris", "Halk", "Jor", "Kessa", "Marn", "Orr", "Tarn", "Vorr"],
+    givenSuffixes: ["a", "an", "ek", "en", "ic", "in", "or", "um", "us"],
+    familyRoots: ["Anvil", "Crag", "Forge", "Granite", "Iron", "Kiln", "Quarry", "Rivet", "Steel", "Trestle"],
+    familySuffixes: ["brand", "hall", "hold", "mark", "shaft", "spur", "ward", "wright", "yard"],
+    standaloneFamilies: ["Anvilmark", "Cragspur", "Forgeyard", "Gearwright", "Ironwright", "Kilnbrand", "Quarryhold"],
+    placeRoots: ["Anvil", "Crag", "Forge", "Granite", "Iron", "Kiln", "Quarry", "Ridge", "Steel"],
+    placeSuffixes: ["crag", "delve", "fast", "hall", "hold", "peak", "spur", "vault"],
+    tavernAdjectives: ["Black", "Deep", "Iron", "Red", "Ringing", "Stone"],
+    tavernNouns: ["Anvil", "Bellows", "Hammer", "Mug", "Pick", "Spur"],
+    factionRoots: ["Concord", "Forgeguild", "Hammerhold", "Ironwardens", "Quarry League"],
+    artifactRoots: ["Anvil", "Hammer", "Ironstar", "Kilnheart", "Stonekey"]
+  }),
+  profile("plains", "Plains", {
+    ...commonProfileParts,
+    familyRoots: ["Barley", "Field", "Grass", "Hearth", "Mile", "Oat", "Road", "Sky", "Wain", "Wheat"],
+    familySuffixes: ["bridge", "field", "ford", "hall", "row", "stead", "ward", "wick"],
+    standaloneFamilies: ["Barleyford", "Fieldward", "Hearthstead", "Milewick", "Wainstead", "Wheatford"],
+    placeRoots: ["Barley", "Crown", "Field", "Hearth", "Mile", "Road", "Sun", "Wain", "Wheat"],
+    placeSuffixes: ["cross", "field", "ford", "market", "stead", "way", "wick"],
+    tavernAdjectives: ["Golden", "Hearthlit", "Long", "Open", "Sunlit"],
+    tavernNouns: ["Bushel", "Crown", "Hare", "Mile", "Plough", "Wagon"],
+    factionRoots: ["Freeholders", "Grain League", "Roadwardens", "Sun Court"],
+    artifactRoots: ["Harvest Bell", "Roadstone", "Sunmark", "Wheatcrown"]
+  }),
+  profile("desert", "Desert", {
+    ...commonProfileParts,
+    givenPrefixes: ["Asha", "Dalim", "Eris", "Hale", "Ishan", "Nadir", "Oren", "Rasil", "Talim", "Zerin"],
+    givenSuffixes: ["a", "an", "el", "im", "ir", "or", "ra", "us"],
+    familyRoots: ["Amber", "Cedar", "Dune", "Glass", "Mirage", "Palm", "Saffron", "Sun", "Votive"],
+    familySuffixes: ["bind", "glass", "keeper", "rest", "scribe", "shade", "thread", "well"],
+    standaloneFamilies: ["Amberrest", "Cedarscribe", "Dunewell", "Glasskeeper", "Mirageshade", "Saffronbind"],
+    placeRoots: ["Amber", "Cedar", "Dune", "Glass", "Mirage", "Palm", "Saffron", "Sun"],
+    placeSuffixes: ["gate", "rest", "shade", "spring", "watch", "well"],
+    tavernAdjectives: ["Amber", "Cool", "Hidden", "Saffron", "White"],
+    tavernNouns: ["Camel", "Cup", "Moon", "Palm", "Spring", "Star"],
+    factionRoots: ["Caravanserai", "Mirage Compact", "Sunwardens", "Wellkeepers"],
+    artifactRoots: ["Amber Lens", "Glass Star", "Moon Jar", "Sunseal"]
+  }),
+  profile("marsh", "Marsh", {
+    ...commonProfileParts,
+    familyRoots: ["Bog", "Fen", "Mire", "Moss", "Reed", "Sedge", "Silt", "Willow"],
+    familySuffixes: ["brook", "fen", "hollow", "mere", "mire", "reed", "wash"],
+    standaloneFamilies: ["Bogmere", "Fenreed", "Mirewash", "Mossmere", "Sedgehollow"],
+    placeRoots: ["Bog", "Fen", "Mire", "Reed", "Sedge", "Silt", "Willow"],
+    placeSuffixes: ["fen", "mere", "mire", "pool", "wash", "wick"],
+    tavernAdjectives: ["Crooked", "Fogbound", "Green", "Mired", "Reedy"],
+    tavernNouns: ["Crane", "Frog", "Lantern", "Reed", "Skiff"],
+    factionRoots: ["Fenwatch", "Reed Compact", "Sedgefolk", "Willow Circle"],
+    artifactRoots: ["Fenlight", "Mire Bell", "Reed Crown", "Siltmask"]
+  }),
+  profile("riverlands", "Riverlands", {
+    ...commonProfileParts,
+    familyRoots: ["Barge", "Bridge", "Brook", "Ferry", "Ford", "Mill", "Reed", "River"],
+    familySuffixes: ["bend", "bridge", "brook", "ford", "mill", "reed", "run"],
+    standaloneFamilies: ["Bargeford", "Bridgebrook", "Ferrybend", "Millrun", "Riverreed"],
+    placeRoots: ["Barge", "Bridge", "Brook", "Ferry", "Ford", "Mill", "River"],
+    placeSuffixes: ["bend", "bridge", "ford", "mill", "run", "water"],
+    tavernAdjectives: ["Blue", "Low", "Miller's", "Running", "Silver"],
+    tavernNouns: ["Barge", "Eel", "Ferry", "Mill", "Pike"],
+    factionRoots: ["Bargemen", "Bridge Guild", "Ferry Compact", "Millers"],
+    artifactRoots: ["Blue Oar", "Ford Key", "Millstone", "Riverglass"]
+  }),
+  profile("island", "Island", {
+    ...commonProfileParts,
+    familyRoots: ["Atoll", "Coral", "Gull", "Pearl", "Reef", "Shell", "Skerry", "Spume"],
+    familySuffixes: ["cove", "gull", "holm", "reef", "shell", "strand", "watch"],
+    standaloneFamilies: ["Coralstrand", "Pearlshell", "Reefwatch", "Skerryholm", "Spumecove"],
+    placeRoots: ["Atoll", "Coral", "Gull", "Pearl", "Reef", "Shell", "Skerry"],
+    placeSuffixes: ["cove", "holm", "isle", "reef", "strand", "watch"],
+    tavernAdjectives: ["Bright", "Coral", "Laughing", "Pearl", "White"],
+    tavernNouns: ["Crab", "Gull", "Oar", "Pearl", "Reef"],
+    factionRoots: ["Pearl Divers", "Reefwardens", "Skerry Compact"],
+    artifactRoots: ["Coral Knife", "Pearl Crown", "Reef Bell"]
+  }),
+  profile("frontier", "Frontier", {
+    ...commonProfileParts,
+    familyRoots: ["Claim", "Dust", "Gate", "Ridge", "Stake", "Trail", "Ward", "Winch"],
+    familySuffixes: ["gate", "hold", "mark", "post", "ridge", "stake", "watch", "wright"],
+    standaloneFamilies: ["Claimstake", "Gatepost", "Ridgewatch", "Stakehold", "Winchwright"],
+    placeRoots: ["Claim", "Dust", "Gate", "Ridge", "Stake", "Trail", "Ward"],
+    placeSuffixes: ["camp", "gate", "hold", "post", "stake", "watch"],
+    tavernAdjectives: ["First", "Last", "Lucky", "Red", "Weathered"],
+    tavernNouns: ["Claim", "Mule", "Pick", "Stake", "Trail"],
+    factionRoots: ["Claimholders", "Gatewatch", "Surveyors", "Trail Company"],
+    artifactRoots: ["Claim Rod", "Survey Chain", "Trail Lantern"]
+  }),
+  profile("ruinlands", "Ruinlands", {
+    ...commonProfileParts,
+    familyRoots: ["Ash", "Glass", "Relic", "Rim", "Shard", "Sunder", "Vault", "Well"],
+    familySuffixes: ["choir", "gate", "glass", "hold", "mark", "shaft", "watch"],
+    standaloneFamilies: ["Glassmark", "Rimshaft", "Shardwatch", "Sunderhold", "Vaultgate"],
+    placeRoots: ["Ash", "Glass", "Relic", "Rim", "Shard", "Sunder", "Vault", "Well"],
+    placeSuffixes: ["gate", "hollow", "rift", "shaft", "vault", "watch"],
+    tavernAdjectives: ["Broken", "Last", "Pale", "Shard", "Sundered"],
+    tavernNouns: ["Bell", "Key", "Pick", "Relic", "Shard"],
+    factionRoots: ["Delvers", "Relic Compact", "Shardwatch", "Vaultwardens"],
+    artifactRoots: ["Glass Key", "Relic Bell", "Shard Crown", "Vaultheart"]
+  }),
+  profile("underground", "Underground", {
+    ...commonProfileParts,
+    familyRoots: ["Deep", "Gem", "Hollow", "Lode", "Mica", "Onyx", "Root", "Vault"],
+    familySuffixes: ["delve", "gem", "hall", "lode", "root", "vault"],
+    standaloneFamilies: ["Deepdelve", "Gemhall", "Lodelock", "Onyxroot", "Vaultgem"],
+    placeRoots: ["Deep", "Gem", "Hollow", "Lode", "Mica", "Onyx", "Vault"],
+    placeSuffixes: ["delve", "hall", "lode", "vault", "warren"],
+    tavernAdjectives: ["Deep", "Glittering", "Low", "Onyx", "Quiet"],
+    tavernNouns: ["Gem", "Lamp", "Mole", "Pick", "Vault"],
+    factionRoots: ["Deep Guild", "Gemcutters", "Lodekeepers"],
+    artifactRoots: ["Deep Lamp", "Gem Key", "Onyx Crown"]
+  }),
+  profile("arctic", "Arctic", {
+    ...commonProfileParts,
+    familyRoots: ["Aurora", "Frost", "Ice", "Rime", "Snow", "Tusk", "Winter"],
+    familySuffixes: ["brand", "fall", "fang", "hold", "mane", "watch"],
+    standaloneFamilies: ["Aurorawatch", "Frostfang", "Icehold", "Rimefall", "Winterbrand"],
+    placeRoots: ["Aurora", "Frost", "Ice", "Rime", "Snow", "Tusk"],
+    placeSuffixes: ["fall", "hold", "reach", "watch", "white"],
+    tavernAdjectives: ["Blue", "Frosted", "Last", "White", "Winter"],
+    tavernNouns: ["Bear", "Cup", "Fox", "Hearth", "Tusk"],
+    factionRoots: ["Aurora Watch", "Frostborn", "White Compact"],
+    artifactRoots: ["Frostbrand", "Ice Bell", "Winterglass"]
+  }),
+  profile("urban", "Urban", {
+    ...commonProfileParts,
+    familyRoots: ["Arch", "Bell", "Coin", "Gate", "Lamp", "Market", "Row", "Stone", "Toll"],
+    familySuffixes: ["cross", "gate", "hall", "mark", "row", "ward", "wick"],
+    standaloneFamilies: ["Archgate", "Bellrow", "Coinward", "Marketwick", "Tollcross"],
+    placeRoots: ["Arch", "Bell", "Coin", "Gate", "Lamp", "Market", "Row", "Stone"],
+    placeSuffixes: ["court", "gate", "market", "row", "ward", "wick"],
+    tavernAdjectives: ["Brass", "Crowded", "Gilded", "Red", "Twinned"],
+    tavernNouns: ["Bell", "Coin", "Cup", "Gate", "Lamp"],
+    factionRoots: ["City Watch", "Gate Guild", "Lampkeepers", "Market League"],
+    artifactRoots: ["Brass Key", "Gate Seal", "Market Bell"]
+  }),
+  profile("rural", "Rural", {
+    ...commonProfileParts,
+    familyRoots: ["Brook", "Byre", "Candle", "Cart", "Croft", "Hearth", "Hedge", "Reed", "Thatch", "Well"],
+    familySuffixes: ["brook", "croft", "field", "ford", "hedge", "row", "stead", "well", "wick"],
+    standaloneFamilies: ["Brookfield", "Byrecroft", "Cartwell", "Hedgerow", "Thatchwick", "Wellstead"],
+    placeRoots: ["Brook", "Byre", "Croft", "Hearth", "Hedge", "Reed", "Thatch", "Well"],
+    placeSuffixes: ["brook", "croft", "field", "ford", "row", "stead", "well", "wick"],
+    tavernAdjectives: ["Crooked", "Hearthlit", "Old", "Quiet", "Warm"],
+    tavernNouns: ["Goose", "Hare", "Hearth", "Pitcher", "Sheaf"],
+    factionRoots: ["Hedge Council", "Reedfolk", "Village Moot", "Wellkeepers"],
+    artifactRoots: ["Hearth Bell", "Hedge Charm", "Old Pitcher", "Wellstone"]
+  }),
+  profile("mercantile", "Mercantile", {
+    ...commonProfileParts,
+    familyRoots: ["Bill", "Coin", "Factor", "Ledger", "Mark", "Scale", "Tally", "Toll"],
+    familySuffixes: ["book", "lock", "mark", "scale", "scribe", "ward"],
+    standaloneFamilies: ["Coinmark", "Ledgerlock", "Scaleward", "Tallyscribe", "Tollbook"],
+    placeRoots: ["Coin", "Ledger", "Market", "Scale", "Tally", "Toll"],
+    placeSuffixes: ["exchange", "market", "post", "row", "ward"],
+    tavernAdjectives: ["Brass", "Counting", "Gilded", "Honest", "Lucky"],
+    tavernNouns: ["Coin", "Ledger", "Scale", "Wager", "Weight"],
+    factionRoots: ["Factors", "Ledger Guild", "Scale League", "Toll Compact"],
+    artifactRoots: ["Coin Seal", "Ledger Key", "Scale of Oaths"]
+  }),
+  profile("scholastic", "Scholastic", {
+    ...commonProfileParts,
+    familyRoots: ["Archive", "Candle", "Cipher", "Ink", "Page", "Quill", "Script", "Tome"],
+    familySuffixes: ["bind", "keeper", "scribe", "shade", "thread", "well"],
+    standaloneFamilies: ["Archivebind", "Candlekeeper", "Cipherglass", "Inkshade", "Quillscribe"],
+    placeRoots: ["Archive", "Candle", "Cipher", "Ink", "Script", "Tome"],
+    placeSuffixes: ["hall", "keep", "rest", "scriptorium", "tower"],
+    tavernAdjectives: ["Inky", "Quiet", "Red", "Third", "Wise"],
+    tavernNouns: ["Candle", "Quill", "Riddle", "Tome", "Tower"],
+    factionRoots: ["Archivists", "Candle College", "Quill Circle", "Scriptorium"],
+    artifactRoots: ["Cipher Lens", "Ink Mirror", "Quill of Hours"]
+  }),
+  profile("religious", "Religious", {
+    ...commonProfileParts,
+    familyRoots: ["Chapel", "Censer", "Hymn", "Oath", "Shrine", "Votive", "Warden"],
+    familySuffixes: ["bell", "bind", "keeper", "mark", "ward", "well"],
+    standaloneFamilies: ["Chapelbell", "Hymnkeeper", "Oathmark", "Shrineward", "Votivewell"],
+    placeRoots: ["Chapel", "Censer", "Hymn", "Shrine", "Votive"],
+    placeSuffixes: ["chapel", "cross", "rest", "sanctum", "ward"],
+    tavernAdjectives: ["Blessed", "Candlelit", "Pilgrim's", "Quiet", "Votive"],
+    tavernNouns: ["Bell", "Candle", "Chalice", "Pilgrim", "Saint"],
+    factionRoots: ["Chantry", "Pilgrims", "Shrinewardens", "Votive Order"],
+    artifactRoots: ["Chalice", "Hymn Bell", "Oath Candle", "Votive Mask"]
+  }),
+  profile("martial", "Martial", {
+    ...commonProfileParts,
+    familyRoots: ["Banner", "Blade", "Guard", "Helm", "Iron", "Shield", "Spear", "Ward"],
+    familySuffixes: ["brand", "guard", "helm", "mark", "shield", "ward"],
+    standaloneFamilies: ["Bannermark", "Bladeguard", "Ironhelm", "Shieldward", "Spearbrand"],
+    placeRoots: ["Banner", "Blade", "Guard", "Helm", "Shield", "Spear"],
+    placeSuffixes: ["bastion", "fort", "gate", "hold", "watch"],
+    tavernAdjectives: ["Broken", "Iron", "Red", "Shielded", "Veteran's"],
+    tavernNouns: ["Banner", "Blade", "Helm", "Shield", "Spear"],
+    factionRoots: ["Banner Company", "Iron Guard", "Shieldwardens", "Spearhost"],
+    artifactRoots: ["Banner Spear", "Iron Helm", "Shield of Hours"]
+  }),
+  profile("noble", "Noble", {
+    ...commonProfileParts,
+    familyRoots: ["Crown", "Dove", "Gold", "High", "Rose", "Sable", "Star", "White"],
+    familySuffixes: ["crest", "hall", "mark", "mont", "rose", "ward"],
+    standaloneFamilies: ["Crowncrest", "Goldhall", "Rosemont", "Sablemark", "Whiteward"],
+    placeRoots: ["Crown", "Gold", "High", "Rose", "Star", "White"],
+    placeSuffixes: ["court", "hall", "keep", "mont", "spire"],
+    tavernAdjectives: ["Crowned", "Golden", "High", "Rose", "White"],
+    tavernNouns: ["Crown", "Falcon", "Lily", "Rose", "Swan"],
+    factionRoots: ["Crown Court", "Rose Compact", "Whitehall", "Star Chamber"],
+    artifactRoots: ["Crown", "Gold Seal", "Rose Diadem", "Star Scepter"]
+  }),
+  profile("criminal", "Criminal", {
+    ...commonProfileParts,
+    familyRoots: ["Black", "Cloak", "Crow", "Knife", "Lock", "Rat", "Shade", "Slip"],
+    familySuffixes: ["crown", "cut", "lock", "shade", "slip", "thorn"],
+    standaloneFamilies: ["Blacklock", "Crowshade", "Knifecut", "Ratcrown", "Slipthorn"],
+    placeRoots: ["Black", "Crow", "Knife", "Lock", "Rat", "Shade"],
+    placeSuffixes: ["alley", "den", "market", "row", "vault"],
+    tavernAdjectives: ["Black", "Crooked", "Hidden", "Low", "Silent"],
+    tavernNouns: ["Crow", "Knife", "Lock", "Rat", "Wink"],
+    factionRoots: ["Black Knives", "Crow Market", "Lockhands", "Shade Guild"],
+    artifactRoots: ["Black Key", "Crow Mask", "Silent Knife"]
+  }),
+  profile("nomadic", "Nomadic", {
+    ...commonProfileParts,
+    familyRoots: ["Dust", "Mare", "Moon", "Oath", "Steppe", "Trail", "Wind"],
+    familySuffixes: ["mane", "rider", "road", "song", "trail", "wind"],
+    standaloneFamilies: ["Dusttrail", "Maremane", "Moonrider", "Oathsong", "Windroad"],
+    placeRoots: ["Dust", "Moon", "Steppe", "Trail", "Wind"],
+    placeSuffixes: ["camp", "crossing", "road", "trail", "watch"],
+    tavernAdjectives: ["Dusty", "Moonlit", "Open", "Wandering", "Windworn"],
+    tavernNouns: ["Horse", "Moon", "Road", "Tent", "Wind"],
+    factionRoots: ["Moonriders", "Trail Clans", "Wind Compact"],
+    artifactRoots: ["Moon Bridle", "Trail Bell", "Wind Banner"]
+  }),
+  profile("industrial", "Industrial", {
+    ...commonProfileParts,
+    familyRoots: ["Bellows", "Coal", "Gear", "Kiln", "Rivet", "Smoke", "Trestle"],
+    familySuffixes: ["brand", "hall", "mark", "shaft", "ward", "wright", "yard"],
+    standaloneFamilies: ["Bellowsward", "Gearwright", "Kilnbrand", "Rivetmark", "Smokeyard"],
+    placeRoots: ["Bellows", "Coal", "Gear", "Kiln", "Rivet", "Smoke"],
+    placeSuffixes: ["forge", "hall", "shaft", "works", "yard"],
+    tavernAdjectives: ["Black", "Coal", "Red", "Ringing", "Smoky"],
+    tavernNouns: ["Bellows", "Gear", "Hammer", "Kiln", "Wheel"],
+    factionRoots: ["Bellows Union", "Gearwrights", "Kiln Compact", "Rivet Guild"],
+    artifactRoots: ["Coal Heart", "Gear Crown", "Kiln Key"]
+  }),
+  profile("agrarian", "Agrarian", {
+    ...commonProfileParts,
+    familyRoots: ["Apple", "Barley", "Beech", "Harvest", "Miller", "Oat", "Plough", "Wheat"],
+    familySuffixes: ["field", "ford", "grove", "mill", "row", "stead", "wick"],
+    standaloneFamilies: ["Applewick", "Barleyford", "Harvestrow", "Millerstead", "Wheatfield"],
+    placeRoots: ["Apple", "Barley", "Harvest", "Miller", "Oat", "Plough", "Wheat"],
+    placeSuffixes: ["field", "mill", "stead", "wick", "yard"],
+    tavernAdjectives: ["Golden", "Miller's", "Old", "Ploughman's", "Warm"],
+    tavernNouns: ["Apple", "Bee", "Bushel", "Plough", "Sheaf"],
+    factionRoots: ["Harvest Guild", "Millers", "Plough League"],
+    artifactRoots: ["Harvest Bell", "Miller's Stone", "Wheat Crown"]
+  }),
+  profile("seafaring", "Seafaring", {
+    ...commonProfileParts,
+    familyRoots: ["Compass", "Hull", "Mast", "Oar", "Sail", "Starboard", "Storm"],
+    familySuffixes: ["helm", "lock", "mast", "sail", "ward", "watch"],
+    standaloneFamilies: ["Compassward", "Hullmast", "Oarlock", "Sailwatch", "Stormhelm"],
+    placeRoots: ["Compass", "Hull", "Mast", "Oar", "Sail", "Storm"],
+    placeSuffixes: ["dock", "helm", "port", "watch", "yard"],
+    tavernAdjectives: ["Blue", "Compass", "Drunken", "Stormy", "Three-Masted"],
+    tavernNouns: ["Compass", "Hull", "Mast", "Oar", "Sail"],
+    factionRoots: ["Compass Fleet", "Sailmakers", "Storm Pilots"],
+    artifactRoots: ["Compass Rose", "Storm Oar", "True Helm"]
+  }),
+  profile("old_faith", "Old Faith", {
+    ...commonProfileParts,
+    familyRoots: ["Antler", "Grove", "Hearth", "Horn", "Root", "Stone", "Wicker"],
+    familySuffixes: ["bind", "grove", "horn", "root", "stone", "ward"],
+    standaloneFamilies: ["Antlerward", "Groveroot", "Hornbind", "Stonegrove", "Wickerward"],
+    placeRoots: ["Antler", "Grove", "Horn", "Root", "Stone", "Wicker"],
+    placeSuffixes: ["circle", "grove", "ring", "root", "stone"],
+    tavernAdjectives: ["Antlered", "Green", "Old", "Wicker", "Wild"],
+    tavernNouns: ["Antler", "Horn", "Oak", "Stone", "Wren"],
+    factionRoots: ["Grove Speakers", "Horn Circle", "Rootwardens"],
+    artifactRoots: ["Antler Mask", "Green Horn", "Root Crown"]
+  }),
+  profile("arcane", "Arcane", {
+    ...commonProfileParts,
+    familyRoots: ["Aether", "Glyph", "Glass", "Moon", "Rune", "Sigil", "Star"],
+    familySuffixes: ["bind", "glass", "mark", "scribe", "ward", "weave"],
+    standaloneFamilies: ["Aetherbind", "Glyphmark", "Runescribe", "Sigilward", "Starweave"],
+    placeRoots: ["Aether", "Glyph", "Moon", "Rune", "Sigil", "Star"],
+    placeSuffixes: ["hall", "spire", "tower", "vault", "weave"],
+    tavernAdjectives: ["Blue", "Glimmering", "Moonlit", "Runed", "Starry"],
+    tavernNouns: ["Glyph", "Moon", "Rune", "Star", "Wand"],
+    factionRoots: ["Glyph Circle", "Moon College", "Rune Compact", "Starbinders"],
+    artifactRoots: ["Glyph Key", "Moon Lens", "Rune Mirror", "Star Wand"]
+  }),
+  profile("divine", "Divine", {
+    ...commonProfileParts,
+    familyRoots: ["Blessing", "Chalice", "Dawn", "Grace", "Halo", "Hymn", "Saint"],
+    familySuffixes: ["bell", "bind", "keeper", "light", "mark", "ward"],
+    standaloneFamilies: ["Blessingward", "Chalicekeeper", "Dawnlight", "Gracebind", "Hymnmark"],
+    placeRoots: ["Blessing", "Chalice", "Dawn", "Grace", "Halo", "Saint"],
+    placeSuffixes: ["chapel", "light", "rest", "sanctum", "ward"],
+    tavernAdjectives: ["Blessed", "Dawnlit", "Golden", "Sainted", "White"],
+    tavernNouns: ["Chalice", "Dove", "Halo", "Hymn", "Lamp"],
+    factionRoots: ["Dawn Choir", "Gracewardens", "Order of the Chalice"],
+    artifactRoots: ["Dawn Chalice", "Halo Bell", "Saint's Lamp"]
+  }),
+  profile("haunted", "Haunted", {
+    ...commonProfileParts,
+    familyRoots: ["Ash", "Black", "Grave", "Mourning", "Pale", "Raven", "Widow"],
+    familySuffixes: ["bell", "hollow", "rest", "shade", "watch", "wick"],
+    standaloneFamilies: ["Ashhollow", "Gravewatch", "Mourningwick", "Paleshade", "Ravenrest"],
+    placeRoots: ["Ash", "Black", "Grave", "Mourning", "Pale", "Raven"],
+    placeSuffixes: ["hollow", "rest", "shade", "watch", "wick"],
+    tavernAdjectives: ["Black", "Crying", "Last", "Pale", "Widow's"],
+    tavernNouns: ["Bell", "Candle", "Crow", "Raven", "Veil"],
+    factionRoots: ["Gravewatch", "Mourning Choir", "Pale Order"],
+    artifactRoots: ["Black Bell", "Raven Mask", "Widow's Candle"]
+  }),
+  profile("fey", "Fey", {
+    ...commonProfileParts,
+    familyRoots: ["Bloom", "Dew", "Fox", "Glimmer", "Moth", "Petal", "Thistle"],
+    familySuffixes: ["bloom", "glade", "moth", "petal", "song", "wink"],
+    standaloneFamilies: ["Bloomsong", "Dewglade", "Foxwink", "Mothpetal", "Thistlebloom"],
+    placeRoots: ["Bloom", "Dew", "Fox", "Glimmer", "Moth", "Petal"],
+    placeSuffixes: ["bower", "glade", "ring", "wink", "wood"],
+    tavernAdjectives: ["Laughing", "Moonlit", "Silver", "Twice-Told", "Wild"],
+    tavernNouns: ["Fox", "Moth", "Mushroom", "Petal", "Thimble"],
+    factionRoots: ["Bloom Court", "Fox Compact", "Moth Circle"],
+    artifactRoots: ["Dew Crown", "Fox Mask", "Moth Lantern"]
+  }),
+  profile("infernal", "Infernal", {
+    ...commonProfileParts,
+    familyRoots: ["Ash", "Brim", "Chain", "Cinder", "Oath", "Red", "Soot"],
+    familySuffixes: ["brand", "chain", "mark", "oath", "scar", "ward"],
+    standaloneFamilies: ["Ashbrand", "Brimchain", "Cinderscar", "Oathmark", "Redward"],
+    placeRoots: ["Ash", "Brim", "Chain", "Cinder", "Red", "Soot"],
+    placeSuffixes: ["gate", "pit", "scar", "spire", "vault"],
+    tavernAdjectives: ["Black", "Burning", "Red", "Sooty", "Twice-Damned"],
+    tavernNouns: ["Chain", "Cinder", "Horn", "Oath", "Pit"],
+    factionRoots: ["Chain Compact", "Cinder Court", "Red Oath"],
+    artifactRoots: ["Brim Key", "Cinder Chain", "Red Seal"]
+  }),
+  profile("celestial", "Celestial", {
+    ...commonProfileParts,
+    familyRoots: ["Dawn", "Gold", "Halo", "Lumen", "Star", "Sun", "White"],
+    familySuffixes: ["beam", "crown", "light", "mark", "spire", "ward"],
+    standaloneFamilies: ["Dawnspire", "Goldmark", "Haloward", "Starlight", "Sunbeam"],
+    placeRoots: ["Dawn", "Gold", "Halo", "Lumen", "Star", "Sun"],
+    placeSuffixes: ["crown", "light", "spire", "watch"],
+    tavernAdjectives: ["Dawn", "Golden", "Radiant", "Starry", "White"],
+    tavernNouns: ["Crown", "Dove", "Halo", "Star", "Sun"],
+    factionRoots: ["Dawn Court", "Golden Choir", "Starwardens"],
+    artifactRoots: ["Halo Crown", "Star Lance", "Sun Mirror"]
+  }),
+  profile("shadowed", "Shadowed", {
+    ...commonProfileParts,
+    familyRoots: ["Dusken", "Ebon", "Hush", "Night", "Shade", "Silk", "Veil"],
+    familySuffixes: ["hush", "lock", "shade", "silk", "veil", "whisper"],
+    standaloneFamilies: ["Ebonveil", "Hushlock", "Nightshade", "Silkwhisper", "Veilhush"],
+    placeRoots: ["Dusken", "Ebon", "Hush", "Night", "Shade", "Veil"],
+    placeSuffixes: ["alley", "hush", "shade", "veil", "watch"],
+    tavernAdjectives: ["Black", "Dusken", "Hidden", "Quiet", "Veiled"],
+    tavernNouns: ["Cat", "Curtain", "Hush", "Lamp", "Whisper"],
+    factionRoots: ["Hush Guild", "Night Court", "Veil Compact"],
+    artifactRoots: ["Ebon Key", "Hush Bell", "Veil Knife"]
+  }),
+  profile("ancient", "Ancient", {
+    ...commonProfileParts,
+    familyRoots: ["Elder", "First", "Old", "Prime", "Relic", "Rune", "Urn"],
+    familySuffixes: ["bind", "hall", "mark", "root", "stone", "ward"],
+    standaloneFamilies: ["Elderstone", "Firstmark", "Oldhall", "Relicward", "Runebind"],
+    placeRoots: ["Elder", "First", "Old", "Prime", "Relic", "Rune"],
+    placeSuffixes: ["barrow", "gate", "hall", "root", "stone"],
+    tavernAdjectives: ["Elder", "First", "Old", "Prime", "Remembered"],
+    tavernNouns: ["Barrow", "Key", "Oath", "Rune", "Stone"],
+    factionRoots: ["Elder Compact", "First Circle", "Relicwardens"],
+    artifactRoots: ["Elder Key", "First Bell", "Prime Stone"]
+  }),
+  profile("wondrous", "Wondrous", {
+    ...commonProfileParts,
+    familyRoots: ["Bright", "Glass", "Glimmer", "Lantern", "Marvel", "Moon", "Wander"],
+    familySuffixes: ["bright", "glass", "glow", "keeper", "mark", "wand"],
+    standaloneFamilies: ["Brightglass", "Glimmermark", "Lanternkeeper", "Moonwand", "Wanderglow"],
+    placeRoots: ["Bright", "Glimmer", "Lantern", "Marvel", "Moon", "Wander"],
+    placeSuffixes: ["bright", "cross", "glow", "rest", "spire"],
+    tavernAdjectives: ["Bright", "Glimmering", "Impossible", "Moonlit", "Wandering"],
+    tavernNouns: ["Door", "Lantern", "Moon", "Spoon", "Star"],
+    factionRoots: ["Bright Company", "Glimmer Court", "Lantern Circle"],
+    artifactRoots: ["Bright Door", "Glimmer Spoon", "Moon Lantern"]
+  }),
+  profile("grim", "Grim", {
+    ...commonProfileParts,
+    familyRoots: ["Black", "Blood", "Cairn", "Crow", "Frost", "Grim", "Iron"],
+    familySuffixes: ["brand", "cairn", "crow", "fell", "mark", "ward"],
+    standaloneFamilies: ["Blackcairn", "Bloodmark", "Crowfell", "Frostward", "Grimbrand"],
+    placeRoots: ["Black", "Blood", "Cairn", "Crow", "Frost", "Grim"],
+    placeSuffixes: ["cairn", "fell", "hold", "mark", "watch"],
+    tavernAdjectives: ["Black", "Bleak", "Bloody", "Cold", "Last"],
+    tavernNouns: ["Crow", "Grave", "Knife", "Skull", "Wolf"],
+    factionRoots: ["Black Company", "Crow Guard", "Grim Compact"],
+    artifactRoots: ["Black Blade", "Blood Crown", "Crow Bell"]
+  })
 ];
 
-export const nameCultures: NameCulture[] = eldermereCultures;
+const styleProfileById = new Map(nameStyleProfiles.map((style) => [style.id, style]));
+
+export const eldermereRegionStyles: Record<string, WeightedNameStyle[]> = {
+  "Cael Ambrose": [
+    { id: "riverlands", weight: 3 },
+    { id: "agrarian", weight: 3 },
+    { id: "religious", weight: 2 },
+    { id: "noble", weight: 1 }
+  ],
+  "Thornwake Vale": [
+    { id: "forest", weight: 4 },
+    { id: "old_faith", weight: 3 },
+    { id: "rural", weight: 1 },
+    { id: "fey", weight: 1 }
+  ],
+  "The Ferrant Concord": [
+    { id: "mountain", weight: 3 },
+    { id: "industrial", weight: 3 },
+    { id: "mercantile", weight: 2 },
+    { id: "urban", weight: 1 }
+  ],
+  "The Salt Concordat": [
+    { id: "coastal", weight: 4 },
+    { id: "seafaring", weight: 3 },
+    { id: "mercantile", weight: 2 },
+    { id: "urban", weight: 1 }
+  ],
+  "Ashfell Marches": [
+    { id: "plains", weight: 2 },
+    { id: "frontier", weight: 3 },
+    { id: "martial", weight: 2 },
+    { id: "nomadic", weight: 2 },
+    { id: "grim", weight: 1 }
+  ],
+  "The Veiled Reach": [
+    { id: "scholastic", weight: 3 },
+    { id: "religious", weight: 2 },
+    { id: "arcane", weight: 2 },
+    { id: "ancient", weight: 2 },
+    { id: "desert", weight: 1 }
+  ],
+  "The Sundered Vale": [
+    { id: "ruinlands", weight: 4 },
+    { id: "frontier", weight: 2 },
+    { id: "industrial", weight: 1 },
+    { id: "wondrous", weight: 1 }
+  ]
+};
+
+const defaultStyles: WeightedNameStyle[] = [
+  { id: "plains", weight: 2 },
+  { id: "urban", weight: 1 },
+  { id: "riverlands", weight: 1 },
+  { id: "wondrous", weight: 1 }
+];
+
+export const nameCultures: NameCulture[] = [
+  ...Object.entries(eldermereRegionStyles).map(([region, styles]) => {
+    const blended = blendStyles(styles);
+    return {
+      id: `eldermere-${normalizeName(region).replace(/\s+/g, "-")}`,
+      label: region.replace(/^The /, ""),
+      world: "Eldermere",
+      regions: [region],
+      styleIds: blended.styleIds,
+      givenPrefixes: blended.givenPrefixes,
+      givenSuffixes: blended.givenSuffixes,
+      standaloneGiven: blended.standaloneGiven,
+      surnameRoots: blended.surnameRoots,
+      surnameSuffixes: blended.surnameSuffixes,
+      standaloneSurnames: blended.standaloneSurnames,
+      roleHints: blended.roleHints
+    };
+  }),
+  {
+    id: "fantasy-general",
+    label: "General Fantasy",
+    world: "Fantasy",
+    regions: [],
+    styleIds: ["plains", "urban", "riverlands", "wondrous"],
+    givenPrefixes: commonGivenPrefixes,
+    givenSuffixes: commonGivenSuffixes,
+    standaloneGiven: commonStandaloneGiven,
+    surnameRoots: commonProfileParts.familyRoots,
+    surnameSuffixes: commonProfileParts.familySuffixes,
+    standaloneSurnames: commonProfileParts.standaloneFamilies,
+    roleHints: commonProfileParts.roleHints
+  }
+];
 
 function hashSeed(seed: string) {
   let hash = 2166136261;
@@ -909,6 +965,34 @@ function nameTokens(value: string) {
     .filter(Boolean);
 }
 
+const structuralNameTokens = new Set([
+  "the",
+  "of",
+  "and",
+  "order",
+  "company",
+  "league",
+  "circle",
+  "compact",
+  "guild",
+  "watch",
+  "court",
+  "pact",
+  "accord",
+  "concord",
+  "house",
+  "fellowship",
+  "brotherhood",
+  "sisterhood",
+  "wardens",
+  "keepers",
+  "speakers"
+]);
+
+function meaningfulNameTokens(value: string) {
+  return nameTokens(value).filter((token) => !structuralNameTokens.has(token));
+}
+
 function consonantSkeleton(value: string) {
   return normalizeName(value)
     .replace(/[aeiouy\s'-]/g, "")
@@ -953,10 +1037,189 @@ function similarity(left: string, right: string) {
   return 1 - levenshteinDistance(normalizedLeft, normalizedRight) / maxLength;
 }
 
+function unique<T>(items: T[]) {
+  return [...new Set(items)];
+}
+
+function expandByWeight<T>(items: T[], weight: number) {
+  return Array.from({ length: Math.max(1, Math.round(weight)) }).flatMap(() => items);
+}
+
+function normalizeWeightedStyle(style: WeightedNameStyle): { id: NameStyleId; weight: number } {
+  return typeof style === "string"
+    ? { id: style, weight: 1 }
+    : { id: style.id, weight: style.weight ?? 1 };
+}
+
+function mergeRoleHints(styles: Array<{ profile: NameStyleProfile; weight: number }>) {
+  const hints: Partial<Record<NameRole, string[]>> = {};
+
+  for (const { profile, weight } of styles) {
+    for (const [role, roleHints] of Object.entries(profile.roleHints ?? {}) as Array<
+      [NameRole, string[]]
+    >) {
+      hints[role] = [
+        ...(hints[role] ?? []),
+        ...expandByWeight(roleHints, weight)
+      ];
+    }
+  }
+
+  return hints;
+}
+
+function blendStyles(styles: WeightedNameStyle[] = defaultStyles): BlendedStylePool {
+  const selected = styles
+    .map(normalizeWeightedStyle)
+    .map(({ id, weight }) => {
+      const profile = styleProfileById.get(id);
+
+      if (!profile) {
+        throw new Error(`Unknown name style: ${id}`);
+      }
+
+      return { profile, weight };
+    });
+  const styleIds = unique(selected.map(({ profile }) => profile.id));
+  const label = styleIds.map((id) => styleProfileById.get(id)?.label ?? id).join(" + ");
+
+  return {
+    id: `styles:${styleIds.join("+")}`,
+    label,
+    world: "Fantasy",
+    regions: [],
+    styleIds,
+    givenPrefixes: selected.flatMap(({ profile, weight }) =>
+      expandByWeight(profile.givenPrefixes, weight)
+    ),
+    givenSuffixes: selected.flatMap(({ profile, weight }) =>
+      expandByWeight(profile.givenSuffixes, weight)
+    ),
+    standaloneGiven: selected.flatMap(({ profile, weight }) =>
+      expandByWeight(profile.standaloneGiven, weight)
+    ),
+    surnameRoots: selected.flatMap(({ profile, weight }) =>
+      expandByWeight(profile.familyRoots, weight)
+    ),
+    surnameSuffixes: selected.flatMap(({ profile, weight }) =>
+      expandByWeight(profile.familySuffixes, weight)
+    ),
+    standaloneSurnames: selected.flatMap(({ profile, weight }) =>
+      expandByWeight(profile.standaloneFamilies, weight)
+    ),
+    placeRoots: selected.flatMap(({ profile, weight }) =>
+      expandByWeight(profile.placeRoots, weight)
+    ),
+    placeSuffixes: selected.flatMap(({ profile, weight }) =>
+      expandByWeight(profile.placeSuffixes, weight)
+    ),
+    tavernAdjectives: selected.flatMap(({ profile, weight }) =>
+      expandByWeight(profile.tavernAdjectives, weight)
+    ),
+    tavernNouns: selected.flatMap(({ profile, weight }) =>
+      expandByWeight(profile.tavernNouns, weight)
+    ),
+    factionRoots: selected.flatMap(({ profile, weight }) =>
+      expandByWeight(profile.factionRoots, weight)
+    ),
+    artifactRoots: selected.flatMap(({ profile, weight }) =>
+      expandByWeight(profile.artifactRoots, weight)
+    ),
+    roleHints: mergeRoleHints(selected)
+  };
+}
+
+function targetForInput(input: GenerateNamePoolInput): NameTarget {
+  if (input.target) {
+    return input.target;
+  }
+
+  if (input.kind === "place") {
+    return "settlement";
+  }
+
+  if (input.kind === "npc") {
+    return "person";
+  }
+
+  return input.kind ?? "person";
+}
+
+export function stylesForNameRequest(input: GenerateNamePoolInput): WeightedNameStyle[] {
+  if (input.styles?.length) {
+    return input.styles;
+  }
+
+  if (input.region) {
+    const normalizedRegion = normalizeName(input.region);
+    const matchedRegion = Object.keys(eldermereRegionStyles).find(
+      (region) => normalizeName(region) === normalizedRegion
+    );
+
+    if (matchedRegion) {
+      return eldermereRegionStyles[matchedRegion]!;
+    }
+  }
+
+  if (input.cultureId) {
+    const culture = nameCultures.find((candidate) => candidate.id === input.cultureId);
+
+    if (culture?.styleIds.length) {
+      return culture.styleIds;
+    }
+  }
+
+  return defaultStyles;
+}
+
+export function cultureForNameRequest(input: GenerateNamePoolInput): NameCulture {
+  const styles = stylesForNameRequest(input);
+  const blended = blendStyles(styles);
+  const region = input.region?.trim();
+  const culture = input.cultureId
+    ? nameCultures.find((candidate) => candidate.id === input.cultureId)
+    : region
+      ? nameCultures.find((candidate) =>
+          candidate.regions.some(
+            (candidateRegion) => normalizeName(candidateRegion) === normalizeName(region)
+          )
+        )
+      : undefined;
+
+  return {
+    id: culture?.id ?? blended.id,
+    label: culture?.label ?? blended.label,
+    world: culture?.world ?? input.world ?? blended.world,
+    regions: culture?.regions ?? (region ? [region] : []),
+    styleIds: blended.styleIds,
+    givenPrefixes: blended.givenPrefixes,
+    givenSuffixes: blended.givenSuffixes,
+    standaloneGiven: blended.standaloneGiven,
+    surnameRoots: blended.surnameRoots,
+    surnameSuffixes: blended.surnameSuffixes,
+    standaloneSurnames: blended.standaloneSurnames,
+    roleHints: blended.roleHints
+  };
+}
+
+function poolForInput(input: GenerateNamePoolInput) {
+  const styles = stylesForNameRequest(input);
+  const blended = blendStyles(styles);
+  const culture = cultureForNameRequest(input);
+
+  return {
+    ...blended,
+    id: culture.id,
+    label: culture.label,
+    world: culture.world,
+    regions: culture.regions
+  };
+}
+
 function hasPronounceableShape(name: string) {
   const normalized = normalizeName(name);
 
-  if (normalized.length < 5 || normalized.length > 30) {
+  if (normalized.length < 5 || normalized.length > 36) {
     return false;
   }
 
@@ -988,7 +1251,7 @@ function finalToken(value: string) {
 }
 
 function tokenEnding(value: string, length: number) {
-  const token = finalToken(value);
+  const token = meaningfulNameTokens(value).at(-1) ?? finalToken(value);
   return token.slice(Math.max(0, token.length - length));
 }
 
@@ -1028,8 +1291,8 @@ function isNearDuplicate(candidate: string, existingName: string) {
     return true;
   }
 
-  const candidateTokens = nameTokens(candidate);
-  const existingTokens = nameTokens(existingName);
+  const candidateTokens = meaningfulNameTokens(candidate);
+  const existingTokens = meaningfulNameTokens(existingName);
   const sharedTokens = candidateTokens.filter((token) =>
     existingTokens.includes(token)
   );
@@ -1043,7 +1306,10 @@ function isNearDuplicate(candidate: string, existingName: string) {
     return true;
   }
 
-  if (sharedTokens.length > 0 && tokenEnding(candidate, 3) === tokenEnding(existingName, 3)) {
+  if (
+    sharedTokens.length > 0 &&
+    tokenEnding(candidate, 3) === tokenEnding(existingName, 3)
+  ) {
     return true;
   }
 
@@ -1069,76 +1335,208 @@ function batchHasTooMuchEnding(candidate: string, accepted: string[]) {
 }
 
 function batchHasTooMuchPrefix(candidate: string, accepted: string[]) {
-  const prefix = nameTokens(candidate)[0]?.slice(0, 3) ?? "";
+  const prefix = meaningfulNameTokens(candidate)[0]?.slice(0, 3) ?? "";
 
   if (prefix.length < 3) {
     return false;
   }
 
-  return accepted.filter((name) => nameTokens(name)[0]?.startsWith(prefix)).length >= 2;
+  return accepted.filter((name) => meaningfulNameTokens(name)[0]?.startsWith(prefix)).length >= 2;
 }
 
-function roleBiasedSurnameParts(culture: NameCulture, role: NameRole | undefined) {
-  const hints = role ? culture.roleHints[role] ?? [] : [];
+function roleBiasedParts(pool: BlendedStylePool, role: NameRole | undefined) {
+  const hints = role ? pool.roleHints[role] ?? [] : [];
 
   return {
     roots: [
-      ...culture.surnameRoots.filter((part) => hints.includes(part)),
-      ...culture.surnameRoots
+      ...pool.surnameRoots.filter((part) => hints.includes(part)),
+      ...pool.surnameRoots
     ],
     suffixes: [
-      ...culture.surnameSuffixes.filter((part) => hints.includes(part)),
-      ...culture.surnameSuffixes
+      ...pool.surnameSuffixes.filter((part) => hints.includes(part)),
+      ...pool.surnameSuffixes
     ],
     standalone: [
-      ...culture.standaloneSurnames.filter((part) =>
+      ...pool.standaloneSurnames.filter((part) =>
         hints.some((hint) => part.includes(hint))
       ),
-      ...culture.standaloneSurnames
+      ...pool.standaloneSurnames
     ]
   };
 }
 
-function makeCandidateName(
-  culture: NameCulture,
+function makePersonName(
+  pool: BlendedStylePool,
   random: RandomSource,
   role: NameRole | undefined
-): NameCandidate {
+) {
   const useStandaloneGiven = random.next() < 0.34;
   const givenName = useStandaloneGiven
-    ? choose(culture.standaloneGiven, random)
-    : `${choose(culture.givenPrefixes, random)}${choose(culture.givenSuffixes, random)}`;
-  const surnameParts = roleBiasedSurnameParts(culture, role);
+    ? choose(pool.standaloneGiven, random)
+    : `${choose(pool.givenPrefixes, random)}${choose(pool.givenSuffixes, random)}`;
+  const surnameParts = roleBiasedParts(pool, role);
   const useStandaloneSurname = random.next() < 0.42;
   const familyName = useStandaloneSurname
     ? choose(surnameParts.standalone, random)
     : `${choose(surnameParts.roots, random)}${choose(surnameParts.suffixes, random)}`;
-  const name = compactSpaces(`${givenName} ${familyName}`);
 
   return {
-    name,
+    name: compactSpaces(`${givenName} ${familyName}`),
     givenName,
-    familyName,
-    cultureId: culture.id,
-    cultureLabel: culture.label,
-    score: scoreName(name, culture, role)
+    familyName
   };
 }
 
-function scoreName(name: string, culture: NameCulture, role: NameRole | undefined) {
+function makePlaceName(pool: BlendedStylePool, random: RandomSource, target: NameTarget) {
+  const root = choose(pool.placeRoots, random);
+  const suffix = choose(pool.placeSuffixes, random);
+  const spaced = random.next() < 0.18;
+  const name = target === "district" && random.next() < 0.35
+    ? `${root} ${choose(["Court", "Market", "Row", "Ward", "Yard"], random)}`
+    : spaced
+      ? `${root} ${suffix[0]!.toUpperCase()}${suffix.slice(1)}`
+      : `${root}${suffix}`;
+
+  return {
+    name: compactSpaces(name),
+    givenName: root,
+    familyName: suffix
+  };
+}
+
+function makeTheName(adjectives: string[], nouns: string[], random: RandomSource) {
+  const adjective = choose(adjectives, random);
+  const noun = choose(nouns, random);
+  return {
+    name: compactSpaces(`The ${adjective} ${noun}`),
+    givenName: adjective,
+    familyName: noun
+  };
+}
+
+function makeFactionName(pool: BlendedStylePool, random: RandomSource) {
+  const root = choose(pool.factionRoots, random);
+  const descriptor = choose(
+    [
+      ...pool.placeRoots,
+      ...pool.artifactRoots,
+      ...pool.tavernAdjectives,
+      ...pool.tavernNouns
+    ],
+    random
+  );
+  const secondDescriptor = choose(
+    [
+      ...pool.placeRoots,
+      ...pool.artifactRoots,
+      ...pool.tavernAdjectives,
+      ...pool.tavernNouns
+    ],
+    random
+  );
+  const institution = choose(
+    [
+      "Accord",
+      "Circle",
+      "Compact",
+      "Company",
+      "Court",
+      "Fellowship",
+      "Guild",
+      "House",
+      "League",
+      "Order",
+      "Pact",
+      "Watch"
+    ],
+    random
+  );
+  const form = Math.floor(random.next() * 8);
+  const rootAlreadyInstitutional =
+    /Guild|League|Compact|Company|Circle|Court|Watch|Choir|Clans|Union|College|Order|Concord|Fleet|Pilots|Wardens|Keepers|Speakers|Delvers|Archivists|Factors|Freeholders|Millers|Folk|Born/i.test(root);
+  const name =
+    form === 0
+      ? `The ${descriptor} ${root}`
+      : form === 1
+        ? `The ${root} of ${descriptor}`
+        : form === 2
+          ? `The ${descriptor} ${institution}`
+          : form === 3
+            ? `${institution} of the ${descriptor} ${secondDescriptor}`
+            : form === 4
+              ? `The ${descriptor} and ${secondDescriptor} ${institution}`
+              : form === 5
+                ? `${descriptor} ${rootAlreadyInstitutional ? institution : root}`
+                : form === 6
+                  ? `The ${secondDescriptor} ${rootAlreadyInstitutional ? root : institution}`
+                  : `${institution} of ${rootAlreadyInstitutional ? descriptor : root}`;
+
+  return {
+    name: compactSpaces(name),
+    givenName: root,
+    familyName: descriptor
+  };
+}
+
+function makeCandidateName(
+  pool: BlendedStylePool,
+  random: RandomSource,
+  role: NameRole | undefined,
+  target: NameTarget
+): NameCandidate {
+  const parts =
+    target === "person" || target === "family" || target === "title"
+      ? makePersonName(pool, random, role)
+      : target === "tavern"
+        ? makeTheName(pool.tavernAdjectives, pool.tavernNouns, random)
+        : target === "ship"
+          ? makeTheName(
+              [...pool.tavernAdjectives, "Wandering", "Storm", "Silver"],
+              [...pool.tavernNouns, "Promise", "Wager", "Wake", "Star"],
+              random
+            )
+          : target === "faction"
+            ? makeFactionName(pool, random)
+            : target === "artifact" || target === "monster"
+              ? makeTheName(
+                  ["Black", "Bright", "Broken", "Hidden", "Last", "Pale", "Red", "Silver"],
+                  pool.artifactRoots,
+                  random
+                )
+              : makePlaceName(pool, random, target);
+  const name = target === "family" ? parts.familyName || parts.name : parts.name;
+
+  return {
+    name,
+    givenName: parts.givenName,
+    familyName: parts.familyName,
+    cultureId: pool.id,
+    cultureLabel: pool.label,
+    target,
+    styleIds: pool.styleIds,
+    score: scoreName(name, pool, role, target)
+  };
+}
+
+function scoreName(
+  name: string,
+  pool: BlendedStylePool,
+  role: NameRole | undefined,
+  target: NameTarget
+) {
   const tokens = nameTokens(name);
   let score = 100;
 
-  if (tokens.length !== 2) {
+  if (target === "person" && tokens.length !== 2) {
     score -= 12;
   }
 
-  if (name.length >= 12 && name.length <= 22) {
+  if (name.length >= 8 && name.length <= 26) {
     score += 8;
   }
 
   if (role) {
-    const hints = culture.roleHints[role] ?? [];
+    const hints = pool.roleHints[role] ?? [];
     if (hints.some((hint) => name.includes(hint))) {
       score += 8;
     }
@@ -1149,33 +1547,6 @@ function scoreName(name: string, culture: NameCulture, role: NameRole | undefine
   }
 
   return score;
-}
-
-export function cultureForNameRequest(input: GenerateNamePoolInput) {
-  if (input.cultureId) {
-    const culture = nameCultures.find((candidate) => candidate.id === input.cultureId);
-
-    if (culture) {
-      return culture;
-    }
-  }
-
-  if (input.region) {
-    const normalizedRegion = normalizeName(input.region);
-    const culture = nameCultures.find((candidate) =>
-      candidate.regions.some((region) => normalizeName(region) === normalizedRegion)
-    );
-
-    if (culture) {
-      return culture;
-    }
-  }
-
-  if (normalizeName(input.world ?? "") === "eldermere") {
-    return baseCulture;
-  }
-
-  return baseCulture;
 }
 
 export function validateCandidateName(input: {
@@ -1227,15 +1598,19 @@ export function validateCandidateName(input: {
 }
 
 export function generateNamePool(input: GenerateNamePoolInput = {}) {
+  const target = targetForInput(input);
+  const pool = poolForInput(input);
   const culture = cultureForNameRequest(input);
   const count = Math.max(1, Math.min(input.count ?? defaultNameCount, 40));
   const random = seededRandom(
     [
       input.seed ?? "ai-taverns-name-director",
-      culture.id,
+      pool.id,
+      pool.styleIds.join("+"),
+      target,
       input.region ?? "",
       input.role ?? "",
-      input.kind ?? "npc",
+      input.kind ?? "",
       count
     ].join("|")
   );
@@ -1247,7 +1622,7 @@ export function generateNamePool(input: GenerateNamePoolInput = {}) {
     attempt < maxGeneratedNameAttempts && accepted.length < count;
     attempt += 1
   ) {
-    const candidate = makeCandidateName(culture, random, input.role);
+    const candidate = makeCandidateName(pool, random, input.role, target);
     const validation = validateCandidateName({
       candidate: candidate.name,
       existingNames: input.existingNames,

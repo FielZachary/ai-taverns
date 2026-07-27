@@ -2,21 +2,31 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   cultureForNameRequest,
+  eldermereRegionStyles,
   generateNamePool,
-  nameCultures,
+  nameStyleProfiles,
   normalizeName,
-  validateCandidateName
+  stylesForNameRequest,
+  validateCandidateName,
+  type NameTarget
 } from "./name-director.js";
 
-describe("name director", () => {
-  it("selects Eldermere regional naming cultures", () => {
-    assert.equal(
-      cultureForNameRequest({
-        world: "Eldermere",
-        region: "The Salt Concordat"
-      }).id,
-      "eldermere-salt-concordat"
+function usesBannedRut(name: string) {
+  return normalizeName(name)
+    .split(/[\s'-]+/)
+    .some((token) =>
+      ["elara", "kaelos", "venn", "vell", "vael", "vale", "vey"].includes(token)
     );
+}
+
+describe("name director", () => {
+  it("maps Eldermere regions to composable fantasy styles", () => {
+    assert.deepEqual(stylesForNameRequest({ region: "The Salt Concordat" }), [
+      { id: "coastal", weight: 4 },
+      { id: "seafaring", weight: 3 },
+      { id: "mercantile", weight: 2 },
+      { id: "urban", weight: 1 }
+    ]);
     assert.equal(
       cultureForNameRequest({
         world: "Eldermere",
@@ -32,12 +42,7 @@ describe("name director", () => {
   });
 
   it("rejects exact, near, shape, and banned-rut names", () => {
-    assert.deepEqual(
-      validateCandidateName({
-        candidate: "Elara Venn"
-      }).ok,
-      false
-    );
+    assert.deepEqual(validateCandidateName({ candidate: "Elara Venn" }).ok, false);
     assert.deepEqual(
       validateCandidateName({
         candidate: "Alara Ven",
@@ -51,45 +56,71 @@ describe("name director", () => {
       }).ok,
       false
     );
-    assert.deepEqual(
-      validateCandidateName({
-        candidate: "Brrxalth Qor"
-      }).ok,
-      false
-    );
+    assert.deepEqual(validateCandidateName({ candidate: "Brrxalth Qor" }).ok, false);
   });
 
-  it("generates deterministic, unique candidate pools", () => {
-    const first = generateNamePool({
-      world: "Eldermere",
-      region: "The Salt Concordat",
-      role: "mentor",
+  it("generates deterministic mixed-style person pools", () => {
+    const input = {
+      styles: [
+        { id: "coastal" as const, weight: 3 },
+        { id: "mercantile" as const, weight: 2 },
+        { id: "urban" as const, weight: 1 }
+      ],
+      target: "person" as const,
+      role: "mentor" as const,
       count: 10,
       seed: "mira-backstory"
-    });
-    const second = generateNamePool({
-      world: "Eldermere",
-      region: "The Salt Concordat",
-      role: "mentor",
-      count: 10,
-      seed: "mira-backstory"
-    });
+    };
+    const first = generateNamePool(input);
+    const second = generateNamePool(input);
 
     assert.deepEqual(
       first.names.map((candidate) => candidate.name),
       second.names.map((candidate) => candidate.name)
     );
     assert.equal(first.names.length, 10);
+    assert.deepEqual(first.culture.styleIds, ["coastal", "mercantile", "urban"]);
     assert.equal(
       new Set(first.names.map((candidate) => normalizeName(candidate.name))).size,
       10
     );
   });
 
+  it("generates target-specific names from the same styles", () => {
+    const targets: NameTarget[] = [
+      "settlement",
+      "tavern",
+      "ship",
+      "faction",
+      "artifact"
+    ];
+
+    for (const target of targets) {
+      const pool = generateNamePool({
+        styles: ["forest", "old_faith", "haunted"],
+        target,
+        count: 6,
+        seed: `target-${target}`
+      });
+
+      assert.equal(pool.names.length, 6);
+      assert.equal(pool.names.every((candidate) => candidate.target === target), true);
+    }
+
+    assert.equal(
+      generateNamePool({
+        styles: ["coastal", "seafaring"],
+        target: "tavern",
+        count: 4,
+        seed: "tavern-shape"
+      }).names.every((candidate) => candidate.name.startsWith("The ")),
+      true
+    );
+  });
+
   it("honors existing and avoided names", () => {
     const pool = generateNamePool({
-      world: "Eldermere",
-      region: "The Salt Concordat",
+      styles: ["coastal", "mercantile"],
       count: 12,
       seed: "avoid-known-names",
       existingNames: ["Nessa Saltmere", "Bria Keelmark"],
@@ -102,31 +133,39 @@ describe("name director", () => {
     assert.equal(generatedNames.some((name) => /Elara|Kaelos/i.test(name)), false);
   });
 
-  it("mass-tests regional pools for uniqueness, pronounceability, and banned shapes", () => {
-    const regions = nameCultures.flatMap((culture) => culture.regions).filter(Boolean);
+  it("mass-tests style mixes for uniqueness, pronounceability, and banned shapes", () => {
+    const styleIds = nameStyleProfiles.map((style) => style.id);
+    const targets: NameTarget[] = ["person", "settlement", "tavern", "ship", "faction"];
     const failures: string[] = [];
     let generatedCount = 0;
 
-    for (const region of regions) {
-      for (let seedIndex = 0; seedIndex < 80; seedIndex += 1) {
+    for (let styleIndex = 0; styleIndex < styleIds.length; styleIndex += 1) {
+      const styles = [
+        { id: styleIds[styleIndex]!, weight: 3 },
+        { id: styleIds[(styleIndex + 7) % styleIds.length]!, weight: 2 },
+        { id: styleIds[(styleIndex + 13) % styleIds.length]!, weight: 1 }
+      ];
+
+      for (let seedIndex = 0; seedIndex < 40; seedIndex += 1) {
+        const target = targets[seedIndex % targets.length]!;
         const pool = generateNamePool({
-          world: "Eldermere",
-          region,
+          styles,
+          target,
           role: seedIndex % 2 === 0 ? "patron" : "rival",
-          count: 16,
-          seed: `mass-${region}-${seedIndex}`,
+          count: 12,
+          seed: `mass-${styleIndex}-${seedIndex}`,
           existingNames: ["Elara Venn", "Kaelos", "Marra Vell"]
         });
         const normalized = pool.names.map((candidate) => normalizeName(candidate.name));
 
         generatedCount += pool.names.length;
 
-        if (pool.names.length < 16) {
-          failures.push(`${region} seed ${seedIndex} returned ${pool.names.length} names`);
+        if (pool.names.length < 12) {
+          failures.push(`style ${styleIndex} seed ${seedIndex} returned ${pool.names.length} names`);
         }
 
         if (new Set(normalized).size !== normalized.length) {
-          failures.push(`${region} seed ${seedIndex} returned duplicate names`);
+          failures.push(`style ${styleIndex} seed ${seedIndex} returned duplicate names`);
         }
 
         for (const candidate of pool.names) {
@@ -137,18 +176,38 @@ describe("name director", () => {
 
           if (!validation.ok) {
             failures.push(
-              `${region} seed ${seedIndex} generated invalid ${candidate.name}: ${validation.reasons.join(", ")}`
+              `style ${styleIndex} seed ${seedIndex} generated invalid ${candidate.name}: ${validation.reasons.join(", ")}`
             );
           }
 
-          if (/Elara|Kaelos|Venn|Vell|Vael|Vale|Vey/i.test(candidate.name)) {
-            failures.push(`${region} seed ${seedIndex} used a banned rut: ${candidate.name}`);
+          if (usesBannedRut(candidate.name)) {
+            failures.push(`style ${styleIndex} seed ${seedIndex} used a banned rut: ${candidate.name}`);
           }
         }
       }
     }
 
     assert.equal(failures.length, 0, failures.slice(0, 20).join("\n"));
-    assert.ok(generatedCount >= 8000);
+    assert.ok(generatedCount >= 16000);
+  });
+
+  it("keeps every Eldermere region mapping fillable", () => {
+    const failures: string[] = [];
+
+    for (const region of Object.keys(eldermereRegionStyles)) {
+      const pool = generateNamePool({
+        world: "Eldermere",
+        region,
+        count: 16,
+        seed: `eldermere-region-${region}`,
+        existingNames: ["Elara Venn", "Kaelos", "Marra Vell"]
+      });
+
+      if (pool.names.length !== 16) {
+        failures.push(`${region} returned ${pool.names.length} names`);
+      }
+    }
+
+    assert.deepEqual(failures, []);
   });
 });
