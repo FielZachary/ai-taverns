@@ -75,6 +75,25 @@ type NewAdventureFormProps = {
   initialInviteToken?: string;
 };
 
+const defaultCampaignPreparationMessage = "Preparing your campaign";
+const campaignPreparationMessages = [
+  defaultCampaignPreparationMessage,
+  "Integrating your backstory",
+  "Creating story direction",
+  "Determining NPCs",
+  "Ironing out details",
+  "Crafting first scene",
+  "Writing",
+  "Fetching 5E rules",
+  "Updating contracts",
+  "Double checking NPCs",
+  "Improving campaign plan",
+  "Repairing story holes",
+  "Final touches"
+];
+const campaignPreparationMessageIntervalMs = 10_000;
+const campaignPreparationTransitionMs = 650;
+
 type AbilityKey = "str" | "dex" | "con" | "int" | "wis" | "cha";
 type CompleteAbilityScores = Record<AbilityKey, number>;
 type AbilityScores = Record<AbilityKey, number | null>;
@@ -3297,6 +3316,82 @@ function normalizeGameCodeInput(value: string) {
   );
 }
 
+function CampaignPreparationLoader() {
+  const [messageIndex, setMessageIndex] = useState(0);
+  const [exitingMessage, setExitingMessage] = useState("");
+  const currentMessage =
+    campaignPreparationMessages[messageIndex] ??
+    defaultCampaignPreparationMessage;
+
+  useEffect(() => {
+    let timeoutId: number | undefined;
+
+    const intervalId = window.setInterval(() => {
+      setMessageIndex((currentIndex) => {
+        const nextIndex =
+          (currentIndex + 1) % campaignPreparationMessages.length;
+
+        setExitingMessage(
+          campaignPreparationMessages[currentIndex] ??
+            defaultCampaignPreparationMessage
+        );
+
+        if (timeoutId) {
+          window.clearTimeout(timeoutId);
+        }
+
+        timeoutId = window.setTimeout(() => {
+          setExitingMessage("");
+        }, campaignPreparationTransitionMs);
+
+        return nextIndex;
+      });
+    }, campaignPreparationMessageIntervalMs);
+
+    return () => {
+      window.clearInterval(intervalId);
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, []);
+
+  return (
+    <div className="campaign-prep-loader">
+      <div className="campaign-prep-loader-window">
+        {exitingMessage ? (
+          <p
+            key={`exiting-${exitingMessage}`}
+            className="rune-loader campaign-prep-loader-message exiting"
+            aria-hidden="true"
+          >
+            {exitingMessage}
+            <span className="rune-loader-dots" aria-hidden="true">
+              <span>.</span>
+              <span>.</span>
+              <span>.</span>
+            </span>
+          </p>
+        ) : null}
+        <p
+          key={currentMessage}
+          className="rune-loader campaign-prep-loader-message entering"
+        >
+          {currentMessage}
+          <span className="rune-loader-dots" aria-hidden="true">
+            <span>.</span>
+            <span>.</span>
+            <span>.</span>
+          </span>
+        </p>
+      </div>
+      <p className="campaign-prep-loader-note">
+        this'll take about a minute and a half, sit tight ;)
+      </p>
+    </div>
+  );
+}
+
 export function NewAdventureForm({
   initialInviteToken = ""
 }: NewAdventureFormProps) {
@@ -4543,14 +4638,7 @@ export function NewAdventureForm({
     return (
       <main className="campaign-creation-screen" aria-label="Creating campaign">
         <section className="campaign-creation-center" aria-live="polite">
-          <p className="rune-loader">
-            Preparing your campaign
-            <span className="rune-loader-dots" aria-hidden="true">
-              <span>.</span>
-              <span>.</span>
-              <span>.</span>
-            </span>
-          </p>
+          <CampaignPreparationLoader />
         </section>
       </main>
     );
@@ -5404,14 +5492,7 @@ export function NewAdventureForm({
                   ) : (
                     <div className="portrait-placeholder">
                       {isCreatingArt ? (
-                        <p className="rune-loader">
-                          Preparing your campaign
-                          <span className="rune-loader-dots" aria-hidden="true">
-                            <span>.</span>
-                            <span>.</span>
-                            <span>.</span>
-                          </span>
-                        </p>
+                        <CampaignPreparationLoader />
                       ) : (
                         <>
                           <ImagePlus size={42} />

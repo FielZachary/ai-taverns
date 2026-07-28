@@ -686,6 +686,17 @@ describe("NewAdventureForm", () => {
     expect(screen.getByText("Preparing your campaign")).toHaveClass(
       "rune-loader"
     );
+    expect(
+      screen.getByText("this'll take about a minute and a half, sit tight ;)")
+    ).toHaveClass("campaign-prep-loader-note");
+
+    await act(async () => {
+      vi.advanceTimersByTime(10_000);
+    });
+
+    expect(screen.getByText("Integrating your backstory")).toHaveClass(
+      "rune-loader"
+    );
   });
 
   it("recovers when art preview fails without creating a campaign", async () => {
