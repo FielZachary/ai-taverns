@@ -38,10 +38,13 @@ type QwenImageResponse = {
 type OpenAiImageResponse = {
   data?: {
     b64_json?: string;
+    url?: string;
   }[];
   usage?: unknown;
   error?: {
     message?: string;
+    code?: string;
+    type?: string;
   };
 };
 
@@ -365,32 +368,52 @@ async function fetchOpenAiImage(input: {
       model: input.model,
       prompt: `${input.prompt}\n\nAvoid: ${input.negativePrompt}.`,
       n: 1,
-      size: "1024x1024",
-      quality: "medium",
-      output_format: "png"
+      size: "1024x1024"
     })
   });
   const body = (await response.json()) as OpenAiImageResponse;
+  const requestId = response.headers.get("x-request-id");
 
   if (!response.ok || body.error) {
+    const errorCode = body.error?.code ? ` (${body.error.code})` : "";
+    const requestSuffix = requestId ? ` Request ID: ${requestId}.` : "";
+    const providerMessage = body.error?.message?.replace(/\.+$/, "");
+
     throw new Error(
-      body.error?.message ||
-        `OpenAI image generation failed with ${response.status}.`
+      providerMessage
+        ? `OpenAI image generation failed${errorCode}: ${providerMessage}.${requestSuffix}`
+        : `OpenAI image generation failed with ${response.status}.${requestSuffix}`
     );
   }
 
   const imageBase64 = body.data?.[0]?.b64_json;
+  const imageUrl = body.data?.[0]?.url;
 
-  if (!imageBase64) {
-    throw new Error("OpenAI image generation returned no image data.");
+  if (imageBase64) {
+    return {
+      buffer: Buffer.from(imageBase64, "base64"),
+      contentType: "image/png",
+      requestId,
+      usage: body.usage
+    };
   }
 
-  return {
-    buffer: Buffer.from(imageBase64, "base64"),
-    contentType: "image/png",
-    requestId: response.headers.get("x-request-id"),
-    usage: body.usage
-  };
+  if (imageUrl) {
+    const downloaded = await downloadImage(input.fetchImpl, imageUrl);
+
+    return {
+      buffer: downloaded.buffer,
+      contentType: downloaded.contentType,
+      requestId,
+      usage: body.usage
+    };
+  }
+
+  throw new Error(
+    `OpenAI image generation returned no image data.${
+      requestId ? ` Request ID: ${requestId}.` : ""
+    }`
+  );
 }
 
 async function generatePortraitSourceImage(input: {

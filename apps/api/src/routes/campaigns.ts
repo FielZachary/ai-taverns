@@ -107,9 +107,19 @@ const campaignGenrePresets = [
   }
 ] as const;
 
-function createHttpError(statusCode: number, message: string): Error {
-  const error = new Error(message) as Error & { statusCode: number };
+function createHttpError(
+  statusCode: number,
+  message: string,
+  options: { expose?: boolean } = {}
+): Error {
+  const error = new Error(message) as Error & {
+    expose?: boolean;
+    statusCode: number;
+  };
   error.statusCode = statusCode;
+  if (options.expose !== undefined) {
+    error.expose = options.expose;
+  }
   return error;
 }
 
@@ -673,7 +683,7 @@ export async function registerCampaignRoutes(
     });
 
     if (portrait.status !== "ready") {
-      throw createHttpError(502, portrait.reason);
+      throw createHttpError(502, portrait.reason, { expose: true });
     }
 
     return CharacterPortraitPreviewResponseSchema.parse({
@@ -722,7 +732,7 @@ export async function registerCampaignRoutes(
     });
 
     if (portrait.status !== "ready") {
-      throw createHttpError(502, portrait.reason);
+      throw createHttpError(502, portrait.reason, { expose: true });
     }
 
     const campaign = await getCampaignSummaryForUser(fastify.pg, {

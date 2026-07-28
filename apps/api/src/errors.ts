@@ -29,15 +29,17 @@ export function handleRouteError(
 ) {
   const isValidationError = error instanceof ZodError;
   const statusCode = isValidationError ? 400 : error.statusCode ?? 500;
+  const shouldExposeMessage =
+    statusCode < 500 || (error as FastifyError & { expose?: boolean }).expose;
   const response: ApiErrorResponse = {
     error: {
       code: statusToCode(statusCode),
       message:
-        statusCode >= 500
-          ? "Internal server error"
-          : isValidationError
+        shouldExposeMessage
+          ? isValidationError
             ? "Invalid request body."
-            : error.message,
+            : error.message
+          : "Internal server error",
       requestId: request.id
     }
   };

@@ -380,8 +380,6 @@ test("POST /api/campaigns/portrait/preview can use OpenAI GPT Image", async () =
       prompt?: string;
       n?: number;
       size?: string;
-      quality?: string;
-      output_format?: string;
     };
 
     assert.equal(body.model, "gpt-image-2");
@@ -393,8 +391,6 @@ test("POST /api/campaigns/portrait/preview can use OpenAI GPT Image", async () =
     assert.match(body.prompt ?? "", /Avoid:/);
     assert.equal(body.n, 1);
     assert.equal(body.size, "1024x1024");
-    assert.equal(body.quality, "medium");
-    assert.equal(body.output_format, "png");
 
     return new Response(
       JSON.stringify({
@@ -440,6 +436,75 @@ test("POST /api/campaigns/portrait/preview can use OpenAI GPT Image", async () =
     const preview = CharacterPortraitPreviewResponseSchema.parse(response.json());
     assert.equal(preview.contentType, "image/png");
     assert.match(preview.imageDataUrl, /^data:image\/png;base64,/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalOpenAiApiKey === undefined) {
+      delete process.env.OPENAI_API_KEY;
+    } else {
+      process.env.OPENAI_API_KEY = originalOpenAiApiKey;
+    }
+
+    if (originalOpenAiImageEndpoint === undefined) {
+      delete process.env.OPENAI_IMAGE_ENDPOINT;
+    } else {
+      process.env.OPENAI_IMAGE_ENDPOINT = originalOpenAiImageEndpoint;
+    }
+
+    if (originalOpenAiImageModel === undefined) {
+      delete process.env.OPENAI_IMAGE_MODEL;
+    } else {
+      process.env.OPENAI_IMAGE_MODEL = originalOpenAiImageModel;
+    }
+  }
+});
+
+test("POST /api/campaigns/portrait/preview exposes image provider failures", async () => {
+  const cookie = await signIn("portrait-openai-failure-owner@example.com");
+  const originalFetch = globalThis.fetch;
+  const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
+  const originalOpenAiImageEndpoint = process.env.OPENAI_IMAGE_ENDPOINT;
+  const originalOpenAiImageModel = process.env.OPENAI_IMAGE_MODEL;
+
+  process.env.OPENAI_API_KEY = "test-openai-image-key";
+  process.env.OPENAI_IMAGE_ENDPOINT =
+    "https://openai-image.example.test/failure";
+  process.env.OPENAI_IMAGE_MODEL = "gpt-image-2";
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify({
+        error: {
+          code: "invalid_request_error",
+          message: "Unsupported image parameter."
+        }
+      }),
+      {
+        status: 400,
+        headers: {
+          "content-type": "application/json",
+          "x-request-id": "openai-image-error-request-1"
+        }
+      }
+    )) as typeof fetch;
+
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/campaigns/portrait/preview",
+      headers: {
+        cookie
+      },
+      payload: {
+        characterName: "Mira Vale",
+        characterSheet: "Level 5 Human Fighter",
+        imageModel: "openai"
+      }
+    });
+
+    assert.equal(response.statusCode, 502, response.body);
+    assert.match(
+      response.body,
+      /OpenAI image generation failed \(invalid_request_error\): Unsupported image parameter\. Request ID: openai-image-error-request-1\./
+    );
   } finally {
     globalThis.fetch = originalFetch;
     if (originalOpenAiApiKey === undefined) {
