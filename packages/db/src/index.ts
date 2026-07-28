@@ -1919,6 +1919,9 @@ export async function createCampaignForMode(
   });
 
   try {
+    let foundationCompilerPromise:
+      | Promise<ContextStorageDebugState | undefined>
+      | undefined;
     const opening = hasEldermereWorldProfile(createdState.campaign)
       ? await (async () => {
           const plan = await askEldermereOpeningPlanner(
@@ -1933,12 +1936,16 @@ export async function createCampaignForMode(
             createdState.campaign.id,
             plan.plan
           );
-          void runEldermereCampaignFoundationCompiler(db, runtime, {
-            campaign: createdState.campaign,
-            openingRequest,
-            plan: plan.plan,
-            turnId: openingTurn.id
-          });
+          foundationCompilerPromise = runEldermereCampaignFoundationCompiler(
+            db,
+            runtime,
+            {
+              campaign: createdState.campaign,
+              openingRequest,
+              plan: plan.plan,
+              turnId: openingTurn.id
+            }
+          );
 
           const opening = await askEldermereOpeningNarrator(
             db,
@@ -1985,6 +1992,23 @@ export async function createCampaignForMode(
       setting: opening.setting,
       aiDebug: opening.debug
     });
+
+    const foundationContextStorageState = await foundationCompilerPromise;
+
+    if (foundationContextStorageState) {
+      await attachContextStorageStateToDmEventDebug(db, {
+        campaignId: createdState.campaign.id,
+        dmEventId: resolvedTurn.dmEventId,
+        contextStorageState: foundationContextStorageState
+      });
+
+      runtime.emitDmStreamEvent?.({
+        type: "room_updated",
+        roomId: createdState.campaign.id,
+        updatedAt: foundationContextStorageState.capturedAt,
+        eventId: resolvedTurn.dmEventId
+      });
+    }
 
     await db.query("update campaigns set has_begun = true where id = $1", [
       createdState.campaign.id
@@ -4518,6 +4542,22 @@ async function retrieveCampaignContextStorageState(
   }
 }
 
+type ContextStorageDebugState = {
+  capturedAt: string;
+  contextChunkCount: number;
+  contextChunks: Awaited<ReturnType<typeof retrieveCampaignContextStorageState>>;
+};
+
+function campaignContextStorageDebugState(
+  contextStorageState: Awaited<ReturnType<typeof retrieveCampaignContextStorageState>>
+): ContextStorageDebugState {
+  return {
+    capturedAt: nowIso(),
+    contextChunkCount: contextStorageState.length,
+    contextChunks: contextStorageState
+  };
+}
+
 async function listCampaignNpcContextIndex(
   db: Queryable,
   campaignId: string,
@@ -5244,11 +5284,8 @@ export async function runModularPostTurnContextJobs(
       db,
       input.campaignId
     );
-    const contextStorageDebugState = {
-      capturedAt: nowIso(),
-      contextChunkCount: contextStorageState.length,
-      contextChunks: contextStorageState
-    };
+    const contextStorageDebugState =
+      campaignContextStorageDebugState(contextStorageState);
 
     await logDmTurnTrace(db, {
       campaignId: input.campaignId,
@@ -6542,7 +6579,7 @@ async function runEldermereCampaignFoundationCompiler(
     plan: EldermereOpeningPlan;
     turnId?: string | undefined;
   }
-) {
+): Promise<ContextStorageDebugState | undefined> {
   const traceId = randomUUID();
   const startedAt = Date.now();
 
@@ -6627,6 +6664,8 @@ async function runEldermereCampaignFoundationCompiler(
       db,
       input.campaign.id
     );
+    const contextStorageDebugState =
+      campaignContextStorageDebugState(contextStorageState);
 
     await logDmTurnTrace(db, {
       campaignId: input.campaign.id,
@@ -6637,9 +6676,17 @@ async function runEldermereCampaignFoundationCompiler(
         proposedPatchCount: proposedPatches.length,
         acceptedPatchCount: validation.accepted.length,
         discardedPatchCount: validation.discarded.length,
-        contextChunkCount: contextStorageState.length,
+        contextChunkCount: contextStorageDebugState.contextChunkCount,
         durationMs: Date.now() - startedAt
       }
+    });
+
+    await logDmTurnTrace(db, {
+      campaignId: input.campaign.id,
+      traceId,
+      turnId: input.turnId,
+      phase: "context_storage_state_snapshot",
+      payload: contextStorageDebugState
     });
 
     await logDmMemoryPatchLog(db, {
@@ -6658,8 +6705,10 @@ async function runEldermereCampaignFoundationCompiler(
     runtime.emitDmStreamEvent?.({
       type: "room_updated",
       roomId: input.campaign.id,
-      updatedAt: nowIso()
+      updatedAt: contextStorageDebugState.capturedAt
     });
+
+    return contextStorageDebugState;
   } catch (error) {
     await logDmMemoryPatchLog(db, {
       campaignId: input.campaign.id,
@@ -6672,6 +6721,8 @@ async function runEldermereCampaignFoundationCompiler(
         durationMs: Date.now() - startedAt
       }
     });
+
+    return undefined;
   }
 }
 
@@ -7846,6 +7897,9 @@ export async function beginRoomForUser(
   });
 
   try {
+    let foundationCompilerPromise:
+      | Promise<ContextStorageDebugState | undefined>
+      | undefined;
     const opening = hasEldermereWorldProfile(beginState.campaign)
       ? await (async () => {
           const plan = await askEldermereOpeningPlanner(
@@ -7860,12 +7914,16 @@ export async function beginRoomForUser(
             beginState.campaign.id,
             plan.plan
           );
-          void runEldermereCampaignFoundationCompiler(db, runtime, {
-            campaign: beginState.campaign,
-            openingRequest,
-            plan: plan.plan,
-            turnId: openingTurn.id
-          });
+          foundationCompilerPromise = runEldermereCampaignFoundationCompiler(
+            db,
+            runtime,
+            {
+              campaign: beginState.campaign,
+              openingRequest,
+              plan: plan.plan,
+              turnId: openingTurn.id
+            }
+          );
 
           const opening = await askEldermereOpeningNarrator(
             db,
@@ -7912,6 +7970,23 @@ export async function beginRoomForUser(
       setting: opening.setting,
       aiDebug: opening.debug
     });
+
+    const foundationContextStorageState = await foundationCompilerPromise;
+
+    if (foundationContextStorageState) {
+      await attachContextStorageStateToDmEventDebug(db, {
+        campaignId: beginState.campaign.id,
+        dmEventId: resolvedTurn.dmEventId,
+        contextStorageState: foundationContextStorageState
+      });
+
+      runtime.emitDmStreamEvent?.({
+        type: "room_updated",
+        roomId: beginState.campaign.id,
+        updatedAt: foundationContextStorageState.capturedAt,
+        eventId: resolvedTurn.dmEventId
+      });
+    }
 
     runtime.emitDmStreamEvent?.({
       type: "dm_stream_done",
@@ -8525,6 +8600,9 @@ export async function submitSoloTurnForUser(
     }
 
     const pendingRollRequests = pendingRollRequestsFromCampaign(campaign);
+    const inputTargets = inputTargetsFromCampaign(campaign);
+    const inputPolicy = inputPolicyFromCampaign(campaign);
+    const campaignMetadata = eventPayload(campaign.metadata);
     const submittedRolls = rollSubmissionsFromPayload(
       input.rollRequestId,
       input.rollResult,
@@ -8535,7 +8613,13 @@ export async function submitSoloTurnForUser(
     const rollSubmission = validatePendingRollSubmissions(
       pendingRollRequests,
       submittedRolls,
-      player
+      player,
+      {
+        inputTargets,
+        inputPolicy,
+        isExplicitBroadInput:
+          campaignMetadata.inputPolicy === "all_players" && inputTargets.length === 0
+      }
     );
 
     if (!isRollSubmission && pendingRollRequests.length > 0) {
