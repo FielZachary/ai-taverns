@@ -25,11 +25,15 @@ vi.mock("./ChatHistorySidebar", () => ({
     isLoading,
     onSelectChat,
     onStartNewChat,
-    onViewCharacterSheet
+    onViewCharacterSheet,
+    playerPortraitStatus,
+    playerPortraitUrl
   }: {
     chats: Array<{ id: string; title: string }>;
     activeChatId: string;
     isLoading: boolean;
+    playerPortraitStatus?: "pending" | "ready" | "failed";
+    playerPortraitUrl?: string;
     onSelectChat: (chatId: string) => void;
     onStartNewChat: () => void;
     onViewCharacterSheet: () => void;
@@ -42,6 +46,10 @@ vi.mock("./ChatHistorySidebar", () => ({
       <button type="button" onClick={onViewCharacterSheet}>
         View Character Sheet
       </button>
+      {playerPortraitStatus ? (
+        <p>Portrait status: {playerPortraitStatus}</p>
+      ) : null}
+      {playerPortraitUrl ? <p>Portrait URL: {playerPortraitUrl}</p> : null}
       {chats.map((chat) => (
         <button
           aria-current={chat.id === activeChatId ? "page" : undefined}
@@ -574,6 +582,78 @@ describe("GameShell", () => {
       "data-sending",
       "false"
     );
+  });
+
+  it("updates the single-player portrait when the room realtime event arrives", async () => {
+    const pendingRoom = roomSnapshot({
+      players: [
+        {
+          id: "player-1",
+          slot: 0,
+          username: "Mira",
+          characterName: "Mira Vale",
+          characterSheet: "Name: Mira Vale",
+          portraitStatus: "pending",
+          status: "waiting"
+        }
+      ]
+    });
+    const readyRoom = roomSnapshot({
+      players: [
+        {
+          id: "player-1",
+          slot: 0,
+          username: "Mira",
+          characterName: "Mira Vale",
+          characterSheet: "Name: Mira Vale",
+          portraitStatus: "ready",
+          portraitUrl:
+            "/media/campaigns/campaign-1/players/player-1/portraits/asset-1/512.webp",
+          status: "waiting"
+        }
+      ]
+    });
+    let roomFetchCount = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.startsWith("/api/room?")) {
+        roomFetchCount += 1;
+        return responseJson(roomFetchCount <= 2 ? pendingRoom : readyRoom);
+      }
+
+      if (url === "/api/auth/claim-guest-state") {
+        return responseJson({});
+      }
+
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<GameShell initialCampaignId={campaign.id} />);
+
+    expect(
+      await screen.findByText("Portrait status: pending")
+    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(MockWebSocket.instances).toHaveLength(1);
+    });
+
+    act(() => {
+      MockWebSocket.instances[0].emitMessage({
+        type: "room_updated",
+        roomId: campaign.id,
+        updatedAt: "2026-07-12T00:00:10.000Z",
+        eventId: "portrait-ready"
+      });
+    });
+
+    expect(
+      await screen.findByText(
+        "Portrait URL: /media/campaigns/campaign-1/players/player-1/portraits/asset-1/512.webp"
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByText("Portrait status: ready")).toBeInTheDocument();
   });
 
   it("does not overwrite an old multiplayer adventure with the previous character profile", async () => {

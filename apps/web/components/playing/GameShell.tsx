@@ -726,6 +726,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
 
         if (!shouldIgnore) {
           if (isSinglePlayer) {
+            setRoomPlayers(room.players);
             setIsRoomResolving(room.isResolving);
             setHasAdventureBegun(true);
             setPendingRollRequests(rollRequestsFromRoom(room));
