@@ -544,7 +544,9 @@ async function requestDeepSeek(
       : {}),
     temperature,
     max_tokens: 4096,
-    ...(onPublicNarrationDelta ? { stream: true } : {})
+    ...(onPublicNarrationDelta
+      ? { stream: true }
+      : { response_format: { type: "json_object" } })
   });
   const requestStarted = Date.now();
   const timing: DeepSeekTiming = {

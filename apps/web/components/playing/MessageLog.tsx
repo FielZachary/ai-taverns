@@ -138,6 +138,24 @@ function MessageDebugModal({
               </section>
             </>
           ) : null}
+          {debug.eldermereOpeningPlanner ? (
+            <>
+              <section>
+                <h3>Eldermere Planner Prompt Sent</h3>
+                <pre>{formatDebugPrompt(debug.eldermereOpeningPlanner)}</pre>
+              </section>
+              <section>
+                <h3>Eldermere Planner Output</h3>
+                <pre>{debug.eldermereOpeningPlanner.rawResponse}</pre>
+              </section>
+              <section>
+                <h3>Eldermere Planner Parsed Output</h3>
+                <pre>
+                  {formatDebugJson(debug.eldermereOpeningPlanner.parsedOutput)}
+                </pre>
+              </section>
+            </>
+          ) : null}
           <section>
             <h3>Temperature</h3>
             <pre>{debug.temperature ?? "Not recorded"}</pre>

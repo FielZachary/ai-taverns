@@ -185,10 +185,16 @@ test("campaign contracts accept list, create, and join preview payloads", () => 
     mode: "multiplayer",
     campaignGenreKind: "preset",
     campaignGenrePresetId: "classic_fantasy",
-    ownerClientId: "client-1"
+    ownerClientId: "client-1",
+    eldermereStart: {
+      regionName: "The Salt Concordat",
+      settlementName: "Selwick",
+      reason: "The generated backstory points at port trouble."
+    }
   });
 
   assert.equal(createRequest.mode, "multiplayer");
+  assert.equal(createRequest.eldermereStart?.settlementName, "Selwick");
 
   const listResponse = CampaignListResponseSchema.parse({
     campaigns: [

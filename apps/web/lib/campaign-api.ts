@@ -5,6 +5,9 @@ import {
   CampaignCreateResponseSchema,
   CampaignNpcCardUpdateResponseSchema,
   CampaignNpcCardsResponseSchema,
+  CharacterBackstoryGenerateResponseSchema,
+  CharacterPortraitPreviewResponseSchema,
+  CharacterPortraitResponseSchema,
   CampaignJoinPreviewResponseSchema,
   CampaignJoinResponseSchema,
   CampaignListResponseSchema,
@@ -15,6 +18,10 @@ import {
   type CampaignCreateRequest,
   type CampaignNpcCard,
   type CampaignNpcCardUpdateRequest,
+  type CharacterBackstoryGenerateRequest,
+  type CharacterPortraitGenerateRequest,
+  type CharacterPortraitPreviewRequest,
+  type CharacterPortraitUploadRequest,
   type CampaignJoinPreviewRequest,
   type CampaignJoinRequest,
   type CampaignSummary,
@@ -97,6 +104,90 @@ export async function readCampaign(campaignId: string) {
     response,
     CampaignReadResponseSchema,
     "Campaign could not be loaded."
+  );
+
+  return data.campaign;
+}
+
+export async function generateCharacterPortrait(
+  campaignId: string,
+  input: CharacterPortraitGenerateRequest
+) {
+  const response = await fetch(
+    `/api/campaigns/${encodeURIComponent(campaignId)}/portrait/generate`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(input)
+    }
+  );
+  const data = await parseJsonResponse(
+    response,
+    CharacterPortraitResponseSchema,
+    "Character art could not be created."
+  );
+
+  return data.campaign;
+}
+
+export async function previewCharacterPortrait(
+  input: CharacterPortraitPreviewRequest
+) {
+  const response = await fetch("/api/campaigns/portrait/preview", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(input)
+  });
+  const data = await parseJsonResponse(
+    response,
+    CharacterPortraitPreviewResponseSchema,
+    "Character art could not be created."
+  );
+
+  return data;
+}
+
+export async function generateCharacterBackstory(
+  input: CharacterBackstoryGenerateRequest
+) {
+  const response = await fetch("/api/campaigns/backstory", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(input)
+  });
+  const data = await parseJsonResponse(
+    response,
+    CharacterBackstoryGenerateResponseSchema,
+    "Backstory could not be created."
+  );
+
+  return data;
+}
+
+export async function uploadCharacterPortrait(
+  campaignId: string,
+  input: CharacterPortraitUploadRequest
+) {
+  const response = await fetch(
+    `/api/campaigns/${encodeURIComponent(campaignId)}/portrait/upload`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(input)
+    }
+  );
+  const data = await parseJsonResponse(
+    response,
+    CharacterPortraitResponseSchema,
+    "Character art could not be uploaded."
   );
 
   return data.campaign;

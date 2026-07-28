@@ -84,6 +84,24 @@ describe("PlayerInput", () => {
     expect(screen.queryByRole("dialog", { name: /ai model/i })).not.toBeInTheDocument();
   });
 
+  it("opens and closes the Eldermere map modal", () => {
+    renderPlayerInput();
+
+    fireEvent.click(screen.getByRole("button", { name: /open eldermere map/i }));
+
+    expect(screen.getByRole("dialog", { name: /eldermere map/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/map of eldermere/i)).toHaveAttribute(
+      "data",
+      "/maps/eldermere-map.svg"
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /close/i }));
+
+    expect(
+      screen.queryByRole("dialog", { name: /eldermere map/i })
+    ).not.toBeInTheDocument();
+  });
+
   it("ignores stale provider-level model picker values", () => {
     localStorage.setItem("ai-dnd.aiModel", "deepseek-reasoner");
 

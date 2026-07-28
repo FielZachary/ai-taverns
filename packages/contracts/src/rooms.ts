@@ -42,6 +42,7 @@ export const RoomPlayerSchema = z.object({
   characterSheet: z.string(),
   portraitAssetId: z.string().uuid().optional(),
   portraitUrl: z.string().min(1).optional(),
+  portraitStatus: z.enum(["pending", "ready", "failed"]).optional(),
   status: z.enum(["waiting", "submitted"]),
   lastSeenAt: z.string().datetime()
 });
