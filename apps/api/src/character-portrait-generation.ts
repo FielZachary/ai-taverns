@@ -35,6 +35,27 @@ type QwenImageResponse = {
   message?: string;
 };
 
+type OpenAiImageResponse = {
+  data?: {
+    b64_json?: string;
+  }[];
+  usage?: unknown;
+  error?: {
+    message?: string;
+  };
+};
+
+type CharacterPortraitImageModel = "qwen" | "openai";
+const supportedCharacterPortraitImageModels = ["qwen", "openai"] as const;
+
+type GeneratedPortraitImage = {
+  buffer: Buffer;
+  contentType: string;
+  requestId: string | null;
+  usage: unknown;
+  sourceImageUrl: string | null;
+};
+
 type CharacterPortraitGenerationResult =
   | {
       status: "ready";
@@ -53,7 +74,7 @@ type GenerateCharacterPortraitInput = {
   userId: string;
   guidelines?: string | undefined;
   artStyle?: string | undefined;
-  imageModel?: "qwen" | undefined;
+  imageModel?: CharacterPortraitImageModel | undefined;
   fetchImpl?: typeof fetch;
   storage?: MediaStorage;
 };
@@ -66,13 +87,16 @@ type PreviewCharacterPortraitInput = {
   customWorldName?: string | undefined;
   guidelines?: string | undefined;
   artStyle?: string | undefined;
-  imageModel?: "qwen" | undefined;
+  imageModel?: CharacterPortraitImageModel | undefined;
   fetchImpl?: typeof fetch;
 };
 
 const defaultQwenImageEndpoint =
   "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation";
 const defaultQwenImageModel = "qwen-image-2.0-pro";
+const defaultOpenAiImageEndpoint =
+  "https://api.openai.com/v1/images/generations";
+const defaultOpenAiImageModel = "gpt-image-2";
 let localEnvCache: Record<string, string> | undefined;
 let localEnvCacheCwd: string | undefined;
 
@@ -172,6 +196,30 @@ function qwenImageSettings() {
     ).replace(/\/+$/, ""),
     model: envValue("QWEN_IMAGE_MODEL") || defaultQwenImageModel
   };
+}
+
+function openAiImageSettings() {
+  return {
+    apiKey: envValue("OPENAI_API_KEY"),
+    endpoint: (
+      envValue("OPENAI_IMAGE_ENDPOINT") || defaultOpenAiImageEndpoint
+    ).replace(/\/+$/, ""),
+    model: envValue("OPENAI_IMAGE_MODEL") || defaultOpenAiImageModel
+  };
+}
+
+function imageProviderForModel(
+  imageModel: CharacterPortraitImageModel | undefined
+) {
+  return imageModel ?? "qwen";
+}
+
+function isSupportedCharacterPortraitImageModel(
+  imageModel: unknown
+): imageModel is CharacterPortraitImageModel {
+  return supportedCharacterPortraitImageModels.includes(
+    imageModel as CharacterPortraitImageModel
+  );
 }
 
 function compactText(value: string, maxLength: number) {
@@ -299,6 +347,82 @@ async function fetchQwenImage(input: {
   };
 }
 
+async function fetchOpenAiImage(input: {
+  fetchImpl: typeof fetch;
+  apiKey: string;
+  endpoint: string;
+  model: string;
+  prompt: string;
+  negativePrompt: string;
+}) {
+  const response = await input.fetchImpl(input.endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${input.apiKey}`
+    },
+    body: JSON.stringify({
+      model: input.model,
+      prompt: `${input.prompt}\n\nAvoid: ${input.negativePrompt}.`,
+      n: 1,
+      size: "1024x1024",
+      quality: "medium",
+      output_format: "png"
+    })
+  });
+  const body = (await response.json()) as OpenAiImageResponse;
+
+  if (!response.ok || body.error) {
+    throw new Error(
+      body.error?.message ||
+        `OpenAI image generation failed with ${response.status}.`
+    );
+  }
+
+  const imageBase64 = body.data?.[0]?.b64_json;
+
+  if (!imageBase64) {
+    throw new Error("OpenAI image generation returned no image data.");
+  }
+
+  return {
+    buffer: Buffer.from(imageBase64, "base64"),
+    contentType: "image/png",
+    requestId: response.headers.get("x-request-id"),
+    usage: body.usage
+  };
+}
+
+async function generatePortraitSourceImage(input: {
+  provider: CharacterPortraitImageModel;
+  fetchImpl: typeof fetch;
+  apiKey: string;
+  endpoint: string;
+  model: string;
+  prompt: string;
+  negativePrompt: string;
+}): Promise<GeneratedPortraitImage> {
+  if (input.provider === "openai") {
+    const generated = await fetchOpenAiImage(input);
+
+    return {
+      ...generated,
+      sourceImageUrl: null
+    };
+  }
+
+  const generated = await fetchQwenImage(input);
+  const downloaded = await downloadImage(input.fetchImpl, generated.imageUrl);
+
+  return {
+    buffer: downloaded.buffer,
+    contentType: downloaded.contentType,
+    requestId: generated.requestId,
+    usage: generated.usage,
+    sourceImageUrl: generated.imageUrl
+  };
+}
+
 async function downloadImage(fetchImpl: typeof fetch, imageUrl: string) {
   const response = await fetchImpl(imageUrl);
 
@@ -388,19 +512,27 @@ async function storePortraitSource(input: {
 export async function generateCharacterPortraitForCampaign(
   input: GenerateCharacterPortraitInput
 ): Promise<CharacterPortraitGenerationResult> {
-  if (input.imageModel && input.imageModel !== "qwen") {
+  if (
+    input.imageModel &&
+    !isSupportedCharacterPortraitImageModel(input.imageModel)
+  ) {
     return {
       status: "skipped",
       reason: "That character portrait model is not supported yet."
     };
   }
 
-  const settings = qwenImageSettings();
+  const provider = imageProviderForModel(input.imageModel);
+  const settings =
+    provider === "openai" ? openAiImageSettings() : qwenImageSettings();
 
   if (!settings.apiKey) {
     return {
       status: "skipped",
-      reason: "Qwen image generation is not configured."
+      reason:
+        provider === "openai"
+          ? "OpenAI image generation is not configured."
+          : "Qwen image generation is not configured."
     };
   }
 
@@ -423,12 +555,13 @@ export async function generateCharacterPortraitForCampaign(
     storageProvider: configuredStorageProvider(input.config),
     prompt,
     negativePrompt,
-    provider: "qwen",
+    provider,
     model: settings.model
   });
 
   try {
-    const generated = await fetchQwenImage({
+    const generated = await generatePortraitSourceImage({
+      provider,
       fetchImpl,
       apiKey: settings.apiKey,
       endpoint: settings.endpoint,
@@ -436,9 +569,8 @@ export async function generateCharacterPortraitForCampaign(
       prompt,
       negativePrompt
     });
-    const source = (await downloadImage(fetchImpl, generated.imageUrl)).buffer;
     const { displayObject, storedObjects } = await storePortraitSource({
-      source,
+      source: generated.buffer,
       storage,
       campaignId: target.campaignId,
       playerId: target.playerId,
@@ -451,7 +583,7 @@ export async function generateCharacterPortraitForCampaign(
       displayObject,
       providerRequestId: generated.requestId,
       generationMetadata: {
-        sourceImageUrl: generated.imageUrl,
+        sourceImageUrl: generated.sourceImageUrl,
         usage: generated.usage ?? null,
         variants: storedObjects.map((object) => ({
           objectKey: object.objectKey,
@@ -503,19 +635,27 @@ export async function generateCharacterPortraitPreview(
       reason: string;
     }
 > {
-  if (input.imageModel && input.imageModel !== "qwen") {
+  if (
+    input.imageModel &&
+    !isSupportedCharacterPortraitImageModel(input.imageModel)
+  ) {
     return {
       status: "skipped",
       reason: "That character portrait model is not supported yet."
     };
   }
 
-  const settings = qwenImageSettings();
+  const provider = imageProviderForModel(input.imageModel);
+  const settings =
+    provider === "openai" ? openAiImageSettings() : qwenImageSettings();
 
   if (!settings.apiKey) {
     return {
       status: "skipped",
-      reason: "Qwen image generation is not configured."
+      reason:
+        provider === "openai"
+          ? "OpenAI image generation is not configured."
+          : "Qwen image generation is not configured."
     };
   }
 
@@ -532,7 +672,8 @@ export async function generateCharacterPortraitPreview(
   const negativePrompt = characterPortraitNegativePrompt();
 
   try {
-    const generated = await fetchQwenImage({
+    const generated = await generatePortraitSourceImage({
+      provider,
       fetchImpl,
       apiKey: settings.apiKey,
       endpoint: settings.endpoint,
@@ -540,8 +681,7 @@ export async function generateCharacterPortraitPreview(
       prompt,
       negativePrompt
     });
-    const downloaded = await downloadImage(fetchImpl, generated.imageUrl);
-    const png = await sharp(downloaded.buffer).png().toBuffer();
+    const png = await sharp(generated.buffer).png().toBuffer();
 
     return {
       status: "ready",

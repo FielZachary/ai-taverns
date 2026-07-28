@@ -63,7 +63,7 @@ export const CharacterPortraitArtStyleSchema = z.enum([
   "cinematic_concept_art"
 ]);
 
-export const CharacterPortraitImageModelSchema = z.enum(["qwen"]);
+export const CharacterPortraitImageModelSchema = z.enum(["qwen", "openai"]);
 
 export const CharacterPortraitGenerateParamsSchema = z.object({
   campaignId: z.string().uuid()

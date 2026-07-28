@@ -475,6 +475,9 @@ describe("NewAdventureForm", () => {
       screen.getByRole("heading", { name: /create your character art/i })
     ).toBeInTheDocument();
 
+    fireEvent.change(screen.getByLabelText("Image model"), {
+      target: { value: "openai" }
+    });
     fireEvent.click(screen.getByRole("button", { name: /create art/i }));
 
     await act(async () => {});
@@ -483,7 +486,7 @@ describe("NewAdventureForm", () => {
       expect.objectContaining({
         characterName: "Mira Vale",
         campaignGenre: "Eldermere",
-        imageModel: "qwen"
+        imageModel: "openai"
       })
     );
     expect(createCampaignMock).not.toHaveBeenCalled();

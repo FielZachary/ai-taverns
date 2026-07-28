@@ -349,6 +349,119 @@ test("POST /api/campaigns/portrait/preview generates transient art without campa
   }
 });
 
+test("POST /api/campaigns/portrait/preview can use OpenAI GPT Image", async () => {
+  const cookie = await signIn("portrait-openai-preview-owner@example.com");
+  const originalFetch = globalThis.fetch;
+  const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
+  const originalOpenAiImageEndpoint = process.env.OPENAI_IMAGE_ENDPOINT;
+  const originalOpenAiImageModel = process.env.OPENAI_IMAGE_MODEL;
+  const imageBuffer = await sharp({
+    create: {
+      width: 96,
+      height: 96,
+      channels: 4,
+      background: "#1d4ed8"
+    }
+  })
+    .png()
+    .toBuffer();
+
+  process.env.OPENAI_API_KEY = "test-openai-image-key";
+  process.env.OPENAI_IMAGE_ENDPOINT =
+    "https://openai-image.example.test/generations";
+  process.env.OPENAI_IMAGE_MODEL = "gpt-image-2";
+  globalThis.fetch = (async (url, init) => {
+    assert.equal(String(url), "https://openai-image.example.test/generations");
+
+    const headers = new Headers(init?.headers);
+    assert.equal(headers.get("authorization"), "Bearer test-openai-image-key");
+    const body = JSON.parse(String(init?.body)) as {
+      model?: string;
+      prompt?: string;
+      n?: number;
+      size?: string;
+      quality?: string;
+      output_format?: string;
+    };
+
+    assert.equal(body.model, "gpt-image-2");
+    assert.match(
+      body.prompt ?? "",
+      /Create a square fantasy character portrait/
+    );
+    assert.match(body.prompt ?? "", /Mira Vale/);
+    assert.match(body.prompt ?? "", /Avoid:/);
+    assert.equal(body.n, 1);
+    assert.equal(body.size, "1024x1024");
+    assert.equal(body.quality, "medium");
+    assert.equal(body.output_format, "png");
+
+    return new Response(
+      JSON.stringify({
+        data: [
+          {
+            b64_json: imageBuffer.toString("base64")
+          }
+        ],
+        usage: {
+          output_tokens: 196
+        }
+      }),
+      {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "x-request-id": "openai-image-preview-request-1"
+        }
+      }
+    );
+  }) as typeof fetch;
+
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/campaigns/portrait/preview",
+      headers: {
+        cookie
+      },
+      payload: {
+        characterName: "Mira Vale",
+        playerName: "Mira",
+        characterSheet: "Level 5 Human Fighter carrying a silver shield.",
+        campaignGenre: "Eldermere",
+        guidelines: "warm tavern light",
+        artStyle: "painterly_fantasy",
+        imageModel: "openai"
+      }
+    });
+
+    assert.equal(response.statusCode, 200, response.body);
+
+    const preview = CharacterPortraitPreviewResponseSchema.parse(response.json());
+    assert.equal(preview.contentType, "image/png");
+    assert.match(preview.imageDataUrl, /^data:image\/png;base64,/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalOpenAiApiKey === undefined) {
+      delete process.env.OPENAI_API_KEY;
+    } else {
+      process.env.OPENAI_API_KEY = originalOpenAiApiKey;
+    }
+
+    if (originalOpenAiImageEndpoint === undefined) {
+      delete process.env.OPENAI_IMAGE_ENDPOINT;
+    } else {
+      process.env.OPENAI_IMAGE_ENDPOINT = originalOpenAiImageEndpoint;
+    }
+
+    if (originalOpenAiImageModel === undefined) {
+      delete process.env.OPENAI_IMAGE_MODEL;
+    } else {
+      process.env.OPENAI_IMAGE_MODEL = originalOpenAiImageModel;
+    }
+  }
+});
+
 test("POST /api/campaigns can generate and attach a character portrait", async () => {
   const cookie = await signIn("portrait-owner@example.com");
   const originalFetch = globalThis.fetch;

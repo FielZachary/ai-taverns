@@ -112,7 +112,7 @@ type CharacterArtStyle =
   | "storybook_illustration"
   | "ink_and_watercolor"
   | "cinematic_concept_art";
-type CharacterImageModel = "qwen";
+type CharacterImageModel = "qwen" | "openai";
 type SpellLevelLabel = "Cantrip" | "1st level" | "2nd level" | "3rd level";
 type SpellGroup = {
   level: SpellLevelLabel;
@@ -5549,6 +5549,7 @@ export function NewAdventureForm({
                         }
                       >
                         <option value="qwen">Qwen</option>
+                        <option value="openai">ChatGPT Image 2</option>
                       </select>
                     </label>
                     <label>
