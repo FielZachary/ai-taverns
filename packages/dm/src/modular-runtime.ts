@@ -1164,7 +1164,6 @@ export function buildMemoryUpdaterPrompt() {
     "Return strict JSON with patches, new_context_chunks, and remove_context_chunks.",
     "Allowed operations: append, replace_section, create_chunk, archive_chunk.",
     "Do not rewrite whole campaign memory or treat minor narration as durable memory.",
-    "For now, make every created context chunk player-visible by setting visibility to \"player_safe\".",
     "Treat campaign context as a living world bible for the AI DM. Your job is not only to record facts; it is also to maintain compelling, reusable story material that helps the DM make the world feel coherent and alive.",
     "Be proactive when the turn reveals or strongly implies durable worldbuilding, mysteries, factions, locations, artifacts, open player-facing problems, or long-running secrets.",
     "Do not contradict established play. Separate confirmed facts from creative inference so future DMs can use your ideas without mistaking every seed for settled truth.",

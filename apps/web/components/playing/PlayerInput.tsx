@@ -6,7 +6,7 @@ import {
   useRef,
   useState
 } from "react";
-import { Settings } from "lucide-react";
+import { Map, Settings } from "lucide-react";
 import type { AiModelId, DiceRollRequest } from "@/lib/game-types";
 
 export type DiceFace = "d4" | "d6" | "d8" | "d10" | "d12" | "d20";
@@ -72,6 +72,7 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
     const [isCallingAttention, setIsCallingAttention] = useState(false);
     const [isDicePickerOpen, setIsDicePickerOpen] = useState(false);
     const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
+    const [isMapOpen, setIsMapOpen] = useState(false);
     const [selectedAiModel, setSelectedAiModel] =
       useState<AiModelId>("deepseek-v4-flash");
     const [queuedDice, setQueuedDice] = useState<QueuedDice>({});
@@ -230,6 +231,16 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
             >
               <Settings size={17} />
             </button>
+            <button
+              className={`map-button ${isMapOpen ? "active" : ""}`}
+              type="button"
+              aria-label="Open Eldermere map"
+              aria-expanded={isMapOpen}
+              disabled={isSending}
+              onClick={() => setIsMapOpen(true)}
+            >
+              <Map size={17} />
+            </button>
           </div>
           <div className="dice-roll-control" ref={diceRollControlRef}>
             <button
@@ -353,6 +364,29 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
                     {option.label}
                   </button>
                 ))}
+              </div>
+            </section>
+          </div>
+        ) : null}
+        {isMapOpen ? (
+          <div className="eldermere-map-backdrop" role="presentation">
+            <section
+              className="eldermere-map-modal"
+              aria-label="Eldermere map"
+              role="dialog"
+            >
+              <header className="eldermere-map-header">
+                <h2>Eldermere</h2>
+                <button type="button" onClick={() => setIsMapOpen(false)}>
+                  Close
+                </button>
+              </header>
+              <div className="eldermere-map-frame">
+                <object
+                  aria-label="Map of Eldermere"
+                  data="/maps/eldermere-map.svg"
+                  type="image/svg+xml"
+                />
               </div>
             </section>
           </div>

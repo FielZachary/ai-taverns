@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,6 +7,7 @@ import { test } from "node:test";
 import sharp from "sharp";
 import {
   ApiErrorResponseSchema,
+  CharacterBackstoryGenerateResponseSchema,
   CampaignInviteCreateResponseSchema,
   CampaignInviteDisableResponseSchema,
   CampaignInviteListResponseSchema,
@@ -14,6 +16,7 @@ import {
   CampaignNpcCardsResponseSchema,
   CampaignJoinPreviewResponseSchema,
   CampaignJoinResponseSchema,
+  CharacterPortraitPreviewResponseSchema,
   LobbyInviteJoinResponseSchema,
   LobbyInvitePreviewResponseSchema,
   CampaignListResponseSchema,
@@ -29,6 +32,1039 @@ import {
   setProviderOverride,
   signIn
 } from "./test/app-test-harness.js";
+import {
+  generateCharacterPortraitForCampaign,
+  generateCharacterPortraitPreview
+} from "./character-portrait-generation.js";
+import { loadConfig } from "./config.js";
+
+test("character portrait generation rejects unsupported model selections early", async () => {
+  const result = await generateCharacterPortraitForCampaign({
+    db: {} as never,
+    config: loadConfig({ NODE_ENV: "test" }),
+    campaignId: "11111111-1111-4111-8111-111111111111",
+    userId: "22222222-2222-4222-8222-222222222222",
+    imageModel: "not-qwen" as never
+  });
+
+  assert.deepEqual(result, {
+    status: "skipped",
+    reason: "That character portrait model is not supported yet."
+  });
+});
+
+test("character portrait preview rejects unsupported model selections early", async () => {
+  const result = await generateCharacterPortraitPreview({
+    characterName: "Mira",
+    characterSheet: "Level 5 Fighter",
+    imageModel: "not-qwen" as never
+  });
+
+  assert.deepEqual(result, {
+    status: "skipped",
+    reason: "That character portrait model is not supported yet."
+  });
+});
+
+test("character portrait preview reports unconfigured image generation", async () => {
+  const originalQwenImageApiKey = process.env.QWEN_IMAGE_API_KEY;
+  const originalDashscopeApiKey = process.env.DASHSCOPE_API_KEY;
+  const originalQwenApiKey = process.env.QWEN_API_KEY;
+  const originalCwd = process.cwd();
+  const emptyCwd = await mkdtemp(join(tmpdir(), "portrait-preview-unconfigured-"));
+
+  delete process.env.QWEN_IMAGE_API_KEY;
+  delete process.env.DASHSCOPE_API_KEY;
+  delete process.env.QWEN_API_KEY;
+
+  try {
+    process.chdir(emptyCwd);
+
+    const result = await generateCharacterPortraitPreview({
+      characterName: "Mira",
+      characterSheet: "Level 5 Fighter",
+      imageModel: "qwen"
+    });
+
+    assert.deepEqual(result, {
+      status: "skipped",
+      reason: "Qwen image generation is not configured."
+    });
+  } finally {
+    if (originalQwenImageApiKey === undefined) {
+      delete process.env.QWEN_IMAGE_API_KEY;
+    } else {
+      process.env.QWEN_IMAGE_API_KEY = originalQwenImageApiKey;
+    }
+
+    if (originalDashscopeApiKey === undefined) {
+      delete process.env.DASHSCOPE_API_KEY;
+    } else {
+      process.env.DASHSCOPE_API_KEY = originalDashscopeApiKey;
+    }
+
+    if (originalQwenApiKey === undefined) {
+      delete process.env.QWEN_API_KEY;
+    } else {
+      process.env.QWEN_API_KEY = originalQwenApiKey;
+    }
+
+    process.chdir(originalCwd);
+    await rm(emptyCwd, { recursive: true, force: true });
+  }
+});
+
+test("character portrait generation reports unconfigured OpenAI image generation", async () => {
+  const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
+  const originalCwd = process.cwd();
+  const emptyCwd = await mkdtemp(join(tmpdir(), "portrait-openai-unconfigured-"));
+
+  delete process.env.OPENAI_API_KEY;
+
+  try {
+    process.chdir(emptyCwd);
+
+    const result = await generateCharacterPortraitForCampaign({
+      db: {} as never,
+      config: loadConfig({ NODE_ENV: "test" }),
+      campaignId: "11111111-1111-4111-8111-111111111111",
+      userId: "22222222-2222-4222-8222-222222222222",
+      imageModel: "openai"
+    });
+
+    assert.deepEqual(result, {
+      status: "skipped",
+      reason: "OpenAI image generation is not configured."
+    });
+  } finally {
+    if (originalOpenAiApiKey === undefined) {
+      delete process.env.OPENAI_API_KEY;
+    } else {
+      process.env.OPENAI_API_KEY = originalOpenAiApiKey;
+    }
+
+    process.chdir(originalCwd);
+    await rm(emptyCwd, { recursive: true, force: true });
+  }
+});
+
+test("character portrait preview reports unconfigured OpenAI image generation", async () => {
+  const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
+  const originalCwd = process.cwd();
+  const emptyCwd = await mkdtemp(join(tmpdir(), "portrait-openai-preview-"));
+
+  delete process.env.OPENAI_API_KEY;
+
+  try {
+    process.chdir(emptyCwd);
+
+    const result = await generateCharacterPortraitPreview({
+      characterName: "Mira",
+      characterSheet: "Level 5 Fighter",
+      imageModel: "openai"
+    });
+
+    assert.deepEqual(result, {
+      status: "skipped",
+      reason: "OpenAI image generation is not configured."
+    });
+  } finally {
+    if (originalOpenAiApiKey === undefined) {
+      delete process.env.OPENAI_API_KEY;
+    } else {
+      process.env.OPENAI_API_KEY = originalOpenAiApiKey;
+    }
+
+    process.chdir(originalCwd);
+    await rm(emptyCwd, { recursive: true, force: true });
+  }
+});
+
+test("character portrait preview reports OpenAI provider error details", async () => {
+  const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
+  const originalOpenAiImageEndpoint = process.env.OPENAI_IMAGE_ENDPOINT;
+  const originalOpenAiImageModel = process.env.OPENAI_IMAGE_MODEL;
+
+  process.env.OPENAI_API_KEY = "test-openai-image-key";
+  process.env.OPENAI_IMAGE_ENDPOINT = "https://openai-image.example.test/failure";
+  process.env.OPENAI_IMAGE_MODEL = "gpt-image-test";
+
+  try {
+    const result = await generateCharacterPortraitPreview({
+      characterName: "Mira",
+      characterSheet: "Level 5 Fighter",
+      imageModel: "openai",
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "bad_prompt",
+              message: "portrait prompt rejected..."
+            }
+          }),
+          {
+            status: 400,
+            headers: {
+              "content-type": "application/json",
+              "x-request-id": "req-openai-image-test"
+            }
+          }
+        )
+    });
+
+    assert.deepEqual(result, {
+      status: "failed",
+      reason:
+        "OpenAI image generation failed (bad_prompt): portrait prompt rejected. Request ID: req-openai-image-test."
+    });
+  } finally {
+    if (originalOpenAiApiKey === undefined) {
+      delete process.env.OPENAI_API_KEY;
+    } else {
+      process.env.OPENAI_API_KEY = originalOpenAiApiKey;
+    }
+
+    if (originalOpenAiImageEndpoint === undefined) {
+      delete process.env.OPENAI_IMAGE_ENDPOINT;
+    } else {
+      process.env.OPENAI_IMAGE_ENDPOINT = originalOpenAiImageEndpoint;
+    }
+
+    if (originalOpenAiImageModel === undefined) {
+      delete process.env.OPENAI_IMAGE_MODEL;
+    } else {
+      process.env.OPENAI_IMAGE_MODEL = originalOpenAiImageModel;
+    }
+  }
+});
+
+test("character portrait preview handles OpenAI base64 and empty image responses", async () => {
+  const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
+  const originalOpenAiImageEndpoint = process.env.OPENAI_IMAGE_ENDPOINT;
+  const originalOpenAiImageModel = process.env.OPENAI_IMAGE_MODEL;
+
+  process.env.OPENAI_API_KEY = "test-openai-image-key";
+  process.env.OPENAI_IMAGE_MODEL = "gpt-image-test";
+
+  try {
+    process.env.OPENAI_IMAGE_ENDPOINT =
+      "https://openai-image.example.test/base64";
+    const ready = await generateCharacterPortraitPreview({
+      characterName: "Mira",
+      characterSheet: "Level 5 Fighter",
+      imageModel: "openai",
+      fetchImpl: async (_url, init) => {
+        const body = JSON.parse(String(init?.body)) as { prompt?: string };
+
+        assert.match(
+          body.prompt ?? "",
+          /premium painterly tabletop RPG fantasy realism/
+        );
+
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                b64_json: Buffer.from("portrait").toString("base64")
+              }
+            ]
+          }),
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json"
+            }
+          }
+        );
+      }
+    });
+
+    assert.equal(ready.status, "ready");
+    if (ready.status === "ready") {
+      assert.equal(ready.contentType, "image/jpeg");
+      assert.match(ready.imageDataUrl, /^data:image\/jpeg;base64,/);
+    }
+
+    process.env.OPENAI_IMAGE_ENDPOINT =
+      "https://openai-image.example.test/empty";
+    const empty = await generateCharacterPortraitPreview({
+      characterName: "Mira",
+      characterSheet: "Level 5 Fighter",
+      imageModel: "openai",
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            data: [{}]
+          }),
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json",
+              "x-request-id": "req-openai-empty"
+            }
+          }
+        )
+    });
+
+    assert.deepEqual(empty, {
+      status: "failed",
+      reason:
+        "OpenAI image generation returned no image data. Request ID: req-openai-empty."
+    });
+  } finally {
+    if (originalOpenAiApiKey === undefined) {
+      delete process.env.OPENAI_API_KEY;
+    } else {
+      process.env.OPENAI_API_KEY = originalOpenAiApiKey;
+    }
+
+    if (originalOpenAiImageEndpoint === undefined) {
+      delete process.env.OPENAI_IMAGE_ENDPOINT;
+    } else {
+      process.env.OPENAI_IMAGE_ENDPOINT = originalOpenAiImageEndpoint;
+    }
+
+    if (originalOpenAiImageModel === undefined) {
+      delete process.env.OPENAI_IMAGE_MODEL;
+    } else {
+      process.env.OPENAI_IMAGE_MODEL = originalOpenAiImageModel;
+    }
+  }
+});
+
+test("POST /api/campaigns/backstory generates a world-grounded character backstory", async () => {
+  resetProviderInputs();
+  setProviderOverride(async () => {
+    const content = JSON.stringify({
+      backstory:
+        "Mira Vale learned the sea keeps better records than any court, especially when Ilyra Fen vanished with a tide-priest's ledger.",
+      eldermereStart: {
+        regionName: "The Salt Concordat",
+        settlementName: "Selwick",
+        reason: "The backstory centers on ports, ledgers, and sea debts."
+      }
+    });
+
+    return {
+      id: "provider-backstory-1",
+      content,
+      debug: {
+        requestMessages: [],
+        rawResponse: content,
+        model: "test-model",
+        temperature: 0.8,
+        providerTimings: []
+      }
+    };
+  });
+  const cookie = await signIn("backstory-writer@example.com");
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/campaigns/backstory",
+    headers: {
+      cookie
+    },
+    payload: {
+      mode: "generate",
+      characterSheet: "Character Name: Mira Vale\nClass: Fighter",
+      campaignGenre: "Eldermere",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "eldermere"
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(CharacterBackstoryGenerateResponseSchema.parse(response.json()), {
+    backstory:
+      "Mira Vale learned the sea keeps better records than any court, especially when Ilyra Fen vanished with a tide-priest's ledger.",
+    eldermereStart: {
+      regionName: "The Salt Concordat",
+      settlementName: "Selwick",
+      reason: "The backstory centers on ports, ledgers, and sea debts."
+    }
+  });
+
+  const providerInput = getProviderInputs().at(-1);
+
+  assert.match(providerInput?.message ?? "", /Character Name: Mira Vale/);
+  assert.match(providerInput?.message ?? "", /Validated people names for this backstory:/);
+  assert.match(providerInput?.message ?? "", /Use these validated candidate names only when inventing people/);
+  assert.match(providerInput?.message ?? "", /Masculine people:/);
+  assert.match(providerInput?.message ?? "", /Feminine people:/);
+  assert.match(providerInput?.message ?? "", /Neutral people:/);
+  assert.match(providerInput?.message ?? "", /gender group that fits the person's stated role or gender/);
+  assert.doesNotMatch(providerInput?.message ?? "", /Factions and organizations:/);
+  assert.doesNotMatch(providerInput?.message ?? "", /inventing new people, families, places/);
+  assert.match(providerInput?.message ?? "", /World: Eldermere/);
+  assert.match(providerInput?.message ?? "", /Canonical Eldermere start options:/);
+  assert.match(providerInput?.message ?? "", /Region: The Salt Concordat/);
+  assert.match(providerInput?.message ?? "", /Settlements: Corvane, Selwick, Skerrywatch/);
+  assert.match(providerInput?.message ?? "", /eldermereStart\.regionName/);
+  assert.match(providerInput?.message ?? "", /Use generated names only for people/i);
+  assert.match(providerInput?.message ?? "", /only newly invented proper nouns allowed are people names/i);
+  assert.match(providerInput?.message ?? "", /Do not give names to ships, taverns, guilds/i);
+  assert.match(providerInput?.instructions ?? "", /invented proper nouns are allowed only for people/i);
+  assert.match(providerInput?.message ?? "", /Backstory override for Eldermere opener context/i);
+  assert.match(providerInput?.message ?? "", /Do not add a 'Hooks:' label/i);
+  assert.match(providerInput?.message ?? "", /at most two other canonical setting proper nouns/i);
+  assert.match(
+    providerInput?.message ?? "",
+    /why those people matter not only to the player character, but also to the living world/i
+  );
+  assert.doesNotMatch(providerInput?.message ?? "", /Current backstory field/i);
+  resetProviderInputs();
+});
+
+test("POST /api/campaigns/backstory requires existing text when adding details", async () => {
+  const cookie = await signIn("backstory-empty-details@example.com");
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/campaigns/backstory",
+    headers: {
+      cookie
+    },
+    payload: {
+      mode: "add_details",
+      characterSheet: "Character Name: Mira Vale\nClass: Fighter",
+      currentBackstory: ""
+    }
+  });
+  const error = ApiErrorResponseSchema.parse(response.json());
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(error.error.message, "Write a backstory before adding details.");
+});
+
+test("POST /api/campaigns/backstory adds details and falls back to plain prose", async () => {
+  resetProviderInputs();
+  setProviderOverride(async () => {
+    const content =
+      "Mira once carried a lighthouse key through a storm and still checks every lock twice.";
+
+    return {
+      id: "provider-backstory-details",
+      content,
+      debug: {
+        requestMessages: [],
+        rawResponse: content,
+        model: "test-model",
+        temperature: 0.8,
+        providerTimings: []
+      }
+    };
+  });
+  const cookie = await signIn("backstory-details@example.com");
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/campaigns/backstory",
+    headers: {
+      cookie
+    },
+    payload: {
+      mode: "add_details",
+      characterSheet: "Character Name: Mira Vale\nClass: Fighter",
+      currentBackstory: "Mira grew up beside a lighthouse.",
+      campaignGenre: "Clockwork Isles",
+      campaignGenreKind: "custom",
+      customWorldName: "Clockwork Isles",
+      customWorldDescription: "A chain of islands powered by old machines."
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(CharacterBackstoryGenerateResponseSchema.parse(response.json()), {
+    backstory:
+      "Mira once carried a lighthouse key through a storm and still checks every lock twice."
+  });
+
+  const providerInput = getProviderInputs().at(-1);
+
+  assert.match(providerInput?.message ?? "", /Player-written backstory:/);
+  assert.match(providerInput?.message ?? "", /Mira grew up beside a lighthouse/);
+  assert.match(providerInput?.message ?? "", /World: Clockwork Isles/);
+  assert.doesNotMatch(providerInput?.message ?? "", /Canonical Eldermere start options:/);
+  resetProviderInputs();
+});
+
+test("POST /api/campaigns/backstory accepts Eldermere starts without reasons", async () => {
+  resetProviderInputs();
+  setProviderOverride(async () => {
+    const content = JSON.stringify({
+      backstory: "Mira follows a salt-stained debt into Selwick.",
+      eldermereStart: {
+        regionName: "The Salt Concordat",
+        settlementName: "Selwick"
+      }
+    });
+
+    return {
+      id: "provider-backstory-eldermere-no-reason",
+      content,
+      debug: {
+        requestMessages: [],
+        rawResponse: content,
+        model: "test-model",
+        temperature: 0.8,
+        providerTimings: []
+      }
+    };
+  });
+  const cookie = await signIn("backstory-eldermere-no-reason@example.com");
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/campaigns/backstory",
+    headers: {
+      cookie
+    },
+    payload: {
+      mode: "generate",
+      characterSheet: "Character Name: Mira Vale\nClass: Fighter",
+      campaignGenre: "Eldermere",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "eldermere"
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(CharacterBackstoryGenerateResponseSchema.parse(response.json()), {
+    backstory: "Mira follows a salt-stained debt into Selwick.",
+    eldermereStart: {
+      regionName: "The Salt Concordat",
+      settlementName: "Selwick"
+    }
+  });
+  resetProviderInputs();
+});
+
+test("character portrait preview reports provider failures", async () => {
+  const originalQwenImageApiKey = process.env.QWEN_IMAGE_API_KEY;
+  const originalQwenImageEndpoint = process.env.QWEN_IMAGE_ENDPOINT;
+  const originalQwenImageModel = process.env.QWEN_IMAGE_MODEL;
+
+  process.env.QWEN_IMAGE_API_KEY = "test-qwen-image-key";
+  process.env.QWEN_IMAGE_ENDPOINT = "https://qwen-image.example.test/failure";
+  process.env.QWEN_IMAGE_MODEL = "qwen-image-failure-model";
+
+  try {
+    const result = await generateCharacterPortraitPreview({
+      characterName: "Mira",
+      characterSheet: "Level 5 Fighter",
+      imageModel: "qwen",
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            code: "BadRequest",
+            message: "preview prompt rejected"
+          }),
+          {
+            status: 400,
+            headers: {
+              "content-type": "application/json"
+            }
+          }
+        )
+    });
+
+    assert.deepEqual(result, {
+      status: "failed",
+      reason: "preview prompt rejected"
+    });
+  } finally {
+    if (originalQwenImageApiKey === undefined) {
+      delete process.env.QWEN_IMAGE_API_KEY;
+    } else {
+      process.env.QWEN_IMAGE_API_KEY = originalQwenImageApiKey;
+    }
+
+    if (originalQwenImageEndpoint === undefined) {
+      delete process.env.QWEN_IMAGE_ENDPOINT;
+    } else {
+      process.env.QWEN_IMAGE_ENDPOINT = originalQwenImageEndpoint;
+    }
+
+    if (originalQwenImageModel === undefined) {
+      delete process.env.QWEN_IMAGE_MODEL;
+    } else {
+      process.env.QWEN_IMAGE_MODEL = originalQwenImageModel;
+    }
+  }
+});
+
+test("character portrait preview applies Qwen defaults and fallback prompt fields", async () => {
+  const originalQwenImageApiKey = process.env.QWEN_IMAGE_API_KEY;
+  const originalDashscopeApiKey = process.env.DASHSCOPE_API_KEY;
+  const originalQwenApiKey = process.env.QWEN_API_KEY;
+  const originalQwenImageEndpoint = process.env.QWEN_IMAGE_ENDPOINT;
+  const originalQwenBaseUrl = process.env.QWEN_BASE_URL;
+  const originalQwenImageModel = process.env.QWEN_IMAGE_MODEL;
+  const originalCwd = process.cwd();
+  const emptyCwd = await mkdtemp(join(tmpdir(), "portrait-preview-qwen-defaults-"));
+
+  delete process.env.QWEN_IMAGE_API_KEY;
+  delete process.env.DASHSCOPE_API_KEY;
+  process.env.QWEN_API_KEY = "fallback-qwen-key";
+  delete process.env.QWEN_IMAGE_ENDPOINT;
+  process.env.QWEN_BASE_URL = "not a url";
+  delete process.env.QWEN_IMAGE_MODEL;
+  process.chdir(emptyCwd);
+
+  try {
+    const result = await generateCharacterPortraitPreview({
+      characterName: " ",
+      playerName: " ",
+      characterSheet: "A careful wanderer with a patched cloak.",
+      artStyle: "ink_and_watercolor",
+      imageModel: "qwen",
+      fetchImpl: async (url, init) => {
+        if (
+          String(url) ===
+          "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
+        ) {
+          const headers = new Headers(init?.headers);
+          assert.equal(headers.get("authorization"), "Bearer fallback-qwen-key");
+          const body = JSON.parse(String(init?.body)) as {
+            input?: { messages?: { content?: { text?: string }[] }[] };
+            model?: string;
+          };
+          const prompt = body.input?.messages?.[0]?.content?.[0]?.text ?? "";
+
+          assert.equal(body.model, "qwen-image-2.0-pro");
+          assert.match(prompt, /Create fantasy character key art for Adventurer/);
+          assert.match(prompt, /Campaign world or genre: fantasy/);
+          assert.match(prompt, /expressive ink lines with layered watercolor washes/);
+
+          return new Response(
+            JSON.stringify({
+              output: {
+                choices: [
+                  {
+                    message: {
+                      content: [
+                        {
+                          image: "https://qwen-image.example.test/defaults.png"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }),
+            {
+              status: 200,
+              headers: {
+                "content-type": "application/json"
+              }
+            }
+          );
+        }
+
+        if (String(url) === "https://qwen-image.example.test/defaults.png") {
+          return new Response(Buffer.from("portrait"), {
+            status: 200
+          });
+        }
+
+        throw new Error(`Unexpected fetch URL: ${String(url)}`);
+      }
+    });
+
+    assert.equal(result.status, "ready");
+    if (result.status === "ready") {
+      assert.equal(result.contentType, "image/png");
+      assert.match(result.imageDataUrl, /^data:image\/png;base64,/);
+    }
+
+    process.env.QWEN_BASE_URL = "https://api.example.test";
+
+    const nonDashscopeBaseUrlResult = await generateCharacterPortraitPreview({
+      characterName: "Adventurer",
+      characterSheet: "A careful wanderer with a patched cloak.",
+      imageModel: "qwen",
+      fetchImpl: async (url) => {
+        if (String(url) === "https://qwen-image.example.test/defaults.png") {
+          return new Response(Buffer.from("portrait"), {
+            status: 200
+          });
+        }
+
+        assert.equal(
+          String(url),
+          "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
+        );
+
+        return new Response(
+          JSON.stringify({
+            output: {
+              choices: [
+                {
+                  message: {
+                    content: [
+                      {
+                        image: "https://qwen-image.example.test/defaults.png"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }),
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json"
+            }
+          }
+        );
+      }
+    });
+
+    assert.equal(nonDashscopeBaseUrlResult.status, "ready");
+    if (nonDashscopeBaseUrlResult.status === "ready") {
+      assert.equal(nonDashscopeBaseUrlResult.contentType, "image/png");
+    }
+  } finally {
+    if (originalQwenImageApiKey === undefined) {
+      delete process.env.QWEN_IMAGE_API_KEY;
+    } else {
+      process.env.QWEN_IMAGE_API_KEY = originalQwenImageApiKey;
+    }
+
+    if (originalDashscopeApiKey === undefined) {
+      delete process.env.DASHSCOPE_API_KEY;
+    } else {
+      process.env.DASHSCOPE_API_KEY = originalDashscopeApiKey;
+    }
+
+    if (originalQwenApiKey === undefined) {
+      delete process.env.QWEN_API_KEY;
+    } else {
+      process.env.QWEN_API_KEY = originalQwenApiKey;
+    }
+
+    if (originalQwenImageEndpoint === undefined) {
+      delete process.env.QWEN_IMAGE_ENDPOINT;
+    } else {
+      process.env.QWEN_IMAGE_ENDPOINT = originalQwenImageEndpoint;
+    }
+
+    if (originalQwenBaseUrl === undefined) {
+      delete process.env.QWEN_BASE_URL;
+    } else {
+      process.env.QWEN_BASE_URL = originalQwenBaseUrl;
+    }
+
+    if (originalQwenImageModel === undefined) {
+      delete process.env.QWEN_IMAGE_MODEL;
+    } else {
+      process.env.QWEN_IMAGE_MODEL = originalQwenImageModel;
+    }
+
+    process.chdir(originalCwd);
+    await rm(emptyCwd, { recursive: true, force: true });
+  }
+});
+
+test("POST /api/campaigns/portrait/preview generates transient art without campaign rows", async () => {
+  const cookie = await signIn("portrait-preview-owner@example.com");
+  const originalFetch = globalThis.fetch;
+  const originalQwenImageApiKey = process.env.QWEN_IMAGE_API_KEY;
+  const originalQwenImageEndpoint = process.env.QWEN_IMAGE_ENDPOINT;
+  const originalQwenImageModel = process.env.QWEN_IMAGE_MODEL;
+  const imageBuffer = await sharp({
+    create: {
+      width: 96,
+      height: 96,
+      channels: 4,
+      background: "#0f766e"
+    }
+  })
+    .png()
+    .toBuffer();
+  const campaignsBefore = database.campaigns.length;
+  const mediaAssetsBefore = database.mediaAssets.length;
+
+  process.env.QWEN_IMAGE_API_KEY = "test-qwen-image-key";
+  process.env.QWEN_IMAGE_ENDPOINT = "https://qwen-image.example.test/generation";
+  process.env.QWEN_IMAGE_MODEL = "qwen-image-2.0-pro";
+  globalThis.fetch = (async (url, init) => {
+    if (String(url) === "https://qwen-image.example.test/generation") {
+      const headers = new Headers(init?.headers);
+      assert.equal(headers.get("authorization"), "Bearer test-qwen-image-key");
+      const body = JSON.parse(String(init?.body)) as {
+        input?: {
+          messages?: { content?: { text?: string }[] }[];
+        };
+      };
+      const prompt = body.input?.messages?.[0]?.content?.[0]?.text ?? "";
+
+      assert.match(prompt, /Create fantasy character key art for Mira/);
+      assert.match(prompt, /Campaign world or genre: Clockwork Isles/);
+      assert.match(prompt, /richly textured fantasy storybook illustration/);
+
+      return new Response(
+        JSON.stringify({
+          request_id: "qwen-image-preview-request-1",
+          output: {
+            choices: [
+              {
+                message: {
+                  content: [
+                    {
+                      image: "https://qwen-image.example.test/preview.png"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json"
+          }
+        }
+      );
+    }
+
+    if (String(url) === "https://qwen-image.example.test/preview.png") {
+      return new Response(imageBuffer, {
+        status: 200,
+        headers: {
+          "content-type": "image/png"
+        }
+      });
+    }
+
+    throw new Error(`Unexpected fetch URL: ${String(url)}`);
+  }) as typeof fetch;
+
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/campaigns/portrait/preview",
+      headers: {
+        cookie
+      },
+      payload: {
+        characterName: " ",
+        playerName: "Mira",
+        characterSheet: "Level 5 Human Fighter carrying a silver shield.",
+        customWorldName: "Clockwork Isles",
+        guidelines: "warm tavern light",
+        artStyle: "storybook_illustration",
+        imageModel: "qwen"
+      }
+    });
+
+    assert.equal(response.statusCode, 200, response.body);
+
+    const preview = CharacterPortraitPreviewResponseSchema.parse(response.json());
+    assert.equal(preview.contentType, "image/png");
+    assert.match(preview.imageDataUrl, /^data:image\/png;base64,/);
+    assert.equal(database.campaigns.length, campaignsBefore);
+    assert.equal(database.mediaAssets.length, mediaAssetsBefore);
+  } finally {
+    globalThis.fetch = originalFetch;
+    process.env.QWEN_IMAGE_API_KEY = originalQwenImageApiKey;
+    process.env.QWEN_IMAGE_ENDPOINT = originalQwenImageEndpoint;
+    process.env.QWEN_IMAGE_MODEL = originalQwenImageModel;
+  }
+});
+
+test("POST /api/campaigns/portrait/preview can use OpenAI GPT Image", async () => {
+  const cookie = await signIn("portrait-openai-preview-owner@example.com");
+  const originalFetch = globalThis.fetch;
+  const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
+  const originalOpenAiImageEndpoint = process.env.OPENAI_IMAGE_ENDPOINT;
+  const originalOpenAiImageModel = process.env.OPENAI_IMAGE_MODEL;
+  const imageBuffer = await sharp({
+    create: {
+      width: 96,
+      height: 96,
+      channels: 4,
+      background: "#1d4ed8"
+    }
+  })
+    .jpeg()
+    .toBuffer();
+
+  process.env.OPENAI_API_KEY = "test-openai-image-key";
+  process.env.OPENAI_IMAGE_ENDPOINT =
+    "https://openai-image.example.test/generations";
+  process.env.OPENAI_IMAGE_MODEL = "gpt-image-2";
+  globalThis.fetch = (async (url, init) => {
+    if (String(url) === "https://openai-image.example.test/result.jpg") {
+      return new Response(imageBuffer, {
+        status: 200,
+        headers: {
+          "content-type": "image/jpeg"
+        }
+      });
+    }
+
+    assert.equal(String(url), "https://openai-image.example.test/generations");
+
+    const headers = new Headers(init?.headers);
+    assert.equal(headers.get("authorization"), "Bearer test-openai-image-key");
+    const body = JSON.parse(String(init?.body)) as {
+      model?: string;
+      prompt?: string;
+      n?: number;
+      size?: string;
+      quality?: string;
+      output_format?: string;
+      output_compression?: number;
+    };
+
+    assert.equal(body.model, "gpt-image-2");
+    assert.match(
+      body.prompt ?? "",
+      /Create fantasy character key art/
+    );
+    assert.match(body.prompt ?? "", /square 1024 by 1024/);
+    assert.match(body.prompt ?? "", /Mira Vale/);
+    assert.match(body.prompt ?? "", /Avoid:/);
+    assert.equal(body.n, 1);
+    assert.equal(body.size, "1024x1024");
+    assert.equal(body.quality, "medium");
+    assert.equal(body.output_format, "jpeg");
+    assert.equal(body.output_compression, 88);
+
+    return new Response(
+      JSON.stringify({
+        data: [
+          {
+            url: "https://openai-image.example.test/result.jpg"
+          }
+        ],
+        usage: {
+          output_tokens: 196
+        }
+      }),
+      {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "x-request-id": "openai-image-preview-request-1"
+        }
+      }
+    );
+  }) as typeof fetch;
+
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/campaigns/portrait/preview",
+      headers: {
+        cookie
+      },
+      payload: {
+        characterName: "Mira Vale",
+        playerName: "Mira",
+        characterSheet: "Level 5 Human Fighter carrying a silver shield.",
+        campaignGenre: "Eldermere",
+        guidelines: "warm tavern light",
+        artStyle: "painterly_fantasy",
+        imageModel: "openai"
+      }
+    });
+
+    assert.equal(response.statusCode, 200, response.body);
+
+    const preview = CharacterPortraitPreviewResponseSchema.parse(response.json());
+    assert.equal(preview.contentType, "image/jpeg");
+    assert.match(preview.imageDataUrl, /^data:image\/jpeg;base64,/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalOpenAiApiKey === undefined) {
+      delete process.env.OPENAI_API_KEY;
+    } else {
+      process.env.OPENAI_API_KEY = originalOpenAiApiKey;
+    }
+
+    if (originalOpenAiImageEndpoint === undefined) {
+      delete process.env.OPENAI_IMAGE_ENDPOINT;
+    } else {
+      process.env.OPENAI_IMAGE_ENDPOINT = originalOpenAiImageEndpoint;
+    }
+
+    if (originalOpenAiImageModel === undefined) {
+      delete process.env.OPENAI_IMAGE_MODEL;
+    } else {
+      process.env.OPENAI_IMAGE_MODEL = originalOpenAiImageModel;
+    }
+  }
+});
+
+test("POST /api/campaigns/portrait/preview exposes image provider failures", async () => {
+  const cookie = await signIn("portrait-openai-failure-owner@example.com");
+  const originalFetch = globalThis.fetch;
+  const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
+  const originalOpenAiImageEndpoint = process.env.OPENAI_IMAGE_ENDPOINT;
+  const originalOpenAiImageModel = process.env.OPENAI_IMAGE_MODEL;
+
+  process.env.OPENAI_API_KEY = "test-openai-image-key";
+  process.env.OPENAI_IMAGE_ENDPOINT =
+    "https://openai-image.example.test/failure";
+  process.env.OPENAI_IMAGE_MODEL = "gpt-image-2";
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify({
+        error: {
+          code: "invalid_request_error",
+          message: "Unsupported image parameter."
+        }
+      }),
+      {
+        status: 400,
+        headers: {
+          "content-type": "application/json",
+          "x-request-id": "openai-image-error-request-1"
+        }
+      }
+    )) as typeof fetch;
+
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/campaigns/portrait/preview",
+      headers: {
+        cookie
+      },
+      payload: {
+        characterName: "Mira Vale",
+        characterSheet: "Level 5 Human Fighter",
+        imageModel: "openai"
+      }
+    });
+
+    assert.equal(response.statusCode, 502, response.body);
+    assert.match(
+      response.body,
+      /OpenAI image generation failed \(invalid_request_error\): Unsupported image parameter\. Request ID: openai-image-error-request-1\./
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalOpenAiApiKey === undefined) {
+      delete process.env.OPENAI_API_KEY;
+    } else {
+      process.env.OPENAI_API_KEY = originalOpenAiApiKey;
+    }
+
+    if (originalOpenAiImageEndpoint === undefined) {
+      delete process.env.OPENAI_IMAGE_ENDPOINT;
+    } else {
+      process.env.OPENAI_IMAGE_ENDPOINT = originalOpenAiImageEndpoint;
+    }
+
+    if (originalOpenAiImageModel === undefined) {
+      delete process.env.OPENAI_IMAGE_MODEL;
+    } else {
+      process.env.OPENAI_IMAGE_MODEL = originalOpenAiImageModel;
+    }
+  }
+});
 
 test("POST /api/campaigns can generate and attach a character portrait", async () => {
   const cookie = await signIn("portrait-owner@example.com");
@@ -62,13 +1098,18 @@ test("POST /api/campaigns can generate and attach a character portrait", async (
         input?: {
           messages?: { content?: { text?: string }[] }[];
         };
+        parameters?: {
+          size?: string;
+        };
       };
       const prompt = body.input?.messages?.[0]?.content?.[0]?.text ?? "";
 
       assert.equal(body.model, "qwen-image-2.0-pro");
-      assert.match(prompt, /Create a square fantasy character portrait/);
+      assert.match(prompt, /Create fantasy character key art/);
+      assert.match(prompt, /square 1024 by 1024/);
       assert.match(prompt, /Seraphina/);
       assert.match(prompt, /Level 5 Tiefling Warlock/);
+      assert.equal(body.parameters?.size, "1024*1024");
 
       return new Response(
         JSON.stringify({
@@ -185,6 +1226,627 @@ test("POST /api/campaigns can generate and attach a character portrait", async (
   }
 });
 
+test("POST /api/campaigns/:campaignId/portrait/generate creates art after campaign setup", async () => {
+  const cookie = await signIn("portrait-route-owner@example.com");
+  const originalFetch = globalThis.fetch;
+  const originalQwenImageApiKey = process.env.QWEN_IMAGE_API_KEY;
+  const originalQwenImageEndpoint = process.env.QWEN_IMAGE_ENDPOINT;
+  const originalQwenImageModel = process.env.QWEN_IMAGE_MODEL;
+  const imageBuffer = await sharp({
+    create: {
+      width: 128,
+      height: 128,
+      channels: 4,
+      background: "#0f766e"
+    }
+  })
+    .png()
+    .toBuffer();
+
+  process.env.QWEN_IMAGE_API_KEY = "test-qwen-route-key";
+  process.env.QWEN_IMAGE_ENDPOINT = "https://qwen-image.example.test/route";
+  process.env.QWEN_IMAGE_MODEL = "qwen-image-route-model";
+  globalThis.fetch = (async (url, init) => {
+    if (String(url) === "https://qwen-image.example.test/route") {
+      const headers = new Headers(init?.headers);
+      assert.equal(headers.get("authorization"), "Bearer test-qwen-route-key");
+      const body = JSON.parse(String(init?.body)) as {
+        model?: string;
+        input?: {
+          messages?: { content?: { text?: string }[] }[];
+        };
+      };
+      const prompt = body.input?.messages?.[0]?.content?.[0]?.text ?? "";
+
+      assert.equal(body.model, "qwen-image-route-model");
+      assert.match(prompt, /silver cloak and a wary half-smile/);
+      assert.match(prompt, /cinematic fantasy concept art/i);
+
+      return new Response(
+        JSON.stringify({
+          request_id: "qwen-image-route-request",
+          output: {
+            choices: [
+              {
+                message: {
+                  content: [
+                    {
+                      image: "https://qwen-image.example.test/route-result.png"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        }
+      );
+    }
+
+    if (String(url) === "https://qwen-image.example.test/route-result.png") {
+      return new Response(imageBuffer, {
+        status: 200,
+        headers: { "Content-Type": "image/png" }
+      });
+    }
+
+    throw new Error(`Unexpected fetch URL ${String(url)}`);
+  }) as typeof fetch;
+
+  try {
+    const createdResponse = await app.inject({
+      method: "POST",
+      url: "/api/campaigns",
+      headers: {
+        cookie
+      },
+      payload: {
+        mode: "single_player",
+        title: "Route Portrait Campaign",
+        campaignGenre: "Classic Fantasy",
+        campaignGenreKind: "preset",
+        campaignGenrePresetId: "classic_fantasy",
+        ownerClientId: "portrait-route-owner-client",
+        playerName: "Nyra",
+        characterName: "Nyra",
+        characterSheet: "Level 5 Human Rogue"
+      }
+    });
+
+    assert.equal(createdResponse.statusCode, 201, createdResponse.body);
+    const created = CampaignCreateResponseSchema.parse(createdResponse.json());
+    assert.equal(created.campaign.portraitUrl, undefined);
+
+    const portraitResponse = await app.inject({
+      method: "POST",
+      url: `/api/campaigns/${created.campaign.id}/portrait/generate`,
+      headers: {
+        cookie
+      },
+      payload: {
+        guidelines: "silver cloak and a wary half-smile",
+        artStyle: "cinematic_concept_art",
+        imageModel: "qwen"
+      }
+    });
+    const withPortrait = CampaignCreateResponseSchema.parse(
+      portraitResponse.json()
+    );
+
+    assert.equal(portraitResponse.statusCode, 200, portraitResponse.body);
+    assert.ok(withPortrait.campaign.portraitAssetId);
+    assert.match(withPortrait.campaign.portraitUrl ?? "", /\/media\/campaigns\//);
+  } finally {
+    globalThis.fetch = originalFetch;
+    process.env.QWEN_IMAGE_API_KEY = originalQwenImageApiKey;
+    process.env.QWEN_IMAGE_ENDPOINT = originalQwenImageEndpoint;
+    process.env.QWEN_IMAGE_MODEL = originalQwenImageModel;
+  }
+});
+
+test("POST /api/campaigns/:campaignId/portrait/generate can start art in the background", async () => {
+  const cookie = await signIn("portrait-background-owner@example.com");
+  const originalFetch = globalThis.fetch;
+  const originalQwenImageApiKey = process.env.QWEN_IMAGE_API_KEY;
+  const originalQwenImageEndpoint = process.env.QWEN_IMAGE_ENDPOINT;
+  const originalQwenImageModel = process.env.QWEN_IMAGE_MODEL;
+  const imageBuffer = await sharp({
+    create: {
+      width: 128,
+      height: 128,
+      channels: 4,
+      background: "#2563eb"
+    }
+  })
+    .png()
+    .toBuffer();
+  let releaseQwenRequest: (() => void) | undefined;
+  const qwenRequestStarted = new Promise<void>((resolve) => {
+    globalThis.fetch = (async (url) => {
+      if (String(url) === "https://qwen-image.example.test/background") {
+        resolve();
+        await new Promise<void>((release) => {
+          releaseQwenRequest = release;
+        });
+
+        return new Response(
+          JSON.stringify({
+            request_id: "qwen-image-background-request",
+            output: {
+              choices: [
+                {
+                  message: {
+                    content: [
+                      {
+                        image:
+                          "https://qwen-image.example.test/background-result.png"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" }
+          }
+        );
+      }
+
+      if (
+        String(url) === "https://qwen-image.example.test/background-result.png"
+      ) {
+        return new Response(imageBuffer, {
+          status: 200,
+          headers: { "Content-Type": "image/png" }
+        });
+      }
+
+      throw new Error(`Unexpected fetch URL ${String(url)}`);
+    }) as typeof fetch;
+  });
+
+  process.env.QWEN_IMAGE_API_KEY = "test-qwen-background-key";
+  process.env.QWEN_IMAGE_ENDPOINT = "https://qwen-image.example.test/background";
+  process.env.QWEN_IMAGE_MODEL = "qwen-image-background-model";
+
+  try {
+    const createdResponse = await app.inject({
+      method: "POST",
+      url: "/api/campaigns",
+      headers: {
+        cookie
+      },
+      payload: {
+        mode: "single_player",
+        title: "Background Portrait Campaign",
+        campaignGenre: "Classic Fantasy",
+        campaignGenreKind: "preset",
+        campaignGenrePresetId: "classic_fantasy",
+        ownerClientId: "portrait-background-owner-client",
+        playerName: "Eris",
+        characterName: "Eris",
+        characterSheet: "Level 5 Human Wizard"
+      }
+    });
+    const created = CampaignCreateResponseSchema.parse(createdResponse.json());
+
+    const portraitResponse = await app.inject({
+      method: "POST",
+      url: `/api/campaigns/${created.campaign.id}/portrait/generate`,
+      headers: {
+        cookie
+      },
+      payload: {
+        guidelines: "blue cloak with careful eyes",
+        artStyle: "ink_and_watercolor",
+        imageModel: "qwen",
+        background: true
+      }
+    });
+    const immediate = CampaignCreateResponseSchema.parse(portraitResponse.json());
+
+    assert.equal(portraitResponse.statusCode, 200, portraitResponse.body);
+    assert.equal(immediate.campaign.portraitUrl, undefined);
+    await qwenRequestStarted;
+
+    releaseQwenRequest?.();
+
+    await assert.doesNotReject(async () => {
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const readResponse = await app.inject({
+          method: "GET",
+          url: `/api/room?roomId=${created.campaign.id}&sessionId=${created.campaign.sessionId}`,
+          headers: {
+            cookie
+          }
+        });
+        const read = readResponse.json() as {
+          players?: {
+            portraitAssetId?: string;
+            portraitUrl?: string;
+          }[];
+        };
+        const player = read.players?.[0];
+
+        if (player?.portraitUrl) {
+          assert.ok(player.portraitAssetId);
+          assert.match(player.portraitUrl, /\/media\/campaigns\//);
+          return;
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+
+      throw new Error("Background portrait did not finish.");
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+    process.env.QWEN_IMAGE_API_KEY = originalQwenImageApiKey;
+    process.env.QWEN_IMAGE_ENDPOINT = originalQwenImageEndpoint;
+    process.env.QWEN_IMAGE_MODEL = originalQwenImageModel;
+  }
+});
+
+test("POST /api/campaigns/:campaignId/portrait/upload stores user character art", async () => {
+  const cookie = await signIn("portrait-upload-owner@example.com");
+  const imageBuffer = await sharp({
+    create: {
+      width: 128,
+      height: 128,
+      channels: 4,
+      background: "#92400e"
+    }
+  })
+    .png()
+    .toBuffer();
+  const createdResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: {
+      cookie
+    },
+    payload: {
+      mode: "single_player",
+      title: "Uploaded Portrait Campaign",
+      campaignGenre: "Classic Fantasy",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "classic_fantasy",
+      ownerClientId: "portrait-upload-owner-client",
+      playerName: "Orrin",
+      characterName: "Orrin",
+      characterSheet: "Level 5 Dwarf Cleric"
+    }
+  });
+
+  assert.equal(createdResponse.statusCode, 201, createdResponse.body);
+  const created = CampaignCreateResponseSchema.parse(createdResponse.json());
+  const uploadResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${created.campaign.id}/portrait/upload`,
+    headers: {
+      cookie
+    },
+    payload: {
+      imageDataUrl: `data:image/png;base64,${imageBuffer.toString("base64")}`,
+      fileName: "orrin.png",
+      guidelines: "keep the amber cloak and holy symbol",
+      artStyle: "ink_and_watercolor"
+    }
+  });
+  const uploaded = CampaignCreateResponseSchema.parse(uploadResponse.json());
+
+  assert.equal(uploadResponse.statusCode, 200, uploadResponse.body);
+  assert.ok(uploaded.campaign.portraitAssetId);
+  assert.match(uploaded.campaign.portraitUrl ?? "", /\/media\/campaigns\//);
+  const asset = database.mediaAssets.find(
+    (candidate) => candidate.id === uploaded.campaign.portraitAssetId
+  );
+
+  assert.equal(asset?.provider, "upload");
+  assert.equal(asset?.model, "user-upload");
+  assert.match(asset?.prompt ?? "", /amber cloak and holy symbol/);
+  assert.equal(
+    database.players.find(
+      (player) => player.client_id === "portrait-upload-owner-client"
+    )?.portrait_asset_id,
+    uploaded.campaign.portraitAssetId
+  );
+});
+
+test("POST /api/campaigns/:campaignId/portrait/upload accepts generated preview-sized payloads", async () => {
+  const cookie = await signIn("large-portrait-upload-owner@example.com");
+  const width = 800;
+  const height = 800;
+  const imageBuffer = await sharp(randomBytes(width * height * 3), {
+    raw: {
+      width,
+      height,
+      channels: 3
+    }
+  })
+    .png()
+    .toBuffer();
+
+  assert.ok(imageBuffer.byteLength > 1_000_000);
+
+  const createdResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: {
+      cookie
+    },
+    payload: {
+      mode: "single_player",
+      title: "Large Portrait Campaign",
+      campaignGenre: "Classic Fantasy",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "classic_fantasy",
+      ownerClientId: "large-portrait-owner-client",
+      playerName: "Liora",
+      characterName: "Liora",
+      characterSheet: "Level 5 Elf Wizard"
+    }
+  });
+
+  assert.equal(createdResponse.statusCode, 201, createdResponse.body);
+  const created = CampaignCreateResponseSchema.parse(createdResponse.json());
+  const uploadResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${created.campaign.id}/portrait/upload`,
+    headers: {
+      cookie
+    },
+    payload: {
+      imageDataUrl: `data:image/png;base64,${imageBuffer.toString("base64")}`,
+      fileName: "generated-character-portrait.png",
+      guidelines: "generated preview image from the create-art step",
+      artStyle: "painterly_fantasy"
+    }
+  });
+
+  assert.equal(uploadResponse.statusCode, 200, uploadResponse.body);
+  const uploaded = CampaignCreateResponseSchema.parse(uploadResponse.json());
+
+  assert.ok(uploaded.campaign.portraitAssetId);
+  assert.match(uploaded.campaign.portraitUrl ?? "", /\/media\/campaigns\//);
+});
+
+test("POST /api/campaigns/:campaignId/portrait/upload reports invalid image bytes", async () => {
+  const cookie = await signIn("portrait-invalid-upload-owner@example.com");
+  const createdResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: {
+      cookie
+    },
+    payload: {
+      mode: "single_player",
+      title: "Invalid Upload Campaign",
+      campaignGenre: "Classic Fantasy",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "classic_fantasy",
+      ownerClientId: "portrait-invalid-upload-client",
+      playerName: "Ira",
+      characterName: "Ira",
+      characterSheet: "Level 5 Human Wizard"
+    }
+  });
+
+  assert.equal(createdResponse.statusCode, 201, createdResponse.body);
+  const created = CampaignCreateResponseSchema.parse(createdResponse.json());
+  const uploadResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${created.campaign.id}/portrait/upload`,
+    headers: {
+      cookie
+    },
+    payload: {
+      imageDataUrl: `data:image/png;base64,${Buffer.from("not an image").toString(
+        "base64"
+      )}`,
+      fileName: "broken.png"
+    }
+  });
+  const error = ApiErrorResponseSchema.parse(uploadResponse.json()).error;
+
+  assert.equal(uploadResponse.statusCode, 400);
+  assert.equal(error.code, "BAD_REQUEST");
+  assert.match(error.message, /Input buffer contains unsupported image format/);
+});
+
+test("POST /api/campaigns/:campaignId/portrait/upload rejects unsupported image MIME types", async () => {
+  const cookie = await signIn("portrait-gif-upload-owner@example.com");
+  const createdResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: {
+      cookie
+    },
+    payload: {
+      mode: "single_player",
+      title: "Unsupported Upload Campaign",
+      campaignGenre: "Classic Fantasy",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "classic_fantasy",
+      ownerClientId: "portrait-gif-upload-client",
+      playerName: "Gia",
+      characterName: "Gia",
+      characterSheet: "Level 5 Elf Ranger"
+    }
+  });
+
+  assert.equal(createdResponse.statusCode, 201, createdResponse.body);
+  const created = CampaignCreateResponseSchema.parse(createdResponse.json());
+  const uploadResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${created.campaign.id}/portrait/upload`,
+    headers: {
+      cookie
+    },
+    payload: {
+      imageDataUrl: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
+    }
+  });
+  const error = ApiErrorResponseSchema.parse(uploadResponse.json()).error;
+
+  assert.equal(uploadResponse.statusCode, 400);
+  assert.equal(error.code, "BAD_REQUEST");
+  assert.equal(error.message, "Upload a PNG, JPEG, or WebP image.");
+});
+
+test("POST /api/campaigns uses production Qwen base URL for character portraits", async () => {
+  const cookie = await signIn("portrait-production-env@example.com");
+  const originalFetch = globalThis.fetch;
+  const originalQwenImageApiKey = process.env.QWEN_IMAGE_API_KEY;
+  const originalDashscopeApiKey = process.env.DASHSCOPE_API_KEY;
+  const originalQwenApiKey = process.env.QWEN_API_KEY;
+  const originalQwenImageEndpoint = process.env.QWEN_IMAGE_ENDPOINT;
+  const originalQwenBaseUrl = process.env.QWEN_BASE_URL;
+  const originalQwenImageModel = process.env.QWEN_IMAGE_MODEL;
+  const imageBuffer = await sharp({
+    create: {
+      width: 128,
+      height: 128,
+      channels: 4,
+      background: "#0f766e"
+    }
+  })
+    .png()
+    .toBuffer();
+  const imageGenerationEndpoint =
+    "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation";
+  const fetchCalls: string[] = [];
+
+  delete process.env.QWEN_IMAGE_API_KEY;
+  delete process.env.DASHSCOPE_API_KEY;
+  process.env.QWEN_API_KEY = "production-qwen-key";
+  delete process.env.QWEN_IMAGE_ENDPOINT;
+  process.env.QWEN_BASE_URL =
+    "https://dashscope.aliyuncs.com/compatible-mode/v1";
+  delete process.env.QWEN_IMAGE_MODEL;
+
+  globalThis.fetch = (async (url, init) => {
+    fetchCalls.push(String(url));
+
+    if (String(url) === imageGenerationEndpoint) {
+      const headers = new Headers(init?.headers);
+      assert.equal(headers.get("authorization"), "Bearer production-qwen-key");
+      const body = JSON.parse(String(init?.body)) as {
+        model?: string;
+      };
+
+      assert.equal(body.model, "qwen-image-2.0-pro");
+
+      return new Response(
+        JSON.stringify({
+          request_id: "qwen-image-production-request",
+          output: {
+            choices: [
+              {
+                message: {
+                  content: [
+                    {
+                      image: "https://qwen-image.example.test/production.png"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json"
+          }
+        }
+      );
+    }
+
+    if (String(url) === "https://qwen-image.example.test/production.png") {
+      return new Response(imageBuffer, {
+        status: 200,
+        headers: {
+          "content-type": "image/png"
+        }
+      });
+    }
+
+    throw new Error(`Unexpected fetch URL: ${String(url)}`);
+  }) as typeof fetch;
+
+  try {
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/campaigns",
+      headers: {
+        cookie
+      },
+      payload: {
+        mode: "multiplayer",
+        campaignGenreKind: "preset",
+        campaignGenrePresetId: "classic_fantasy",
+        ownerClientId: "portrait-production-env-client",
+        playerName: "Production Portrait Owner",
+        characterName: "Thalia",
+        characterSheet:
+          "Character Name: Thalia\nLevel: 2\nClass: Fighter\nSpecies: Human\nDM Brief: A shield-bearing mercenary with sea-green armor.",
+        generateCharacterPortrait: true
+      }
+    });
+
+    assert.equal(createResponse.statusCode, 201, createResponse.body);
+
+    const created = CampaignCreateResponseSchema.parse(createResponse.json());
+    assert.ok(created.campaign.portraitAssetId);
+    assert.match(
+      created.campaign.portraitUrl ?? "",
+      /^\/media\/campaigns\/.+\/512\.webp$/
+    );
+    assert.deepEqual(fetchCalls, [
+      imageGenerationEndpoint,
+      "https://qwen-image.example.test/production.png"
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalQwenImageApiKey === undefined) {
+      delete process.env.QWEN_IMAGE_API_KEY;
+    } else {
+      process.env.QWEN_IMAGE_API_KEY = originalQwenImageApiKey;
+    }
+    if (originalDashscopeApiKey === undefined) {
+      delete process.env.DASHSCOPE_API_KEY;
+    } else {
+      process.env.DASHSCOPE_API_KEY = originalDashscopeApiKey;
+    }
+    if (originalQwenApiKey === undefined) {
+      delete process.env.QWEN_API_KEY;
+    } else {
+      process.env.QWEN_API_KEY = originalQwenApiKey;
+    }
+    if (originalQwenImageEndpoint === undefined) {
+      delete process.env.QWEN_IMAGE_ENDPOINT;
+    } else {
+      process.env.QWEN_IMAGE_ENDPOINT = originalQwenImageEndpoint;
+    }
+    if (originalQwenBaseUrl === undefined) {
+      delete process.env.QWEN_BASE_URL;
+    } else {
+      process.env.QWEN_BASE_URL = originalQwenBaseUrl;
+    }
+    if (originalQwenImageModel === undefined) {
+      delete process.env.QWEN_IMAGE_MODEL;
+    } else {
+      process.env.QWEN_IMAGE_MODEL = originalQwenImageModel;
+    }
+  }
+});
+
 test("POST /api/campaigns records failed character portrait generation", async () => {
   const cookie = await signIn("portrait-failure@example.com");
   const originalFetch = globalThis.fetch;
@@ -199,6 +1861,7 @@ test("POST /api/campaigns records failed character portrait generation", async (
   await writeFile(
     join(tempDir, ".env.local"),
     [
+      "THIS LINE HAS NO SEPARATOR",
       "QWEN_IMAGE_API_KEY='file-qwen-image-key'",
       'QWEN_IMAGE_ENDPOINT="https://qwen-image.example.test/fail"',
       "QWEN_IMAGE_MODEL=qwen-image-file-model"
@@ -495,7 +2158,21 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
       ownerClientId: "eldermere-client",
       playerName: "Eldermere Player",
       characterName: "Mira",
-      characterSheet: "A ruin-delver who follows old glowing roads."
+      characterSheet: [
+        "Character Name: Mira",
+        "",
+        "Backstory",
+        "Mira is a ruin-delver who follows old glowing roads after her missing mentor, Captain Saela, left her a brass compass that points toward Selwick only during stormlight.",
+        "",
+        "Core Stats",
+        "Class: Rogue",
+        "Background: Archaeologist"
+      ].join("\n"),
+      eldermereStart: {
+        regionName: "The Salt Concordat",
+        settlementName: "Selwick",
+        reason: "Mira's generated backstory points toward port trouble."
+      }
     }
   });
 
@@ -515,15 +2192,59 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   const openingPlan = metadata.eldermereOpeningPlan as Record<string, unknown>;
   const plannerInput = getProviderInputs().at(0);
   const narratorInput = getProviderInputs().at(1);
+  const openingEvent = database.campaignEvents.find(
+    (event) =>
+      event.campaign_id === created.campaign.id &&
+      event.type === "adventure_begun"
+  );
+  const openingPayload = openingEvent?.payload as Record<string, unknown> | undefined;
+  const aiDebug = openingPayload?.aiDebug as Record<string, unknown> | undefined;
+  const plannerDebug = aiDebug?.eldermereOpeningPlanner as
+    | Record<string, unknown>
+    | undefined;
 
   assert.equal(worldProfile.worldName, "Eldermere");
   assert.equal(worldProfile.source, "flagship_world");
-  assert.equal(typeof selectedRegion.name, "string");
-  assert.equal(typeof startingLocation.name, "string");
+  assert.equal(selectedRegion.name, "The Salt Concordat");
+  assert.equal(startingLocation.name, "Selwick");
   assert.equal(startingLocation.displayLocation, startingLocation.name);
   assert.equal(metadata.eldermereOpeningPlanVersion, 1);
   assert.equal(openingPlan.campaign_title, "The Quiet Road");
+  assert.equal(openingPayload?.content, "A lantern flickers over the old road as your adventure begins.\n\nA weathered sign points toward a ruined watchtower beyond the trees.\n\nWhat do you do?");
   assert.equal(getProviderInputs().length, 2);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const foundationChunk = database.contextChunks.find(
+    (chunk) =>
+      chunk.campaign_id === created.campaign.id &&
+      chunk.context_key === "world:sunder-kiln"
+  );
+  const foundationSecret = database.contextChunks.find(
+    (chunk) =>
+      chunk.campaign_id === created.campaign.id &&
+      chunk.context_key === "secret:sunder-kiln"
+  );
+  const foundationThread = database.contextChunks.find(
+    (chunk) =>
+      chunk.campaign_id === created.campaign.id &&
+      chunk.context_key === "thread:lysa-trail"
+  );
+
+  assert.ok(foundationChunk);
+  assert.equal(foundationChunk.category, "relevant_world_context");
+  assert.equal(foundationChunk.visibility, "player_safe");
+  assert.match(foundationChunk.body_markdown, /## Canonical Grounding/);
+  assert.match(foundationChunk.body_markdown, /## Embedded Threads/);
+  assert.ok(foundationSecret);
+  assert.equal(foundationSecret.category, "overarching_big_plot_secrets");
+  assert.equal(foundationSecret.visibility, "dm_only");
+  assert.match(foundationSecret.body_markdown, /## Hidden Truth/);
+  assert.ok(foundationThread);
+  assert.equal(foundationThread.category, "quests_open_threads");
+  assert.equal(foundationThread.visibility, "player_safe");
+  assert.doesNotMatch(foundationThread.body_markdown, /DM Eyes Only|Hidden Truth/i);
+  assert.doesNotMatch(foundationThread.body_markdown, /duplicate ledger/i);
+  assert.doesNotMatch(foundationThread.body_markdown, /Garrick Vaultgate/i);
 
   assert.ok(plannerInput);
   assert.match(plannerInput.instructions, /campaign-opening planner/);
@@ -541,7 +2262,19 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.doesNotMatch(plannerInput.message, /Recurring live conflicts:/);
   assert.match(plannerInput.message, /Selected opener region and settlement:/);
   assert.match(plannerInput.message, /use this selected region and settlement/);
+  assert.match(plannerInput.message, /Validated name bank for this campaign opener:/);
+  assert.match(plannerInput.message, /People:/);
+  assert.match(plannerInput.message, /Settlements and landmarks:/);
+  assert.match(plannerInput.message, /Threats and creatures:/);
+  assert.match(plannerInput.message, /prefer the validated name bank above/i);
   assert.match(plannerInput.message, /Opening lore clarity rule:/);
+  assert.match(plannerInput.message, /Player backstory anchors for the opening scene:/);
+  assert.match(plannerInput.message, /Captain Saela/);
+  assert.match(plannerInput.message, /compass that points toward Selwick/);
+  assert.match(
+    plannerInput.instructions,
+    /Use the player backstory anchors from the opening request/
+  );
   assert.match(
     plannerInput.message,
     /use no more than 2-3 new Eldermere-specific proper nouns/
@@ -569,6 +2302,25 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(narratorInput.message, /allowed_player_facing_terms/);
   assert.match(narratorInput.message, /forbidden_opening_terms/);
   assert.match(narratorInput.message, /Second Dominion/);
+  assert.match(narratorInput.message, /Player backstory anchors for the opening scene:/);
+  assert.match(narratorInput.message, /Captain Saela/);
+  assert.match(
+    narratorInput.message,
+    /Keep the first scene anchored in the planned region and starting location/
+  );
+  assert.match(
+    narratorInput.message,
+    /Make at least one player backstory anchor visible in the first scene/
+  );
+  assert.match(narratorInput.message, /arrival runway into the first live scene/);
+  assert.match(narratorInput.message, /Paragraph 1 must explain why/);
+  assert.match(narratorInput.message, /The first sentence must be about/);
+  assert.match(narratorInput.message, /You stand at/);
+  assert.match(narratorInput.message, /Paragraph 2 must describe what/);
+  assert.match(narratorInput.message, /personal urgency beat/);
+  assert.match(narratorInput.message, /grounded, direct fantasy prose/);
+  assert.match(narratorInput.message, /do not say they disappeared/);
+  assert.match(narratorInput.message, /Do not invent new circumstances/);
   assert.doesNotMatch(narratorInput.message, /Flagship world context:/);
   assert.doesNotMatch(narratorInput.message, /Seven regions available for the opener:/);
   assert.doesNotMatch(narratorInput.instructions, /World Context:/);
@@ -589,6 +2341,19 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
     narratorInput.message,
     /Write the player-facing opener only from the Eldermere opening plan/
   );
+
+  assert.ok(plannerDebug);
+  assert.equal(plannerDebug.rawResponse, JSON.stringify(openingPlan));
+  assert.deepEqual(plannerDebug.parsedOutput, openingPlan);
+  assert.match(
+    JSON.stringify(plannerDebug.requestMessages),
+    /campaign-opening planner/
+  );
+  assert.match(
+    JSON.stringify(plannerDebug.requestMessages),
+    /Selected opener region and settlement/
+  );
+  assert.match(JSON.stringify(plannerDebug.requestMessages), /Captain Saela/);
 });
 
 test("GET /api/campaigns/:campaignId/npc-cards lists existing NPC context cards", async () => {

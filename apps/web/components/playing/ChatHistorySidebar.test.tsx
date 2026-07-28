@@ -63,7 +63,7 @@ describe("ChatHistorySidebar", () => {
     expect(props.onViewCharacterSheet).toHaveBeenCalledTimes(1);
   });
 
-  it("shows the player portrait above the resources button", () => {
+  it("shows the player portrait above the resources button and opens the portrait viewer", () => {
     const props = renderChatHistorySidebar({
       playerPortraitAlt: "Seraphina portrait",
       playerPortraitUrl: "/media/campaigns/campaign-1/players/player-1/portraits/asset-1/128.webp"
@@ -71,7 +71,7 @@ describe("ChatHistorySidebar", () => {
 
     const portrait = screen.getByRole("img", { name: /seraphina portrait/i });
     const portraitButton = screen.getByRole("button", {
-      name: /open player resources/i
+      name: /view player portrait/i
     });
     const resourcesButton = screen.getByRole("button", {
       name: "Player Resources"
@@ -88,7 +88,47 @@ describe("ChatHistorySidebar", () => {
 
     fireEvent.click(portraitButton);
 
+    expect(props.onViewCharacterSheet).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("dialog", { name: /player portrait/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("img", { name: /seraphina portrait/i })
+    ).toHaveLength(2);
+    expect(
+      screen.getAllByRole("img", { name: /seraphina portrait/i })[1]
+    ).toHaveAttribute(
+      "src",
+      "/media/campaigns/campaign-1/players/player-1/portraits/asset-1/original.png"
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /close player portrait/i })
+    );
+
+    expect(
+      screen.queryByRole("dialog", { name: /player portrait/i })
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(resourcesButton);
+
     expect(props.onViewCharacterSheet).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a pending portrait placeholder while character art is generating", () => {
+    renderChatHistorySidebar({
+      playerPortraitStatus: "pending"
+    });
+
+    expect(screen.getByText(/generating portrait/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "this takes about 3 minutes, so don't be too surprised its taking a bit, hope its not too much of a hassle ;)"
+      )
+    ).toHaveClass("chat-sidebar-portrait-note");
+    expect(
+      screen.queryByRole("button", { name: /view player portrait/i })
+    ).not.toBeInTheDocument();
   });
 
   it("renders chats with previews and marks the active chat", () => {
