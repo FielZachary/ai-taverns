@@ -214,6 +214,27 @@ type DmTurnTraceRecord = {
   created_at: Date;
 };
 
+type CampaignDmGuidanceRecord = {
+  campaign_id: string;
+  trace_id: string;
+  covered_message_count: number;
+  guidance: Record<string, unknown>;
+  updated_at: Date;
+};
+
+type LivingWorldEngineRunRecord = {
+  id: string;
+  campaign_id: string;
+  trace_id: string;
+  turn_id: string | null;
+  covered_message_count: number;
+  accepted_patch_count: number;
+  discarded_patch_count: number;
+  guidance: unknown;
+  payload: unknown;
+  created_at: Date;
+};
+
 class FakeDatabase {
   loginTokens: LoginTokenRecord[] = [];
   users: UserRecord[] = [];
@@ -227,6 +248,8 @@ class FakeDatabase {
   mediaAssets: MediaAssetRecord[] = [];
   contextChunks: ContextChunkRecord[] = [];
   dmTurnTraces: DmTurnTraceRecord[] = [];
+  campaignDmGuidance: CampaignDmGuidanceRecord[] = [];
+  livingWorldEngineRuns: LivingWorldEngineRunRecord[] = [];
   turns: TurnRecord[] = [];
   submissions: SubmissionRecord[] = [];
   nextId = 1;
@@ -408,6 +431,14 @@ class FakeDatabase {
     }
 
     if (normalizedSql === "select * from campaigns where id = $1 for update") {
+      const campaign = this.campaigns.find(
+        (candidate) => candidate.id === values[0]
+      );
+
+      return { rows: campaign ? ([campaign] as T[]) : ([] as T[]) };
+    }
+
+    if (normalizedSql === "select * from campaigns where id = $1 limit 1") {
       const campaign = this.campaigns.find(
         (candidate) => candidate.id === values[0]
       );
@@ -862,6 +893,36 @@ class FakeDatabase {
       return { rows: [{ id: record.id } as T] };
     }
 
+    if (normalizedSql.startsWith("select count(*) as count from campaign_events")) {
+      const campaignId = values[0] as string;
+
+      return {
+        rows: [
+          {
+            count: this.campaignEvents.filter((event) => {
+              const payload =
+                event.payload && typeof event.payload === "object"
+                  ? (event.payload as Record<string, unknown>)
+                  : {};
+
+              return (
+                event.campaign_id === campaignId &&
+                [
+                  "turn_submitted",
+                  "turn_resolved",
+                  "adventure_begun",
+                  "dm_question",
+                  "dm_answer"
+                ].includes(event.type) &&
+                typeof payload.content === "string" &&
+                payload.content.trim().length > 0
+              );
+            }).length
+          } as T
+        ]
+      };
+    }
+
     if (
       normalizedSql.startsWith(
         "update campaign_events set payload = jsonb_set"
@@ -1072,6 +1133,34 @@ class FakeDatabase {
     if (
       normalizedSql.startsWith(
         "select context_key, category, title, visibility, priority, body_markdown, updated_at from campaign_context_chunks"
+      ) &&
+      normalizedSql.includes("limit 120")
+    ) {
+      const campaignId = values[0] as string;
+
+      return {
+        rows: this.contextChunks
+          .filter(
+            (chunk) =>
+              chunk.campaign_id === campaignId && chunk.archived_at === null
+          )
+          .sort((left, right) => {
+            const priorityDelta = right.priority - left.priority;
+
+            if (priorityDelta !== 0) {
+              return priorityDelta;
+            }
+
+            return right.updated_at.getTime() - left.updated_at.getTime();
+          })
+          .slice(0, 120)
+          .map((chunk) => ({ ...chunk }) as T)
+      };
+    }
+
+    if (
+      normalizedSql.startsWith(
+        "select context_key, category, title, visibility, priority, body_markdown, updated_at from campaign_context_chunks"
       )
     ) {
       const campaignId = values[0] as string;
@@ -1126,6 +1215,143 @@ class FakeDatabase {
     }
 
     if (normalizedSql.startsWith("insert into dm_memory_patch_logs")) {
+      return { rows: [] as T[] };
+    }
+
+    if (normalizedSql.startsWith("select guidance, updated_at from campaign_dm_guidance")) {
+      const campaignId = values[0] as string;
+      const record = this.campaignDmGuidance.find(
+        (candidate) => candidate.campaign_id === campaignId
+      );
+
+      return { rows: record ? ([record] as T[]) : ([] as T[]) };
+    }
+
+    if (
+      normalizedSql.startsWith(
+        "insert into campaign_dm_guidance"
+      )
+    ) {
+      const campaignId = values[0] as string;
+      const existing = this.campaignDmGuidance.find(
+        (candidate) => candidate.campaign_id === campaignId
+      );
+      const guidance =
+        typeof values[3] === "string"
+          ? (JSON.parse(values[3] as string) as Record<string, unknown>)
+          : (values[3] as Record<string, unknown>);
+
+      if (existing) {
+        existing.trace_id = values[1] as string;
+        existing.covered_message_count = values[2] as number;
+        existing.guidance = guidance;
+        existing.updated_at = new Date();
+      } else {
+        this.campaignDmGuidance.push({
+          campaign_id: campaignId,
+          trace_id: values[1] as string,
+          covered_message_count: values[2] as number,
+          guidance,
+          updated_at: new Date()
+        });
+      }
+
+      return { rows: [] as T[] };
+    }
+
+    if (
+      normalizedSql.startsWith(
+        "select covered_message_count from living_world_engine_runs"
+      )
+    ) {
+      const campaignId = values[0] as string;
+      const record = this.livingWorldEngineRuns
+        .filter((candidate) => candidate.campaign_id === campaignId)
+        .sort((left, right) => {
+          const coveredDelta =
+            right.covered_message_count - left.covered_message_count;
+
+          if (coveredDelta !== 0) {
+            return coveredDelta;
+          }
+
+          return right.created_at.getTime() - left.created_at.getTime();
+        })[0];
+
+      return {
+        rows: record
+          ? ([{ covered_message_count: record.covered_message_count }] as T[])
+          : ([] as T[])
+      };
+    }
+
+    if (normalizedSql.startsWith("insert into living_world_engine_runs")) {
+      const campaignId = values[0] as string;
+      const coveredMessageCount = values[3] as number;
+      const existing = this.livingWorldEngineRuns.find(
+        (candidate) =>
+          candidate.campaign_id === campaignId &&
+          candidate.covered_message_count === coveredMessageCount
+      );
+
+      if (normalizedSql.includes("returning id")) {
+        if (existing) {
+          return { rows: [] as T[] };
+        }
+
+        const record = {
+          id: `living-world-run-${this.nextId++}`,
+          campaign_id: campaignId,
+          trace_id: values[1] as string,
+          turn_id: (values[2] as string | null) ?? null,
+          covered_message_count: coveredMessageCount,
+          accepted_patch_count: 0,
+          discarded_patch_count: 0,
+          guidance: null,
+          payload:
+            typeof values[4] === "string"
+              ? JSON.parse(values[4] as string)
+              : values[4],
+          created_at: new Date()
+        } satisfies LivingWorldEngineRunRecord;
+
+        this.livingWorldEngineRuns.push(record);
+
+        return { rows: [{ id: record.id } as T] };
+      }
+
+      const record =
+        existing ??
+        ({
+          id: `living-world-run-${this.nextId++}`,
+          campaign_id: campaignId,
+          trace_id: values[1] as string,
+          turn_id: (values[2] as string | null) ?? null,
+          covered_message_count: coveredMessageCount,
+          accepted_patch_count: 0,
+          discarded_patch_count: 0,
+          guidance: null,
+          payload: {},
+          created_at: new Date()
+        } satisfies LivingWorldEngineRunRecord);
+
+      record.trace_id = values[1] as string;
+      record.turn_id = (values[2] as string | null) ?? null;
+      record.accepted_patch_count = values[7] as number;
+      record.discarded_patch_count = values[8] as number;
+      record.guidance =
+        typeof values[9] === "string"
+          ? JSON.parse(values[9] as string)
+          : values[9];
+      record.payload =
+        typeof values[10] === "string"
+          ? JSON.parse(values[10] as string)
+          : values[10];
+
+      if (!existing) {
+        this.livingWorldEngineRuns.push(record);
+      }
+
       return { rows: [] as T[] };
     }
 
@@ -2114,6 +2340,82 @@ before(async () => {
 
           return {
             id: "provider-foundation-compiler-1",
+            content,
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: content,
+              model: "test-model",
+              temperature: 0.8,
+              providerTimings: []
+            }
+          };
+        }
+
+        if (input.instructions.includes("living world pressure engine")) {
+          const content = JSON.stringify({
+            world_clock_updates: [
+              {
+                clock_id: "thread:lysa-trail:accord-pressure",
+                title: "Accord pressure on Lysa's trail",
+                status: "advanced",
+                summary:
+                  "The Accord hears enough public talk to start moving surveyors toward the same records.",
+                visibility: "dm_only",
+                related_context_ids: ["thread:lysa-trail"]
+              }
+            ],
+            patches: [
+              {
+                operation: "append",
+                context_id: "thread:lysa-trail",
+                markdown:
+                  "## Offscreen Movement\n- The Claim-Stake Accord has begun asking about the same records, making the trail more contested."
+              }
+            ],
+            new_context_chunks: [],
+            remove_context_chunks: [],
+            dm_guidance: {
+              current_direction:
+                "The Claim-Stake Accord is getting closer to Lysa's trail because the player's public investigation created noise. Surface that pressure through records being sealed, surveyors asking questions, or an ally warning the player.",
+              pressure_to_surface: [
+                "Accord surveyors asking about Lysa",
+                "Public records becoming harder to access"
+              ],
+              soft_moves: [
+                "Show posted claim notices or nervous clerks before a direct confrontation"
+              ],
+              hard_moves_if_earned: [
+                "If the player ignores the pressure, an Accord agent can reach a clue first"
+              ],
+              avoid: [
+                "Do not reveal Lysa's true fate",
+                "Do not force the player to go to the kiln immediately"
+              ]
+            },
+            possible_intrusions: [
+              {
+                title: "Accord surveyors arrive",
+                summary:
+                  "Surveyors enter the settlement asking after the same records.",
+                fairness_reason:
+                  "The player has been investigating Lysa in public.",
+                pacing_note: "Use after a softer warning."
+              }
+            ],
+            contradiction_warnings: []
+          });
+
+          return {
+            id: "provider-living-world-1",
             content,
             debug: {
               requestMessages: [
