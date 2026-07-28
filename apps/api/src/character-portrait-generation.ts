@@ -100,7 +100,8 @@ const defaultQwenImageModel = "qwen-image-2.0-pro";
 const defaultOpenAiImageEndpoint =
   "https://api.openai.com/v1/images/generations";
 const defaultOpenAiImageModel = "gpt-image-2";
-const openAiCharacterPortraitSize = "1536x1024";
+const openAiCharacterPortraitSize = "1024x1024";
+const qwenCharacterPortraitSize = "1024*1024";
 let localEnvCache: Record<string, string> | undefined;
 let localEnvCacheCwd: string | undefined;
 
@@ -268,7 +269,7 @@ function characterPortraitPrompt(input: {
     "",
     artStyleDirection(input.artStyle),
     guidelines ? `User art guidelines: ${guidelines}` : "",
-    "Composition: cinematic environmental character portrait, 3:2 landscape key art, medium-distance framing. Show the character from head to at least mid-thigh or knees with full torso, hands, belt, cloak, and main props visible. Do not make a tight bust, headshot, chest-up crop, or flat studio portrait. Place the character slightly off center with generous readable background on both sides: a real fantasy adventure location with depth, weather, architecture, lanterns, banners, roads, ruins, or distant landmarks. Keep the head safely away from the top edge and leave room around the full silhouette. No frame, no UI, no text, no logo, no watermark."
+    "Composition: square 1024 by 1024 cinematic environmental character portrait, medium-distance framing. Show the character from head to at least mid-thigh or knees with full torso, hands, belt, cloak, and main props visible. Do not make a tight bust, headshot, chest-up crop, or flat studio portrait. Place the character slightly off center with generous readable background around them: a real fantasy adventure location with depth, weather, architecture, lanterns, banners, roads, ruins, or distant landmarks. Keep the head safely away from the top edge and leave room around the full silhouette. No frame, no UI, no text, no logo, no watermark."
   ].join("\n");
 }
 
@@ -323,7 +324,7 @@ async function fetchQwenImage(input: {
         prompt_extend: true,
         watermark: false,
         n: 1,
-        size: "1024*1024",
+        size: qwenCharacterPortraitSize,
         negative_prompt: input.negativePrompt
       }
     })
@@ -523,7 +524,7 @@ async function storePortraitSource(input: {
   }
 
   const displayObject =
-    storedObjects.find((object) => object.objectKey.endsWith("/768.webp")) ??
+    storedObjects.find((object) => object.objectKey.endsWith("/512.webp")) ??
     storedObjects.at(-1);
 
   if (!displayObject) {

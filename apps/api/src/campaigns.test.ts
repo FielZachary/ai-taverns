@@ -387,10 +387,11 @@ test("POST /api/campaigns/portrait/preview can use OpenAI GPT Image", async () =
       body.prompt ?? "",
       /Create fantasy character key art/
     );
+    assert.match(body.prompt ?? "", /square 1024 by 1024/);
     assert.match(body.prompt ?? "", /Mira Vale/);
     assert.match(body.prompt ?? "", /Avoid:/);
     assert.equal(body.n, 1);
-    assert.equal(body.size, "1536x1024");
+    assert.equal(body.size, "1024x1024");
 
     return new Response(
       JSON.stringify({
@@ -559,13 +560,18 @@ test("POST /api/campaigns can generate and attach a character portrait", async (
         input?: {
           messages?: { content?: { text?: string }[] }[];
         };
+        parameters?: {
+          size?: string;
+        };
       };
       const prompt = body.input?.messages?.[0]?.content?.[0]?.text ?? "";
 
       assert.equal(body.model, "qwen-image-2.0-pro");
       assert.match(prompt, /Create fantasy character key art/);
+      assert.match(prompt, /square 1024 by 1024/);
       assert.match(prompt, /Seraphina/);
       assert.match(prompt, /Level 5 Tiefling Warlock/);
+      assert.equal(body.parameters?.size, "1024*1024");
 
       return new Response(
         JSON.stringify({
@@ -634,7 +640,7 @@ test("POST /api/campaigns can generate and attach a character portrait", async (
     assert.ok(created.campaign.portraitAssetId);
     assert.match(
       created.campaign.portraitUrl ?? "",
-      /^\/media\/campaigns\/.+\/768\.webp$/
+      /^\/media\/campaigns\/.+\/512\.webp$/
     );
     assert.deepEqual(fetchCalls, [
       "https://qwen-image.example.test/generation",
@@ -1117,7 +1123,7 @@ test("POST /api/campaigns uses production Qwen base URL for character portraits"
     assert.ok(created.campaign.portraitAssetId);
     assert.match(
       created.campaign.portraitUrl ?? "",
-      /^\/media\/campaigns\/.+\/768\.webp$/
+      /^\/media\/campaigns\/.+\/512\.webp$/
     );
     assert.deepEqual(fetchCalls, [
       imageGenerationEndpoint,

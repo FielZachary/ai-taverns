@@ -23,7 +23,7 @@ async function samplePng() {
     .toBuffer();
 }
 
-test("createCharacterPortraitVariants creates landscape webp variants", async () => {
+test("createCharacterPortraitVariants creates square webp variants", async () => {
   const variants = await createCharacterPortraitVariants(await samplePng());
 
   assert.deepEqual(
@@ -35,14 +35,14 @@ test("createCharacterPortraitVariants creates landscape webp variants", async ()
     })),
     [
       {
-        name: "768",
-        width: 768,
+        name: "512",
+        width: 512,
         height: 512,
         contentType: "image/webp"
       },
       {
-        name: "192",
-        width: 192,
+        name: "128",
+        width: 128,
         height: 128,
         contentType: "image/webp"
       }
@@ -68,7 +68,7 @@ test("local media storage writes objects and returns stable metadata", async () 
   assert.ok(smallVariant);
 
   const result = await storage.putObject({
-    objectKey: "campaigns/campaign-1/players/player-1/portraits/asset-1/192.webp",
+    objectKey: "campaigns/campaign-1/players/player-1/portraits/asset-1/128.webp",
     body: smallVariant.buffer,
     contentType: "image/webp"
   });
@@ -77,14 +77,14 @@ test("local media storage writes objects and returns stable metadata", async () 
   assert.equal(result.bucket, null);
   assert.equal(
     result.objectKey,
-    "campaigns/campaign-1/players/player-1/portraits/asset-1/192.webp"
+    "campaigns/campaign-1/players/player-1/portraits/asset-1/128.webp"
   );
   assert.equal(
     result.publicUrl,
-    "/media/campaigns/campaign-1/players/player-1/portraits/asset-1/192.webp"
+    "/media/campaigns/campaign-1/players/player-1/portraits/asset-1/128.webp"
   );
   assert.equal(result.contentType, "image/webp");
-  assert.equal(result.width, 192);
+  assert.equal(result.width, 128);
   assert.equal(result.height, 128);
   assert.match(result.sha256, /^[a-f0-9]{64}$/);
 
@@ -169,7 +169,7 @@ test("Spaces media storage uploads public objects and returns CDN metadata", asy
     "https://cdn.example.com/media/campaigns/campaign-1/portrait.webp"
   );
   assert.equal(result.contentType, "image/webp");
-  assert.equal(result.width, 768);
+  assert.equal(result.width, 512);
   assert.equal(result.height, 512);
   assert.match(result.sha256, /^[a-f0-9]{64}$/);
   assert.equal(sentCommands.length, 1);

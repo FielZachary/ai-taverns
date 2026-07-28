@@ -63,8 +63,8 @@ export async function createCharacterPortraitVariants(
   source: Buffer
 ): Promise<ImageVariant[]> {
   const sizes = [
-    { name: "768", width: 768, height: 512, quality: 86 },
-    { name: "192", width: 192, height: 128, quality: 82 }
+    { name: "512", width: 512, height: 512, quality: 86 },
+    { name: "128", width: 128, height: 128, quality: 82 }
   ];
 
   return Promise.all(
