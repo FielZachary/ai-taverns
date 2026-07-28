@@ -380,33 +380,36 @@ describe("NewAdventureForm", () => {
     expect(
       screen.getByRole("heading", { name: /choose your proficiencies/i })
     ).toBeInTheDocument();
-    expect(
-      screen
-        .getByRole("button", { name: /dice set/i })
-        .style.getPropertyValue("--option-art-url")
-    ).toContain("/new-adventure/options/tools/dice-set.jpg");
+    const diceSet = screen.getByRole("button", { name: /dice set/i });
+
+    expect(diceSet).toHaveClass("art-option-card");
+    expect(diceSet.style.getPropertyValue("--option-art-url")).toContain(
+      "/new-adventure/options/tools/dice-set.jpg"
+    );
 
     await nextCharacterStep();
 
     expect(
       screen.getByRole("heading", { name: /choose your background/i })
     ).toBeInTheDocument();
-    expect(
-      screen
-        .getByRole("button", { name: /folk hero/i })
-        .style.getPropertyValue("--option-art-url")
-    ).toContain("/new-adventure/options/backgrounds/folk-hero.jpg");
+    const folkHero = screen.getByRole("button", { name: /folk hero/i });
+
+    expect(folkHero).toHaveClass("art-option-card");
+    expect(folkHero.style.getPropertyValue("--option-art-url")).toContain(
+      "/new-adventure/options/backgrounds/folk-hero.jpg"
+    );
 
     await nextCharacterStep();
 
     expect(
       screen.getByRole("heading", { name: /choose your skills/i })
     ).toBeInTheDocument();
-    expect(
-      screen
-        .getByRole("button", { name: /athletics/i })
-        .style.getPropertyValue("--option-art-url")
-    ).toContain("/new-adventure/options/skills/athletics.jpg");
+    const athletics = screen.getByRole("button", { name: /athletics/i });
+
+    expect(athletics).toHaveClass("art-option-card");
+    expect(athletics.style.getPropertyValue("--option-art-url")).toContain(
+      "/new-adventure/options/skills/athletics.jpg"
+    );
 
     await nextCharacterStep();
 
@@ -424,6 +427,7 @@ describe("NewAdventureForm", () => {
     expect(battleaxe.style.getPropertyValue("--option-art-url")).toContain(
       "/new-adventure/options/weapons/battleaxe.jpg"
     );
+    expect(battleaxe).toHaveClass("art-option-card");
     expect(weaponModal).toHaveClass("weapon-equipment-modal");
     expect(weaponGrid).toHaveClass("weapon-equipment-modal-options");
     expect(battleaxe).toHaveTextContent("1d8 slashing");
