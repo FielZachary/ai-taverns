@@ -395,7 +395,7 @@ test("POST /api/campaigns/portrait/preview can use OpenAI GPT Image", async () =
     assert.match(body.prompt ?? "", /Avoid:/);
     assert.equal(body.n, 1);
     assert.equal(body.size, "1024x1024");
-    assert.equal(body.quality, "low");
+    assert.equal(body.quality, "medium");
     assert.equal(body.output_format, "jpeg");
     assert.equal(body.output_compression, 88);
 

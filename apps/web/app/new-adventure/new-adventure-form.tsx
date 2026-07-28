@@ -3484,9 +3484,9 @@ export function NewAdventureForm({
   const [portraitPreviewDataUrl, setPortraitPreviewDataUrl] = useState("");
   const [characterArtGuidelines, setCharacterArtGuidelines] = useState("");
   const [characterArtStyle, setCharacterArtStyle] =
-    useState<CharacterArtStyle>("painterly_fantasy");
+    useState<CharacterArtStyle>("ink_and_watercolor");
   const [characterImageModel, setCharacterImageModel] =
-    useState<CharacterImageModel>("qwen");
+    useState<CharacterImageModel>("openai");
   const [uploadedPortraitFileName, setUploadedPortraitFileName] = useState("");
   const [flowTransition, setFlowTransition] =
     useState<FlowTransitionState>("idle");

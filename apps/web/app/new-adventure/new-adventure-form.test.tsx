@@ -475,9 +475,8 @@ describe("NewAdventureForm", () => {
       screen.getByRole("heading", { name: /create your character art/i })
     ).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Image model"), {
-      target: { value: "openai" }
-    });
+    expect(screen.getByLabelText("Image model")).toHaveValue("openai");
+    expect(screen.getByLabelText("Art style")).toHaveValue("ink_and_watercolor");
     fireEvent.click(screen.getByRole("button", { name: /create art/i }));
 
     await act(async () => {});
@@ -486,6 +485,7 @@ describe("NewAdventureForm", () => {
       expect.objectContaining({
         characterName: "Mira Vale",
         campaignGenre: "Eldermere",
+        artStyle: "ink_and_watercolor",
         imageModel: "openai"
       })
     );

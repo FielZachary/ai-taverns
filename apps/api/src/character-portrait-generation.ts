@@ -101,7 +101,7 @@ const defaultOpenAiImageEndpoint =
   "https://api.openai.com/v1/images/generations";
 const defaultOpenAiImageModel = "gpt-image-2";
 const openAiCharacterPortraitSize = "1024x1024";
-const openAiCharacterPortraitQuality = "low";
+const openAiCharacterPortraitQuality = "medium";
 const openAiCharacterPortraitOutputFormat = "jpeg";
 const openAiCharacterPortraitOutputCompression = 88;
 const qwenCharacterPortraitSize = "1024*1024";
