@@ -279,13 +279,17 @@ function optionArtSlug(value: string) {
 }
 
 function optionArtUrl(category: "tools" | "backgrounds" | "skills" | "weapons", value: string) {
-  return `${optionArtRoot}/${category}/${optionArtSlug(value)}.jpg`;
+  return encodeURI(`${optionArtRoot}/${category}/${optionArtSlug(value)}.jpg`);
 }
 
 function optionArtStyle(url: string) {
   return {
     "--option-art-url": `url("${url}")`
   } as CSSProperties;
+}
+
+function artOptionClassName(isSelected?: boolean) {
+  return isSelected ? "art-option-card selected" : "art-option-card";
 }
 
 function isWeaponCategory(category: EquipmentCategory) {
@@ -5065,7 +5069,7 @@ export function NewAdventureForm({
                       {backgroundOptions.map((option) => (
                         <button
                           type="button"
-                          className={characterBackground === option ? "selected" : ""}
+                          className={artOptionClassName(characterBackground === option)}
                           aria-pressed={characterBackground === option}
                           key={option}
                           onClick={() => setCharacterBackground(option)}
@@ -5298,7 +5302,7 @@ export function NewAdventureForm({
                       {selectedClass.skillChoices.map((option) => (
                         <button
                           type="button"
-                          className={selectedSkills.includes(option) ? "selected" : ""}
+                          className={artOptionClassName(selectedSkills.includes(option))}
                           aria-pressed={selectedSkills.includes(option)}
                           key={option}
                           onClick={() => toggleSkill(option)}
@@ -5322,7 +5326,7 @@ export function NewAdventureForm({
                         {toolOptions.map((option) => (
                           <button
                             type="button"
-                            className={selectedTool === option ? "selected" : ""}
+                            className={artOptionClassName(selectedTool === option)}
                             aria-pressed={selectedTool === option}
                             key={option}
                             onClick={() => setSelectedTool(option)}
@@ -5973,7 +5977,7 @@ export function NewAdventureForm({
                 return (
                   <button
                     type="button"
-                    className={isWeapon ? "equipment-weapon-option" : ""}
+                    className={isWeapon ? "art-option-card equipment-weapon-option" : ""}
                     key={item}
                     onClick={() => chooseEquipmentModalItem(item)}
                     style={

@@ -1193,7 +1193,8 @@ h1 {
 }
 
 .tool-picker button,
-.skill-picker button {
+.skill-picker button,
+.art-option-card {
   position: relative;
   isolation: isolate;
   align-content: end;
@@ -1212,6 +1213,7 @@ h1 {
 .tool-picker button::before,
 .skill-picker button::before,
 .background-picker button::before,
+.art-option-card::before,
 .equipment-modal-options .equipment-weapon-option::before {
   position: absolute;
   inset: 0;
@@ -1229,7 +1231,10 @@ h1 {
 .tool-picker button:focus-visible,
 .skill-picker button.selected,
 .skill-picker button:hover,
-.skill-picker button:focus-visible {
+.skill-picker button:focus-visible,
+.art-option-card.selected,
+.art-option-card:hover,
+.art-option-card:focus-visible {
   background:
     linear-gradient(180deg, rgba(8, 6, 4, 0.02), rgba(8, 6, 4, 0.76)),
     linear-gradient(90deg, rgba(173, 71, 43, 0.28), rgba(8, 6, 4, 0.08)),
@@ -1248,6 +1253,9 @@ h1 {
 .background-picker button.selected::before,
 .background-picker button:hover::before,
 .background-picker button:focus-visible::before,
+.art-option-card.selected::before,
+.art-option-card:hover::before,
+.art-option-card:focus-visible::before,
 .equipment-modal-options .equipment-weapon-option:hover::before,
 .equipment-modal-options .equipment-weapon-option:focus-visible::before {
   opacity: 0.62;
@@ -1257,6 +1265,8 @@ h1 {
 .skill-picker strong,
 .background-picker strong,
 .background-picker small,
+.art-option-card strong,
+.art-option-card small,
 .equipment-modal-options .equipment-weapon-option strong,
 .equipment-modal-options .equipment-weapon-option small {
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.92);
@@ -1265,6 +1275,7 @@ h1 {
 .tool-picker strong,
 .skill-picker strong,
 .background-picker strong,
+.art-option-card strong,
 .equipment-modal-options .equipment-weapon-option strong {
   color: #fff7df;
 }
@@ -1277,6 +1288,7 @@ h1 {
   position: relative;
   isolation: isolate;
   align-content: end;
+  aspect-ratio: auto;
   min-height: 156px;
   overflow: hidden;
   padding: 18px;
