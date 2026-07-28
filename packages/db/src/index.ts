@@ -8600,6 +8600,9 @@ export async function submitSoloTurnForUser(
     }
 
     const pendingRollRequests = pendingRollRequestsFromCampaign(campaign);
+    const inputTargets = inputTargetsFromCampaign(campaign);
+    const inputPolicy = inputPolicyFromCampaign(campaign);
+    const campaignMetadata = eventPayload(campaign.metadata);
     const submittedRolls = rollSubmissionsFromPayload(
       input.rollRequestId,
       input.rollResult,
@@ -8610,7 +8613,13 @@ export async function submitSoloTurnForUser(
     const rollSubmission = validatePendingRollSubmissions(
       pendingRollRequests,
       submittedRolls,
-      player
+      player,
+      {
+        inputTargets,
+        inputPolicy,
+        isExplicitBroadInput:
+          campaignMetadata.inputPolicy === "all_players" && inputTargets.length === 0
+      }
     );
 
     if (!isRollSubmission && pendingRollRequests.length > 0) {

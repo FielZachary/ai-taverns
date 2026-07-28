@@ -2683,6 +2683,103 @@ test("campaign creation stores a multiplayer campaign and list returns it", asyn
   assert.equal(listBody.campaigns[0]?.id, createBody.campaign.id);
 });
 
+test("solo turn accepts broad single pending rolls even when over-targeted", async () => {
+  const cookie = await signIn("solo-broad-roll@example.com");
+
+  resetProviderInputs();
+  setProviderOverride(async () => {
+    const content = JSON.stringify({
+      public_narration: "The disguise holds long enough for you to slip away.",
+      roll_requests: [],
+      next_input_needed: "player_actions",
+      input_targets: [],
+      input_policy: "all_players"
+    });
+
+    return {
+      id: "provider-solo-broad-roll",
+      content,
+      debug: {
+        requestMessages: [],
+        rawResponse: content,
+        model: "test-model",
+        temperature: 0.8,
+        providerTimings: []
+      }
+    };
+  });
+
+  try {
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/campaigns",
+      headers: { cookie },
+      payload: {
+        mode: "single_player",
+        campaignGenreKind: "preset",
+        campaignGenrePresetId: "classic_fantasy",
+        ownerClientId: "solo-broad-roll-client",
+        playerName: "Senden",
+        characterName: "Senden",
+        characterSheet: "A frightened spellcaster trying to escape."
+      }
+    });
+
+    assert.equal(createResponse.statusCode, 201, createResponse.body);
+    const created = CampaignCreateResponseSchema.parse(createResponse.json());
+    const campaign = database.campaigns.find(
+      (candidate) => candidate.id === created.campaign.id
+    );
+
+    assert.ok(campaign);
+    campaign.metadata = {
+      ...(campaign.metadata as Record<string, unknown>),
+      inputTargets: [],
+      inputPolicy: "all_players",
+      pendingRollRequests: [
+        {
+          id: "disguise-self-deception",
+          player: "Disguise Self",
+          dice: "1d20",
+          label: "Deception (Disguise)",
+          modifier: 2
+        }
+      ],
+      nextInputNeeded: "dice_results"
+    };
+
+    const rollResponse = await app.inject({
+      method: "POST",
+      url: `/api/campaigns/${created.campaign.id}/solo-turn`,
+      headers: { cookie },
+      payload: {
+        rollRequestId: "disguise-self-deception",
+        rollResult: {
+          rolls: [14],
+          total: 16
+        }
+      }
+    });
+
+    assert.equal(rollResponse.statusCode, 200, rollResponse.body);
+    const room = CampaignSoloTurnResponseSchema.parse(rollResponse.json());
+    assert.equal(room.pendingRollRequest, null);
+    assert.deepEqual(room.pendingRollRequests, []);
+
+    assert.equal(
+      (campaign.metadata as Record<string, unknown>).pendingRollRequest,
+      undefined
+    );
+    assert.equal(
+      (campaign.metadata as Record<string, unknown>).pendingRollRequests,
+      undefined
+    );
+  } finally {
+    setProviderOverride(undefined);
+    resetProviderInputs();
+  }
+});
+
 test("mechanics state initializes and projects spell slot lifecycle", async () => {
   const cookie = await signIn("kair-mechanics@example.com");
   const mechanicsSeed = {
