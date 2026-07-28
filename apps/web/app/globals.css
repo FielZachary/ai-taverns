@@ -2347,6 +2347,73 @@ h1 {
   padding-top: 2px;
 }
 
+.backstory-field {
+  display: grid;
+  gap: 8px;
+}
+
+.backstory-field small {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.new-adventure-form .backstory-field textarea {
+  min-height: 190px;
+}
+
+.new-adventure-form .backstory-input-shell {
+  position: relative;
+  display: grid;
+}
+
+.new-adventure-form .backstory-input-shell textarea[aria-busy="true"] {
+  padding-bottom: 48px;
+}
+
+.new-adventure-form .backstory-loader {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  max-width: calc(100% - 28px);
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(12, 9, 8, 0.86);
+  font-size: 0.76rem;
+  pointer-events: none;
+}
+
+.new-adventure-form .backstory-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-self: start;
+}
+
+.new-adventure-form .backstory-actions button {
+  min-height: 40px;
+  padding: 10px 14px;
+  border: 1px solid rgba(244, 207, 122, 0.3);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(31, 23, 16, 0.9), rgba(12, 9, 8, 0.92));
+  color: var(--gold-bright);
+  font-size: 0.82rem;
+  font-weight: 850;
+  letter-spacing: 0;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 10px 20px rgba(0, 0, 0, 0.18);
+}
+
+.new-adventure-form .backstory-actions button:hover,
+.new-adventure-form .backstory-actions button:focus-visible {
+  border-color: rgba(244, 207, 122, 0.58);
+  background:
+    linear-gradient(180deg, rgba(64, 43, 21, 0.94), rgba(20, 14, 9, 0.96));
+}
+
 .character-current-pick {
   display: grid;
   gap: 5px;
@@ -2491,46 +2558,55 @@ h1 {
 .campaign-creation-center {
   display: grid;
   justify-items: center;
-  gap: 22px;
   text-align: center;
 }
 
-.campaign-creation-loader {
-  position: relative;
+.campaign-creation-center .rune-loader {
+  font-size: clamp(0.82rem, 1.6vw, 1rem);
+}
+
+.campaign-prep-loader {
   display: grid;
-  width: 76px;
-  height: 76px;
-  place-items: center;
-  border: 1px solid rgba(244, 207, 122, 0.42);
-  border-radius: 999px;
-  color: var(--gold-bright);
-  background: rgba(18, 15, 13, 0.58);
-  animation: campaign-loader-idle 2.8s ease-in-out infinite;
+  justify-items: center;
+  text-align: center;
+  width: 100%;
 }
 
-.campaign-creation-loader::before {
+.campaign-prep-loader-window {
+  position: relative;
+  width: min(100%, 620px);
+  min-height: 2rem;
+  overflow: hidden;
+}
+
+.campaign-prep-loader-message {
   position: absolute;
-  inset: -7px;
-  content: "";
-  border: 2px solid transparent;
-  border-top-color: var(--gold-bright);
-  border-right-color: rgba(95, 119, 81, 0.74);
-  border-radius: inherit;
-  animation: campaign-loader-spin 1.35s linear infinite;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  line-height: 1.3;
+  text-align: center;
+  white-space: nowrap;
 }
 
-.campaign-creation-center p {
-  min-height: 1.5em;
-  margin: 0;
-  color: var(--ink);
-  font-family: var(--body-font);
-  font-size: clamp(1rem, 2.5vw, 1.25rem);
-  font-weight: 900;
-  animation: loading-text-slide 2.4s ease-in-out both;
+.campaign-prep-loader-message.entering {
+  animation:
+    rune-loader-pulse 1.6s ease-in-out infinite,
+    campaign-prep-message-in 650ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.campaign-creation-center .campaign-creation-message-hold {
-  animation: loading-text-hold 0.45s ease-out both;
+.campaign-prep-loader-message.exiting {
+  animation: campaign-prep-message-out 650ms cubic-bezier(0.22, 1, 0.36, 1)
+    forwards;
+}
+
+.campaign-prep-loader-note {
+  margin: 1.6rem 0 0;
+  color: rgba(248, 234, 208, 0.72);
+  font-size: 0.9rem;
+  font-style: italic;
+  line-height: 1.5;
 }
 
 .creation-review {
@@ -2629,8 +2705,11 @@ h1 {
 
 .portrait-placeholder {
   display: grid;
+  align-content: center;
   justify-items: center;
   gap: 10px;
+  width: 100%;
+  height: 100%;
   padding: 18px;
 }
 
@@ -2639,6 +2718,31 @@ h1 {
   font-size: 0.78rem;
   font-weight: 900;
   text-transform: uppercase;
+}
+
+.portrait-placeholder .rune-loader {
+  justify-content: center;
+  text-align: center;
+}
+
+.portrait-placeholder .campaign-prep-loader {
+  width: min(100%, 220px);
+}
+
+.portrait-placeholder .campaign-prep-loader-window {
+  width: 100%;
+  min-height: 2rem;
+}
+
+.portrait-placeholder .campaign-prep-loader-message {
+  color: var(--gold-bright);
+  font-size: 0.72rem;
+  text-shadow: 0 0 18px rgba(244, 207, 122, 0.34);
+}
+
+.portrait-placeholder .rune-loader-dots span {
+  color: inherit;
+  font-size: inherit;
 }
 
 .character-art-controls {
@@ -2809,6 +2913,17 @@ h1 {
   opacity: 0.68;
 }
 
+.character-art-wait-note {
+  max-width: min(100%, 560px);
+  margin: 2px auto 0;
+  color: rgba(248, 234, 208, 0.58);
+  font-family: var(--body-font);
+  font-size: 0.86rem;
+  font-style: italic;
+  line-height: 1.5;
+  text-align: center;
+}
+
 .new-adventure-page *,
 .new-adventure-page *::before,
 .new-adventure-page *::after,
@@ -2835,55 +2950,6 @@ h1 {
   }
 
   to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes campaign-loader-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes campaign-loader-idle {
-  0%,
-  100% {
-    box-shadow: 0 0 0 rgba(244, 207, 122, 0);
-    transform: translateY(0) scale(1);
-  }
-
-  50% {
-    box-shadow: 0 10px 30px rgba(244, 207, 122, 0.16);
-    transform: translateY(-4px) scale(1.03);
-  }
-}
-
-@keyframes loading-text-slide {
-  0% {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-
-  18%,
-  72% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-
-  100% {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-}
-
-@keyframes loading-text-hold {
-  0% {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-
-  100% {
     opacity: 1;
     transform: translateY(0);
   }
@@ -2972,8 +3038,8 @@ h1 {
 .chat-sidebar-portrait {
   display: block;
   align-self: center;
-  width: min(142px, 100%);
-  aspect-ratio: 2 / 3;
+  width: min(184px, 100%);
+  aspect-ratio: 1;
   overflow: hidden;
   border: 1px solid rgba(244, 207, 122, 0.38);
   border-radius: 8px;
@@ -3001,6 +3067,92 @@ h1 {
   height: 100%;
   object-fit: cover;
   object-position: center;
+}
+
+.chat-sidebar-portrait.pending {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  cursor: default;
+  padding: 12px 14px;
+}
+
+.chat-sidebar-portrait.pending .rune-loader {
+  color: var(--gold-bright);
+  font-size: 0.68rem;
+  line-height: 1.25;
+  text-align: center;
+  white-space: normal;
+}
+
+.chat-sidebar-portrait-note {
+  margin: 0;
+  color: rgba(248, 234, 208, 0.58);
+  font-family: var(--body-font);
+  font-size: 0.66rem;
+  font-style: italic;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.portrait-viewer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: clamp(18px, 4vw, 36px);
+  background: rgba(3, 2, 2, 0.74);
+  backdrop-filter: blur(10px) saturate(1.04);
+}
+
+.portrait-viewer-modal {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: min(720px, calc(100vw - 36px));
+  max-height: calc(100dvh - 36px);
+  border: 1px solid rgba(244, 207, 122, 0.46);
+  border-radius: 8px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 28%, rgba(244, 207, 122, 0.12), transparent 40%),
+    rgba(12, 9, 7, 0.96);
+  box-shadow:
+    inset 0 0 56px rgba(0, 0, 0, 0.42),
+    0 30px 92px rgba(0, 0, 0, 0.62);
+}
+
+.portrait-viewer-modal img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  background: rgba(3, 2, 2, 0.72);
+}
+
+.portrait-viewer-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(244, 207, 122, 0.42);
+  border-radius: 8px;
+  color: var(--gold-bright);
+  background: rgba(10, 8, 7, 0.72);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.38);
+}
+
+.portrait-viewer-close:hover,
+.portrait-viewer-close:focus-visible {
+  border-color: rgba(244, 207, 122, 0.74);
+  background: rgba(24, 18, 13, 0.9);
 }
 
 .chat-sidebar-header {
@@ -4282,6 +4434,41 @@ h1 {
   }
 }
 
+@keyframes campaign-prep-message-in {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes campaign-prep-message-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .campaign-prep-loader-message.entering,
+  .campaign-prep-loader-message.exiting {
+    animation: none;
+  }
+
+  .campaign-prep-loader-message.exiting {
+    opacity: 0;
+  }
+}
+
 .turn-form {
   display: grid;
   gap: 10px;
@@ -5443,7 +5630,7 @@ h6 {
   }
 
   .chat-sidebar-portrait {
-    width: 72px;
+    width: 96px;
   }
 
   .player-resources-button {

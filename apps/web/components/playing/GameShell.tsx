@@ -726,6 +726,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
 
         if (!shouldIgnore) {
           if (isSinglePlayer) {
+            setRoomPlayers(room.players);
             setIsRoomResolving(room.isResolving);
             setHasAdventureBegun(true);
             setPendingRollRequests(rollRequestsFromRoom(room));
@@ -1683,6 +1684,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
               playerProfile.characterName ||
               "Player character"
             } portrait`}
+            playerPortraitStatus={currentRoomPlayer?.portraitStatus}
             playerPortraitUrl={currentRoomPlayer?.portraitUrl}
             onViewCharacterSheet={() => setIsCharacterSheetOpen(true)}
           />

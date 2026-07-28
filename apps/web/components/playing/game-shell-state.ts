@@ -20,6 +20,7 @@ export type RoomPlayer = {
   characterSheet: string;
   portraitAssetId?: string;
   portraitUrl?: string;
+  portraitStatus?: "pending" | "ready" | "failed";
   status: "waiting" | "submitted";
 };
 

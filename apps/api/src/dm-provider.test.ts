@@ -160,7 +160,7 @@ test("DeepSeek provider sends filtered history and returns non-stream debug meta
     }
   ]);
   assert.equal(requestBody?.stream, undefined);
-  assert.equal(requestBody?.response_format, undefined);
+  assert.deepEqual(requestBody?.response_format, { type: "json_object" });
   assert.deepEqual(requestBody?.thinking, { type: "disabled" });
   assert.equal(requestBody?.temperature, 0.8);
   assert.equal(response.id, "chat-1");
@@ -697,9 +697,11 @@ test("DeepSeek provider reports successful streaming responses without a body", 
 test("DeepSeek provider skips malformed stream chunks and keeps valid streamed content", async () => {
   const narrationDeltas: string[] = [];
   let requestCount = 0;
+  let requestBody: { stream?: boolean; response_format?: unknown } | undefined;
 
-  globalThis.fetch = async () => {
+  globalThis.fetch = async (_url, init) => {
     requestCount += 1;
+    requestBody = JSON.parse(String(init?.body)) as typeof requestBody;
 
     return streamResponse([
       "data: {not-json}\n\n",
@@ -736,6 +738,8 @@ test("DeepSeek provider skips malformed stream chunks and keeps valid streamed c
   });
 
   assert.equal(requestCount, 1);
+  assert.equal(requestBody?.stream, true);
+  assert.equal(requestBody?.response_format, undefined);
   assert.equal(response.id, "stream-1");
   assert.equal(response.debug.model, "test-model");
   assert.equal(
@@ -853,7 +857,10 @@ test("DeepSeek provider retries an empty stream and reports an empty reply diagn
       response_format?: unknown;
     };
     streams.push(requestBody.stream);
-    assert.equal(requestBody.response_format, undefined);
+    assert.deepEqual(
+      requestBody.response_format,
+      requestCount === 1 ? undefined : { type: "json_object" }
+    );
     return streamResponse(["data: [DONE]\n\n"]);
   };
 
@@ -882,7 +889,10 @@ test("DeepSeek provider falls back to buffered retry after an empty stream", asy
       response_format?: unknown;
     };
     streams.push(requestBody.stream);
-    assert.equal(requestBody.response_format, undefined);
+    assert.deepEqual(
+      requestBody.response_format,
+      requestCount === 1 ? undefined : { type: "json_object" }
+    );
 
     if (requestCount === 1) {
       return streamResponse(["data: [DONE]\n\n"]);
@@ -926,7 +936,10 @@ test("DeepSeek provider attaches debug details to repeated empty reply errors", 
       response_format?: unknown;
     };
     assert.equal(requestBody.stream, requestCount === 1 ? true : undefined);
-    assert.equal(requestBody.response_format, undefined);
+    assert.deepEqual(
+      requestBody.response_format,
+      requestCount === 1 ? undefined : { type: "json_object" }
+    );
 
     return jsonResponse({
       model: "test-model",

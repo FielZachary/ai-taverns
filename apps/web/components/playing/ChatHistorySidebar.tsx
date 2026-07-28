@@ -1,4 +1,7 @@
-import { Pencil, Plus, Search, Trash2 } from "lucide-react";
+"use client";
+
+import { useEffect, useState } from "react";
+import { Pencil, Plus, Search, Trash2, X } from "lucide-react";
 
 export type ChatSummary = {
   id: string;
@@ -14,6 +17,7 @@ type ChatHistorySidebarProps = {
   isLoading: boolean;
   isCreatingChat: boolean;
   playerPortraitAlt?: string;
+  playerPortraitStatus?: "pending" | "ready" | "failed";
   playerPortraitUrl?: string;
   onStartNewChat: () => void;
   onDeleteChat: (chatId: string) => void;
@@ -22,12 +26,17 @@ type ChatHistorySidebarProps = {
   onViewCharacterSheet: () => void;
 };
 
+function fullSizePortraitUrl(portraitUrl: string) {
+  return portraitUrl.replace(/\/(?:512|128)\.webp(\?.*)?$/, "/original.png$1");
+}
+
 export function ChatHistorySidebar({
   chats,
   activeChatId,
   isLoading,
   isCreatingChat,
   playerPortraitAlt = "Player character portrait",
+  playerPortraitStatus,
   playerPortraitUrl,
   onStartNewChat,
   onDeleteChat,
@@ -35,6 +44,29 @@ export function ChatHistorySidebar({
   onSelectChat,
   onViewCharacterSheet
 }: ChatHistorySidebarProps) {
+  const [isPortraitModalOpen, setIsPortraitModalOpen] = useState(false);
+  const modalPortraitUrl = playerPortraitUrl
+    ? fullSizePortraitUrl(playerPortraitUrl)
+    : "";
+
+  useEffect(() => {
+    if (!isPortraitModalOpen) {
+      return;
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsPortraitModalOpen(false);
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isPortraitModalOpen]);
+
   return (
     <aside className="chat-sidebar" aria-label="Chat history">
       <div className="chat-sidebar-history">
@@ -105,12 +137,27 @@ export function ChatHistorySidebar({
           <button
             className="chat-sidebar-portrait"
             type="button"
-            aria-label="Open player resources"
-            onClick={onViewCharacterSheet}
+            aria-label="View player portrait"
+            onClick={() => setIsPortraitModalOpen(true)}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={playerPortraitUrl} alt={playerPortraitAlt} />
           </button>
+        ) : playerPortraitStatus === "pending" ? (
+          <div className="chat-sidebar-portrait pending" aria-live="polite">
+            <span className="rune-loader">
+              Generating portrait
+              <span className="rune-loader-dots" aria-hidden="true">
+                <span>.</span>
+                <span>.</span>
+                <span>.</span>
+              </span>
+            </span>
+            <p className="chat-sidebar-portrait-note">
+              this takes about 3 minutes, so don&apos;t be too surprised its taking
+              a bit, hope its not too much of a hassle ;)
+            </p>
+          </div>
         ) : null}
         <button
           className="player-resources-button"
@@ -120,6 +167,33 @@ export function ChatHistorySidebar({
           Player Resources
         </button>
       </div>
+
+      {playerPortraitUrl && isPortraitModalOpen ? (
+        <div
+          className="portrait-viewer-backdrop"
+          role="presentation"
+          onClick={() => setIsPortraitModalOpen(false)}
+        >
+          <div
+            aria-modal="true"
+            aria-label="Player portrait"
+            className="portrait-viewer-modal"
+            role="dialog"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              className="portrait-viewer-close"
+              type="button"
+              aria-label="Close player portrait"
+              onClick={() => setIsPortraitModalOpen(false)}
+            >
+              <X size={20} />
+            </button>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={modalPortraitUrl} alt={playerPortraitAlt} />
+          </div>
+        </div>
+      ) : null}
     </aside>
   );
 }

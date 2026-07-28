@@ -5,6 +5,7 @@ import {
   eldermereMetadataProfile,
   eldermereRegions,
   formatEldermereOpeningPromptContext,
+  formatNameDirectorPromptContext,
   formatEldermereTurnPromptContext,
   openingSceneRequest,
   parseDmContract,
@@ -436,6 +437,7 @@ type PlayerRow = {
   last_seen_at: Date | string;
   portrait_asset_id?: string | null;
   portrait_public_url?: string | null;
+  portrait_status?: "pending" | "ready" | "failed" | "deleted" | null;
 };
 
 export type MediaStorageProvider = "local" | "digitalocean_spaces" | "s3";
@@ -552,6 +554,7 @@ type CampaignSettingSummary = {
 
 type CampaignOpeningStyle = {
   campaignGenre?: string | undefined;
+  campaignGenrePresetId?: string | undefined;
   campaignGenrePromptBrief?: string | undefined;
   customWorldName?: string | undefined;
   customWorldDescription?: string | undefined;
@@ -596,10 +599,25 @@ type EldermereOpeningPlan = {
   firstInteractableChoices: string[];
   sensoryPalette: Record<string, string[]>;
   dmPrivateContext: string[];
+  campaignFoundation?: Record<string, unknown> | undefined;
   forbiddenOpeningTerms: string[];
   narratorInstructions: string[];
   openingQualityChecks: string[];
 };
+
+function extractExistingPromptNames(...values: Array<string | undefined>) {
+  return [
+    ...new Set(
+      values
+        .flatMap((value) =>
+          value?.match(/\b[A-Z][a-z]+(?:\s+(?:of|the|and|[A-Z][a-z]+)){0,3}\b/g) ??
+          []
+        )
+        .map((name) => name.trim())
+        .filter((name) => name.length >= 3)
+    )
+  ];
+}
 
 type DungeonMasterProviderResponse = {
   id?: string;
@@ -619,6 +637,14 @@ type DungeonMasterReply = {
   nextInputNeeded: DmNextInputNeeded;
   resolutionMode: ResolutionMode;
   setting?: CampaignSettingSummary | undefined;
+};
+
+type EldermereOpeningPlannerDebug =
+  NonNullable<AiDebugInfo["eldermereOpeningPlanner"]>;
+
+type EldermereOpeningPlannerResult = {
+  plan: EldermereOpeningPlan;
+  debug: EldermereOpeningPlannerDebug;
 };
 
 type DmPromptContext = {
@@ -772,6 +798,7 @@ function campaignOpeningStyleFromMetadata(campaign: CampaignRow): CampaignOpenin
 
   return {
     campaignGenre: eventPayloadString(genre.label),
+    campaignGenrePresetId: eventPayloadString(genre.presetId),
     campaignGenrePromptBrief: eventPayloadString(genre.promptBrief),
     customWorldName: eventPayloadString(genre.customWorldName),
     customWorldDescription: eventPayloadString(genre.customWorldDescription)
@@ -1715,13 +1742,14 @@ export async function createCampaignForMode(
     characterName?: string | undefined;
     characterSheet?: string | undefined;
     mechanicsSeed?: MechanicsSeed | undefined;
+    eldermereStart?: EldermereCampaignStart | undefined;
     userId: string;
     runtime?: DungeonMasterRuntime | undefined;
   }
 ): Promise<CampaignSummary> {
   const sessionId = `ai-dnd-${randomUUID()}`;
   const eldermereStart = isEldermerePreset(input.campaignGenrePresetId)
-    ? randomEldermereCampaignStart()
+    ? input.eldermereStart ?? randomEldermereCampaignStart()
     : undefined;
   const genreMetadata = {
     genre: {
@@ -1883,6 +1911,7 @@ export async function createCampaignForMode(
     players: [createdState.player],
     style: {
       campaignGenre: input.campaignGenre,
+      campaignGenrePresetId: input.campaignGenrePresetId,
       campaignGenrePromptBrief: input.campaignGenrePromptBrief,
       customWorldName: input.customWorldName,
       customWorldDescription: input.customWorldDescription
@@ -1899,18 +1928,36 @@ export async function createCampaignForMode(
             openingRequest,
             openingTurn.id
           );
-          await persistEldermereOpeningPlan(db, createdState.campaign.id, plan);
+          await persistEldermereOpeningPlan(
+            db,
+            createdState.campaign.id,
+            plan.plan
+          );
+          void runEldermereCampaignFoundationCompiler(db, runtime, {
+            campaign: createdState.campaign,
+            openingRequest,
+            plan: plan.plan,
+            turnId: openingTurn.id
+          });
 
-          return askEldermereOpeningNarrator(
+          const opening = await askEldermereOpeningNarrator(
             db,
             runtime,
             createdState.campaign,
             openingRequest,
             openingSceneInstructions("single_player"),
-            plan,
+            plan.plan,
             openingTurn.id,
             { allowResolvedCombatWithoutRolls: true }
           );
+
+          return {
+            ...opening,
+            debug: {
+              ...opening.debug,
+              eldermereOpeningPlanner: plan.debug
+            }
+          };
         })()
       : await askDungeonMaster(
           db,
@@ -3393,6 +3440,12 @@ function rowToRoomPlayer(
   mechanicsState?: MechanicsState
 ): RoomSnapshot["players"][number] {
   const actor = mechanicsState?.actors[actorKeyForPlayer(player.id)];
+  const portraitStatus =
+    player.portrait_status === "pending" ||
+    player.portrait_status === "ready" ||
+    player.portrait_status === "failed"
+      ? player.portrait_status
+      : undefined;
 
   return {
     id: player.client_id,
@@ -3411,7 +3464,8 @@ function rowToRoomPlayer(
       : {}),
     ...(player.portrait_public_url
       ? { portraitUrl: player.portrait_public_url }
-      : {})
+      : {}),
+    ...(portraitStatus ? { portraitStatus } : {})
   };
 }
 
@@ -3476,11 +3530,21 @@ async function buildRoomSnapshot(
       select
         players.*,
         media_assets.id as portrait_asset_id,
-        media_assets.public_url as portrait_public_url
+        media_assets.public_url as portrait_public_url,
+        coalesce(media_assets.status, latest_portrait.status) as portrait_status
       from players
       left join media_assets
         on media_assets.id = players.portrait_asset_id
        and media_assets.status = 'ready'
+      left join lateral (
+        select status
+        from media_assets
+        where media_assets.player_id = players.id
+          and media_assets.kind = 'character_portrait'
+          and media_assets.status in ('pending', 'failed')
+        order by media_assets.created_at desc
+        limit 1
+      ) latest_portrait on true
       where players.campaign_id = $1 and players.status = 'active'
       order by players.slot asc nulls last, players.created_at asc
     `,
@@ -3817,7 +3881,7 @@ async function logDmModelCall(
     campaignId: string;
     traceId: string;
     turnId?: string | undefined;
-    phase: "router" | "main" | "memory_updater";
+    phase: "router" | "main" | "memory_updater" | "campaign_foundation_compiler";
     providerData: DungeonMasterProviderResponse;
     durationMs: number;
   }
@@ -4699,17 +4763,185 @@ function formatNpcContextIndex(index: NpcContextIndexEntry[]) {
 
 function normalizeNewContextChunkPatch(chunk: unknown) {
   const payload = eventPayload(chunk);
-  const contextId = String(payload.context_id ?? payload.contextId ?? "");
-  const title = String(payload.title ?? contextId);
+  const rawContextId = String(
+    payload.context_id ?? payload.contextId ?? payload.chunk_id ?? payload.chunkId ?? ""
+  );
+  const title = String(payload.title ?? rawContextId);
+  const contextType = payload.context_type ?? payload.contextType ?? "npc_context";
+  const contextId =
+    contextType === "npc_context"
+      ? normalizeNpcContextId(rawContextId, title)
+      : rawContextId;
+  const visibility = payload.visibility === "dm_only" ? "dm_only" : "player_safe";
+  const markdown =
+    typeof payload.markdown === "string"
+      ? payload.markdown
+      : isRecord(payload.content)
+        ? jsonObjectToMarkdown(title, payload.content)
+        : typeof payload.content === "string"
+          ? payload.content
+          : "";
 
   return eventPayload({
     ...payload,
     operation: "create_chunk",
     context_id: contextId,
-    context_type: payload.context_type ?? payload.contextType ?? "npc_context",
+    context_type: contextType,
     title,
-    visibility: "player_safe"
+    visibility,
+    markdown
   });
+}
+
+function sanitizeCampaignFoundationCompilerChunks(
+  chunks: Record<string, unknown>[]
+) {
+  const dmOnlyNpcNames = chunks
+    .filter(
+      (chunk) =>
+        chunk.visibility === "dm_only" &&
+        typeof chunk.context_id === "string" &&
+        chunk.context_id.startsWith("npc:")
+    )
+    .map((chunk) =>
+      String(chunk.title ?? "")
+        .replace(/^NPC:\s*/i, "")
+        .trim()
+    )
+    .filter(Boolean);
+
+  return chunks.map((chunk) => {
+    const markdown =
+      typeof chunk.markdown === "string" ? chunk.markdown : "";
+    let visibility = chunk.visibility;
+
+    if (
+      visibility === "player_safe" &&
+      typeof chunk.context_id === "string" &&
+      chunk.context_id.startsWith("npc:") &&
+      /not yet met|private buyer|secret employer|hidden patron|antagonist/i.test(
+        `${chunk.title ?? ""}\n${markdown}`
+      )
+    ) {
+      visibility = "dm_only";
+    }
+
+    if (visibility !== "player_safe" || !markdown.trim()) {
+      return { ...chunk, visibility };
+    }
+
+    const sanitizedMarkdown = markdown
+      .split("\n")
+      .filter((line) => !isCampaignFoundationHiddenLine(line, dmOnlyNpcNames))
+      .join("\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+
+    return {
+      ...chunk,
+      visibility,
+      markdown: sanitizedMarkdown || markdown
+    };
+  });
+}
+
+function isCampaignFoundationHiddenLine(line: string, dmOnlyNpcNames: string[]) {
+  const hiddenPattern =
+    /duplicate ledger|hidden under|half-burned map|time-loop|Second Dominion|Ashen Scholar|buyer'?s agent|secret agent|second team|paid in Wellglass|Fara .*Garrick|Garrick .*buyer|alive.*trapped/i;
+
+  return (
+    hiddenPattern.test(line) ||
+    dmOnlyNpcNames.some((name) => name && line.includes(name))
+  );
+}
+
+function normalizeNpcContextId(contextId: string, title: string) {
+  if (!contextId.startsWith("npc:")) {
+    return contextId;
+  }
+
+  const slug = contextId.slice("npc:".length);
+  const titleSlug = kebabCaseContextSlug(title.replace(/^NPC:\s*/i, ""));
+
+  if (!titleSlug || slug.includes("-") || slug === titleSlug) {
+    return contextId;
+  }
+
+  if (slug.replace(/-/g, "") === titleSlug.replace(/-/g, "")) {
+    return `npc:${titleSlug}`;
+  }
+
+  return contextId;
+}
+
+function kebabCaseContextSlug(value: string) {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function headingFromObjectKey(key: string) {
+  return key
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function markdownValue(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return ["Unknown."];
+    }
+
+    return value.flatMap((item) => {
+      if (typeof item === "string") {
+        return [`- ${item}`];
+      }
+
+      if (isRecord(item)) {
+        return [
+          "-",
+          ...Object.entries(item).flatMap(([key, child]) =>
+            markdownValue(child).map((line) => `  ${headingFromObjectKey(key)}: ${line.replace(/^- /, "")}`)
+          )
+        ];
+      }
+
+      return [`- ${String(item)}`];
+    });
+  }
+
+  if (isRecord(value)) {
+    return Object.entries(value).flatMap(([key, child]) => [
+      `### ${headingFromObjectKey(key)}`,
+      ...markdownValue(child),
+      ""
+    ]);
+  }
+
+  if (typeof value === "string") {
+    return value.trim() ? [value.trim()] : ["Unknown."];
+  }
+
+  return [String(value)];
+}
+
+function jsonObjectToMarkdown(title: string, content: Record<string, unknown>) {
+  const heading = title.trim() || "Campaign Context";
+
+  return [
+    `# ${heading}`,
+    "",
+    ...Object.entries(content).flatMap(([key, value]) => [
+      `## ${headingFromObjectKey(key)}`,
+      ...markdownValue(value),
+      ""
+    ])
+  ]
+    .join("\n")
+    .trim();
 }
 
 async function listCampaignContextIds(db: Queryable, campaignId: string) {
@@ -4741,6 +4973,10 @@ async function applyAcceptedMemoryPatch(
   const operation = patch.operation;
   const contextId = String(patch.context_id ?? patch.contextId ?? "");
   const markdown = String(patch.markdown ?? "");
+  const visibility =
+    patch.visibility === "player_safe" || patch.visibility === "dm_only"
+      ? patch.visibility
+      : undefined;
 
   if (operation === "append") {
     await bestEffortRuntimeInsert(
@@ -4748,7 +4984,6 @@ async function applyAcceptedMemoryPatch(
       `
         update campaign_context_chunks
         set body_markdown = concat_ws(E'\n', body_markdown, $3),
-          visibility = 'player_safe',
           updated_at = now()
         where campaign_id = $1 and context_key = $2
       `,
@@ -4763,7 +4998,6 @@ async function applyAcceptedMemoryPatch(
       `
         update campaign_context_chunks
         set body_markdown = $3,
-          visibility = 'player_safe',
           updated_at = now()
         where campaign_id = $1 and context_key = $2
       `,
@@ -4806,7 +5040,7 @@ async function applyAcceptedMemoryPatch(
         contextId,
         String(patch.context_type ?? patch.contextType),
         String(patch.title ?? contextId),
-        "player_safe",
+        visibility ?? "player_safe",
         markdown
       ]
     );
@@ -4821,24 +5055,6 @@ async function applyAcceptedMemoryPatches(
   for (const patch of patches) {
     await applyAcceptedMemoryPatch(db, campaignId, patch);
   }
-}
-
-async function makeCampaignContextChunksPlayerVisible(
-  db: Queryable,
-  campaignId: string
-) {
-  await bestEffortRuntimeInsert(
-    db,
-    `
-      update campaign_context_chunks
-      set visibility = 'player_safe',
-        updated_at = now()
-      where campaign_id = $1
-        and archived_at is null
-        and visibility <> 'player_safe'
-    `,
-    [campaignId]
-  );
 }
 
 async function attachContextStorageStateToDmEventDebug(
@@ -5007,7 +5223,6 @@ export async function runModularPostTurnContextJobs(
       input.campaignId,
       validation.accepted
     );
-    await makeCampaignContextChunksPlayerVisible(db, input.campaignId);
 
     const contextStorageState = await retrieveCampaignContextStorageState(
       db,
@@ -5092,6 +5307,56 @@ function formatCanonicalCharacterContext(
       ].join("\n")
     )
   ].join("\n\n");
+}
+
+function compactPromptText(value: string) {
+  return value
+    .replace(/\r\n/g, "\n")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function extractCharacterBackstory(characterSheet: string) {
+  const normalized = characterSheet.replace(/\r\n/g, "\n");
+  const labelledBackstory = normalized.match(
+    /(?:^|\n)(?:#{1,6}\s*)?Backstory\s*\n([\s\S]*?)(?=\n(?:#{1,6}\s*)?(?:Backstory Expansion|Core Stats|Ability Scores|Saving Throws|Skills|Proficiencies and Languages|Attacks|Features and Traits|Equipment|Inventory|Currency|Spells|DM Brief|Level Progression|Appearance)\b|$)/i
+  );
+
+  if (labelledBackstory?.[1]) {
+    return compactPromptText(labelledBackstory[1]);
+  }
+
+  const inlineBackstory = normalized.match(
+    /(?:^|\n)(?:Backstory|Background)\s*:\s*([^\n]+(?:\n(?![A-Z][A-Za-z ]+:\s).+)*)/i
+  );
+
+  return inlineBackstory?.[1] ? compactPromptText(inlineBackstory[1]) : "";
+}
+
+function formatOpeningBackstoryAnchors(players: PlayerRow[]) {
+  const anchors = players
+    .filter(isProfileComplete)
+    .map((player) => {
+      const backstory = extractCharacterBackstory(player.character_sheet);
+
+      if (!backstory) {
+        return "";
+      }
+
+      return `- ${player.character_name}: ${previewText(backstory, 900)}`;
+    })
+    .filter(Boolean);
+
+  if (anchors.length === 0) {
+    return "";
+  }
+
+  return [
+    "Player backstory anchors for the opening scene:",
+    "Treat these as authoritative personal story ingredients. The opener must connect at least one immediate clue, NPC demand, debt, danger, opportunity, or emotional pressure to these anchors while staying in the selected starting place. Do not rewrite, resolve, or contradict the backstory.",
+    ...anchors
+  ].join("\n");
 }
 
 function formatMechanicsPromptContext(mechanicsState: MechanicsState) {
@@ -5242,9 +5507,16 @@ function formatOpeningSceneRequest(input: {
   const customWorldDescription = input.style.customWorldDescription
     ? `Custom world description: ${input.style.customWorldDescription}`
     : "";
+  const nameBank = formatCampaignOpeningNameBank({
+    campaign: input.campaign,
+    players: input.players,
+    style: input.style
+  });
 
   return [
     formatCanonicalCharacterContext(input.players, mechanicsState),
+    "",
+    formatOpeningBackstoryAnchors(input.players),
     "",
     formatMechanicsPromptContext(mechanicsState),
     "",
@@ -5261,10 +5533,15 @@ function formatOpeningSceneRequest(input: {
     customWorldName,
     customWorldDescription,
     "",
+    nameBank,
+    "",
     "Campaign opener requirements:",
     "Write a true campaign opener, not only a room description, road encounter, or local hazard.",
     "Establish a named starting place and a named larger region, realm, frontier, city, or world. If the setup does not provide names, invent strong fantasy names.",
+    "When the setup provides a selected canonical region and settlement, use those exact places as the opener's primary region and starting location instead of picking or inventing replacements.",
+    "When inventing new NPCs, places, taverns, factions, objects, or threats for the opener, prefer the validated name bank above. Do not force every candidate into the scene, and do not rename player characters or established names.",
     "Establish why the character or party is here now and what set them on this path.",
+    "For completed character backstories, make the opening premise visibly grow out of at least one unresolved relationship, obligation, fear, promise, loss, secret, or ambition from the player backstory.",
     "Give the character a concrete first objective, destination, mystery, obligation, rescue, delivery, investigation, or promise that can drive the next several scenes.",
     "Introduce an immediate obstacle, threat, discovery, or NPC demand that blocks or complicates that objective right now.",
     "Make the campaign promise legible: what kind of adventure this is, what larger problem is stirring, and why the character should care.",
@@ -5283,14 +5560,18 @@ function formatOpeningSceneRequest(input: {
 
 function eldermereOpeningPlannerInstructions() {
   return [
-    "You are the campaign-opening planner for AI Taverns, a D&D-style fantasy campaign app.",
+    "You are the campaign-opening planner and campaign foundation planner for AI Taverns, a D&D-style fantasy campaign app.",
     "Your job is not to write player-facing narration.",
-    "Create a compact structured campaign opener seed that a separate narrator will turn into the opening scene.",
+    "Create a structured campaign foundation that a separate narrator will turn into only the opening scene, and that a background compiler can turn into durable DM context chunks.",
     "The narrator will not receive the full world lore, so separate player-safe facts, private DM context, allowed opening terms, and forbidden opening terms.",
     "Use the selected Eldermere region and settlement when provided. Do not choose a different primary region or starting settlement.",
-    "Make the opener specific, playable, and mysterious. Let the narrator start with a human-scale scene, not a history lecture.",
+    "Use the player backstory anchors from the opening request as core premise material: the opener must make at least one unresolved backstory relationship, obligation, loss, secret, fear, promise, or ambition immediately relevant.",
+    "Make the campaign foundation feel like a living part of Eldermere: include what has been happening locally, what factions or NPCs are doing if unopposed, what secrets can be discovered over time, and how the player could eventually leave a mark on the region or world.",
+    "Give the campaign long-term direction without railroading: create reveal ladders, escalation clocks, NPC agendas, and possible consequences, not a fixed plot that ignores player choice.",
+    "Make the first scene specific, playable, and mysterious. Let the narrator start with a human-scale scene, not a history lecture.",
     "The player-facing opening should use at most 3 Eldermere-specific setting proper nouns total, not counting ordinary NPC names. The chosen region and starting location count toward this limit.",
     "Prefer plain descriptions over official names: use concrete meaning before setting terminology.",
+    "Treat canonical Eldermere facts as source-grounded world truth. Treat any new links, NPC motives, faction plans, or secret ladders you invent as campaign-local premises until established through play.",
     "Return exactly one valid JSON object and no Markdown.",
     "Use this exact JSON shape:",
     JSON.stringify(
@@ -5346,6 +5627,68 @@ function eldermereOpeningPlannerInstructions() {
         dm_private_context: [
           "facts the DM can use later but the narrator must not reveal directly in the opening"
         ],
+        campaign_foundation: {
+          campaign_thesis: {
+            core_question: "the campaign-scale dramatic question",
+            player_personal_stake: "how the player backstory connects to the world conflict",
+            world_stake: "what changes in Eldermere if no one intervenes",
+            possible_mark_on_eldermere: "how the player could eventually change a place, faction, secret, or power structure"
+          },
+          living_local_context: {
+            recent_events: [
+              "what has been happening around the starting place before the player arrives"
+            ],
+            local_pressures: [
+              "arguments, shortages, fears, opportunities, or social tensions locals are living with"
+            ],
+            visible_signs: [
+              "observable details that imply deeper trouble without explaining everything"
+            ],
+            rumors_half_true: [
+              "rumors that are useful, incomplete, or distorted"
+            ]
+          },
+          npc_web: [
+            {
+              name: "important or recurring NPC name",
+              public_role: "what players can understand early",
+              private_agenda: "DM-only motive, pressure, secret, or plan",
+              relationship_to_player_hook: "how they touch a player backstory, ambition, debt, fear, promise, or capability",
+              if_unopposed: "what this NPC will do if the player ignores them"
+            }
+          ],
+          faction_and_event_clocks: [
+            {
+              name: "clock or pressure name",
+              current_stage: "what is true now",
+              next_escalation: "what happens next if no one changes it",
+              what_advances_it: "events or player choices that make it worse",
+              what_slows_or_changes_it: "actions that can bend or stop it"
+            }
+          ],
+          secret_ladder: {
+            opening_secrets: [
+              "small secrets that can be discovered in the first few scenes"
+            ],
+            early_arc_revelations: [
+              "truths for the first local arc"
+            ],
+            mid_campaign_revelations: [
+              "truths that connect local events to major regional/world forces"
+            ],
+            late_campaign_truths: [
+              "truths that should only become clear after earned discovery"
+            ],
+            do_not_resolve_too_soon: [
+              "mysteries, relationships, or stakes that need a long runway"
+            ]
+          },
+          arc_direction: {
+            act_1: "local survival, trust, first mysteries, and immediate choices",
+            act_2: "regional power, faction pressure, deeper costs, and player agency",
+            act_3: "world secrets, irreversible choices, and the player's mark on Eldermere"
+          }
+        },
         forbidden_opening_terms: [
           "setting terms or lore names that should not appear in the first player-facing narration"
         ],
@@ -5386,12 +5729,63 @@ function formatEldermereNarratorOpeningRequest(input: {
     "Narrator boundary:",
     "Write the player-facing opener only from the Eldermere opening plan above, the canonical character sheets, and the website DM instructions.",
     "Do not use the full Eldermere world bible. Do not introduce extra Eldermere lore, factions, institutions, ancient ages, regions, gods, magic resources, or historical terms beyond the allowed_player_facing_terms.",
+    "Keep the first scene anchored in the planned region and starting location; do not relocate the opener to another settlement, region, road, tavern, faction hall, or invented landmark unless the plan explicitly places it inside the starting location.",
+    "Make at least one player backstory anchor visible in the first scene through a clue, NPC demand, debt, danger, opportunity, sensory trigger, or emotional pressure. Do not retell the whole backstory.",
     "If a useful idea appears in dm_private_context, imply it only through concrete visible facts or pressure; do not reveal it as confirmed exposition.",
     "Forbidden opening terms must not appear in public_narration.",
     "Allowed player-facing terms must be explained plainly on first use.",
+    "",
+    "Opening structure:",
+    "Treat the opener as an arrival runway into the first live scene, not only a cold open.",
+    "Paragraph 1 must explain why this specific character or party has come here now, using player-facing backstory context. Assume the player has not recently read the backstory. Connect the arrival to at least one unresolved dream, loss, secret, promise, obligation, fear, ambition, or relationship. Do not begin with scenery, weather, crowds, dialogue, combat, or the name of the starting location.",
+    "The first sentence must be about the character's reason for coming, not where they are standing. Do not start with phrases like 'You stand at', 'You arrive at', 'The town', 'The road', or any location-first camera direction.",
+    "Paragraph 2 must describe what the character or party has been doing over the last few days and then the last few hours to reach this place. Explain how they entered the region or settlement, where exactly they have landed, what kind of area it is, what locals say about it, and what the character plausibly knows before the immediate scene begins. Keep this player-facing and concrete. Do not reveal DM-private secrets.",
+    "Paragraph 3 and after may describe the live scene: the physical location, sensory details, visible NPC tension, immediate complication, and interactable choices.",
+    "Before the final question, include one short personal urgency beat that connects the immediate clue, demand, threat, or opportunity back to the character's backstory reason for being here. Do not explain why the player should care abstractly. Show the character noticing, reacting, or connecting it to their unresolved backstory.",
+    "",
+    "Opening style:",
+    "Write in grounded, direct fantasy prose. Keep the narration detailed and atmospheric, but avoid ornate, poetic, elevated, or mythic phrasing. Do not solve this by making the narration shorter; keep the same amount of detail and make the details more concrete.",
+    "Use physical, observable wording for magical or emotional details. Prefer direct wording like 'vibrates', 'shakes', 'burns', 'goes cold', 'draws attention', 'people argue', 'the road was hard', and 'someone here knows something' over lyrical abstractions like 'pulls at you like a thread', 'the dream is here', or 'every instinct says'.",
+    "The tone should feel serious, grounded, and specific, like a DM clearly describing a dangerous place to the player. It should not sound like a bard, prophecy, epic poem, or fantasy trailer.",
+    "Do not rewrite, soften, or alter the character backstory. If the backstory says someone died, do not say they disappeared. If the narrator mentions a backstory event, preserve the cause and relationship exactly.",
+    "Do not invent new circumstances for how a keepsake, clue, wound, relationship, promise, or obligation entered the character's life. If the exact handoff is not specified, use neutral wording like 'the scroll case you carry from her' instead of inventing a scene where someone gave it to the character.",
+    "Useful personal urgency beats look like: 'The handwriting looks enough like your mother's that your hand goes to the scroll case before you decide to move.', 'The same name from your dream is written on the board in front of you. Someone in this town knows something.', or 'The shard vibrates at your side at the same moment you read the note.'",
     'Set setting.world_name to "Eldermere".',
     `Set setting.starting_location and setting.display_location to "${input.plan.startingLocation.name}".`
   ].join("\n");
+}
+
+function eldermereOpeningPlannerDebug(input: {
+  instructions: string;
+  message: string;
+  providerData: DungeonMasterProviderResponse;
+  plan: EldermereOpeningPlan;
+}): EldermereOpeningPlannerDebug {
+  const requestMessages =
+    input.providerData.debug.requestMessages.length > 0
+      ? input.providerData.debug.requestMessages
+      : [
+          { role: "system" as const, content: input.instructions },
+          { role: "user" as const, content: input.message }
+        ];
+
+  return {
+    requestMessages,
+    rawResponse: input.providerData.content,
+    parsedOutput: openingPlanToJson(input.plan),
+    ...(input.providerData.debug.providerResponseId
+      ? { providerResponseId: input.providerData.debug.providerResponseId }
+      : {}),
+    ...(input.providerData.debug.model
+      ? { model: input.providerData.debug.model }
+      : {}),
+    ...(typeof input.providerData.debug.temperature === "number"
+      ? { temperature: input.providerData.debug.temperature }
+      : {}),
+    ...(input.providerData.debug.providerTimings
+      ? { providerTimings: input.providerData.debug.providerTimings }
+      : {})
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -5591,6 +5985,9 @@ function parseEldermereOpeningPlan(content: string) {
     ),
     sensoryPalette: parseSensoryPalette(sensoryPalette, errors),
     dmPrivateContext: readStringArray(parsed, "dm_private_context", errors),
+    ...(isRecord(parsed?.campaign_foundation)
+      ? { campaignFoundation: parsed.campaign_foundation }
+      : {}),
     forbiddenOpeningTerms: readStringArray(
       parsed,
       "forbidden_opening_terms",
@@ -5664,10 +6061,57 @@ function openingPlanToJson(plan: EldermereOpeningPlan) {
     first_interactable_choices: plan.firstInteractableChoices,
     sensory_palette: plan.sensoryPalette,
     dm_private_context: plan.dmPrivateContext,
+    ...(plan.campaignFoundation
+      ? { campaign_foundation: plan.campaignFoundation }
+      : {}),
     forbidden_opening_terms: plan.forbiddenOpeningTerms,
     narrator_instructions: plan.narratorInstructions,
     opening_quality_checks: plan.openingQualityChecks
   };
+}
+
+function formatCampaignOpeningNameBank(input: {
+  campaign: CampaignRow;
+  players: PlayerRow[];
+  style: CampaignOpeningStyle;
+}) {
+  const eldermereStart = isEldermerePreset(input.style.campaignGenrePresetId)
+    ? eldermereCampaignStartFromMetadata(input.campaign)
+    : undefined;
+  const world =
+    input.style.customWorldName ??
+    input.style.campaignGenre ??
+    (eldermereStart ? "Eldermere" : undefined);
+
+  return formatNameDirectorPromptContext({
+    world,
+    region: eldermereStart?.region.name,
+    seed: [
+      "campaign-opening",
+      input.campaign.id,
+      input.style.campaignGenrePresetId ?? "",
+      world ?? "",
+      eldermereStart?.region.name ?? "",
+      input.players.map((player) => player.character_name).join("|")
+    ].join("|"),
+    targets: [
+      "person",
+      "settlement",
+      "district",
+      "tavern",
+      "faction",
+      "artifact",
+      "monster"
+    ],
+    perTargetCount: 8,
+    existingNames: extractExistingPromptNames(
+      ...input.players.flatMap((player) => [
+        player.character_name,
+        player.character_sheet
+      ])
+    ),
+    heading: "Validated name bank for this campaign opener:"
+  });
 }
 
 function openingSceneInstructions(mode: CampaignMode) {
@@ -5803,7 +6247,7 @@ async function askEldermereOpeningPlanner(
   campaign: CampaignRow,
   openingRequest: string,
   turnId?: string
-) {
+): Promise<EldermereOpeningPlannerResult> {
   const traceId = randomUUID();
   const startedAt = Date.now();
   const instructions = eldermereOpeningPlannerInstructions();
@@ -5880,7 +6324,15 @@ async function askEldermereOpeningPlanner(
       }
     });
 
-    return plan;
+    return {
+      plan,
+      debug: eldermereOpeningPlannerDebug({
+        instructions,
+        message,
+        providerData: initialData,
+        plan
+      })
+    };
   } catch (initialError) {
     await logTurnDebugTrace(db, {
       campaignId: campaign.id,
@@ -5913,7 +6365,24 @@ async function askEldermereOpeningPlanner(
         }
       });
 
-      return plan;
+      const repairMessage = [
+        "The previous Eldermere opening planner response failed validation.",
+        "Return a corrected response using exactly the required JSON shape.",
+        "Do not include Markdown or commentary.",
+        "",
+        "Original planner request:",
+        message
+      ].join("\n");
+
+      return {
+        plan,
+        debug: eldermereOpeningPlannerDebug({
+          instructions,
+          message: repairMessage,
+          providerData: repairData,
+          plan
+        })
+      };
     } catch (repairError) {
       await logTurnDebugTrace(db, {
         campaignId: campaign.id,
@@ -5931,6 +6400,262 @@ async function askEldermereOpeningPlanner(
         `Eldermere opening planner failed validation. Trace ID: ${traceId}`
       );
     }
+  }
+}
+
+function buildCampaignFoundationCompilerPrompt() {
+  return [
+    "You are the AI Taverns campaign foundation compiler.",
+    "You run after an Eldermere campaign opening planner and before long-term play has accumulated.",
+    "Your job is to transform the planner's campaign foundation into durable campaign_context_chunks for future AI DM retrieval.",
+    "You are not the narrator. Do not write player-facing prose. Do not continue the scene.",
+    "Return strict JSON with patches, new_context_chunks, and remove_context_chunks.",
+    "Use the same context patch contract as the memory/context updater.",
+    "Allowed operations: append, replace_section, create_chunk, archive_chunk.",
+    "Prefer create_chunk for new campaign foundation material. Prefer append only when updating an existing matching chunk from the provided index.",
+    "Create rich aggregate chunks around durable retrieval anchors, usually 8-12 chunks total for a campaign opener. Do not create a separate chunk for every clue, rumor, scene detail, subtask, or minor prop.",
+    "Small granular details belong inside the best parent chunk: a major NPC, player character, place, faction, active cross-cutting thread, or campaign-scale secret.",
+    "Create a separate chunk only when future turns may need to retrieve that anchor independently without pulling a broader parent chunk.",
+    "Do not create many near-duplicate chunks for the same anchor. Prefer one rich chunk with sections for Embedded Threads, Leads, Clues, Rumors, Related NPCs, Escalation, and Open Questions.",
+    "Use these categories only: npc_context, player_character_context, combat_context, relevant_world_context, quests_open_threads, overarching_big_plot_secrets.",
+    "Set visibility intentionally: player_safe only for facts, leads, pressures, or NPC details that can safely guide player-facing continuity; dm_only for hidden motives, reveal ladders, antagonist plans, true causes, secret clocks, and future twists.",
+    "Visibility applies to the entire markdown string. If any bullet, parenthetical, section, clue answer, private motive, true cause, future reveal, or DM-only fact appears in the chunk, the chunk must be dm_only.",
+    "Player-safe chunks must not include hidden answers in parentheses, private agendas, true culprit identities, not-yet-discovered locations, future betrayals, secret relationships, time-loop truths, divine fragments, fabricated-debt confirmations, or the actual answer to an open question.",
+    "Player-safe chunks must not include parenthetical corrections that reveal the truth of a rumor, such as '(false - ...)' or '(actually ...)'. Keep rumor truth values in dm_only secret chunks.",
+    "Player-safe chunks must not name not-yet-discovered hidden actors, employers, buyers, locations, ledgers, agents, or culprits. Use 'an unknown buyer', 'an undiscovered lead', or 'a hidden record' until the player discovers the name or object.",
+    "Do not launder hidden facts into player_safe chunks by marking them 'rumored', 'unconfirmed', 'possible', or as a question. If the detail is a hidden ledger, secret agent, true culprit, exact hidden location, private employer, or true motive from the planner, it belongs in dm_only.",
+    "Player-safe thread chunks may list immediate playable choices and unconfirmed rumors, but their Escalation sections must not name hidden antagonists, hidden destinations, or future secret events. Either make the thread dm_only or describe escalation generically, such as 'the unknown buyer acts first' or 'the trail grows colder'.",
+    "Never put a section labeled DM Eyes Only, Hidden Truth, Future Reveal Paths, true cause, private motive, or secret clock inside a player_safe chunk. If that section is needed, move it to a secret:* dm_only chunk or make the entire chunk dm_only.",
+    "For an anchor with both public continuity and hidden truth, split it into a player_safe parent chunk and a dm_only secret chunk. Only make the parent chunk dm_only when there is no player-safe rumor, lead, place-name, symbol, or local pressure to preserve yet.",
+    "Player-safe chunks may include mysteries as mysteries: use 'Unknown', 'rumored', 'unconfirmed', or 'not yet discovered' instead of revealing the true answer.",
+    "Treat Pageden/canonical Eldermere material as source-grounded world truth. Treat planner-created links, motives, clocks, and secrets as campaign-local premises until established through play.",
+    "Every chunk should label its epistemic status with sections or bullets such as Canonical Grounding, Campaign-Local Premise, Established Facts, Strong Inferences, DM Seeds, Hidden Truth, Future Reveal Paths, Constraints, or Open Questions.",
+    "When an anchor has both player-safe continuity and hidden truth, create a public/world or NPC chunk plus a DM-only secret chunk only when both need independent retrieval. Example: world:sunder-kiln for known leads, rumors, local pressures, and playable context, plus secret:sunder-kiln for the time-loop truth and reveal ladder.",
+    "Do not resolve long-term secrets immediately. Preserve a long runway for discovery, player choice, and the player leaving a mark on Eldermere.",
+    "Use stable ids with prefixes: npc:kebab-case-name, world:kebab-case-name, faction:kebab-case-name, thread:kebab-case-name, secret:kebab-case-name, or pc:kebab-case-name.",
+    "Do not create secret companion chunks with npc:* or thread:* ids such as npc:name-secrets or thread:name-secrets. If the chunk is mainly hidden truth, private motive, or reveal ladder, its context_id must start with secret: and its context_type must be overarching_big_plot_secrets.",
+    "NPC chunks must use context_type npc_context and the NPC card section structure from the memory updater where possible.",
+    "Every campaign-important named NPC from the planner must receive an npc:* chunk, including missing mentors, off-screen patrons, not-yet-met antagonists, and dead or endangered anchors. Do not replace an important NPC chunk with only a thread, faction, world, or secret chunk.",
+    "NPC id slugs must preserve word boundaries with hyphens, especially personal names: use npc:lysa-marvelbridge, not npc:lysamarvelbridge.",
+    "For a missing NPC, create a player_safe npc:* chunk with what is known, rumors, relationships, and open questions. Put their true fate, secret location, private discoveries, or reveal ladder in a paired secret:* chunk if needed.",
+    "For a not-yet-met antagonist, private buyer, secret employer, or hidden patron whose name has not been discovered in play, create the npc:* chunk as dm_only. Do not make a player_safe NPC chunk that names the hidden antagonist as a rumor or open question.",
+    "World chunks should cover living local context, locations, factions, hazards, artifacts, or recurring symbols.",
+    "Major hidden places, artifacts, or institutions named by the planner should usually receive a relevant_world_context chunk. If player-facing rumors, leads, symbols, missing-person clues, or local pressures point toward that anchor, make the world chunk player_safe and keep it mystery-forward.",
+    "A world:* chunk for a hidden place must not contain the true nature, private location, reveal ladder, bound entities, antagonist plan, or final answer. Put those in the paired secret:* chunk.",
+    "If the planner names a major hidden ruin, dungeon, artifact, chamber, or location as a destination or long-term anchor, create a world:<anchor> chunk with context_type relevant_world_context. If that anchor has hidden truth or a reveal ladder, also create secret:<same-anchor> with context_type overarching_big_plot_secrets, using the exact same kebab-case slug after the prefix. Do not add suffixes like -truth, -secrets, -mystery, or -reveal to the paired secret id.",
+    "Do not satisfy a named major anchor with only a broader region, faction, or thread chunk. If the planner names the Sunder Kiln, create world:sunder-kiln and secret:sunder-kiln specifically.",
+    "Thread chunks should cover active objectives, mysteries, obligations, faction pressures, or choice points only when the thread cuts across multiple anchors. Otherwise embed the thread inside the relevant parent chunk.",
+    "Secret chunks should cover reveal ladders, hidden truths, long-term antagonistic plans, or campaign-scale mysteries.",
+    "Required invariant: if a player_safe world:<anchor> chunk exists for a major hidden place with campaign-scale truth, a dm_only secret:<same-anchor> chunk must also exist. For Sunder Kiln specifically, world:sunder-kiln and secret:sunder-kiln must both exist.",
+    "Do not use a catch-all secret such as secret:campaign-core, secret:hidden-agendas, or secret:revelation-ladder as a substitute for a required named secret anchor. Catch-all secret chunks are allowed only after all required named secret anchors have been created.",
+    "Before returning, audit every player_safe chunk and remove or move any of these examples to dm_only: 'duplicate ledger hidden in his room', 'half-burned map in her room', 'the buyer's agent will retrieve notes', 'Garrick is the buyer', 'Fara works for Garrick', 'Lysa is alive/trapped', 'the ruin is a time-loop chamber', or any equivalent hidden-answer wording.",
+    "Safe public rewrites are acceptable: 'a missing record may exist', 'Lysa's lodging may contain a lead', 'an unknown buyer may act first', 'someone is destroying evidence', 'the ruin may hold old imperial machinery', 'the sinkhole may be connected'.",
+    "If you cannot make a player_safe chunk useful without those hidden facts, set that chunk visibility to dm_only instead.",
+    "For Eldermere campaign foundations, ensure the output covers the player character, every important NPC including missing or not-yet-met anchors, the starting place, major local institutions or factions, major hidden places or artifacts, the primary active thread, and the major DM-only secrets.",
+    "If the planner names a missing mentor, patron, antagonist, key faction, major ruin, or collapse clock, that anchor should appear either as its own chunk or as a clearly labeled section inside a richer parent chunk.",
+    "Return new_context_chunks as an array. Each item must use exactly these fields: context_id, context_type, title, visibility, markdown.",
+    "Never use chunk_id, chunkId, content, body, body_markdown, or nested JSON for a new_context_chunks item. The markdown field must be a single Markdown string.",
+    "Return patches as an array, even when empty. Return remove_context_chunks as an array, even when empty.",
+    "Exact output shape example:",
+    JSON.stringify(
+      {
+        patches: [],
+        new_context_chunks: [
+          {
+            context_id: "world:major-anchor",
+            context_type: "relevant_world_context",
+            title: "Major Anchor",
+            visibility: "player_safe",
+            markdown:
+              "# Major Anchor\n\n## Canonical Grounding\n- Source-grounded world truth.\n\n## Campaign-Local Premise\n- Campaign-specific material from the planner.\n\n## Embedded Threads\n- Related clue, rumor, and objective details that do not need separate chunks yet.\n\n## Related NPCs\n- Names and relationships.\n\n## Open Questions\n- Questions for future play."
+          },
+          {
+            context_id: "secret:major-anchor",
+            context_type: "overarching_big_plot_secrets",
+            title: "Major Anchor Secret",
+            visibility: "dm_only",
+            markdown:
+              "# Major Anchor Secret\n\n## Hidden Truth\n- True cause or secret state.\n\n## Evidence Planted\n- Clues that can surface later.\n\n## Future Reveal Paths\n- How the truth can be discovered over time.\n\n## Constraints\n- Do not resolve too soon."
+          }
+        ],
+        remove_context_chunks: []
+      },
+      null,
+      2
+    ),
+    "Never invent player decisions that have not happened. Do not say the player trusts, accepts, refuses, discovers, defeats, or resolves anything unless established in the opening input.",
+    "Return exactly one JSON object and no Markdown outside JSON."
+  ].join("\n");
+}
+
+function formatCampaignFoundationCompilerRequest(input: {
+  campaign: CampaignRow;
+  openingRequest: string;
+  plan: EldermereOpeningPlan;
+  contextChunkIndex: ContextChunkIndex;
+}) {
+  return [
+    "Campaign ID:",
+    input.campaign.id,
+    "",
+    "Canonical Eldermere context for this selected start:",
+    formatEldermereOpeningPromptContext(
+      eldermereCampaignStartFromMetadata(input.campaign)
+    ),
+    "",
+    "Opening request and canonical character/backstory context:",
+    input.openingRequest,
+    "",
+    "Eldermere opening planner output JSON:",
+    JSON.stringify(openingPlanToJson(input.plan), null, 2),
+    "",
+    "Existing context chunk index:",
+    formatContextChunkIndexForMemoryUpdater(input.contextChunkIndex),
+    "",
+    "Output reminder:",
+    "Return JSON with patches, new_context_chunks, and remove_context_chunks only."
+  ].join("\n");
+}
+
+async function runEldermereCampaignFoundationCompiler(
+  db: Queryable,
+  runtime: DungeonMasterRuntime,
+  input: {
+    campaign: CampaignRow;
+    openingRequest: string;
+    plan: EldermereOpeningPlan;
+    turnId?: string | undefined;
+  }
+) {
+  const traceId = randomUUID();
+  const startedAt = Date.now();
+
+  try {
+    const contextChunkIndex = await listCampaignContextChunkIndex(
+      db,
+      input.campaign.id
+    );
+    const instructions = buildCampaignFoundationCompilerPrompt();
+    const message = formatCampaignFoundationCompilerRequest({
+      campaign: input.campaign,
+      openingRequest: input.openingRequest,
+      plan: input.plan,
+      contextChunkIndex
+    });
+
+    await logDmTurnTrace(db, {
+      campaignId: input.campaign.id,
+      traceId,
+      turnId: input.turnId,
+      phase: "campaign_foundation_compiler_started",
+      payload: {
+        message: textStats(message),
+        instructions: textStats(instructions),
+        campaignTitle: input.plan.campaignTitle,
+        region: input.plan.region.name,
+        startingLocation: input.plan.startingLocation.name
+      }
+    });
+
+    const providerStartedAt = Date.now();
+    const providerData = await runtime.askProvider({
+      instructions,
+      message,
+      history: []
+    });
+
+    await logDmModelCall(db, {
+      campaignId: input.campaign.id,
+      traceId,
+      turnId: input.turnId,
+      phase: "campaign_foundation_compiler",
+      providerData,
+      durationMs: Date.now() - providerStartedAt
+    });
+
+    const parsed = parseJsonRecord(providerData.content);
+    const foundationChunkPatches = Array.isArray(parsed?.new_context_chunks)
+      ? sanitizeCampaignFoundationCompilerChunks(
+          parsed.new_context_chunks.map((chunk) =>
+            normalizeNewContextChunkPatch(chunk)
+          )
+        )
+      : [];
+    const proposedPatches = [
+      ...(Array.isArray(parsed?.patches) ? parsed.patches : []),
+      ...foundationChunkPatches,
+      ...(Array.isArray(parsed?.remove_context_chunks)
+        ? parsed.remove_context_chunks.map((chunk) => ({
+            operation: "archive_chunk",
+            context_id:
+              typeof chunk === "string" ? chunk : eventPayload(chunk).context_id
+          }))
+        : [])
+    ];
+    const existingContextIds = await listCampaignContextIds(
+      db,
+      input.campaign.id
+    );
+    const validation = validateMemoryPatches(
+      proposedPatches,
+      existingContextIds
+    );
+
+    await applyAcceptedMemoryPatches(
+      db,
+      input.campaign.id,
+      validation.accepted
+    );
+
+    const contextStorageState = await retrieveCampaignContextStorageState(
+      db,
+      input.campaign.id
+    );
+
+    await logDmTurnTrace(db, {
+      campaignId: input.campaign.id,
+      traceId,
+      turnId: input.turnId,
+      phase: "campaign_foundation_compiler_completed",
+      payload: {
+        proposedPatchCount: proposedPatches.length,
+        acceptedPatchCount: validation.accepted.length,
+        discardedPatchCount: validation.discarded.length,
+        contextChunkCount: contextStorageState.length,
+        durationMs: Date.now() - startedAt
+      }
+    });
+
+    await logDmMemoryPatchLog(db, {
+      campaignId: input.campaign.id,
+      traceId,
+      turnId: input.turnId,
+      payload: {
+        source: "campaign_foundation_compiler",
+        proposedPatches,
+        acceptedPatches: validation.accepted,
+        discardedPatches: validation.discarded,
+        durationMs: Date.now() - startedAt
+      }
+    });
+
+    runtime.emitDmStreamEvent?.({
+      type: "room_updated",
+      roomId: input.campaign.id,
+      updatedAt: nowIso()
+    });
+  } catch (error) {
+    await logDmMemoryPatchLog(db, {
+      campaignId: input.campaign.id,
+      traceId,
+      turnId: input.turnId,
+      payload: {
+        source: "campaign_foundation_compiler",
+        failed: true,
+        error: errorSummary(error),
+        durationMs: Date.now() - startedAt
+      }
+    });
   }
 }
 
@@ -7114,18 +7839,36 @@ export async function beginRoomForUser(
             openingRequest,
             openingTurn.id
           );
-          await persistEldermereOpeningPlan(db, beginState.campaign.id, plan);
+          await persistEldermereOpeningPlan(
+            db,
+            beginState.campaign.id,
+            plan.plan
+          );
+          void runEldermereCampaignFoundationCompiler(db, runtime, {
+            campaign: beginState.campaign,
+            openingRequest,
+            plan: plan.plan,
+            turnId: openingTurn.id
+          });
 
-          return askEldermereOpeningNarrator(
+          const opening = await askEldermereOpeningNarrator(
             db,
             runtime,
             beginState.campaign,
             openingRequest,
             openingSceneInstructions("multiplayer"),
-            plan,
+            plan.plan,
             openingTurn.id,
             { allowResolvedCombatWithoutRolls: true }
           );
+
+          return {
+            ...opening,
+            debug: {
+              ...opening.debug,
+              eldermereOpeningPlanner: plan.debug
+            }
+          };
         })()
       : await askDungeonMaster(
           db,

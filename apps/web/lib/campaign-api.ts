@@ -5,6 +5,7 @@ import {
   CampaignCreateResponseSchema,
   CampaignNpcCardUpdateResponseSchema,
   CampaignNpcCardsResponseSchema,
+  CharacterBackstoryGenerateResponseSchema,
   CharacterPortraitPreviewResponseSchema,
   CharacterPortraitResponseSchema,
   CampaignJoinPreviewResponseSchema,
@@ -17,6 +18,7 @@ import {
   type CampaignCreateRequest,
   type CampaignNpcCard,
   type CampaignNpcCardUpdateRequest,
+  type CharacterBackstoryGenerateRequest,
   type CharacterPortraitGenerateRequest,
   type CharacterPortraitPreviewRequest,
   type CharacterPortraitUploadRequest,
@@ -144,6 +146,25 @@ export async function previewCharacterPortrait(
     response,
     CharacterPortraitPreviewResponseSchema,
     "Character art could not be created."
+  );
+
+  return data;
+}
+
+export async function generateCharacterBackstory(
+  input: CharacterBackstoryGenerateRequest
+) {
+  const response = await fetch("/api/campaigns/backstory", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(input)
+  });
+  const data = await parseJsonResponse(
+    response,
+    CharacterBackstoryGenerateResponseSchema,
+    "Backstory could not be created."
   );
 
   return data;
