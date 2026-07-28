@@ -95,6 +95,12 @@ describe("ChatHistorySidebar", () => {
     expect(
       screen.getAllByRole("img", { name: /seraphina portrait/i })
     ).toHaveLength(2);
+    expect(
+      screen.getAllByRole("img", { name: /seraphina portrait/i })[1]
+    ).toHaveAttribute(
+      "src",
+      "/media/campaigns/campaign-1/players/player-1/portraits/asset-1/original.png"
+    );
 
     fireEvent.click(
       screen.getByRole("button", { name: /close player portrait/i })

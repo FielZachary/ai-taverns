@@ -363,7 +363,7 @@ test("POST /api/campaigns/portrait/preview can use OpenAI GPT Image", async () =
       background: "#1d4ed8"
     }
   })
-    .png()
+    .jpeg()
     .toBuffer();
 
   process.env.OPENAI_API_KEY = "test-openai-image-key";
@@ -380,6 +380,9 @@ test("POST /api/campaigns/portrait/preview can use OpenAI GPT Image", async () =
       prompt?: string;
       n?: number;
       size?: string;
+      quality?: string;
+      output_format?: string;
+      output_compression?: number;
     };
 
     assert.equal(body.model, "gpt-image-2");
@@ -392,6 +395,9 @@ test("POST /api/campaigns/portrait/preview can use OpenAI GPT Image", async () =
     assert.match(body.prompt ?? "", /Avoid:/);
     assert.equal(body.n, 1);
     assert.equal(body.size, "1024x1024");
+    assert.equal(body.quality, "low");
+    assert.equal(body.output_format, "jpeg");
+    assert.equal(body.output_compression, 88);
 
     return new Response(
       JSON.stringify({
@@ -435,8 +441,8 @@ test("POST /api/campaigns/portrait/preview can use OpenAI GPT Image", async () =
     assert.equal(response.statusCode, 200, response.body);
 
     const preview = CharacterPortraitPreviewResponseSchema.parse(response.json());
-    assert.equal(preview.contentType, "image/png");
-    assert.match(preview.imageDataUrl, /^data:image\/png;base64,/);
+    assert.equal(preview.contentType, "image/jpeg");
+    assert.match(preview.imageDataUrl, /^data:image\/jpeg;base64,/);
   } finally {
     globalThis.fetch = originalFetch;
     if (originalOpenAiApiKey === undefined) {

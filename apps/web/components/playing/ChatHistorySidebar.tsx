@@ -25,6 +25,10 @@ type ChatHistorySidebarProps = {
   onViewCharacterSheet: () => void;
 };
 
+function fullSizePortraitUrl(portraitUrl: string) {
+  return portraitUrl.replace(/\/(?:512|128)\.webp(\?.*)?$/, "/original.png$1");
+}
+
 export function ChatHistorySidebar({
   chats,
   activeChatId,
@@ -39,6 +43,9 @@ export function ChatHistorySidebar({
   onViewCharacterSheet
 }: ChatHistorySidebarProps) {
   const [isPortraitModalOpen, setIsPortraitModalOpen] = useState(false);
+  const modalPortraitUrl = playerPortraitUrl
+    ? fullSizePortraitUrl(playerPortraitUrl)
+    : "";
 
   useEffect(() => {
     if (!isPortraitModalOpen) {
@@ -166,7 +173,7 @@ export function ChatHistorySidebar({
               <X size={20} />
             </button>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={playerPortraitUrl} alt={playerPortraitAlt} />
+            <img src={modalPortraitUrl} alt={playerPortraitAlt} />
           </div>
         </div>
       ) : null}

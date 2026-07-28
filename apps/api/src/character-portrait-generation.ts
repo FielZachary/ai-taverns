@@ -101,6 +101,9 @@ const defaultOpenAiImageEndpoint =
   "https://api.openai.com/v1/images/generations";
 const defaultOpenAiImageModel = "gpt-image-2";
 const openAiCharacterPortraitSize = "1024x1024";
+const openAiCharacterPortraitQuality = "low";
+const openAiCharacterPortraitOutputFormat = "jpeg";
+const openAiCharacterPortraitOutputCompression = 88;
 const qwenCharacterPortraitSize = "1024*1024";
 let localEnvCache: Record<string, string> | undefined;
 let localEnvCacheCwd: string | undefined;
@@ -370,7 +373,10 @@ async function fetchOpenAiImage(input: {
       model: input.model,
       prompt: `${input.prompt}\n\nAvoid: ${input.negativePrompt}.`,
       n: 1,
-      size: openAiCharacterPortraitSize
+      size: openAiCharacterPortraitSize,
+      quality: openAiCharacterPortraitQuality,
+      output_format: openAiCharacterPortraitOutputFormat,
+      output_compression: openAiCharacterPortraitOutputCompression
     })
   });
   const body = (await response.json()) as OpenAiImageResponse;
@@ -394,7 +400,7 @@ async function fetchOpenAiImage(input: {
   if (imageBase64) {
     return {
       buffer: Buffer.from(imageBase64, "base64"),
-      contentType: "image/png",
+      contentType: `image/${openAiCharacterPortraitOutputFormat}`,
       requestId,
       usage: body.usage
     };
@@ -706,12 +712,12 @@ export async function generateCharacterPortraitPreview(
       prompt,
       negativePrompt
     });
-    const png = await sharp(generated.buffer).png().toBuffer();
-
     return {
       status: "ready",
-      imageDataUrl: `data:image/png;base64,${png.toString("base64")}`,
-      contentType: "image/png"
+      imageDataUrl: `data:${generated.contentType};base64,${generated.buffer.toString(
+        "base64"
+      )}`,
+      contentType: generated.contentType
     };
   } catch (error) {
     return {
