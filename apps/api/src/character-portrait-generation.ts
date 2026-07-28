@@ -35,6 +35,30 @@ type QwenImageResponse = {
   message?: string;
 };
 
+type OpenAiImageResponse = {
+  data?: {
+    b64_json?: string;
+    url?: string;
+  }[];
+  usage?: unknown;
+  error?: {
+    message?: string;
+    code?: string;
+    type?: string;
+  };
+};
+
+type CharacterPortraitImageModel = "qwen" | "openai";
+const supportedCharacterPortraitImageModels = ["qwen", "openai"] as const;
+
+type GeneratedPortraitImage = {
+  buffer: Buffer;
+  contentType: string;
+  requestId: string | null;
+  usage: unknown;
+  sourceImageUrl: string | null;
+};
+
 type CharacterPortraitGenerationResult =
   | {
       status: "ready";
@@ -53,9 +77,10 @@ type GenerateCharacterPortraitInput = {
   userId: string;
   guidelines?: string | undefined;
   artStyle?: string | undefined;
-  imageModel?: "qwen" | undefined;
+  imageModel?: CharacterPortraitImageModel | undefined;
   fetchImpl?: typeof fetch;
   storage?: MediaStorage;
+  onPending?: (() => void | Promise<void>) | undefined;
 };
 
 type PreviewCharacterPortraitInput = {
@@ -66,13 +91,21 @@ type PreviewCharacterPortraitInput = {
   customWorldName?: string | undefined;
   guidelines?: string | undefined;
   artStyle?: string | undefined;
-  imageModel?: "qwen" | undefined;
+  imageModel?: CharacterPortraitImageModel | undefined;
   fetchImpl?: typeof fetch;
 };
 
 const defaultQwenImageEndpoint =
   "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation";
 const defaultQwenImageModel = "qwen-image-2.0-pro";
+const defaultOpenAiImageEndpoint =
+  "https://api.openai.com/v1/images/generations";
+const defaultOpenAiImageModel = "gpt-image-2";
+const openAiCharacterPortraitSize = "1024x1024";
+const openAiCharacterPortraitQuality = "medium";
+const openAiCharacterPortraitOutputFormat = "jpeg";
+const openAiCharacterPortraitOutputCompression = 88;
+const qwenCharacterPortraitSize = "1024*1024";
 let localEnvCache: Record<string, string> | undefined;
 let localEnvCacheCwd: string | undefined;
 
@@ -174,6 +207,30 @@ function qwenImageSettings() {
   };
 }
 
+function openAiImageSettings() {
+  return {
+    apiKey: envValue("OPENAI_API_KEY"),
+    endpoint: (
+      envValue("OPENAI_IMAGE_ENDPOINT") || defaultOpenAiImageEndpoint
+    ).replace(/\/+$/, ""),
+    model: envValue("OPENAI_IMAGE_MODEL") || defaultOpenAiImageModel
+  };
+}
+
+function imageProviderForModel(
+  imageModel: CharacterPortraitImageModel | undefined
+) {
+  return imageModel ?? "qwen";
+}
+
+function isSupportedCharacterPortraitImageModel(
+  imageModel: unknown
+): imageModel is CharacterPortraitImageModel {
+  return supportedCharacterPortraitImageModels.includes(
+    imageModel as CharacterPortraitImageModel
+  );
+}
+
 function compactText(value: string, maxLength: number) {
   return value.replace(/\s+/g, " ").trim().slice(0, maxLength);
 }
@@ -208,7 +265,7 @@ function characterPortraitPrompt(input: {
   const guidelines = compactText(input.guidelines ?? "", 900);
 
   return [
-    `Create a square fantasy character portrait for ${characterName}.`,
+    `Create fantasy character key art for ${characterName}.`,
     `Campaign world or genre: ${world}.`,
     "Use the character sheet details below for class, species, gear, mood, age, gender presentation, alignment, and magical flavor.",
     "",
@@ -216,7 +273,7 @@ function characterPortraitPrompt(input: {
     "",
     artStyleDirection(input.artStyle),
     guidelines ? `User art guidelines: ${guidelines}` : "",
-    "Composition: waist-up heroic portrait, expressive face, readable silhouette, detailed clothing and equipment, subtle background atmosphere, no frame, no UI, no text, no logo, no watermark."
+    "Composition: square 1024 by 1024 cinematic environmental character portrait, medium-distance framing. Show the character from head to at least mid-thigh or knees with full torso, hands, belt, cloak, and main props visible. Do not make a tight bust, headshot, chest-up crop, or flat studio portrait. Place the character slightly off center with generous readable background around them: a real fantasy adventure location with depth, weather, architecture, lanterns, banners, roads, ruins, or distant landmarks. Keep the head safely away from the top edge and leave room around the full silhouette. No frame, no UI, no text, no logo, no watermark."
   ].join("\n");
 }
 
@@ -271,7 +328,7 @@ async function fetchQwenImage(input: {
         prompt_extend: true,
         watermark: false,
         n: 1,
-        size: "1024*1024",
+        size: qwenCharacterPortraitSize,
         negative_prompt: input.negativePrompt
       }
     })
@@ -296,6 +353,105 @@ async function fetchQwenImage(input: {
     imageUrl,
     requestId: body.request_id ?? null,
     usage: body.usage
+  };
+}
+
+async function fetchOpenAiImage(input: {
+  fetchImpl: typeof fetch;
+  apiKey: string;
+  endpoint: string;
+  model: string;
+  prompt: string;
+  negativePrompt: string;
+}) {
+  const response = await input.fetchImpl(input.endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${input.apiKey}`
+    },
+    body: JSON.stringify({
+      model: input.model,
+      prompt: `${input.prompt}\n\nAvoid: ${input.negativePrompt}.`,
+      n: 1,
+      size: openAiCharacterPortraitSize,
+      quality: openAiCharacterPortraitQuality,
+      output_format: openAiCharacterPortraitOutputFormat,
+      output_compression: openAiCharacterPortraitOutputCompression
+    })
+  });
+  const body = (await response.json()) as OpenAiImageResponse;
+  const requestId = response.headers.get("x-request-id");
+
+  if (!response.ok || body.error) {
+    const errorCode = body.error?.code ? ` (${body.error.code})` : "";
+    const requestSuffix = requestId ? ` Request ID: ${requestId}.` : "";
+    const providerMessage = body.error?.message?.replace(/\.+$/, "");
+
+    throw new Error(
+      providerMessage
+        ? `OpenAI image generation failed${errorCode}: ${providerMessage}.${requestSuffix}`
+        : `OpenAI image generation failed with ${response.status}.${requestSuffix}`
+    );
+  }
+
+  const imageBase64 = body.data?.[0]?.b64_json;
+  const imageUrl = body.data?.[0]?.url;
+
+  if (imageBase64) {
+    return {
+      buffer: Buffer.from(imageBase64, "base64"),
+      contentType: `image/${openAiCharacterPortraitOutputFormat}`,
+      requestId,
+      usage: body.usage
+    };
+  }
+
+  if (imageUrl) {
+    const downloaded = await downloadImage(input.fetchImpl, imageUrl);
+
+    return {
+      buffer: downloaded.buffer,
+      contentType: downloaded.contentType,
+      requestId,
+      usage: body.usage
+    };
+  }
+
+  throw new Error(
+    `OpenAI image generation returned no image data.${
+      requestId ? ` Request ID: ${requestId}.` : ""
+    }`
+  );
+}
+
+async function generatePortraitSourceImage(input: {
+  provider: CharacterPortraitImageModel;
+  fetchImpl: typeof fetch;
+  apiKey: string;
+  endpoint: string;
+  model: string;
+  prompt: string;
+  negativePrompt: string;
+}): Promise<GeneratedPortraitImage> {
+  if (input.provider === "openai") {
+    const generated = await fetchOpenAiImage(input);
+
+    return {
+      ...generated,
+      sourceImageUrl: null
+    };
+  }
+
+  const generated = await fetchQwenImage(input);
+  const downloaded = await downloadImage(input.fetchImpl, generated.imageUrl);
+
+  return {
+    buffer: downloaded.buffer,
+    contentType: downloaded.contentType,
+    requestId: generated.requestId,
+    usage: generated.usage,
+    sourceImageUrl: generated.imageUrl
   };
 }
 
@@ -388,19 +544,27 @@ async function storePortraitSource(input: {
 export async function generateCharacterPortraitForCampaign(
   input: GenerateCharacterPortraitInput
 ): Promise<CharacterPortraitGenerationResult> {
-  if (input.imageModel && input.imageModel !== "qwen") {
+  if (
+    input.imageModel &&
+    !isSupportedCharacterPortraitImageModel(input.imageModel)
+  ) {
     return {
       status: "skipped",
       reason: "That character portrait model is not supported yet."
     };
   }
 
-  const settings = qwenImageSettings();
+  const provider = imageProviderForModel(input.imageModel);
+  const settings =
+    provider === "openai" ? openAiImageSettings() : qwenImageSettings();
 
   if (!settings.apiKey) {
     return {
       status: "skipped",
-      reason: "Qwen image generation is not configured."
+      reason:
+        provider === "openai"
+          ? "OpenAI image generation is not configured."
+          : "Qwen image generation is not configured."
     };
   }
 
@@ -423,12 +587,15 @@ export async function generateCharacterPortraitForCampaign(
     storageProvider: configuredStorageProvider(input.config),
     prompt,
     negativePrompt,
-    provider: "qwen",
+    provider,
     model: settings.model
   });
 
+  await input.onPending?.();
+
   try {
-    const generated = await fetchQwenImage({
+    const generated = await generatePortraitSourceImage({
+      provider,
       fetchImpl,
       apiKey: settings.apiKey,
       endpoint: settings.endpoint,
@@ -436,9 +603,8 @@ export async function generateCharacterPortraitForCampaign(
       prompt,
       negativePrompt
     });
-    const source = (await downloadImage(fetchImpl, generated.imageUrl)).buffer;
     const { displayObject, storedObjects } = await storePortraitSource({
-      source,
+      source: generated.buffer,
       storage,
       campaignId: target.campaignId,
       playerId: target.playerId,
@@ -451,7 +617,7 @@ export async function generateCharacterPortraitForCampaign(
       displayObject,
       providerRequestId: generated.requestId,
       generationMetadata: {
-        sourceImageUrl: generated.imageUrl,
+        sourceImageUrl: generated.sourceImageUrl,
         usage: generated.usage ?? null,
         variants: storedObjects.map((object) => ({
           objectKey: object.objectKey,
@@ -503,19 +669,27 @@ export async function generateCharacterPortraitPreview(
       reason: string;
     }
 > {
-  if (input.imageModel && input.imageModel !== "qwen") {
+  if (
+    input.imageModel &&
+    !isSupportedCharacterPortraitImageModel(input.imageModel)
+  ) {
     return {
       status: "skipped",
       reason: "That character portrait model is not supported yet."
     };
   }
 
-  const settings = qwenImageSettings();
+  const provider = imageProviderForModel(input.imageModel);
+  const settings =
+    provider === "openai" ? openAiImageSettings() : qwenImageSettings();
 
   if (!settings.apiKey) {
     return {
       status: "skipped",
-      reason: "Qwen image generation is not configured."
+      reason:
+        provider === "openai"
+          ? "OpenAI image generation is not configured."
+          : "Qwen image generation is not configured."
     };
   }
 
@@ -532,7 +706,8 @@ export async function generateCharacterPortraitPreview(
   const negativePrompt = characterPortraitNegativePrompt();
 
   try {
-    const generated = await fetchQwenImage({
+    const generated = await generatePortraitSourceImage({
+      provider,
       fetchImpl,
       apiKey: settings.apiKey,
       endpoint: settings.endpoint,
@@ -540,13 +715,12 @@ export async function generateCharacterPortraitPreview(
       prompt,
       negativePrompt
     });
-    const downloaded = await downloadImage(fetchImpl, generated.imageUrl);
-    const png = await sharp(downloaded.buffer).png().toBuffer();
-
     return {
       status: "ready",
-      imageDataUrl: `data:image/png;base64,${png.toString("base64")}`,
-      contentType: "image/png"
+      imageDataUrl: `data:${generated.contentType};base64,${generated.buffer.toString(
+        "base64"
+      )}`,
+      contentType: generated.contentType
     };
   } catch (error) {
     return {

@@ -10,7 +10,6 @@ import {
   Plus,
   RefreshCw,
   ScrollText,
-  Sparkles,
   Wand2
 } from "lucide-react";
 import {
@@ -19,17 +18,22 @@ import {
 } from "@/lib/campaign-genres";
 import {
   createCampaign as createCampaignViaApi,
+  generateCharacterPortrait,
+  generateCharacterBackstory,
   joinCampaign as joinCampaignViaApi,
   joinLobbyInvite,
   previewLobbyInvite,
   previewCampaignJoin,
-  previewCharacterPortrait,
   uploadCharacterPortrait,
   type CampaignSummary
 } from "@/lib/campaign-api";
 import { defaultCharacterSheet } from "@/components/playing/PlayerPanel";
 import { DiceRollReveal3D } from "@/components/playing/DiceRollReveal3D";
-import type { MechanicsSeed, SpellSlotState } from "@ai-dnd/contracts";
+import type {
+  EldermereCampaignStart,
+  MechanicsSeed,
+  SpellSlotState
+} from "@ai-dnd/contracts";
 import artificerClassArt from "../../../../assets/classes art/artificer.png";
 import barbarianClassArt from "../../../../assets/classes art/barbarian.png";
 import bardClassArt from "../../../../assets/classes art/bard.png";
@@ -71,6 +75,31 @@ type NewAdventureFormProps = {
   initialInviteToken?: string;
 };
 
+const defaultCampaignPreparationMessage = "Preparing your campaign";
+const campaignPreparationMessages = [
+  defaultCampaignPreparationMessage,
+  "Integrating your backstory",
+  "Creating story direction",
+  "Determining NPCs",
+  "Ironing out details",
+  "Crafting first scene",
+  "Writing",
+  "Fetching 5E rules",
+  "Updating contracts",
+  "Double checking NPCs",
+  "Improving campaign plan",
+  "Repairing story holes",
+  "Final touches"
+];
+const campaignPreparationMessageIntervalMs = 10_000;
+const campaignPreparationTransitionMs = 650;
+
+type PreparationLoaderLayoutProps = {
+  currentMessage: string;
+  exitingMessage?: string;
+  note?: string;
+};
+
 type AbilityKey = "str" | "dex" | "con" | "int" | "wis" | "cha";
 type CompleteAbilityScores = Record<AbilityKey, number>;
 type AbilityScores = Record<AbilityKey, number | null>;
@@ -83,7 +112,31 @@ type CharacterArtStyle =
   | "storybook_illustration"
   | "ink_and_watercolor"
   | "cinematic_concept_art";
-type CharacterImageModel = "qwen";
+type CharacterImageModel = "qwen" | "openai";
+type PortraitRoomPlayer = {
+  portraitStatus?: "pending" | "ready" | "failed";
+  portraitUrl?: string;
+};
+type PortraitRoomSnapshot = {
+  players?: PortraitRoomPlayer[];
+};
+type PortraitRoomRealtimeEvent =
+  | { type: "room_updated"; roomId: string }
+  | { type: "room_snapshot"; roomId: string; snapshot: PortraitRoomSnapshot }
+  | { type: string; roomId?: string };
+
+function roomSocketUrl(campaign: CampaignSummary) {
+  const apiOrigin =
+    process.env.NEXT_PUBLIC_FASTIFY_API_ORIGIN?.replace(/\/$/, "") ||
+    window.location.origin;
+  const url = new URL("/api/room/live", apiOrigin);
+
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  url.searchParams.set("roomId", campaign.id);
+  url.searchParams.set("sessionId", campaign.sessionId);
+
+  return url.toString();
+}
 type SpellLevelLabel = "Cantrip" | "1st level" | "2nd level" | "3rd level";
 type SpellGroup = {
   level: SpellLevelLabel;
@@ -182,12 +235,6 @@ const multiplayerCustomCreateSteps = [
 ];
 const joinSteps = ["Mode", "Multiplayer", "Game Code", "Character", "Review"];
 const joinCodePattern = /[A-HJ-NP-Z2-9]{6}/;
-const campaignCreationLoadingSteps = [
-  "Preparing your adventure",
-  "Painting your character portrait",
-  "Saving the final details",
-  "Setting the table"
-];
 const customCharacterCreationSteps = [
   "Build",
   "Class",
@@ -3299,6 +3346,98 @@ function normalizeGameCodeInput(value: string) {
   );
 }
 
+function CampaignPreparationLoader() {
+  const [messageIndex, setMessageIndex] = useState(0);
+  const [exitingMessage, setExitingMessage] = useState("");
+  const currentMessage =
+    campaignPreparationMessages[messageIndex] ??
+    defaultCampaignPreparationMessage;
+
+  useEffect(() => {
+    let timeoutId: number | undefined;
+
+    const intervalId = window.setInterval(() => {
+      setMessageIndex((currentIndex) => {
+        const nextIndex =
+          (currentIndex + 1) % campaignPreparationMessages.length;
+
+        setExitingMessage(
+          campaignPreparationMessages[currentIndex] ??
+            defaultCampaignPreparationMessage
+        );
+
+        if (timeoutId) {
+          window.clearTimeout(timeoutId);
+        }
+
+        timeoutId = window.setTimeout(() => {
+          setExitingMessage("");
+        }, campaignPreparationTransitionMs);
+
+        return nextIndex;
+      });
+    }, campaignPreparationMessageIntervalMs);
+
+    return () => {
+      window.clearInterval(intervalId);
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, []);
+
+  return (
+    <PreparationLoaderLayout
+      currentMessage={currentMessage}
+      exitingMessage={exitingMessage}
+      note="this'll take about a minute and a half, sit tight ;)"
+    />
+  );
+}
+
+function PortraitPreparationLoader() {
+  return <PreparationLoaderLayout currentMessage="Generating portrait" />;
+}
+
+function PreparationLoaderLayout({
+  currentMessage,
+  exitingMessage = "",
+  note
+}: PreparationLoaderLayoutProps) {
+  return (
+    <div className="campaign-prep-loader">
+      <div className="campaign-prep-loader-window">
+        {exitingMessage ? (
+          <p
+            key={`exiting-${exitingMessage}`}
+            className="rune-loader campaign-prep-loader-message exiting"
+            aria-hidden="true"
+          >
+            {exitingMessage}
+            <span className="rune-loader-dots" aria-hidden="true">
+              <span>.</span>
+              <span>.</span>
+              <span>.</span>
+            </span>
+          </p>
+        ) : null}
+        <p
+          key={currentMessage}
+          className="rune-loader campaign-prep-loader-message entering"
+        >
+          {currentMessage}
+          <span className="rune-loader-dots" aria-hidden="true">
+            <span>.</span>
+            <span>.</span>
+            <span>.</span>
+          </span>
+        </p>
+      </div>
+      {note ? <p className="campaign-prep-loader-note">{note}</p> : null}
+    </div>
+  );
+}
+
 export function NewAdventureForm({
   initialInviteToken = ""
 }: NewAdventureFormProps) {
@@ -3355,9 +3494,13 @@ export function NewAdventureForm({
   const [dlcSpellVisibility, setDlcSpellVisibility] = useState<DlcSpellVisibility>({});
   const [alignment, setAlignment] = useState<Alignment>("Neutral Good");
   const [gender, setGender] = useState<Gender>("Non-binary");
+  const [backstory, setBackstory] = useState("");
+  const [eldermereStart, setEldermereStart] =
+    useState<EldermereCampaignStart | null>(null);
   const [characterSheet, setCharacterSheet] = useState(defaultCharacterSheet);
   const [ownerClientId, setOwnerClientId] = useState("");
   const [error, setError] = useState("");
+  const [isGeneratingBackstory, setIsGeneratingBackstory] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [isCreatingArt, setIsCreatingArt] = useState(false);
   const [createdCampaign, setCreatedCampaign] =
@@ -3365,11 +3508,10 @@ export function NewAdventureForm({
   const [portraitPreviewDataUrl, setPortraitPreviewDataUrl] = useState("");
   const [characterArtGuidelines, setCharacterArtGuidelines] = useState("");
   const [characterArtStyle, setCharacterArtStyle] =
-    useState<CharacterArtStyle>("painterly_fantasy");
+    useState<CharacterArtStyle>("ink_and_watercolor");
   const [characterImageModel, setCharacterImageModel] =
-    useState<CharacterImageModel>("qwen");
+    useState<CharacterImageModel>("openai");
   const [uploadedPortraitFileName, setUploadedPortraitFileName] = useState("");
-  const [creationLoadingStep, setCreationLoadingStep] = useState(0);
   const [flowTransition, setFlowTransition] =
     useState<FlowTransitionState>("idle");
   const isFlowTransitioning = flowTransition !== "idle";
@@ -3575,6 +3717,17 @@ export function NewAdventureForm({
         ]
       : ["None"];
     const name = characterName.trim() || "Unnamed adventurer";
+    const trimmedBackstory = backstory.trim();
+    const backstoryLines = trimmedBackstory
+      ? [
+          "Backstory",
+          trimmedBackstory,
+          "Backstory Expansion: Preserve this backstory as written unless the player changes it."
+        ]
+      : [
+          "Backstory",
+          "AI Taverns should generate a fitting backstory for this character."
+        ];
 
     return [
       `Character Name: ${name}`,
@@ -3593,6 +3746,8 @@ export function NewAdventureForm({
       `Background: ${characterBackground}`,
       `Alignment: ${alignment}`,
       `Gender: ${gender}`,
+      "",
+      ...backstoryLines,
       "",
       "Core Stats",
       `Armor Class: ${selectedEquipmentProfile.armorClass}`,
@@ -3649,13 +3804,14 @@ export function NewAdventureForm({
       ...spells,
       "",
       "DM Brief",
-      `${name} is a Level ${characterLevel} ${alignment} ${gender.toLowerCase()} ${characterSpecies} ${selectedClass.id} (${subclass}) with the ${characterBackground} background. Use their proficient skills (${formatList(proficientSkills)}) and key class choices to frame checks, spotlight moments, and opening-scene hooks.`
+      `${name} is a Level ${characterLevel} ${alignment} ${gender.toLowerCase()} ${characterSpecies} ${selectedClass.id} (${subclass}) with the ${characterBackground} background. Use their proficient skills (${formatList(proficientSkills)}) and key class choices to frame checks, spotlight moments, opening-scene hooks, and ${trimmedBackstory ? "the player's backstory" : "a generated backstory"}.`
     ]
       .filter((line): line is string => line !== null)
       .join("\n");
   }, [
     abilityScores,
     alignment,
+    backstory,
     backgroundSkillList,
     characterBackground,
     characterBuildMode,
@@ -3756,21 +3912,6 @@ export function NewAdventureForm({
   }, [characterSheetPreview]);
 
   useEffect(() => {
-    if (!isCreating || isJoinFlow) {
-      setCreationLoadingStep(0);
-      return;
-    }
-
-    const interval = window.setInterval(() => {
-      setCreationLoadingStep((currentStep) =>
-        Math.min(currentStep + 1, campaignCreationLoadingSteps.length - 1)
-      );
-    }, 2400);
-
-    return () => window.clearInterval(interval);
-  }, [isCreating, isJoinFlow]);
-
-  useEffect(() => {
     const savedPlayerId = localStorage.getItem(playerIdStorageKey);
 
     if (savedPlayerId) {
@@ -3782,6 +3923,121 @@ export function NewAdventureForm({
     localStorage.setItem(playerIdStorageKey, nextPlayerId);
     setOwnerClientId(nextPlayerId);
   }, []);
+
+  useEffect(() => {
+    if (
+      !createdCampaign ||
+      !isCreatingArt ||
+      uploadedPortraitFileName ||
+      portraitPreviewDataUrl
+    ) {
+      return;
+    }
+
+    const portraitCampaign = createdCampaign;
+    let shouldIgnore = false;
+    let socket: WebSocket | null = null;
+
+    async function refreshPortraitStatus() {
+      try {
+        const response = await fetch(
+          `/api/room?roomId=${encodeURIComponent(
+            portraitCampaign.id
+          )}&sessionId=${encodeURIComponent(portraitCampaign.sessionId)}`,
+          { cache: "no-store" }
+        );
+
+        if (!response.ok) {
+          return;
+        }
+
+        const room = (await response.json()) as PortraitRoomSnapshot;
+        const portraitPlayer = room.players?.find(
+          (player) => player.portraitStatus || player.portraitUrl
+        );
+
+        if (shouldIgnore || !portraitPlayer) {
+          return;
+        }
+
+        if (portraitPlayer.portraitUrl) {
+          setPortraitPreviewDataUrl(portraitPlayer.portraitUrl);
+          setIsCreatingArt(false);
+          setError("");
+          return;
+        }
+
+        if (portraitPlayer.portraitStatus === "failed") {
+          setError("Character art could not be created.");
+          setIsCreatingArt(false);
+        }
+      } catch {
+        // The WebSocket remains the source of truth for the next pushed update.
+      }
+    }
+
+    function connectSocket() {
+      try {
+        socket = new WebSocket(roomSocketUrl(portraitCampaign));
+      } catch {
+        return;
+      }
+
+      socket.addEventListener("open", () => {
+        void refreshPortraitStatus();
+      });
+      socket.addEventListener("message", (event) => {
+        if (typeof event.data !== "string") {
+          return;
+        }
+
+        let parsed: PortraitRoomRealtimeEvent;
+
+        try {
+          parsed = JSON.parse(event.data) as PortraitRoomRealtimeEvent;
+        } catch {
+          return;
+        }
+
+        if (parsed.roomId !== portraitCampaign.id) {
+          return;
+        }
+
+        if (parsed.type === "room_snapshot" && "snapshot" in parsed) {
+          const portraitPlayer = parsed.snapshot.players?.find(
+            (player: PortraitRoomPlayer) =>
+              player.portraitStatus || player.portraitUrl
+          );
+
+          if (portraitPlayer?.portraitUrl) {
+            setPortraitPreviewDataUrl(portraitPlayer.portraitUrl);
+            setIsCreatingArt(false);
+            setError("");
+          } else if (portraitPlayer?.portraitStatus === "failed") {
+            setError("Character art could not be created.");
+            setIsCreatingArt(false);
+          }
+          return;
+        }
+
+        if (parsed.type === "room_updated") {
+          void refreshPortraitStatus();
+        }
+      });
+    }
+
+    connectSocket();
+
+    return () => {
+      shouldIgnore = true;
+      socket?.close();
+    };
+  }, [
+    createdCampaign,
+    isCreatingArt,
+    portraitPreviewDataUrl,
+    uploadedPortraitFileName
+  ]);
 
   useEffect(() => {
     if (!isInviteJoinFlow) {
@@ -4330,7 +4586,10 @@ export function NewAdventureForm({
           : "Table Owner",
       characterName,
       characterSheet,
-      mechanicsSeed
+      mechanicsSeed,
+      ...(eldermereStart && !isCustomGenre && selectedGenre.id === "eldermere"
+        ? { eldermereStart }
+        : {})
     });
   }
 
@@ -4341,33 +4600,8 @@ export function NewAdventureForm({
 
     setError("");
     setIsCreatingArt(true);
-
-    try {
-      const preview = await previewCharacterPortrait({
-        characterName,
-        playerName:
-          mode === "single_player"
-            ? characterName.trim() || "Solo Player"
-            : "Table Owner",
-        characterSheet,
-        campaignGenre: selectedGenre.label,
-        customWorldName: isCustomGenre ? customWorldName.trim() : undefined,
-        guidelines: characterArtGuidelines,
-        artStyle: characterArtStyle,
-        imageModel: characterImageModel
-      });
-
-      setPortraitPreviewDataUrl(preview.imageDataUrl);
-      setUploadedPortraitFileName("");
-      setIsCreatingArt(false);
-    } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "Character art could not be created."
-      );
-      setIsCreatingArt(false);
-    }
+    setPortraitPreviewDataUrl("");
+    setUploadedPortraitFileName("");
   }
 
   function readImageFileAsDataUrl(file: File) {
@@ -4413,13 +4647,50 @@ export function NewAdventureForm({
     }
   }
 
-  async function continueToCampaign() {
-    if (isCreating) {
+  async function writeBackstory(mode: "generate" | "add_details") {
+    if (isGeneratingBackstory) {
       return;
     }
 
-    if (!portraitPreviewDataUrl) {
-      void createCharacterArt();
+    const currentBackstory = backstory.trim();
+
+    if (mode === "add_details" && !currentBackstory) {
+      setError("Write a backstory before adding details.");
+      return;
+    }
+
+    setError("");
+    setIsGeneratingBackstory(true);
+
+    try {
+      const generatedBackstory = await generateCharacterBackstory({
+        mode,
+        characterSheet: characterSheetPreview,
+        ...(mode === "add_details" ? { currentBackstory } : {}),
+        campaignGenre: selectedGenre.label,
+        campaignGenreKind: isCustomGenre ? "custom" : "preset",
+        campaignGenrePresetId: isCustomGenre ? undefined : selectedGenre.id,
+        customWorldName: isCustomGenre ? customWorldName.trim() : undefined,
+        customWorldDescription: isCustomGenre
+          ? customWorldDescription.trim()
+          : undefined
+      });
+
+      setBackstory(generatedBackstory.backstory);
+      setEldermereStart(generatedBackstory.eldermereStart ?? null);
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Backstory could not be created."
+      );
+    } finally {
+      setIsGeneratingBackstory(false);
+    }
+  }
+
+  async function continueToCampaign() {
+    if (isCreating) {
       return;
     }
 
@@ -4429,12 +4700,24 @@ export function NewAdventureForm({
     try {
       const campaign = await createCampaignFromSetup();
       setCreatedCampaign(campaign);
-      const campaignWithPortrait = await uploadCharacterPortrait(campaign.id, {
-        imageDataUrl: portraitPreviewDataUrl,
-        fileName: uploadedPortraitFileName || "generated-character-portrait.png",
-        guidelines: characterArtGuidelines,
-        artStyle: characterArtStyle
-      });
+      let campaignWithPortrait = campaign;
+
+      if (portraitPreviewDataUrl && uploadedPortraitFileName) {
+        campaignWithPortrait = await uploadCharacterPortrait(campaign.id, {
+          imageDataUrl: portraitPreviewDataUrl,
+          fileName: uploadedPortraitFileName,
+          guidelines: characterArtGuidelines,
+          artStyle: characterArtStyle
+        });
+      } else if (!portraitPreviewDataUrl) {
+        setIsCreatingArt(true);
+        await generateCharacterPortrait(campaign.id, {
+          guidelines: characterArtGuidelines,
+          artStyle: characterArtStyle,
+          imageModel: characterImageModel,
+          background: true
+        });
+      }
 
       setCreatedCampaign(campaignWithPortrait);
       window.location.assign(
@@ -4446,6 +4729,7 @@ export function NewAdventureForm({
           ? caught.message
           : "The campaign could not be created."
       );
+      setIsCreatingArt(false);
       setIsCreating(false);
     }
   }
@@ -4487,7 +4771,22 @@ export function NewAdventureForm({
     event.preventDefault();
 
     if (isLastStep) {
-      void (isJoinFlow ? joinCampaign() : continueToCampaign());
+      if (isJoinFlow) {
+        void joinCampaign();
+        return;
+      }
+
+      if (
+        !portraitPreviewDataUrl &&
+        !uploadedPortraitFileName &&
+        !createdCampaign &&
+        !isCreatingArt
+      ) {
+        void createCharacterArt();
+        return;
+      }
+
+      void continueToCampaign();
       return;
     }
 
@@ -4495,25 +4794,10 @@ export function NewAdventureForm({
   }
 
   if (isCreating && !isJoinFlow) {
-    const isFinalCreationLoadingStep =
-      creationLoadingStep === campaignCreationLoadingSteps.length - 1;
-
     return (
       <main className="campaign-creation-screen" aria-label="Creating campaign">
         <section className="campaign-creation-center" aria-live="polite">
-          <div className="campaign-creation-loader" aria-hidden="true">
-            <Sparkles size={26} />
-          </div>
-          <p
-            key={creationLoadingStep}
-            className={
-              isFinalCreationLoadingStep
-                ? "campaign-creation-message-hold"
-                : undefined
-            }
-          >
-            {campaignCreationLoadingSteps[creationLoadingStep]}
-          </p>
+          <CampaignPreparationLoader />
         </section>
       </main>
     );
@@ -4649,7 +4933,10 @@ export function NewAdventureForm({
                       aria-pressed={campaignGenre === genre.id}
                       disabled={genre.id === customCampaignGenre.id}
                       key={genre.id}
-                      onClick={() => setCampaignGenre(genre.id)}
+                      onClick={() => {
+                        setCampaignGenre(genre.id);
+                        setEldermereStart(null);
+                      }}
                       style={
                         {
                           "--genre-banner-url": `url("${campaignWorldBannerUrls[genre.id]}")`
@@ -5292,6 +5579,53 @@ export function NewAdventureForm({
                         ))}
                       </div>
                     </fieldset>
+
+                    <label className="backstory-field">
+                      <span>Backstory</span>
+                      <small>
+                        Feel free to leave it blank and let AI Taverns generate the
+                        backstory for you.
+                      </small>
+                      <div className="backstory-input-shell">
+                        <textarea
+                          value={backstory}
+                          onChange={(event) => {
+                            setBackstory(event.target.value);
+                            setEldermereStart(null);
+                          }}
+                          placeholder="Optional: Write Backstory"
+                          readOnly={isGeneratingBackstory}
+                          aria-busy={isGeneratingBackstory}
+                        />
+                        {isGeneratingBackstory ? (
+                          <p className="rune-loader backstory-loader">
+                            Writing your backstory
+                            <span className="rune-loader-dots" aria-hidden="true">
+                              <span>.</span>
+                              <span>.</span>
+                              <span>.</span>
+                            </span>
+                          </p>
+                        ) : null}
+                      </div>
+                    </label>
+
+                    <div className="backstory-actions" aria-label="Backstory actions">
+                      <button
+                        type="button"
+                        onClick={() => void writeBackstory("generate")}
+                        disabled={isGeneratingBackstory}
+                      >
+                        Generate story
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void writeBackstory("add_details")}
+                        disabled={isGeneratingBackstory || !backstory.trim()}
+                      >
+                        Add details
+                      </button>
+                    </div>
                   </div>
                 ) : null}
 
@@ -5316,10 +5650,14 @@ export function NewAdventureForm({
                     />
                   ) : (
                     <div className="portrait-placeholder">
-                      {isCreatingArt ? <Wand2 size={42} /> : <ImagePlus size={42} />}
-                      <span>
-                        {isCreatingArt ? "Creating art..." : "Portrait placeholder"}
-                      </span>
+                      {isCreatingArt ? (
+                        <PortraitPreparationLoader />
+                      ) : (
+                        <>
+                          <ImagePlus size={42} />
+                          <span>Portrait placeholder</span>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
@@ -5348,6 +5686,7 @@ export function NewAdventureForm({
                         }
                       >
                         <option value="qwen">Qwen</option>
+                        <option value="openai">ChatGPT Image 2</option>
                       </select>
                     </label>
                     <label>
@@ -5386,7 +5725,7 @@ export function NewAdventureForm({
                     ) : null}
                   </label>
 
-                  {portraitPreviewDataUrl ? (
+                  {portraitPreviewDataUrl || createdCampaign ? (
                     <button
                       type="button"
                       className="character-art-regenerate"
@@ -5394,7 +5733,7 @@ export function NewAdventureForm({
                       onClick={() => void createCharacterArt()}
                     >
                       <RefreshCw size={16} />
-                      Regenerate
+                      {portraitPreviewDataUrl ? "Regenerate" : "Retry portrait"}
                     </button>
                   ) : null}
                 </div>
@@ -5494,13 +5833,26 @@ export function NewAdventureForm({
             </button>
             <button
               type="submit"
-              disabled={isCreating || isCreatingArt || isFlowTransitioning}
+              disabled={isCreating || isFlowTransitioning}
             >
               {isCreating ? (
                 isJoinFlow ? "Joining..." : "Creating..."
-              ) : isCreatingArt ? (
-                "Creating art..."
+              ) : isCreatingArt && !createdCampaign ? (
+                <>
+                  Continue
+                  <span className="fantasy-arrow-icon fantasy-arrow-forward" aria-hidden="true" />
+                </>
               ) : portraitPreviewDataUrl ? (
+                <>
+                  Continue
+                  <span className="fantasy-arrow-icon fantasy-arrow-forward" aria-hidden="true" />
+                </>
+              ) : isCreatingArt && createdCampaign ? (
+                <>
+                  Continue
+                  <span className="fantasy-arrow-icon fantasy-arrow-forward" aria-hidden="true" />
+                </>
+              ) : createdCampaign ? (
                 <>
                   Continue
                   <span className="fantasy-arrow-icon fantasy-arrow-forward" aria-hidden="true" />
@@ -5518,6 +5870,12 @@ export function NewAdventureForm({
               )}
             </button>
           </div>
+          {stepIndex === reviewStepIndex && !isJoinFlow && isCreatingArt ? (
+            <p className="character-art-wait-note">
+              this takes quite a long while, so you may move on to the next part if
+              you wish
+            </p>
+          ) : null}
       </form>
 
       {activeSpellDetail && activeSpellRuleProfile ? (

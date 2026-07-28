@@ -21,6 +21,12 @@ export const CampaignListResponseSchema = z.object({
   campaigns: z.array(CampaignSummarySchema)
 });
 
+export const EldermereCampaignStartSchema = z.object({
+  regionName: z.string().min(1),
+  settlementName: z.string().min(1),
+  reason: z.string().optional()
+});
+
 export const CampaignCreateRequestSchema = z.object({
   mode: CampaignModeSchema.optional(),
   title: z.string().optional(),
@@ -34,6 +40,7 @@ export const CampaignCreateRequestSchema = z.object({
   characterName: z.string().optional(),
   characterSheet: z.string().optional(),
   mechanicsSeed: MechanicsSeedSchema.optional(),
+  eldermereStart: EldermereCampaignStartSchema.optional(),
   generateCharacterPortrait: z.boolean().optional()
 });
 
@@ -56,7 +63,7 @@ export const CharacterPortraitArtStyleSchema = z.enum([
   "cinematic_concept_art"
 ]);
 
-export const CharacterPortraitImageModelSchema = z.enum(["qwen"]);
+export const CharacterPortraitImageModelSchema = z.enum(["qwen", "openai"]);
 
 export const CharacterPortraitGenerateParamsSchema = z.object({
   campaignId: z.string().uuid()
@@ -65,7 +72,8 @@ export const CharacterPortraitGenerateParamsSchema = z.object({
 export const CharacterPortraitGenerateRequestSchema = z.object({
   guidelines: z.string().optional(),
   artStyle: CharacterPortraitArtStyleSchema.optional(),
-  imageModel: CharacterPortraitImageModelSchema.optional()
+  imageModel: CharacterPortraitImageModelSchema.optional(),
+  background: z.boolean().optional()
 });
 
 export const CharacterPortraitPreviewRequestSchema = z.object({
@@ -82,6 +90,24 @@ export const CharacterPortraitPreviewRequestSchema = z.object({
 export const CharacterPortraitPreviewResponseSchema = z.object({
   imageDataUrl: z.string().min(1),
   contentType: z.string().min(1)
+});
+
+export const CharacterBackstoryModeSchema = z.enum(["generate", "add_details"]);
+
+export const CharacterBackstoryGenerateRequestSchema = z.object({
+  mode: CharacterBackstoryModeSchema,
+  characterSheet: z.string().min(1),
+  currentBackstory: z.string().optional(),
+  campaignGenre: z.string().optional(),
+  campaignGenreKind: z.enum(["preset", "custom"]).optional(),
+  campaignGenrePresetId: z.string().optional(),
+  customWorldName: z.string().optional(),
+  customWorldDescription: z.string().optional()
+});
+
+export const CharacterBackstoryGenerateResponseSchema = z.object({
+  backstory: z.string().min(1),
+  eldermereStart: EldermereCampaignStartSchema.optional()
 });
 
 export const CharacterPortraitUploadParamsSchema = z.object({
@@ -219,6 +245,9 @@ export const LobbyInviteJoinResponseSchema = z.object({
 export type CampaignMode = z.infer<typeof CampaignModeSchema>;
 export type CampaignSummary = z.infer<typeof CampaignSummarySchema>;
 export type CampaignListResponse = z.infer<typeof CampaignListResponseSchema>;
+export type EldermereCampaignStart = z.infer<
+  typeof EldermereCampaignStartSchema
+>;
 export type CampaignCreateRequest = z.infer<typeof CampaignCreateRequestSchema>;
 export type CampaignCreateResponse = z.infer<
   typeof CampaignCreateResponseSchema
@@ -239,6 +268,12 @@ export type CharacterPortraitPreviewRequest = z.infer<
 >;
 export type CharacterPortraitPreviewResponse = z.infer<
   typeof CharacterPortraitPreviewResponseSchema
+>;
+export type CharacterBackstoryGenerateRequest = z.infer<
+  typeof CharacterBackstoryGenerateRequestSchema
+>;
+export type CharacterBackstoryGenerateResponse = z.infer<
+  typeof CharacterBackstoryGenerateResponseSchema
 >;
 export type CharacterPortraitUploadRequest = z.infer<
   typeof CharacterPortraitUploadRequestSchema

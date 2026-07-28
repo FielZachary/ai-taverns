@@ -35,6 +35,7 @@ export type DebugFields = {
   combatState?: unknown;
   contextStorageState?: unknown;
   combatAdjudication?: unknown;
+  eldermereOpeningPlanner?: unknown;
   router?: unknown;
 };
 
@@ -1728,11 +1729,21 @@ class FakeDatabase {
                     asset.status === "ready"
                 )
               : undefined;
+            const latestIncompletePortrait = this.mediaAssets
+              .filter(
+                (asset) =>
+                  asset.player_id === player.id &&
+                  asset.kind === "character_portrait" &&
+                  (asset.status === "pending" || asset.status === "failed")
+              )
+              .at(-1);
 
             return {
               ...player,
               portrait_asset_id: portrait?.id ?? player.portrait_asset_id,
-              portrait_public_url: portrait?.public_url ?? null
+              portrait_public_url: portrait?.public_url ?? null,
+              portrait_status:
+                portrait?.status ?? latestIncompletePortrait?.status ?? null
             } as T;
           })
         };
@@ -2053,6 +2064,76 @@ before(async () => {
           };
         }
 
+        if (input.instructions.includes("campaign foundation compiler")) {
+          const content = JSON.stringify({
+            patches: [],
+            new_context_chunks: [
+              {
+                context_id: "pc:yiller",
+                context_type: "player_character_context",
+                title: "Yiller",
+                visibility: "player_safe",
+                markdown:
+                  "# Yiller\n\n## Established Facts\n- Yiller is searching for Lysa after her trail went quiet.\n\n## Embedded Threads\n- The first playable leads should keep the search personal without resolving Lysa's fate."
+              },
+              {
+                context_id: "world:sunder-kiln",
+                context_type: "relevant_world_context",
+                title: "Sunder Kiln",
+                visibility: "player_safe",
+                markdown:
+                  "# Sunder Kiln\n\n## Canonical Grounding\n- A major campaign-local ruin anchor in the Sundered Vale.\n\n## Campaign-Local Premise\n- Local rumors, missing expeditions, and claim disputes point toward a dangerous ruin whose truth is not public.\n\n## Embedded Threads\n- Lysa's trail, local claim violence, and strange ruin signs can all point here over time.\n\n## Open Questions\n- What did Lysa find?\n- Who else wants the ruin claimed?"
+              },
+              {
+                context_id: "thread:lysa-trail",
+                context_type: "quests_open_threads",
+                title: "Lysa's Trail",
+                visibility: "player_safe",
+                markdown:
+                  "# Lysa's Trail\n\n## Established Facts\n- Lysa is missing after taking a private ruin contract.\n\n## Player-Safe Leads\n- Question witnesses.\n- Search public claim records.\n- Follow rumors of strange ruin signs.\n- Find the duplicate ledger hidden in the clerk's room.\n\n## Escalation\n- If Yiller waits too long, the unknown buyer may act first and the trail may grow colder.\n- Garrick Vaultgate sends a second team.\n\n## Open Questions\n- Who hired Lysa?\n- Is she still alive?"
+              },
+              {
+                context_id: "npc:garrick-vaultgate",
+                context_type: "npc_context",
+                title: "Garrick Vaultgate",
+                visibility: "dm_only",
+                markdown:
+                  "# Garrick Vaultgate\n\n## Hidden Truth\n- Garrick is the private buyer behind the opening pressure."
+              },
+              {
+                context_id: "secret:sunder-kiln",
+                context_type: "overarching_big_plot_secrets",
+                title: "Sunder Kiln Secret",
+                visibility: "dm_only",
+                markdown:
+                  "# Sunder Kiln Secret\n\n## Hidden Truth\n- The ruin's deeper behavior and the missing mentor's fate are campaign-scale secrets.\n\n## Evidence Planted\n- Witness contradictions, damaged records, and impossible ruin signs can point toward the truth.\n\n## Future Reveal Paths\n- Reveal the truth only after Yiller follows local leads and makes choices that affect Stakehold.\n\n## Constraints\n- Do not resolve the campaign-scale truth in the opener."
+              }
+            ],
+            remove_context_chunks: []
+          });
+
+          return {
+            id: "provider-foundation-compiler-1",
+            content,
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: content,
+              model: "test-model",
+              temperature: 0.8,
+              providerTimings: []
+            }
+          };
+        }
+
         if (input.instructions.includes("memory/context updater")) {
           const shouldCreateMarra = /\bMarra Vell\b/.test(input.message);
           const hasMarraContext = input.message.includes(
@@ -2084,7 +2165,7 @@ before(async () => {
                         context_id: "world:amber-sphere",
                         context_type: "relevant_world_context",
                         title: "Amber Sphere",
-                        visibility: "dm_only",
+                        visibility: "player_safe",
                         markdown:
                           "# Amber Sphere\n\n## Established Facts\n- The amber sphere rests in the grove's root chamber.\n- Touching it woke a pulse of amber light through the roots.\n\n## Strong Inferences\nThe sphere is tied to the grove's living heart and reacts to direct contact.\n\n## DM Seeds\n- The sphere may preserve an old warning from the grove.\n- The amber light can become a recurring sign of the grove's attention.\n\n## Open Questions\n- Is the sphere protecting the grove, imprisoning something, or asking for help?\n\n## Last Touched\nCreated after the party touched the amber sphere."
                       },
@@ -2092,7 +2173,7 @@ before(async () => {
                         context_id: "thread:the-amber-sphere",
                         context_type: "quests_open_threads",
                         title: "The Amber Sphere",
-                        visibility: "dm_only",
+                        visibility: "player_safe",
                         markdown:
                           "# The Amber Sphere\n\n## Current Situation\nThe party has touched the amber sphere in the grove's root chamber.\n\n## Stakes\nThe sphere's awakening may change how the grove responds to the party.\n\n## Known Leads\n- Watch the chamber for changes after contact.\n- Ask grove-touched NPCs about the amber light.\n\n## Possible Complications\n- The grove may answer in visions or transformations instead of words.\n\n## Resolution Signals\nThe party learns what the sphere is and decides what to do with it."
                       },

@@ -6,6 +6,25 @@ export type AiDebugMessage = {
   content: string;
 };
 
+export type AiDebugProviderTiming = {
+  attempt: number;
+  requestStartedAt: string;
+  headersReceivedAt?: string;
+  bodyReceivedAt?: string;
+  completedAt: string;
+  totalMs: number;
+  headersMs?: number;
+  bodyReadMs?: number;
+  jsonParseMs?: number;
+  status?: number;
+  ok?: boolean;
+  requestBytes: number;
+  responseBytes?: number;
+  requestMessageCount: number;
+  requestContentChars: number;
+  responseFormat: "json_contract_prompt";
+};
+
 export type AiDebugInfo = {
   requestMessages: AiDebugMessage[];
   rawResponse: string;
@@ -15,6 +34,15 @@ export type AiDebugInfo = {
   combatState?: unknown;
   combatAdjudication?: unknown;
   contextStorageState?: unknown;
+  eldermereOpeningPlanner?: {
+    requestMessages: AiDebugMessage[];
+    rawResponse: string;
+    parsedOutput?: unknown;
+    model?: string;
+    temperature?: number;
+    providerResponseId?: string;
+    providerTimings?: AiDebugProviderTiming[];
+  };
   router?: {
     requestMessages: AiDebugMessage[];
     rawResponse: string;
@@ -23,24 +51,7 @@ export type AiDebugInfo = {
     temperature?: number;
     providerResponseId?: string;
   };
-  providerTimings?: {
-    attempt: number;
-    requestStartedAt: string;
-    headersReceivedAt?: string;
-    bodyReceivedAt?: string;
-    completedAt: string;
-    totalMs: number;
-    headersMs?: number;
-    bodyReadMs?: number;
-    jsonParseMs?: number;
-    status?: number;
-    ok?: boolean;
-    requestBytes: number;
-    responseBytes?: number;
-    requestMessageCount: number;
-    requestContentChars: number;
-    responseFormat: "json_contract_prompt";
-  }[];
+  providerTimings?: AiDebugProviderTiming[];
 };
 
 export type GameMessage = {

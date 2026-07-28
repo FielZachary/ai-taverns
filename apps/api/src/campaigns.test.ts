@@ -7,6 +7,7 @@ import { test } from "node:test";
 import sharp from "sharp";
 import {
   ApiErrorResponseSchema,
+  CharacterBackstoryGenerateResponseSchema,
   CampaignInviteCreateResponseSchema,
   CampaignInviteDisableResponseSchema,
   CampaignInviteListResponseSchema,
@@ -111,6 +112,89 @@ test("character portrait preview reports unconfigured image generation", async (
     process.chdir(originalCwd);
     await rm(emptyCwd, { recursive: true, force: true });
   }
+});
+
+test("POST /api/campaigns/backstory generates a world-grounded character backstory", async () => {
+  resetProviderInputs();
+  setProviderOverride(async () => {
+    const content = JSON.stringify({
+      backstory:
+        "Mira Vale learned the sea keeps better records than any court, especially when Ilyra Fen vanished with a tide-priest's ledger.",
+      eldermereStart: {
+        regionName: "The Salt Concordat",
+        settlementName: "Selwick",
+        reason: "The backstory centers on ports, ledgers, and sea debts."
+      }
+    });
+
+    return {
+      id: "provider-backstory-1",
+      content,
+      debug: {
+        requestMessages: [],
+        rawResponse: content,
+        model: "test-model",
+        temperature: 0.8,
+        providerTimings: []
+      }
+    };
+  });
+  const cookie = await signIn("backstory-writer@example.com");
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/campaigns/backstory",
+    headers: {
+      cookie
+    },
+    payload: {
+      mode: "generate",
+      characterSheet: "Character Name: Mira Vale\nClass: Fighter",
+      campaignGenre: "Eldermere",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "eldermere"
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(CharacterBackstoryGenerateResponseSchema.parse(response.json()), {
+    backstory:
+      "Mira Vale learned the sea keeps better records than any court, especially when Ilyra Fen vanished with a tide-priest's ledger.",
+    eldermereStart: {
+      regionName: "The Salt Concordat",
+      settlementName: "Selwick",
+      reason: "The backstory centers on ports, ledgers, and sea debts."
+    }
+  });
+
+  const providerInput = getProviderInputs().at(-1);
+
+  assert.match(providerInput?.message ?? "", /Character Name: Mira Vale/);
+  assert.match(providerInput?.message ?? "", /Validated people names for this backstory:/);
+  assert.match(providerInput?.message ?? "", /Use these validated candidate names only when inventing people/);
+  assert.match(providerInput?.message ?? "", /Masculine people:/);
+  assert.match(providerInput?.message ?? "", /Feminine people:/);
+  assert.match(providerInput?.message ?? "", /Neutral people:/);
+  assert.match(providerInput?.message ?? "", /gender group that fits the person's stated role or gender/);
+  assert.doesNotMatch(providerInput?.message ?? "", /Factions and organizations:/);
+  assert.doesNotMatch(providerInput?.message ?? "", /inventing new people, families, places/);
+  assert.match(providerInput?.message ?? "", /World: Eldermere/);
+  assert.match(providerInput?.message ?? "", /Canonical Eldermere start options:/);
+  assert.match(providerInput?.message ?? "", /Region: The Salt Concordat/);
+  assert.match(providerInput?.message ?? "", /Settlements: Corvane, Selwick, Skerrywatch/);
+  assert.match(providerInput?.message ?? "", /eldermereStart\.regionName/);
+  assert.match(providerInput?.message ?? "", /Use generated names only for people/i);
+  assert.match(providerInput?.message ?? "", /only newly invented proper nouns allowed are people names/i);
+  assert.match(providerInput?.message ?? "", /Do not give names to ships, taverns, guilds/i);
+  assert.match(providerInput?.instructions ?? "", /invented proper nouns are allowed only for people/i);
+  assert.match(providerInput?.message ?? "", /Backstory override for Eldermere opener context/i);
+  assert.match(providerInput?.message ?? "", /Do not add a 'Hooks:' label/i);
+  assert.match(providerInput?.message ?? "", /at most two other canonical setting proper nouns/i);
+  assert.match(
+    providerInput?.message ?? "",
+    /why those people matter not only to the player character, but also to the living world/i
+  );
+  assert.doesNotMatch(providerInput?.message ?? "", /Current backstory field/i);
+  resetProviderInputs();
 });
 
 test("character portrait preview reports provider failures", async () => {
@@ -265,6 +349,191 @@ test("POST /api/campaigns/portrait/preview generates transient art without campa
   }
 });
 
+test("POST /api/campaigns/portrait/preview can use OpenAI GPT Image", async () => {
+  const cookie = await signIn("portrait-openai-preview-owner@example.com");
+  const originalFetch = globalThis.fetch;
+  const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
+  const originalOpenAiImageEndpoint = process.env.OPENAI_IMAGE_ENDPOINT;
+  const originalOpenAiImageModel = process.env.OPENAI_IMAGE_MODEL;
+  const imageBuffer = await sharp({
+    create: {
+      width: 96,
+      height: 96,
+      channels: 4,
+      background: "#1d4ed8"
+    }
+  })
+    .jpeg()
+    .toBuffer();
+
+  process.env.OPENAI_API_KEY = "test-openai-image-key";
+  process.env.OPENAI_IMAGE_ENDPOINT =
+    "https://openai-image.example.test/generations";
+  process.env.OPENAI_IMAGE_MODEL = "gpt-image-2";
+  globalThis.fetch = (async (url, init) => {
+    assert.equal(String(url), "https://openai-image.example.test/generations");
+
+    const headers = new Headers(init?.headers);
+    assert.equal(headers.get("authorization"), "Bearer test-openai-image-key");
+    const body = JSON.parse(String(init?.body)) as {
+      model?: string;
+      prompt?: string;
+      n?: number;
+      size?: string;
+      quality?: string;
+      output_format?: string;
+      output_compression?: number;
+    };
+
+    assert.equal(body.model, "gpt-image-2");
+    assert.match(
+      body.prompt ?? "",
+      /Create fantasy character key art/
+    );
+    assert.match(body.prompt ?? "", /square 1024 by 1024/);
+    assert.match(body.prompt ?? "", /Mira Vale/);
+    assert.match(body.prompt ?? "", /Avoid:/);
+    assert.equal(body.n, 1);
+    assert.equal(body.size, "1024x1024");
+    assert.equal(body.quality, "medium");
+    assert.equal(body.output_format, "jpeg");
+    assert.equal(body.output_compression, 88);
+
+    return new Response(
+      JSON.stringify({
+        data: [
+          {
+            b64_json: imageBuffer.toString("base64")
+          }
+        ],
+        usage: {
+          output_tokens: 196
+        }
+      }),
+      {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "x-request-id": "openai-image-preview-request-1"
+        }
+      }
+    );
+  }) as typeof fetch;
+
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/campaigns/portrait/preview",
+      headers: {
+        cookie
+      },
+      payload: {
+        characterName: "Mira Vale",
+        playerName: "Mira",
+        characterSheet: "Level 5 Human Fighter carrying a silver shield.",
+        campaignGenre: "Eldermere",
+        guidelines: "warm tavern light",
+        artStyle: "painterly_fantasy",
+        imageModel: "openai"
+      }
+    });
+
+    assert.equal(response.statusCode, 200, response.body);
+
+    const preview = CharacterPortraitPreviewResponseSchema.parse(response.json());
+    assert.equal(preview.contentType, "image/jpeg");
+    assert.match(preview.imageDataUrl, /^data:image\/jpeg;base64,/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalOpenAiApiKey === undefined) {
+      delete process.env.OPENAI_API_KEY;
+    } else {
+      process.env.OPENAI_API_KEY = originalOpenAiApiKey;
+    }
+
+    if (originalOpenAiImageEndpoint === undefined) {
+      delete process.env.OPENAI_IMAGE_ENDPOINT;
+    } else {
+      process.env.OPENAI_IMAGE_ENDPOINT = originalOpenAiImageEndpoint;
+    }
+
+    if (originalOpenAiImageModel === undefined) {
+      delete process.env.OPENAI_IMAGE_MODEL;
+    } else {
+      process.env.OPENAI_IMAGE_MODEL = originalOpenAiImageModel;
+    }
+  }
+});
+
+test("POST /api/campaigns/portrait/preview exposes image provider failures", async () => {
+  const cookie = await signIn("portrait-openai-failure-owner@example.com");
+  const originalFetch = globalThis.fetch;
+  const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
+  const originalOpenAiImageEndpoint = process.env.OPENAI_IMAGE_ENDPOINT;
+  const originalOpenAiImageModel = process.env.OPENAI_IMAGE_MODEL;
+
+  process.env.OPENAI_API_KEY = "test-openai-image-key";
+  process.env.OPENAI_IMAGE_ENDPOINT =
+    "https://openai-image.example.test/failure";
+  process.env.OPENAI_IMAGE_MODEL = "gpt-image-2";
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify({
+        error: {
+          code: "invalid_request_error",
+          message: "Unsupported image parameter."
+        }
+      }),
+      {
+        status: 400,
+        headers: {
+          "content-type": "application/json",
+          "x-request-id": "openai-image-error-request-1"
+        }
+      }
+    )) as typeof fetch;
+
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/campaigns/portrait/preview",
+      headers: {
+        cookie
+      },
+      payload: {
+        characterName: "Mira Vale",
+        characterSheet: "Level 5 Human Fighter",
+        imageModel: "openai"
+      }
+    });
+
+    assert.equal(response.statusCode, 502, response.body);
+    assert.match(
+      response.body,
+      /OpenAI image generation failed \(invalid_request_error\): Unsupported image parameter\. Request ID: openai-image-error-request-1\./
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalOpenAiApiKey === undefined) {
+      delete process.env.OPENAI_API_KEY;
+    } else {
+      process.env.OPENAI_API_KEY = originalOpenAiApiKey;
+    }
+
+    if (originalOpenAiImageEndpoint === undefined) {
+      delete process.env.OPENAI_IMAGE_ENDPOINT;
+    } else {
+      process.env.OPENAI_IMAGE_ENDPOINT = originalOpenAiImageEndpoint;
+    }
+
+    if (originalOpenAiImageModel === undefined) {
+      delete process.env.OPENAI_IMAGE_MODEL;
+    } else {
+      process.env.OPENAI_IMAGE_MODEL = originalOpenAiImageModel;
+    }
+  }
+});
+
 test("POST /api/campaigns can generate and attach a character portrait", async () => {
   const cookie = await signIn("portrait-owner@example.com");
   const originalFetch = globalThis.fetch;
@@ -297,13 +566,18 @@ test("POST /api/campaigns can generate and attach a character portrait", async (
         input?: {
           messages?: { content?: { text?: string }[] }[];
         };
+        parameters?: {
+          size?: string;
+        };
       };
       const prompt = body.input?.messages?.[0]?.content?.[0]?.text ?? "";
 
       assert.equal(body.model, "qwen-image-2.0-pro");
-      assert.match(prompt, /Create a square fantasy character portrait/);
+      assert.match(prompt, /Create fantasy character key art/);
+      assert.match(prompt, /square 1024 by 1024/);
       assert.match(prompt, /Seraphina/);
       assert.match(prompt, /Level 5 Tiefling Warlock/);
+      assert.equal(body.parameters?.size, "1024*1024");
 
       return new Response(
         JSON.stringify({
@@ -1206,7 +1480,21 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
       ownerClientId: "eldermere-client",
       playerName: "Eldermere Player",
       characterName: "Mira",
-      characterSheet: "A ruin-delver who follows old glowing roads."
+      characterSheet: [
+        "Character Name: Mira",
+        "",
+        "Backstory",
+        "Mira is a ruin-delver who follows old glowing roads after her missing mentor, Captain Saela, left her a brass compass that points toward Selwick only during stormlight.",
+        "",
+        "Core Stats",
+        "Class: Rogue",
+        "Background: Archaeologist"
+      ].join("\n"),
+      eldermereStart: {
+        regionName: "The Salt Concordat",
+        settlementName: "Selwick",
+        reason: "Mira's generated backstory points toward port trouble."
+      }
     }
   });
 
@@ -1226,15 +1514,59 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   const openingPlan = metadata.eldermereOpeningPlan as Record<string, unknown>;
   const plannerInput = getProviderInputs().at(0);
   const narratorInput = getProviderInputs().at(1);
+  const openingEvent = database.campaignEvents.find(
+    (event) =>
+      event.campaign_id === created.campaign.id &&
+      event.type === "adventure_begun"
+  );
+  const openingPayload = openingEvent?.payload as Record<string, unknown> | undefined;
+  const aiDebug = openingPayload?.aiDebug as Record<string, unknown> | undefined;
+  const plannerDebug = aiDebug?.eldermereOpeningPlanner as
+    | Record<string, unknown>
+    | undefined;
 
   assert.equal(worldProfile.worldName, "Eldermere");
   assert.equal(worldProfile.source, "flagship_world");
-  assert.equal(typeof selectedRegion.name, "string");
-  assert.equal(typeof startingLocation.name, "string");
+  assert.equal(selectedRegion.name, "The Salt Concordat");
+  assert.equal(startingLocation.name, "Selwick");
   assert.equal(startingLocation.displayLocation, startingLocation.name);
   assert.equal(metadata.eldermereOpeningPlanVersion, 1);
   assert.equal(openingPlan.campaign_title, "The Quiet Road");
+  assert.equal(openingPayload?.content, "A lantern flickers over the old road as your adventure begins.\n\nA weathered sign points toward a ruined watchtower beyond the trees.\n\nWhat do you do?");
   assert.equal(getProviderInputs().length, 2);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const foundationChunk = database.contextChunks.find(
+    (chunk) =>
+      chunk.campaign_id === created.campaign.id &&
+      chunk.context_key === "world:sunder-kiln"
+  );
+  const foundationSecret = database.contextChunks.find(
+    (chunk) =>
+      chunk.campaign_id === created.campaign.id &&
+      chunk.context_key === "secret:sunder-kiln"
+  );
+  const foundationThread = database.contextChunks.find(
+    (chunk) =>
+      chunk.campaign_id === created.campaign.id &&
+      chunk.context_key === "thread:lysa-trail"
+  );
+
+  assert.ok(foundationChunk);
+  assert.equal(foundationChunk.category, "relevant_world_context");
+  assert.equal(foundationChunk.visibility, "player_safe");
+  assert.match(foundationChunk.body_markdown, /## Canonical Grounding/);
+  assert.match(foundationChunk.body_markdown, /## Embedded Threads/);
+  assert.ok(foundationSecret);
+  assert.equal(foundationSecret.category, "overarching_big_plot_secrets");
+  assert.equal(foundationSecret.visibility, "dm_only");
+  assert.match(foundationSecret.body_markdown, /## Hidden Truth/);
+  assert.ok(foundationThread);
+  assert.equal(foundationThread.category, "quests_open_threads");
+  assert.equal(foundationThread.visibility, "player_safe");
+  assert.doesNotMatch(foundationThread.body_markdown, /DM Eyes Only|Hidden Truth/i);
+  assert.doesNotMatch(foundationThread.body_markdown, /duplicate ledger/i);
+  assert.doesNotMatch(foundationThread.body_markdown, /Garrick Vaultgate/i);
 
   assert.ok(plannerInput);
   assert.match(plannerInput.instructions, /campaign-opening planner/);
@@ -1252,7 +1584,19 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.doesNotMatch(plannerInput.message, /Recurring live conflicts:/);
   assert.match(plannerInput.message, /Selected opener region and settlement:/);
   assert.match(plannerInput.message, /use this selected region and settlement/);
+  assert.match(plannerInput.message, /Validated name bank for this campaign opener:/);
+  assert.match(plannerInput.message, /People:/);
+  assert.match(plannerInput.message, /Settlements and landmarks:/);
+  assert.match(plannerInput.message, /Threats and creatures:/);
+  assert.match(plannerInput.message, /prefer the validated name bank above/i);
   assert.match(plannerInput.message, /Opening lore clarity rule:/);
+  assert.match(plannerInput.message, /Player backstory anchors for the opening scene:/);
+  assert.match(plannerInput.message, /Captain Saela/);
+  assert.match(plannerInput.message, /compass that points toward Selwick/);
+  assert.match(
+    plannerInput.instructions,
+    /Use the player backstory anchors from the opening request/
+  );
   assert.match(
     plannerInput.message,
     /use no more than 2-3 new Eldermere-specific proper nouns/
@@ -1280,6 +1624,25 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(narratorInput.message, /allowed_player_facing_terms/);
   assert.match(narratorInput.message, /forbidden_opening_terms/);
   assert.match(narratorInput.message, /Second Dominion/);
+  assert.match(narratorInput.message, /Player backstory anchors for the opening scene:/);
+  assert.match(narratorInput.message, /Captain Saela/);
+  assert.match(
+    narratorInput.message,
+    /Keep the first scene anchored in the planned region and starting location/
+  );
+  assert.match(
+    narratorInput.message,
+    /Make at least one player backstory anchor visible in the first scene/
+  );
+  assert.match(narratorInput.message, /arrival runway into the first live scene/);
+  assert.match(narratorInput.message, /Paragraph 1 must explain why/);
+  assert.match(narratorInput.message, /The first sentence must be about/);
+  assert.match(narratorInput.message, /You stand at/);
+  assert.match(narratorInput.message, /Paragraph 2 must describe what/);
+  assert.match(narratorInput.message, /personal urgency beat/);
+  assert.match(narratorInput.message, /grounded, direct fantasy prose/);
+  assert.match(narratorInput.message, /do not say they disappeared/);
+  assert.match(narratorInput.message, /Do not invent new circumstances/);
   assert.doesNotMatch(narratorInput.message, /Flagship world context:/);
   assert.doesNotMatch(narratorInput.message, /Seven regions available for the opener:/);
   assert.doesNotMatch(narratorInput.instructions, /World Context:/);
@@ -1300,6 +1663,19 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
     narratorInput.message,
     /Write the player-facing opener only from the Eldermere opening plan/
   );
+
+  assert.ok(plannerDebug);
+  assert.equal(plannerDebug.rawResponse, JSON.stringify(openingPlan));
+  assert.deepEqual(plannerDebug.parsedOutput, openingPlan);
+  assert.match(
+    JSON.stringify(plannerDebug.requestMessages),
+    /campaign-opening planner/
+  );
+  assert.match(
+    JSON.stringify(plannerDebug.requestMessages),
+    /Selected opener region and settlement/
+  );
+  assert.match(JSON.stringify(plannerDebug.requestMessages), /Captain Saela/);
 });
 
 test("GET /api/campaigns/:campaignId/npc-cards lists existing NPC context cards", async () => {

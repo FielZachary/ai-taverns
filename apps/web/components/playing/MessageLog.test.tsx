@@ -313,6 +313,25 @@ describe("MessageLog", () => {
           }
         ]
       },
+      eldermereOpeningPlanner: {
+        requestMessages: [
+          {
+            role: "system",
+            content: "You are the campaign-opening planner."
+          },
+          {
+            role: "user",
+            content: "Selected opener region and settlement: Selwick."
+          }
+        ],
+        rawResponse: "{\"campaign_title\":\"The Quiet Road\"}",
+        parsedOutput: {
+          campaign_title: "The Quiet Road",
+          starting_location: {
+            name: "Selwick"
+          }
+        }
+      },
       requestMessages: [
         {
           role: "system",
@@ -325,6 +344,7 @@ describe("MessageLog", () => {
       ],
       rawResponse: "{\"message\":\"The hinges complain.\"}"
     };
+    const plannerDebug = debug.eldermereOpeningPlanner!;
 
     renderMessageLog({
       messages: [
@@ -351,8 +371,14 @@ describe("MessageLog", () => {
     expect(screen.getByText("Context Storage")).toBeInTheDocument();
     expect(screen.getByText(/"context_id": "npc:mara"/)).toBeInTheDocument();
     expect(screen.getByText(/Protect her crew/)).toBeInTheDocument();
-    expect(screen.getByText(/# 1\. SYSTEM/)).toBeInTheDocument();
+    expect(screen.getAllByText(/# 1\. SYSTEM/).length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText(debug.rawResponse)).toBeInTheDocument();
+    expect(screen.getByText("Eldermere Planner Prompt Sent")).toBeInTheDocument();
+    expect(screen.getByText(/Selected opener region and settlement/)).toBeInTheDocument();
+    expect(screen.getByText("Eldermere Planner Output")).toBeInTheDocument();
+    expect(screen.getByText(plannerDebug.rawResponse)).toBeInTheDocument();
+    expect(screen.getByText("Eldermere Planner Parsed Output")).toBeInTheDocument();
+    expect(screen.getByText(/"name": "Selwick"/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /close debug details/i }));
 

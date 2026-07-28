@@ -16,6 +16,7 @@ import {
 
 const {
   createCampaignMock,
+  generateCharacterBackstoryMock,
   generateCharacterPortraitMock,
   joinCampaignMock,
   previewCampaignJoinMock,
@@ -23,6 +24,7 @@ const {
   uploadCharacterPortraitMock
 } = vi.hoisted(() => ({
   createCampaignMock: vi.fn(),
+  generateCharacterBackstoryMock: vi.fn(),
   generateCharacterPortraitMock: vi.fn(),
   joinCampaignMock: vi.fn(),
   previewCampaignJoinMock: vi.fn(),
@@ -32,6 +34,7 @@ const {
 
 vi.mock("@/lib/campaign-api", () => ({
   createCampaign: createCampaignMock,
+  generateCharacterBackstory: generateCharacterBackstoryMock,
   generateCharacterPortrait: generateCharacterPortraitMock,
   joinCampaign: joinCampaignMock,
   previewCampaignJoin: previewCampaignJoinMock,
@@ -125,9 +128,18 @@ describe("NewAdventureForm", () => {
       availableSlots: 2,
       hasBegun: false
     });
+    generateCharacterBackstoryMock.mockResolvedValue({
+      backstory: "Mira's life changed when the lighthouse bell rang at noon."
+    });
     previewCharacterPortraitMock.mockResolvedValue({
       imageDataUrl: "data:image/png;base64,preview",
       contentType: "image/png"
+    });
+    generateCharacterPortraitMock.mockResolvedValue({
+      id: "11111111-1111-4111-8111-111111111111",
+      sessionId: "provider-session",
+      mode: "single_player",
+      title: "Eldermere Adventure"
     });
     createCampaignMock.mockResolvedValue({
       id: "11111111-1111-4111-8111-111111111111",
@@ -442,6 +454,26 @@ describe("NewAdventureForm", () => {
     fireEvent.change(screen.getByLabelText("Character name"), {
       target: { value: "Mira Vale" }
     });
+    expect(
+      screen.getByText(
+        "Feel free to leave it blank and let AI Taverns generate the backstory for you."
+      )
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText("Optional: Write Backstory"), {
+      target: { value: "Raised among lighthouse keepers beneath twin moons." }
+    });
+    expect(
+      screen.getByRole("button", { name: /generate story/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /add details/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("checkbox", {
+        name: /let ai taverns add unto my backstory/i
+      })
+    ).not.toBeInTheDocument();
 
     await nextCharacterStep();
 
@@ -449,18 +481,16 @@ describe("NewAdventureForm", () => {
       screen.getByRole("heading", { name: /create your character art/i })
     ).toBeInTheDocument();
 
+    expect(screen.getByLabelText("Image model")).toHaveValue("openai");
+    expect(screen.getByLabelText("Art style")).toHaveValue("ink_and_watercolor");
     fireEvent.click(screen.getByRole("button", { name: /create art/i }));
 
     await act(async () => {});
 
-    expect(previewCharacterPortraitMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        characterName: "Mira Vale",
-        campaignGenre: "Eldermere",
-        imageModel: "qwen"
-      })
-    );
+    expect(screen.getByText("Generating portrait")).toHaveClass("rune-loader");
     expect(createCampaignMock).not.toHaveBeenCalled();
+    expect(generateCharacterPortraitMock).not.toHaveBeenCalled();
+    expect(previewCharacterPortraitMock).not.toHaveBeenCalled();
     expect(uploadCharacterPortraitMock).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled();
 
@@ -472,20 +502,219 @@ describe("NewAdventureForm", () => {
       expect.objectContaining({
         mode: "single_player",
         playerName: "Mira Vale",
-        characterName: "Mira Vale"
+        characterName: "Mira Vale",
+        characterSheet: expect.stringContaining(
+          "Raised among lighthouse keepers beneath twin moons.\nBackstory Expansion: Preserve this backstory as written"
+        )
       })
     );
-    expect(uploadCharacterPortraitMock).toHaveBeenCalledWith(
+    expect(generateCharacterPortraitMock).toHaveBeenCalledWith(
       "11111111-1111-4111-8111-111111111111",
       expect.objectContaining({
-        imageDataUrl: "data:image/png;base64,preview"
+        artStyle: "ink_and_watercolor",
+        imageModel: "openai",
+        background: true
       })
     );
-    expect(generateCharacterPortraitMock).not.toHaveBeenCalled();
+    expect(previewCharacterPortraitMock).not.toHaveBeenCalled();
+    expect(uploadCharacterPortraitMock).not.toHaveBeenCalled();
   });
 
-  it("recovers when art preview fails without creating a campaign", async () => {
-    previewCharacterPortraitMock.mockRejectedValue(
+  it("generates and enriches backstory from the identity step", async () => {
+    let resolveBackstory:
+      | ((
+          value:
+            | {
+                backstory: string;
+                eldermereStart?: {
+                  regionName: string;
+                  settlementName: string;
+                  reason?: string;
+                };
+              }
+            | PromiseLike<{
+                backstory: string;
+                eldermereStart?: {
+                  regionName: string;
+                  settlementName: string;
+                  reason?: string;
+                };
+              }>
+        ) => void)
+      | undefined;
+    generateCharacterBackstoryMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveBackstory = resolve;
+      })
+    );
+
+    render(<NewAdventureForm />);
+
+    await advanceSingleplayerToIdentity();
+
+    fireEvent.change(screen.getByLabelText("Character name"), {
+      target: { value: "Mira Vale" }
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /generate story/i }));
+
+    expect(screen.getByText("Writing your backstory")).toHaveClass(
+      "rune-loader"
+    );
+    expect(screen.getByPlaceholderText("Optional: Write Backstory")).toHaveAttribute(
+      "aria-busy",
+      "true"
+    );
+    expect(generateCharacterBackstoryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: "generate",
+        campaignGenre: "Eldermere",
+        campaignGenreKind: "preset",
+        campaignGenrePresetId: "eldermere",
+        characterSheet: expect.stringContaining("Character Name: Mira Vale")
+      })
+    );
+    expect(generateCharacterBackstoryMock.mock.calls[0]?.[0]).not.toHaveProperty(
+      "currentBackstory"
+    );
+
+    await act(async () => {
+      resolveBackstory?.({
+        backstory: "Mira once guarded a lantern no storm could drown.",
+        eldermereStart: {
+          regionName: "The Salt Concordat",
+          settlementName: "Selwick"
+        }
+      });
+    });
+
+    expect(screen.getByPlaceholderText("Optional: Write Backstory")).toHaveValue(
+      "Mira once guarded a lantern no storm could drown."
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /add details/i }));
+
+    expect(generateCharacterBackstoryMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        mode: "add_details",
+        currentBackstory: "Mira once guarded a lantern no storm could drown.",
+        characterSheet: expect.stringContaining(
+          "Mira once guarded a lantern no storm could drown."
+        )
+      })
+    );
+  });
+
+  it("passes generated Eldermere start into campaign creation", async () => {
+    generateCharacterBackstoryMock.mockResolvedValueOnce({
+      backstory: "Mira owes a debt to a Selwick shipwright.",
+      eldermereStart: {
+        regionName: "The Salt Concordat",
+        settlementName: "Selwick",
+        reason: "The generated backstory centers on Selwick maritime debt."
+      }
+    });
+
+    render(<NewAdventureForm />);
+
+    await advanceSingleplayerToIdentity();
+
+    fireEvent.change(screen.getByLabelText("Character name"), {
+      target: { value: "Mira Vale" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: /generate story/i }));
+
+    await act(async () => {});
+
+    expect(screen.getByPlaceholderText("Optional: Write Backstory")).toHaveValue(
+      "Mira owes a debt to a Selwick shipwright."
+    );
+
+    await nextCharacterStep();
+
+    fireEvent.click(screen.getByRole("button", { name: /create art/i }));
+
+    await act(async () => {});
+
+    expect(createCampaignMock).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+
+    await act(async () => {});
+
+    expect(createCampaignMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eldermereStart: {
+          regionName: "The Salt Concordat",
+          settlementName: "Selwick",
+          reason: "The generated backstory centers on Selwick maritime debt."
+        },
+        characterSheet: expect.stringContaining(
+          "Mira owes a debt to a Selwick shipwright."
+        )
+      })
+    );
+  });
+
+  it("uses the shared rune loader for portrait and campaign preparation", async () => {
+    generateCharacterPortraitMock.mockReturnValue(
+      new Promise(() => {})
+    );
+
+    render(<NewAdventureForm />);
+
+    await advanceSingleplayerToIdentity();
+
+    fireEvent.change(screen.getByLabelText("Character name"), {
+      target: { value: "Mira Vale" }
+    });
+
+    await nextCharacterStep();
+
+    fireEvent.click(screen.getByRole("button", { name: /create art/i }));
+
+    expect(screen.getByText("Generating portrait")).toHaveClass("rune-loader");
+    expect(
+      screen.getByText(
+        "this takes quite a long while, so you may move on to the next part if you wish"
+      )
+    ).toHaveClass("character-art-wait-note");
+    expect(createCampaignMock).not.toHaveBeenCalled();
+    expect(generateCharacterPortraitMock).not.toHaveBeenCalled();
+    expect(
+      screen.queryByText("this'll take about a minute and a half, sit tight ;)")
+    ).not.toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(10_000);
+    });
+
+    expect(screen.getByText("Generating portrait")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Integrating your backstory")
+    ).not.toBeInTheDocument();
+
+    expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+
+    expect(screen.getByText("Preparing your campaign")).toHaveClass(
+      "rune-loader"
+    );
+    expect(
+      screen.getByText("this'll take about a minute and a half, sit tight ;)")
+    ).toHaveClass("campaign-prep-loader-note");
+
+    await act(async () => {
+      vi.advanceTimersByTime(10_000);
+    });
+
+    expect(screen.getByText("Integrating your backstory")).toHaveClass(
+      "rune-loader"
+    );
+  });
+
+  it("recovers when background art start fails during campaign creation", async () => {
+    generateCharacterPortraitMock.mockRejectedValue(
       new Error("The portrait easel cracked.")
     );
 
@@ -504,11 +733,18 @@ describe("NewAdventureForm", () => {
     await act(async () => {});
 
     expect(createCampaignMock).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+
+    await act(async () => {});
+
+    expect(createCampaignMock).toHaveBeenCalledTimes(1);
+    expect(generateCharacterPortraitMock).toHaveBeenCalledTimes(1);
     expect(uploadCharacterPortraitMock).not.toHaveBeenCalled();
     expect(screen.getByRole("alert")).toHaveTextContent(
       "The portrait easel cracked."
     );
-    expect(screen.getByRole("button", { name: /create art/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /retry portrait/i })).toBeEnabled();
   });
 });
 
