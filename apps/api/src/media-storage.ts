@@ -63,21 +63,21 @@ export async function createCharacterPortraitVariants(
   source: Buffer
 ): Promise<ImageVariant[]> {
   const sizes = [
-    { name: "512", size: 512 },
-    { name: "128", size: 128 }
+    { name: "768", width: 768, height: 512, quality: 86 },
+    { name: "192", width: 192, height: 128, quality: 82 }
   ];
 
   return Promise.all(
-    sizes.map(async ({ name, size }) => ({
+    sizes.map(async ({ name, width, height, quality }) => ({
       name,
-      width: size,
-      height: size,
+      width,
+      height,
       buffer: await sharp(source)
-        .resize(size, size, {
+        .resize(width, height, {
           fit: "cover",
           position: "attention"
         })
-        .webp({ quality: name === "512" ? 86 : 82 })
+        .webp({ quality })
         .toBuffer(),
       contentType: "image/webp" as const
     }))
