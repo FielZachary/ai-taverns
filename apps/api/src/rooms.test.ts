@@ -1326,6 +1326,79 @@ test("room submit rejects pending roll mismatches", async () => {
   );
 });
 
+test("room submit accepts broad single pending rolls even when over-targeted", async () => {
+  const { ownerCookie, joinerCookie, campaignId, joinerClientId } =
+    await createMultiplayerRoom("room-broad-roll-over-targeted");
+
+  const beginResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/begin",
+    headers: {
+      cookie: ownerCookie
+    },
+    payload: {
+      roomId: campaignId
+    }
+  });
+
+  assert.equal(beginResponse.statusCode, 200, beginResponse.body);
+
+  const campaign = database.campaigns.find(
+    (candidate) => candidate.id === campaignId
+  );
+  assert.ok(campaign);
+  campaign.metadata = {
+    ...(campaign.metadata as Record<string, unknown>),
+    inputTargets: [],
+    inputPolicy: "all_players",
+    pendingRollRequests: [
+      {
+        id: "disguise-performance",
+        player: "Owner Character",
+        dice: "1d20",
+        label: "Deception or Sleight of Hand check to complete the disguise"
+      }
+    ],
+    nextInputNeeded: "dice_results"
+  };
+
+  const rollResponse = await app.inject({
+    method: "POST",
+    url: "/api/room/submit",
+    headers: {
+      cookie: joinerCookie
+    },
+    payload: {
+      roomId: campaignId,
+      playerId: joinerClientId,
+      rollRequestId: "disguise-performance",
+      rollResult: {
+        rolls: [14],
+        total: 14
+      }
+    }
+  });
+
+  assert.equal(rollResponse.statusCode, 200, rollResponse.body);
+  const room = RoomSubmitResponseSchema.parse(rollResponse.json());
+  assert.equal(room.pendingRollRequest, null);
+  assert.deepEqual(room.pendingRollRequests, []);
+  assert.equal(room.messages.at(-1)?.role, "dm");
+
+  const updatedCampaign = database.campaigns.find(
+    (candidate) => candidate.id === campaignId
+  );
+  assert.ok(updatedCampaign);
+  assert.equal(
+    (updatedCampaign.metadata as Record<string, unknown>).pendingRollRequest,
+    undefined
+  );
+  assert.equal(
+    (updatedCampaign.metadata as Record<string, unknown>).pendingRollRequests,
+    undefined
+  );
+});
+
 test("room routes require an owned session", async () => {
   const response = await app.inject({
     method: "GET",
