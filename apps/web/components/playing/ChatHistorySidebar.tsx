@@ -153,6 +153,10 @@ export function ChatHistorySidebar({
                 <span>.</span>
               </span>
             </span>
+            <p className="chat-sidebar-portrait-note">
+              this takes about 3 minutes, so don&apos;t be too surprised its taking
+              a bit, hope its not too much of a hassle ;)
+            </p>
           </div>
         ) : null}
         <button

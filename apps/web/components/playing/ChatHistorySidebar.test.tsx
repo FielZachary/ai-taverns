@@ -122,6 +122,11 @@ describe("ChatHistorySidebar", () => {
 
     expect(screen.getByText(/generating portrait/i)).toBeInTheDocument();
     expect(
+      screen.getByText(
+        "this takes about 3 minutes, so don't be too surprised its taking a bit, hope its not too much of a hassle ;)"
+      )
+    ).toHaveClass("chat-sidebar-portrait-note");
+    expect(
       screen.queryByRole("button", { name: /view player portrait/i })
     ).not.toBeInTheDocument();
   });

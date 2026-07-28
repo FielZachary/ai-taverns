@@ -674,6 +674,11 @@ describe("NewAdventureForm", () => {
     fireEvent.click(screen.getByRole("button", { name: /create art/i }));
 
     expect(screen.getByText("Generating portrait")).toHaveClass("rune-loader");
+    expect(
+      screen.getByText(
+        "this takes quite a long while, so you may move on to the next part if you wish"
+      )
+    ).toHaveClass("character-art-wait-note");
     expect(createCampaignMock).not.toHaveBeenCalled();
     expect(generateCharacterPortraitMock).not.toHaveBeenCalled();
     expect(

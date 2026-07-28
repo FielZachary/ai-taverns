@@ -2913,6 +2913,17 @@ h1 {
   opacity: 0.68;
 }
 
+.character-art-wait-note {
+  max-width: min(100%, 560px);
+  margin: 2px auto 0;
+  color: rgba(248, 234, 208, 0.58);
+  font-family: var(--body-font);
+  font-size: 0.86rem;
+  font-style: italic;
+  line-height: 1.5;
+  text-align: center;
+}
+
 .new-adventure-page *,
 .new-adventure-page *::before,
 .new-adventure-page *::after,
@@ -3059,10 +3070,13 @@ h1 {
 }
 
 .chat-sidebar-portrait.pending {
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
   cursor: default;
-  padding: 12px;
+  padding: 12px 14px;
 }
 
 .chat-sidebar-portrait.pending .rune-loader {
@@ -3071,6 +3085,16 @@ h1 {
   line-height: 1.25;
   text-align: center;
   white-space: normal;
+}
+
+.chat-sidebar-portrait-note {
+  margin: 0;
+  color: rgba(248, 234, 208, 0.58);
+  font-family: var(--body-font);
+  font-size: 0.66rem;
+  font-style: italic;
+  line-height: 1.35;
+  text-align: center;
 }
 
 .portrait-viewer-backdrop {

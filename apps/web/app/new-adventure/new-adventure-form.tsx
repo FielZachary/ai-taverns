@@ -5870,6 +5870,12 @@ export function NewAdventureForm({
               )}
             </button>
           </div>
+          {stepIndex === reviewStepIndex && !isJoinFlow && isCreatingArt ? (
+            <p className="character-art-wait-note">
+              this takes quite a long while, so you may move on to the next part if
+              you wish
+            </p>
+          ) : null}
       </form>
 
       {activeSpellDetail && activeSpellRuleProfile ? (
