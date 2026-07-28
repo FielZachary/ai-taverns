@@ -660,10 +660,7 @@ test("character portrait preview applies Qwen defaults and fallback prompt field
 
         if (String(url) === "https://qwen-image.example.test/defaults.png") {
           return new Response(Buffer.from("portrait"), {
-            status: 200,
-            headers: {
-              "content-type": "image/png"
-            }
+            status: 200
           });
         }
 
@@ -675,6 +672,55 @@ test("character portrait preview applies Qwen defaults and fallback prompt field
     if (result.status === "ready") {
       assert.equal(result.contentType, "image/png");
       assert.match(result.imageDataUrl, /^data:image\/png;base64,/);
+    }
+
+    process.env.QWEN_BASE_URL = "https://api.example.test";
+
+    const nonDashscopeBaseUrlResult = await generateCharacterPortraitPreview({
+      characterName: "Adventurer",
+      characterSheet: "A careful wanderer with a patched cloak.",
+      imageModel: "qwen",
+      fetchImpl: async (url) => {
+        if (String(url) === "https://qwen-image.example.test/defaults.png") {
+          return new Response(Buffer.from("portrait"), {
+            status: 200
+          });
+        }
+
+        assert.equal(
+          String(url),
+          "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
+        );
+
+        return new Response(
+          JSON.stringify({
+            output: {
+              choices: [
+                {
+                  message: {
+                    content: [
+                      {
+                        image: "https://qwen-image.example.test/defaults.png"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }),
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json"
+            }
+          }
+        );
+      }
+    });
+
+    assert.equal(nonDashscopeBaseUrlResult.status, "ready");
+    if (nonDashscopeBaseUrlResult.status === "ready") {
+      assert.equal(nonDashscopeBaseUrlResult.contentType, "image/png");
     }
   } finally {
     if (originalQwenImageApiKey === undefined) {
