@@ -2245,6 +2245,33 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.doesNotMatch(foundationThread.body_markdown, /DM Eyes Only|Hidden Truth/i);
   assert.doesNotMatch(foundationThread.body_markdown, /duplicate ledger/i);
   assert.doesNotMatch(foundationThread.body_markdown, /Garrick Vaultgate/i);
+  const refreshedOpeningPayload = database.campaignEvents.find(
+    (event) =>
+      event.campaign_id === created.campaign.id &&
+      event.type === "adventure_begun"
+  )?.payload as Record<string, unknown> | undefined;
+  const contextStorageState = (
+    refreshedOpeningPayload?.aiDebug as Record<string, unknown> | undefined
+  )?.contextStorageState as
+    | {
+        contextChunkCount?: unknown;
+        contextChunks?: { context_id?: unknown; body_markdown?: unknown }[];
+      }
+    | undefined;
+
+  assert.equal(
+    contextStorageState?.contextChunkCount,
+    contextStorageState?.contextChunks?.length
+  );
+  assert.ok((contextStorageState?.contextChunkCount ?? 0) >= 3);
+  assert.ok(
+    contextStorageState?.contextChunks?.some(
+      (chunk) =>
+        chunk.context_id === "world:sunder-kiln" &&
+        typeof chunk.body_markdown === "string" &&
+        /## Canonical Grounding/.test(chunk.body_markdown)
+    )
+  );
 
   assert.ok(plannerInput);
   assert.match(plannerInput.instructions, /campaign-opening planner/);
