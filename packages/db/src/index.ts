@@ -3223,7 +3223,12 @@ function validatePendingRollSubmissions(
     rollResult?: DiceRollResult;
     clientMessageId?: string;
   }>,
-  player?: PlayerRow
+  player?: PlayerRow,
+  inputControl?: {
+    inputTargets: string[];
+    inputPolicy: "all_players" | "only_targeted_players";
+    isExplicitBroadInput: boolean;
+  }
 ) {
   if (submittedRolls.length === 0) {
     return {
@@ -3241,6 +3246,13 @@ function validatePendingRollSubmissions(
     throw createStatusError(400, "Too many roll results were submitted.");
   }
 
+  const isBroadSingleRoll =
+    pendingRollRequests.length === 1 &&
+    submittedRolls.length === 1 &&
+    inputControl?.isExplicitBroadInput === true &&
+    inputControl?.inputPolicy !== "only_targeted_players" &&
+    inputControl?.inputTargets.length === 0;
+
   const content = submittedRolls
     .map((submission, index) => {
       const pendingRollRequest = pendingRollRequests[index];
@@ -3253,7 +3265,11 @@ function validatePendingRollSubmissions(
         throw createStatusError(409, "The DM is waiting for the required roll.");
       }
 
-      if (player && !rollRequestTargetsPlayer(pendingRollRequest, player)) {
+      if (
+        player &&
+        !isBroadSingleRoll &&
+        !rollRequestTargetsPlayer(pendingRollRequest, player)
+      ) {
         throw createStatusError(403, "That roll is waiting on another player.");
       }
 
@@ -8031,6 +8047,7 @@ export async function submitRoomTurnForUser(
     const pendingRollRequests = pendingRollRequestsFromCampaign(campaignRow);
     const inputTargets = inputTargetsFromCampaign(campaignRow);
     const inputPolicy = inputPolicyFromCampaign(campaignRow);
+    const campaignMetadata = eventPayload(campaignRow.metadata);
     const submittedRolls = rollSubmissionsFromPayload(
       input.rollRequestId,
       input.rollResult,
@@ -8041,7 +8058,13 @@ export async function submitRoomTurnForUser(
     const rollSubmission = validatePendingRollSubmissions(
       pendingRollRequests,
       submittedRolls,
-      player
+      player,
+      {
+        inputTargets,
+        inputPolicy,
+        isExplicitBroadInput:
+          campaignMetadata.inputPolicy === "all_players" && inputTargets.length === 0
+      }
     );
 
     if (!isRollSubmission && pendingRollRequests.length > 0) {
