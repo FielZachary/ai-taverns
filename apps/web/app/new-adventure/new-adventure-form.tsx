@@ -94,6 +94,12 @@ const campaignPreparationMessages = [
 const campaignPreparationMessageIntervalMs = 10_000;
 const campaignPreparationTransitionMs = 650;
 
+type PreparationLoaderLayoutProps = {
+  currentMessage: string;
+  exitingMessage?: string;
+  note?: string;
+};
+
 type AbilityKey = "str" | "dex" | "con" | "int" | "wis" | "cha";
 type CompleteAbilityScores = Record<AbilityKey, number>;
 type AbilityScores = Record<AbilityKey, number | null>;
@@ -3357,6 +3363,24 @@ function CampaignPreparationLoader() {
   }, []);
 
   return (
+    <PreparationLoaderLayout
+      currentMessage={currentMessage}
+      exitingMessage={exitingMessage}
+      note="this'll take about a minute and a half, sit tight ;)"
+    />
+  );
+}
+
+function PortraitPreparationLoader() {
+  return <PreparationLoaderLayout currentMessage="Generating portrait" />;
+}
+
+function PreparationLoaderLayout({
+  currentMessage,
+  exitingMessage = "",
+  note
+}: PreparationLoaderLayoutProps) {
+  return (
     <div className="campaign-prep-loader">
       <div className="campaign-prep-loader-window">
         {exitingMessage ? (
@@ -3385,9 +3409,7 @@ function CampaignPreparationLoader() {
           </span>
         </p>
       </div>
-      <p className="campaign-prep-loader-note">
-        this'll take about a minute and a half, sit tight ;)
-      </p>
+      {note ? <p className="campaign-prep-loader-note">{note}</p> : null}
     </div>
   );
 }
@@ -5492,7 +5514,7 @@ export function NewAdventureForm({
                   ) : (
                     <div className="portrait-placeholder">
                       {isCreatingArt ? (
-                        <CampaignPreparationLoader />
+                        <PortraitPreparationLoader />
                       ) : (
                         <>
                           <ImagePlus size={42} />

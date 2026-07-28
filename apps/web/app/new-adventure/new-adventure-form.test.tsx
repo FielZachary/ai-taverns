@@ -669,9 +669,16 @@ describe("NewAdventureForm", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /create art/i }));
 
-    expect(screen.getByText("Preparing your campaign")).toHaveClass(
-      "rune-loader"
-    );
+    expect(screen.getByText("Generating portrait")).toHaveClass("rune-loader");
+
+    await act(async () => {
+      vi.advanceTimersByTime(10_000);
+    });
+
+    expect(screen.getByText("Generating portrait")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Integrating your backstory")
+    ).not.toBeInTheDocument();
 
     await act(async () => {
       resolvePreview?.({
