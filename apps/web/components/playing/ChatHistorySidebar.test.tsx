@@ -63,7 +63,7 @@ describe("ChatHistorySidebar", () => {
     expect(props.onViewCharacterSheet).toHaveBeenCalledTimes(1);
   });
 
-  it("shows the player portrait above the resources button", () => {
+  it("shows the player portrait above the resources button and opens the portrait viewer", () => {
     const props = renderChatHistorySidebar({
       playerPortraitAlt: "Seraphina portrait",
       playerPortraitUrl: "/media/campaigns/campaign-1/players/player-1/portraits/asset-1/128.webp"
@@ -71,7 +71,7 @@ describe("ChatHistorySidebar", () => {
 
     const portrait = screen.getByRole("img", { name: /seraphina portrait/i });
     const portraitButton = screen.getByRole("button", {
-      name: /open player resources/i
+      name: /view player portrait/i
     });
     const resourcesButton = screen.getByRole("button", {
       name: "Player Resources"
@@ -87,6 +87,24 @@ describe("ChatHistorySidebar", () => {
     ).toBeTruthy();
 
     fireEvent.click(portraitButton);
+
+    expect(props.onViewCharacterSheet).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("dialog", { name: /player portrait/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("img", { name: /seraphina portrait/i })
+    ).toHaveLength(2);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /close player portrait/i })
+    );
+
+    expect(
+      screen.queryByRole("dialog", { name: /player portrait/i })
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(resourcesButton);
 
     expect(props.onViewCharacterSheet).toHaveBeenCalledTimes(1);
   });

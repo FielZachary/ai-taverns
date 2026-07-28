@@ -1,4 +1,7 @@
-import { Pencil, Plus, Search, Trash2 } from "lucide-react";
+"use client";
+
+import { useEffect, useState } from "react";
+import { Pencil, Plus, Search, Trash2, X } from "lucide-react";
 
 export type ChatSummary = {
   id: string;
@@ -35,6 +38,26 @@ export function ChatHistorySidebar({
   onSelectChat,
   onViewCharacterSheet
 }: ChatHistorySidebarProps) {
+  const [isPortraitModalOpen, setIsPortraitModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isPortraitModalOpen) {
+      return;
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsPortraitModalOpen(false);
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isPortraitModalOpen]);
+
   return (
     <aside className="chat-sidebar" aria-label="Chat history">
       <div className="chat-sidebar-history">
@@ -105,8 +128,8 @@ export function ChatHistorySidebar({
           <button
             className="chat-sidebar-portrait"
             type="button"
-            aria-label="Open player resources"
-            onClick={onViewCharacterSheet}
+            aria-label="View player portrait"
+            onClick={() => setIsPortraitModalOpen(true)}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={playerPortraitUrl} alt={playerPortraitAlt} />
@@ -120,6 +143,33 @@ export function ChatHistorySidebar({
           Player Resources
         </button>
       </div>
+
+      {playerPortraitUrl && isPortraitModalOpen ? (
+        <div
+          className="portrait-viewer-backdrop"
+          role="presentation"
+          onClick={() => setIsPortraitModalOpen(false)}
+        >
+          <div
+            aria-modal="true"
+            aria-label="Player portrait"
+            className="portrait-viewer-modal"
+            role="dialog"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              className="portrait-viewer-close"
+              type="button"
+              aria-label="Close player portrait"
+              onClick={() => setIsPortraitModalOpen(false)}
+            >
+              <X size={20} />
+            </button>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={playerPortraitUrl} alt={playerPortraitAlt} />
+          </div>
+        </div>
+      ) : null}
     </aside>
   );
 }

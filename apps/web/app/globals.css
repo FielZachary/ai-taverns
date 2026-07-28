@@ -3027,7 +3027,7 @@ h1 {
 .chat-sidebar-portrait {
   display: block;
   align-self: center;
-  width: min(142px, 100%);
+  width: min(184px, 100%);
   aspect-ratio: 1;
   overflow: hidden;
   border: 1px solid rgba(244, 207, 122, 0.38);
@@ -3056,6 +3056,64 @@ h1 {
   height: 100%;
   object-fit: cover;
   object-position: center;
+}
+
+.portrait-viewer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: clamp(18px, 4vw, 36px);
+  background: rgba(3, 2, 2, 0.74);
+  backdrop-filter: blur(10px) saturate(1.04);
+}
+
+.portrait-viewer-modal {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: min(720px, calc(100vw - 36px));
+  max-height: calc(100dvh - 36px);
+  border: 1px solid rgba(244, 207, 122, 0.46);
+  border-radius: 8px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 28%, rgba(244, 207, 122, 0.12), transparent 40%),
+    rgba(12, 9, 7, 0.96);
+  box-shadow:
+    inset 0 0 56px rgba(0, 0, 0, 0.42),
+    0 30px 92px rgba(0, 0, 0, 0.62);
+}
+
+.portrait-viewer-modal img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  background: rgba(3, 2, 2, 0.72);
+}
+
+.portrait-viewer-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(244, 207, 122, 0.42);
+  border-radius: 8px;
+  color: var(--gold-bright);
+  background: rgba(10, 8, 7, 0.72);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.38);
+}
+
+.portrait-viewer-close:hover,
+.portrait-viewer-close:focus-visible {
+  border-color: rgba(244, 207, 122, 0.74);
+  background: rgba(24, 18, 13, 0.9);
 }
 
 .chat-sidebar-header {
@@ -5533,7 +5591,7 @@ h6 {
   }
 
   .chat-sidebar-portrait {
-    width: 72px;
+    width: 96px;
   }
 
   .player-resources-button {
