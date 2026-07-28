@@ -487,6 +487,17 @@ describe("NewAdventureForm", () => {
 
     await act(async () => {});
 
+    expect(screen.getByText("Generating portrait")).toHaveClass("rune-loader");
+    expect(createCampaignMock).not.toHaveBeenCalled();
+    expect(generateCharacterPortraitMock).not.toHaveBeenCalled();
+    expect(previewCharacterPortraitMock).not.toHaveBeenCalled();
+    expect(uploadCharacterPortraitMock).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+
+    await act(async () => {});
+
     expect(createCampaignMock).toHaveBeenCalledWith(
       expect.objectContaining({
         mode: "single_player",
@@ -506,13 +517,6 @@ describe("NewAdventureForm", () => {
       })
     );
     expect(previewCharacterPortraitMock).not.toHaveBeenCalled();
-    expect(uploadCharacterPortraitMock).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled();
-
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-
-    await act(async () => {});
-
     expect(uploadCharacterPortraitMock).not.toHaveBeenCalled();
   });
 
@@ -632,6 +636,8 @@ describe("NewAdventureForm", () => {
 
     await act(async () => {});
 
+    expect(createCampaignMock).not.toHaveBeenCalled();
+
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
 
     await act(async () => {});
@@ -651,18 +657,8 @@ describe("NewAdventureForm", () => {
   });
 
   it("uses the shared rune loader for portrait and campaign preparation", async () => {
-    let resolvePortraitStart:
-      | ((value: {
-          id: string;
-          sessionId: string;
-          mode: "single_player";
-          title: string;
-        }) => void)
-      | undefined;
     generateCharacterPortraitMock.mockReturnValue(
-      new Promise((resolve) => {
-        resolvePortraitStart = resolve;
-      })
+      new Promise(() => {})
     );
 
     render(<NewAdventureForm />);
@@ -678,6 +674,8 @@ describe("NewAdventureForm", () => {
     fireEvent.click(screen.getByRole("button", { name: /create art/i }));
 
     expect(screen.getByText("Generating portrait")).toHaveClass("rune-loader");
+    expect(createCampaignMock).not.toHaveBeenCalled();
+    expect(generateCharacterPortraitMock).not.toHaveBeenCalled();
     expect(
       screen.queryByText("this'll take about a minute and a half, sit tight ;)")
     ).not.toBeInTheDocument();
@@ -690,15 +688,6 @@ describe("NewAdventureForm", () => {
     expect(
       screen.queryByText("Integrating your backstory")
     ).not.toBeInTheDocument();
-
-    await act(async () => {
-      resolvePortraitStart?.({
-        id: "11111111-1111-4111-8111-111111111111",
-        sessionId: "provider-session",
-        mode: "single_player",
-        title: "Eldermere Adventure"
-      });
-    });
 
     expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
@@ -719,7 +708,7 @@ describe("NewAdventureForm", () => {
     );
   });
 
-  it("recovers when background art start fails without uploading art", async () => {
+  it("recovers when background art start fails during campaign creation", async () => {
     generateCharacterPortraitMock.mockRejectedValue(
       new Error("The portrait easel cracked.")
     );
@@ -738,7 +727,14 @@ describe("NewAdventureForm", () => {
 
     await act(async () => {});
 
+    expect(createCampaignMock).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+
+    await act(async () => {});
+
     expect(createCampaignMock).toHaveBeenCalledTimes(1);
+    expect(generateCharacterPortraitMock).toHaveBeenCalledTimes(1);
     expect(uploadCharacterPortraitMock).not.toHaveBeenCalled();
     expect(screen.getByRole("alert")).toHaveTextContent(
       "The portrait easel cracked."

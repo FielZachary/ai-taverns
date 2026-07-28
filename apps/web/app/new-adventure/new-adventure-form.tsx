@@ -4600,27 +4600,8 @@ export function NewAdventureForm({
 
     setError("");
     setIsCreatingArt(true);
-
-    try {
-      const campaign = await createCampaignFromSetup();
-      setCreatedCampaign(campaign);
-      setPortraitPreviewDataUrl("");
-      setUploadedPortraitFileName("");
-
-      await generateCharacterPortrait(campaign.id, {
-        guidelines: characterArtGuidelines,
-        artStyle: characterArtStyle,
-        imageModel: characterImageModel,
-        background: true
-      });
-    } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "Character art could not be created."
-      );
-      setIsCreatingArt(false);
-    }
+    setPortraitPreviewDataUrl("");
+    setUploadedPortraitFileName("");
   }
 
   function readImageFileAsDataUrl(file: File) {
@@ -4728,7 +4709,7 @@ export function NewAdventureForm({
           guidelines: characterArtGuidelines,
           artStyle: characterArtStyle
         });
-      } else if (!portraitPreviewDataUrl && !isCreatingArt) {
+      } else if (!portraitPreviewDataUrl) {
         setIsCreatingArt(true);
         await generateCharacterPortrait(campaign.id, {
           guidelines: characterArtGuidelines,
@@ -4748,6 +4729,7 @@ export function NewAdventureForm({
           ? caught.message
           : "The campaign could not be created."
       );
+      setIsCreatingArt(false);
       setIsCreating(false);
     }
   }
@@ -5851,16 +5833,15 @@ export function NewAdventureForm({
             </button>
             <button
               type="submit"
-              disabled={
-                isCreating ||
-                isFlowTransitioning ||
-                (isCreatingArt && !createdCampaign)
-              }
+              disabled={isCreating || isFlowTransitioning}
             >
               {isCreating ? (
                 isJoinFlow ? "Joining..." : "Creating..."
               ) : isCreatingArt && !createdCampaign ? (
-                "Creating art..."
+                <>
+                  Continue
+                  <span className="fantasy-arrow-icon fantasy-arrow-forward" aria-hidden="true" />
+                </>
               ) : portraitPreviewDataUrl ? (
                 <>
                   Continue
