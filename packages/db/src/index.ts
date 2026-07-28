@@ -437,6 +437,7 @@ type PlayerRow = {
   last_seen_at: Date | string;
   portrait_asset_id?: string | null;
   portrait_public_url?: string | null;
+  portrait_status?: "pending" | "ready" | "failed" | "deleted" | null;
 };
 
 export type MediaStorageProvider = "local" | "digitalocean_spaces" | "s3";
@@ -3439,6 +3440,12 @@ function rowToRoomPlayer(
   mechanicsState?: MechanicsState
 ): RoomSnapshot["players"][number] {
   const actor = mechanicsState?.actors[actorKeyForPlayer(player.id)];
+  const portraitStatus =
+    player.portrait_status === "pending" ||
+    player.portrait_status === "ready" ||
+    player.portrait_status === "failed"
+      ? player.portrait_status
+      : undefined;
 
   return {
     id: player.client_id,
@@ -3457,7 +3464,8 @@ function rowToRoomPlayer(
       : {}),
     ...(player.portrait_public_url
       ? { portraitUrl: player.portrait_public_url }
-      : {})
+      : {}),
+    ...(portraitStatus ? { portraitStatus } : {})
   };
 }
 
@@ -3522,11 +3530,21 @@ async function buildRoomSnapshot(
       select
         players.*,
         media_assets.id as portrait_asset_id,
-        media_assets.public_url as portrait_public_url
+        media_assets.public_url as portrait_public_url,
+        coalesce(media_assets.status, latest_portrait.status) as portrait_status
       from players
       left join media_assets
         on media_assets.id = players.portrait_asset_id
        and media_assets.status = 'ready'
+      left join lateral (
+        select status
+        from media_assets
+        where media_assets.player_id = players.id
+          and media_assets.kind = 'character_portrait'
+          and media_assets.status in ('pending', 'failed')
+        order by media_assets.created_at desc
+        limit 1
+      ) latest_portrait on true
       where players.campaign_id = $1 and players.status = 'active'
       order by players.slot asc nulls last, players.created_at asc
     `,

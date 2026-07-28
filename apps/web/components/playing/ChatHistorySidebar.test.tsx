@@ -115,6 +115,17 @@ describe("ChatHistorySidebar", () => {
     expect(props.onViewCharacterSheet).toHaveBeenCalledTimes(1);
   });
 
+  it("shows a pending portrait placeholder while character art is generating", () => {
+    renderChatHistorySidebar({
+      playerPortraitStatus: "pending"
+    });
+
+    expect(screen.getByText(/generating portrait/i)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /view player portrait/i })
+    ).not.toBeInTheDocument();
+  });
+
   it("renders chats with previews and marks the active chat", () => {
     renderChatHistorySidebar({
       activeChatId: "chat-2",

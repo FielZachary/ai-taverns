@@ -80,6 +80,7 @@ type GenerateCharacterPortraitInput = {
   imageModel?: CharacterPortraitImageModel | undefined;
   fetchImpl?: typeof fetch;
   storage?: MediaStorage;
+  onPending?: (() => void | Promise<void>) | undefined;
 };
 
 type PreviewCharacterPortraitInput = {
@@ -589,6 +590,8 @@ export async function generateCharacterPortraitForCampaign(
     provider,
     model: settings.model
   });
+
+  await input.onPending?.();
 
   try {
     const generated = await generatePortraitSourceImage({

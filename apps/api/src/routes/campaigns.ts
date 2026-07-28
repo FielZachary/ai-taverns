@@ -123,6 +123,65 @@ function createHttpError(
   return error;
 }
 
+async function generateCharacterPortraitAndPublish(input: {
+  fastify: FastifyInstance;
+  config: ApiConfig;
+  campaignId: string;
+  userId: string;
+  guidelines?: string | undefined;
+  artStyle?: Parameters<typeof generateCharacterPortraitForCampaign>[0]["artStyle"];
+  imageModel?: Parameters<
+    typeof generateCharacterPortraitForCampaign
+  >[0]["imageModel"];
+}) {
+  const portrait = await generateCharacterPortraitForCampaign({
+    db: input.fastify.pg,
+    config: input.config,
+    campaignId: input.campaignId,
+    userId: input.userId,
+    guidelines: input.guidelines,
+    artStyle: input.artStyle,
+    imageModel: input.imageModel,
+    onPending: async () => {
+      try {
+        await input.fastify.roomRealtime.publishRoomUpdated({
+          roomId: input.campaignId
+        });
+      } catch (error) {
+        input.fastify.log.warn(
+          { error, campaignId: input.campaignId },
+          "Character portrait pending update could not be published."
+        );
+      }
+    }
+  });
+
+  if (portrait.status !== "ready") {
+    input.fastify.log.warn(
+      {
+        campaignId: input.campaignId,
+        userId: input.userId,
+        portraitStatus: portrait.status,
+        reason: portrait.reason
+      },
+      "Character portrait generation did not complete."
+    );
+  }
+
+  try {
+    await input.fastify.roomRealtime.publishRoomUpdated({
+      roomId: input.campaignId
+    });
+  } catch (error) {
+    input.fastify.log.warn(
+      { error, campaignId: input.campaignId },
+      "Character portrait completion update could not be published."
+    );
+  }
+
+  return portrait;
+}
+
 function imageBufferFromDataUrl(dataUrl: string) {
   const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=\s]+)$/.exec(
     dataUrl.trim()
@@ -629,25 +688,13 @@ export async function registerCampaignRoutes(
     });
     const portrait =
       body.generateCharacterPortrait === true
-        ? await generateCharacterPortraitForCampaign({
-            db: fastify.pg,
+        ? await generateCharacterPortraitAndPublish({
+            fastify,
             config,
             campaignId: campaign.id,
             userId: user.id
           })
         : undefined;
-
-    if (portrait && portrait.status !== "ready") {
-      fastify.log.warn(
-        {
-          campaignId: campaign.id,
-          userId: user.id,
-          portraitStatus: portrait.status,
-          reason: portrait.reason
-        },
-        "Character portrait generation did not complete."
-      );
-    }
 
     const responseCampaign =
       portrait?.status === "ready"
@@ -721,8 +768,32 @@ export async function registerCampaignRoutes(
       userId: user.id
     });
 
-    const portrait = await generateCharacterPortraitForCampaign({
-      db: fastify.pg,
+    if (body.background) {
+      void generateCharacterPortraitAndPublish({
+        fastify,
+        config,
+        campaignId: params.campaignId,
+        userId: user.id,
+        guidelines: body.guidelines,
+        artStyle: body.artStyle,
+        imageModel: body.imageModel
+      }).catch((error) => {
+        fastify.log.error(
+          { error, campaignId: params.campaignId, userId: user.id },
+          "Background character portrait generation failed."
+        );
+      });
+
+      const campaign = await getCampaignSummaryForUser(fastify.pg, {
+        campaignId: params.campaignId,
+        userId: user.id
+      });
+
+      return CharacterPortraitResponseSchema.parse({ campaign });
+    }
+
+    const portrait = await generateCharacterPortraitAndPublish({
+      fastify,
       config,
       campaignId: params.campaignId,
       userId: user.id,

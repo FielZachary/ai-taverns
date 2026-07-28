@@ -72,7 +72,8 @@ export const CharacterPortraitGenerateParamsSchema = z.object({
 export const CharacterPortraitGenerateRequestSchema = z.object({
   guidelines: z.string().optional(),
   artStyle: CharacterPortraitArtStyleSchema.optional(),
-  imageModel: CharacterPortraitImageModelSchema.optional()
+  imageModel: CharacterPortraitImageModelSchema.optional(),
+  background: z.boolean().optional()
 });
 
 export const CharacterPortraitPreviewRequestSchema = z.object({

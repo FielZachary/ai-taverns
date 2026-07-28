@@ -1729,11 +1729,21 @@ class FakeDatabase {
                     asset.status === "ready"
                 )
               : undefined;
+            const latestIncompletePortrait = this.mediaAssets
+              .filter(
+                (asset) =>
+                  asset.player_id === player.id &&
+                  asset.kind === "character_portrait" &&
+                  (asset.status === "pending" || asset.status === "failed")
+              )
+              .at(-1);
 
             return {
               ...player,
               portrait_asset_id: portrait?.id ?? player.portrait_asset_id,
-              portrait_public_url: portrait?.public_url ?? null
+              portrait_public_url: portrait?.public_url ?? null,
+              portrait_status:
+                portrait?.status ?? latestIncompletePortrait?.status ?? null
             } as T;
           })
         };

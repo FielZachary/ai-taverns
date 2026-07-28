@@ -18,12 +18,12 @@ import {
 } from "@/lib/campaign-genres";
 import {
   createCampaign as createCampaignViaApi,
+  generateCharacterPortrait,
   generateCharacterBackstory,
   joinCampaign as joinCampaignViaApi,
   joinLobbyInvite,
   previewLobbyInvite,
   previewCampaignJoin,
-  previewCharacterPortrait,
   uploadCharacterPortrait,
   type CampaignSummary
 } from "@/lib/campaign-api";
@@ -113,6 +113,30 @@ type CharacterArtStyle =
   | "ink_and_watercolor"
   | "cinematic_concept_art";
 type CharacterImageModel = "qwen" | "openai";
+type PortraitRoomPlayer = {
+  portraitStatus?: "pending" | "ready" | "failed";
+  portraitUrl?: string;
+};
+type PortraitRoomSnapshot = {
+  players?: PortraitRoomPlayer[];
+};
+type PortraitRoomRealtimeEvent =
+  | { type: "room_updated"; roomId: string }
+  | { type: "room_snapshot"; roomId: string; snapshot: PortraitRoomSnapshot }
+  | { type: string; roomId?: string };
+
+function roomSocketUrl(campaign: CampaignSummary) {
+  const apiOrigin =
+    process.env.NEXT_PUBLIC_FASTIFY_API_ORIGIN?.replace(/\/$/, "") ||
+    window.location.origin;
+  const url = new URL("/api/room/live", apiOrigin);
+
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  url.searchParams.set("roomId", campaign.id);
+  url.searchParams.set("sessionId", campaign.sessionId);
+
+  return url.toString();
+}
 type SpellLevelLabel = "Cantrip" | "1st level" | "2nd level" | "3rd level";
 type SpellGroup = {
   level: SpellLevelLabel;
@@ -3901,6 +3925,121 @@ export function NewAdventureForm({
   }, []);
 
   useEffect(() => {
+    if (
+      !createdCampaign ||
+      !isCreatingArt ||
+      uploadedPortraitFileName ||
+      portraitPreviewDataUrl
+    ) {
+      return;
+    }
+
+    const portraitCampaign = createdCampaign;
+    let shouldIgnore = false;
+    let socket: WebSocket | null = null;
+
+    async function refreshPortraitStatus() {
+      try {
+        const response = await fetch(
+          `/api/room?roomId=${encodeURIComponent(
+            portraitCampaign.id
+          )}&sessionId=${encodeURIComponent(portraitCampaign.sessionId)}`,
+          { cache: "no-store" }
+        );
+
+        if (!response.ok) {
+          return;
+        }
+
+        const room = (await response.json()) as PortraitRoomSnapshot;
+        const portraitPlayer = room.players?.find(
+          (player) => player.portraitStatus || player.portraitUrl
+        );
+
+        if (shouldIgnore || !portraitPlayer) {
+          return;
+        }
+
+        if (portraitPlayer.portraitUrl) {
+          setPortraitPreviewDataUrl(portraitPlayer.portraitUrl);
+          setIsCreatingArt(false);
+          setError("");
+          return;
+        }
+
+        if (portraitPlayer.portraitStatus === "failed") {
+          setError("Character art could not be created.");
+          setIsCreatingArt(false);
+        }
+      } catch {
+        // The WebSocket remains the source of truth for the next pushed update.
+      }
+    }
+
+    function connectSocket() {
+      try {
+        socket = new WebSocket(roomSocketUrl(portraitCampaign));
+      } catch {
+        return;
+      }
+
+      socket.addEventListener("open", () => {
+        void refreshPortraitStatus();
+      });
+      socket.addEventListener("message", (event) => {
+        if (typeof event.data !== "string") {
+          return;
+        }
+
+        let parsed: PortraitRoomRealtimeEvent;
+
+        try {
+          parsed = JSON.parse(event.data) as PortraitRoomRealtimeEvent;
+        } catch {
+          return;
+        }
+
+        if (parsed.roomId !== portraitCampaign.id) {
+          return;
+        }
+
+        if (parsed.type === "room_snapshot" && "snapshot" in parsed) {
+          const portraitPlayer = parsed.snapshot.players?.find(
+            (player: PortraitRoomPlayer) =>
+              player.portraitStatus || player.portraitUrl
+          );
+
+          if (portraitPlayer?.portraitUrl) {
+            setPortraitPreviewDataUrl(portraitPlayer.portraitUrl);
+            setIsCreatingArt(false);
+            setError("");
+          } else if (portraitPlayer?.portraitStatus === "failed") {
+            setError("Character art could not be created.");
+            setIsCreatingArt(false);
+          }
+          return;
+        }
+
+        if (parsed.type === "room_updated") {
+          void refreshPortraitStatus();
+        }
+      });
+    }
+
+    connectSocket();
+
+    return () => {
+      shouldIgnore = true;
+      socket?.close();
+    };
+  }, [
+    createdCampaign,
+    isCreatingArt,
+    portraitPreviewDataUrl,
+    uploadedPortraitFileName
+  ]);
+
+  useEffect(() => {
     if (!isInviteJoinFlow) {
       setJoinPreview(null);
     }
@@ -4463,23 +4602,17 @@ export function NewAdventureForm({
     setIsCreatingArt(true);
 
     try {
-      const preview = await previewCharacterPortrait({
-        characterName,
-        playerName:
-          mode === "single_player"
-            ? characterName.trim() || "Solo Player"
-            : "Table Owner",
-        characterSheet,
-        campaignGenre: selectedGenre.label,
-        customWorldName: isCustomGenre ? customWorldName.trim() : undefined,
+      const campaign = await createCampaignFromSetup();
+      setCreatedCampaign(campaign);
+      setPortraitPreviewDataUrl("");
+      setUploadedPortraitFileName("");
+
+      await generateCharacterPortrait(campaign.id, {
         guidelines: characterArtGuidelines,
         artStyle: characterArtStyle,
-        imageModel: characterImageModel
+        imageModel: characterImageModel,
+        background: true
       });
-
-      setPortraitPreviewDataUrl(preview.imageDataUrl);
-      setUploadedPortraitFileName("");
-      setIsCreatingArt(false);
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -4580,23 +4713,30 @@ export function NewAdventureForm({
       return;
     }
 
-    if (!portraitPreviewDataUrl) {
-      void createCharacterArt();
-      return;
-    }
-
     setError("");
     setIsCreating(true);
 
     try {
       const campaign = await createCampaignFromSetup();
       setCreatedCampaign(campaign);
-      const campaignWithPortrait = await uploadCharacterPortrait(campaign.id, {
-        imageDataUrl: portraitPreviewDataUrl,
-        fileName: uploadedPortraitFileName || "generated-character-portrait.png",
-        guidelines: characterArtGuidelines,
-        artStyle: characterArtStyle
-      });
+      let campaignWithPortrait = campaign;
+
+      if (portraitPreviewDataUrl && uploadedPortraitFileName) {
+        campaignWithPortrait = await uploadCharacterPortrait(campaign.id, {
+          imageDataUrl: portraitPreviewDataUrl,
+          fileName: uploadedPortraitFileName,
+          guidelines: characterArtGuidelines,
+          artStyle: characterArtStyle
+        });
+      } else if (!portraitPreviewDataUrl && !isCreatingArt) {
+        setIsCreatingArt(true);
+        await generateCharacterPortrait(campaign.id, {
+          guidelines: characterArtGuidelines,
+          artStyle: characterArtStyle,
+          imageModel: characterImageModel,
+          background: true
+        });
+      }
 
       setCreatedCampaign(campaignWithPortrait);
       window.location.assign(
@@ -4649,7 +4789,22 @@ export function NewAdventureForm({
     event.preventDefault();
 
     if (isLastStep) {
-      void (isJoinFlow ? joinCampaign() : continueToCampaign());
+      if (isJoinFlow) {
+        void joinCampaign();
+        return;
+      }
+
+      if (
+        !portraitPreviewDataUrl &&
+        !uploadedPortraitFileName &&
+        !createdCampaign &&
+        !isCreatingArt
+      ) {
+        void createCharacterArt();
+        return;
+      }
+
+      void continueToCampaign();
       return;
     }
 
@@ -5588,7 +5743,7 @@ export function NewAdventureForm({
                     ) : null}
                   </label>
 
-                  {portraitPreviewDataUrl ? (
+                  {portraitPreviewDataUrl || createdCampaign ? (
                     <button
                       type="button"
                       className="character-art-regenerate"
@@ -5596,7 +5751,7 @@ export function NewAdventureForm({
                       onClick={() => void createCharacterArt()}
                     >
                       <RefreshCw size={16} />
-                      Regenerate
+                      {portraitPreviewDataUrl ? "Regenerate" : "Retry portrait"}
                     </button>
                   ) : null}
                 </div>
@@ -5696,13 +5851,27 @@ export function NewAdventureForm({
             </button>
             <button
               type="submit"
-              disabled={isCreating || isCreatingArt || isFlowTransitioning}
+              disabled={
+                isCreating ||
+                isFlowTransitioning ||
+                (isCreatingArt && !createdCampaign)
+              }
             >
               {isCreating ? (
                 isJoinFlow ? "Joining..." : "Creating..."
-              ) : isCreatingArt ? (
+              ) : isCreatingArt && !createdCampaign ? (
                 "Creating art..."
               ) : portraitPreviewDataUrl ? (
+                <>
+                  Continue
+                  <span className="fantasy-arrow-icon fantasy-arrow-forward" aria-hidden="true" />
+                </>
+              ) : isCreatingArt && createdCampaign ? (
+                <>
+                  Continue
+                  <span className="fantasy-arrow-icon fantasy-arrow-forward" aria-hidden="true" />
+                </>
+              ) : createdCampaign ? (
                 <>
                   Continue
                   <span className="fantasy-arrow-icon fantasy-arrow-forward" aria-hidden="true" />

@@ -1683,6 +1683,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
               playerProfile.characterName ||
               "Player character"
             } portrait`}
+            playerPortraitStatus={currentRoomPlayer?.portraitStatus}
             playerPortraitUrl={currentRoomPlayer?.portraitUrl}
             onViewCharacterSheet={() => setIsCharacterSheetOpen(true)}
           />

@@ -3058,6 +3058,21 @@ h1 {
   object-position: center;
 }
 
+.chat-sidebar-portrait.pending {
+  display: grid;
+  place-items: center;
+  cursor: default;
+  padding: 12px;
+}
+
+.chat-sidebar-portrait.pending .rune-loader {
+  color: var(--gold-bright);
+  font-size: 0.68rem;
+  line-height: 1.25;
+  text-align: center;
+  white-space: normal;
+}
+
 .portrait-viewer-backdrop {
   position: fixed;
   inset: 0;

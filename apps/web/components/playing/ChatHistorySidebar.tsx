@@ -17,6 +17,7 @@ type ChatHistorySidebarProps = {
   isLoading: boolean;
   isCreatingChat: boolean;
   playerPortraitAlt?: string;
+  playerPortraitStatus?: "pending" | "ready" | "failed";
   playerPortraitUrl?: string;
   onStartNewChat: () => void;
   onDeleteChat: (chatId: string) => void;
@@ -35,6 +36,7 @@ export function ChatHistorySidebar({
   isLoading,
   isCreatingChat,
   playerPortraitAlt = "Player character portrait",
+  playerPortraitStatus,
   playerPortraitUrl,
   onStartNewChat,
   onDeleteChat,
@@ -141,6 +143,17 @@ export function ChatHistorySidebar({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={playerPortraitUrl} alt={playerPortraitAlt} />
           </button>
+        ) : playerPortraitStatus === "pending" ? (
+          <div className="chat-sidebar-portrait pending" aria-live="polite">
+            <span className="rune-loader">
+              Generating portrait
+              <span className="rune-loader-dots" aria-hidden="true">
+                <span>.</span>
+                <span>.</span>
+                <span>.</span>
+              </span>
+            </span>
+          </div>
         ) : null}
         <button
           className="player-resources-button"
