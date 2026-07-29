@@ -487,6 +487,14 @@ describe("modular AI DM runtime contracts", () => {
         prompt,
         /If the character does not have the required item or currency, reject the attempt in public_narration/i
       );
+      assert.match(
+        prompt,
+        /Inventory update: you gained a brass key/i
+      );
+      assert.match(
+        prompt,
+        /Inventory update: you dropped the torch/i
+      );
     }
     assert.match(buildMemoryUpdaterPrompt(), /Allowed operations/);
     assert.match(buildMemoryUpdaterPrompt(), /Create a new NPC card/i);
