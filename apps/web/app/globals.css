@@ -3528,6 +3528,7 @@ h1 {
 .player-resources-tabs {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 10px 14px;
   border-bottom: 1px solid var(--line);
@@ -3553,6 +3554,32 @@ h1 {
 
 .character-sheet-overlay-panel .player-resources-close {
   margin-left: auto;
+}
+
+.player-resource-panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px;
+}
+
+.player-resource-grid {
+  display: grid;
+  flex: 1;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  min-height: 0;
+}
+
+.player-weapons-spells-grid {
+  grid-template-columns: minmax(300px, 0.95fr) minmax(340px, 1.35fr);
+}
+
+.player-resource-grid .dnd-sheet-lined-panel {
+  min-height: 260px;
 }
 
 .npc-cards-panel {
@@ -5786,6 +5813,15 @@ h6 {
   .dnd-sheet-body {
     grid-template-columns: 1fr;
     padding: 10px;
+  }
+
+  .player-resource-grid,
+  .player-weapons-spells-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .player-resource-grid .dnd-sheet-lined-panel {
+    min-height: 180px;
   }
 
   .dnd-combat-grid {
