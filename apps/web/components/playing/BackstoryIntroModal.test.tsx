@@ -35,4 +35,21 @@ describe("BackstoryIntroModal", () => {
 
     expect(onContinue).toHaveBeenCalledOnce();
   });
+
+  it("formats one-blob backstories and explains mentioned world terms", () => {
+    render(
+      <BackstoryIntroModal
+        backstory="You were born in the Ashfell Marches. The Oath Warden died. Ferrant Concord steel reached Thornwake Vale. Sallowholt may hold the answer."
+        countdown={0}
+        onContinue={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("World Terms")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Ashfell Marches" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Oath-Ring Warden" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Ferrant Concord" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Thornwake Vale" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Sallowholt" })).toBeInTheDocument();
+  });
 });

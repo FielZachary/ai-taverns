@@ -228,6 +228,7 @@ const backstoryJsonInstructions = [
   "Return exactly one valid JSON object with this shape: {\"backstory\":\"...\",\"eldermereStart\":{\"regionName\":\"...\",\"settlementName\":\"...\",\"reason\":\"...\"}}.",
   "Only include eldermereStart when the prompt provides canonical Eldermere start options. Otherwise return only {\"backstory\":\"...\"}.",
   "The backstory value must be plain player-facing prose only. Do not include markdown headings, bullet points, stat blocks, hook labels, explanations, or surrounding commentary.",
+  "Write the backstory value as 3-5 short paragraphs separated by blank lines. Avoid returning one long unbroken paragraph.",
   "For backstories, invented proper nouns are allowed only for people. Do not invent named non-person entities."
 ].join("\n");
 
@@ -382,6 +383,7 @@ function buildGenerateBackstoryPrompt(input: BackstoryPromptInput) {
     "- Keep the character as someone with unresolved motivation, not someone whose story is already complete.",
     "- Include 2-4 usable story hooks: a personal want, a complication, a connection to the world, and something the DM can bring into play later.",
     "- Weave hooks into the prose. Do not add a 'Hooks:' label or any other labeled section.",
+    "- Write 3-5 readable paragraphs separated by blank lines. Avoid one long unbroken block of text.",
     "- Before returning JSON, silently remove any invented non-person proper noun and replace it with a plain description.",
     ...(input.includeEldermereStart
       ? [
@@ -430,6 +432,7 @@ function buildAddBackstoryDetailsPrompt(input: BackstoryPromptInput) {
     "- Keep the character as someone with unresolved motivation, not someone whose story is already complete.",
     "- Include 2-4 usable story hooks: a personal want, a complication, a connection to the world, and something the DM can bring into play later.",
     "- Weave hooks into the prose. Do not add a 'Hooks:' label or any other labeled section.",
+    "- Write 3-5 readable paragraphs separated by blank lines. Avoid one long unbroken block of text.",
     "- Before returning JSON, silently remove any invented non-person proper noun and replace it with a plain description.",
     "- Do not reveal secret DM-only information unless the world context explicitly says it is player-safe.",
     ...(input.includeEldermereStart

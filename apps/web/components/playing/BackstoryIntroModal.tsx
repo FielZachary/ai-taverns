@@ -1,5 +1,10 @@
 "use client";
 
+import {
+  formatBackstoryParagraphs,
+  glossaryEntriesForBackstory
+} from "./backstory-intro";
+
 type BackstoryIntroModalProps = {
   backstory: string;
   countdown: number;
@@ -12,6 +17,8 @@ export function BackstoryIntroModal({
   onContinue
 }: BackstoryIntroModalProps) {
   const canContinue = countdown <= 0;
+  const paragraphs = formatBackstoryParagraphs(backstory);
+  const glossaryEntries = glossaryEntriesForBackstory(backstory);
 
   return (
     <div className="backstory-intro-backdrop" role="presentation">
@@ -25,10 +32,23 @@ export function BackstoryIntroModal({
           <p className="eyebrow">Campaign Memory</p>
           <h2 id="backstory-intro-title">Your Backstory</h2>
           <div className="backstory-intro-copy">
-            {backstory.split(/\n{2,}/).map((paragraph, index) => (
+            {paragraphs.map((paragraph, index) => (
               <p key={`${index}-${paragraph.slice(0, 18)}`}>{paragraph}</p>
             ))}
           </div>
+          {glossaryEntries.length > 0 ? (
+            <section className="backstory-glossary">
+              <h3>World Terms</h3>
+              <div className="backstory-glossary-list">
+                {glossaryEntries.map((entry) => (
+                  <article key={entry.term}>
+                    <h4>{entry.term}</h4>
+                    <p>{entry.definition}</p>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
         </div>
         <button
           className="backstory-intro-continue"

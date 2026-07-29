@@ -80,6 +80,18 @@ DM Brief
 Secret heir to the moon court.
 `;
 
+const backstoryCharacterSheet = `
+Character Name: Calder
+Class: Fighter
+Level: 3
+
+Backstory
+You were born in the Ashfell Marches. The Oath Warden died without a clear heir. Ferrant Concord mercenaries broke your line. You heard rumors of Thornwake Vale black markets. Sallowholt may hold the answer.
+
+Core Stats
+Armor Class: 16
+`;
+
 function renderCharacterSheetOverlay(
   overrides: Partial<ComponentProps<typeof CharacterSheetOverlay>> = {}
 ) {
@@ -246,5 +258,37 @@ None
     fireEvent.click(within(npcDialog).getByRole("button", { name: /close npc card/i }));
 
     expect(screen.queryByRole("dialog", { name: /marra vell/i })).not.toBeInTheDocument();
+  });
+
+  it("keeps the player backstory in Player Resources with world term explanations", () => {
+    renderCharacterSheetOverlay({
+      characterSheet: backstoryCharacterSheet
+    });
+
+    fireEvent.click(screen.getByRole("tab", { name: "Backstory" }));
+
+    const backstoryPanel = screen.getByRole("region", {
+      name: "Your Backstory"
+    });
+
+    expect(
+      within(backstoryPanel).getByText(/You were born in the Ashfell Marches/)
+    ).toBeInTheDocument();
+    expect(within(backstoryPanel).getByText("World Terms")).toBeInTheDocument();
+    expect(
+      within(backstoryPanel).getByRole("heading", { name: "Ashfell Marches" })
+    ).toBeInTheDocument();
+    expect(
+      within(backstoryPanel).getByRole("heading", { name: "Oath-Ring Warden" })
+    ).toBeInTheDocument();
+    expect(
+      within(backstoryPanel).getByRole("heading", { name: "Ferrant Concord" })
+    ).toBeInTheDocument();
+    expect(
+      within(backstoryPanel).getByRole("heading", { name: "Thornwake Vale" })
+    ).toBeInTheDocument();
+    expect(
+      within(backstoryPanel).getByRole("heading", { name: "Sallowholt" })
+    ).toBeInTheDocument();
   });
 });
