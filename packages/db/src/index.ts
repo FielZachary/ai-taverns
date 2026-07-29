@@ -5558,6 +5558,8 @@ async function runLivingWorldPressureEngineIfDue(
     return;
   }
 
+  let pressureProviderDebug: AiDebugInfo | undefined;
+
   try {
     const campaign = requireRow(
       (
@@ -5611,6 +5613,7 @@ async function runLivingWorldPressureEngineIfDue(
       message,
       history: []
     });
+    pressureProviderDebug = providerData.debug;
 
     await logDmModelCall(db, {
       campaignId: input.campaignId,
@@ -5735,6 +5738,43 @@ async function runLivingWorldPressureEngineIfDue(
       ...(input.dmEventId ? { eventId: input.dmEventId } : {})
     });
   } catch (error) {
+    const debugFromError = pressureProviderDebug ?? providerDebugFromError(error);
+
+    await attachLivingWorldPressureEngineToDmEventDebug(db, {
+      campaignId: input.campaignId,
+      dmEventId: input.dmEventId,
+      livingWorldPressureEngine: {
+        traceId,
+        coveredMessageCount: currentMessageCount,
+        failed: true,
+        error: errorSummary(error),
+        durationMs: Date.now() - startedAt,
+        ...(debugFromError
+          ? {
+              requestMessages: debugFromError.requestMessages,
+              rawResponse: debugFromError.rawResponse,
+              ...(debugFromError.model ? { model: debugFromError.model } : {}),
+              ...(typeof debugFromError.temperature === "number"
+                ? { temperature: debugFromError.temperature }
+                : {}),
+              ...(debugFromError.providerResponseId
+                ? { providerResponseId: debugFromError.providerResponseId }
+                : {}),
+              ...(debugFromError.providerTimings
+                ? { providerTimings: debugFromError.providerTimings }
+                : {})
+            }
+          : {})
+      }
+    });
+
+    runtime.emitDmStreamEvent?.({
+      type: "room_updated",
+      roomId: input.campaignId,
+      updatedAt: nowIso(),
+      ...(input.dmEventId ? { eventId: input.dmEventId } : {})
+    });
+
     await logLivingWorldEngineRun(db, {
       campaignId: input.campaignId,
       traceId,

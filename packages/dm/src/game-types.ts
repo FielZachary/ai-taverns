@@ -37,6 +37,8 @@ export type AiDebugInfo = {
   livingWorldPressureEngine?: {
     traceId?: string;
     coveredMessageCount?: number;
+    failed?: boolean;
+    error?: unknown;
     requestMessages?: AiDebugMessage[];
     rawResponse?: string;
     parsedOutput?: unknown;
