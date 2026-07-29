@@ -9869,3 +9869,12 @@ function createStatusError(statusCode: number, message: string): Error {
   error.statusCode = statusCode;
   return error;
 }
+
+export const __dbTestInternals = {
+  applyAcceptedMemoryPatch,
+  campaignContextStorageDebugState,
+  formatDmGuidance,
+  formatLivingWorldPressureEngineRequest,
+  getLatestLivingWorldCoveredMessageCount,
+  normalizeNewContextChunkPatch
+};
