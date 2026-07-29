@@ -246,6 +246,10 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("scene_director"), /failed roll consequence/i);
     assert.match(jobPrompt("scene_director"), /Do not copy their names/i);
     assert.match(jobPrompt("scene_director"), /\\n\\nWhat do you do\\?/);
+    assert.match(
+      jobPrompt("scene_director"),
+      /exploration, travel, downtime, and ordinary scene resolution/i
+    );
     assert.doesNotMatch(
       jobPrompt("scene_director"),
       /Roll Sleight of Hand:[^"]*\\n\\nWhat do you do\?/
@@ -256,6 +260,11 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("npc_dialogue"), /Persuasion partial success/i);
     assert.match(jobPrompt("npc_dialogue"), /failed Intimidation/i);
     assert.match(jobPrompt("npc_dialogue"), /conversational texture/i);
+    assert.match(jobPrompt("npc_dialogue"), /bargaining, gifting, payment/i);
+    assert.match(
+      jobPrompt("investigation"),
+      /Distinguish discovering, seeing, identifying, or learning about an item/i
+    );
     assert.match(jobPrompt("combat"), /strict turn ownership/i);
     assert.match(jobPrompt("combat"), /Group combat narration by action\/result beat/i);
     assert.match(jobPrompt("combat"), /Bold visible mechanics inside public_narration using Markdown/i);
@@ -431,6 +440,10 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("combat"), /Robed priest Dexterity save: 16 vs DC 14 - success/i);
     assert.match(jobPrompt("combat"), /final enemy defeated and combat ends/i);
     assert.match(jobPrompt("combat"), /Never silently modify HP/);
+    assert.match(
+      jobPrompt("combat"),
+      /attempts to attack with, throw, draw, load, fire, equip, or otherwise use a weapon they do not have/i
+    );
     assert.match(jobPrompt("combat"), /Do not copy their names, actor keys/i);
     assert.match(
       jobPrompt("combat"),
@@ -451,7 +464,30 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("clarification"), /Do not advance fictional time/i);
     assert.match(jobPrompt("clarification"), /have NPCs speak or react/i);
     assert.match(jobPrompt("clarification"), /Do not set next_input_needed to "player_actions"/);
+    assert.match(
+      jobPrompt("clarification"),
+      /Do not create inventory patches just because the player clarifies intent/i
+    );
     assert.match(jobPrompt("clarification"), /Do not reframe or soften the player's declared intent/i);
+    for (const job of [
+      "scene_director",
+      "investigation",
+      "npc_dialogue",
+      "combat",
+      "clarification"
+    ] as const) {
+      const prompt = jobPrompt(job);
+      assert.match(prompt, /inventory_state_update/);
+      assert.match(prompt, /Treat canonical character sheet Inventory, Equipment, and Currency sections/i);
+      assert.match(
+        prompt,
+        /attempts to use, consume, equip, spend, give, trade, throw, load, unlock with, activate/i
+      );
+      assert.match(
+        prompt,
+        /If the character does not have the required item or currency, reject the attempt in public_narration/i
+      );
+    }
     assert.match(buildMemoryUpdaterPrompt(), /Allowed operations/);
     assert.match(buildMemoryUpdaterPrompt(), /Create a new NPC card/i);
     assert.match(buildMemoryUpdaterPrompt(), /Make each NPC feel like a compelling character/i);
