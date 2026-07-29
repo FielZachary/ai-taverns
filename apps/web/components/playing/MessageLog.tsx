@@ -1,7 +1,15 @@
 "use client";
 
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Bug, RefreshCcw, Sparkles, Undo2, UserRound, X } from "lucide-react";
+import {
+  Activity,
+  Bug,
+  RefreshCcw,
+  Sparkles,
+  Undo2,
+  UserRound,
+  X
+} from "lucide-react";
 import type { AiDebugInfo, GameMessage } from "@/lib/game-types";
 
 export type ChatPlayerStatus = {
@@ -18,7 +26,9 @@ type MessageLogProps = {
   waitingPlayers?: ChatPlayerStatus[];
   regeneratingMessageId?: string | null;
   regeneratableMessageId?: string | null;
+  onInspectMap?: () => void;
   onRegenerateResponse?: (messageId: string) => void;
+  onViewEldermereLore?: () => void;
 };
 
 function renderInlineMarkdown(content: string) {
@@ -67,6 +77,85 @@ function RuneLoader({ label }: { label: string }) {
         <span>.</span>
       </span>
     </p>
+  );
+}
+
+function MessageAvatar({ message }: { message: GameMessage }) {
+  if (message.role === "player") {
+    return message.avatarUrl ? (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img alt="" className="message-avatar-image" src={message.avatarUrl} />
+    ) : (
+      <UserRound size={18} />
+    );
+  }
+
+  if (message.role === "dm") {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        alt=""
+        className="message-avatar-image"
+        src="/avatars/dungeon-master.jpg"
+      />
+    );
+  }
+
+  return <Sparkles size={18} />;
+}
+
+function MessageResourceCard({
+  message,
+  onInspectMap,
+  onViewEldermereLore
+}: {
+  message: GameMessage;
+  onInspectMap?: () => void;
+  onViewEldermereLore?: () => void;
+}) {
+  const resourceCard = message.resourceCard;
+
+  if (!resourceCard) {
+    return null;
+  }
+
+  return (
+    <div className="message-resource-card">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img alt={resourceCard.imageAlt} src={resourceCard.imageUrl} />
+      <div className="message-resource-actions">
+        {resourceCard.actions.includes("inspect_map") ? (
+          <button type="button" onClick={onInspectMap}>
+            Inspect Map
+          </button>
+        ) : null}
+        {resourceCard.actions.includes("view_eldermere_lore") ? (
+          <button type="button" onClick={onViewEldermereLore}>
+            View Eldermere Lore
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function StandaloneResourceMessage({
+  message,
+  onInspectMap,
+  onViewEldermereLore
+}: {
+  message: GameMessage;
+  onInspectMap?: () => void;
+  onViewEldermereLore?: () => void;
+}) {
+  return (
+    <article className="message-card message-resource" key={message.id}>
+      <MessageResourceCard
+        message={message}
+        onInspectMap={onInspectMap}
+        onViewEldermereLore={onViewEldermereLore}
+      />
+    </article>
   );
 }
 
@@ -168,6 +257,12 @@ function MessageDebugModal({
             <h3>Context Storage</h3>
             <pre>{formatDebugJson(debug.contextStorageState)}</pre>
           </section>
+          {debug.livingWorldPressureEngine ? (
+            <section>
+              <h3>Pressure Engine Output</h3>
+              <pre>{formatDebugJson(debug.livingWorldPressureEngine)}</pre>
+            </section>
+          ) : null}
         </div>
       </section>
     </div>
@@ -199,7 +294,9 @@ export function MessageLog({
   waitingPlayers = [],
   regeneratingMessageId,
   regeneratableMessageId,
-  onRegenerateResponse
+  onInspectMap,
+  onRegenerateResponse,
+  onViewEldermereLore
 }: MessageLogProps) {
   const logRef = useRef<HTMLDivElement>(null);
   const [openDebugMessageId, setOpenDebugMessageId] = useState<string | null>(
@@ -237,9 +334,21 @@ export function MessageLog({
   return (
     <div className="message-log" aria-live="polite" ref={logRef}>
       {messages.map((message) => {
+        if (message.resourceCard) {
+          return (
+            <StandaloneResourceMessage
+              key={message.id}
+              message={message}
+              onInspectMap={onInspectMap}
+              onViewEldermereLore={onViewEldermereLore}
+            />
+          );
+        }
+
         const canRegenerateMessage =
           message.role === "dm" &&
           message.kind !== "ask_dm_answer" &&
+          !message.isSyntheticIntro &&
           Boolean(onRegenerateResponse);
         const isLatestRegeneratableMessage =
           message.id === regeneratableMessageId;
@@ -254,17 +363,7 @@ export function MessageLog({
             key={message.id}
           >
             <div className="message-icon" aria-hidden="true">
-              {message.role === "player" ? (
-                <UserRound size={18} />
-              ) : message.role === "dm" ? (
-                <img
-                  alt=""
-                  className="message-avatar-image"
-                  src="/avatars/dungeon-master.jpg"
-                />
-              ) : (
-                <Sparkles size={18} />
-              )}
+              <MessageAvatar message={message} />
             </div>
             <div className="message-content">
               <div className="message-heading">
@@ -282,6 +381,16 @@ export function MessageLog({
                       >
                         <Bug size={15} />
                       </button>
+                    ) : null}
+                    {message.debug?.livingWorldPressureEngine ? (
+                      <span
+                        className="message-pressure-badge"
+                        aria-label="Pressure engine ran"
+                        title="Pressure engine ran"
+                        role="img"
+                      >
+                        <Activity size={15} />
+                      </span>
                     ) : null}
                     {canRewindToMessage ? (
                       <button
@@ -315,6 +424,11 @@ export function MessageLog({
               ) : (
                 <MessageBody content={message.content} />
               )}
+              <MessageResourceCard
+                message={message}
+                onInspectMap={onInspectMap}
+                onViewEldermereLore={onViewEldermereLore}
+              />
             </div>
           </article>
         );
@@ -345,6 +459,7 @@ export function MessageLog({
       {isSending && !hideSendingIndicator ? (
         <article className="message-card message-dm">
           <div className="message-icon" aria-hidden="true">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               alt=""
               className="message-avatar-image"

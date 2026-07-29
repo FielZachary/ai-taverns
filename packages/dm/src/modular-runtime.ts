@@ -86,6 +86,24 @@ export type MemoryPatch = {
   markdown?: string;
 };
 
+export type LivingWorldGuidance = {
+  currentDirection: string;
+  pressureToSurface: string[];
+  softMoves: string[];
+  hardMovesIfEarned: string[];
+  avoid: string[];
+};
+
+export type LivingWorldOutput = {
+  worldClockUpdates: unknown[];
+  patches: unknown[];
+  newContextChunks: unknown[];
+  removeContextChunks: unknown[];
+  dmGuidance: LivingWorldGuidance;
+  possibleIntrusions: unknown[];
+  contradictionWarnings: unknown[];
+};
+
 const fallbackContextKeys = contextCategories.reduce(
   (keys, category) => ({ ...keys, [category]: [] }),
   {} as RouterContextKeys
@@ -1311,6 +1329,108 @@ export function buildMemoryUpdaterPrompt() {
   ].join("\n");
 }
 
+export function buildLivingWorldPressureEnginePrompt() {
+  return [
+    "You are the AI Taverns living world pressure engine.",
+    "You run in the background on a cadence while the campaign is being played.",
+    "Your job is to advance offscreen pressures, propose durable context chunk updates, and refresh short-lived DM guidance for the foreground DM runtime.",
+    "You are not the narrator. Do not write player-facing prose. Do not continue the current scene.",
+    "You are not the router. Do not choose DM jobs. Do not answer the player's latest action.",
+    "You are not the normal turn memory updater. Do not merely summarize the last turn; look for offscreen NPC, faction, villain, ally, rumor, clock, and location movement that follows from current campaign pressure.",
+    "Return exactly one JSON object with world_clock_updates, patches, new_context_chunks, remove_context_chunks, dm_guidance, possible_intrusions, and contradiction_warnings.",
+    "Use the same context patch contract as the memory/context updater. Allowed operations: append, replace_section, create_chunk, archive_chunk.",
+    "Treat canonical Eldermere docs as source-grounded world truth. Treat campaign-local planner secrets, clocks, motives, and factions as established only inside this campaign until play establishes wider truth.",
+    "Models may choose, infer, and propose; the server validates, stores, and mutates.",
+    "",
+    "World movement rules:",
+    "Advance people and groups who plausibly have goals, resources, fear, ignorance, deadlines, or opportunities.",
+    "Make the world feel alive outside the player's current location: factions prepare, NPCs travel, enemies investigate, allies act imperfectly, rumors spread, supplies change, threats close in, and clocks tick.",
+    "Prefer pressure, consequences, and opportunities over random events.",
+    "Do not make hard consequences arbitrary. A hard move should be supported by established clocks, recent player choices, ignored warnings, loud actions, or campaign-local antagonist plans.",
+    "Foreshadow most major intrusions before they become hard consequences.",
+    "Never invent player decisions, discoveries, travel, agreements, betrayals, victories, injuries, or losses that have not happened.",
+    "Never reveal hidden truths in player_safe chunks. Use dm_only for true causes, reveal ladders, private motives, not-yet-discovered agents, future betrayals, and campaign-scale secrets.",
+    "",
+    "DM guidance rules:",
+    "DM guidance is server-side direction for the next stretch of foreground narration. It is not canon by itself.",
+    "current_direction should explain what pressure is alive, why it matters, and what the foreground DM should watch for.",
+    "pressure_to_surface should list concrete pressures that can appear through signs, rumors, NPC behavior, roadblocks, requests, clues, or consequences.",
+    "soft_moves should be flexible ways to surface the pressure without forcing a player choice.",
+    "hard_moves_if_earned should be stronger consequences that are fair only if established pressure, pacing, or player neglect supports them.",
+    "avoid should name agency, pacing, mystery, continuity, or visibility boundaries.",
+    "",
+    "Possible intrusions rules:",
+    "possible_intrusions are proposals for the foreground DM, not direct narration.",
+    "Each intrusion should include or clearly imply a fairness reason and a pacing note.",
+    "Good intrusions include a hunter entering town, an ally asking for urgent help, a rival reaching a clue first, a faction checkpoint appearing on an intended route, or distant violence creating rumors and refugees.",
+    "Do not force the player to follow a single path.",
+    "",
+    "Required output shape example:",
+    JSON.stringify(
+      {
+        world_clock_updates: [
+          {
+            clock_id: "faction:claim-stake-accord:pressure-on-stakehold",
+            title: "Claim-Stake Accord pressure on Stakehold",
+            status: "advanced",
+            summary:
+              "The Accord moves surveyors closer to the kiln road after hearing public questions about Lysa.",
+            visibility: "dm_only",
+            related_context_ids: [
+              "faction:claim-stake-accord",
+              "world:stakehold",
+              "secret:sunder-kiln"
+            ]
+          }
+        ],
+        patches: [
+          {
+            operation: "append",
+            context_id: "faction:claim-stake-accord",
+            markdown:
+              "## Offscreen Movement\n- The Accord has begun moving surveyors toward the kiln road after hearing public questions about Lysa."
+          }
+        ],
+        new_context_chunks: [],
+        remove_context_chunks: [],
+        dm_guidance: {
+          current_direction:
+            "The Accord is getting closer because the player's questions made Lysa's trail visible. Look for fair chances to show pressure without forcing the player to go to the kiln immediately.",
+          pressure_to_surface: [
+            "Surveyors asking about ruin claims",
+            "A worried ally warning that records are being sealed"
+          ],
+          soft_moves: [
+            "Show posted notices or nervous miners before a direct confrontation"
+          ],
+          hard_moves_if_earned: [
+            "If the player ignores the pressure for another beat, an Accord agent may reach the same clue first"
+          ],
+          avoid: [
+            "Do not reveal Lysa's true fate",
+            "Do not force immediate travel to the kiln"
+          ]
+        },
+        possible_intrusions: [
+          {
+            title: "Accord surveyors arrive",
+            summary:
+              "Surveyors enter the settlement looking for the same claim records.",
+            fairness_reason:
+              "The player asked public questions and the Accord already has a claim clock.",
+            pacing_note:
+              "Use as a visible complication after one softer warning."
+          }
+        ],
+        contradiction_warnings: []
+      },
+      null,
+      2
+    ),
+    "Return exactly one JSON object and no Markdown outside JSON."
+  ].join("\n");
+}
+
 export function renderContextChunks(chunks: ContextChunk[]) {
   if (chunks.length === 0) {
     return "No selected context chunks were retrieved.";
@@ -1359,6 +1479,60 @@ export function validateMainDmOutput(text: string | undefined): MainDmOutput {
     combatEvents: Array.isArray(parsed.combat_events) ? parsed.combat_events : [],
     proposedContextUpdates: Array.isArray(parsed.proposed_context_updates)
       ? parsed.proposed_context_updates
+      : []
+  };
+}
+
+function stringField(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+export function validateLivingWorldOutput(
+  text: string | undefined
+): LivingWorldOutput {
+  const parsed = parseJsonRecord(text);
+
+  if (!parsed) {
+    throw new Error("living world output must be parseable JSON");
+  }
+
+  const rawGuidance = isRecord(parsed.dm_guidance) ? parsed.dm_guidance : null;
+
+  if (!rawGuidance) {
+    throw new Error("living world output is missing dm_guidance");
+  }
+
+  const currentDirection = stringField(rawGuidance.current_direction);
+
+  if (!currentDirection) {
+    throw new Error("living world dm_guidance is missing current_direction");
+  }
+
+  return {
+    worldClockUpdates: Array.isArray(parsed.world_clock_updates)
+      ? parsed.world_clock_updates
+      : [],
+    patches: Array.isArray(parsed.patches) ? parsed.patches : [],
+    newContextChunks: Array.isArray(parsed.new_context_chunks)
+      ? parsed.new_context_chunks
+      : [],
+    removeContextChunks: Array.isArray(parsed.remove_context_chunks)
+      ? parsed.remove_context_chunks
+      : [],
+    dmGuidance: {
+      currentDirection,
+      pressureToSurface: normalizeStringArray(rawGuidance.pressure_to_surface),
+      softMoves: normalizeStringArray(rawGuidance.soft_moves),
+      hardMovesIfEarned: normalizeStringArray(
+        rawGuidance.hard_moves_if_earned
+      ),
+      avoid: normalizeStringArray(rawGuidance.avoid)
+    },
+    possibleIntrusions: Array.isArray(parsed.possible_intrusions)
+      ? parsed.possible_intrusions
+      : [],
+    contradictionWarnings: Array.isArray(parsed.contradiction_warnings)
+      ? parsed.contradiction_warnings
       : []
   };
 }

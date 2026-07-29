@@ -3565,6 +3565,77 @@ h1 {
   padding: 14px;
 }
 
+.eldermere-lore-panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px;
+}
+
+.player-backstory-panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px;
+}
+
+.player-backstory-copy {
+  display: grid;
+  gap: 1rem;
+  color: var(--ink);
+  font-family: var(--play-text-font);
+}
+
+.player-backstory-copy p {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+
+.eldermere-lore-copy {
+  display: grid;
+  gap: 14px;
+  color: var(--ink);
+}
+
+.eldermere-lore-copy > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.94rem;
+  line-height: 1.55;
+}
+
+.eldermere-lore-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.eldermere-lore-grid article {
+  border: 1px solid rgba(244, 207, 122, 0.18);
+  padding: 12px;
+  background: rgba(250, 235, 199, 0.08);
+}
+
+.eldermere-lore-grid h3 {
+  margin: 0 0 6px;
+  color: var(--gold-bright);
+  font-size: 1rem;
+}
+
+.eldermere-lore-grid p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
 .npc-cards-header {
   display: flex;
   align-items: flex-end;
@@ -3783,6 +3854,77 @@ h1 {
 .npc-detail-actions button:disabled {
   cursor: not-allowed;
   opacity: 0.58;
+}
+
+.backstory-intro-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 48;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: rgba(3, 2, 2, 0.78);
+  backdrop-filter: blur(12px) saturate(1.05);
+}
+
+.backstory-intro-modal {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 16px;
+  width: min(680px, 100%);
+  max-height: min(760px, calc(100vh - 44px));
+  border: 1px solid rgba(244, 207, 122, 0.28);
+  padding: 18px;
+  background:
+    linear-gradient(180deg, rgba(255, 248, 220, 0.055), transparent 32%),
+    rgba(26, 19, 15, 0.98);
+  box-shadow: 0 26px 90px rgba(0, 0, 0, 0.62);
+}
+
+.backstory-intro-scroll {
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.backstory-intro-modal h2 {
+  margin: 0 0 14px;
+  color: var(--gold-bright);
+  font-size: 1.7rem;
+  line-height: 1;
+}
+
+.backstory-intro-copy {
+  display: grid;
+  gap: 1rem;
+  color: var(--ink);
+  font-family: var(--play-text-font);
+}
+
+.backstory-intro-copy p {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+
+.backstory-intro-continue {
+  justify-self: end;
+  min-width: 150px;
+  min-height: 42px;
+  border: 1px solid rgba(244, 207, 122, 0.36);
+  padding: 0 18px;
+  color: var(--gold-bright);
+  font-family: var(--body-font);
+  font-size: 0.82rem;
+  font-weight: 900;
+  background: rgba(17, 13, 10, 0.54);
+}
+
+.backstory-intro-continue:disabled {
+  cursor: wait;
+  color: rgba(244, 207, 122, 0.54);
+  border-color: rgba(244, 207, 122, 0.18);
+  background: rgba(17, 13, 10, 0.36);
 }
 
 .dnd-sheet-body {
@@ -4198,6 +4340,57 @@ h1 {
   object-position: 50% 18%;
 }
 
+.message-resource-card {
+  display: grid;
+  gap: 10px;
+}
+
+.message-resource {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  padding-left: 48px;
+}
+
+.message-resource-card img {
+  display: block;
+  width: 45%;
+  height: auto;
+  border: 1px solid rgba(244, 207, 122, 0.24);
+  object-fit: contain;
+  object-position: 50% 50%;
+}
+
+.message-resource-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.message-resource-actions button {
+  min-height: 36px;
+  border: 1px solid rgba(244, 207, 122, 0.3);
+  padding: 0 12px;
+  color: var(--gold-bright);
+  font-family: var(--body-font);
+  font-size: 0.76rem;
+  font-weight: 900;
+  background: rgba(17, 13, 10, 0.46);
+  box-shadow: 0 0 0 rgba(217, 169, 74, 0);
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.message-resource-actions button:hover,
+.message-resource-actions button:focus-visible {
+  border-color: rgba(244, 207, 122, 0.68);
+  background: rgba(217, 169, 74, 0.16);
+  box-shadow: 0 10px 28px rgba(217, 169, 74, 0.16);
+  transform: translateY(-2px);
+}
+
 .message-heading {
   display: flex;
   align-items: center;
@@ -4250,6 +4443,18 @@ h1 {
 .message-action-button:disabled {
   cursor: wait;
   opacity: 0.48;
+}
+
+.message-pressure-badge {
+  display: grid;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid rgba(104, 189, 149, 0.38);
+  border-radius: 8px;
+  color: #8ddab4;
+  background: rgba(34, 73, 56, 0.28);
 }
 
 .message-body {
@@ -4914,7 +5119,7 @@ h1 {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 14px;
-  width: min(760px, 100%);
+  width: min(980px, 100%);
   max-height: min(860px, calc(100vh - 44px));
   border: 1px solid var(--line);
   padding: 16px;
@@ -4937,7 +5142,7 @@ h1 {
   font-size: 1.2rem;
 }
 
-.turn-form .eldermere-map-header button {
+.eldermere-map-header button {
   min-height: 34px;
   border: 1px solid rgba(244, 207, 122, 0.24);
   padding: 0 12px;
@@ -4952,12 +5157,14 @@ h1 {
   background: rgba(250, 235, 199, 0.08);
 }
 
-.eldermere-map-frame object {
+.eldermere-map-frame object,
+.eldermere-map-frame img {
   display: block;
   width: 100%;
   min-width: 420px;
   height: auto;
-  aspect-ratio: 680 / 900;
+  aspect-ratio: 3 / 2;
+  object-fit: contain;
 }
 
 @keyframes dice-picker-appear {
