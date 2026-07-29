@@ -3,6 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { UserRound, X } from "lucide-react";
 import type { CampaignNpcCard } from "@/lib/campaign-api";
+import {
+  extractPlayerBackstory,
+  formatBackstoryParagraphs,
+  glossaryEntriesForBackstory
+} from "./backstory-intro";
 
 type CharacterSheetOverlayProps = {
   characterSheet: string;
@@ -33,6 +38,7 @@ type SheetTableRow = {
 
 export type PlayerResourcesTab =
   | "character_sheet"
+  | "backstory"
   | "npc_cards"
   | "eldermere_lore";
 
@@ -601,6 +607,9 @@ export function CharacterSheetOverlay({
   const [npcSaveStatus, setNpcSaveStatus] = useState("");
   const [isSavingNpc, setIsSavingNpc] = useState(false);
   const sheet = parseCharacterSheet(characterSheet.trim());
+  const playerBackstory = extractPlayerBackstory(characterSheet);
+  const backstoryParagraphs = formatBackstoryParagraphs(playerBackstory);
+  const backstoryGlossaryEntries = glossaryEntriesForBackstory(playerBackstory);
   const abilityLines = abilityNames.map(
     (ability) =>
       findSectionLine(sheet, "Ability Scores", ability) ?? `${ability}:`
@@ -668,6 +677,8 @@ export function CharacterSheetOverlay({
       aria-labelledby={
         activeTab === "character_sheet"
           ? "character-sheet-title"
+          : activeTab === "backstory"
+            ? "player-backstory-title"
           : activeTab === "npc_cards"
             ? "npc-cards-title"
             : "eldermere-lore-title"
@@ -683,6 +694,15 @@ export function CharacterSheetOverlay({
             onClick={() => setActiveTab("character_sheet")}
           >
             Character Sheet
+          </button>
+          <button
+            aria-selected={activeTab === "backstory"}
+            className="player-resource-tab"
+            role="tab"
+            type="button"
+            onClick={() => setActiveTab("backstory")}
+          >
+            Backstory
           </button>
           <button
             aria-selected={activeTab === "npc_cards"}
@@ -803,6 +823,46 @@ export function CharacterSheetOverlay({
               </section>
             </div>
           </>
+        ) : activeTab === "backstory" ? (
+          <section
+            aria-labelledby="player-backstory-title"
+            className="player-backstory-panel"
+            role="region"
+          >
+            <div className="npc-cards-header">
+              <div>
+                <p className="eyebrow">Player Resources</p>
+                <h2 id="player-backstory-title">Your Backstory</h2>
+              </div>
+              <span>Character memory</span>
+            </div>
+            {backstoryParagraphs.length > 0 ? (
+              <>
+                <div className="player-backstory-copy">
+                  {backstoryParagraphs.map((paragraph, index) => (
+                    <p key={`${index}-${paragraph.slice(0, 18)}`}>
+                      {paragraph}
+                    </p>
+                  ))}
+                </div>
+                {backstoryGlossaryEntries.length > 0 ? (
+                  <section className="backstory-glossary">
+                    <h3>World Terms</h3>
+                    <div className="backstory-glossary-list">
+                      {backstoryGlossaryEntries.map((entry) => (
+                        <article key={entry.term}>
+                          <h4>{entry.term}</h4>
+                          <p>{entry.definition}</p>
+                        </article>
+                      ))}
+                    </div>
+                  </section>
+                ) : null}
+              </>
+            ) : (
+              <p className="npc-cards-status">No backstory yet.</p>
+            )}
+          </section>
         ) : activeTab === "npc_cards" ? (
           <section
             aria-labelledby="npc-cards-title"
