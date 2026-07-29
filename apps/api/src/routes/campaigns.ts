@@ -227,7 +227,7 @@ const backstoryJsonInstructions = [
   "You are AI Taverns, a fantasy tabletop character backstory writer and editor.",
   "Return exactly one valid JSON object with this shape: {\"backstory\":\"...\",\"eldermereStart\":{\"regionName\":\"...\",\"settlementName\":\"...\",\"reason\":\"...\"}}.",
   "Only include eldermereStart when the prompt provides canonical Eldermere start options. Otherwise return only {\"backstory\":\"...\"}.",
-  "The backstory value must be plain player-facing prose only. Do not include markdown headings, bullet points, stat blocks, hook labels, explanations, or surrounding commentary.",
+  "The backstory value must be plain player-facing prose only. Do not include markdown headings, bullet points, stat blocks, hook labels, separate glossary entries, or surrounding commentary. Explain any setting terms inside the prose itself.",
   "Write the backstory value as 3-5 short paragraphs separated by blank lines. Avoid returning one long unbroken paragraph.",
   "For backstories, invented proper nouns are allowed only for people. Do not invent named non-person entities."
 ].join("\n");
@@ -374,6 +374,7 @@ function buildGenerateBackstoryPrompt(input: BackstoryPromptInput) {
     "- Use places, factions, faiths, threats, historical events, and magic terms only when they come from the world context or the player-authored character sheet. If the world context does not supply a specific proper noun, use a plain description instead of inventing one.",
     "- Backstory override for Eldermere opener context: do not invent named starting places or named local anchors. Use only region, city-state, faction, threat, history, or magic names already present in the world context.",
     "- Keep the setting texture focused: choose one primary region or local anchor from the world context, include at most two other canonical setting proper nouns, and explain lore through personal stakes rather than listing canon.",
+    "- When introducing a setting term, faction, region, title, settlement, custom, historical event, or magic concept a new player may not know, briefly define it in the same sentence or a nearby clause through natural prose. Do not add a separate glossary or labeled explanation section.",
     "- Make the backstory unique, interesting, and specific. Avoid generic fantasy biography, vague tragedy, empty prophecy, or interchangeable \"chosen one\" framing.",
     "- Include important people from the character's past or present. These people should have names, clear relationships to the character, and reasons they matter.",
     "- When naming newly invented people, prefer the validated people names below. Use only 1-2 new named people unless the character sheet already establishes more. Do not rename the player character or any established player-written names.",
@@ -424,6 +425,7 @@ function buildAddBackstoryDetailsPrompt(input: BackstoryPromptInput) {
     "- Use places, factions, faiths, threats, historical events, and magic terms only when they come from the world context, the player-written backstory, or the character sheet. If the world context does not supply a specific proper noun, use a plain description instead of inventing one.",
     "- Backstory override for Eldermere opener context: do not invent named starting places or named local anchors. Use only region, city-state, faction, threat, history, or magic names already present in the world context.",
     "- Keep the setting texture focused: choose one primary region or local anchor from the world context, include at most two other canonical setting proper nouns, and explain lore through personal stakes rather than listing canon.",
+    "- When introducing a setting term, faction, region, title, settlement, custom, historical event, or magic concept a new player may not know, briefly define it in the same sentence or a nearby clause through natural prose. Do not add a separate glossary or labeled explanation section.",
     "- Make the enriched backstory unique, interesting, and specific. Avoid generic fantasy biography, vague tragedy, empty prophecy, or interchangeable \"chosen one\" framing.",
     "- Add or deepen important people from the character's past or present. These people should have names, clear relationships to the character, and reasons they matter.",
     "- When naming newly invented people, prefer the validated people names below. Use only 1-2 new named people unless the player-written backstory already establishes more. Do not rename the player character or any established player-written names.",

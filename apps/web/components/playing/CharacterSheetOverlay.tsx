@@ -5,8 +5,7 @@ import { UserRound, X } from "lucide-react";
 import type { CampaignNpcCard } from "@/lib/campaign-api";
 import {
   extractPlayerBackstory,
-  formatBackstoryParagraphs,
-  glossaryEntriesForBackstory
+  formatBackstoryParagraphs
 } from "./backstory-intro";
 
 type CharacterSheetOverlayProps = {
@@ -609,7 +608,6 @@ export function CharacterSheetOverlay({
   const sheet = parseCharacterSheet(characterSheet.trim());
   const playerBackstory = extractPlayerBackstory(characterSheet);
   const backstoryParagraphs = formatBackstoryParagraphs(playerBackstory);
-  const backstoryGlossaryEntries = glossaryEntriesForBackstory(playerBackstory);
   const abilityLines = abilityNames.map(
     (ability) =>
       findSectionLine(sheet, "Ability Scores", ability) ?? `${ability}:`
@@ -837,28 +835,13 @@ export function CharacterSheetOverlay({
               <span>Character memory</span>
             </div>
             {backstoryParagraphs.length > 0 ? (
-              <>
-                <div className="player-backstory-copy">
-                  {backstoryParagraphs.map((paragraph, index) => (
-                    <p key={`${index}-${paragraph.slice(0, 18)}`}>
-                      {paragraph}
-                    </p>
-                  ))}
-                </div>
-                {backstoryGlossaryEntries.length > 0 ? (
-                  <section className="backstory-glossary">
-                    <h3>World Terms</h3>
-                    <div className="backstory-glossary-list">
-                      {backstoryGlossaryEntries.map((entry) => (
-                        <article key={entry.term}>
-                          <h4>{entry.term}</h4>
-                          <p>{entry.definition}</p>
-                        </article>
-                      ))}
-                    </div>
-                  </section>
-                ) : null}
-              </>
+              <div className="player-backstory-copy">
+                {backstoryParagraphs.map((paragraph, index) => (
+                  <p key={`${index}-${paragraph.slice(0, 18)}`}>
+                    {paragraph}
+                  </p>
+                ))}
+              </div>
             ) : (
               <p className="npc-cards-status">No backstory yet.</p>
             )}
