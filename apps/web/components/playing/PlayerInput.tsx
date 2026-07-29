@@ -8,6 +8,7 @@ import {
 } from "react";
 import { Map, Settings } from "lucide-react";
 import type { AiModelId, DiceRollRequest } from "@/lib/game-types";
+import { EldermereMapModal } from "./EldermereMapModal";
 
 export type DiceFace = "d4" | "d6" | "d8" | "d10" | "d12" | "d20";
 export type QueuedDice = Partial<Record<DiceFace, number>>;
@@ -369,27 +370,7 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
           </div>
         ) : null}
         {isMapOpen ? (
-          <div className="eldermere-map-backdrop" role="presentation">
-            <section
-              className="eldermere-map-modal"
-              aria-label="Eldermere map"
-              role="dialog"
-            >
-              <header className="eldermere-map-header">
-                <h2>Eldermere</h2>
-                <button type="button" onClick={() => setIsMapOpen(false)}>
-                  Close
-                </button>
-              </header>
-              <div className="eldermere-map-frame">
-                <object
-                  aria-label="Map of Eldermere"
-                  data="/maps/eldermere-map.svg"
-                  type="image/svg+xml"
-                />
-              </div>
-            </section>
-          </div>
+          <EldermereMapModal onClose={() => setIsMapOpen(false)} />
         ) : null}
       </form>
     );

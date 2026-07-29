@@ -1,6 +1,14 @@
 export type GameMessageRole = "player" | "dm" | "system";
 export type GameMessageKind = "turn" | "ask_dm_question" | "ask_dm_answer";
 export type AiModelId = "deepseek-v4-flash" | "qwen-3-7-flash";
+export type GameMessageResourceAction = "inspect_map" | "view_eldermere_lore";
+
+export type GameMessageResourceCard = {
+  type: "eldermere_map";
+  imageUrl: string;
+  imageAlt: string;
+  actions: GameMessageResourceAction[];
+};
 
 export type AiDebugMessage = {
   role: "system" | "user" | "assistant";
@@ -34,6 +42,23 @@ export type AiDebugInfo = {
   temperature?: number;
   combatState?: unknown;
   contextStorageState?: unknown;
+  livingWorldPressureEngine?: {
+    traceId?: string;
+    coveredMessageCount?: number;
+    failed?: boolean;
+    error?: unknown;
+    requestMessages?: AiDebugMessage[];
+    rawResponse?: string;
+    parsedOutput?: unknown;
+    proposedPatches?: unknown[];
+    acceptedPatches?: unknown[];
+    discardedPatches?: unknown[];
+    durationMs?: number;
+    model?: string;
+    temperature?: number;
+    providerResponseId?: string;
+    providerTimings?: AiDebugProviderTiming[];
+  };
   eldermereOpeningPlanner?: {
     requestMessages: AiDebugMessage[];
     rawResponse: string;
@@ -60,8 +85,11 @@ export type GameMessage = {
   kind?: GameMessageKind;
   playerName?: string;
   characterName?: string;
+  avatarUrl?: string;
   content: string;
   createdAt: string;
+  isSyntheticIntro?: boolean;
+  resourceCard?: GameMessageResourceCard;
   debug?: AiDebugInfo;
 };
 

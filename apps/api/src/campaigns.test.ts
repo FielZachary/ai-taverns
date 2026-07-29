@@ -404,9 +404,13 @@ test("POST /api/campaigns/backstory generates a world-grounded character backsto
   assert.match(providerInput?.message ?? "", /only newly invented proper nouns allowed are people names/i);
   assert.match(providerInput?.message ?? "", /Do not give names to ships, taverns, guilds/i);
   assert.match(providerInput?.instructions ?? "", /invented proper nouns are allowed only for people/i);
+  assert.match(providerInput?.instructions ?? "", /Explain any setting terms inside the prose itself/i);
   assert.match(providerInput?.message ?? "", /Backstory override for Eldermere opener context/i);
   assert.match(providerInput?.message ?? "", /Do not add a 'Hooks:' label/i);
+  assert.match(providerInput?.message ?? "", /3-5 readable paragraphs separated by blank lines/i);
   assert.match(providerInput?.message ?? "", /at most two other canonical setting proper nouns/i);
+  assert.match(providerInput?.message ?? "", /briefly define it in the same sentence or a nearby clause/i);
+  assert.match(providerInput?.message ?? "", /Do not add a separate glossary/i);
   assert.match(
     providerInput?.message ?? "",
     /why those people matter not only to the player character, but also to the living world/i
@@ -463,7 +467,7 @@ test("POST /api/campaigns/backstory adds details and falls back to plain prose",
     payload: {
       mode: "add_details",
       characterSheet: "Character Name: Mira Vale\nClass: Fighter",
-      currentBackstory: "Mira grew up beside a lighthouse.",
+      currentBackstory: "x",
       campaignGenre: "Clockwork Isles",
       campaignGenreKind: "custom",
       customWorldName: "Clockwork Isles",
@@ -480,7 +484,9 @@ test("POST /api/campaigns/backstory adds details and falls back to plain prose",
   const providerInput = getProviderInputs().at(-1);
 
   assert.match(providerInput?.message ?? "", /Player-written backstory:/);
-  assert.match(providerInput?.message ?? "", /Mira grew up beside a lighthouse/);
+  assert.match(providerInput?.message ?? "", /Player-written backstory:\nx/);
+  assert.match(providerInput?.message ?? "", /3-5 readable paragraphs separated by blank lines/i);
+  assert.match(providerInput?.message ?? "", /briefly define it in the same sentence or a nearby clause/i);
   assert.match(providerInput?.message ?? "", /World: Clockwork Isles/);
   assert.doesNotMatch(providerInput?.message ?? "", /Canonical Eldermere start options:/);
   resetProviderInputs();

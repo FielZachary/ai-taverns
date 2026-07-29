@@ -134,6 +134,52 @@ describe("MessageLog", () => {
     expect(screen.getByText(/waiting/i)).toBeInTheDocument();
   });
 
+  it("renders character art avatars and Eldermere resource card actions", () => {
+    const onInspectMap = vi.fn();
+    const onViewEldermereLore = vi.fn();
+
+    renderMessageLog({
+      messages: [
+        gameMessage({
+          id: "player-message",
+          avatarUrl: "/portraits/lyra.png",
+          characterName: "Lyra",
+          content: "I study the map."
+        }),
+        gameMessage({
+          id: "map-message",
+          role: "dm",
+          content: "",
+          resourceCard: {
+            type: "eldermere_map",
+            imageUrl: "/maps/eldermere-map.png",
+            imageAlt: "Map of Eldermere",
+            actions: ["inspect_map", "view_eldermere_lore"]
+          }
+        })
+      ],
+      onInspectMap,
+      onViewEldermereLore
+    });
+
+    expect(screen.getByAltText("Map of Eldermere")).toHaveAttribute(
+      "src",
+      "/maps/eldermere-map.png"
+    );
+    expect(document.querySelector(".message-player img")).toHaveAttribute(
+      "src",
+      "/portraits/lyra.png"
+    );
+    expect(document.querySelector(".message-resource")).toBeInTheDocument();
+    expect(screen.queryByText("Dungeon Master")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Inspect Map" }));
+    fireEvent.click(screen.getByRole("button", { name: "View Eldermere Lore" }));
+
+    expect(onInspectMap).toHaveBeenCalledOnce();
+    expect(onViewEldermereLore).toHaveBeenCalledOnce();
+  });
+
   it("shows the sending indicator unless a streaming DM message is already visible", () => {
     const { rerender } = render(
       <MessageLog messages={[]} isSending={true} />
@@ -313,6 +359,28 @@ describe("MessageLog", () => {
           }
         ]
       },
+      livingWorldPressureEngine: {
+        coveredMessageCount: 21,
+        rawResponse: "{\"world_clock_updates\":[{\"title\":\"Accord pressure\"}]}",
+        parsedOutput: {
+          dmGuidance: {
+            currentDirection:
+              "Surface the Accord pressure through nervous clerks."
+          },
+          possibleIntrusions: [
+            {
+              title: "Accord surveyors arrive"
+            }
+          ]
+        },
+        acceptedPatches: [
+          {
+            operation: "append",
+            context_id: "thread:lysa-trail"
+          }
+        ],
+        discardedPatches: []
+      },
       eldermereOpeningPlanner: {
         requestMessages: [
           {
@@ -357,6 +425,10 @@ describe("MessageLog", () => {
       ]
     });
 
+    expect(
+      screen.getByRole("img", { name: /pressure engine ran/i })
+    ).toBeInTheDocument();
+
     fireEvent.click(screen.getByRole("button", { name: /show ai debug details/i }));
 
     expect(
@@ -371,6 +443,10 @@ describe("MessageLog", () => {
     expect(screen.getByText("Context Storage")).toBeInTheDocument();
     expect(screen.getByText(/"context_id": "npc:mara"/)).toBeInTheDocument();
     expect(screen.getByText(/Protect her crew/)).toBeInTheDocument();
+    expect(screen.getByText("Pressure Engine Output")).toBeInTheDocument();
+    expect(screen.getByText(/"coveredMessageCount": 21/)).toBeInTheDocument();
+    expect(screen.getByText(/Accord surveyors arrive/)).toBeInTheDocument();
+    expect(screen.getByText(/thread:lysa-trail/)).toBeInTheDocument();
     expect(screen.getAllByText(/# 1\. SYSTEM/).length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText(debug.rawResponse)).toBeInTheDocument();
     expect(screen.getByText("Eldermere Planner Prompt Sent")).toBeInTheDocument();
