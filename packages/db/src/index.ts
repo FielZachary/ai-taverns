@@ -6982,6 +6982,7 @@ const gameplayTurnOutputContractReminder = [
   "If a player character attempts to use, consume, equip, spend, give, trade, throw, load, unlock with, activate, or otherwise rely on an item, first check the canonical character sheet Inventory, Equipment, and Currency sections.",
   "If the character does not have the required item or currency, reject the attempt in public_narration and clearly state that they do not have it. Do not include an inventory patch for the failed attempt.",
   "If public_narration says a player character gained, lost, spent, consumed, equipped, unequipped, or transferred an item/currency, inventory_state_update must include the matching patch.",
+  "If inventory_state_update.patches is non-empty, public_narration must include a concise player-visible Inventory update sentence naming what changed, such as 'Inventory update: you gained a brass key' or 'Inventory update: you dropped the torch.'",
   "Only include patches for changes that are explicit and resolved.",
   "If the action is attempted but uncertain, request the needed roll, choice, or payment and leave patches empty.",
   "input_policy must be all_players or only_targeted_players; never use acting_player.",
