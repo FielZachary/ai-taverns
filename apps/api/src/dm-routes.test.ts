@@ -1248,6 +1248,25 @@ test("living world engine updates chunks and injects current DM guidance", async
 
   assert.equal(database.livingWorldEngineRuns.length, 1);
   assert.equal(database.livingWorldEngineRuns[0]?.covered_message_count, 21);
+  const pressureDebug = database.campaignEvents
+    .map((event) => {
+      const payload = event.payload as
+        | {
+            aiDebug?: DebugFields;
+          }
+        | undefined;
+      return payload?.aiDebug?.livingWorldPressureEngine as
+        | Record<string, unknown>
+        | undefined;
+    })
+    .find(Boolean);
+  assert.ok(pressureDebug);
+  assert.equal(pressureDebug.coveredMessageCount, 21);
+  assert.match(String(pressureDebug.rawResponse ?? ""), /world_clock_updates/);
+  assert.match(
+    JSON.stringify(pressureDebug.parsedOutput ?? {}),
+    /Accord surveyors arrive/
+  );
   assert.match(
     database.contextChunks.find(
       (chunk) =>
@@ -1280,6 +1299,7 @@ test("living world engine updates chunks and injects current DM guidance", async
   });
 
   assert.equal(guidedResponse.statusCode, 200, guidedResponse.body);
+  CampaignSoloTurnResponseSchema.parse(guidedResponse.json());
 
   const mainProviderInput = getProviderInputs().find((input) =>
     input.message.includes("Current campaign DM guidance:")

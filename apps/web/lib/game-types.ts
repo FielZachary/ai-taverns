@@ -34,6 +34,21 @@ export type AiDebugInfo = {
   temperature?: number;
   combatState?: unknown;
   contextStorageState?: unknown;
+  livingWorldPressureEngine?: {
+    traceId?: string;
+    coveredMessageCount?: number;
+    requestMessages?: AiDebugMessage[];
+    rawResponse?: string;
+    parsedOutput?: unknown;
+    proposedPatches?: unknown[];
+    acceptedPatches?: unknown[];
+    discardedPatches?: unknown[];
+    durationMs?: number;
+    model?: string;
+    temperature?: number;
+    providerResponseId?: string;
+    providerTimings?: AiDebugProviderTiming[];
+  };
   eldermereOpeningPlanner?: {
     requestMessages: AiDebugMessage[];
     rawResponse: string;

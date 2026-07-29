@@ -34,6 +34,7 @@ export type DebugFields = {
   temperature?: unknown;
   combatState?: unknown;
   contextStorageState?: unknown;
+  livingWorldPressureEngine?: unknown;
   combatAdjudication?: unknown;
   eldermereOpeningPlanner?: unknown;
   router?: unknown;
@@ -930,10 +931,15 @@ class FakeDatabase {
     ) {
       const campaignId = values[0] as string;
       const eventId = values[1] as string;
-      const contextStorageState =
+      const debugValue =
         typeof values[2] === "string"
           ? (JSON.parse(values[2] as string) as unknown)
           : values[2];
+      const debugKey = normalizedSql.includes(
+        "{aiDebug,livingWorldPressureEngine}"
+      )
+        ? "livingWorldPressureEngine"
+        : "contextStorageState";
       const event = this.campaignEvents.find(
         (candidate) =>
           candidate.campaign_id === campaignId && candidate.id === eventId
@@ -951,7 +957,7 @@ class FakeDatabase {
           ...payload,
           aiDebug: {
             ...aiDebug,
-            contextStorageState
+            [debugKey]: debugValue
           }
         };
       }

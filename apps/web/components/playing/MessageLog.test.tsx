@@ -313,6 +313,28 @@ describe("MessageLog", () => {
           }
         ]
       },
+      livingWorldPressureEngine: {
+        coveredMessageCount: 21,
+        rawResponse: "{\"world_clock_updates\":[{\"title\":\"Accord pressure\"}]}",
+        parsedOutput: {
+          dmGuidance: {
+            currentDirection:
+              "Surface the Accord pressure through nervous clerks."
+          },
+          possibleIntrusions: [
+            {
+              title: "Accord surveyors arrive"
+            }
+          ]
+        },
+        acceptedPatches: [
+          {
+            operation: "append",
+            context_id: "thread:lysa-trail"
+          }
+        ],
+        discardedPatches: []
+      },
       eldermereOpeningPlanner: {
         requestMessages: [
           {
@@ -357,6 +379,10 @@ describe("MessageLog", () => {
       ]
     });
 
+    expect(
+      screen.getByRole("img", { name: /pressure engine ran/i })
+    ).toBeInTheDocument();
+
     fireEvent.click(screen.getByRole("button", { name: /show ai debug details/i }));
 
     expect(
@@ -371,6 +397,10 @@ describe("MessageLog", () => {
     expect(screen.getByText("Context Storage")).toBeInTheDocument();
     expect(screen.getByText(/"context_id": "npc:mara"/)).toBeInTheDocument();
     expect(screen.getByText(/Protect her crew/)).toBeInTheDocument();
+    expect(screen.getByText("Pressure Engine Output")).toBeInTheDocument();
+    expect(screen.getByText(/"coveredMessageCount": 21/)).toBeInTheDocument();
+    expect(screen.getByText(/Accord surveyors arrive/)).toBeInTheDocument();
+    expect(screen.getByText(/thread:lysa-trail/)).toBeInTheDocument();
     expect(screen.getAllByText(/# 1\. SYSTEM/).length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText(debug.rawResponse)).toBeInTheDocument();
     expect(screen.getByText("Eldermere Planner Prompt Sent")).toBeInTheDocument();

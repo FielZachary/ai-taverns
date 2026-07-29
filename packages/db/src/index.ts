@@ -5529,6 +5529,7 @@ async function runLivingWorldPressureEngineIfDue(
   input: {
     campaignId: string;
     turnId: string;
+    dmEventId?: string | undefined;
   }
 ) {
   const currentMessageCount = await getCampaignLivingWorldMessageCount(
@@ -5651,6 +5652,44 @@ async function runLivingWorldPressureEngineIfDue(
       guidance: parsed.dmGuidance
     });
 
+    const livingWorldDebugState = {
+      traceId,
+      coveredMessageCount: currentMessageCount,
+      requestMessages: providerData.debug.requestMessages,
+      rawResponse: providerData.debug.rawResponse,
+      parsedOutput: {
+        worldClockUpdates: parsed.worldClockUpdates,
+        patches: parsed.patches,
+        newContextChunks: parsed.newContextChunks,
+        removeContextChunks: parsed.removeContextChunks,
+        dmGuidance: parsed.dmGuidance,
+        possibleIntrusions: parsed.possibleIntrusions,
+        contradictionWarnings: parsed.contradictionWarnings
+      },
+      proposedPatches,
+      acceptedPatches: validation.accepted,
+      discardedPatches: validation.discarded,
+      durationMs: Date.now() - startedAt,
+      ...(providerData.debug.model
+        ? { model: providerData.debug.model }
+        : {}),
+      ...(typeof providerData.debug.temperature === "number"
+        ? { temperature: providerData.debug.temperature }
+        : {}),
+      ...(providerData.debug.providerResponseId
+        ? { providerResponseId: providerData.debug.providerResponseId }
+        : {}),
+      ...(providerData.debug.providerTimings
+        ? { providerTimings: providerData.debug.providerTimings }
+        : {})
+    };
+
+    await attachLivingWorldPressureEngineToDmEventDebug(db, {
+      campaignId: input.campaignId,
+      dmEventId: input.dmEventId,
+      livingWorldPressureEngine: livingWorldDebugState
+    });
+
     await logLivingWorldEngineRun(db, {
       campaignId: input.campaignId,
       traceId,
@@ -5692,7 +5731,8 @@ async function runLivingWorldPressureEngineIfDue(
     runtime.emitDmStreamEvent?.({
       type: "room_updated",
       roomId: input.campaignId,
-      updatedAt: nowIso()
+      updatedAt: nowIso(),
+      ...(input.dmEventId ? { eventId: input.dmEventId } : {})
     });
   } catch (error) {
     await logLivingWorldEngineRun(db, {
@@ -5758,6 +5798,43 @@ async function attachContextStorageStateToDmEventDebug(
       input.campaignId,
       input.dmEventId,
       JSON.stringify(input.contextStorageState)
+    ]
+  );
+}
+
+async function attachLivingWorldPressureEngineToDmEventDebug(
+  db: Queryable,
+  input: {
+    campaignId: string;
+    dmEventId?: string | undefined;
+    livingWorldPressureEngine: unknown;
+  }
+) {
+  if (!input.dmEventId) {
+    return;
+  }
+
+  await bestEffortRuntimeInsert(
+    db,
+    `
+      update campaign_events
+      set payload = jsonb_set(
+        jsonb_set(
+          payload,
+          '{aiDebug}',
+          coalesce(payload->'aiDebug', '{}'::jsonb),
+          true
+        ),
+        '{aiDebug,livingWorldPressureEngine}',
+        $3::jsonb,
+        true
+      )
+      where campaign_id = $1 and id = $2
+    `,
+    [
+      input.campaignId,
+      input.dmEventId,
+      JSON.stringify(input.livingWorldPressureEngine)
     ]
   );
 }
@@ -5948,7 +6025,8 @@ export async function runModularPostTurnContextJobs(
 
   await runLivingWorldPressureEngineIfDue(db, runtime, {
     campaignId: input.campaignId,
-    turnId: input.turnId
+    turnId: input.turnId,
+    dmEventId: input.dmEventId
   });
 }
 
