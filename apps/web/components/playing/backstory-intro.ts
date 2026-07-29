@@ -1,71 +1,6 @@
 const backstoryBoundary =
   "Backstory Expansion|Core Stats|Ability Scores|Saving Throws|Skills|Proficiencies and Languages|Attacks|Features and Traits|Equipment|Inventory|Currency|Spells|DM Brief|Level Progression|Appearance|Personality|Notes";
 
-export type BackstoryGlossaryEntry = {
-  term: string;
-  definition: string;
-  aliases?: string[];
-};
-
-export const eldermereBackstoryGlossary: BackstoryGlossaryEntry[] = [
-  {
-    term: "Ashfell Marches",
-    definition:
-      "A northern highland region of open moor, clan holdings, oath politics, and hard-won border settlements."
-  },
-  {
-    term: "Oath-Ring Warden",
-    aliases: ["Oath Warden"],
-    definition:
-      "A Marcher title for the leader trusted to hold clan oaths together when rival families, claimants, and warbands threaten to fracture them."
-  },
-  {
-    term: "Ferrant Concord",
-    definition:
-      "A hard industrial power in the eastern mountains, known for foundries, mercenary contracts, fortified towns, and weapon trade."
-  },
-  {
-    term: "Thornwake Vale",
-    definition:
-      "A deep western forest-vale where old roads, market towns, and older powers meet beneath a dangerous green canopy."
-  },
-  {
-    term: "Sallowholt",
-    definition:
-      "A Thornwake Vale settlement on the forest edge, useful to traders, scouts, smugglers, and anyone following rumors through the woods."
-  },
-  {
-    term: "Suncross",
-    definition:
-      "The bright crossroads settlement of Cael Ambrose, where heartland roads, farms, and obligations gather."
-  },
-  {
-    term: "Cael Ambrose",
-    definition:
-      "Eldermere's fertile heartland, shaped by roads, farms, noble duties, and old claims."
-  },
-  {
-    term: "Salt Concordat",
-    definition:
-      "A coastal sea power of ports, ships, lighthouse holdings, and haunted waters around the Drowned City."
-  },
-  {
-    term: "Drowned City",
-    definition:
-      "A luminous ruin beneath the Salt Concordat's waters, remembered as one of Eldermere's strangest old scars."
-  },
-  {
-    term: "Cinderspine",
-    definition:
-      "Volcanic mountain country of iron towns, smoke, ore, and severe bargains."
-  },
-  {
-    term: "Sundered Vale",
-    definition:
-      "Broken ground marked by ruin and blue fire, where the old catastrophe has never gone fully quiet."
-  }
-];
-
 function normalizeBackstoryText(value: string) {
   return value
     .replace(/\r\n/g, "\n")
@@ -108,21 +43,6 @@ export function formatBackstoryParagraphs(backstory: string) {
   }
 
   return paragraphs.length > 0 ? paragraphs : [normalizedBackstory];
-}
-
-function glossaryPattern(value: string) {
-  return new RegExp(
-    `\\b${value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
-    "i"
-  );
-}
-
-export function glossaryEntriesForBackstory(backstory: string) {
-  return eldermereBackstoryGlossary.filter((entry) =>
-    [entry.term, ...(entry.aliases ?? [])].some((term) =>
-      glossaryPattern(term).test(backstory)
-    )
-  );
 }
 
 export function extractPlayerBackstory(characterSheet: string) {

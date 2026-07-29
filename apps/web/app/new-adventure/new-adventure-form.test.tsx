@@ -55,6 +55,7 @@ async function continueFlow() {
 
 async function nextCharacterStep() {
   fireEvent.click(screen.getByRole("button", { name: /next/i }));
+  await act(async () => {});
   await finishFlowTransition();
 }
 
@@ -463,6 +464,9 @@ describe("NewAdventureForm", () => {
         "Feel free to leave it blank and let AI Taverns generate the backstory for you."
       )
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /add details/i })
+    ).toBeDisabled();
 
     fireEvent.change(screen.getByPlaceholderText("Optional: Write Backstory"), {
       target: { value: "Raised among lighthouse keepers beneath twin moons." }
@@ -472,7 +476,7 @@ describe("NewAdventureForm", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /add details/i })
-    ).toBeInTheDocument();
+    ).toBeEnabled();
     expect(
       screen.queryByRole("checkbox", {
         name: /let ai taverns add unto my backstory/i
@@ -607,6 +611,57 @@ describe("NewAdventureForm", () => {
         )
       })
     );
+  });
+
+  it("generates a blank identity backstory before continuing", async () => {
+    let resolveBackstory:
+      | ((
+          value:
+            | { backstory: string }
+            | PromiseLike<{ backstory: string }>
+        ) => void)
+      | undefined;
+    generateCharacterBackstoryMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveBackstory = resolve;
+      })
+    );
+
+    render(<NewAdventureForm />);
+
+    await advanceSingleplayerToIdentity();
+
+    fireEvent.change(screen.getByLabelText("Character name"), {
+      target: { value: "Mira Vale" }
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /next/i }));
+
+    expect(
+      screen.getByRole("button", { name: "Generating backstory..." })
+    ).toBeDisabled();
+    expect(screen.queryByText("Writing your backstory")).not.toBeInTheDocument();
+    expect(generateCharacterBackstoryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: "generate",
+        characterSheet: expect.stringContaining("Character Name: Mira Vale")
+      })
+    );
+
+    await act(async () => {
+      resolveBackstory?.({
+        backstory: "Mira follows a salt-stained promise toward Selwick."
+      });
+    });
+
+    expect(screen.getByPlaceholderText("Optional: Write Backstory")).toHaveValue(
+      "Mira follows a salt-stained promise toward Selwick."
+    );
+    await finishFlowTransition();
+
+    expect(
+      screen.getByRole("heading", { name: /create your character art/i })
+    ).toBeInTheDocument();
   });
 
   it("passes generated Eldermere start into campaign creation", async () => {

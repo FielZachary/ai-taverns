@@ -260,7 +260,7 @@ None
     expect(screen.queryByRole("dialog", { name: /marra vell/i })).not.toBeInTheDocument();
   });
 
-  it("keeps the player backstory in Player Resources with world term explanations", () => {
+  it("keeps the player backstory in Player Resources without adding a separate glossary", () => {
     renderCharacterSheetOverlay({
       characterSheet: backstoryCharacterSheet
     });
@@ -274,21 +274,6 @@ None
     expect(
       within(backstoryPanel).getByText(/You were born in the Ashfell Marches/)
     ).toBeInTheDocument();
-    expect(within(backstoryPanel).getByText("World Terms")).toBeInTheDocument();
-    expect(
-      within(backstoryPanel).getByRole("heading", { name: "Ashfell Marches" })
-    ).toBeInTheDocument();
-    expect(
-      within(backstoryPanel).getByRole("heading", { name: "Oath-Ring Warden" })
-    ).toBeInTheDocument();
-    expect(
-      within(backstoryPanel).getByRole("heading", { name: "Ferrant Concord" })
-    ).toBeInTheDocument();
-    expect(
-      within(backstoryPanel).getByRole("heading", { name: "Thornwake Vale" })
-    ).toBeInTheDocument();
-    expect(
-      within(backstoryPanel).getByRole("heading", { name: "Sallowholt" })
-    ).toBeInTheDocument();
+    expect(within(backstoryPanel).queryByText("World Terms")).not.toBeInTheDocument();
   });
 });

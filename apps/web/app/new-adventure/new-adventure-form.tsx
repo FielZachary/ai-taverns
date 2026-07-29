@@ -3505,6 +3505,8 @@ export function NewAdventureForm({
   const [ownerClientId, setOwnerClientId] = useState("");
   const [error, setError] = useState("");
   const [isGeneratingBackstory, setIsGeneratingBackstory] = useState(false);
+  const [isContinuingWithBackstory, setIsContinuingWithBackstory] =
+    useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [isCreatingArt, setIsCreatingArt] = useState(false);
   const [createdCampaign, setCreatedCampaign] =
@@ -4467,7 +4469,7 @@ export function NewAdventureForm({
   }
 
   async function handleNext() {
-    if (isFlowTransitioning) {
+    if (isFlowTransitioning || isGeneratingBackstory) {
       return;
     }
 
@@ -4520,6 +4522,21 @@ export function NewAdventureForm({
         )
       );
       return;
+    }
+
+    if (
+      isCharacterStep &&
+      currentCharacterStep === "Identity" &&
+      !isJoinFlow &&
+      !backstory.trim()
+    ) {
+      setIsContinuingWithBackstory(true);
+      const wroteBackstory = await writeBackstory("generate");
+      setIsContinuingWithBackstory(false);
+
+      if (!wroteBackstory) {
+        return;
+      }
     }
 
     if (isCharacterStep && !isLastCharacterStep) {
@@ -4653,14 +4670,14 @@ export function NewAdventureForm({
 
   async function writeBackstory(mode: "generate" | "add_details") {
     if (isGeneratingBackstory) {
-      return;
+      return false;
     }
 
     const currentBackstory = backstory.trim();
 
     if (mode === "add_details" && !currentBackstory) {
       setError("Write a backstory before adding details.");
-      return;
+      return false;
     }
 
     setError("");
@@ -4682,12 +4699,14 @@ export function NewAdventureForm({
 
       setBackstory(generatedBackstory.backstory);
       setEldermereStart(generatedBackstory.eldermereStart ?? null);
+      return true;
     } catch (caught) {
       setError(
         caught instanceof Error
           ? caught.message
           : "Backstory could not be created."
       );
+      return false;
     } finally {
       setIsGeneratingBackstory(false);
     }
@@ -5601,7 +5620,7 @@ export function NewAdventureForm({
                           readOnly={isGeneratingBackstory}
                           aria-busy={isGeneratingBackstory}
                         />
-                        {isGeneratingBackstory ? (
+                        {isGeneratingBackstory && !isContinuingWithBackstory ? (
                           <p className="rune-loader backstory-loader">
                             Writing your backstory
                             <span className="rune-loader-dots" aria-hidden="true">
@@ -5827,6 +5846,7 @@ export function NewAdventureForm({
                 stepIndex === 0 ||
                 isCreating ||
                 isCreatingArt ||
+                isGeneratingBackstory ||
                 isFlowTransitioning ||
                 Boolean(createdCampaign)
               }
@@ -5837,10 +5857,12 @@ export function NewAdventureForm({
             </button>
             <button
               type="submit"
-              disabled={isCreating || isFlowTransitioning}
+              disabled={isCreating || isFlowTransitioning || isGeneratingBackstory}
             >
               {isCreating ? (
                 isJoinFlow ? "Joining..." : "Creating..."
+              ) : isContinuingWithBackstory ? (
+                "Generating backstory..."
               ) : isCreatingArt && !createdCampaign ? (
                 <>
                   Continue

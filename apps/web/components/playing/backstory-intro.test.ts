@@ -2,8 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   extractPlayerBackstory,
-  formatBackstoryParagraphs,
-  glossaryEntriesForBackstory
+  formatBackstoryParagraphs
 } from "./backstory-intro";
 
 describe("extractPlayerBackstory", () => {
@@ -50,11 +49,4 @@ describe("extractPlayerBackstory", () => {
     ]);
   });
 
-  it("returns glossary entries for Eldermere terms mentioned in backstory", () => {
-    expect(
-      glossaryEntriesForBackstory(
-        "The Oath Warden died while Ferrant Concord arms reached Sallowholt."
-      ).map((entry) => entry.term)
-    ).toEqual(["Oath-Ring Warden", "Ferrant Concord", "Sallowholt"]);
-  });
 });
