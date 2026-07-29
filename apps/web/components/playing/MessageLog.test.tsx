@@ -134,6 +134,50 @@ describe("MessageLog", () => {
     expect(screen.getByText(/waiting/i)).toBeInTheDocument();
   });
 
+  it("renders character art avatars and Eldermere resource card actions", () => {
+    const onInspectMap = vi.fn();
+    const onViewEldermereLore = vi.fn();
+
+    renderMessageLog({
+      messages: [
+        gameMessage({
+          id: "player-message",
+          avatarUrl: "/portraits/lyra.png",
+          characterName: "Lyra",
+          content: "I study the map."
+        }),
+        gameMessage({
+          id: "map-message",
+          role: "dm",
+          content: "Eldermere",
+          resourceCard: {
+            type: "eldermere_map",
+            imageUrl: "/maps/eldermere-map.png",
+            imageAlt: "Map of Eldermere",
+            actions: ["inspect_map", "view_eldermere_lore"]
+          }
+        })
+      ],
+      onInspectMap,
+      onViewEldermereLore
+    });
+
+    expect(screen.getByAltText("Map of Eldermere")).toHaveAttribute(
+      "src",
+      "/maps/eldermere-map.png"
+    );
+    expect(document.querySelector(".message-player img")).toHaveAttribute(
+      "src",
+      "/portraits/lyra.png"
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Inspect Map" }));
+    fireEvent.click(screen.getByRole("button", { name: "View Eldermere Lore" }));
+
+    expect(onInspectMap).toHaveBeenCalledOnce();
+    expect(onViewEldermereLore).toHaveBeenCalledOnce();
+  });
+
   it("shows the sending indicator unless a streaming DM message is already visible", () => {
     const { rerender } = render(
       <MessageLog messages={[]} isSending={true} />

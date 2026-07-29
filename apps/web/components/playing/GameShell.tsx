@@ -38,7 +38,11 @@ import {
   ChatHistorySidebar,
   type ChatSummary
 } from "./ChatHistorySidebar";
-import { CharacterSheetOverlay } from "./CharacterSheetOverlay";
+import {
+  CharacterSheetOverlay,
+  type PlayerResourcesTab
+} from "./CharacterSheetOverlay";
+import { EldermereMapModal } from "./EldermereMapModal";
 import { MessageLog } from "./MessageLog";
 import {
   emptyPlayerProfile,
@@ -88,6 +92,8 @@ import {
   removePersistedStreamingDmMessages,
   removeStreamingDmMessage,
   startStreamingDmMessage,
+  withOpeningResourceMessages,
+  withPlayerMessageAvatars,
   type StreamingDmMessage
 } from "./game-shell-messages";
 
@@ -276,6 +282,9 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
   const [activeDiceReveal, setActiveDiceReveal] =
     useState<ActiveDiceReveal | null>(null);
   const [isCharacterSheetOpen, setIsCharacterSheetOpen] = useState(false);
+  const [playerResourcesInitialTab, setPlayerResourcesInitialTab] =
+    useState<PlayerResourcesTab>("character_sheet");
+  const [isMessageMapOpen, setIsMessageMapOpen] = useState(false);
   const [npcCards, setNpcCards] = useState<CampaignNpcCard[]>([]);
   const [isLoadingNpcCards, setIsLoadingNpcCards] = useState(false);
   const [npcCardsError, setNpcCardsError] = useState("");
@@ -358,13 +367,26 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
   });
 
   const visibleMessages = useMemo(
-    () =>
-      mergeVisibleGameMessages({
+    () => {
+      const mergedMessages = mergeVisibleGameMessages({
         localMessages: messages,
         roomMessages,
         streamingDmMessages
-      }),
-    [messages, roomMessages, streamingDmMessages]
+      });
+      const preparedMessages =
+        hasAdventureBegun && mergedMessages.length > 0
+          ? withOpeningResourceMessages(mergedMessages)
+          : mergedMessages;
+
+      return withPlayerMessageAvatars(preparedMessages, displayedRoomPlayers);
+    },
+    [
+      displayedRoomPlayers,
+      hasAdventureBegun,
+      messages,
+      roomMessages,
+      streamingDmMessages
+    ]
   );
   const isShowingStreamingDmMessage = useMemo(
     () => streamingDmMessages.length > 0,
@@ -393,7 +415,12 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
   const regeneratableMessageId = useMemo(() => {
     const latestDmMessage = [...visibleMessages]
       .reverse()
-      .find((message) => message.role === "dm" && message.kind !== "ask_dm_answer");
+      .find(
+        (message) =>
+          message.role === "dm" &&
+          message.kind !== "ask_dm_answer" &&
+          !message.isSyntheticIntro
+      );
 
     return latestDmMessage?.id ?? null;
   }, [visibleMessages]);
@@ -1686,7 +1713,10 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
             } portrait`}
             playerPortraitStatus={currentRoomPlayer?.portraitStatus}
             playerPortraitUrl={currentRoomPlayer?.portraitUrl}
-            onViewCharacterSheet={() => setIsCharacterSheetOpen(true)}
+            onViewCharacterSheet={() => {
+              setPlayerResourcesInitialTab("character_sheet");
+              setIsCharacterSheetOpen(true);
+            }}
           />
           <div className="story-column">
             {tableAlert ? (
@@ -1713,9 +1743,14 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
               regeneratingMessageId={regeneratingMessageId}
               regeneratableMessageId={regeneratableMessageId}
               waitingPlayers={waitingPlayers}
+              onInspectMap={() => setIsMessageMapOpen(true)}
               onRegenerateResponse={(messageId) =>
                 void handleRegenerateResponse(messageId)
               }
+              onViewEldermereLore={() => {
+                setPlayerResourcesInitialTab("eldermere_lore");
+                setIsCharacterSheetOpen(true);
+              }}
             />
 
             {!isSinglePlayer && !hasAdventureBegun ? (
@@ -1815,6 +1850,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
       {isCharacterSheetOpen ? (
         <CharacterSheetOverlay
           characterSheet={activeCharacterSheet}
+          initialTab={playerResourcesInitialTab}
           portraitUrl={currentRoomPlayer?.portraitUrl}
           isLoadingNpcCards={isLoadingNpcCards}
           npcCards={npcCards}
@@ -1822,6 +1858,10 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
           onClose={() => setIsCharacterSheetOpen(false)}
           onNpcCardUpdate={handleUpdateNpcCard}
         />
+      ) : null}
+
+      {isMessageMapOpen ? (
+        <EldermereMapModal onClose={() => setIsMessageMapOpen(false)} />
       ) : null}
 
       <button

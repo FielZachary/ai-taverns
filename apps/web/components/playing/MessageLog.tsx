@@ -26,7 +26,9 @@ type MessageLogProps = {
   waitingPlayers?: ChatPlayerStatus[];
   regeneratingMessageId?: string | null;
   regeneratableMessageId?: string | null;
+  onInspectMap?: () => void;
   onRegenerateResponse?: (messageId: string) => void;
+  onViewEldermereLore?: () => void;
 };
 
 function renderInlineMarkdown(content: string) {
@@ -75,6 +77,65 @@ function RuneLoader({ label }: { label: string }) {
         <span>.</span>
       </span>
     </p>
+  );
+}
+
+function MessageAvatar({ message }: { message: GameMessage }) {
+  if (message.role === "player") {
+    return message.avatarUrl ? (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img alt="" className="message-avatar-image" src={message.avatarUrl} />
+    ) : (
+      <UserRound size={18} />
+    );
+  }
+
+  if (message.role === "dm") {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        alt=""
+        className="message-avatar-image"
+        src="/avatars/dungeon-master.jpg"
+      />
+    );
+  }
+
+  return <Sparkles size={18} />;
+}
+
+function MessageResourceCard({
+  message,
+  onInspectMap,
+  onViewEldermereLore
+}: {
+  message: GameMessage;
+  onInspectMap?: () => void;
+  onViewEldermereLore?: () => void;
+}) {
+  const resourceCard = message.resourceCard;
+
+  if (!resourceCard) {
+    return null;
+  }
+
+  return (
+    <div className="message-resource-card">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img alt={resourceCard.imageAlt} src={resourceCard.imageUrl} />
+      <div className="message-resource-actions">
+        {resourceCard.actions.includes("inspect_map") ? (
+          <button type="button" onClick={onInspectMap}>
+            Inspect Map
+          </button>
+        ) : null}
+        {resourceCard.actions.includes("view_eldermere_lore") ? (
+          <button type="button" onClick={onViewEldermereLore}>
+            View Eldermere Lore
+          </button>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -213,7 +274,9 @@ export function MessageLog({
   waitingPlayers = [],
   regeneratingMessageId,
   regeneratableMessageId,
-  onRegenerateResponse
+  onInspectMap,
+  onRegenerateResponse,
+  onViewEldermereLore
 }: MessageLogProps) {
   const logRef = useRef<HTMLDivElement>(null);
   const [openDebugMessageId, setOpenDebugMessageId] = useState<string | null>(
@@ -254,6 +317,7 @@ export function MessageLog({
         const canRegenerateMessage =
           message.role === "dm" &&
           message.kind !== "ask_dm_answer" &&
+          !message.isSyntheticIntro &&
           Boolean(onRegenerateResponse);
         const isLatestRegeneratableMessage =
           message.id === regeneratableMessageId;
@@ -268,17 +332,7 @@ export function MessageLog({
             key={message.id}
           >
             <div className="message-icon" aria-hidden="true">
-              {message.role === "player" ? (
-                <UserRound size={18} />
-              ) : message.role === "dm" ? (
-                <img
-                  alt=""
-                  className="message-avatar-image"
-                  src="/avatars/dungeon-master.jpg"
-                />
-              ) : (
-                <Sparkles size={18} />
-              )}
+              <MessageAvatar message={message} />
             </div>
             <div className="message-content">
               <div className="message-heading">
@@ -339,6 +393,11 @@ export function MessageLog({
               ) : (
                 <MessageBody content={message.content} />
               )}
+              <MessageResourceCard
+                message={message}
+                onInspectMap={onInspectMap}
+                onViewEldermereLore={onViewEldermereLore}
+              />
             </div>
           </article>
         );
@@ -369,6 +428,7 @@ export function MessageLog({
       {isSending && !hideSendingIndicator ? (
         <article className="message-card message-dm">
           <div className="message-icon" aria-hidden="true">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               alt=""
               className="message-avatar-image"
