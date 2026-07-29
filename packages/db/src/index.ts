@@ -5177,7 +5177,7 @@ async function applyAcceptedMemoryPatch(
       db,
       `
         update campaign_context_chunks
-        set body_markdown = concat_ws(E'\n', body_markdown, $3),
+        set body_markdown = concat_ws(E'\n', body_markdown, $3::text),
           updated_at = now()
         where campaign_id = $1 and context_key = $2
       `,
@@ -5191,7 +5191,7 @@ async function applyAcceptedMemoryPatch(
       db,
       `
         update campaign_context_chunks
-        set body_markdown = $3,
+        set body_markdown = $3::text,
           updated_at = now()
         where campaign_id = $1 and context_key = $2
       `,
@@ -5293,6 +5293,8 @@ async function getLatestLivingWorldCoveredMessageCount(
         select covered_message_count
         from living_world_engine_runs
         where campaign_id = $1
+          and coalesce(payload->>'failed', 'false') <> 'true'
+          and coalesce(payload->>'status', '') <> 'started'
         order by covered_message_count desc, created_at desc
         limit 1
       `,
