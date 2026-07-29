@@ -56,7 +56,10 @@ describe("game shell message helpers", () => {
       imageUrl: "/maps/eldermere-map.png",
       actions: ["inspect_map", "view_eldermere_lore"]
     });
+    expect(visibleMessages[0]?.content).toBe("");
+    expect(visibleMessages[0]?.isSyntheticIntro).toBe(true);
     expect(visibleMessages[1]?.content).toBe(playerResourcesIntroText);
+    expect(visibleMessages[1]?.isSyntheticIntro).toBe(true);
   });
 
   it("uses room player portraits for matching player messages", () => {
