@@ -5,9 +5,12 @@ import {
   appendStreamingDmDelta,
   completeStreamingDmMessage,
   mergeVisibleGameMessages,
+  playerResourcesIntroText,
   removePersistedStreamingDmMessages,
   removeStreamingDmMessage,
   startStreamingDmMessage,
+  withOpeningResourceMessages,
+  withPlayerMessageAvatars,
   type StreamingDmMessage
 } from "./game-shell-messages";
 
@@ -38,6 +41,50 @@ function streamingMessage(
 }
 
 describe("game shell message helpers", () => {
+  it("prepends Eldermere resources before the first campaign opener", () => {
+    const visibleMessages = withOpeningResourceMessages([
+      message("opener-1", "dm", "2026-07-11T10:00:00.000Z", "Welcome to Selwick.")
+    ]);
+
+    expect(visibleMessages.map((visibleMessage) => visibleMessage.id)).toEqual([
+      "opener-1-eldermere-map",
+      "opener-1-player-resources-guide",
+      "opener-1"
+    ]);
+    expect(visibleMessages[0]?.resourceCard).toMatchObject({
+      type: "eldermere_map",
+      imageUrl: "/maps/eldermere-map.png",
+      actions: ["inspect_map", "view_eldermere_lore"]
+    });
+    expect(visibleMessages[1]?.content).toBe(playerResourcesIntroText);
+  });
+
+  it("uses room player portraits for matching player messages", () => {
+    const visibleMessages = withPlayerMessageAvatars(
+      [
+        {
+          ...message(
+            "player-1",
+            "player",
+            "2026-07-11T10:00:00.000Z",
+            "I draw my blade."
+          ),
+          characterName: "Lyra",
+          playerName: "Maya"
+        }
+      ],
+      [
+        {
+          characterName: "Lyra",
+          username: "Maya",
+          portraitUrl: "/portraits/lyra.png"
+        }
+      ]
+    );
+
+    expect(visibleMessages[0]?.avatarUrl).toBe("/portraits/lyra.png");
+  });
+
   it("merges local and room messages in chronological order", () => {
     const visibleMessages = mergeVisibleGameMessages({
       localMessages: [

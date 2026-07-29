@@ -6,6 +6,7 @@ import type { CampaignNpcCard } from "@/lib/campaign-api";
 
 type CharacterSheetOverlayProps = {
   characterSheet: string;
+  initialTab?: PlayerResourcesTab;
   portraitUrl?: string;
   isLoadingNpcCards?: boolean;
   npcCards?: CampaignNpcCard[];
@@ -30,7 +31,10 @@ type SheetTableRow = {
   effect: string;
 };
 
-type PlayerResourcesTab = "character_sheet" | "npc_cards";
+export type PlayerResourcesTab =
+  | "character_sheet"
+  | "npc_cards"
+  | "eldermere_lore";
 
 type ParsedNpcCard = CampaignNpcCard & {
   fields: Record<string, string>;
@@ -575,6 +579,7 @@ function LinedPanel({
 
 export function CharacterSheetOverlay({
   characterSheet,
+  initialTab = "character_sheet",
   portraitUrl,
   isLoadingNpcCards = false,
   npcCards = [],
@@ -582,8 +587,7 @@ export function CharacterSheetOverlay({
   onClose,
   onNpcCardUpdate
 }: CharacterSheetOverlayProps) {
-  const [activeTab, setActiveTab] =
-    useState<PlayerResourcesTab>("character_sheet");
+  const [activeTab, setActiveTab] = useState<PlayerResourcesTab>(initialTab);
   const [selectedNpcId, setSelectedNpcId] = useState<string | null>(null);
   const parsedNpcCards = useMemo(
     () => npcCards.map((card) => parseNpcCard(card)),
@@ -617,6 +621,10 @@ export function CharacterSheetOverlay({
   const proficiencyLines = sheet.sections["Proficiencies and Languages"] ?? [];
   const spells = sheet.sections.Spells ?? [];
   const dmBrief = sheet.sections["DM Brief"] ?? [];
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
 
   useEffect(() => {
     if (!selectedNpc) {
@@ -660,7 +668,9 @@ export function CharacterSheetOverlay({
       aria-labelledby={
         activeTab === "character_sheet"
           ? "character-sheet-title"
-          : "npc-cards-title"
+          : activeTab === "npc_cards"
+            ? "npc-cards-title"
+            : "eldermere-lore-title"
       }
     >
       <div className="character-sheet-overlay-panel dnd-sheet">
@@ -682,6 +692,15 @@ export function CharacterSheetOverlay({
             onClick={() => setActiveTab("npc_cards")}
           >
             NPC Cards
+          </button>
+          <button
+            aria-selected={activeTab === "eldermere_lore"}
+            className="player-resource-tab"
+            role="tab"
+            type="button"
+            onClick={() => setActiveTab("eldermere_lore")}
+          >
+            Eldermere Lore
           </button>
           <button
             className="player-resources-close"
@@ -784,7 +803,7 @@ export function CharacterSheetOverlay({
               </section>
             </div>
           </>
-        ) : (
+        ) : activeTab === "npc_cards" ? (
           <section
             aria-labelledby="npc-cards-title"
             className="npc-cards-panel"
@@ -826,6 +845,71 @@ export function CharacterSheetOverlay({
                   </span>
                 </button>
               ))}
+            </div>
+          </section>
+        ) : (
+          <section
+            aria-labelledby="eldermere-lore-title"
+            className="eldermere-lore-panel"
+            role="region"
+          >
+            <div className="npc-cards-header">
+              <div>
+                <p className="eyebrow">Player Resources</p>
+                <h2 id="eldermere-lore-title">Eldermere Lore</h2>
+              </div>
+              <span>World primer</span>
+            </div>
+            <div className="eldermere-lore-copy">
+              <p>
+                Eldermere is a fractured realm where old roads, drowned cities,
+                ashland fortresses, and living forests still remember the age
+                before the sundering.
+              </p>
+              <div className="eldermere-lore-grid">
+                <article>
+                  <h3>Cael Ambrose</h3>
+                  <p>
+                    The fertile heartland around Suncross, threaded by roads,
+                    farms, old claims, and noble obligations.
+                  </p>
+                </article>
+                <article>
+                  <h3>Ashfell Marches</h3>
+                  <p>
+                    Grey northern country of border towns, open moor, and
+                    watchful settlements along the Sern.
+                  </p>
+                </article>
+                <article>
+                  <h3>Thornwake Vale</h3>
+                  <p>
+                    A deep green western vale where Sallowholt and Bramblegate
+                    sit beneath older, less forgiving woods.
+                  </p>
+                </article>
+                <article>
+                  <h3>Salt Concordat</h3>
+                  <p>
+                    A sea power of ports, ships, lighthouse holdings, and the
+                    haunted glow of the Drowned City.
+                  </p>
+                </article>
+                <article>
+                  <h3>Cinderspine</h3>
+                  <p>
+                    Ironhold and Cragfoot cling to volcanic heights ruled by
+                    smoke, ore, ambition, and hard bargains.
+                  </p>
+                </article>
+                <article>
+                  <h3>Sundered Vale</h3>
+                  <p>
+                    Broken ground and blue fire around Stakehold and Rimshaft,
+                    where ruin has never gone fully quiet.
+                  </p>
+                </article>
+              </div>
             </div>
           </section>
         )}

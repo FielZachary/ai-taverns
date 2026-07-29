@@ -91,8 +91,8 @@ describe("PlayerInput", () => {
 
     expect(screen.getByRole("dialog", { name: /eldermere map/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/map of eldermere/i)).toHaveAttribute(
-      "data",
-      "/maps/eldermere-map.svg"
+      "src",
+      "/maps/eldermere-map.png"
     );
 
     fireEvent.click(screen.getByRole("button", { name: /close/i }));
