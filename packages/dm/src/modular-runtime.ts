@@ -301,7 +301,8 @@ export function jobPrompt(
           next_input_needed: "player_actions",
           input_targets: [],
           input_policy: "acting_player",
-          mechanics_state_update: {}
+          mechanics_state_update: {},
+          inventory_state_update: { patches: [] }
         },
         null,
         2
@@ -331,7 +332,8 @@ export function jobPrompt(
           next_input_needed: "dice_results",
           input_targets: [],
           input_policy: "acting_player",
-          mechanics_state_update: {}
+          mechanics_state_update: {},
+          inventory_state_update: { patches: [] }
         },
         null,
         2
@@ -355,7 +357,8 @@ export function jobPrompt(
           next_input_needed: "player_actions",
           input_targets: [],
           input_policy: "acting_player",
-          mechanics_state_update: {}
+          mechanics_state_update: {},
+          inventory_state_update: { patches: [] }
         },
         null,
         2
@@ -396,7 +399,8 @@ export function jobPrompt(
           next_input_needed: "player_actions",
           input_targets: [],
           input_policy: "acting_player",
-          mechanics_state_update: {}
+          mechanics_state_update: {},
+          inventory_state_update: { patches: [] }
         },
         null,
         2
@@ -422,7 +426,8 @@ export function jobPrompt(
           next_input_needed: "player_actions",
           input_targets: [],
           input_policy: "acting_player",
-          mechanics_state_update: {}
+          mechanics_state_update: {},
+          inventory_state_update: { patches: [] }
         },
         null,
         2
@@ -448,7 +453,8 @@ export function jobPrompt(
           next_input_needed: "player_actions",
           input_targets: [],
           input_policy: "acting_player",
-          mechanics_state_update: {}
+          mechanics_state_update: {},
+          inventory_state_update: { patches: [] }
         },
         null,
         2
@@ -504,6 +510,8 @@ export function jobPrompt(
     "Mechanics and state:",
     "Never silently modify HP, resources, conditions, initiative, spell slots, inventory, death saves, concentration, or combat status only in prose.",
     "Use mechanics_state_update for canonical mechanics changes and combat_events for traceable combat events.",
+    "Track combat inventory changes only for items that are actually used, consumed, dropped, picked up, broken, equipped, unequipped, transferred, or awarded during the resolved combat turn. Ordinary weapon attacks do not change inventory unless a limited consumable, thrown or lost item, or tracked ammunition is explicitly involved.",
+    "If a player attempts to attack with, throw, draw, load, fire, equip, or otherwise use a weapon they do not have in their canonical Equipment or Inventory sections, reject the attempt in public_narration and clearly state that they do not have that weapon.",
     "HP cannot go below 0.",
     "State changes should use known actor keys. Do not invent actor keys when current context already provides them.",
     "If an enemy is reduced to 0 HP, narrate defeat clearly and update the combat state accordingly.",
@@ -590,7 +598,8 @@ export function jobPrompt(
                 "npc:cutthroat-2"
               ]
             }
-          }
+          },
+          inventory_state_update: { patches: [] }
         },
         null,
         2
@@ -631,7 +640,8 @@ export function jobPrompt(
                 "player:komer"
               ]
             }
-          }
+          },
+          inventory_state_update: { patches: [] }
         },
         null,
         2
@@ -674,7 +684,8 @@ export function jobPrompt(
                 "player:komer"
               ]
             }
-          }
+          },
+          inventory_state_update: { patches: [] }
         },
         null,
         2
@@ -704,7 +715,8 @@ export function jobPrompt(
           next_input_needed: "dice_results",
           input_targets: [],
           input_policy: "all_players",
-          mechanics_state_update: {}
+          mechanics_state_update: {},
+          inventory_state_update: { patches: [] }
         },
         null,
         2
@@ -740,7 +752,8 @@ export function jobPrompt(
                 "player:komer"
               ]
             }
-          }
+          },
+          inventory_state_update: { patches: [] }
         },
         null,
         2
@@ -782,7 +795,8 @@ export function jobPrompt(
                 "player:komer"
               ]
             }
-          }
+          },
+          inventory_state_update: { patches: [] }
         },
         null,
         2
@@ -825,7 +839,8 @@ export function jobPrompt(
                 "player:komer"
               ]
             }
-          }
+          },
+          inventory_state_update: { patches: [] }
         },
         null,
         2
@@ -864,7 +879,8 @@ export function jobPrompt(
                 "npc:horn-blower"
               ]
             }
-          }
+          },
+          inventory_state_update: { patches: [] }
         },
         null,
         2
@@ -899,7 +915,8 @@ export function jobPrompt(
                 "npc:warden-lift-guard-1"
               ]
             }
-          }
+          },
+          inventory_state_update: { patches: [] }
         },
         null,
         2
@@ -939,7 +956,8 @@ export function jobPrompt(
                 "player:tart"
               ]
             }
-          }
+          },
+          inventory_state_update: { patches: [] }
         },
         null,
         2
@@ -980,7 +998,8 @@ export function jobPrompt(
                 "player:komer"
               ]
             }
-          }
+          },
+          inventory_state_update: { patches: [] }
         },
         null,
         2
@@ -1026,7 +1045,8 @@ export function jobPrompt(
               turnOwner: null,
               initiativeOrder: []
             }
-          }
+          },
+          inventory_state_update: { patches: [] }
         },
         null,
         2
@@ -1062,7 +1082,8 @@ export function jobPrompt(
               turnOwner: null,
               initiativeOrder: []
             }
-          }
+          },
+          inventory_state_update: { patches: [] }
         },
         null,
         2
@@ -1070,11 +1091,23 @@ export function jobPrompt(
     ].join("\n")
   ];
 
+  const inventoryStateGuidance = [
+    "Inventory state:",
+    "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved this turn.",
+    "Treat canonical character sheet Inventory, Equipment, and Currency sections as current inventory state.",
+    "If a player character attempts to use, consume, equip, spend, give, trade, throw, load, unlock with, activate, or otherwise rely on an item, first check the canonical character sheet Inventory, Equipment, and Currency sections.",
+    "If the character does not have the required item or currency, reject the attempt in public_narration and clearly state that they do not have it. Do not include an inventory patch for the failed attempt.",
+    "If public_narration says a player character gained, lost, spent, consumed, equipped, unequipped, or transferred an item/currency, inventory_state_update must include the matching patch.",
+    "Only include patches for changes that are explicit and resolved.",
+    "If the action is attempted but uncertain, request the needed roll, choice, or payment and leave patches empty."
+  ];
+
   const shared = [
     "Return strict JSON only.",
-    "Minimum output fields: public_narration, roll_requests, next_input_needed, combat_events, proposed_context_updates.",
+    "Minimum output fields: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update, combat_events, proposed_context_updates.",
     "Only public_narration is player-visible.",
     "Do not use Markdown outside the JSON object; Markdown emphasis is allowed inside public_narration strings when the job guidance asks for it.",
+    ...inventoryStateGuidance,
     "Models may choose, narrate, infer, and propose; the server retrieves, validates, stores, and mutates."
   ];
 
@@ -1100,6 +1133,7 @@ export function jobPrompt(
       "Resolve simple consequences directly when no roll is needed. If uncertainty, danger, resistance, or meaningful cost matters, request an appropriate roll instead of deciding the uncertain outcome.",
       "Separate simultaneous intentions cleanly: respond to visible conversation or positioning, then pause at the risky uncertain action with a roll request instead of resolving it.",
       "Outside combat, do not silently modify HP, inventory, spell slots, conditions, gold, experience, faction standing, or durable world state. Propose state changes only through the structured output fields.",
+      "For exploration, travel, downtime, and ordinary scene resolution, include inventory patches only when the resolved outcome clearly changes possession, carried equipment, equipped gear, consumables, or currency.",
       "Default narration length: 2-5 paragraphs for ordinary turns. Use 4-7 richer paragraphs for major scene openings, location reveals, travel arrivals, or campaign-significant transitions.",
       "End with a clear present-tense handoff that invites action, usually by naming what is immediately available or pressing, without listing menu options unless clarity requires it.",
       ...rollAdjudicationGuidance,
@@ -1109,7 +1143,8 @@ export function jobPrompt(
     ],
     investigation: [
       "Handle discovery, mysteries, hidden information, and clue progression.",
-      "Reveal clues gradually and avoid dead ends on failed rolls."
+      "Reveal clues gradually and avoid dead ends on failed rolls.",
+      "Distinguish discovering, seeing, identifying, or learning about an item from taking possession of it. Only add inventory when the character actually takes, receives, pockets, collects, or is handed the item."
     ],
     npc_dialogue: [
       "Handle direct conversation with NPCs, including negotiation, deception, intimidation, persuasion, bargaining, interrogation, pleading, threats, boasts, apologies, and casual talk.",
@@ -1122,6 +1157,7 @@ export function jobPrompt(
       "When uncertainty matters, request Deception, Persuasion, Intimidation, Insight, Performance, or another fitting check, then pause for dice.",
       "When resolving dice results, narrate the NPC's reaction as a visible emotional and tactical shift, not just success or failure.",
       "End with the NPC's new stance, demand, offer, refusal, question, or opening, then hand control back to the player.",
+      "For bargaining, gifting, payment, theft, rewards, bribes, and trade, include inventory or currency patches only when the exchange is accepted and completed in the resolved turn. If terms are still being negotiated, leave patches empty.",
       ...rollAdjudicationGuidance,
       ...socialRollGuidance,
       ...narrativeQualityBar,
@@ -1143,6 +1179,7 @@ export function jobPrompt(
       "Set roll_requests to [].",
       "Do not advance fictional time, move characters, have NPCs speak or react, resolve any part of the action, invent consequences, or change game state.",
       'Do not set next_input_needed to "player_actions" when the response is asking for clarification.',
+      "Do not create inventory patches just because the player clarifies intent. Only include a patch if the clarification resolves the action and the narration confirms the item or currency actually changes hands.",
       "Do not reframe or soften the player's declared intent; preserve the pending action exactly and ask only for the missing detail needed to adjudicate it."
     ]
   };

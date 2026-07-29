@@ -169,6 +169,38 @@ None
     expect(within(dialog).getByText("Strength:")).toBeInTheDocument();
   });
 
+  it("renders dedicated inventory and weapons tabs from character sheet sections", () => {
+    renderCharacterSheetOverlay();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Inventory" }));
+
+    const inventoryPanel = screen.getByRole("region", { name: "Inventory" });
+
+    expect(
+      within(inventoryPanel).getByRole("heading", { name: "Equipment" })
+    ).toBeInTheDocument();
+    expect(within(inventoryPanel).getByText("Leather armor")).toBeInTheDocument();
+    expect(within(inventoryPanel).getByText("Brass key")).toBeInTheDocument();
+    expect(within(inventoryPanel).getByText("12 gp")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Weapons & Spells" }));
+
+    const weaponsPanel = screen.getByRole("region", {
+      name: "Weapons & Spells"
+    });
+
+    expect(
+      within(weaponsPanel).getByRole("heading", { name: "Attacks" })
+    ).toBeInTheDocument();
+    expect(within(weaponsPanel).getByText("Shortbow")).toBeInTheDocument();
+    expect(within(weaponsPanel).getByText("range 80/320 ft")).toBeInTheDocument();
+    expect(
+      within(weaponsPanel).getByRole("heading", { name: "Spells" })
+    ).toBeInTheDocument();
+    expect(within(weaponsPanel).getByText("Mage Hand")).toBeInTheDocument();
+    expect(within(weaponsPanel).getByText("Misty Step")).toBeInTheDocument();
+  });
+
   it("renders NPC cards from context chunks and opens editable NPC fields", async () => {
     const props = renderCharacterSheetOverlay({
       npcCards: [

@@ -37,6 +37,8 @@ type SheetTableRow = {
 
 export type PlayerResourcesTab =
   | "character_sheet"
+  | "inventory"
+  | "weapons_spells"
   | "backstory"
   | "npc_cards"
   | "eldermere_lore";
@@ -138,6 +140,24 @@ const npcFieldLabels = [
 ];
 
 const compactNpcFields = new Set(["Name", "Location", "Last Seen"]);
+
+const playerResourceTabs: { id: PlayerResourcesTab; label: string }[] = [
+  { id: "character_sheet", label: "Character Sheet" },
+  { id: "inventory", label: "Inventory" },
+  { id: "weapons_spells", label: "Weapons & Spells" },
+  { id: "backstory", label: "Backstory" },
+  { id: "npc_cards", label: "NPC Cards" },
+  { id: "eldermere_lore", label: "Eldermere Lore" }
+];
+
+const playerResourceTitleIds: Record<PlayerResourcesTab, string> = {
+  character_sheet: "character-sheet-title",
+  inventory: "player-inventory-title",
+  weapons_spells: "player-weapons-spells-title",
+  backstory: "player-backstory-title",
+  npc_cards: "npc-cards-title",
+  eldermere_lore: "eldermere-lore-title"
+};
 
 function parseCharacterSheet(rawSheet: string): ParsedSheet {
   const fields: Record<string, string> = {};
@@ -672,54 +692,22 @@ export function CharacterSheetOverlay({
       className="character-sheet-overlay"
       role="dialog"
       aria-modal="true"
-      aria-labelledby={
-        activeTab === "character_sheet"
-          ? "character-sheet-title"
-          : activeTab === "backstory"
-            ? "player-backstory-title"
-          : activeTab === "npc_cards"
-            ? "npc-cards-title"
-            : "eldermere-lore-title"
-      }
+      aria-labelledby={playerResourceTitleIds[activeTab]}
     >
       <div className="character-sheet-overlay-panel dnd-sheet">
         <div className="player-resources-tabs" role="tablist" aria-label="Player resources">
-          <button
-            aria-selected={activeTab === "character_sheet"}
-            className="player-resource-tab"
-            role="tab"
-            type="button"
-            onClick={() => setActiveTab("character_sheet")}
-          >
-            Character Sheet
-          </button>
-          <button
-            aria-selected={activeTab === "backstory"}
-            className="player-resource-tab"
-            role="tab"
-            type="button"
-            onClick={() => setActiveTab("backstory")}
-          >
-            Backstory
-          </button>
-          <button
-            aria-selected={activeTab === "npc_cards"}
-            className="player-resource-tab"
-            role="tab"
-            type="button"
-            onClick={() => setActiveTab("npc_cards")}
-          >
-            NPC Cards
-          </button>
-          <button
-            aria-selected={activeTab === "eldermere_lore"}
-            className="player-resource-tab"
-            role="tab"
-            type="button"
-            onClick={() => setActiveTab("eldermere_lore")}
-          >
-            Eldermere Lore
-          </button>
+          {playerResourceTabs.map((tab) => (
+            <button
+              aria-selected={activeTab === tab.id}
+              className="player-resource-tab"
+              key={tab.id}
+              role="tab"
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
           <button
             className="player-resources-close"
             type="button"
@@ -821,6 +809,43 @@ export function CharacterSheetOverlay({
               </section>
             </div>
           </>
+        ) : activeTab === "inventory" ? (
+          <section
+            aria-labelledby="player-inventory-title"
+            className="player-resource-panel player-inventory-panel"
+            role="region"
+          >
+            <div className="npc-cards-header">
+              <div>
+                <p className="eyebrow">Player Resources</p>
+                <h2 id="player-inventory-title">Inventory</h2>
+              </div>
+              <span>Gear & currency</span>
+            </div>
+            <div className="player-resource-grid">
+              <LinedPanel title="Equipment" lines={equipmentLines} />
+              <LinedPanel title="Inventory" lines={inventoryLines} />
+              <LinedPanel title="Currency" lines={currencyLines} />
+            </div>
+          </section>
+        ) : activeTab === "weapons_spells" ? (
+          <section
+            aria-labelledby="player-weapons-spells-title"
+            className="player-resource-panel player-weapons-spells-panel"
+            role="region"
+          >
+            <div className="npc-cards-header">
+              <div>
+                <p className="eyebrow">Player Resources</p>
+                <h2 id="player-weapons-spells-title">Weapons & Spells</h2>
+              </div>
+              <span>Actions & magic</span>
+            </div>
+            <div className="player-resource-grid player-weapons-spells-grid">
+              <AttackPanel lines={attackLines} />
+              <SpellPanel lines={spells} />
+            </div>
+          </section>
         ) : activeTab === "backstory" ? (
           <section
             aria-labelledby="player-backstory-title"

@@ -665,7 +665,8 @@ const dungeonMasterContractInstructions = [
   "Use roll_requests only for player-controlled dice the website must collect.",
   "In roll_requests, dice must be bare dice notation only, such as 1d20, 3d4, or 8d6. Do not include + or - modifiers in dice; put static bonuses or penalties in modifier. Example: Magic Missile uses dice \"3d4\" and modifier 3, not dice \"3d4+3\".",
   "Use mechanics_state_update for canonical game/mechanics state changes; the website owns persistence.",
-  "Required top-level keys: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update."
+  "Required top-level keys: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update.",
+  "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved this turn."
 ].join("\n");
 
 export type DungeonMasterRuntime = {
@@ -6975,7 +6976,14 @@ function answerFromAskDmProviderResponse(content: string) {
 const gameplayTurnOutputContractReminder = [
   "Output contract reminder:",
   "Return only one valid JSON object. Do not include prose, Markdown, or commentary outside JSON.",
-  "Required top-level keys: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update.",
+  "Required top-level keys: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update.",
+  "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved this turn.",
+  "Treat canonical character sheet Inventory, Equipment, and Currency sections as current inventory state.",
+  "If a player character attempts to use, consume, equip, spend, give, trade, throw, load, unlock with, activate, or otherwise rely on an item, first check the canonical character sheet Inventory, Equipment, and Currency sections.",
+  "If the character does not have the required item or currency, reject the attempt in public_narration and clearly state that they do not have it. Do not include an inventory patch for the failed attempt.",
+  "If public_narration says a player character gained, lost, spent, consumed, equipped, unequipped, or transferred an item/currency, inventory_state_update must include the matching patch.",
+  "Only include patches for changes that are explicit and resolved.",
+  "If the action is attempted but uncertain, request the needed roll, choice, or payment and leave patches empty.",
   "input_policy must be all_players or only_targeted_players; never use acting_player.",
   "Set resolution_mode to needs_dice whenever roll_requests is non-empty or next_input_needed is dice_results; otherwise set it to resolved_without_dice.",
   "When resolution_mode is needs_dice, public_narration must not resolve the rolled outcome.",
