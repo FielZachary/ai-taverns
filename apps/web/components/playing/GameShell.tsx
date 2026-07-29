@@ -38,6 +38,7 @@ import {
   ChatHistorySidebar,
   type ChatSummary
 } from "./ChatHistorySidebar";
+import { BackstoryIntroModal } from "./BackstoryIntroModal";
 import {
   CharacterSheetOverlay,
   type PlayerResourcesTab
@@ -96,13 +97,16 @@ import {
   withPlayerMessageAvatars,
   type StreamingDmMessage
 } from "./game-shell-messages";
+import { extractPlayerBackstory } from "./backstory-intro";
 
 const openingMessages: GameMessage[] = [];
 const aiModelStorageKey = "ai-dnd.aiModel";
 const defaultAiModel: AiModelId = "deepseek-v4-flash";
 const playerIdStorageKey = "ai-dnd.playerId";
+const backstoryIntroSeenStoragePrefix = "ai-dnd.backstoryIntroSeen";
 const roomRequestTimeoutMs = 8_000;
 const fallbackRoomPollMs = 25_000;
+const backstoryIntroDelaySeconds = 10;
 
 function isAiModelId(value: FormDataEntryValue | string | null): value is AiModelId {
   return value === "deepseek-v4-flash" || value === "qwen-3-7-flash";
@@ -285,6 +289,13 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
   const [playerResourcesInitialTab, setPlayerResourcesInitialTab] =
     useState<PlayerResourcesTab>("character_sheet");
   const [isMessageMapOpen, setIsMessageMapOpen] = useState(false);
+  const [backstoryIntro, setBackstoryIntro] = useState<{
+    backstory: string;
+    storageKey: string;
+  } | null>(null);
+  const [backstoryIntroCountdown, setBackstoryIntroCountdown] = useState(
+    backstoryIntroDelaySeconds
+  );
   const [npcCards, setNpcCards] = useState<CampaignNpcCard[]>([]);
   const [isLoadingNpcCards, setIsLoadingNpcCards] = useState(false);
   const [npcCardsError, setNpcCardsError] = useState("");
@@ -411,6 +422,10 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
         playerProfile
       }),
     [currentRoomPlayer, displayedRoomPlayers, playerProfile]
+  );
+  const activeBackstory = useMemo(
+    () => extractPlayerBackstory(activeCharacterSheet),
+    [activeCharacterSheet]
   );
   const regeneratableMessageId = useMemo(() => {
     const latestDmMessage = [...visibleMessages]
@@ -590,6 +605,60 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
       setInputValidationMessage("");
     }
   }, [inputValidationMessage, playerProfile]);
+
+  useEffect(() => {
+    if (!activeCampaign?.id || !hasAdventureBegun || !activeBackstory) {
+      return;
+    }
+
+    const storageKey = [
+      backstoryIntroSeenStoragePrefix,
+      activeCampaign.id,
+      playerId || "player"
+    ].join(".");
+
+    if (
+      backstoryIntro?.storageKey === storageKey ||
+      window.localStorage.getItem(storageKey) === "true"
+    ) {
+      return;
+    }
+
+    setBackstoryIntro({
+      backstory: activeBackstory,
+      storageKey
+    });
+    setBackstoryIntroCountdown(backstoryIntroDelaySeconds);
+  }, [
+    activeBackstory,
+    activeCampaign?.id,
+    backstoryIntro?.storageKey,
+    hasAdventureBegun,
+    playerId
+  ]);
+
+  useEffect(() => {
+    if (!backstoryIntro || backstoryIntroCountdown <= 0) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setBackstoryIntroCountdown((currentCountdown) =>
+        Math.max(0, currentCountdown - 1)
+      );
+    }, 1_000);
+
+    return () => window.clearTimeout(timeout);
+  }, [backstoryIntro, backstoryIntroCountdown]);
+
+  function closeBackstoryIntro() {
+    if (backstoryIntro) {
+      window.localStorage.setItem(backstoryIntro.storageKey, "true");
+    }
+
+    setBackstoryIntro(null);
+    setBackstoryIntroCountdown(backstoryIntroDelaySeconds);
+  }
 
   useEffect(() => {
     if (!isCharacterSheetOpen || !activeCampaign?.id) {
@@ -1862,6 +1931,14 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
 
       {isMessageMapOpen ? (
         <EldermereMapModal onClose={() => setIsMessageMapOpen(false)} />
+      ) : null}
+
+      {backstoryIntro ? (
+        <BackstoryIntroModal
+          backstory={backstoryIntro.backstory}
+          countdown={backstoryIntroCountdown}
+          onContinue={closeBackstoryIntro}
+        />
       ) : null}
 
       <button

@@ -139,6 +139,26 @@ function MessageResourceCard({
   );
 }
 
+function StandaloneResourceMessage({
+  message,
+  onInspectMap,
+  onViewEldermereLore
+}: {
+  message: GameMessage;
+  onInspectMap?: () => void;
+  onViewEldermereLore?: () => void;
+}) {
+  return (
+    <article className="message-card message-resource" key={message.id}>
+      <MessageResourceCard
+        message={message}
+        onInspectMap={onInspectMap}
+        onViewEldermereLore={onViewEldermereLore}
+      />
+    </article>
+  );
+}
+
 function formatDebugPrompt(debug: Pick<AiDebugInfo, "requestMessages">) {
   return debug.requestMessages
     .map(
@@ -314,6 +334,17 @@ export function MessageLog({
   return (
     <div className="message-log" aria-live="polite" ref={logRef}>
       {messages.map((message) => {
+        if (message.resourceCard) {
+          return (
+            <StandaloneResourceMessage
+              key={message.id}
+              message={message}
+              onInspectMap={onInspectMap}
+              onViewEldermereLore={onViewEldermereLore}
+            />
+          );
+        }
+
         const canRegenerateMessage =
           message.role === "dm" &&
           message.kind !== "ask_dm_answer" &&

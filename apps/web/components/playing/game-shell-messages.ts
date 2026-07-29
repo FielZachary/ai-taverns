@@ -98,7 +98,7 @@ export function withOpeningResourceMessages(messages: GameMessage[]) {
     {
       id: mapMessageId,
       role: "dm",
-      content: "Eldermere",
+      content: "",
       createdAt: offsetMessageTime(firstDmMessage, -2),
       isSyntheticIntro: true,
       resourceCard: {

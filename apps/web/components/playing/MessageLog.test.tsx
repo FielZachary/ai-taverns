@@ -149,7 +149,7 @@ describe("MessageLog", () => {
         gameMessage({
           id: "map-message",
           role: "dm",
-          content: "Eldermere",
+          content: "",
           resourceCard: {
             type: "eldermere_map",
             imageUrl: "/maps/eldermere-map.png",
@@ -170,6 +170,8 @@ describe("MessageLog", () => {
       "src",
       "/portraits/lyra.png"
     );
+    expect(document.querySelector(".message-resource")).toBeInTheDocument();
+    expect(screen.queryByText("Dungeon Master")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Inspect Map" }));
     fireEvent.click(screen.getByRole("button", { name: "View Eldermere Lore" }));
