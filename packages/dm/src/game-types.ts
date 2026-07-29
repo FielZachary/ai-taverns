@@ -34,6 +34,23 @@ export type AiDebugInfo = {
   combatState?: unknown;
   combatAdjudication?: unknown;
   contextStorageState?: unknown;
+  livingWorldPressureEngine?: {
+    traceId?: string;
+    coveredMessageCount?: number;
+    failed?: boolean;
+    error?: unknown;
+    requestMessages?: AiDebugMessage[];
+    rawResponse?: string;
+    parsedOutput?: unknown;
+    proposedPatches?: unknown[];
+    acceptedPatches?: unknown[];
+    discardedPatches?: unknown[];
+    durationMs?: number;
+    model?: string;
+    temperature?: number;
+    providerResponseId?: string;
+    providerTimings?: AiDebugProviderTiming[];
+  };
   eldermereOpeningPlanner?: {
     requestMessages: AiDebugMessage[];
     rawResponse: string;

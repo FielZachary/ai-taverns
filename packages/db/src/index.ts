@@ -17,8 +17,10 @@ import {
   buildRouterPrompt,
   contextCategories,
   formatRouterCurrentTurnInput,
+  buildLivingWorldPressureEnginePrompt,
   jobPrompt,
   renderContextChunks,
+  validateLivingWorldOutput,
   validateCombatEvents,
   validateMainDmOutput,
   validateMemoryPatches,
@@ -3921,7 +3923,12 @@ async function logDmModelCall(
     campaignId: string;
     traceId: string;
     turnId?: string | undefined;
-    phase: "router" | "main" | "memory_updater" | "campaign_foundation_compiler";
+    phase:
+      | "router"
+      | "main"
+      | "memory_updater"
+      | "campaign_foundation_compiler"
+      | "living_world_pressure_engine";
     providerData: DungeonMasterProviderResponse;
     durationMs: number;
   }
@@ -4340,6 +4347,125 @@ function formatContextChunkIndexForMemoryUpdater(index: ContextChunkIndex) {
   return JSON.stringify(entries, null, 2);
 }
 
+type CampaignDmGuidance = {
+  currentDirection: string;
+  pressureToSurface: string[];
+  softMoves: string[];
+  hardMovesIfEarned: string[];
+  avoid: string[];
+  updatedAt?: string;
+};
+
+function normalizeStringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? [
+        ...new Set(
+          value
+            .filter((item): item is string => typeof item === "string")
+            .map((item) => item.trim())
+            .filter(Boolean)
+        )
+      ]
+    : [];
+}
+
+function formatDmGuidance(guidance: CampaignDmGuidance | null) {
+  if (!guidance) {
+    return "No current DM guidance.";
+  }
+
+  return JSON.stringify(
+    {
+      current_direction: guidance.currentDirection,
+      pressure_to_surface: guidance.pressureToSurface,
+      soft_moves: guidance.softMoves,
+      hard_moves_if_earned: guidance.hardMovesIfEarned,
+      avoid: guidance.avoid,
+      updated_at: guidance.updatedAt ?? null
+    },
+    null,
+    2
+  );
+}
+
+async function getCurrentCampaignDmGuidance(
+  db: Queryable,
+  campaignId: string
+): Promise<CampaignDmGuidance | null> {
+  try {
+    const result = await db.query<Record<string, unknown>>(
+      `
+        select guidance, updated_at
+        from campaign_dm_guidance
+        where campaign_id = $1
+        limit 1
+      `,
+      [campaignId]
+    );
+    const row = result.rows[0];
+    const guidance = isRecord(row?.guidance) ? row.guidance : null;
+
+    if (!guidance) {
+      return null;
+    }
+
+    return {
+      currentDirection: String(guidance.current_direction ?? ""),
+      pressureToSurface: normalizeStringList(guidance.pressure_to_surface),
+      softMoves: normalizeStringList(guidance.soft_moves),
+      hardMovesIfEarned: normalizeStringList(guidance.hard_moves_if_earned),
+      avoid: normalizeStringList(guidance.avoid),
+      ...(row?.updated_at ? { updatedAt: toIso(row.updated_at as Date | string) } : {})
+    };
+  } catch (error) {
+    if (!isMissingRuntimeTableError(error)) {
+      throw error;
+    }
+
+    return null;
+  }
+}
+
+async function upsertCampaignDmGuidance(
+  db: Queryable,
+  input: {
+    campaignId: string;
+    traceId: string;
+    coveredMessageCount: number;
+    guidance: CampaignDmGuidance;
+  }
+) {
+  await bestEffortRuntimeInsert(
+    db,
+    `
+      insert into campaign_dm_guidance (
+        campaign_id,
+        trace_id,
+        covered_message_count,
+        guidance
+      )
+      values ($1, $2, $3, $4::jsonb)
+      on conflict (campaign_id) do update
+      set trace_id = excluded.trace_id,
+          covered_message_count = excluded.covered_message_count,
+          guidance = excluded.guidance,
+          updated_at = now()
+    `,
+    [
+      input.campaignId,
+      input.traceId,
+      input.coveredMessageCount,
+      JSON.stringify({
+        current_direction: input.guidance.currentDirection,
+        pressure_to_surface: input.guidance.pressureToSurface,
+        soft_moves: input.guidance.softMoves,
+        hard_moves_if_earned: input.guidance.hardMovesIfEarned,
+        avoid: input.guidance.avoid
+      })
+    ]
+  );
+}
+
 async function buildModularDmPromptContext(
   db: Queryable,
   runtime: DungeonMasterRuntime,
@@ -4358,6 +4484,7 @@ async function buildModularDmPromptContext(
     db,
     campaign.id
   );
+  const dmGuidance = await getCurrentCampaignDmGuidance(db, campaign.id);
   const routerState = routerStateForCampaign(campaign, players);
   const routerInstructions = buildRouterPrompt();
   const routerMessage = buildRouterMessage({
@@ -4427,12 +4554,19 @@ async function buildModularDmPromptContext(
       jobPrompt(router.jobNeeded, campaign.mode, {
         routerReason:
           router.jobNeeded === "clarification" ? router.reason : undefined
-      })
+      }),
+      "",
+      "Current campaign DM guidance:",
+      "Use this as short-lived direction for surfacing pressures when it fits the current scene. It is not canon by itself; validated campaign context chunks and campaign events remain the source of truth. Preserve player agency and do not reveal DM-only secrets directly.",
+      formatDmGuidance(dmGuidance)
     ].join("\n"),
     jobNeeded: router.jobNeeded,
     message: [
       "Selected context chunks:",
       renderContextChunks(context.chunks),
+      "",
+      "Current campaign DM guidance:",
+      formatDmGuidance(dmGuidance),
       "",
       "Current turn input:",
       input.currentAction
@@ -4452,6 +4586,10 @@ async function buildModularDmPromptContext(
         kind: "context_snapshot",
         includedContextKeys: context.chunks.map((chunk) => chunk.id),
         omittedContextKeys: context.omitted
+      },
+      {
+        kind: "dm_guidance",
+        guidance: dmGuidance
       }
     ],
     budget: {
@@ -5039,7 +5177,7 @@ async function applyAcceptedMemoryPatch(
       db,
       `
         update campaign_context_chunks
-        set body_markdown = concat_ws(E'\n', body_markdown, $3),
+        set body_markdown = concat_ws(E'\n', body_markdown, $3::text),
           updated_at = now()
         where campaign_id = $1 and context_key = $2
       `,
@@ -5053,7 +5191,7 @@ async function applyAcceptedMemoryPatch(
       db,
       `
         update campaign_context_chunks
-        set body_markdown = $3,
+        set body_markdown = $3::text,
           updated_at = now()
         where campaign_id = $1 and context_key = $2
       `,
@@ -5113,6 +5251,562 @@ async function applyAcceptedMemoryPatches(
   }
 }
 
+async function getCampaignLivingWorldMessageCount(
+  db: Queryable,
+  campaignId: string
+) {
+  try {
+    const result = await db.query<{ count: string | number }>(
+      `
+        select count(*) as count
+        from campaign_events
+        where campaign_id = $1
+          and type in (
+            'turn_submitted',
+            'turn_resolved',
+            'adventure_begun',
+            'dm_question',
+            'dm_answer'
+          )
+          and coalesce(payload->>'content', '') <> ''
+      `,
+      [campaignId]
+    );
+
+    return Number(result.rows[0]?.count ?? 0);
+  } catch (error) {
+    if (!isMissingRuntimeTableError(error)) {
+      throw error;
+    }
+
+    return 0;
+  }
+}
+
+async function getLatestLivingWorldCoveredMessageCount(
+  db: Queryable,
+  campaignId: string
+) {
+  try {
+    const result = await db.query<{ covered_message_count: number }>(
+      `
+        select covered_message_count
+        from living_world_engine_runs
+        where campaign_id = $1
+          and coalesce(payload->>'failed', 'false') <> 'true'
+          and coalesce(payload->>'status', '') <> 'started'
+        order by covered_message_count desc, created_at desc
+        limit 1
+      `,
+      [campaignId]
+    );
+
+    return Number(result.rows[0]?.covered_message_count ?? 0);
+  } catch (error) {
+    if (!isMissingRuntimeTableError(error)) {
+      throw error;
+    }
+
+    return 0;
+  }
+}
+
+async function retrieveLivingWorldContextChunks(
+  db: Queryable,
+  campaignId: string,
+  maxChars = 36000
+) {
+  let rows: Record<string, unknown>[] = [];
+
+  try {
+    const result = await db.query<Record<string, unknown>>(
+      `
+        select
+          context_key,
+          category,
+          title,
+          visibility,
+          priority,
+          body_markdown,
+          updated_at
+        from campaign_context_chunks
+        where campaign_id = $1
+          and archived_at is null
+        order by priority desc, updated_at desc
+        limit 120
+      `,
+      [campaignId]
+    );
+    rows = result.rows;
+  } catch (error) {
+    if (!isMissingRuntimeTableError(error)) {
+      throw error;
+    }
+  }
+
+  const chunks: ContextChunk[] = [];
+  let usedChars = 0;
+
+  for (const row of rows) {
+    const chunk = mapContextChunkRow(row);
+    const nextChars = usedChars + chunk.bodyMarkdown.length;
+
+    if (nextChars > maxChars) {
+      continue;
+    }
+
+    usedChars = nextChars;
+    chunks.push(chunk);
+  }
+
+  return chunks;
+}
+
+function formatLivingWorldPressureEngineRequest(input: {
+  campaign: CampaignRow;
+  currentGuidance: CampaignDmGuidance | null;
+  contextChunkIndex: ContextChunkIndex;
+  contextChunks: ContextChunk[];
+  recentMessages: GameMessage[];
+  currentMessageCount: number;
+  lastCoveredMessageCount: number;
+}) {
+  return [
+    "Campaign ID:",
+    input.campaign.id,
+    "",
+    "Campaign mode:",
+    input.campaign.mode,
+    "",
+    "Canonical Eldermere context relevant to this campaign:",
+    formatEldermereOpeningPromptContext(
+      eldermereCampaignStartFromMetadata(input.campaign)
+    ),
+    "",
+    "Current DM guidance:",
+    formatDmGuidance(input.currentGuidance),
+    "",
+    "Existing context chunk index:",
+    formatContextChunkIndexForMemoryUpdater(input.contextChunkIndex),
+    "",
+    "Current campaign context chunks:",
+    renderContextChunks(input.contextChunks),
+    "",
+    "Recent uncovered-ish message window:",
+    JSON.stringify(input.recentMessages, null, 2),
+    "",
+    "Cadence state:",
+    JSON.stringify(
+      {
+        current_message_count: input.currentMessageCount,
+        last_covered_message_count: input.lastCoveredMessageCount,
+        cadence_messages: 20
+      },
+      null,
+      2
+    ),
+    "",
+    "Output reminder:",
+    "Return JSON with world_clock_updates, patches, new_context_chunks, remove_context_chunks, dm_guidance, possible_intrusions, and contradiction_warnings only."
+  ].join("\n");
+}
+
+async function logLivingWorldEngineRun(
+  db: Queryable,
+  input: {
+    campaignId: string;
+    traceId: string;
+    turnId?: string | undefined;
+    coveredMessageCount: number;
+    providerData?: DungeonMasterProviderResponse | undefined;
+    acceptedPatchCount: number;
+    discardedPatchCount: number;
+    guidance: CampaignDmGuidance | null;
+    payload: Record<string, unknown>;
+  }
+) {
+  await bestEffortRuntimeInsert(
+    db,
+    `
+      insert into living_world_engine_runs (
+        campaign_id,
+        trace_id,
+        turn_id,
+        covered_message_count,
+        provider,
+        model,
+        raw_response,
+        accepted_patch_count,
+        discarded_patch_count,
+        guidance,
+        payload
+      )
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb)
+      on conflict (campaign_id, covered_message_count) do update
+      set trace_id = excluded.trace_id,
+          turn_id = excluded.turn_id,
+          provider = excluded.provider,
+          model = excluded.model,
+          raw_response = excluded.raw_response,
+          accepted_patch_count = excluded.accepted_patch_count,
+          discarded_patch_count = excluded.discarded_patch_count,
+          guidance = excluded.guidance,
+          payload = excluded.payload
+    `,
+    [
+      input.campaignId,
+      input.traceId,
+      input.turnId ?? null,
+      input.coveredMessageCount,
+      input.providerData ? "deepseek" : null,
+      input.providerData?.debug.model ?? null,
+      input.providerData?.content ?? null,
+      input.acceptedPatchCount,
+      input.discardedPatchCount,
+      input.guidance
+        ? JSON.stringify({
+            current_direction: input.guidance.currentDirection,
+            pressure_to_surface: input.guidance.pressureToSurface,
+            soft_moves: input.guidance.softMoves,
+            hard_moves_if_earned: input.guidance.hardMovesIfEarned,
+            avoid: input.guidance.avoid
+          })
+        : JSON.stringify(null),
+      JSON.stringify(input.payload)
+    ]
+  );
+}
+
+async function claimLivingWorldEngineWindow(
+  db: Queryable,
+  input: {
+    campaignId: string;
+    traceId: string;
+    turnId?: string | undefined;
+    coveredMessageCount: number;
+  }
+) {
+  try {
+    const result = await db.query<{ id: string }>(
+      `
+        insert into living_world_engine_runs (
+          campaign_id,
+          trace_id,
+          turn_id,
+          covered_message_count,
+          accepted_patch_count,
+          discarded_patch_count,
+          guidance,
+          payload
+        )
+        values ($1, $2, $3, $4, 0, 0, null, $5::jsonb)
+        on conflict (campaign_id, covered_message_count) do nothing
+        returning id
+      `,
+      [
+        input.campaignId,
+        input.traceId,
+        input.turnId ?? null,
+        input.coveredMessageCount,
+        JSON.stringify({
+          source: "living_world_pressure_engine",
+          status: "started"
+        })
+      ]
+    );
+
+    return Boolean(result.rows[0]);
+  } catch (error) {
+    if (!isMissingRuntimeTableError(error)) {
+      throw error;
+    }
+
+    return false;
+  }
+}
+
+async function runLivingWorldPressureEngineIfDue(
+  db: Queryable,
+  runtime: DungeonMasterRuntime,
+  input: {
+    campaignId: string;
+    turnId: string;
+    dmEventId?: string | undefined;
+  }
+) {
+  const currentMessageCount = await getCampaignLivingWorldMessageCount(
+    db,
+    input.campaignId
+  );
+  const lastCoveredMessageCount = await getLatestLivingWorldCoveredMessageCount(
+    db,
+    input.campaignId
+  );
+
+  if (currentMessageCount - lastCoveredMessageCount < 20) {
+    return;
+  }
+
+  const traceId = randomUUID();
+  const startedAt = Date.now();
+  const claimed = await claimLivingWorldEngineWindow(db, {
+    campaignId: input.campaignId,
+    traceId,
+    turnId: input.turnId,
+    coveredMessageCount: currentMessageCount
+  });
+
+  if (!claimed) {
+    return;
+  }
+
+  let pressureProviderDebug: AiDebugInfo | undefined;
+
+  try {
+    const campaign = requireRow(
+      (
+        await db.query<CampaignRow>(
+          "select * from campaigns where id = $1 limit 1",
+          [input.campaignId]
+        )
+      ).rows[0],
+      "Campaign not found."
+    );
+    const contextChunkIndex = await listCampaignContextChunkIndex(
+      db,
+      input.campaignId
+    );
+    const contextChunks = await retrieveLivingWorldContextChunks(
+      db,
+      input.campaignId
+    );
+    const currentGuidance = await getCurrentCampaignDmGuidance(
+      db,
+      input.campaignId
+    );
+    const recentMessages = await getCampaignEventMessages(db, input.campaignId, 20);
+    const instructions = buildLivingWorldPressureEnginePrompt();
+    const message = formatLivingWorldPressureEngineRequest({
+      campaign,
+      currentGuidance,
+      contextChunkIndex,
+      contextChunks,
+      recentMessages,
+      currentMessageCount,
+      lastCoveredMessageCount
+    });
+
+    await logDmTurnTrace(db, {
+      campaignId: input.campaignId,
+      traceId,
+      turnId: input.turnId,
+      phase: "living_world_pressure_engine_started",
+      payload: {
+        currentMessageCount,
+        lastCoveredMessageCount,
+        message: textStats(message),
+        instructions: textStats(instructions)
+      }
+    });
+
+    const providerStartedAt = Date.now();
+    const providerData = await runtime.askProvider({
+      instructions,
+      message,
+      history: []
+    });
+    pressureProviderDebug = providerData.debug;
+
+    await logDmModelCall(db, {
+      campaignId: input.campaignId,
+      traceId,
+      turnId: input.turnId,
+      phase: "living_world_pressure_engine",
+      providerData,
+      durationMs: Date.now() - providerStartedAt
+    });
+
+    const parsed = validateLivingWorldOutput(providerData.content);
+    const proposedPatches = [
+      ...parsed.patches,
+      ...parsed.newContextChunks.map((chunk) =>
+        normalizeNewContextChunkPatch(chunk)
+      ),
+      ...parsed.removeContextChunks.map((chunk) => ({
+        operation: "archive_chunk",
+        context_id:
+          typeof chunk === "string" ? chunk : eventPayload(chunk).context_id
+      }))
+    ];
+    const existingContextIds = await listCampaignContextIds(db, input.campaignId);
+    const validation = validateMemoryPatches(
+      proposedPatches,
+      existingContextIds
+    );
+
+    await applyAcceptedMemoryPatches(
+      db,
+      input.campaignId,
+      validation.accepted
+    );
+
+    await upsertCampaignDmGuidance(db, {
+      campaignId: input.campaignId,
+      traceId,
+      coveredMessageCount: currentMessageCount,
+      guidance: parsed.dmGuidance
+    });
+
+    const livingWorldDebugState = {
+      traceId,
+      coveredMessageCount: currentMessageCount,
+      requestMessages: providerData.debug.requestMessages,
+      rawResponse: providerData.debug.rawResponse,
+      parsedOutput: {
+        worldClockUpdates: parsed.worldClockUpdates,
+        patches: parsed.patches,
+        newContextChunks: parsed.newContextChunks,
+        removeContextChunks: parsed.removeContextChunks,
+        dmGuidance: parsed.dmGuidance,
+        possibleIntrusions: parsed.possibleIntrusions,
+        contradictionWarnings: parsed.contradictionWarnings
+      },
+      proposedPatches,
+      acceptedPatches: validation.accepted,
+      discardedPatches: validation.discarded,
+      durationMs: Date.now() - startedAt,
+      ...(providerData.debug.model
+        ? { model: providerData.debug.model }
+        : {}),
+      ...(typeof providerData.debug.temperature === "number"
+        ? { temperature: providerData.debug.temperature }
+        : {}),
+      ...(providerData.debug.providerResponseId
+        ? { providerResponseId: providerData.debug.providerResponseId }
+        : {}),
+      ...(providerData.debug.providerTimings
+        ? { providerTimings: providerData.debug.providerTimings }
+        : {})
+    };
+
+    await attachLivingWorldPressureEngineToDmEventDebug(db, {
+      campaignId: input.campaignId,
+      dmEventId: input.dmEventId,
+      livingWorldPressureEngine: livingWorldDebugState
+    });
+
+    await logLivingWorldEngineRun(db, {
+      campaignId: input.campaignId,
+      traceId,
+      turnId: input.turnId,
+      coveredMessageCount: currentMessageCount,
+      providerData,
+      acceptedPatchCount: validation.accepted.length,
+      discardedPatchCount: validation.discarded.length,
+      guidance: parsed.dmGuidance,
+      payload: {
+        source: "living_world_pressure_engine",
+        worldClockUpdates: parsed.worldClockUpdates,
+        possibleIntrusions: parsed.possibleIntrusions,
+        contradictionWarnings: parsed.contradictionWarnings,
+        proposedPatches,
+        acceptedPatches: validation.accepted,
+        discardedPatches: validation.discarded,
+        durationMs: Date.now() - startedAt
+      }
+    });
+
+    await logDmMemoryPatchLog(db, {
+      campaignId: input.campaignId,
+      traceId,
+      turnId: input.turnId,
+      payload: {
+        source: "living_world_pressure_engine",
+        worldClockUpdates: parsed.worldClockUpdates,
+        possibleIntrusions: parsed.possibleIntrusions,
+        contradictionWarnings: parsed.contradictionWarnings,
+        proposedPatches,
+        acceptedPatches: validation.accepted,
+        discardedPatches: validation.discarded,
+        dmGuidance: parsed.dmGuidance,
+        durationMs: Date.now() - startedAt
+      }
+    });
+
+    runtime.emitDmStreamEvent?.({
+      type: "room_updated",
+      roomId: input.campaignId,
+      updatedAt: nowIso(),
+      ...(input.dmEventId ? { eventId: input.dmEventId } : {})
+    });
+  } catch (error) {
+    const debugFromError = pressureProviderDebug ?? providerDebugFromError(error);
+
+    await attachLivingWorldPressureEngineToDmEventDebug(db, {
+      campaignId: input.campaignId,
+      dmEventId: input.dmEventId,
+      livingWorldPressureEngine: {
+        traceId,
+        coveredMessageCount: currentMessageCount,
+        failed: true,
+        error: errorSummary(error),
+        durationMs: Date.now() - startedAt,
+        ...(debugFromError
+          ? {
+              requestMessages: debugFromError.requestMessages,
+              rawResponse: debugFromError.rawResponse,
+              ...(debugFromError.model ? { model: debugFromError.model } : {}),
+              ...(typeof debugFromError.temperature === "number"
+                ? { temperature: debugFromError.temperature }
+                : {}),
+              ...(debugFromError.providerResponseId
+                ? { providerResponseId: debugFromError.providerResponseId }
+                : {}),
+              ...(debugFromError.providerTimings
+                ? { providerTimings: debugFromError.providerTimings }
+                : {})
+            }
+          : {})
+      }
+    });
+
+    runtime.emitDmStreamEvent?.({
+      type: "room_updated",
+      roomId: input.campaignId,
+      updatedAt: nowIso(),
+      ...(input.dmEventId ? { eventId: input.dmEventId } : {})
+    });
+
+    await logLivingWorldEngineRun(db, {
+      campaignId: input.campaignId,
+      traceId,
+      turnId: input.turnId,
+      coveredMessageCount: currentMessageCount,
+      acceptedPatchCount: 0,
+      discardedPatchCount: 0,
+      guidance: null,
+      payload: {
+        source: "living_world_pressure_engine",
+        failed: true,
+        error: errorSummary(error),
+        durationMs: Date.now() - startedAt
+      }
+    });
+
+    await logDmMemoryPatchLog(db, {
+      campaignId: input.campaignId,
+      traceId,
+      turnId: input.turnId,
+      payload: {
+        source: "living_world_pressure_engine",
+        failed: true,
+        error: errorSummary(error),
+        durationMs: Date.now() - startedAt
+      }
+    });
+  }
+}
+
 async function attachContextStorageStateToDmEventDebug(
   db: Queryable,
   input: {
@@ -5146,6 +5840,43 @@ async function attachContextStorageStateToDmEventDebug(
       input.campaignId,
       input.dmEventId,
       JSON.stringify(input.contextStorageState)
+    ]
+  );
+}
+
+async function attachLivingWorldPressureEngineToDmEventDebug(
+  db: Queryable,
+  input: {
+    campaignId: string;
+    dmEventId?: string | undefined;
+    livingWorldPressureEngine: unknown;
+  }
+) {
+  if (!input.dmEventId) {
+    return;
+  }
+
+  await bestEffortRuntimeInsert(
+    db,
+    `
+      update campaign_events
+      set payload = jsonb_set(
+        jsonb_set(
+          payload,
+          '{aiDebug}',
+          coalesce(payload->'aiDebug', '{}'::jsonb),
+          true
+        ),
+        '{aiDebug,livingWorldPressureEngine}',
+        $3::jsonb,
+        true
+      )
+      where campaign_id = $1 and id = $2
+    `,
+    [
+      input.campaignId,
+      input.dmEventId,
+      JSON.stringify(input.livingWorldPressureEngine)
     ]
   );
 }
@@ -5333,6 +6064,12 @@ export async function runModularPostTurnContextJobs(
       }
     });
   }
+
+  await runLivingWorldPressureEngineIfDue(db, runtime, {
+    campaignId: input.campaignId,
+    turnId: input.turnId,
+    dmEventId: input.dmEventId
+  });
 }
 
 function formatCanonicalCharacterContext(
@@ -9132,3 +9869,12 @@ function createStatusError(statusCode: number, message: string): Error {
   error.statusCode = statusCode;
   return error;
 }
+
+export const __dbTestInternals = {
+  applyAcceptedMemoryPatch,
+  campaignContextStorageDebugState,
+  formatDmGuidance,
+  formatLivingWorldPressureEngineRequest,
+  getLatestLivingWorldCoveredMessageCount,
+  normalizeNewContextChunkPatch
+};

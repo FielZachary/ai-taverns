@@ -1,7 +1,15 @@
 "use client";
 
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Bug, RefreshCcw, Sparkles, Undo2, UserRound, X } from "lucide-react";
+import {
+  Activity,
+  Bug,
+  RefreshCcw,
+  Sparkles,
+  Undo2,
+  UserRound,
+  X
+} from "lucide-react";
 import type { AiDebugInfo, GameMessage } from "@/lib/game-types";
 
 export type ChatPlayerStatus = {
@@ -168,6 +176,12 @@ function MessageDebugModal({
             <h3>Context Storage</h3>
             <pre>{formatDebugJson(debug.contextStorageState)}</pre>
           </section>
+          {debug.livingWorldPressureEngine ? (
+            <section>
+              <h3>Pressure Engine Output</h3>
+              <pre>{formatDebugJson(debug.livingWorldPressureEngine)}</pre>
+            </section>
+          ) : null}
         </div>
       </section>
     </div>
@@ -282,6 +296,16 @@ export function MessageLog({
                       >
                         <Bug size={15} />
                       </button>
+                    ) : null}
+                    {message.debug?.livingWorldPressureEngine ? (
+                      <span
+                        className="message-pressure-badge"
+                        aria-label="Pressure engine ran"
+                        title="Pressure engine ran"
+                        role="img"
+                      >
+                        <Activity size={15} />
+                      </span>
                     ) : null}
                     {canRewindToMessage ? (
                       <button

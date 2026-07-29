@@ -41,6 +41,24 @@ async function createSinglePlayerCampaign(label: string) {
   return { cookie, campaignId: created.campaign.id };
 }
 
+async function waitForCondition(
+  predicate: () => boolean,
+  message: string,
+  timeoutMs = 1000
+) {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    if (predicate()) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+
+  assert.fail(message);
+}
+
 test("DM runtime routes handle authorized solo, ask-DM, regenerate, and traces", async () => {
   const cookie = await signIn("dm-runtime-owner@example.com");
   const createResponse = await app.inject({
@@ -1186,6 +1204,115 @@ test("DM runtime memory updater creates and updates NPC context cards", async ()
         typeof chunk.body_markdown === "string" &&
         /Harbor Watch station/.test(chunk.body_markdown)
     )
+  );
+});
+
+test("living world engine updates chunks and injects current DM guidance", async () => {
+  const { cookie, campaignId } = await createSinglePlayerCampaign(
+    "living-world-pressure"
+  );
+
+  database.contextChunks.push({
+    campaign_id: campaignId,
+    context_key: "thread:lysa-trail",
+    category: "quests_open_threads",
+    title: "Lysa's Trail",
+    visibility: "player_safe",
+    priority: 5,
+    body_markdown:
+      "# Lysa's Trail\n\n## Current Situation\nSeren is looking for Lysa after her trail went quiet.",
+    archived_at: null,
+    updated_at: new Date()
+  });
+
+  for (let index = 0; index < 10; index += 1) {
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/campaigns/${campaignId}/solo-turn`,
+      headers: {
+        cookie
+      },
+      payload: {
+        message: `I ask around town about Lysa's trail, step ${index + 1}.`,
+        clientMessageId: `living-world-turn-${index + 1}`
+      }
+    });
+
+    assert.equal(response.statusCode, 200, response.body);
+  }
+
+  await waitForCondition(
+    () => database.livingWorldEngineRuns.length > 0,
+    "living world engine did not run"
+  );
+
+  assert.equal(database.livingWorldEngineRuns.length, 1);
+  assert.equal(database.livingWorldEngineRuns[0]?.covered_message_count, 21);
+  const pressureDebug = database.campaignEvents
+    .map((event) => {
+      const payload = event.payload as
+        | {
+            aiDebug?: DebugFields;
+          }
+        | undefined;
+      return payload?.aiDebug?.livingWorldPressureEngine as
+        | Record<string, unknown>
+        | undefined;
+    })
+    .find(Boolean);
+  assert.ok(pressureDebug);
+  assert.equal(pressureDebug.coveredMessageCount, 21);
+  assert.match(String(pressureDebug.rawResponse ?? ""), /world_clock_updates/);
+  assert.match(
+    JSON.stringify(pressureDebug.parsedOutput ?? {}),
+    /Accord surveyors arrive/
+  );
+  assert.match(
+    database.contextChunks.find(
+      (chunk) =>
+        chunk.campaign_id === campaignId &&
+        chunk.context_key === "thread:lysa-trail"
+    )?.body_markdown ?? "",
+    /Claim-Stake Accord has begun asking/
+  );
+  assert.match(
+    String(
+      database.campaignDmGuidance.find(
+        (guidance) => guidance.campaign_id === campaignId
+      )?.guidance.current_direction ?? ""
+    ),
+    /Claim-Stake Accord is getting closer/
+  );
+
+  resetProviderInputs();
+
+  const guidedResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "I check whether anyone else has been asking about Lysa.",
+      clientMessageId: "living-world-guided-turn"
+    }
+  });
+
+  assert.equal(guidedResponse.statusCode, 200, guidedResponse.body);
+  CampaignSoloTurnResponseSchema.parse(guidedResponse.json());
+
+  const mainProviderInput = getProviderInputs().find((input) =>
+    input.message.includes("Current campaign DM guidance:")
+  );
+
+  assert.ok(mainProviderInput);
+  assert.match(
+    mainProviderInput.instructions,
+    /Use this as short-lived direction/
+  );
+  assert.match(
+    mainProviderInput.message,
+    /Claim-Stake Accord is getting closer/
   );
 });
 
