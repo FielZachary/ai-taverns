@@ -86,6 +86,29 @@ describe("MessageLog", () => {
     ).toBeInTheDocument();
   });
 
+  it("unwraps Ask DM JSON envelopes before rendering player-facing content", () => {
+    renderMessageLog({
+      messages: [
+        gameMessage({
+          id: "ask-answer-json",
+          role: "dm",
+          kind: "ask_dm_answer",
+          content: JSON.stringify({
+            public_narration: "Use this as clarification only.",
+            roll_requests: [],
+            next_input_needed: "player_actions",
+            input_targets: [],
+            input_policy: "all_players"
+          })
+        })
+      ]
+    });
+
+    expect(screen.getByText("DM Answer")).toBeInTheDocument();
+    expect(screen.getByText("Use this as clarification only.")).toBeInTheDocument();
+    expect(screen.queryByText(/public_narration/)).not.toBeInTheDocument();
+  });
+
   it("renders a DM scene location under the Dungeon Master label", () => {
     renderMessageLog({
       messages: [

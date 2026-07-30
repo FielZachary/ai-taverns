@@ -8225,6 +8225,15 @@ function answerFromAskDmProviderResponse(content: string) {
     return answer;
   }
 
+  const publicNarration =
+    typeof parsed.public_narration === "string"
+      ? parsed.public_narration.trim()
+      : "";
+
+  if (publicNarration) {
+    return publicNarration;
+  }
+
   const trimmed = content.trim();
 
   if (trimmed) {

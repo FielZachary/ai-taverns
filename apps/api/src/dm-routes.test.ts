@@ -328,6 +328,70 @@ test("DM runtime routes handle authorized solo, ask-DM, regenerate, and traces",
   assert.match(routerTraceProvider?.rawResponse ?? "", /job_needed/);
 });
 
+test("ask-DM accepts public_narration provider envelopes without storing raw JSON", async () => {
+  const { cookie, campaignId } = await createSinglePlayerCampaign(
+    "dm-runtime-ask-public-narration"
+  );
+  const content = JSON.stringify({
+    public_narration: "Out-of-turn guidance: there is no immediate threat here.",
+    roll_requests: [],
+    next_input_needed: "player_actions",
+    input_targets: [],
+    input_policy: "all_players"
+  });
+
+  setProviderOverride(async (input) => ({
+    id: "provider-ask-public-narration",
+    content,
+    debug: {
+      requestMessages: [
+        {
+          role: "system",
+          content: input.instructions
+        },
+        {
+          role: "user",
+          content: input.message
+        }
+      ],
+      rawResponse: content,
+      model: "test-model",
+      temperature: 0.8,
+      providerTimings: []
+    }
+  }));
+
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/campaigns/${campaignId}/ask-dm`,
+      headers: {
+        cookie
+      },
+      payload: {
+        question: "Is anyone about to attack me?"
+      }
+    });
+
+    assert.equal(response.statusCode, 200, response.body);
+    CampaignAskDmResponseSchema.parse(response.json());
+    const askAnswerEvent = database.campaignEvents
+      .filter(
+        (event) => event.campaign_id === campaignId && event.type === "dm_answer"
+      )
+      .at(-1);
+    const answerPayload = askAnswerEvent?.payload as { content?: string };
+
+    assert.equal(
+      answerPayload.content,
+      "Out-of-turn guidance: there is no immediate threat here."
+    );
+    assert.doesNotMatch(answerPayload.content ?? "", /public_narration/);
+  } finally {
+    setProviderOverride(undefined);
+  }
+});
+
 test("solo turn applies accepted inventory patches to the character sheet", async () => {
   resetProviderInputs();
   const { cookie, campaignId } = await createSinglePlayerCampaign(
