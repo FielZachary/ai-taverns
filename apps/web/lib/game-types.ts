@@ -76,6 +76,15 @@ export type AiDebugInfo = {
     temperature?: number;
     providerResponseId?: string;
   };
+  askDmContextSelector?: {
+    requestMessages: AiDebugMessage[];
+    rawResponse: string;
+    parsedOutput?: unknown;
+    model?: string;
+    temperature?: number;
+    providerResponseId?: string;
+    providerTimings?: AiDebugProviderTiming[];
+  };
   providerTimings?: AiDebugProviderTiming[];
 };
 
@@ -86,6 +95,14 @@ export type GameMessage = {
   playerName?: string;
   characterName?: string;
   avatarUrl?: string;
+  setting?: {
+    displayLocation?: string;
+    worldName?: string;
+    regionName?: string;
+    settlementName?: string;
+    sceneLocation?: string;
+    startingLocation?: string;
+  };
   content: string;
   createdAt: string;
   isSyntheticIntro?: boolean;

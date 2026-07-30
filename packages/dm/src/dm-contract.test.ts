@@ -162,6 +162,9 @@ describe("parseDmContract", () => {
         setting: {
           displayLocation: "Saltwatch Chapel",
           worldName: "Brinefall",
+          regionName: "The Salt Concordat",
+          settlementName: "Saltwatch",
+          sceneLocation: "Saltwatch Chapel",
           startingLocation: "Harbor Road"
         }
       })
@@ -177,6 +180,9 @@ describe("parseDmContract", () => {
     assert.deepEqual(result.setting, {
       displayLocation: "Saltwatch Chapel",
       worldName: "Brinefall",
+      regionName: "The Salt Concordat",
+      settlementName: "Saltwatch",
+      sceneLocation: "Saltwatch Chapel",
       startingLocation: "Harbor Road"
     });
   });

@@ -325,6 +325,14 @@ test("room contracts accept snapshots and mutation payloads", () => {
         kind: "turn",
         playerName: "Player",
         characterName: "Stone",
+        setting: {
+          displayLocation: "Ferrant Concord / Ironhold / Crag Market Street",
+          worldName: "Eldermere",
+          regionName: "Ferrant Concord",
+          settlementName: "Ironhold",
+          sceneLocation: "Crag Market Street",
+          startingLocation: "Ironhold"
+        },
         content: "I check the old door.",
         createdAt: "2026-07-05T00:00:00.000Z"
       }

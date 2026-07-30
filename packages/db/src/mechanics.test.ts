@@ -109,3 +109,33 @@ test("mechanics state infers tracked spell slots from explicit caster prose", ()
     })
   );
 });
+
+test("mechanics state clamps persisted negative HP to zero", () => {
+  const state = resolveMechanicsState(
+    {
+      metadata: {
+        mechanicsState: {
+          combat: {
+            active: false,
+            round: 0,
+            turnOwner: null,
+            initiativeOrder: []
+          },
+          actors: {
+            "player:vayne": {
+              characterName: "Vayne",
+              currentHp: -2,
+              maxHp: 20,
+              conditions: ["unconscious"]
+            }
+          }
+        }
+      }
+    },
+    []
+  );
+
+  assert.equal(state.actors["player:vayne"]?.currentHp, 0);
+  assert.equal(state.actors["player:vayne"]?.maxHp, 20);
+  assert.deepEqual(state.actors["player:vayne"]?.conditions, ["unconscious"]);
+});

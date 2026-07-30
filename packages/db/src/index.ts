@@ -273,6 +273,47 @@ export async function ensureEmailIdentity(
   );
 }
 
+export async function findUserByAuthIdentity(
+  db: Queryable,
+  input: {
+    provider: "email" | "google";
+    providerSubject: string;
+  }
+): Promise<UserRecord | null> {
+  const result = await db.query<UserRow>(
+    `
+      select users.id, users.email, users.display_name, users.created_at, users.updated_at
+      from auth_identities
+      join users on users.id = auth_identities.user_id
+      where auth_identities.provider = $1
+        and auth_identities.provider_subject = $2
+      limit 1
+    `,
+    [input.provider, input.providerSubject]
+  );
+
+  return result.rows[0] ? mapUserRow(result.rows[0]) : null;
+}
+
+export async function ensureGoogleIdentity(
+  db: Queryable,
+  input: {
+    userId: UserId;
+    providerSubject: string;
+    email: string;
+  }
+): Promise<void> {
+  await db.query(
+    `
+      insert into auth_identities (user_id, provider, provider_subject, email)
+      values ($1, 'google', $2, $3)
+      on conflict (provider, provider_subject) do update
+      set email = excluded.email
+    `,
+    [input.userId, input.providerSubject, input.email]
+  );
+}
+
 export async function createSession(
   db: Queryable,
   input: {
@@ -551,6 +592,9 @@ type CampaignInvitePreviewRow = CampaignInviteRow & {
 type CampaignSettingSummary = {
   displayLocation?: string;
   worldName?: string;
+  regionName?: string;
+  settlementName?: string;
+  sceneLocation?: string;
   startingLocation?: string;
 };
 
@@ -686,6 +730,9 @@ const dungeonMasterContractInstructions = [
   "Use roll_requests only for player-controlled dice the website must collect.",
   "In roll_requests, dice must be bare dice notation only, such as 1d20, 3d4, or 8d6. Do not include + or - modifiers in dice; put static bonuses or penalties in modifier. Example: Magic Missile uses dice \"3d4\" and modifier 3, not dice \"3d4+3\".",
   "Use mechanics_state_update for canonical game/mechanics state changes; the website owns persistence.",
+  "When the party's current location is known, include a setting object with display_location, world_name, region_name, settlement_name, scene_location, and starting_location when available.",
+  "Use scene_location for the current local scene label, such as a tavern, street, room, road, ruin, district, or wilderness landmark.",
+  "Use display_location as the short UI label for the current location; do not use a genre label.",
   "Required top-level keys: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update.",
   "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved this turn."
 ].join("\n");
@@ -1841,6 +1888,11 @@ function numberField(record: Record<string, unknown>, key: string) {
   return Number.isInteger(value) && Number(value) >= 0 ? Number(value) : undefined;
 }
 
+function hpNumberField(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  return Number.isInteger(value) ? Math.max(0, Number(value)) : undefined;
+}
+
 function stringListField(record: Record<string, unknown>, key: string) {
   const value = record[key];
   return Array.isArray(value)
@@ -1879,11 +1931,11 @@ function applyMechanicsStateUpdate(
     nextActors[actorKey] = {
       ...(existing ?? { characterName: characterName ?? actorKey }),
       ...(characterName ? { characterName } : {}),
-      ...(numberField(rawActor, "currentHp") !== undefined
-        ? { currentHp: numberField(rawActor, "currentHp") }
+      ...(hpNumberField(rawActor, "currentHp") !== undefined
+        ? { currentHp: hpNumberField(rawActor, "currentHp") }
         : {}),
-      ...(numberField(rawActor, "maxHp") !== undefined
-        ? { maxHp: numberField(rawActor, "maxHp") }
+      ...(hpNumberField(rawActor, "maxHp") !== undefined
+        ? { maxHp: hpNumberField(rawActor, "maxHp") }
         : {}),
       ...(stringListField(rawActor, "conditions") !== undefined
         ? { conditions: stringListField(rawActor, "conditions") }
@@ -4514,6 +4566,52 @@ function eventAiDebug(payload: Record<string, unknown>, role: "player" | "dm") {
   return debug as AiDebugInfo;
 }
 
+function eventSetting(payload: Record<string, unknown>, role: "player" | "dm") {
+  if (role !== "dm") {
+    return undefined;
+  }
+
+  const setting = eventPayload(payload.setting);
+  const displayLocation =
+    typeof setting.displayLocation === "string"
+      ? setting.displayLocation.trim()
+      : "";
+  const worldName =
+    typeof setting.worldName === "string" ? setting.worldName.trim() : "";
+  const regionName =
+    typeof setting.regionName === "string" ? setting.regionName.trim() : "";
+  const settlementName =
+    typeof setting.settlementName === "string"
+      ? setting.settlementName.trim()
+      : "";
+  const sceneLocation =
+    typeof setting.sceneLocation === "string" ? setting.sceneLocation.trim() : "";
+  const startingLocation =
+    typeof setting.startingLocation === "string"
+      ? setting.startingLocation.trim()
+      : "";
+
+  if (
+    !displayLocation &&
+    !worldName &&
+    !regionName &&
+    !settlementName &&
+    !sceneLocation &&
+    !startingLocation
+  ) {
+    return undefined;
+  }
+
+  return {
+    ...(displayLocation ? { displayLocation } : {}),
+    ...(worldName ? { worldName } : {}),
+    ...(regionName ? { regionName } : {}),
+    ...(settlementName ? { settlementName } : {}),
+    ...(sceneLocation ? { sceneLocation } : {}),
+    ...(startingLocation ? { startingLocation } : {})
+  };
+}
+
 async function buildRoomSnapshot(
   db: Queryable,
   campaign: CampaignRow
@@ -4601,6 +4699,7 @@ async function buildRoomSnapshot(
 
       const role = payload.role === "player" ? "player" : "dm";
       const debug = eventAiDebug(payload, role);
+      const setting = eventSetting(payload, role);
 
       return {
         id: String(payload.messageId || event.id),
@@ -4614,6 +4713,7 @@ async function buildRoomSnapshot(
         ...(typeof payload.characterName === "string"
           ? { characterName: payload.characterName }
           : {}),
+        ...(setting ? { setting } : {}),
         ...(debug ? { debug } : {})
       };
     })
@@ -4884,6 +4984,8 @@ async function logDmModelCall(
     phase:
       | "router"
       | "main"
+      | "ask_dm_context_selector"
+      | "ask_dm"
       | "memory_updater"
       | "campaign_foundation_compiler"
       | "living_world_pressure_engine";
@@ -4979,6 +5081,45 @@ async function logDmMemoryPatchLog(
       JSON.stringify(input.payload)
     ]
   );
+}
+
+async function logCombatEvents(
+  db: Queryable,
+  input: {
+    campaignId: string;
+    turnId?: string | undefined;
+    events: Record<string, unknown>[];
+  }
+) {
+  for (const event of input.events) {
+    const eventType =
+      typeof event.event_type === "string" && event.event_type.trim()
+        ? event.event_type.trim()
+        : typeof event.event === "string" && event.event.trim()
+          ? event.event.trim()
+          : typeof event.type === "string" && event.type.trim()
+            ? event.type.trim()
+            : "combat_event";
+
+    await bestEffortRuntimeInsert(
+      db,
+      `
+        insert into combat_events (
+          campaign_id,
+          turn_id,
+          event_type,
+          payload
+        )
+        values ($1, $2, $3, $4::jsonb)
+      `,
+      [
+        input.campaignId,
+        input.turnId ?? null,
+        eventType,
+        JSON.stringify(event)
+      ]
+    );
+  }
 }
 
 function contextKeyEntries(router: ValidatedRouterOutput) {
@@ -5287,6 +5428,87 @@ function formatContextChunkIndexForRouter(index: ContextChunkIndex) {
   return JSON.stringify(index, null, 2);
 }
 
+function buildAskDmContextSelectorPrompt() {
+  return [
+    "You are the AI Taverns Ask DM context selector.",
+    "This is separate from the gameplay DM router. Do not choose or imply a gameplay job.",
+    "Select only context chunk keys that are relevant for answering the player's out-of-turn table question.",
+    "Ask DM answers must not advance time, resolve actions, mutate state, reveal hidden facts as discoveries, or invent continuity.",
+    "Prefer player_safe chunks. Include dm_only chunks only when they are needed for the DM to avoid contradicting canon; the answering prompt will still decide what can be said player-facing.",
+    "Only select context keys from the Available context chunk keys JSON provided in the user message.",
+    "Do not invent, rename, summarize, slugify, or transform context keys. Copy exact key strings only.",
+    "If no available key fits a category, return an empty array for that category.",
+    `Context categories: ${contextCategories.join(", ")}.`,
+    "Return exactly one JSON object with context_keys and optional reason.",
+    "context_keys must be an object whose keys are context categories and whose values are arrays of context chunk key strings, never an array of category names.",
+    'Example context_keys shape: {"npc_context":[],"player_character_context":[],"combat_context":[],"relevant_world_context":[],"quests_open_threads":[],"overarching_big_plot_secrets":[]}.'
+  ].join("\n");
+}
+
+function buildAskDmContextSelectorMessage(input: {
+  currentAction: string;
+  routerState: Record<string, unknown>;
+  availableContextChunks: ContextChunkIndex;
+}) {
+  return [
+    "Ask DM routing state JSON:",
+    JSON.stringify(input.routerState, null, 2),
+    "",
+    "Available context chunk keys JSON:",
+    formatContextChunkIndexForRouter(input.availableContextChunks),
+    "",
+    "Ask DM question input:",
+    input.currentAction
+  ].join("\n");
+}
+
+type AskDmContextSelectorOutput = {
+  contextKeys: RouterContextKeys;
+  reason?: string;
+  fallbackUsed: boolean;
+  errors: string[];
+};
+
+function validateAskDmContextSelectorOutput(
+  text: string | undefined
+): AskDmContextSelectorOutput {
+  const parsed = parseJsonRecord(text ?? "");
+  const errors: string[] = [];
+  const rawContextKeys = isRecord(parsed?.context_keys)
+    ? parsed.context_keys
+    : {};
+
+  if (!parsed) {
+    errors.push("selector output must be parseable JSON");
+  }
+
+  if (!isRecord(parsed?.context_keys)) {
+    errors.push("context_keys must be an object");
+  }
+
+  const contextKeys = contextCategories.reduce((keys, category) => {
+    const value = rawContextKeys[category];
+    const normalized = normalizeStringList(value);
+
+    if (
+      value !== undefined &&
+      (!Array.isArray(value) ||
+        value.some((item) => typeof item !== "string" || !item.trim()))
+    ) {
+      errors.push(`${category} context keys must be strings`);
+    }
+
+    return { ...keys, [category]: normalized };
+  }, emptyContextKeys());
+
+  return {
+    contextKeys: errors.length > 0 ? emptyContextKeys() : contextKeys,
+    ...(typeof parsed?.reason === "string" ? { reason: parsed.reason } : {}),
+    fallbackUsed: errors.length > 0,
+    errors
+  };
+}
+
 function formatContextChunkIndexForMemoryUpdater(index: ContextChunkIndex) {
   const entries = contextCategories.flatMap((category) =>
     index[category].map((entry) => ({
@@ -5573,6 +5795,164 @@ async function buildModularDmPromptContext(
         : {}),
       ...(routerData.debug.providerResponseId
         ? { providerResponseId: routerData.debug.providerResponseId }
+        : {})
+    }
+  };
+}
+
+async function buildAskDmPromptContext(
+  db: Queryable,
+  runtime: DungeonMasterRuntime,
+  campaign: Pick<CampaignRow, "id" | "metadata" | "mode">,
+  input: {
+    traceId: string;
+    turnId?: string | undefined;
+    currentAction: string;
+    baseInstructions: string;
+    history: GameMessage[];
+    model?: AiModelId;
+  }
+): Promise<
+  DmPromptContext & {
+    askDmContextSelectorDebug: NonNullable<AiDebugInfo["askDmContextSelector"]>;
+  }
+> {
+  const players = await getActiveCampaignPlayers(db, campaign.id);
+  const availableContextChunks = await listCampaignContextChunkIndex(
+    db,
+    campaign.id
+  );
+  const routerState = routerStateForCampaign(campaign, players);
+  const selectorInstructions = buildAskDmContextSelectorPrompt();
+  const selectorMessage = buildAskDmContextSelectorMessage({
+    currentAction: input.currentAction,
+    routerState,
+    availableContextChunks
+  });
+  const selectorStartedAt = Date.now();
+  const selectorData = await runtime.askProvider({
+    instructions: selectorInstructions,
+    message: selectorMessage,
+    history: input.history,
+    ...(input.model ? { model: input.model } : {})
+  });
+  const selector = validateAskDmContextSelectorOutput(selectorData.content);
+  const retrievalRouter: ValidatedRouterOutput = {
+    jobNeeded: "scene_director",
+    contextKeys: selector.contextKeys,
+    fallbackUsed: selector.fallbackUsed,
+    errors: selector.errors,
+    ...(selector.reason ? { reason: selector.reason } : {})
+  };
+
+  await logDmModelCall(db, {
+    campaignId: campaign.id,
+    traceId: input.traceId,
+    turnId: input.turnId,
+    phase: "ask_dm_context_selector",
+    providerData: selectorData,
+    durationMs: Date.now() - selectorStartedAt
+  });
+
+  await logTurnDebugTrace(db, {
+    campaignId: campaign.id,
+    traceId: input.traceId,
+    phase: "ask_dm_context_selector_response_received",
+    turnId: input.turnId,
+    elapsedMs: Date.now() - selectorStartedAt,
+    payload: {
+      routerState,
+      availableContextChunks,
+      selector: {
+        contextKeys: selector.contextKeys,
+        fallbackUsed: selector.fallbackUsed,
+        errors: selector.errors,
+        reason: selector.reason
+      },
+      provider: providerDebugSummary(selectorData.debug, {
+        includeRawResponse: true,
+        includeRequestMessages: true
+      })
+    }
+  });
+
+  const context = await retrieveSelectedContextChunks(
+    db,
+    campaign.id,
+    retrievalRouter
+  );
+
+  await logTurnDebugTrace(db, {
+    campaignId: campaign.id,
+    traceId: input.traceId,
+    phase: "ask_dm_context_snapshot",
+    turnId: input.turnId,
+    payload: {
+      requestedContextKeys: selector.contextKeys,
+      includedContextKeys: context.chunks.map((chunk) => chunk.id),
+      omittedContextKeys: context.omitted,
+      budget: {
+        maxContextChars: 24000,
+        includedContextChars: context.chunks.reduce(
+          (total, chunk) => total + chunk.bodyMarkdown.length,
+          0
+        )
+      }
+    }
+  });
+
+  const parsedOutput = {
+    contextKeys: selector.contextKeys,
+    fallbackUsed: selector.fallbackUsed,
+    errors: selector.errors,
+    reason: selector.reason
+  };
+
+  return {
+    instructions: input.baseInstructions,
+    message: [
+      "Selected context chunks:",
+      renderContextChunks(context.chunks),
+      "",
+      "Current Ask DM question:",
+      input.currentAction
+    ].join("\n"),
+    sections: [
+      {
+        kind: "ask_dm_context_selector",
+        contextKeys: selector.contextKeys,
+        fallbackUsed: selector.fallbackUsed,
+        errors: selector.errors,
+        reason: selector.reason,
+        routerState,
+        availableContextChunks
+      },
+      {
+        kind: "context_snapshot",
+        includedContextKeys: context.chunks.map((chunk) => chunk.id),
+        omittedContextKeys: context.omitted
+      }
+    ],
+    budget: {
+      maxContextChars: 24000,
+      includedContextChars: context.chunks.reduce(
+        (total, chunk) => total + chunk.bodyMarkdown.length,
+        0
+      )
+    },
+    askDmContextSelectorDebug: {
+      requestMessages: selectorData.debug.requestMessages,
+      rawResponse: selectorData.debug.rawResponse,
+      parsedOutput,
+      ...(selectorData.debug.model ? { model: selectorData.debug.model } : {}),
+      ...(selectorData.debug.temperature !== undefined
+        ? { temperature: selectorData.debug.temperature }
+        : {}),
+      ...(selectorData.debug.providerResponseId
+        ? { providerResponseId: selectorData.debug.providerResponseId }
+        : {}),
+      ...(selectorData.debug.providerTimings
+        ? { providerTimings: selectorData.debug.providerTimings }
         : {})
     }
   };
@@ -7499,7 +7879,10 @@ function formatEldermereNarratorOpeningRequest(input: {
     "Do not invent new circumstances for how a keepsake, clue, wound, relationship, promise, or obligation entered the character's life. If the exact handoff is not specified, use neutral wording like 'the scroll case you carry from her' instead of inventing a scene where someone gave it to the character.",
     "Useful personal urgency beats look like: 'The handwriting looks enough like your mother's that your hand goes to the scroll case before you decide to move.', 'The same name from your dream is written on the board in front of you. Someone in this town knows something.', or 'The shard vibrates at your side at the same moment you read the note.'",
     'Set setting.world_name to "Eldermere".',
-    `Set setting.starting_location and setting.display_location to "${input.plan.startingLocation.name}".`
+    `Set setting.region_name to "${input.plan.region.name}".`,
+    `Set setting.settlement_name to "${input.plan.startingLocation.name}" when the starting location is a settlement; otherwise omit it.`,
+    `Set setting.scene_location and setting.display_location to "${input.plan.startingLocation.name}".`,
+    `Set setting.starting_location to "${input.plan.startingLocation.name}".`
   ].join("\n");
 }
 
@@ -7882,7 +8265,13 @@ function askDmInstructions() {
     "{\"answer\":\"Your player-facing answer.\"}",
     "This is not a player action and must not advance game time.",
     "Do not move the scene forward, resolve consequences, consume resources, request dice, change pending rolls, trigger NPC actions, or introduce new hidden facts as if discovered.",
-    "Use only already-established campaign context, visible character knowledge, rules reasoning, and reasonable table clarification.",
+    "Use only facts explicitly present in the provided campaign context, current scene, canonical character sheets, rules, and visible character knowledge.",
+    "Do not reconstruct missing history, infer where an item came from, or fill continuity gaps unless the provided context explicitly states the answer.",
+    "Do not invent names, places, relationships, deaths, meetings, prior scenes, loot amounts, inventory contents, or inventory changes.",
+    "Do not treat the player's question as confirmation that something happened. If the question contains a false premise, correct only the part contradicted by provided context and clearly say what is unknown.",
+    "If the answer is not clearly established in the provided context, say that you do not see it established in the current campaign context.",
+    "Trust provided campaign context, canonical character sheets, and stored campaign state over prior Ask DM answers when they conflict. Ask DM answers are table guidance, not canon by themselves.",
+    "You may explain what the current context says about inventory, equipment, or currency, but you cannot update inventory, promise an update, or declare a corrected total unless the canonical character sheet or provided campaign state already shows it.",
     "If the player is asking to do something in the fiction, tell them to submit it as a turn/action instead of resolving it here.",
     "Keep the answer concise and useful, normally 1-3 short paragraphs."
   ].join("\n");
@@ -7919,6 +8308,15 @@ function answerFromAskDmProviderResponse(content: string) {
 
   if (answer) {
     return answer;
+  }
+
+  const publicNarration =
+    typeof parsed.public_narration === "string"
+      ? parsed.public_narration.trim()
+      : "";
+
+  if (publicNarration) {
+    return publicNarration;
   }
 
   const trimmed = content.trim();
@@ -8513,6 +8911,8 @@ function repairEldermereOpeningReply(
     setting: {
       ...reply.setting,
       worldName: "Eldermere",
+      regionName: plan.region.name,
+      sceneLocation: plan.startingLocation.name,
       startingLocation: plan.startingLocation.name,
       displayLocation: plan.startingLocation.name
     }
@@ -8744,9 +9144,12 @@ async function getCampaignEventMessages(
         return null;
       }
 
+      const role = payload.role === "player" ? "player" : "dm";
+      const setting = eventSetting(payload, role);
+
       return {
         id: String(payload.messageId || event.id),
-        role: payload.role === "player" ? "player" : "dm",
+        role,
         kind:
           event.type === "dm_question"
             ? "ask_dm_question"
@@ -8760,7 +9163,8 @@ async function getCampaignEventMessages(
           : {}),
         ...(typeof payload.characterName === "string"
           ? { characterName: payload.characterName }
-          : {})
+          : {}),
+        ...(setting ? { setting } : {})
       };
     })
     .filter((message): message is GameMessage => message !== null);
@@ -8999,6 +9403,15 @@ async function askDungeonMaster(
         nextMechanicsState
       );
     }
+
+    if (combatValidation.accepted.length > 0) {
+      await logCombatEvents(db, {
+        campaignId: campaign.id,
+        turnId,
+        events: combatValidation.accepted
+      });
+    }
+
     const appliedInventoryPatches =
       inventoryValidation.accepted.length > 0
         ? await applyAcceptedInventoryPatches(
@@ -9183,16 +9596,36 @@ async function askDungeonMaster(
 function settingMetadata(setting: CampaignSettingSummary | undefined) {
   const displayLocation = setting?.displayLocation?.trim();
   const worldName = setting?.worldName?.trim();
+  const regionName = setting?.regionName?.trim();
+  const settlementName = setting?.settlementName?.trim();
+  const sceneLocation = setting?.sceneLocation?.trim();
   const startingLocation = setting?.startingLocation?.trim();
 
-  if (!displayLocation && !worldName && !startingLocation) {
+  if (
+    !displayLocation &&
+    !worldName &&
+    !regionName &&
+    !settlementName &&
+    !sceneLocation &&
+    !startingLocation
+  ) {
     return {};
   }
 
   return {
     setting: {
-      displayLocation: displayLocation || startingLocation || worldName || null,
+      displayLocation:
+        displayLocation ||
+        sceneLocation ||
+        settlementName ||
+        startingLocation ||
+        regionName ||
+        worldName ||
+        null,
       worldName: worldName || null,
+      regionName: regionName || null,
+      settlementName: settlementName || null,
+      sceneLocation: sceneLocation || null,
       startingLocation: startingLocation || null
     }
   };
@@ -10193,19 +10626,42 @@ export async function askDungeonMasterQuestionForUser(
     trimmedQuestion
   );
   const streamTurnId = runtime.emitDmStreamEvent ? randomUUID() : undefined;
+  const traceId = randomUUID();
+  const startedAt = Date.now();
   const instructions = withEldermereTurnContext(askDmInstructions(), campaign);
+  const history = await getCampaignEventMessages(db, campaign.id);
+  const usesInjectedPromptContext = Boolean(runtime.buildPromptContext);
   const promptContext = runtime.buildPromptContext
       ? await runtime.buildPromptContext({
           campaignId: campaign.id,
-          turnId: streamTurnId,
           currentAction,
           baseInstructions: instructions,
           ...(input.model ? { model: input.model } : {})
         })
-    : null;
-  const history = promptContext
-    ? []
-    : await getCampaignEventMessages(db, campaign.id);
+    : await buildAskDmPromptContext(db, runtime, campaign, {
+        traceId,
+        currentAction,
+        baseInstructions: instructions,
+        history,
+        ...(input.model ? { model: input.model } : {})
+      });
+  const providerHistory = usesInjectedPromptContext ? [] : history;
+
+  await logTurnDebugTrace(db, {
+    campaignId: campaign.id,
+    traceId,
+    phase: "ask_dm_started",
+    elapsedMs: 0,
+    payload: {
+      sessionId: campaign.session_id,
+      streamTurnId,
+      historyCount: providerHistory.length,
+      promptContextSections: promptContext?.sections ?? [],
+      promptContextBudget: promptContext?.budget,
+      message: textStats(currentAction),
+      instructions: textStats(instructions)
+    }
+  });
 
   if (streamTurnId) {
     runtime.emitDmStreamEvent?.({
@@ -10215,11 +10671,14 @@ export async function askDungeonMasterQuestionForUser(
     });
   }
 
+  let providerDebug: AiDebugInfo | undefined;
+
   try {
+    const providerStartedAt = Date.now();
     const providerData = await runtime.askProvider({
       message: promptContext?.message ?? currentAction,
       instructions: promptContext?.instructions ?? instructions,
-      history,
+      history: providerHistory,
       currentPlayerAction: trimmedQuestion,
       ...(input.model ? { model: input.model } : {}),
       ...(streamTurnId
@@ -10239,9 +10698,49 @@ export async function askDungeonMasterQuestionForUser(
           }
         : {})
     });
+    providerDebug = providerData.debug;
+    const providerDurationMs = Date.now() - providerStartedAt;
+
+    await logTurnDebugTrace(db, {
+      campaignId: campaign.id,
+      traceId,
+      phase: "provider_response_received",
+      elapsedMs: Date.now() - startedAt,
+      payload: {
+        durationMs: providerDurationMs,
+        streamTurnId,
+        historyCount: providerHistory.length,
+        promptContextSections: promptContext?.sections ?? [],
+        promptContextBudget: promptContext?.budget,
+        provider: providerDebugSummary(providerData.debug, {
+          includeRawResponse: true,
+          includeRequestMessages: true
+        })
+      }
+    });
+    await logDmModelCall(db, {
+      campaignId: campaign.id,
+      traceId,
+      phase: "ask_dm",
+      providerData,
+      durationMs: providerDurationMs
+    });
+
     const answer = answerFromAskDmProviderResponse(providerData.content);
     const questionMessageId = input.clientMessageId?.trim() || randomUUID();
-    const answerMessageId = providerData.id || randomUUID();
+    const answerMessageId = randomUUID();
+
+    await logTurnDebugTrace(db, {
+      campaignId: campaign.id,
+      traceId,
+      phase: "ask_dm_answer_parsed",
+      elapsedMs: Date.now() - startedAt,
+      payload: {
+        streamTurnId,
+        answer: textStats(answer),
+        providerResponseId: providerData.id ?? providerData.debug.providerResponseId
+      }
+    });
 
     await withTransaction(db, async (client) => {
       await logCampaignEvent(client, campaign.id, "dm_question", {
@@ -10259,7 +10758,16 @@ export async function askDungeonMasterQuestionForUser(
         playerId: player.id,
         inReplyToMessageId: questionMessageId,
         content: answer,
-        aiDebug: providerData.debug
+        aiDebug: {
+          ...providerData.debug,
+          providerResponseId:
+            providerData.debug.providerResponseId ?? providerData.id,
+          ...("askDmContextSelectorDebug" in promptContext
+            ? {
+                askDmContextSelector: promptContext.askDmContextSelectorDebug
+              }
+            : {})
+        }
       });
     });
 
@@ -10272,6 +10780,23 @@ export async function askDungeonMasterQuestionForUser(
       });
     }
   } catch (error) {
+    providerDebug ??= providerDebugFromError(error);
+
+    await logTurnDebugTrace(db, {
+      campaignId: campaign.id,
+      traceId,
+      phase: "ask_dm_failed",
+      elapsedMs: Date.now() - startedAt,
+      payload: {
+        streamTurnId,
+        error: errorSummary(error),
+        provider: providerDebugSummary(providerDebug, {
+          includeRawResponse: true,
+          includeRequestMessages: true
+        })
+      }
+    });
+
     if (streamTurnId) {
       runtime.emitDmStreamEvent?.({
         type: "dm_stream_failed",

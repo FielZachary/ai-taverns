@@ -560,9 +560,46 @@ h1 {
 
 .auth-page {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  min-height: 100dvh;
+  overflow: hidden;
+  background: #070503;
+}
+
+.auth-art-panel {
+  position: relative;
+  min-height: 100dvh;
+  overflow: hidden;
+  isolation: isolate;
+  background: #070503;
+}
+
+.auth-art-image {
+  object-fit: cover;
+  object-position: 38% center;
+  filter: saturate(0.92) contrast(1.04);
+}
+
+.auth-art-panel::after {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  content: "";
+  background:
+    linear-gradient(90deg, rgba(7, 5, 3, 0.12) 0%, rgba(7, 5, 3, 0) 58%, rgba(7, 5, 3, 0.64) 100%),
+    linear-gradient(180deg, rgba(7, 5, 3, 0.12) 0%, rgba(7, 5, 3, 0) 42%, rgba(7, 5, 3, 0.54) 100%);
+}
+
+.auth-form-panel {
+  display: grid;
   min-height: 100dvh;
   place-items: center;
-  padding: 28px;
+  padding: clamp(28px, 5vw, 72px);
+  background:
+    radial-gradient(circle at 24% 18%, rgba(173, 71, 43, 0.25), transparent 22rem),
+    radial-gradient(circle at 85% 74%, rgba(95, 119, 81, 0.2), transparent 24rem),
+    linear-gradient(135deg, #100d0c 0%, #211711 52%, #0d1210 100%);
 }
 
 .auth-panel {
@@ -629,8 +666,12 @@ h1 {
   align-items: center;
   justify-content: center;
   gap: 10px;
+  min-height: 46px;
+  border: 1px solid rgba(244, 207, 122, 0.38);
+  border-radius: 8px;
   color: var(--ink);
   background: rgba(17, 13, 10, 0.58);
+  font-weight: 800;
 }
 
 .auth-local-link {
@@ -693,6 +734,35 @@ h1 {
 
 .auth-error {
   color: #ffb199;
+}
+
+@media (max-width: 820px) {
+  .auth-page {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(260px, 38dvh) auto;
+    min-height: 100dvh;
+    overflow: auto;
+  }
+
+  .auth-art-panel {
+    min-height: 260px;
+  }
+
+  .auth-art-image {
+    object-position: center 22%;
+  }
+
+  .auth-art-panel::after {
+    background:
+      linear-gradient(180deg, rgba(7, 5, 3, 0.04) 0%, rgba(7, 5, 3, 0.1) 42%, #120f0d 100%),
+      linear-gradient(90deg, rgba(7, 5, 3, 0.3), rgba(7, 5, 3, 0));
+  }
+
+  .auth-form-panel {
+    min-height: auto;
+    align-items: start;
+    padding: 24px 18px calc(30px + env(safe-area-inset-bottom));
+  }
 }
 
 .new-adventure-page {
@@ -4425,11 +4495,17 @@ h1 {
 
 .message-heading {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
   min-width: 0;
   margin-bottom: 6px;
+}
+
+.message-label-stack {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
 }
 
 .message-label {
@@ -4438,6 +4514,20 @@ h1 {
   font-family: var(--body-font);
   font-size: 0.78rem;
   font-weight: 800;
+}
+
+.message-location-label {
+  margin: 0;
+  color: rgba(235, 230, 220, 0.78);
+  font-family: var(--body-font);
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.message-dm .message-label,
+.message-dm .message-location-label {
+  font-size: 0.96rem;
 }
 
 .message-label-detail {

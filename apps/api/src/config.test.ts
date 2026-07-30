@@ -29,6 +29,8 @@ test("loadConfig applies development defaults and trims web origins", () => {
   assert.equal(config.authExposeLocalLoginTokens, true);
   assert.equal(config.authPublicAppOrigin, "http://localhost:3000");
   assert.equal(config.authEmailFrom, undefined);
+  assert.equal(config.googleOAuthClientId, undefined);
+  assert.equal(config.googleOAuthClientSecret, undefined);
   assert.equal(config.resendApiKey, undefined);
   assert.equal(config.mediaStorageDriver, "local");
   assert.equal(config.mediaLocalDir, ".local-media");
@@ -57,6 +59,8 @@ test("loadConfig applies production security defaults and explicit overrides", (
     AUTH_EXPOSE_LOCAL_LOGIN_TOKENS: "true",
     AUTH_PUBLIC_APP_ORIGIN: "https://public.example.com",
     AUTH_EMAIL_FROM: "AI Taverns <hello@example.com>",
+    GOOGLE_OAUTH_CLIENT_ID: "google-client-id",
+    GOOGLE_OAUTH_CLIENT_SECRET: "google-client-secret",
     RESEND_API_KEY: "resend-test-key",
     MEDIA_STORAGE_DRIVER: "spaces",
     MEDIA_LOCAL_DIR: "/tmp/media",
@@ -84,6 +88,8 @@ test("loadConfig applies production security defaults and explicit overrides", (
     authExposeLocalLoginTokens: true,
     authPublicAppOrigin: "https://public.example.com",
     authEmailFrom: "AI Taverns <hello@example.com>",
+    googleOAuthClientId: "google-client-id",
+    googleOAuthClientSecret: "google-client-secret",
     resendApiKey: "resend-test-key",
     mediaStorageDriver: "spaces",
     mediaLocalDir: "/tmp/media",

@@ -30,6 +30,7 @@ type QueryFn = <T = unknown>(
 
 export type DebugFields = {
   model?: unknown;
+  providerResponseId?: unknown;
   rawResponse?: unknown;
   temperature?: unknown;
   combatState?: unknown;
@@ -39,6 +40,7 @@ export type DebugFields = {
   combatAdjudication?: unknown;
   eldermereOpeningPlanner?: unknown;
   router?: unknown;
+  askDmContextSelector?: unknown;
 };
 
 type ConnectFn = () => Promise<{
@@ -61,6 +63,15 @@ type UserRecord = {
   display_name: string | null;
   created_at: Date;
   updated_at: Date;
+};
+
+type AuthIdentityRecord = {
+  id: string;
+  user_id: string;
+  provider: "email" | "google";
+  provider_subject: string;
+  email: string;
+  created_at: Date;
 };
 
 type SessionRecord = {
@@ -193,6 +204,16 @@ type CampaignEventRecord = {
   created_at: Date;
 };
 
+type CombatEventRecord = {
+  id: string;
+  campaign_id: string;
+  active_combat_id: string | null;
+  turn_id: string | null;
+  event_type: string;
+  payload: unknown;
+  created_at: Date;
+};
+
 type ContextChunkRecord = {
   campaign_id: string;
   context_key: string;
@@ -213,6 +234,19 @@ type DmTurnTraceRecord = {
   phase: string;
   elapsed_ms: number | null;
   payload: unknown;
+  created_at: Date;
+};
+
+type DmModelCallRecord = {
+  id: string;
+  campaign_id: string;
+  trace_id: string;
+  turn_id: string | null;
+  phase: string;
+  provider: string | null;
+  model: string | null;
+  raw_response: string | null;
+  metadata: unknown;
   created_at: Date;
 };
 
@@ -240,6 +274,7 @@ type LivingWorldEngineRunRecord = {
 class FakeDatabase {
   loginTokens: LoginTokenRecord[] = [];
   users: UserRecord[] = [];
+  authIdentities: AuthIdentityRecord[] = [];
   sessions: SessionRecord[] = [];
   campaigns: CampaignRecord[] = [];
   players: PlayerRecord[] = [];
@@ -247,9 +282,11 @@ class FakeDatabase {
   campaignInvites: CampaignInviteRecord[] = [];
   campaignInviteUses: CampaignInviteUseRecord[] = [];
   campaignEvents: CampaignEventRecord[] = [];
+  combatEvents: CombatEventRecord[] = [];
   mediaAssets: MediaAssetRecord[] = [];
   contextChunks: ContextChunkRecord[] = [];
   dmTurnTraces: DmTurnTraceRecord[] = [];
+  dmModelCalls: DmModelCallRecord[] = [];
   campaignDmGuidance: CampaignDmGuidanceRecord[] = [];
   livingWorldEngineRuns: LivingWorldEngineRunRecord[] = [];
   turns: TurnRecord[] = [];
@@ -331,7 +368,55 @@ class FakeDatabase {
     }
 
     if (normalizedSql.startsWith("insert into auth_identities")) {
+      const provider = normalizedSql.includes("values ($1, 'google'")
+        ? "google"
+        : "email";
+      const record: AuthIdentityRecord = {
+        id: `auth-identity-${this.nextId++}`,
+        user_id: values[0] as string,
+        provider,
+        provider_subject: values[1] as string,
+        email: (provider === "google" ? values[2] : values[1]) as string,
+        created_at: new Date()
+      };
+      const existing = this.authIdentities.find(
+        (identity) =>
+          identity.provider === record.provider &&
+          identity.provider_subject === record.provider_subject
+      );
+
+      if (existing) {
+        existing.email = record.email;
+      } else {
+        this.authIdentities.push(record);
+      }
+
       return { rows: [] as T[] };
+    }
+
+    if (
+      normalizedSql.startsWith(
+        "select users.id, users.email, users.display_name"
+      ) &&
+      normalizedSql.includes("from auth_identities")
+    ) {
+      const provider = values[0] as "email" | "google";
+      const providerSubject = values[1] as string;
+      const identity = this.authIdentities.find(
+        (candidate) =>
+          candidate.provider === provider &&
+          candidate.provider_subject === providerSubject
+      );
+
+      if (!identity) {
+        return { rows: [] as T[] };
+      }
+
+      const user = this.users.find(
+        (candidate) => candidate.id === identity.user_id
+      );
+
+      return { rows: user ? [user as T] : [] };
     }
 
     if (normalizedSql.startsWith("insert into sessions")) {
@@ -929,6 +1014,31 @@ class FakeDatabase {
       return { rows: [{ id: record.id } as T] };
     }
 
+    if (normalizedSql.startsWith("insert into combat_events")) {
+      const hasActiveCombatId = normalizedSql.includes("active_combat_id");
+      const payloadIndex = hasActiveCombatId ? 4 : 3;
+      const record = {
+        id: `combat-event-${this.nextId++}`,
+        campaign_id: values[0] as string,
+        active_combat_id: hasActiveCombatId
+          ? ((values[1] as string | null) ?? null)
+          : null,
+        turn_id: hasActiveCombatId
+          ? ((values[2] as string | null) ?? null)
+          : ((values[1] as string | null) ?? null),
+        event_type: hasActiveCombatId
+          ? (values[3] as string)
+          : (values[2] as string),
+        payload:
+          typeof values[payloadIndex] === "string"
+            ? (JSON.parse(values[payloadIndex] as string) as unknown)
+            : values[payloadIndex],
+        created_at: new Date()
+      } satisfies CombatEventRecord;
+      this.combatEvents.push(record);
+      return { rows: [{ id: record.id } as T] };
+    }
+
     if (normalizedSql.startsWith("select count(*) as count from campaign_events")) {
       const campaignId = values[0] as string;
 
@@ -1248,6 +1358,21 @@ class FakeDatabase {
     }
 
     if (normalizedSql.startsWith("insert into dm_model_calls")) {
+      this.dmModelCalls.push({
+        id: `dm-model-call-${this.nextId++}`,
+        campaign_id: values[0] as string,
+        trace_id: values[1] as string,
+        turn_id: (values[2] as string | null) ?? null,
+        phase: values[3] as string,
+        provider: (values[4] as string | null) ?? null,
+        model: (values[5] as string | null) ?? null,
+        raw_response: (values[6] as string | null) ?? null,
+        metadata:
+          typeof values[7] === "string"
+            ? JSON.parse(values[7] as string)
+            : values[7],
+        created_at: new Date()
+      });
       return { rows: [] as T[] };
     }
 
@@ -2332,6 +2457,8 @@ before(async () => {
       NODE_ENV: "test",
       DATABASE_URL: "postgres://postgres:postgres@localhost:5432/ai_taverns",
       AUTH_COOKIE_NAME: "test_session",
+      GOOGLE_OAUTH_CLIENT_ID: "test-google-client-id",
+      GOOGLE_OAUTH_CLIENT_SECRET: "test-google-client-secret",
       MEDIA_LOCAL_DIR: path.join(
         os.tmpdir(),
         `ai-taverns-api-test-media-${process.pid}`
@@ -2345,15 +2472,32 @@ before(async () => {
             /(?:^|\n)Current turn input:\s*([\s\S]*)$/i
           );
           const currentTurnInput = currentTurnInputMatch?.[1] ?? input.message;
+          const shouldSelectCourierLetter =
+            /read it again/i.test(currentTurnInput) &&
+            input.message.includes('"key": "world:courier-letter"');
+          const shouldSelectCinderhaltDocuments =
+            /cross reference/i.test(currentTurnInput) &&
+            input.message.includes('"key": "world:bellas-notebook"') &&
+            input.message.includes('"key": "world:halkas-ledger"');
           const content = JSON.stringify({
             job_needed: /\battack\b/i.test(currentTurnInput)
               ? "combat"
+              : shouldSelectCourierLetter || shouldSelectCinderhaltDocuments
+                ? "investigation"
               : "scene_director",
             context_keys: {
               npc_context: [],
               player_character_context: [],
               combat_context: [],
-              relevant_world_context: [],
+              relevant_world_context: shouldSelectCourierLetter
+                ? ["world:courier-letter"]
+                : shouldSelectCinderhaltDocuments
+                  ? [
+                      "world:bellas-notebook",
+                      "world:league-of-brass-writ",
+                      "world:halkas-ledger"
+                    ]
+                : [],
               quests_open_threads: [],
               overarching_big_plot_secrets: []
             },
@@ -2537,8 +2681,175 @@ before(async () => {
           const hasAmberContext = input.message.includes(
             '"context_id": "world:amber-sphere"'
           );
+          const courierLetterText = [
+            "Marra,",
+            "",
+            "The tide gate opens at moonrise. Bring the black key and trust no one wearing harbor blue.",
+            "",
+            "- V."
+          ].join("\n");
+          const shouldCreateCourierLetter =
+            /\bcourier letter\b/i.test(input.message) &&
+            input.message.includes(courierLetterText);
+          const hasCourierLetterContext = input.message.includes(
+            '"context_id": "world:courier-letter"'
+          );
+          const bellaNotebookText =
+            "H.K. - 12 oz Wellglass - 400 gp - delivery via relic exchange - Cinderhalt seal confirmed.";
+          const bellaWritText =
+            "Bella Trestlemark is authorized to detain, question, and seize property related to suspected illicit Wellglass trade within the Ferrant Concord.";
+          const halkaLedgerText = [
+            "Borrim Stonehand - two ancient lockets - 15 gp.",
+            "Orin Farseeker - raw material - three recurring entries.",
+            "Hedd Ironbrow - consulting fee - 200 gp - signed H.I.",
+            "Kara Dusthand - Delivery to the Hollow - Copper Lane."
+          ].join("\n");
+          const shouldCreateBellaDocuments =
+            input.message.includes(bellaNotebookText) &&
+            input.message.includes(bellaWritText);
+          const shouldCreateHalkaLedger =
+            input.message.includes(halkaLedgerText) ||
+            /Halka's ledger says/i.test(input.message);
+          const hasBellaNotebookContext = input.message.includes(
+            '"context_id": "world:bellas-notebook"'
+          );
+          const hasHalkaLedgerContext = input.message.includes(
+            '"context_id": "world:halkas-ledger"'
+          );
           const content = JSON.stringify(
-            shouldCreateAmber && hasAmberContext
+            shouldCreateCourierLetter && !hasCourierLetterContext
+              ? {
+                  patches: [],
+                  new_context_chunks: [
+                    {
+                      context_id: "world:courier-letter",
+                      context_type: "relevant_world_context",
+                      title: "Courier Letter",
+                      visibility: "player_safe",
+                      markdown: [
+                        "# Courier Letter",
+                        "",
+                        "## Canonical Document Text",
+                        courierLetterText,
+                        "",
+                        "## Established Facts",
+                        "- Ira read the courier letter and knows its exact wording.",
+                        "- The letter names Marra, the tide gate, the black key, harbor blue, and the initial V.",
+                        "",
+                        "## Strong Inferences",
+                        "The letter points toward a moonrise meeting or handoff at the tide gate.",
+                        "",
+                        "## DM Seeds",
+                        "- Harbor blue may identify watch uniforms, smugglers, or a false-flag disguise.",
+                        "",
+                        "## Open Questions",
+                        "- Who is V?",
+                        "- Why does the writer distrust people wearing harbor blue?",
+                        "",
+                        "## Last Touched",
+                        "Created after Ira read the courier letter."
+                      ].join("\n")
+                    }
+                  ],
+                  remove_context_chunks: []
+                }
+              : shouldCreateBellaDocuments && !hasBellaNotebookContext
+                ? {
+                    patches: [],
+                    new_context_chunks: [
+                      {
+                        context_id: "world:bellas-notebook",
+                        context_type: "relevant_world_context",
+                        title: "Bella's Notebook",
+                        visibility: "player_safe",
+                        markdown: [
+                          "# Bella's Notebook",
+                          "",
+                          "## Canonical Document Text",
+                          bellaNotebookText,
+                          "",
+                          "## Established Facts",
+                          "- Senden read Bella's notebook and knows its exact revealed entry.",
+                          "- The entry links H.K. to a 12 oz Wellglass transaction for 400 gp.",
+                          "",
+                          "## Strong Inferences",
+                          "H.K. is likely Halka Kilnyard.",
+                          "",
+                          "## DM Seeds",
+                          "- The relic exchange may have been cover for Wellglass movement.",
+                          "",
+                          "## Open Questions",
+                          "- Who confirmed the Cinderhalt seal?",
+                          "",
+                          "## Last Touched",
+                          "Created after Senden read Bella's notebook."
+                        ].join("\n")
+                      },
+                      {
+                        context_id: "world:league-of-brass-writ",
+                        context_type: "relevant_world_context",
+                        title: "League of Brass Writ",
+                        visibility: "player_safe",
+                        markdown: [
+                          "# League of Brass Writ",
+                          "",
+                          "## Canonical Document Text",
+                          bellaWritText,
+                          "",
+                          "## Established Facts",
+                          "- Senden read the writ and knows its exact revealed authority.",
+                          "",
+                          "## Strong Inferences",
+                          "The League of Brass investigation covers illicit Wellglass trade.",
+                          "",
+                          "## DM Seeds",
+                          "- The writ could function as leverage or false authority.",
+                          "",
+                          "## Open Questions",
+                          "- Which Master Forge-Alderman signed it?",
+                          "",
+                          "## Last Touched",
+                          "Created after Senden read the writ."
+                        ].join("\n")
+                      }
+                    ],
+                    remove_context_chunks: []
+                  }
+              : shouldCreateHalkaLedger && !hasHalkaLedgerContext
+                ? {
+                    patches: [],
+                    new_context_chunks: [
+                      {
+                        context_id: "world:halkas-ledger",
+                        context_type: "relevant_world_context",
+                        title: "Halka's Ledger",
+                        visibility: "player_safe",
+                        markdown: [
+                          "# Halka's Ledger",
+                          "",
+                          "## Canonical Document Text",
+                          halkaLedgerText,
+                          "",
+                          "## Established Facts",
+                          "- Senden read Halka's ledger and knows the exact revealed entries.",
+                          "",
+                          "## Strong Inferences",
+                          "The names may be Cinderhalt contacts or Wellglass customers.",
+                          "",
+                          "## DM Seeds",
+                          "- The Hollow entry can point toward Copper Lane.",
+                          "",
+                          "## Open Questions",
+                          "- Which listed name is safest to investigate first?",
+                          "",
+                          "## Last Touched",
+                          "Created after Senden read Halka's ledger."
+                        ].join("\n")
+                      }
+                    ],
+                    remove_context_chunks: []
+                  }
+              : shouldCreateAmber && hasAmberContext
               ? {
                   patches: [
                     {
@@ -2824,7 +3135,24 @@ before(async () => {
                   conditions: []
                 }
               }
-            }
+            },
+            combat_events: [
+              {
+                event: "damage",
+                actor: "npc:cutlass-raider",
+                target: targetPlayerKey,
+                roll: {
+                  dice: "1d6",
+                  rolls: [4],
+                  modifier: 2,
+                  total: 6
+                },
+                damage_type: "slashing",
+                amount: 6,
+                from_hp: targetCurrentHp,
+                to_hp: targetNextHp
+              }
+            ]
           });
 
           return {
@@ -3118,9 +3446,51 @@ before(async () => {
           };
         }
 
+        if (input.instructions.includes("AI Taverns Ask DM context selector")) {
+          const shouldSelectRoadTracks =
+            /tracks/i.test(input.message) &&
+            input.message.includes('"key": "world:road-tracks"');
+          const content = JSON.stringify({
+            context_keys: {
+              npc_context: [],
+              player_character_context: [],
+              combat_context: [],
+              relevant_world_context: shouldSelectRoadTracks
+                ? ["world:road-tracks"]
+                : [],
+              quests_open_threads: [],
+              overarching_big_plot_secrets: []
+            },
+            reason: "Deterministic Ask DM context selector response."
+          });
+
+          return {
+            id: "provider-ask-dm-selector-1",
+            content,
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: content,
+              model: "test-model",
+              temperature: 0.8,
+              providerTimings: []
+            }
+          };
+        }
+
         if (input.instructions.includes("out-of-turn table question")) {
           const answer =
-            "Those tracks look too broad for a wolf and too deliberate for a stray animal.";
+            input.message.includes("Road Tracks")
+              ? "The stored campaign context says the road tracks were made by a two-legged creature dragging a hooked pole."
+              : "Those tracks look too broad for a wolf and too deliberate for a stray animal.";
 
           input.onPublicNarrationDelta?.(answer.slice(0, 28));
           input.onPublicNarrationDelta?.(answer.slice(28));
@@ -3152,10 +3522,13 @@ before(async () => {
         const isEldermereNarrator = input.message.includes(
           'Set setting.world_name to "Eldermere".'
         );
-        const eldermereStartingLocation =
-          input.message.match(
-            /Set setting\.starting_location and setting\.display_location to "([^"]+)"/
-          )?.[1] ?? "Old Road";
+          const eldermereStartingLocation =
+            input.message.match(
+              /Set setting\.starting_location to "([^"]+)"/
+            )?.[1] ?? "Old Road";
+          const eldermereRegion =
+            input.message.match(/Set setting\.region_name to "([^"]+)"/)?.[1] ??
+            "Test Region";
 
         input.onPublicNarrationDelta?.(publicNarration.slice(0, 28));
         input.onPublicNarrationDelta?.(publicNarration.slice(28));
@@ -3173,6 +3546,10 @@ before(async () => {
                 ? eldermereStartingLocation
                 : "Old Road",
               world_name: isEldermereNarrator ? "Eldermere" : "Test Realm",
+              region_name: isEldermereNarrator ? eldermereRegion : "Test Region",
+              scene_location: isEldermereNarrator
+                ? eldermereStartingLocation
+                : "Old Road",
               starting_location: isEldermereNarrator
                 ? eldermereStartingLocation
                 : "Old Road"

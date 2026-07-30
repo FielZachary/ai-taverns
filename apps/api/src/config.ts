@@ -30,6 +30,8 @@ const ConfigSchema = z.object({
     .transform((value) => (value === undefined ? undefined : value === "true")),
   AUTH_PUBLIC_APP_ORIGIN: z.string().url().optional(),
   AUTH_EMAIL_FROM: z.string().min(1).optional(),
+  GOOGLE_OAUTH_CLIENT_ID: z.string().min(1).optional(),
+  GOOGLE_OAUTH_CLIENT_SECRET: z.string().min(1).optional(),
   RESEND_API_KEY: z.string().min(1).optional(),
   MEDIA_STORAGE_DRIVER: z.enum(["local", "spaces", "s3"]).default("local"),
   MEDIA_LOCAL_DIR: z.string().min(1).default(".local-media"),
@@ -59,6 +61,8 @@ export type ApiConfig = {
   authExposeLocalLoginTokens: boolean;
   authPublicAppOrigin: string;
   authEmailFrom: string | undefined;
+  googleOAuthClientId: string | undefined;
+  googleOAuthClientSecret: string | undefined;
   resendApiKey: string | undefined;
   mediaStorageDriver: "local" | "spaces" | "s3";
   mediaLocalDir: string;
@@ -99,6 +103,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
         .filter(Boolean)[0] ??
       "http://localhost:3000",
     authEmailFrom: parsed.AUTH_EMAIL_FROM,
+    googleOAuthClientId: parsed.GOOGLE_OAUTH_CLIENT_ID,
+    googleOAuthClientSecret: parsed.GOOGLE_OAUTH_CLIENT_SECRET,
     resendApiKey: parsed.RESEND_API_KEY,
     mediaStorageDriver: parsed.MEDIA_STORAGE_DRIVER,
     mediaLocalDir: parsed.MEDIA_LOCAL_DIR,
