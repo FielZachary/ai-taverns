@@ -481,11 +481,19 @@ describe("modular AI DM runtime contracts", () => {
       assert.match(prompt, /Treat canonical character sheet Inventory, Equipment, and Currency sections/i);
       assert.match(
         prompt,
-        /attempts to use, consume, equip, spend, give, trade, throw, load, unlock with, activate/i
+        /attempts to produce, present, show, appraise, sell, use, consume, equip, spend, give, trade, throw, load, unlock with, activate/i
       );
       assert.match(
         prompt,
-        /If the character does not have the required item or currency, reject the attempt in public_narration/i
+        /If the character does not have the presented, shown, appraised, sold, used, or required item, weapon, or currency, reject the attempt in public_narration/i
+      );
+      assert.match(
+        prompt,
+        /Do not narrate the missing item appearing in the scene/i
+      );
+      assert.match(
+        prompt,
+        /Do not include an inventory patch for a failed inventory attempt/i
       );
       assert.match(
         prompt,
