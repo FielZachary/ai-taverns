@@ -1160,6 +1160,13 @@ export function jobPrompt(
       "Treat every NPC as a person with a present want, a private concern, a social role, and a limit. Their dialogue should come from those pressures.",
       "Keep NPC voice distinct through word choice, rhythm, formality, evasiveness, humor, anger, fear, confidence, or class/cultural position. Do not overdo dialect.",
       "Before an NPC answers, decide what they know, what they believe, what they suspect, what they want from the player, and what they are trying not to reveal.",
+      "NPC knowledge is local, not omniscient. Before an NPC states or implies a fact, decide the concrete path by which they know it: witnessed it, were told by a named source, read a record, inferred from visible evidence, heard a rumor, or do not know.",
+      "Do not let NPCs use player character backstory, DM-only secrets, quest truth, or recent offscreen events as their own knowledge unless the NPC's own selected context or recent conversation gives them a concrete knowledge path.",
+      "DM staging material is for pacing, foreshadowing, pressure, clue placement, and contradiction checks. It is not automatically known by any NPC. NPCs may not state, imply, confirm, or act on DM staging facts unless NPC-owned context establishes how they know.",
+      "If an NPC makes an inference, keep it uncertain and bounded. They may suspect from visible clues, but they must not jump from a clue to a precise hidden relationship, private motive, secret name, or recent player action.",
+      "When the player challenges how an NPC knows something, do not invent a new backstory justification. If the source is not already established, have the NPC hedge, correct themself, admit it was an inference, refuse to explain, or ask a question.",
+      "Treat information as something NPCs value. Useful facts should usually be partial, motivated, costly, risky, biased, or conditional rather than freely given.",
+      "Prefer one meaningful reveal plus a new question, demand, cost, refusal, or lead over a complete explanation. Do not answer a broad question by dumping every relevant secret the model knows.",
       "Let NPCs ask follow-up questions, challenge contradictions, demand proof, bargain, stall, threaten, soften, misdirect, or volunteer information when it fits their motives.",
       "Do not make social checks into mind control. Persuasion cannot force self-destruction, Deception cannot change hard evidence by itself, and Intimidation can create fear without creating loyalty.",
       "When no roll is needed, let the NPC respond naturally and move the conversation forward.",
@@ -1483,17 +1490,53 @@ export function renderContextChunks(chunks: ContextChunk[]) {
     return "No selected context chunks were retrieved.";
   }
 
-  return chunks
-    .map((chunk) =>
+  const playerSafeChunks = chunks.filter(
+    (chunk) => chunk.visibility === "player_safe"
+  );
+  const dmOnlyChunks = chunks.filter((chunk) => chunk.visibility === "dm_only");
+
+  const renderChunk = (
+    chunk: ContextChunk,
+    tagName: "context_chunk" | "dm_staging_chunk"
+  ) =>
+    [
+      `<${tagName} id="${chunk.id}" type="${chunk.category}" visibility="${chunk.visibility}">`,
+      `# ${chunk.title}`,
+      "",
+      chunk.bodyMarkdown.trim(),
+      `</${tagName}>`
+    ].join("\n");
+
+  const sections: string[] = [];
+
+  if (playerSafeChunks.length > 0) {
+    sections.push(
       [
-        `<context_chunk id="${chunk.id}" type="${chunk.category}" visibility="${chunk.visibility}">`,
-        `# ${chunk.title}`,
+        "Player-safe context and established surface facts:",
+        "These facts may guide narration and may be stated by NPCs when their own context, role, or recent conversation supports knowing them.",
         "",
-        chunk.bodyMarkdown.trim(),
-        "</context_chunk>"
+        playerSafeChunks
+          .map((chunk) => renderChunk(chunk, "context_chunk"))
+          .join("\n\n")
       ].join("\n")
-    )
-    .join("\n\n");
+    );
+  }
+
+  if (dmOnlyChunks.length > 0) {
+    sections.push(
+      [
+        "DM staging material:",
+        "Use this material for pacing, foreshadowing, pressure, clue placement, and contradiction checks.",
+        "This material is not automatically known by any NPC. Do not let an NPC state, imply, confirm, or act on these facts unless NPC-owned context or recent conversation establishes a concrete knowledge path.",
+        "",
+        dmOnlyChunks
+          .map((chunk) => renderChunk(chunk, "dm_staging_chunk"))
+          .join("\n\n")
+      ].join("\n")
+    );
+  }
+
+  return sections.join("\n\n");
 }
 
 export function validateMainDmOutput(text: string | undefined): MainDmOutput {
