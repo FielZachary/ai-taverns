@@ -33,6 +33,7 @@ export type DebugFields = {
   rawResponse?: unknown;
   temperature?: unknown;
   combatState?: unknown;
+  inventoryState?: unknown;
   contextStorageState?: unknown;
   livingWorldPressureEngine?: unknown;
   combatAdjudication?: unknown;
@@ -1987,6 +1988,18 @@ class FakeDatabase {
           candidate.campaign_id === campaignId && candidate.client_id === clientId
       );
       return { rows: player ? ([player] as T[]) : ([] as T[]) };
+    }
+
+    if (normalizedSql.startsWith("update players set character_sheet = $2")) {
+      const playerId = values[0] as string;
+      const player = this.players.find((candidate) => candidate.id === playerId);
+
+      if (player) {
+        player.character_sheet = values[1] as string;
+        player.updated_at = new Date();
+      }
+
+      return { rows: [] as T[] };
     }
 
     if (normalizedSql.startsWith("select count(*) as active_players from players")) {

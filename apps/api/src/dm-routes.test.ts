@@ -14,6 +14,7 @@ import {
   database,
   getProviderInputs,
   resetProviderInputs,
+  setProviderOverride,
   signIn,
   type DebugFields
 } from "./test/app-test-harness.js";
@@ -217,6 +218,116 @@ test("DM runtime routes handle authorized solo, ask-DM, regenerate, and traces",
     /Routing state JSON:/
   );
   assert.match(routerTraceProvider?.rawResponse ?? "", /job_needed/);
+});
+
+test("solo turn applies accepted inventory patches to the character sheet", async () => {
+  resetProviderInputs();
+  const { cookie, campaignId } = await createSinglePlayerCampaign(
+    "dm-runtime-inventory-currency"
+  );
+  const player = database.players.find(
+    (candidate) => candidate.campaign_id === campaignId
+  );
+  assert.ok(player);
+  player.character_sheet = [
+    "Core Stats",
+    "Level 1 Ranger",
+    "",
+    "Inventory",
+    "Rations",
+    "",
+    "Currency",
+    "GP: 5"
+  ].join("\n");
+
+  setProviderOverride(async (input) => {
+    const content = JSON.stringify({
+      public_narration:
+        "The barkeep takes the three copper pieces and slides the clay cup across, then adds a brass token beside it. Inventory update: you spent 3 CP and gained a brass token.",
+      resolution_mode: "resolved_without_dice",
+      roll_requests: [],
+      next_input_needed: "player_actions",
+      input_targets: [],
+      input_policy: "all_players",
+      mechanics_state_update: {},
+      inventory_state_update: {
+        patches: [
+          {
+            actor_key: "player:dm-runtime-inventory-currency-client",
+            type: "currency",
+            currency: "GP",
+            delta: -3,
+            reason: "Paid 3 copper for a drink."
+          },
+          {
+            actor_key: "player:dm-runtime-inventory-currency-client",
+            type: "item",
+            operation: "add",
+            item: "brass token",
+            quantity: 1,
+            reason: "The barkeep gave the player a brass token."
+          }
+        ]
+      }
+    });
+
+    return {
+      id: "provider-inventory-currency",
+      content,
+      debug: {
+        requestMessages: [
+          {
+            role: "system",
+            content: input.instructions
+          },
+          {
+            role: "user",
+            content: input.message
+          }
+        ],
+        rawResponse: content,
+        model: "test-model",
+        temperature: 0.8,
+        providerTimings: []
+      }
+    };
+  });
+
+  try {
+    const soloResponse = await app.inject({
+      method: "POST",
+      url: `/api/campaigns/${campaignId}/solo-turn`,
+      headers: {
+        cookie
+      },
+      payload: {
+        message: "I buy a drink for three copper.",
+        clientMessageId: "solo-inventory-currency"
+      }
+    });
+
+    assert.equal(soloResponse.statusCode, 200, soloResponse.body);
+    CampaignSoloTurnResponseSchema.parse(soloResponse.json());
+    assert.match(player.character_sheet, /Inventory\nRations\nbrass token/);
+    assert.match(player.character_sheet, /Currency\nGP: 4\nSP: 9\nCP: 7/);
+    const latestDmMessage = database.campaignEvents
+      .filter(
+        (event) => event.campaign_id === campaignId && event.type === "turn_resolved"
+      )
+      .at(-1);
+    const inventoryState = (latestDmMessage?.payload as { aiDebug?: DebugFields })
+      ?.aiDebug?.inventoryState as
+      | {
+          acceptedPatches?: unknown[];
+          discardedPatches?: unknown[];
+        }
+      | undefined;
+
+    assert.equal(inventoryState?.acceptedPatches?.length, 2);
+    assert.deepEqual(inventoryState?.discardedPatches, []);
+  } finally {
+    setProviderOverride(undefined);
+  }
 });
 
 test("DM runtime failure traces include provider debug diagnostics", async () => {
