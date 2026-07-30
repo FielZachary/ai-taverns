@@ -517,6 +517,9 @@ describe("modular AI DM runtime contracts", () => {
     ] as const) {
       const prompt = jobPrompt(job);
       assert.match(prompt, /inventory_state_update/);
+      assert.match(prompt, /include a setting object/i);
+      assert.match(prompt, /scene_location/i);
+      assert.match(prompt, /display_location/i);
       assert.match(prompt, /Treat canonical character sheet Inventory, Equipment, and Currency sections/i);
       assert.match(prompt, /Inventory possession gate/i);
       assert.match(
@@ -565,17 +568,33 @@ describe("modular AI DM runtime contracts", () => {
         /Inventory update: you dropped the torch/i
       );
     }
+    for (const prompt of [
+      jobPrompt("scene_director", "single_player"),
+      jobPrompt("investigation", "multiplayer")
+    ]) {
+      assert.match(prompt, /Canonical document text/i);
+      assert.match(prompt, /## Canonical Document Text section/i);
+      assert.match(prompt, /immutable canon/i);
+      assert.match(prompt, /do not rewrite, reword, expand, shorten, or regenerate/i);
+      assert.match(prompt, /new page, hidden annotation, translation, cipher result/i);
+    }
     assert.match(buildMemoryUpdaterPrompt(), /Allowed operations/);
     assert.match(buildMemoryUpdaterPrompt(), /Create a new NPC card/i);
     assert.match(buildMemoryUpdaterPrompt(), /Make each NPC feel like a compelling character/i);
     assert.match(buildMemoryUpdaterPrompt(), /## Disposition Towards You/);
     assert.match(buildMemoryUpdaterPrompt(), /campaign context as a living world bible/i);
+    assert.match(buildMemoryUpdaterPrompt(), /Canonical written artifact memory/i);
+    assert.match(buildMemoryUpdaterPrompt(), /preserve the revealed text word for word/i);
+    assert.match(buildMemoryUpdaterPrompt(), /notes, notebooks, ledgers, journals, letters/i);
+    assert.match(buildMemoryUpdaterPrompt(), /## Canonical Document Text/);
+    assert.match(buildMemoryUpdaterPrompt(), /Do not paraphrase, clean up, expand, shorten/i);
     assert.match(buildMemoryUpdaterPrompt(), /Create or update relevant_world_context/i);
     assert.match(buildMemoryUpdaterPrompt(), /Create or update quests_open_threads/i);
     assert.match(buildMemoryUpdaterPrompt(), /Create or update overarching_big_plot_secrets/i);
     assert.match(buildMemoryUpdaterPrompt(), /## Strong Inferences/);
     assert.match(buildMemoryUpdaterPrompt(), /## DM Seeds/);
     assert.match(buildMemoryUpdaterPrompt(), /Example new NPC response/);
+    assert.match(buildMemoryUpdaterPrompt(), /Example revealed written artifact response/);
     assert.match(buildMemoryUpdaterPrompt(), /Example proactive world\/story response/);
     assert.match(buildMemoryUpdaterPrompt(), /"visibility": "player_safe"/);
   });

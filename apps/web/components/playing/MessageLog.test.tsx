@@ -86,6 +86,53 @@ describe("MessageLog", () => {
     ).toBeInTheDocument();
   });
 
+  it("unwraps Ask DM JSON envelopes before rendering player-facing content", () => {
+    renderMessageLog({
+      messages: [
+        gameMessage({
+          id: "ask-answer-json",
+          role: "dm",
+          kind: "ask_dm_answer",
+          content: JSON.stringify({
+            public_narration: "Use this as clarification only.",
+            roll_requests: [],
+            next_input_needed: "player_actions",
+            input_targets: [],
+            input_policy: "all_players"
+          })
+        })
+      ]
+    });
+
+    expect(screen.getByText("DM Answer")).toBeInTheDocument();
+    expect(screen.getByText("Use this as clarification only.")).toBeInTheDocument();
+    expect(screen.queryByText(/public_narration/)).not.toBeInTheDocument();
+  });
+
+  it("renders a DM scene location under the Dungeon Master label", () => {
+    renderMessageLog({
+      messages: [
+        gameMessage({
+          id: "dm-location-message",
+          role: "dm",
+          setting: {
+            displayLocation: "Ironhold",
+            regionName: "Ferrant Concord",
+            settlementName: "Ironhold",
+            sceneLocation: "Crag Market Street"
+          },
+          content: "Steam hisses from the grates."
+        })
+      ]
+    });
+
+    const location = screen.getByText(
+      "Ferrant Concord / Ironhold / Crag Market Street"
+    );
+
+    expect(location).toHaveClass("message-location-label");
+  });
+
   it("renders bold markdown emphasis inside message paragraphs", () => {
     renderMessageLog({
       messages: [
@@ -419,6 +466,25 @@ describe("MessageLog", () => {
           }
         }
       },
+      askDmContextSelector: {
+        requestMessages: [
+          {
+            role: "system",
+            content: "You are the AI Taverns Ask DM context selector."
+          },
+          {
+            role: "user",
+            content: "Available context chunk keys JSON: world:road-tracks"
+          }
+        ],
+        rawResponse:
+          "{\"context_keys\":{\"relevant_world_context\":[\"world:road-tracks\"]}}",
+        parsedOutput: {
+          contextKeys: {
+            relevant_world_context: ["world:road-tracks"]
+          }
+        }
+      },
       requestMessages: [
         {
           role: "system",
@@ -474,6 +540,11 @@ describe("MessageLog", () => {
     expect(screen.getByText(plannerDebug.rawResponse)).toBeInTheDocument();
     expect(screen.getByText("Eldermere Planner Parsed Output")).toBeInTheDocument();
     expect(screen.getByText(/"name": "Selwick"/)).toBeInTheDocument();
+    expect(screen.getByText("Ask DM Selector Prompt Sent")).toBeInTheDocument();
+    expect(screen.getByText(/Ask DM context selector/)).toBeInTheDocument();
+    expect(screen.getByText("Ask DM Selector Output")).toBeInTheDocument();
+    expect(screen.getAllByText(/world:road-tracks/).length).toBeGreaterThanOrEqual(3);
+    expect(screen.getByText("Ask DM Selector Parsed Output")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /close debug details/i }));
 

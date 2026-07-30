@@ -363,6 +363,25 @@ test("multiplayer combat catches up NPC turns instead of rejecting players", asy
 
   assert.equal(mechanicsState.combat?.turnOwner, ownerActorKey);
   assert.equal(mechanicsState.actors?.[ownerActorKey]?.currentHp, 14);
+  const persistedCombatEvents = database.combatEvents.filter(
+    (event) => event.campaign_id === campaignId
+  );
+  const resolvedTurn = database.turns
+    .filter((turn) => turn.campaign_id === campaignId && turn.status === "resolved")
+    .at(-1);
+  assert.ok(resolvedTurn);
+  assert.equal(persistedCombatEvents.length, 1);
+  assert.equal(persistedCombatEvents[0]?.turn_id, resolvedTurn.id);
+  assert.equal(persistedCombatEvents[0]?.event_type, "damage");
+  assert.deepEqual(
+    (persistedCombatEvents[0]?.payload as Record<string, unknown>)?.roll,
+    {
+      dice: "1d6",
+      rolls: [4],
+      modifier: 2,
+      total: 6
+    }
+  );
   assert.deepEqual(resolvedRoom.inputTargets, [ownerActorKey]);
   assert.equal(resolvedRoom.inputPolicy, "only_targeted_players");
   assert.equal(getProviderInputs().length, 1);
