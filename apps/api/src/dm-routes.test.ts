@@ -237,7 +237,7 @@ test("solo turn applies accepted inventory patches to the character sheet", asyn
     "Rations",
     "",
     "Currency",
-    "GP: 5"
+    "5 GP"
   ].join("\n");
 
   setProviderOverride(async (input) => {

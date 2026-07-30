@@ -931,6 +931,7 @@ function parseCurrencyLines(lines: string[]) {
   for (const line of lines) {
     const match =
       line.match(/^\s*(?:[-*]\s*)?(PP|GP|EP|SP|CP)\s*[:x-]?\s*(-?\d+)\s*$/i) ??
+      line.match(/^\s*(?:[-*]\s*)?(-?\d+)\s+(PP|GP|EP|SP|CP)\s*$/i) ??
       line.match(/^\s*(?:[-*]\s*)?(-?\d+)\s+(platinum|gold|electrum|silver|copper)(?:\s+pieces?)?\s*$/i);
 
     if (!match) {
