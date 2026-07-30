@@ -237,13 +237,13 @@ test("solo turn applies accepted inventory patches to the character sheet", asyn
     "Rations",
     "",
     "Currency",
-    "GP: 5"
+    "5 GP"
   ].join("\n");
 
   setProviderOverride(async (input) => {
     const content = JSON.stringify({
       public_narration:
-        "The barkeep takes the three copper pieces and slides the clay cup across, then adds a brass token beside it. Inventory update: you spent 3 CP and gained a brass token.",
+        "The barkeep takes the three copper pieces and slides the clay cup across, then adds a brass token beside it.",
       resolution_mode: "resolved_without_dice",
       roll_requests: [],
       next_input_needed: "player_actions",
@@ -307,7 +307,11 @@ test("solo turn applies accepted inventory patches to the character sheet", asyn
     });
 
     assert.equal(soloResponse.statusCode, 200, soloResponse.body);
-    CampaignSoloTurnResponseSchema.parse(soloResponse.json());
+    const solo = CampaignSoloTurnResponseSchema.parse(soloResponse.json());
+    assert.match(
+      solo.messages.at(-1)?.content ?? "",
+      /\*\(Inventory update: you spent 3 CP and gained a brass token\.\)\*/
+    );
     assert.match(player.character_sheet, /Inventory\nRations\nbrass token/);
     assert.match(player.character_sheet, /Currency\nGP: 4\nSP: 9\nCP: 7/);
     const latestDmMessage = database.campaignEvents
@@ -319,11 +323,13 @@ test("solo turn applies accepted inventory patches to the character sheet", asyn
       ?.aiDebug?.inventoryState as
       | {
           acceptedPatches?: unknown[];
+          appliedPatches?: unknown[];
           discardedPatches?: unknown[];
         }
       | undefined;
 
     assert.equal(inventoryState?.acceptedPatches?.length, 2);
+    assert.equal(inventoryState?.appliedPatches?.length, 2);
     assert.deepEqual(inventoryState?.discardedPatches, []);
   } finally {
     setProviderOverride(undefined);

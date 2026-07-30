@@ -36,6 +36,7 @@ export type AiDebugInfo = {
   inventoryState?: {
     proposedPatches?: unknown[];
     acceptedPatches?: unknown[];
+    appliedPatches?: unknown[];
     discardedPatches?: unknown[];
   };
   contextStorageState?: unknown;
