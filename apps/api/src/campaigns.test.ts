@@ -3045,6 +3045,234 @@ test("solo turns persist revealed written artifacts as canonical document text",
   }
 });
 
+test("solo turns replay notebook and ledger reads with canonical document chunks", async () => {
+  const cookie = await signIn("canonical-cinderhalt-documents@example.com");
+  const bellaNotebookText =
+    "H.K. - 12 oz Wellglass - 400 gp - delivery via relic exchange - Cinderhalt seal confirmed.";
+  const bellaWritText =
+    "Bella Trestlemark is authorized to detain, question, and seize property related to suspected illicit Wellglass trade within the Ferrant Concord.";
+  const halkaLedgerText = [
+    "Borrim Stonehand - two ancient lockets - 15 gp.",
+    "Orin Farseeker - raw material - three recurring entries.",
+    "Hedd Ironbrow - consulting fee - 200 gp - signed H.I.",
+    "Kara Dusthand - Delivery to the Hollow - Copper Lane."
+  ].join("\n");
+  let crossReferenceSawBellaNotebook = false;
+  let crossReferenceSawWrit = false;
+  let crossReferenceSawHalkaLedger = false;
+
+  resetProviderInputs();
+
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: { cookie },
+    payload: {
+      mode: "single_player",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "classic_fantasy",
+      ownerClientId: "canonical-cinderhalt-client",
+      playerName: "Senden",
+      characterName: "Senden",
+      characterSheet:
+        "Senden is a human psion who reads Dwarvish and is investigating Cinderhalt Wellglass transactions."
+    }
+  });
+
+  assert.equal(createResponse.statusCode, 201, createResponse.body);
+  const created = CampaignCreateResponseSchema.parse(createResponse.json());
+
+  setProviderOverride(async (input) => {
+    const actionSource = input.currentPlayerAction ?? input.message;
+    const currentAction =
+      Array.from(actionSource.matchAll(/"content": "([^"]+)"/g)).at(-1)?.[1] ??
+      actionSource;
+
+    if (currentAction.includes("cross reference")) {
+      crossReferenceSawBellaNotebook ||= input.message.includes(
+        `# Bella's Notebook\n\n## Canonical Document Text\n${bellaNotebookText}`
+      );
+      crossReferenceSawWrit ||= input.message.includes(
+        `# League of Brass Writ\n\n## Canonical Document Text\n${bellaWritText}`
+      );
+      crossReferenceSawHalkaLedger ||= input.message.includes(
+        `# Halka's Ledger\n\n## Canonical Document Text\n${halkaLedgerText}`
+      );
+    }
+
+    const publicNarration = currentAction.includes("look through the notes and writ")
+      ? [
+          "You pull out Bella's notebook and the League writ.",
+          "",
+          "Bella's notebook says:",
+          "",
+          bellaNotebookText,
+          "",
+          "The writ says:",
+          "",
+          bellaWritText
+        ].join("\n")
+      : /read halka'?s ledger/i.test(currentAction) &&
+          !/cross reference/i.test(currentAction)
+        ? ["Halka's ledger says:", "", halkaLedgerText].join("\n")
+        : [
+            "You cross-reference Halka's ledger against Bella's notebook.",
+            "",
+            "The recurring names are Borrim Stonehand, Orin Farseeker, Hedd Ironbrow, and Kara Dusthand. The H.K. entry remains exactly the Wellglass transaction from Bella's notebook."
+          ].join("\n");
+
+    const content = JSON.stringify({
+      public_narration: publicNarration,
+      resolution_mode: "resolved_without_dice",
+      roll_requests: [],
+      next_input_needed: "player_actions",
+      input_targets: [],
+      input_policy: "all_players",
+      mechanics_state_update: {},
+      inventory_state_update: { patches: [] },
+      combat_events: [],
+      proposed_context_updates: []
+    });
+
+    return {
+      id: "provider-cinderhalt-document-main",
+      content,
+      debug: {
+        requestMessages: [],
+        rawResponse: content,
+        model: "test-model",
+        temperature: 0.8,
+        providerTimings: []
+      }
+    };
+  });
+
+  try {
+    const firstReadResponse = await app.inject({
+      method: "POST",
+      url: `/api/campaigns/${created.campaign.id}/solo-turn`,
+      headers: { cookie },
+      payload: {
+        message: "I clean myself up and look through the notes and writ"
+      }
+    });
+
+    assert.equal(firstReadResponse.statusCode, 200, firstReadResponse.body);
+
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      const keys = new Set(
+        database.contextChunks
+          .filter((chunk) => chunk.campaign_id === created.campaign.id)
+          .map((chunk) => chunk.context_key)
+      );
+
+      if (
+        keys.has("world:bellas-notebook") &&
+        keys.has("world:league-of-brass-writ")
+      ) {
+        break;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+
+    const secondReadResponse = await app.inject({
+      method: "POST",
+      url: `/api/campaigns/${created.campaign.id}/solo-turn`,
+      headers: { cookie },
+      payload: {
+        message: "Read halkas ledger"
+      }
+    });
+
+    assert.equal(secondReadResponse.statusCode, 200, secondReadResponse.body);
+
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      const keys = new Set(
+        database.contextChunks
+          .filter((chunk) => chunk.campaign_id === created.campaign.id)
+          .map((chunk) => chunk.context_key)
+      );
+
+      if (
+        keys.has("world:bellas-notebook") &&
+        keys.has("world:league-of-brass-writ") &&
+        keys.has("world:halkas-ledger")
+      ) {
+        break;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+
+    const bellaNotebookChunk = database.contextChunks.find(
+      (chunk) =>
+        chunk.campaign_id === created.campaign.id &&
+        chunk.context_key === "world:bellas-notebook"
+    );
+    const writChunk = database.contextChunks.find(
+      (chunk) =>
+        chunk.campaign_id === created.campaign.id &&
+        chunk.context_key === "world:league-of-brass-writ"
+    );
+    const halkaLedgerChunk = database.contextChunks.find(
+      (chunk) =>
+        chunk.campaign_id === created.campaign.id &&
+        chunk.context_key === "world:halkas-ledger"
+    );
+
+    assert.ok(bellaNotebookChunk);
+    assert.ok(writChunk);
+    assert.ok(halkaLedgerChunk);
+    assert.ok(bellaNotebookChunk.body_markdown.includes(bellaNotebookText));
+    assert.ok(writChunk.body_markdown.includes(bellaWritText));
+    assert.ok(halkaLedgerChunk.body_markdown.includes(halkaLedgerText));
+    assert.match(bellaNotebookChunk.body_markdown, /## Canonical Document Text/);
+    assert.match(writChunk.body_markdown, /## Canonical Document Text/);
+    assert.match(halkaLedgerChunk.body_markdown, /## Canonical Document Text/);
+
+    const crossReferenceResponse = await app.inject({
+      method: "POST",
+      url: `/api/campaigns/${created.campaign.id}/solo-turn`,
+      headers: { cookie },
+      payload: {
+        message:
+          "Read halkas ledger and cross reference it with Bella's notebook to find recurring names"
+      }
+    });
+
+    assert.equal(crossReferenceResponse.statusCode, 200, crossReferenceResponse.body);
+    const crossReferenceRouterTrace = database.dmTurnTraces
+      .filter(
+        (trace) =>
+          trace.campaign_id === created.campaign.id &&
+          trace.phase === "router_response_received"
+      )
+      .at(-1)?.payload as
+      | {
+          router?: {
+            contextKeys?: {
+              relevant_world_context?: string[];
+            };
+          };
+        }
+      | undefined;
+    assert.deepEqual(
+      crossReferenceRouterTrace?.router?.contextKeys?.relevant_world_context,
+      [
+        "world:bellas-notebook",
+        "world:league-of-brass-writ",
+        "world:halkas-ledger"
+      ]
+    );
+    assert.equal(crossReferenceSawBellaNotebook, true);
+    assert.equal(crossReferenceSawWrit, true);
+    assert.equal(crossReferenceSawHalkaLedger, true);
+  } finally {
+    setProviderOverride(undefined);
+  }
+});
+
 test("solo turn accepts broad single pending rolls even when over-targeted", async () => {
   const cookie = await signIn("solo-broad-roll@example.com");
 

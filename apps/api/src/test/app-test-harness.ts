@@ -2348,10 +2348,14 @@ before(async () => {
           const shouldSelectCourierLetter =
             /read it again/i.test(currentTurnInput) &&
             input.message.includes('"key": "world:courier-letter"');
+          const shouldSelectCinderhaltDocuments =
+            /cross reference/i.test(currentTurnInput) &&
+            input.message.includes('"key": "world:bellas-notebook"') &&
+            input.message.includes('"key": "world:halkas-ledger"');
           const content = JSON.stringify({
             job_needed: /\battack\b/i.test(currentTurnInput)
               ? "combat"
-              : shouldSelectCourierLetter
+              : shouldSelectCourierLetter || shouldSelectCinderhaltDocuments
                 ? "investigation"
               : "scene_director",
             context_keys: {
@@ -2360,6 +2364,12 @@ before(async () => {
               combat_context: [],
               relevant_world_context: shouldSelectCourierLetter
                 ? ["world:courier-letter"]
+                : shouldSelectCinderhaltDocuments
+                  ? [
+                      "world:bellas-notebook",
+                      "world:league-of-brass-writ",
+                      "world:halkas-ledger"
+                    ]
                 : [],
               quests_open_threads: [],
               overarching_big_plot_secrets: []
@@ -2557,6 +2567,28 @@ before(async () => {
           const hasCourierLetterContext = input.message.includes(
             '"context_id": "world:courier-letter"'
           );
+          const bellaNotebookText =
+            "H.K. - 12 oz Wellglass - 400 gp - delivery via relic exchange - Cinderhalt seal confirmed.";
+          const bellaWritText =
+            "Bella Trestlemark is authorized to detain, question, and seize property related to suspected illicit Wellglass trade within the Ferrant Concord.";
+          const halkaLedgerText = [
+            "Borrim Stonehand - two ancient lockets - 15 gp.",
+            "Orin Farseeker - raw material - three recurring entries.",
+            "Hedd Ironbrow - consulting fee - 200 gp - signed H.I.",
+            "Kara Dusthand - Delivery to the Hollow - Copper Lane."
+          ].join("\n");
+          const shouldCreateBellaDocuments =
+            input.message.includes(bellaNotebookText) &&
+            input.message.includes(bellaWritText);
+          const shouldCreateHalkaLedger =
+            input.message.includes(halkaLedgerText) ||
+            /Halka's ledger says/i.test(input.message);
+          const hasBellaNotebookContext = input.message.includes(
+            '"context_id": "world:bellas-notebook"'
+          );
+          const hasHalkaLedgerContext = input.message.includes(
+            '"context_id": "world:halkas-ledger"'
+          );
           const content = JSON.stringify(
             shouldCreateCourierLetter && !hasCourierLetterContext
               ? {
@@ -2594,6 +2626,102 @@ before(async () => {
                   ],
                   remove_context_chunks: []
                 }
+              : shouldCreateBellaDocuments && !hasBellaNotebookContext
+                ? {
+                    patches: [],
+                    new_context_chunks: [
+                      {
+                        context_id: "world:bellas-notebook",
+                        context_type: "relevant_world_context",
+                        title: "Bella's Notebook",
+                        visibility: "player_safe",
+                        markdown: [
+                          "# Bella's Notebook",
+                          "",
+                          "## Canonical Document Text",
+                          bellaNotebookText,
+                          "",
+                          "## Established Facts",
+                          "- Senden read Bella's notebook and knows its exact revealed entry.",
+                          "- The entry links H.K. to a 12 oz Wellglass transaction for 400 gp.",
+                          "",
+                          "## Strong Inferences",
+                          "H.K. is likely Halka Kilnyard.",
+                          "",
+                          "## DM Seeds",
+                          "- The relic exchange may have been cover for Wellglass movement.",
+                          "",
+                          "## Open Questions",
+                          "- Who confirmed the Cinderhalt seal?",
+                          "",
+                          "## Last Touched",
+                          "Created after Senden read Bella's notebook."
+                        ].join("\n")
+                      },
+                      {
+                        context_id: "world:league-of-brass-writ",
+                        context_type: "relevant_world_context",
+                        title: "League of Brass Writ",
+                        visibility: "player_safe",
+                        markdown: [
+                          "# League of Brass Writ",
+                          "",
+                          "## Canonical Document Text",
+                          bellaWritText,
+                          "",
+                          "## Established Facts",
+                          "- Senden read the writ and knows its exact revealed authority.",
+                          "",
+                          "## Strong Inferences",
+                          "The League of Brass investigation covers illicit Wellglass trade.",
+                          "",
+                          "## DM Seeds",
+                          "- The writ could function as leverage or false authority.",
+                          "",
+                          "## Open Questions",
+                          "- Which Master Forge-Alderman signed it?",
+                          "",
+                          "## Last Touched",
+                          "Created after Senden read the writ."
+                        ].join("\n")
+                      }
+                    ],
+                    remove_context_chunks: []
+                  }
+              : shouldCreateHalkaLedger && !hasHalkaLedgerContext
+                ? {
+                    patches: [],
+                    new_context_chunks: [
+                      {
+                        context_id: "world:halkas-ledger",
+                        context_type: "relevant_world_context",
+                        title: "Halka's Ledger",
+                        visibility: "player_safe",
+                        markdown: [
+                          "# Halka's Ledger",
+                          "",
+                          "## Canonical Document Text",
+                          halkaLedgerText,
+                          "",
+                          "## Established Facts",
+                          "- Senden read Halka's ledger and knows the exact revealed entries.",
+                          "",
+                          "## Strong Inferences",
+                          "The names may be Cinderhalt contacts or Wellglass customers.",
+                          "",
+                          "## DM Seeds",
+                          "- The Hollow entry can point toward Copper Lane.",
+                          "",
+                          "## Open Questions",
+                          "- Which listed name is safest to investigate first?",
+                          "",
+                          "## Last Touched",
+                          "Created after Senden read Halka's ledger."
+                        ].join("\n")
+                      }
+                    ],
+                    remove_context_chunks: []
+                  }
               : shouldCreateAmber && hasAmberContext
               ? {
                   patches: [
