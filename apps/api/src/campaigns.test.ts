@@ -2933,6 +2933,118 @@ test("campaign creation stores a multiplayer campaign and list returns it", asyn
   assert.equal(listBody.campaigns[0]?.id, createBody.campaign.id);
 });
 
+test("solo turns persist revealed written artifacts as canonical document text", async () => {
+  const cookie = await signIn("canonical-document-text@example.com");
+  const exactLetterText = [
+    "Marra,",
+    "",
+    "The tide gate opens at moonrise. Bring the black key and trust no one wearing harbor blue.",
+    "",
+    "- V."
+  ].join("\n");
+  let secondTurnSawCanonicalText = false;
+
+  resetProviderInputs();
+
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: { cookie },
+    payload: {
+      mode: "single_player",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "classic_fantasy",
+      ownerClientId: "canonical-document-text-client",
+      playerName: "Document Reader",
+      characterName: "Ira",
+      characterSheet: "A careful investigator who keeps every scrap of writing."
+    }
+  });
+
+  assert.equal(createResponse.statusCode, 201, createResponse.body);
+  const created = CampaignCreateResponseSchema.parse(createResponse.json());
+
+  setProviderOverride(async (input) => {
+    secondTurnSawCanonicalText ||= input.message.includes(
+      `## Canonical Document Text\n${exactLetterText}`
+    );
+    const content = JSON.stringify({
+      public_narration: input.message.includes("read it again")
+        ? `You reread the courier letter. It says:\n\n${exactLetterText}`
+        : `You unfold the courier letter. It says:\n\n${exactLetterText}`,
+      resolution_mode: "resolved_without_dice",
+      roll_requests: [],
+      next_input_needed: "player_actions",
+      input_targets: [],
+      input_policy: "all_players",
+      mechanics_state_update: {},
+      inventory_state_update: { patches: [] },
+      combat_events: [],
+      proposed_context_updates: []
+    });
+
+    return {
+      id: "provider-document-main",
+      content,
+      debug: {
+        requestMessages: [],
+        rawResponse: content,
+        model: "test-model",
+        temperature: 0.8,
+        providerTimings: []
+      }
+    };
+  });
+
+  try {
+    const firstReadResponse = await app.inject({
+      method: "POST",
+      url: `/api/campaigns/${created.campaign.id}/solo-turn`,
+      headers: { cookie },
+      payload: {
+        message: "read the courier letter"
+      }
+    });
+
+    assert.equal(firstReadResponse.statusCode, 200, firstReadResponse.body);
+
+    let documentChunk = database.contextChunks.find(
+      (chunk) =>
+        chunk.campaign_id === created.campaign.id &&
+        chunk.context_key === "world:courier-letter"
+    );
+
+    for (let attempt = 0; !documentChunk && attempt < 20; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      documentChunk = database.contextChunks.find(
+        (chunk) =>
+          chunk.campaign_id === created.campaign.id &&
+          chunk.context_key === "world:courier-letter"
+      );
+    }
+
+    assert.ok(documentChunk);
+    assert.match(documentChunk.body_markdown, /## Canonical Document Text/);
+    assert.match(documentChunk.body_markdown, /## Established Facts/);
+    assert.ok(documentChunk.body_markdown.includes(exactLetterText));
+    assert.match(documentChunk.body_markdown, /## DM Seeds/);
+
+    const secondReadResponse = await app.inject({
+      method: "POST",
+      url: `/api/campaigns/${created.campaign.id}/solo-turn`,
+      headers: { cookie },
+      payload: {
+        message: "read it again"
+      }
+    });
+
+    assert.equal(secondReadResponse.statusCode, 200, secondReadResponse.body);
+    assert.equal(secondTurnSawCanonicalText, true);
+  } finally {
+    setProviderOverride(undefined);
+  }
+});
+
 test("solo turn accepts broad single pending rolls even when over-targeted", async () => {
   const cookie = await signIn("solo-broad-roll@example.com");
 

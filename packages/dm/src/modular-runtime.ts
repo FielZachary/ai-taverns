@@ -1116,6 +1116,11 @@ export function jobPrompt(
     "Minimum output fields: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update, combat_events, proposed_context_updates.",
     "Only public_narration is player-visible.",
     "Do not use Markdown outside the JSON object; Markdown emphasis is allowed inside public_narration strings when the job guidance asks for it.",
+    "Canonical document text:",
+    "If selected context chunks include a ## Canonical Document Text section for a written artifact, treat that exact text as immutable canon.",
+    "Written artifacts include notes, notebooks, ledgers, journals, letters, parchment, scrolls, signs, inscriptions, map annotations, contracts, writs, and similar in-world text.",
+    "When responding about established written artifact contents, quote, excerpt, summarize, or reason from the stored canonical document text; do not rewrite, reword, expand, shorten, or regenerate it.",
+    "Only add new written artifact text when the player discovers a new page, hidden annotation, translation, cipher result, altered physical document, or a different not-yet-read artifact.",
     ...inventoryStateGuidance,
     "Models may choose, narrate, infer, and propose; the server retrieves, validates, stores, and mutates."
   ];
@@ -1241,6 +1246,14 @@ export function buildMemoryUpdaterPrompt() {
     "Do not contradict established play. Separate confirmed facts from creative inference so future DMs can use your ideas without mistaking every seed for settled truth.",
     "Prefer updating an existing matching chunk over creating a duplicate when the same place, artifact, faction, quest, mystery, or secret is clearly referenced by name, alias, role, or scene context.",
     "",
+    "Canonical written artifact memory:",
+    "When the accepted public narration reveals the contents of a written artifact, preserve the revealed text word for word in context storage.",
+    "Written artifacts include notes, notebooks, ledgers, journals, letters, parchment, scrolls, signs, inscriptions, map annotations, contracts, writs, and similar in-world text.",
+    "For artifact chunks, include a ## Canonical Document Text section containing the exact revealed wording, line breaks, names, numbers, quoted text, and signatures from the accepted narration.",
+    "Do not paraphrase, clean up, expand, shorten, reinterpret, or merge the canonical document text into a summary. Summaries and leads are allowed only in separate sections such as ## Established Facts, ## Strong Inferences, ## DM Seeds, or ## Open Questions.",
+    "If an existing artifact chunk already has ## Canonical Document Text, preserve that section exactly unless the accepted narration reveals a new page, hidden annotation, translation, cipher result, altered physical document, or additional text from the same artifact.",
+    "Use a stable document-like context_id such as world:helgas-journal, world:bellas-notebook, world:halkas-ledger, or world:watchers-log when the artifact may matter again.",
+    "",
     "World and story memory rules:",
     "Create or update relevant_world_context for locations, artifacts, magic phenomena, factions, cultures, hazards, recurring symbols, world state, and scene elements that could matter again.",
     "Create or update quests_open_threads for active player-facing objectives, unresolved choices, investigations, threats, promises, leads, stakes, and next-step hooks.",
@@ -1251,6 +1264,7 @@ export function buildMemoryUpdaterPrompt() {
     "",
     "Relevant world context markdown format:",
     "# <World Element>",
+    "## Canonical Document Text (required for written artifact chunks once text is revealed)",
     "## Established Facts",
     "## Strong Inferences",
     "## DM Seeds",
@@ -1325,6 +1339,26 @@ export function buildMemoryUpdaterPrompt() {
             visibility: "player_safe",
             markdown:
               "# The Amber Sphere\n\n## Current Situation\nThe party has chosen to interact directly with the amber sphere in the grove's root chamber.\n\n## Stakes\nThe sphere may define what the grove becomes next, who controls its awakening, and whether the party is treated as intruders, helpers, or chosen witnesses.\n\n## Known Leads\n- Observe how the chamber changes after contact.\n- Ask grove-touched NPCs what the amber light means.\n- Look for matching amber signs elsewhere in Sallowholt.\n\n## Possible Complications\n- The grove may answer in visions, bargains, or physical transformation rather than clear speech.\n- Other powers may notice the sphere's awakening.\n\n## Resolution Signals\nThe thread resolves when the party learns what the sphere is, decides how to handle it, and accepts the consequence of that choice."
+          }
+        ],
+        remove_context_chunks: []
+      },
+      null,
+      2
+    ),
+    "",
+    "Example revealed written artifact response:",
+    JSON.stringify(
+      {
+        patches: [],
+        new_context_chunks: [
+          {
+            context_id: "world:courier-letter",
+            context_type: "relevant_world_context",
+            title: "Courier Letter",
+            visibility: "player_safe",
+            markdown:
+              "# Courier Letter\n\n## Canonical Document Text\nMarra,\n\nThe tide gate opens at moonrise. Bring the black key and trust no one wearing harbor blue.\n\n- V.\n\n## Established Facts\n- The party read the courier letter and knows its exact wording.\n- The letter names Marra, the tide gate, the black key, harbor blue, and the initial V.\n\n## Strong Inferences\nThe letter points toward a moonrise meeting or handoff at the tide gate.\n\n## DM Seeds\n- Harbor blue may identify watch uniforms, smugglers, or a false-flag disguise.\n\n## Open Questions\n- Who is V?\n- Why does the writer distrust people wearing harbor blue?\n\n## Last Touched\nCreated after the party read the courier letter."
           }
         ],
         remove_context_chunks: []
