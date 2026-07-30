@@ -131,6 +131,20 @@ test("DeepSeek provider sends filtered history and returns non-stream debug meta
         role: "player",
         content: "I listen at the door.",
         createdAt: "2026-07-11T00:00:02.000Z"
+      },
+      {
+        id: "message-4",
+        role: "player",
+        kind: "ask_dm_question",
+        content: "Is this a clue?",
+        createdAt: "2026-07-11T00:00:03.000Z"
+      },
+      {
+        id: "message-5",
+        role: "dm",
+        kind: "ask_dm_answer",
+        content: "It is table guidance, not a resolved action.",
+        createdAt: "2026-07-11T00:00:04.000Z"
       }
     ]
   });
@@ -153,6 +167,28 @@ test("DeepSeek provider sends filtered history and returns non-stream debug meta
     {
       role: "user",
       content: "I listen at the door."
+    },
+    {
+      role: "user",
+      content: [
+        "Out-of-turn Ask DM table question.",
+        "This is table guidance only, not a committed character action and not scene advancement.",
+        "Is this a clue?"
+      ].join("\n")
+    },
+    {
+      role: "assistant",
+      content: JSON.stringify({
+        public_narration: [
+          "Out-of-turn Ask DM table guidance.",
+          "Use this as clarification only; it is not in-fiction narration, a committed action, or scene advancement.",
+          "It is table guidance, not a resolved action."
+        ].join("\n"),
+        roll_requests: [],
+        next_input_needed: "player_actions",
+        input_targets: [],
+        input_policy: "all_players"
+      })
     },
     {
       role: "user",
