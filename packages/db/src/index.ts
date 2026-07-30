@@ -273,6 +273,47 @@ export async function ensureEmailIdentity(
   );
 }
 
+export async function findUserByAuthIdentity(
+  db: Queryable,
+  input: {
+    provider: "email" | "google";
+    providerSubject: string;
+  }
+): Promise<UserRecord | null> {
+  const result = await db.query<UserRow>(
+    `
+      select users.id, users.email, users.display_name, users.created_at, users.updated_at
+      from auth_identities
+      join users on users.id = auth_identities.user_id
+      where auth_identities.provider = $1
+        and auth_identities.provider_subject = $2
+      limit 1
+    `,
+    [input.provider, input.providerSubject]
+  );
+
+  return result.rows[0] ? mapUserRow(result.rows[0]) : null;
+}
+
+export async function ensureGoogleIdentity(
+  db: Queryable,
+  input: {
+    userId: UserId;
+    providerSubject: string;
+    email: string;
+  }
+): Promise<void> {
+  await db.query(
+    `
+      insert into auth_identities (user_id, provider, provider_subject, email)
+      values ($1, 'google', $2, $3)
+      on conflict (provider, provider_subject) do update
+      set email = excluded.email
+    `,
+    [input.userId, input.providerSubject, input.email]
+  );
+}
+
 export async function createSession(
   db: Queryable,
   input: {

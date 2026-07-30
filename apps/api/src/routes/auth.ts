@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { FastifyInstance } from "fastify";
+import { z } from "zod";
 import {
   AuthMeResponseSchema,
   AuthClaimGuestStateRequestSchema,
@@ -18,6 +19,8 @@ import {
   createLoginToken,
   createSession,
   ensureEmailIdentity,
+  ensureGoogleIdentity,
+  findUserByAuthIdentity,
   findActiveSessionByTokenHash,
   revokeSessionByTokenHash,
   upsertUserByEmail
@@ -50,6 +53,74 @@ function createHttpError(statusCode: number, message: string): Error {
   return error;
 }
 
+const AuthGoogleStartQuerySchema = z.object({
+  nextPath: z.string().trim().regex(/^\/(?!\/)/).max(200).optional()
+});
+
+const AuthGoogleCallbackQuerySchema = z.object({
+  code: z.string().min(1).optional(),
+  state: z.string().min(32).optional(),
+  error: z.string().optional()
+});
+
+const GoogleTokenResponseSchema = z.object({
+  access_token: z.string().min(1),
+  token_type: z.string().optional(),
+  expires_in: z.number().optional(),
+  id_token: z.string().optional(),
+  scope: z.string().optional()
+});
+
+const GoogleUserInfoSchema = z.object({
+  sub: z.string().min(1),
+  email: z.string().trim().toLowerCase().email(),
+  email_verified: z.boolean().optional(),
+  name: z.string().trim().min(1).optional()
+});
+
+function googleStateCookieName(config: ApiConfig) {
+  return `${config.authCookieName}_google_state`;
+}
+
+function googleCallbackUrl(config: ApiConfig) {
+  const publicOrigin = config.authPublicAppOrigin.replace(/\/$/, "");
+  return `${publicOrigin}/api/auth/google/callback`;
+}
+
+function encodeGoogleStateCookie(input: {
+  state: string;
+  nextPath: string | undefined;
+}) {
+  return Buffer.from(JSON.stringify(input), "utf8").toString("base64url");
+}
+
+function decodeGoogleStateCookie(value: string | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return z
+      .object({
+        state: z.string().min(32),
+        nextPath: z.string().regex(/^\/(?!\/)/).max(200).optional()
+      })
+      .parse(JSON.parse(Buffer.from(value, "base64url").toString("utf8")));
+  } catch {
+    return null;
+  }
+}
+
+function googleStateCookieOptions(config: ApiConfig) {
+  return {
+    path: "/api/auth/google",
+    httpOnly: true,
+    secure: config.authCookieSecure,
+    sameSite: "lax" as const,
+    maxAge: 10 * 60
+  };
+}
+
 function createMagicLink(config: ApiConfig, token: string, nextPath?: string): string {
   const url = new URL(
     "/auth/confirm",
@@ -62,6 +133,65 @@ function createMagicLink(config: ApiConfig, token: string, nextPath?: string): s
   }
 
   return url.toString();
+}
+
+function requireGoogleOAuthConfig(config: ApiConfig) {
+  if (!config.googleOAuthClientId || !config.googleOAuthClientSecret) {
+    throw createHttpError(500, "Google sign-in is not configured.");
+  }
+
+  return {
+    clientId: config.googleOAuthClientId,
+    clientSecret: config.googleOAuthClientSecret
+  };
+}
+
+async function exchangeGoogleAuthorizationCode(input: {
+  config: ApiConfig;
+  code: string;
+}) {
+  const credentials = requireGoogleOAuthConfig(input.config);
+  const body = new URLSearchParams({
+    code: input.code,
+    client_id: credentials.clientId,
+    client_secret: credentials.clientSecret,
+    redirect_uri: googleCallbackUrl(input.config),
+    grant_type: "authorization_code"
+  });
+
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded"
+    },
+    body
+  });
+
+  if (!response.ok) {
+    throw createHttpError(401, "Google sign-in could not be completed.");
+  }
+
+  return GoogleTokenResponseSchema.parse(await response.json());
+}
+
+async function fetchGoogleUserInfo(accessToken: string) {
+  const response = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
+    headers: {
+      authorization: `Bearer ${accessToken}`
+    }
+  });
+
+  if (!response.ok) {
+    throw createHttpError(401, "Google profile could not be loaded.");
+  }
+
+  const profile = GoogleUserInfoSchema.parse(await response.json());
+
+  if (profile.email_verified === false) {
+    throw createHttpError(401, "Google account email is not verified.");
+  }
+
+  return profile;
 }
 
 async function sendMagicLinkEmail(input: {
@@ -192,6 +322,110 @@ export async function registerAuthRoutes(
   options: AuthRouteOptions
 ) {
   const { config } = options;
+
+  fastify.get("/auth/google/start", async (request, reply) => {
+    const credentials = requireGoogleOAuthConfig(config);
+    const query = AuthGoogleStartQuerySchema.parse(request.query);
+    const state = createOpaqueToken();
+    const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+
+    authUrl.searchParams.set("client_id", credentials.clientId);
+    authUrl.searchParams.set("redirect_uri", googleCallbackUrl(config));
+    authUrl.searchParams.set("response_type", "code");
+    authUrl.searchParams.set("scope", "openid email profile");
+    authUrl.searchParams.set("state", state);
+    authUrl.searchParams.set("prompt", "select_account");
+
+    reply.setCookie(
+      googleStateCookieName(config),
+      encodeGoogleStateCookie({
+        state,
+        nextPath: query.nextPath
+      }),
+      googleStateCookieOptions(config)
+    );
+
+    return reply.redirect(authUrl.toString());
+  });
+
+  fastify.get("/auth/google/callback", async (request, reply) => {
+    const query = AuthGoogleCallbackQuerySchema.parse(request.query);
+    const stateCookie = decodeGoogleStateCookie(
+      request.cookies[googleStateCookieName(config)]
+    );
+    const loginUrl = new URL("/login?error=google-auth", config.authPublicAppOrigin);
+
+    reply.clearCookie(googleStateCookieName(config), googleStateCookieOptions(config));
+
+    if (query.error || !query.code || !query.state || !stateCookie) {
+      return reply.redirect(loginUrl.toString());
+    }
+
+    if (query.state !== stateCookie.state) {
+      return reply.redirect(loginUrl.toString());
+    }
+
+    const now = new Date();
+    const sessionToken = createOpaqueToken();
+    const sessionExpiresAt = addDays(now, config.authSessionTtlDays);
+    const googleTokens = await exchangeGoogleAuthorizationCode({
+      config,
+      code: query.code
+    });
+    const googleUser = await fetchGoogleUserInfo(googleTokens.access_token);
+    const client = await fastify.pg.connect();
+
+    try {
+      await client.query("begin");
+
+      const existingUser = await findUserByAuthIdentity(client, {
+        provider: "google",
+        providerSubject: googleUser.sub
+      });
+      const user =
+        existingUser ??
+        (await upsertUserByEmail(client, {
+          email: googleUser.email,
+          displayName: googleUser.name ?? null
+        }));
+
+      await ensureGoogleIdentity(client, {
+        userId: user.id,
+        providerSubject: googleUser.sub,
+        email: googleUser.email
+      });
+
+      if (user.email === googleUser.email) {
+        await ensureEmailIdentity(client, {
+          userId: user.id,
+          email: user.email
+        });
+      }
+
+      const session = await createSession(client, {
+        userId: user.id,
+        tokenHash: hashToken(sessionToken),
+        expiresAt: sessionExpiresAt
+      });
+
+      await client.query("commit");
+
+      reply.setCookie(
+        config.authCookieName,
+        sessionToken,
+        sessionCookieOptions(config, session.expiresAt)
+      );
+
+      return reply.redirect(
+        new URL(stateCookie.nextPath ?? "/play", config.authPublicAppOrigin).toString()
+      );
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  });
 
   fastify.post(
     "/auth/passwordless/start",

@@ -77,6 +77,165 @@ test("passwordless login creates a local session cookie and authenticates /auth/
   assert.equal(meBody.user.email, "player@example.com");
 });
 
+test("Google OAuth start redirects to Google with state and callback configuration", async () => {
+  const response = await app.inject({
+    method: "GET",
+    url: "/api/auth/google/start?nextPath=/new-adventure"
+  });
+
+  assert.equal(response.statusCode, 302);
+  const location = response.headers.location;
+  assert.ok(location);
+
+  const redirectUrl = new URL(location);
+  assert.equal(redirectUrl.origin, "https://accounts.google.com");
+  assert.equal(redirectUrl.pathname, "/o/oauth2/v2/auth");
+  assert.equal(redirectUrl.searchParams.get("client_id"), "test-google-client-id");
+  assert.equal(
+    redirectUrl.searchParams.get("redirect_uri"),
+    "http://localhost:3000/api/auth/google/callback"
+  );
+  assert.equal(redirectUrl.searchParams.get("response_type"), "code");
+  assert.equal(redirectUrl.searchParams.get("scope"), "openid email profile");
+  assert.ok(redirectUrl.searchParams.get("state"));
+
+  const stateCookie = readCookie(response.headers["set-cookie"]);
+  assert.match(stateCookie, /^test_session_google_state=/);
+});
+
+test("Google OAuth callback links identity, creates a session, and authenticates /auth/me", async () => {
+  const startResponse = await app.inject({
+    method: "GET",
+    url: "/api/auth/google/start?nextPath=/new-adventure"
+  });
+  const startLocation = new URL(startResponse.headers.location as string);
+  const state = startLocation.searchParams.get("state");
+  assert.ok(state);
+  const stateCookie = readCookie(startResponse.headers["set-cookie"]);
+  const originalFetch = globalThis.fetch;
+  const fetchCalls: string[] = [];
+
+  globalThis.fetch = (async (url, init) => {
+    fetchCalls.push(url.toString());
+
+    if (url.toString() === "https://oauth2.googleapis.com/token") {
+      assert.equal(init?.method, "POST");
+      const body = init?.body as URLSearchParams;
+      assert.equal(body.get("code"), "google-code");
+      assert.equal(body.get("client_id"), "test-google-client-id");
+      assert.equal(body.get("client_secret"), "test-google-client-secret");
+      assert.equal(
+        body.get("redirect_uri"),
+        "http://localhost:3000/api/auth/google/callback"
+      );
+
+      return Response.json({
+        access_token: "google-access-token",
+        token_type: "Bearer",
+        expires_in: 3600
+      });
+    }
+
+    if (url.toString() === "https://openidconnect.googleapis.com/v1/userinfo") {
+      assert.deepEqual(init?.headers, {
+        authorization: "Bearer google-access-token"
+      });
+
+      return Response.json({
+        sub: "google-user-123",
+        email: "PLAYER@Example.COM",
+        email_verified: true,
+        name: "Tavern Player"
+      });
+    }
+
+    throw new Error(`Unexpected fetch URL: ${url.toString()}`);
+  }) as typeof fetch;
+
+  try {
+    const callbackResponse = await app.inject({
+      method: "GET",
+      url: `/api/auth/google/callback?code=google-code&state=${encodeURIComponent(state)}`,
+      headers: {
+        cookie: stateCookie
+      }
+    });
+
+    assert.equal(callbackResponse.statusCode, 302);
+    assert.equal(
+      callbackResponse.headers.location,
+      "http://localhost:3000/new-adventure"
+    );
+    assert.deepEqual(fetchCalls, [
+      "https://oauth2.googleapis.com/token",
+      "https://openidconnect.googleapis.com/v1/userinfo"
+    ]);
+    assert.equal(database.users.at(-1)?.email, "player@example.com");
+  assert.equal(
+    database.authIdentities.some(
+      (identity) =>
+        identity.provider === "email" &&
+        identity.provider_subject === "player@example.com"
+    ),
+    true
+  );
+    assert.equal(
+      database.authIdentities.some(
+        (identity) =>
+          identity.provider === "google" &&
+          identity.provider_subject === "google-user-123" &&
+          identity.email === "player@example.com"
+      ),
+      true
+    );
+
+    const setCookieHeaders = callbackResponse.headers["set-cookie"];
+    const sessionCookie = (Array.isArray(setCookieHeaders)
+      ? setCookieHeaders
+      : [setCookieHeaders]).find((header) =>
+      header?.toString().startsWith("test_session=")
+    );
+    const cookie = readCookie(sessionCookie?.toString());
+    const meResponse = await app.inject({
+      method: "GET",
+      url: "/api/auth/me",
+      headers: {
+        cookie
+      }
+    });
+
+    assert.equal(meResponse.statusCode, 200);
+    const meBody = AuthMeResponseSchema.parse(meResponse.json());
+    assert.equal(meBody.authenticated, true);
+    assert.equal(meBody.user.email, "player@example.com");
+    assert.equal(meBody.user.displayName, "Tavern Player");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Google OAuth callback rejects bad state before calling Google", async () => {
+  const fetchMock = globalThis.fetch;
+  globalThis.fetch = (async () => {
+    throw new Error("Google should not be called for a bad state");
+  }) as typeof fetch;
+
+  try {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/auth/google/callback?code=google-code&state=bad-state-that-is-long-enough-for-schema"
+    });
+
+    assert.equal(response.statusCode, 302);
+    assert.equal(
+      response.headers.location,
+      "http://localhost:3000/login?error=google-auth"
+    );
+  } finally {
+    globalThis.fetch = fetchMock;
+  }
+});
+
 test("passwordless start rejects invalid email with the standard error envelope", async () => {
   const response = await app.inject({
     method: "POST",

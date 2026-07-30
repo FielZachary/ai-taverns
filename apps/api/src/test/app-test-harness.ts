@@ -65,6 +65,15 @@ type UserRecord = {
   updated_at: Date;
 };
 
+type AuthIdentityRecord = {
+  id: string;
+  user_id: string;
+  provider: "email" | "google";
+  provider_subject: string;
+  email: string;
+  created_at: Date;
+};
+
 type SessionRecord = {
   id: string;
   user_id: string;
@@ -265,6 +274,7 @@ type LivingWorldEngineRunRecord = {
 class FakeDatabase {
   loginTokens: LoginTokenRecord[] = [];
   users: UserRecord[] = [];
+  authIdentities: AuthIdentityRecord[] = [];
   sessions: SessionRecord[] = [];
   campaigns: CampaignRecord[] = [];
   players: PlayerRecord[] = [];
@@ -358,7 +368,55 @@ class FakeDatabase {
     }
 
     if (normalizedSql.startsWith("insert into auth_identities")) {
+      const provider = normalizedSql.includes("values ($1, 'google'")
+        ? "google"
+        : "email";
+      const record: AuthIdentityRecord = {
+        id: `auth-identity-${this.nextId++}`,
+        user_id: values[0] as string,
+        provider,
+        provider_subject: values[1] as string,
+        email: (provider === "google" ? values[2] : values[1]) as string,
+        created_at: new Date()
+      };
+      const existing = this.authIdentities.find(
+        (identity) =>
+          identity.provider === record.provider &&
+          identity.provider_subject === record.provider_subject
+      );
+
+      if (existing) {
+        existing.email = record.email;
+      } else {
+        this.authIdentities.push(record);
+      }
+
       return { rows: [] as T[] };
+    }
+
+    if (
+      normalizedSql.startsWith(
+        "select users.id, users.email, users.display_name"
+      ) &&
+      normalizedSql.includes("from auth_identities")
+    ) {
+      const provider = values[0] as "email" | "google";
+      const providerSubject = values[1] as string;
+      const identity = this.authIdentities.find(
+        (candidate) =>
+          candidate.provider === provider &&
+          candidate.provider_subject === providerSubject
+      );
+
+      if (!identity) {
+        return { rows: [] as T[] };
+      }
+
+      const user = this.users.find(
+        (candidate) => candidate.id === identity.user_id
+      );
+
+      return { rows: user ? [user as T] : [] };
     }
 
     if (normalizedSql.startsWith("insert into sessions")) {
@@ -2399,6 +2457,8 @@ before(async () => {
       NODE_ENV: "test",
       DATABASE_URL: "postgres://postgres:postgres@localhost:5432/ai_taverns",
       AUTH_COOKIE_NAME: "test_session",
+      GOOGLE_OAUTH_CLIENT_ID: "test-google-client-id",
+      GOOGLE_OAUTH_CLIENT_SECRET: "test-google-client-secret",
       MEDIA_LOCAL_DIR: path.join(
         os.tmpdir(),
         `ai-taverns-api-test-media-${process.pid}`
