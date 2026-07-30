@@ -3,11 +3,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createCampaign,
   generateCharacterPortrait,
+  generateCampaignRestartBackstory,
   joinCampaign,
   listCampaigns,
   previewCharacterPortrait,
   previewCampaignJoin,
   readCampaign,
+  restartCampaign,
   uploadCharacterPortrait
 } from "./campaign-api";
 
@@ -68,6 +70,59 @@ describe("campaign API client", () => {
     await expect(readCampaign("campaign/with spaces")).resolves.toEqual(campaign);
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/campaigns/campaign%2Fwith%20spaces"
+    );
+  });
+
+  it("generates restart backstories and restarts campaigns", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        Response.json({
+          backstory: "Mira carries the old oath forward."
+        })
+      )
+      .mockResolvedValueOnce(Response.json({ campaign }));
+
+    await expect(
+      generateCampaignRestartBackstory("campaign/with spaces", {
+        mode: "add_details",
+        currentBackstory: "Mira has an oath."
+      })
+    ).resolves.toEqual({
+      backstory: "Mira carries the old oath forward."
+    });
+    await expect(
+      restartCampaign("campaign/with spaces", {
+        backstory: "Mira carries the old oath forward."
+      })
+    ).resolves.toEqual(campaign);
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/campaigns/campaign%2Fwith%20spaces/restart/backstory",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          mode: "add_details",
+          currentBackstory: "Mira has an oath."
+        })
+      }
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/campaigns/campaign%2Fwith%20spaces/restart",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          backstory: "Mira carries the old oath forward."
+        })
+      }
     );
   });
 

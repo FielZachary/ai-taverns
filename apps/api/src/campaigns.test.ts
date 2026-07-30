@@ -16,6 +16,7 @@ import {
   CampaignNpcCardsResponseSchema,
   CampaignJoinPreviewResponseSchema,
   CampaignJoinResponseSchema,
+  CampaignRestartResponseSchema,
   CharacterPortraitPreviewResponseSchema,
   LobbyInviteJoinResponseSchema,
   LobbyInvitePreviewResponseSchema,
@@ -540,6 +541,249 @@ test("POST /api/campaigns/backstory accepts Eldermere starts without reasons", a
     }
   });
   resetProviderInputs();
+});
+
+test("POST /api/campaigns/:campaignId/restart/backstory generates from the saved character and campaign world", async () => {
+  const cookie = await signIn("restart-backstory@example.com");
+  resetProviderInputs();
+
+  try {
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/campaigns",
+      headers: { cookie },
+      payload: {
+        mode: "single_player",
+        campaignGenreKind: "preset",
+        campaignGenrePresetId: "eldermere",
+        ownerClientId: "restart-backstory-client",
+        playerName: "Mira",
+        characterName: "Mira",
+        characterSheet:
+          "Character Name: Mira\nClass: Rogue\nBackstory\nMira follows a brass compass toward Selwick.",
+        eldermereStart: {
+          regionName: "The Salt Concordat",
+          settlementName: "Selwick"
+        }
+      }
+    });
+
+    assert.equal(createResponse.statusCode, 201, createResponse.body);
+    const created = CampaignCreateResponseSchema.parse(createResponse.json());
+    resetProviderInputs();
+    setProviderOverride(async () => {
+      const content = JSON.stringify({
+        backstory:
+          "Mira sharpens her oath around the old shrine bell and the debt she still owes.",
+        eldermereStart: {
+          regionName: "The Salt Concordat",
+          settlementName: "Selwick",
+          reason: "The backstory keeps Mira pointed at Selwick."
+        }
+      });
+
+      return {
+        id: "provider-restart-backstory",
+        content,
+        debug: {
+          requestMessages: [],
+          rawResponse: content,
+          model: "test-model",
+          temperature: 0.8,
+          providerTimings: []
+        }
+      };
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/campaigns/${created.campaign.id}/restart/backstory`,
+      headers: { cookie },
+      payload: {
+        mode: "add_details",
+        currentBackstory: "Mira follows a brass compass toward Selwick."
+      }
+    });
+
+    assert.equal(response.statusCode, 200, response.body);
+    const parsed = CharacterBackstoryGenerateResponseSchema.parse(response.json());
+    const providerInput = getProviderInputs().at(0);
+
+    assert.match(parsed.backstory, /old shrine bell/);
+    assert.deepEqual(parsed.eldermereStart, {
+      regionName: "The Salt Concordat",
+      settlementName: "Selwick",
+      reason: "The backstory keeps Mira pointed at Selwick."
+    });
+    assert.match(providerInput?.message ?? "", /Mira follows a brass compass/);
+    assert.match(providerInput?.message ?? "", /Player-written backstory:/);
+    assert.match(providerInput?.message ?? "", /Eldermere/);
+  } finally {
+    resetProviderInputs();
+  }
+});
+
+test("POST /api/campaigns/:campaignId/restart/backstory rejects invalid restart backstory contexts", async () => {
+  const cookie = await signIn("restart-backstory-errors@example.com");
+
+  const emptyDetailsResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns/00000000-0000-4000-8000-000000000404/restart/backstory",
+    headers: { cookie },
+    payload: {
+      mode: "add_details",
+      currentBackstory: ""
+    }
+  });
+
+  assert.equal(emptyDetailsResponse.statusCode, 400, emptyDetailsResponse.body);
+  assert.equal(
+    ApiErrorResponseSchema.parse(emptyDetailsResponse.json()).error.message,
+    "Write a backstory before adding details."
+  );
+
+  const missingResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns/00000000-0000-4000-8000-000000000404/restart/backstory",
+    headers: { cookie },
+    payload: {
+      mode: "generate"
+    }
+  });
+
+  assert.equal(missingResponse.statusCode, 404, missingResponse.body);
+  assert.equal(
+    ApiErrorResponseSchema.parse(missingResponse.json()).error.message,
+    "Campaign not found."
+  );
+
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: { cookie },
+    payload: {
+      mode: "multiplayer",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "classic_fantasy",
+      ownerClientId: "restart-backstory-errors-client",
+      playerName: "Table Owner"
+    }
+  });
+
+  assert.equal(createResponse.statusCode, 201, createResponse.body);
+  const created = CampaignCreateResponseSchema.parse(createResponse.json());
+
+  const multiplayerResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${created.campaign.id}/restart/backstory`,
+    headers: { cookie },
+    payload: {
+      mode: "generate"
+    }
+  });
+
+  assert.equal(multiplayerResponse.statusCode, 400, multiplayerResponse.body);
+  assert.equal(
+    ApiErrorResponseSchema.parse(multiplayerResponse.json()).error.message,
+    "Campaign restart is available for singleplayer adventures."
+  );
+});
+
+test("POST /api/campaigns/:campaignId/restart creates a fresh singleplayer campaign", async () => {
+  const cookie = await signIn("restart-success@example.com");
+  resetProviderInputs();
+
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: { cookie },
+    payload: {
+      mode: "single_player",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "classic_fantasy",
+      ownerClientId: "restart-success-client",
+      playerName: "Mira",
+      characterName: "Mira",
+      characterSheet:
+        "Character Name: Mira\nClass: Rogue\nBackstory\nMira began beside the first road."
+    }
+  });
+
+  assert.equal(createResponse.statusCode, 201, createResponse.body);
+  const created = CampaignCreateResponseSchema.parse(createResponse.json());
+  resetProviderInputs();
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${created.campaign.id}/restart`,
+    headers: { cookie },
+    payload: {
+      backstory: "Mira restarts beside a stranger shrine and a brighter moon."
+    }
+  });
+
+  assert.equal(response.statusCode, 201, response.body);
+  const restarted = CampaignRestartResponseSchema.parse(response.json());
+  const restartedPlayer = database.players.find(
+    (player) => player.campaign_id === restarted.campaign.id
+  );
+  const sourcePlayer = database.players.find(
+    (player) => player.campaign_id === created.campaign.id
+  );
+
+  assert.notEqual(restarted.campaign.id, created.campaign.id);
+  assert.equal(restarted.campaign.mode, "single_player");
+  assert.equal(restarted.campaign.title, created.campaign.title);
+  assert.equal(restartedPlayer?.character_name, sourcePlayer?.character_name);
+  assert.match(
+    restartedPlayer?.character_sheet ?? "",
+    /Mira restarts beside a stranger shrine/
+  );
+  assert.equal(
+    database.campaignEvents.some(
+      (event) =>
+        event.campaign_id === created.campaign.id &&
+        event.type === "campaign_restart_diagnostic"
+    ),
+    true
+  );
+});
+
+test("POST /api/campaigns/:campaignId/restart logs and returns restart failures", async () => {
+  const cookie = await signIn("restart-failure@example.com");
+
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/api/campaigns",
+    headers: { cookie },
+    payload: {
+      mode: "single_player",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "classic_fantasy",
+      ownerClientId: "restart-failure-client",
+      playerName: "Mira",
+      characterName: "Mira",
+      characterSheet: "Character Name: Mira\nClass: Rogue"
+    }
+  });
+
+  assert.equal(createResponse.statusCode, 201, createResponse.body);
+  const created = CampaignCreateResponseSchema.parse(createResponse.json());
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${created.campaign.id}/restart`,
+    headers: { cookie },
+    payload: {
+      backstory: "   "
+    }
+  });
+
+  assert.equal(response.statusCode, 400, response.body);
+  assert.equal(
+    ApiErrorResponseSchema.parse(response.json()).error.message,
+    "Write a backstory before restarting."
+  );
 });
 
 test("character portrait preview reports provider failures", async () => {
