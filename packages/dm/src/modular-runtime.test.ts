@@ -107,22 +107,36 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(prompt, /"combat_context":\[\]/);
   });
 
-  it("renders selected context chunks as labelled markdown packets", () => {
+  it("renders selected context chunks by visibility and labels dm_only as staging material", () => {
     const rendered = renderContextChunks([
       {
         id: "npc:captain-vael",
         category: "npc_context",
         title: "Captain Vael",
-        visibility: "dm_only",
+        visibility: "player_safe",
         priority: 8,
         bodyMarkdown: "Goal: Keep the harbor calm."
+      },
+      {
+        id: "secret:undertow",
+        category: "overarching_big_plot_secrets",
+        title: "Undertow",
+        visibility: "dm_only",
+        priority: 10,
+        bodyMarkdown: "Hidden truth: Vael's clerk stole the ledger."
       }
     ]);
 
+    assert.match(rendered, /Player-safe context and established surface facts/);
     assert.match(rendered, /<context_chunk id="npc:captain-vael"/);
     assert.match(rendered, /type="npc_context"/);
     assert.match(rendered, /# Captain Vael/);
     assert.match(rendered, /Goal: Keep the harbor calm/);
+    assert.match(rendered, /DM staging material/);
+    assert.match(rendered, /not automatically known by any NPC/);
+    assert.match(rendered, /<dm_staging_chunk id="secret:undertow"/);
+    assert.match(rendered, /Hidden truth: Vael's clerk stole the ledger/);
+    assert.doesNotMatch(rendered, /<context_chunk id="secret:undertow"/);
   });
 
   it("validates the main DM output envelope narrowly", () => {
@@ -260,6 +274,27 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("npc_dialogue"), /Persuasion partial success/i);
     assert.match(jobPrompt("npc_dialogue"), /failed Intimidation/i);
     assert.match(jobPrompt("npc_dialogue"), /conversational texture/i);
+    assert.match(jobPrompt("npc_dialogue"), /NPC knowledge is local, not omniscient/i);
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /concrete path by which they know it/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /DM staging material is for pacing, foreshadowing, pressure, clue placement, and contradiction checks/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /not automatically known by any NPC/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /When the player challenges how an NPC knows something/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /Prefer one meaningful reveal plus a new question, demand, cost, refusal, or lead/i
+    );
     assert.match(
       jobPrompt("npc_dialogue"),
       /validate that the acting character actually has the offered object before the NPC sees, touches, evaluates, accepts, refuses, or comments on it/i
