@@ -2419,6 +2419,7 @@ export async function createCampaignForMode(
     eldermereStart?: EldermereCampaignStart | undefined;
     userId: string;
     runtime?: DungeonMasterRuntime | undefined;
+    openingResolutionMode?: "await" | "background" | undefined;
   }
 ): Promise<CampaignSummary> {
   const sessionId = `ai-dnd-${randomUUID()}`;
@@ -2592,7 +2593,7 @@ export async function createCampaignForMode(
     }
   });
 
-  try {
+  const resolveOpening = async () => {
     let foundationCompilerPromise:
       | Promise<ContextStorageDebugState | undefined>
       | undefined;
@@ -2701,6 +2702,24 @@ export async function createCampaignForMode(
       campaignId: createdState.campaign.id,
       userId: input.userId
     });
+  };
+
+  if (input.openingResolutionMode === "background") {
+    void resolveOpening().catch(async (error) => {
+      await markTurnFailed(db, openingTurn.id, error);
+      await logCampaignEvent(db, createdState.campaign.id, "turn_failed", {
+        turnId: openingTurn.id,
+        error:
+          error instanceof Error ? error.message : "DM provider call failed.",
+        reason: "background_opening_failed"
+      });
+    });
+
+    return createdState.summary;
+  }
+
+  try {
+    return await resolveOpening();
   } catch (error) {
     await markTurnFailed(db, openingTurn.id, error);
     throw error;
@@ -2915,7 +2934,8 @@ export async function restartSinglePlayerCampaignForUser(
       characterSheet: restartedCharacterSheet,
       eldermereStart,
       userId: input.userId,
-      runtime: input.runtime
+      runtime: input.runtime,
+      openingResolutionMode: "background"
     });
   } catch (error) {
     await logRestartEvent(source.campaign.id, "create_campaign_failed", {
@@ -2927,7 +2947,8 @@ export async function restartSinglePlayerCampaignForUser(
   await logRestartEvent(source.campaign.id, "create_campaign_completed", {
     restartedCampaignId: restarted.id,
     restartedSessionId: restarted.sessionId,
-    restartedTitle: restarted.title
+    restartedTitle: restarted.title,
+    openingResolutionMode: "background"
   });
   await logRestartEvent(restarted.id, "created_from_restart", {
     sourceCampaignId: source.campaign.id,
