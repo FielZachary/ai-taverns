@@ -468,6 +468,40 @@ class FakeDatabase {
     }
 
     if (
+      normalizedSql.startsWith(
+        "select campaigns.metadata, campaigns.mode, players.character_sheet from campaigns join players"
+      )
+    ) {
+      const campaignId = values[0] as string;
+      const userId = values[1] as string;
+      const campaign = this.campaigns.find(
+        (candidate) =>
+          candidate.id === campaignId && candidate.status === "active"
+      );
+      const player = campaign
+        ? this.players.find(
+            (candidate) =>
+              candidate.campaign_id === campaign.id &&
+              candidate.user_id === userId &&
+              candidate.status === "active"
+          )
+        : undefined;
+
+      return {
+        rows:
+          campaign && player
+            ? ([
+                {
+                  metadata: campaign.metadata,
+                  mode: campaign.mode,
+                  character_sheet: player.character_sheet
+                }
+              ] as T[])
+            : ([] as T[])
+      };
+    }
+
+    if (
       normalizedSql ===
       "select * from campaigns where id = $1 and status <> 'deleted' limit 1"
       || normalizedSql ===
@@ -1918,7 +1952,8 @@ class FakeDatabase {
 
     if (
       normalizedSql.startsWith("select * from players where campaign_id") ||
-      normalizedSql.startsWith("select players.*, media_assets.id as portrait_asset_id")
+      normalizedSql.startsWith("select players.*, media_assets.id as portrait_asset_id") ||
+      normalizedSql.startsWith("select players.*, media_assets.public_url")
     ) {
       const campaignId = values[0] as string;
 
@@ -1935,13 +1970,32 @@ class FakeDatabase {
         return { rows: player ? ([player] as T[]) : ([] as T[]) };
       }
 
-      if (normalizedSql.includes("and user_id = $2")) {
+      if (
+        normalizedSql.includes("and user_id = $2") ||
+        normalizedSql.includes("and players.user_id = $2")
+      ) {
         const userId = values[1] as string;
         const player = this.players.find(
           (candidate) =>
             candidate.campaign_id === campaignId && candidate.user_id === userId
         );
-        return { rows: player ? ([player] as T[]) : ([] as T[]) };
+        const portrait = player?.portrait_asset_id
+          ? this.mediaAssets.find(
+              (asset) =>
+                asset.id === player.portrait_asset_id && asset.status === "ready"
+            )
+          : undefined;
+
+        return {
+          rows: player
+            ? ([
+                {
+                  ...player,
+                  portrait_public_url: portrait?.public_url ?? null
+                }
+              ] as T[])
+            : ([] as T[])
+        };
       }
 
       if (
@@ -2183,6 +2237,25 @@ class FakeDatabase {
     }
 
     if (normalizedSql.startsWith("update players set portrait_asset_id")) {
+      if (normalizedSql.includes("where campaign_id = $1")) {
+        const campaignId = values[0] as string;
+        const assetId = values[1] as string;
+        const userId = values[2] as string;
+        const updated = this.players.filter(
+          (player) =>
+            player.campaign_id === campaignId &&
+            player.user_id === userId &&
+            player.status === "active"
+        );
+
+        for (const player of updated) {
+          player.portrait_asset_id = assetId;
+          player.updated_at = new Date();
+        }
+
+        return { rows: [] as T[] };
+      }
+
       const assetId = values[0] as string;
       const playerId = values[1] as string;
       const player = this.players.find((candidate) => candidate.id === playerId);
