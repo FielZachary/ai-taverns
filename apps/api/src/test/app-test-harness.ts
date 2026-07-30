@@ -2345,15 +2345,22 @@ before(async () => {
             /(?:^|\n)Current turn input:\s*([\s\S]*)$/i
           );
           const currentTurnInput = currentTurnInputMatch?.[1] ?? input.message;
+          const shouldSelectCourierLetter =
+            /read it again/i.test(currentTurnInput) &&
+            input.message.includes('"key": "world:courier-letter"');
           const content = JSON.stringify({
             job_needed: /\battack\b/i.test(currentTurnInput)
               ? "combat"
+              : shouldSelectCourierLetter
+                ? "investigation"
               : "scene_director",
             context_keys: {
               npc_context: [],
               player_character_context: [],
               combat_context: [],
-              relevant_world_context: [],
+              relevant_world_context: shouldSelectCourierLetter
+                ? ["world:courier-letter"]
+                : [],
               quests_open_threads: [],
               overarching_big_plot_secrets: []
             },
@@ -2537,8 +2544,57 @@ before(async () => {
           const hasAmberContext = input.message.includes(
             '"context_id": "world:amber-sphere"'
           );
+          const courierLetterText = [
+            "Marra,",
+            "",
+            "The tide gate opens at moonrise. Bring the black key and trust no one wearing harbor blue.",
+            "",
+            "- V."
+          ].join("\n");
+          const shouldCreateCourierLetter =
+            /\bcourier letter\b/i.test(input.message) &&
+            input.message.includes(courierLetterText);
+          const hasCourierLetterContext = input.message.includes(
+            '"context_id": "world:courier-letter"'
+          );
           const content = JSON.stringify(
-            shouldCreateAmber && hasAmberContext
+            shouldCreateCourierLetter && !hasCourierLetterContext
+              ? {
+                  patches: [],
+                  new_context_chunks: [
+                    {
+                      context_id: "world:courier-letter",
+                      context_type: "relevant_world_context",
+                      title: "Courier Letter",
+                      visibility: "player_safe",
+                      markdown: [
+                        "# Courier Letter",
+                        "",
+                        "## Canonical Document Text",
+                        courierLetterText,
+                        "",
+                        "## Established Facts",
+                        "- Ira read the courier letter and knows its exact wording.",
+                        "- The letter names Marra, the tide gate, the black key, harbor blue, and the initial V.",
+                        "",
+                        "## Strong Inferences",
+                        "The letter points toward a moonrise meeting or handoff at the tide gate.",
+                        "",
+                        "## DM Seeds",
+                        "- Harbor blue may identify watch uniforms, smugglers, or a false-flag disguise.",
+                        "",
+                        "## Open Questions",
+                        "- Who is V?",
+                        "- Why does the writer distrust people wearing harbor blue?",
+                        "",
+                        "## Last Touched",
+                        "Created after Ira read the courier letter."
+                      ].join("\n")
+                    }
+                  ],
+                  remove_context_chunks: []
+                }
+              : shouldCreateAmber && hasAmberContext
               ? {
                   patches: [
                     {
