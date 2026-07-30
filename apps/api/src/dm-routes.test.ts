@@ -842,6 +842,15 @@ test("solo turns send the current action once outside provider history", async (
   const secondProviderInput = getProviderInputs().at(-1);
   assert.ok(secondProviderInput);
   assert.match(secondProviderInput.message, /I follow the clearest trail\./);
+  assert.match(secondProviderInput.message, /Inventory possession gate/i);
+  assert.match(
+    secondProviderInput.message,
+    /Player wording is not authoritative for possession/i
+  );
+  assert.match(
+    secondProviderInput.message,
+    /pulling, or producing an item from a bag as attempted inventory actions/i
+  );
   assert.doesNotMatch(
     secondProviderInput.history.map((message) => message.content).join("\n"),
     /I follow the clearest trail\./

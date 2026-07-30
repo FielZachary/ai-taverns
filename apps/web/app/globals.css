@@ -5085,7 +5085,9 @@ h1 {
 .model-settings-modal {
   display: grid;
   gap: 16px;
-  width: min(420px, 100%);
+  width: min(560px, 100%);
+  max-height: min(760px, calc(100vh - 44px));
+  overflow: auto;
   border: 1px solid var(--line);
   padding: 16px;
   background:
@@ -5120,6 +5122,27 @@ h1 {
   gap: 10px;
 }
 
+.model-settings-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.turn-form .model-settings-tabs button {
+  min-height: 38px;
+  border: 1px solid rgba(244, 207, 122, 0.2);
+  color: var(--muted);
+  background: rgba(17, 13, 10, 0.42);
+}
+
+.turn-form .model-settings-tabs button.active,
+.turn-form .model-settings-tabs button:hover:not(:disabled),
+.turn-form .model-settings-tabs button:focus-visible {
+  color: var(--gold-bright);
+  border-color: rgba(244, 207, 122, 0.58);
+  background: rgba(217, 169, 74, 0.12);
+}
+
 .turn-form .model-settings-option {
   justify-content: center;
   min-height: 44px;
@@ -5135,6 +5158,85 @@ h1 {
   opacity: 1;
   border-color: rgba(244, 207, 122, 0.58);
   background: rgba(217, 169, 74, 0.12);
+}
+
+.restart-settings-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.restart-settings-panel p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.restart-settings-panel label {
+  display: grid;
+  gap: 7px;
+  color: var(--gold-bright);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.restart-settings-panel textarea {
+  min-height: 180px;
+  resize: vertical;
+  border: 1px solid rgba(244, 207, 122, 0.24);
+  padding: 12px;
+  color: var(--text);
+  background: rgba(11, 8, 7, 0.68);
+}
+
+.restart-settings-panel textarea:focus {
+  outline: none;
+  border-color: rgba(244, 207, 122, 0.62);
+  box-shadow: 0 0 0 2px rgba(217, 169, 74, 0.14);
+}
+
+.restart-settings-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.turn-form .restart-settings-actions button,
+.turn-form .restart-settings-submit {
+  min-height: 40px;
+  border: 1px solid rgba(244, 207, 122, 0.24);
+  color: var(--gold-bright);
+  background: rgba(17, 13, 10, 0.48);
+}
+
+.turn-form .restart-settings-actions button:hover:not(:disabled),
+.turn-form .restart-settings-actions button:focus-visible,
+.turn-form .restart-settings-submit:hover:not(:disabled),
+.turn-form .restart-settings-submit:focus-visible {
+  border-color: rgba(244, 207, 122, 0.58);
+  background: rgba(217, 169, 74, 0.12);
+}
+
+.turn-form .restart-settings-submit {
+  justify-content: center;
+  color: #ffd0c0;
+  border-color: rgba(255, 151, 111, 0.34);
+  background: rgba(95, 27, 19, 0.36);
+}
+
+.restart-settings-status {
+  color: var(--gold-bright);
+}
+
+.restart-settings-error {
+  color: #ffb4a2;
+}
+
+@media (max-width: 560px) {
+  .restart-settings-actions {
+    grid-template-columns: 1fr;
+  }
 }
 
 .eldermere-map-backdrop {
