@@ -40,6 +40,7 @@ export type DebugFields = {
   combatAdjudication?: unknown;
   eldermereOpeningPlanner?: unknown;
   router?: unknown;
+  askDmContextSelector?: unknown;
 };
 
 type ConnectFn = () => Promise<{
@@ -217,6 +218,19 @@ type DmTurnTraceRecord = {
   created_at: Date;
 };
 
+type DmModelCallRecord = {
+  id: string;
+  campaign_id: string;
+  trace_id: string;
+  turn_id: string | null;
+  phase: string;
+  provider: string | null;
+  model: string | null;
+  raw_response: string | null;
+  metadata: unknown;
+  created_at: Date;
+};
+
 type CampaignDmGuidanceRecord = {
   campaign_id: string;
   trace_id: string;
@@ -251,6 +265,7 @@ class FakeDatabase {
   mediaAssets: MediaAssetRecord[] = [];
   contextChunks: ContextChunkRecord[] = [];
   dmTurnTraces: DmTurnTraceRecord[] = [];
+  dmModelCalls: DmModelCallRecord[] = [];
   campaignDmGuidance: CampaignDmGuidanceRecord[] = [];
   livingWorldEngineRuns: LivingWorldEngineRunRecord[] = [];
   turns: TurnRecord[] = [];
@@ -1249,6 +1264,21 @@ class FakeDatabase {
     }
 
     if (normalizedSql.startsWith("insert into dm_model_calls")) {
+      this.dmModelCalls.push({
+        id: `dm-model-call-${this.nextId++}`,
+        campaign_id: values[0] as string,
+        trace_id: values[1] as string,
+        turn_id: (values[2] as string | null) ?? null,
+        phase: values[3] as string,
+        provider: (values[4] as string | null) ?? null,
+        model: (values[5] as string | null) ?? null,
+        raw_response: (values[6] as string | null) ?? null,
+        metadata:
+          typeof values[7] === "string"
+            ? JSON.parse(values[7] as string)
+            : values[7],
+        created_at: new Date()
+      });
       return { rows: [] as T[] };
     }
 
@@ -3303,9 +3333,51 @@ before(async () => {
           };
         }
 
+        if (input.instructions.includes("AI Taverns Ask DM context selector")) {
+          const shouldSelectRoadTracks =
+            /tracks/i.test(input.message) &&
+            input.message.includes('"key": "world:road-tracks"');
+          const content = JSON.stringify({
+            context_keys: {
+              npc_context: [],
+              player_character_context: [],
+              combat_context: [],
+              relevant_world_context: shouldSelectRoadTracks
+                ? ["world:road-tracks"]
+                : [],
+              quests_open_threads: [],
+              overarching_big_plot_secrets: []
+            },
+            reason: "Deterministic Ask DM context selector response."
+          });
+
+          return {
+            id: "provider-ask-dm-selector-1",
+            content,
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: content,
+              model: "test-model",
+              temperature: 0.8,
+              providerTimings: []
+            }
+          };
+        }
+
         if (input.instructions.includes("out-of-turn table question")) {
           const answer =
-            "Those tracks look too broad for a wolf and too deliberate for a stray animal.";
+            input.message.includes("Road Tracks")
+              ? "The stored campaign context says the road tracks were made by a two-legged creature dragging a hooked pole."
+              : "Those tracks look too broad for a wolf and too deliberate for a stray animal.";
 
           input.onPublicNarrationDelta?.(answer.slice(0, 28));
           input.onPublicNarrationDelta?.(answer.slice(28));

@@ -137,6 +137,19 @@ test("DM runtime routes handle authorized solo, ask-DM, regenerate, and traces",
   );
   assert.equal(solo.isResolving, false);
 
+  database.contextChunks.push({
+    campaign_id: created.campaign.id,
+    context_key: "world:road-tracks",
+    category: "relevant_world_context",
+    title: "Road Tracks",
+    visibility: "player_safe",
+    priority: 10,
+    body_markdown:
+      "# Road Tracks\n\n## Established Facts\n- The road tracks were made by a two-legged creature dragging a hooked pole.",
+    archived_at: null,
+    updated_at: new Date()
+  });
+
   const askResponse = await app.inject({
     method: "POST",
     url: `/api/campaigns/${created.campaign.id}/ask-dm`,
@@ -160,12 +173,45 @@ test("DM runtime routes handle authorized solo, ask-DM, regenerate, and traces",
   assert.ok(askAnswerEvent);
   const askAnswerPayload = askAnswerEvent.payload as {
     messageId?: string;
+    content?: string;
     aiDebug?: DebugFields;
   };
+  assert.match(
+    askAnswerPayload.content ?? "",
+    /two-legged creature dragging a hooked pole/
+  );
   assert.notEqual(askAnswerPayload.messageId, "provider-ask-dm-1");
   assert.equal(
     askAnswerPayload.aiDebug?.providerResponseId,
     "provider-ask-dm-1"
+  );
+  const askSelectorDebug = askAnswerPayload.aiDebug?.askDmContextSelector as
+    | {
+        requestMessages?: { role?: string; content?: string }[];
+        rawResponse?: string;
+        parsedOutput?: {
+          contextKeys?: {
+            relevant_world_context?: string[];
+          };
+        };
+      }
+    | undefined;
+  assert.match(
+    askSelectorDebug?.requestMessages?.at(-1)?.content ?? "",
+    /Available context chunk keys JSON:/
+  );
+  assert.deepEqual(
+    askSelectorDebug?.parsedOutput?.contextKeys?.relevant_world_context,
+    ["world:road-tracks"]
+  );
+  const askAnswerDebug = askAnswerPayload.aiDebug as
+    | {
+        requestMessages?: { role?: string; content?: string }[];
+      }
+    | undefined;
+  assert.match(
+    askAnswerDebug?.requestMessages?.at(-1)?.content ?? "",
+    /Selected context chunks:[\s\S]*Road Tracks/
   );
 
   const latestDmMessage = solo.messages
@@ -222,6 +268,31 @@ test("DM runtime routes handle authorized solo, ask-DM, regenerate, and traces",
     (trace) => trace.phase === "ask_dm_answer_parsed"
   );
   assert.ok(askTrace);
+  const askSelectorTrace = traces.traces.find(
+    (trace) => trace.phase === "ask_dm_context_selector_response_received"
+  );
+  assert.ok(askSelectorTrace);
+  const askContextSnapshotTrace = traces.traces.find(
+    (trace) => trace.phase === "ask_dm_context_snapshot"
+  );
+  assert.ok(askContextSnapshotTrace);
+  assert.deepEqual(
+    (askContextSnapshotTrace as { includedContextKeys?: unknown })
+      .includedContextKeys,
+    ["world:road-tracks"]
+  );
+  const askModelCalls = database.dmModelCalls.filter(
+    (call) =>
+      call.campaign_id === created.campaign.id &&
+      (call.phase === "ask_dm_context_selector" || call.phase === "ask_dm")
+  );
+  assert.deepEqual(
+    askModelCalls.map((call) => [call.phase, call.turn_id]),
+    [
+      ["ask_dm_context_selector", null],
+      ["ask_dm", null]
+    ]
+  );
   const askProviderTrace = traces.traces.find(
     (trace) =>
       trace.phase === "provider_response_received" &&
@@ -255,6 +326,70 @@ test("DM runtime routes handle authorized solo, ask-DM, regenerate, and traces",
     /Routing state JSON:/
   );
   assert.match(routerTraceProvider?.rawResponse ?? "", /job_needed/);
+});
+
+test("ask-DM accepts public_narration provider envelopes without storing raw JSON", async () => {
+  const { cookie, campaignId } = await createSinglePlayerCampaign(
+    "dm-runtime-ask-public-narration"
+  );
+  const content = JSON.stringify({
+    public_narration: "Out-of-turn guidance: there is no immediate threat here.",
+    roll_requests: [],
+    next_input_needed: "player_actions",
+    input_targets: [],
+    input_policy: "all_players"
+  });
+
+  setProviderOverride(async (input) => ({
+    id: "provider-ask-public-narration",
+    content,
+    debug: {
+      requestMessages: [
+        {
+          role: "system",
+          content: input.instructions
+        },
+        {
+          role: "user",
+          content: input.message
+        }
+      ],
+      rawResponse: content,
+      model: "test-model",
+      temperature: 0.8,
+      providerTimings: []
+    }
+  }));
+
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/campaigns/${campaignId}/ask-dm`,
+      headers: {
+        cookie
+      },
+      payload: {
+        question: "Is anyone about to attack me?"
+      }
+    });
+
+    assert.equal(response.statusCode, 200, response.body);
+    CampaignAskDmResponseSchema.parse(response.json());
+    const askAnswerEvent = database.campaignEvents
+      .filter(
+        (event) => event.campaign_id === campaignId && event.type === "dm_answer"
+      )
+      .at(-1);
+    const answerPayload = askAnswerEvent?.payload as { content?: string };
+
+    assert.equal(
+      answerPayload.content,
+      "Out-of-turn guidance: there is no immediate threat here."
+    );
+    assert.doesNotMatch(answerPayload.content ?? "", /public_narration/);
+  } finally {
+    setProviderOverride(undefined);
+  }
 });
 
 test("solo turn applies accepted inventory patches to the character sheet", async () => {

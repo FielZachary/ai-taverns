@@ -45,6 +45,34 @@ function renderInlineMarkdown(content: string) {
   });
 }
 
+function playerFacingMessageContent(message: GameMessage) {
+  if (message.kind !== "ask_dm_answer") {
+    return message.content;
+  }
+
+  try {
+    const parsed = JSON.parse(message.content.trim()) as unknown;
+
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const publicNarration = (parsed as { public_narration?: unknown })
+        .public_narration;
+      const answer = (parsed as { answer?: unknown }).answer;
+
+      if (typeof publicNarration === "string" && publicNarration.trim()) {
+        return publicNarration;
+      }
+
+      if (typeof answer === "string" && answer.trim()) {
+        return answer;
+      }
+    }
+  } catch {
+    // Older messages may be plain prose; render them as-is.
+  }
+
+  return message.content;
+}
+
 function MessageBody({ content }: { content: string }) {
   const paragraphs = content
     .trim()
@@ -228,6 +256,22 @@ function MessageDebugModal({
             <h3>AI Output</h3>
             <pre>{debug.rawResponse}</pre>
           </section>
+          {debug.askDmContextSelector ? (
+            <>
+              <section>
+                <h3>Ask DM Selector Prompt Sent</h3>
+                <pre>{formatDebugPrompt(debug.askDmContextSelector)}</pre>
+              </section>
+              <section>
+                <h3>Ask DM Selector Output</h3>
+                <pre>{debug.askDmContextSelector.rawResponse}</pre>
+              </section>
+              <section>
+                <h3>Ask DM Selector Parsed Output</h3>
+                <pre>{formatDebugJson(debug.askDmContextSelector.parsedOutput)}</pre>
+              </section>
+            </>
+          ) : null}
           {debug.router ? (
             <>
               <section>
@@ -406,6 +450,7 @@ export function MessageLog({
         const canRewindToMessage =
           canRegenerateMessage && !isLatestRegeneratableMessage;
         const locationLabel = messageLocationLabel(message);
+        const messageContent = playerFacingMessageContent(message);
 
         return (
           <article
@@ -476,10 +521,10 @@ export function MessageLog({
                   </div>
                 ) : null}
               </div>
-              {message.role === "dm" && !message.content.trim() ? (
+              {message.role === "dm" && !messageContent.trim() ? (
                 <RuneLoader label="Reading the runes" />
               ) : (
-                <MessageBody content={message.content} />
+                <MessageBody content={messageContent} />
               )}
               <MessageResourceCard
                 message={message}
