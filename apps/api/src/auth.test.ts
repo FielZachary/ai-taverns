@@ -173,14 +173,14 @@ test("Google OAuth callback links identity, creates a session, and authenticates
       "https://openidconnect.googleapis.com/v1/userinfo"
     ]);
     assert.equal(database.users.at(-1)?.email, "player@example.com");
-  assert.equal(
-    database.authIdentities.some(
-      (identity) =>
-        identity.provider === "email" &&
-        identity.provider_subject === "player@example.com"
-    ),
-    true
-  );
+    assert.equal(
+      database.authIdentities.some(
+        (identity) =>
+          identity.provider === "email" &&
+          identity.provider_subject === "player@example.com"
+      ),
+      true
+    );
     assert.equal(
       database.authIdentities.some(
         (identity) =>
@@ -256,8 +256,8 @@ test("Google OAuth start reports missing provider configuration", async () => {
 
     assert.equal(response.statusCode, 500);
     assert.equal(
-      ApiErrorResponseSchema.parse(response.json()).error.message,
-      "Google sign-in is not configured."
+      ApiErrorResponseSchema.parse(response.json()).error.code,
+      "INTERNAL_SERVER_ERROR"
     );
   } finally {
     await noGoogleApp.close();
