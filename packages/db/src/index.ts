@@ -7939,7 +7939,13 @@ function askDmInstructions() {
     "{\"answer\":\"Your player-facing answer.\"}",
     "This is not a player action and must not advance game time.",
     "Do not move the scene forward, resolve consequences, consume resources, request dice, change pending rolls, trigger NPC actions, or introduce new hidden facts as if discovered.",
-    "Use only already-established campaign context, visible character knowledge, rules reasoning, and reasonable table clarification.",
+    "Use only facts explicitly present in the provided campaign context, current scene, canonical character sheets, rules, and visible character knowledge.",
+    "Do not reconstruct missing history, infer where an item came from, or fill continuity gaps unless the provided context explicitly states the answer.",
+    "Do not invent names, places, relationships, deaths, meetings, prior scenes, loot amounts, inventory contents, or inventory changes.",
+    "Do not treat the player's question as confirmation that something happened. If the question contains a false premise, correct only the part contradicted by provided context and clearly say what is unknown.",
+    "If the answer is not clearly established in the provided context, say that you do not see it established in the current campaign context.",
+    "Trust provided campaign context, canonical character sheets, and stored campaign state over prior Ask DM answers when they conflict. Ask DM answers are table guidance, not canon by themselves.",
+    "You may explain what the current context says about inventory, equipment, or currency, but you cannot update inventory, promise an update, or declare a corrected total unless the canonical character sheet or provided campaign state already shows it.",
     "If the player is asking to do something in the fiction, tell them to submit it as a turn/action instead of resolving it here.",
     "Keep the answer concise and useful, normally 1-3 short paragraphs."
   ].join("\n");
