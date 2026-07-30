@@ -1168,7 +1168,7 @@ function inventoryUpdateSentence(patches: Record<string, unknown>[]) {
       ? summaries[0]
       : `${summaries.slice(0, -1).join(", ")} and ${summaries.at(-1)}`;
 
-  return `Inventory update: you ${joined}.`;
+  return `*(Inventory update: you ${joined}.)*`;
 }
 
 function narrationWithInventoryUpdate(
@@ -10583,10 +10583,14 @@ function createStatusError(statusCode: number, message: string): Error {
 }
 
 export const __dbTestInternals = {
+  applyAcceptedInventoryPatches,
   applyAcceptedMemoryPatch,
   campaignContextStorageDebugState,
   formatDmGuidance,
   formatLivingWorldPressureEngineRequest,
   getLatestLivingWorldCoveredMessageCount,
-  normalizeNewContextChunkPatch
+  inventoryUpdateSentence,
+  narrationWithInventoryUpdate,
+  normalizeNewContextChunkPatch,
+  validateInventoryPatches
 };

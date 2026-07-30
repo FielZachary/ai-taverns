@@ -4343,6 +4343,11 @@ h1 {
   background: rgba(217, 169, 74, 0.08);
 }
 
+.message-inventory-update {
+  color: var(--muted);
+  font-style: italic;
+}
+
 .message-waiting {
   color: var(--muted);
 }

@@ -107,6 +107,25 @@ describe("MessageLog", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders inventory update notes as muted italic parentheticals", () => {
+    renderMessageLog({
+      messages: [
+        gameMessage({
+          id: "dm-inventory-update",
+          role: "dm",
+          content:
+            "The barkeep slides the cup across.\n\n*(Inventory update: you spent 3 CP.)*"
+        })
+      ]
+    });
+
+    const inventoryUpdate = screen.getByText(
+      "(Inventory update: you spent 3 CP.)"
+    );
+
+    expect(inventoryUpdate).toHaveClass("message-inventory-update");
+  });
+
   it("renders ask-DM questions and waiting player status details", () => {
     renderMessageLog({
       messages: [

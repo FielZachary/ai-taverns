@@ -310,7 +310,7 @@ test("solo turn applies accepted inventory patches to the character sheet", asyn
     const solo = CampaignSoloTurnResponseSchema.parse(soloResponse.json());
     assert.match(
       solo.messages.at(-1)?.content ?? "",
-      /Inventory update: you spent 3 CP and gained a brass token\./
+      /\*\(Inventory update: you spent 3 CP and gained a brass token\.\)\*/
     );
     assert.match(player.character_sheet, /Inventory\nRations\nbrass token/);
     assert.match(player.character_sheet, /Currency\nGP: 4\nSP: 9\nCP: 7/);
