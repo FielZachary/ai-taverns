@@ -551,6 +551,9 @@ type CampaignInvitePreviewRow = CampaignInviteRow & {
 type CampaignSettingSummary = {
   displayLocation?: string;
   worldName?: string;
+  regionName?: string;
+  settlementName?: string;
+  sceneLocation?: string;
   startingLocation?: string;
 };
 
@@ -686,6 +689,9 @@ const dungeonMasterContractInstructions = [
   "Use roll_requests only for player-controlled dice the website must collect.",
   "In roll_requests, dice must be bare dice notation only, such as 1d20, 3d4, or 8d6. Do not include + or - modifiers in dice; put static bonuses or penalties in modifier. Example: Magic Missile uses dice \"3d4\" and modifier 3, not dice \"3d4+3\".",
   "Use mechanics_state_update for canonical game/mechanics state changes; the website owns persistence.",
+  "When the party's current location is known, include a setting object with display_location, world_name, region_name, settlement_name, scene_location, and starting_location when available.",
+  "Use scene_location for the current local scene label, such as a tavern, street, room, road, ruin, district, or wilderness landmark.",
+  "Use display_location as the short UI label for the current location; do not use a genre label.",
   "Required top-level keys: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update.",
   "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved this turn."
 ].join("\n");
@@ -4514,6 +4520,52 @@ function eventAiDebug(payload: Record<string, unknown>, role: "player" | "dm") {
   return debug as AiDebugInfo;
 }
 
+function eventSetting(payload: Record<string, unknown>, role: "player" | "dm") {
+  if (role !== "dm") {
+    return undefined;
+  }
+
+  const setting = eventPayload(payload.setting);
+  const displayLocation =
+    typeof setting.displayLocation === "string"
+      ? setting.displayLocation.trim()
+      : "";
+  const worldName =
+    typeof setting.worldName === "string" ? setting.worldName.trim() : "";
+  const regionName =
+    typeof setting.regionName === "string" ? setting.regionName.trim() : "";
+  const settlementName =
+    typeof setting.settlementName === "string"
+      ? setting.settlementName.trim()
+      : "";
+  const sceneLocation =
+    typeof setting.sceneLocation === "string" ? setting.sceneLocation.trim() : "";
+  const startingLocation =
+    typeof setting.startingLocation === "string"
+      ? setting.startingLocation.trim()
+      : "";
+
+  if (
+    !displayLocation &&
+    !worldName &&
+    !regionName &&
+    !settlementName &&
+    !sceneLocation &&
+    !startingLocation
+  ) {
+    return undefined;
+  }
+
+  return {
+    ...(displayLocation ? { displayLocation } : {}),
+    ...(worldName ? { worldName } : {}),
+    ...(regionName ? { regionName } : {}),
+    ...(settlementName ? { settlementName } : {}),
+    ...(sceneLocation ? { sceneLocation } : {}),
+    ...(startingLocation ? { startingLocation } : {})
+  };
+}
+
 async function buildRoomSnapshot(
   db: Queryable,
   campaign: CampaignRow
@@ -4601,6 +4653,7 @@ async function buildRoomSnapshot(
 
       const role = payload.role === "player" ? "player" : "dm";
       const debug = eventAiDebug(payload, role);
+      const setting = eventSetting(payload, role);
 
       return {
         id: String(payload.messageId || event.id),
@@ -4614,6 +4667,7 @@ async function buildRoomSnapshot(
         ...(typeof payload.characterName === "string"
           ? { characterName: payload.characterName }
           : {}),
+        ...(setting ? { setting } : {}),
         ...(debug ? { debug } : {})
       };
     })
@@ -7499,7 +7553,10 @@ function formatEldermereNarratorOpeningRequest(input: {
     "Do not invent new circumstances for how a keepsake, clue, wound, relationship, promise, or obligation entered the character's life. If the exact handoff is not specified, use neutral wording like 'the scroll case you carry from her' instead of inventing a scene where someone gave it to the character.",
     "Useful personal urgency beats look like: 'The handwriting looks enough like your mother's that your hand goes to the scroll case before you decide to move.', 'The same name from your dream is written on the board in front of you. Someone in this town knows something.', or 'The shard vibrates at your side at the same moment you read the note.'",
     'Set setting.world_name to "Eldermere".',
-    `Set setting.starting_location and setting.display_location to "${input.plan.startingLocation.name}".`
+    `Set setting.region_name to "${input.plan.region.name}".`,
+    `Set setting.settlement_name to "${input.plan.startingLocation.name}" when the starting location is a settlement; otherwise omit it.`,
+    `Set setting.scene_location and setting.display_location to "${input.plan.startingLocation.name}".`,
+    `Set setting.starting_location to "${input.plan.startingLocation.name}".`
   ].join("\n");
 }
 
@@ -8513,6 +8570,8 @@ function repairEldermereOpeningReply(
     setting: {
       ...reply.setting,
       worldName: "Eldermere",
+      regionName: plan.region.name,
+      sceneLocation: plan.startingLocation.name,
       startingLocation: plan.startingLocation.name,
       displayLocation: plan.startingLocation.name
     }
@@ -8744,9 +8803,12 @@ async function getCampaignEventMessages(
         return null;
       }
 
+      const role = payload.role === "player" ? "player" : "dm";
+      const setting = eventSetting(payload, role);
+
       return {
         id: String(payload.messageId || event.id),
-        role: payload.role === "player" ? "player" : "dm",
+        role,
         kind:
           event.type === "dm_question"
             ? "ask_dm_question"
@@ -8760,7 +8822,8 @@ async function getCampaignEventMessages(
           : {}),
         ...(typeof payload.characterName === "string"
           ? { characterName: payload.characterName }
-          : {})
+          : {}),
+        ...(setting ? { setting } : {})
       };
     })
     .filter((message): message is GameMessage => message !== null);
@@ -9183,16 +9246,36 @@ async function askDungeonMaster(
 function settingMetadata(setting: CampaignSettingSummary | undefined) {
   const displayLocation = setting?.displayLocation?.trim();
   const worldName = setting?.worldName?.trim();
+  const regionName = setting?.regionName?.trim();
+  const settlementName = setting?.settlementName?.trim();
+  const sceneLocation = setting?.sceneLocation?.trim();
   const startingLocation = setting?.startingLocation?.trim();
 
-  if (!displayLocation && !worldName && !startingLocation) {
+  if (
+    !displayLocation &&
+    !worldName &&
+    !regionName &&
+    !settlementName &&
+    !sceneLocation &&
+    !startingLocation
+  ) {
     return {};
   }
 
   return {
     setting: {
-      displayLocation: displayLocation || startingLocation || worldName || null,
+      displayLocation:
+        displayLocation ||
+        sceneLocation ||
+        settlementName ||
+        startingLocation ||
+        regionName ||
+        worldName ||
+        null,
       worldName: worldName || null,
+      regionName: regionName || null,
+      settlementName: settlementName || null,
+      sceneLocation: sceneLocation || null,
       startingLocation: startingLocation || null
     }
   };

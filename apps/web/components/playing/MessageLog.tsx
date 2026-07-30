@@ -304,6 +304,40 @@ function messageLabel(message: GameMessage) {
       : "Table";
 }
 
+function messageLocationLabel(message: GameMessage) {
+  if (message.role !== "dm" || message.kind === "ask_dm_answer") {
+    return "";
+  }
+
+  const setting = message.setting;
+
+  if (!setting) {
+    return "";
+  }
+
+  const structuredParts = [
+    setting.regionName,
+    setting.settlementName,
+    setting.sceneLocation
+  ]
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part));
+  const dedupedParts = structuredParts.filter(
+    (part, index) => structuredParts.indexOf(part) === index
+  );
+
+  if (dedupedParts.length > 0) {
+    return dedupedParts.join(" / ");
+  }
+
+  return (
+    setting.displayLocation?.trim() ||
+    setting.startingLocation?.trim() ||
+    setting.worldName?.trim() ||
+    ""
+  );
+}
+
 export function MessageLog({
   messages,
   isSending,
@@ -371,6 +405,7 @@ export function MessageLog({
           message.id === regeneratableMessageId;
         const canRewindToMessage =
           canRegenerateMessage && !isLatestRegeneratableMessage;
+        const locationLabel = messageLocationLabel(message);
 
         return (
           <article
@@ -384,7 +419,12 @@ export function MessageLog({
             </div>
             <div className="message-content">
               <div className="message-heading">
-                <p className="message-label">{messageLabel(message)}</p>
+                <div className="message-label-stack">
+                  <p className="message-label">{messageLabel(message)}</p>
+                  {locationLabel ? (
+                    <p className="message-location-label">{locationLabel}</p>
+                  ) : null}
+                </div>
                 {message.role === "dm" &&
                 (message.debug || canRegenerateMessage) ? (
                   <div className="message-actions">

@@ -83,6 +83,14 @@ export type GameMessage = {
   kind?: GameMessageKind;
   playerName?: string;
   characterName?: string;
+  setting?: {
+    displayLocation?: string;
+    worldName?: string;
+    regionName?: string;
+    settlementName?: string;
+    sceneLocation?: string;
+    startingLocation?: string;
+  };
   content: string;
   createdAt: string;
   debug?: AiDebugInfo;

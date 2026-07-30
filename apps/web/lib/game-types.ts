@@ -86,6 +86,14 @@ export type GameMessage = {
   playerName?: string;
   characterName?: string;
   avatarUrl?: string;
+  setting?: {
+    displayLocation?: string;
+    worldName?: string;
+    regionName?: string;
+    settlementName?: string;
+    sceneLocation?: string;
+    startingLocation?: string;
+  };
   content: string;
   createdAt: string;
   isSyntheticIntro?: boolean;

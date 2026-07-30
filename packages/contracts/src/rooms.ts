@@ -47,6 +47,15 @@ export const RoomPlayerSchema = z.object({
   lastSeenAt: z.string().datetime()
 });
 
+export const RoomMessageSettingSchema = z.object({
+  displayLocation: z.string().min(1).optional(),
+  worldName: z.string().min(1).optional(),
+  regionName: z.string().min(1).optional(),
+  settlementName: z.string().min(1).optional(),
+  sceneLocation: z.string().min(1).optional(),
+  startingLocation: z.string().min(1).optional()
+});
+
 export const RoomMessageSchema = z
   .object({
     id: z.string().min(1),
@@ -54,6 +63,7 @@ export const RoomMessageSchema = z
     kind: z.string().optional(),
     playerName: z.string().optional(),
     characterName: z.string().optional(),
+    setting: RoomMessageSettingSchema.optional(),
     content: z.string(),
     createdAt: z.string().datetime()
   })

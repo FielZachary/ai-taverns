@@ -3336,10 +3336,13 @@ before(async () => {
         const isEldermereNarrator = input.message.includes(
           'Set setting.world_name to "Eldermere".'
         );
-        const eldermereStartingLocation =
-          input.message.match(
-            /Set setting\.starting_location and setting\.display_location to "([^"]+)"/
-          )?.[1] ?? "Old Road";
+          const eldermereStartingLocation =
+            input.message.match(
+              /Set setting\.starting_location to "([^"]+)"/
+            )?.[1] ?? "Old Road";
+          const eldermereRegion =
+            input.message.match(/Set setting\.region_name to "([^"]+)"/)?.[1] ??
+            "Test Region";
 
         input.onPublicNarrationDelta?.(publicNarration.slice(0, 28));
         input.onPublicNarrationDelta?.(publicNarration.slice(28));
@@ -3357,6 +3360,10 @@ before(async () => {
                 ? eldermereStartingLocation
                 : "Old Road",
               world_name: isEldermereNarrator ? "Eldermere" : "Test Realm",
+              region_name: isEldermereNarrator ? eldermereRegion : "Test Region",
+              scene_location: isEldermereNarrator
+                ? eldermereStartingLocation
+                : "Old Road",
               starting_location: isEldermereNarrator
                 ? eldermereStartingLocation
                 : "Old Road"
