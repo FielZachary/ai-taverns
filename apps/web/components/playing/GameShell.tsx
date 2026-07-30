@@ -109,6 +109,18 @@ const backstoryIntroSeenStoragePrefix = "ai-dnd.backstoryIntroSeen";
 const roomRequestTimeoutMs = 8_000;
 const fallbackRoomPollMs = 25_000;
 const backstoryIntroDelaySeconds = 10;
+const defaultCampaignPreparationMessage = "Preparing your campaign";
+const campaignPreparationMessages = [
+  defaultCampaignPreparationMessage,
+  "Integrating your backstory",
+  "Creating story direction",
+  "Determining NPCs",
+  "Crafting first scene",
+  "Writing",
+  "Final touches"
+];
+const campaignPreparationMessageIntervalMs = 10_000;
+const campaignPreparationTransitionMs = 650;
 
 function isAiModelId(value: FormDataEntryValue | string | null): value is AiModelId {
   return value === "deepseek-v4-flash" || value === "qwen-3-7-flash";
@@ -156,6 +168,82 @@ type ActiveDiceReveal = {
   total: number;
   onComplete: () => void;
 };
+
+function CampaignPreparationLoader() {
+  const [messageIndex, setMessageIndex] = useState(0);
+  const [exitingMessage, setExitingMessage] = useState("");
+  const currentMessage =
+    campaignPreparationMessages[messageIndex] ??
+    defaultCampaignPreparationMessage;
+
+  useEffect(() => {
+    let timeoutId: number | undefined;
+
+    const intervalId = window.setInterval(() => {
+      setMessageIndex((currentIndex) => {
+        const nextIndex =
+          (currentIndex + 1) % campaignPreparationMessages.length;
+
+        setExitingMessage(
+          campaignPreparationMessages[currentIndex] ??
+            defaultCampaignPreparationMessage
+        );
+
+        if (timeoutId) {
+          window.clearTimeout(timeoutId);
+        }
+
+        timeoutId = window.setTimeout(() => {
+          setExitingMessage("");
+        }, campaignPreparationTransitionMs);
+
+        return nextIndex;
+      });
+    }, campaignPreparationMessageIntervalMs);
+
+    return () => {
+      window.clearInterval(intervalId);
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, []);
+
+  return (
+    <div className="campaign-prep-loader">
+      <div className="campaign-prep-loader-window">
+        {exitingMessage ? (
+          <p
+            key={`exiting-${exitingMessage}`}
+            className="rune-loader campaign-prep-loader-message exiting"
+            aria-hidden="true"
+          >
+            {exitingMessage}
+            <span className="rune-loader-dots" aria-hidden="true">
+              <span>.</span>
+              <span>.</span>
+              <span>.</span>
+            </span>
+          </p>
+        ) : null}
+        <p
+          key={currentMessage}
+          className="rune-loader campaign-prep-loader-message entering"
+        >
+          {currentMessage}
+          <span className="rune-loader-dots" aria-hidden="true">
+            <span>.</span>
+            <span>.</span>
+            <span>.</span>
+          </span>
+        </p>
+      </div>
+      <p className="campaign-prep-loader-note">
+        this&apos;ll take about a minute and a half, sit tight ;)
+      </p>
+    </div>
+  );
+}
 
 function createClientId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -249,6 +337,8 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
   const [inputMode, setInputMode] = useState<PlayerInputMode>("turn");
   const [isSending, setIsSending] = useState(false);
   const [isRestartingCampaign, setIsRestartingCampaign] = useState(false);
+  const [restartPreparingCampaignId, setRestartPreparingCampaignId] =
+    useState<string | null>(null);
   const [regeneratingMessageId, setRegeneratingMessageId] = useState<
     string | null
   >(null);
@@ -442,6 +532,21 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
 
     return latestDmMessage?.id ?? null;
   }, [visibleMessages]);
+  const hasVisibleDmOpener = useMemo(
+    () =>
+      visibleMessages.some(
+        (message) =>
+          message.role === "dm" &&
+          message.kind !== "ask_dm_answer" &&
+          !message.isSyntheticIntro
+      ),
+    [visibleMessages]
+  );
+  const isRestartPreparing =
+    Boolean(restartPreparingCampaignId) &&
+    activeCampaign?.id === restartPreparingCampaignId &&
+    !hasVisibleDmOpener &&
+    (isRoomResolving || isLoadingMessages || visibleMessages.length === 0);
 
   const canBeginAdventure =
     Boolean(activeCampaign) &&
@@ -541,14 +646,10 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
       }
 
       const room = (await response.json()) as RoomSnapshot;
-      setMessages(
-        campaign.mode === "single_player" && room.messages.length > 0
-          ? room.messages
-          : openingMessages
-      );
+      setMessages(openingMessages);
 
       if (campaign.mode === "single_player") {
-        setRoomMessages([]);
+        setRoomMessages(room.messages);
         setRoomPlayers(room.players);
         setIsRoomResolving(room.isResolving);
         setHasAdventureBegun(true);
@@ -608,6 +709,16 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
       setInputValidationMessage("");
     }
   }, [inputValidationMessage, playerProfile]);
+
+  useEffect(() => {
+    if (
+      restartPreparingCampaignId &&
+      activeCampaign?.id === restartPreparingCampaignId &&
+      hasVisibleDmOpener
+    ) {
+      setRestartPreparingCampaignId(null);
+    }
+  }, [activeCampaign?.id, hasVisibleDmOpener, restartPreparingCampaignId]);
 
   useEffect(() => {
     if (!activeCampaign?.id || !hasAdventureBegun || !activeBackstory) {
@@ -826,6 +937,10 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
         if (!shouldIgnore) {
           if (isSinglePlayer) {
             setRoomPlayers(room.players);
+            setRoomMessages(room.messages);
+            setStreamingDmMessages((currentMessages) =>
+              removePersistedStreamingDmMessages(currentMessages, room.messages)
+            );
             setIsRoomResolving(room.isResolving);
             setHasAdventureBegun(true);
             setPendingRollRequests(rollRequestsFromRoom(room));
@@ -1289,8 +1404,10 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
         "",
         `/play?campaignId=${restartedCampaign.id}`
       );
+      setRestartPreparingCampaignId(restartedCampaign.id);
       setActiveCampaignId(restartedCampaign.id);
       setDraft("");
+      setMessages(openingMessages);
       setRoomMessages([]);
       setRoomPlayers([]);
       setStreamingDmMessages([]);
@@ -1834,6 +1951,16 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
               <span>.</span>
             </span>
           </p>
+        </section>
+      </main>
+    );
+  }
+
+  if (isRestartPreparing) {
+    return (
+      <main className="campaign-creation-screen" aria-label="Preparing campaign">
+        <section className="campaign-creation-center" aria-live="polite">
+          <CampaignPreparationLoader />
         </section>
       </main>
     );
