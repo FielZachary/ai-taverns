@@ -30,6 +30,7 @@ type QueryFn = <T = unknown>(
 
 export type DebugFields = {
   model?: unknown;
+  providerResponseId?: unknown;
   rawResponse?: unknown;
   temperature?: unknown;
   combatState?: unknown;
