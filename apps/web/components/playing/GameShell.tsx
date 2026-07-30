@@ -1305,6 +1305,11 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
       await loadCampaignMessages(restartedCampaign);
       setTableAlert("Campaign restarted.");
     } catch (error) {
+      console.error("Campaign restart failed", {
+        campaignId: activeCampaign.id,
+        backstoryLength: backstory.trim().length,
+        error
+      });
       setMessages((currentMessages) => [
         ...currentMessages,
         {

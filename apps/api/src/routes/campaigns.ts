@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import {
   CampaignInviteCreateParamsSchema,
@@ -850,22 +851,71 @@ export async function registerCampaignRoutes(
   });
 
   fastify.post("/campaigns/:campaignId/restart", async (request, reply) => {
+    const restartTraceId = randomUUID();
     const params = CampaignRestartBackstoryParamsSchema.parse(request.params);
     const body = CampaignRestartRequestSchema.parse(request.body);
+    request.log.info(
+      {
+        restartTraceId,
+        campaignId: params.campaignId,
+        backstoryLength: body.backstory.trim().length
+      },
+      "campaign restart request received"
+    );
     const user = await requireAuthenticatedUser(
       fastify,
       config,
       request.cookies[config.authCookieName]
     );
-    const campaign = await restartSinglePlayerCampaignForUser(fastify.pg, {
-      campaignId: params.campaignId,
-      backstory: body.backstory,
-      userId: user.id,
-      runtime
-    });
+    request.log.info(
+      {
+        restartTraceId,
+        campaignId: params.campaignId,
+        userId: user.id
+      },
+      "campaign restart authenticated"
+    );
 
-    reply.status(201);
-    return CampaignRestartResponseSchema.parse({ campaign });
+    try {
+      const campaign = await restartSinglePlayerCampaignForUser(fastify.pg, {
+        campaignId: params.campaignId,
+        backstory: body.backstory,
+        userId: user.id,
+        runtime,
+        restartTraceId
+      });
+      request.log.info(
+        {
+          restartTraceId,
+          sourceCampaignId: params.campaignId,
+          restartedCampaignId: campaign.id,
+          restartedSessionId: campaign.sessionId,
+          portraitCopied: Boolean(campaign.portraitAssetId)
+        },
+        "campaign restart completed"
+      );
+
+      reply.status(201);
+      return CampaignRestartResponseSchema.parse({ campaign });
+    } catch (error) {
+      request.log.error(
+        {
+          restartTraceId,
+          campaignId: params.campaignId,
+          userId: user.id,
+          error:
+            error instanceof Error
+              ? {
+                  name: error.name,
+                  message: error.message,
+                  stack: error.stack
+                }
+              : error
+        },
+        "campaign restart failed"
+      );
+      throw error;
+    }
   });
 
   fastify.post("/campaigns/portrait/preview", async (request) => {

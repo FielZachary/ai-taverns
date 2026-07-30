@@ -2743,13 +2743,36 @@ export async function restartSinglePlayerCampaignForUser(
     backstory: string;
     userId: string;
     runtime: DungeonMasterRuntime;
+    restartTraceId?: string | undefined;
   }
 ): Promise<CampaignSummary> {
+  const restartTraceId = input.restartTraceId ?? randomUUID();
   const trimmedBackstory = input.backstory.trim();
 
   if (!trimmedBackstory) {
     throw createStatusError(400, "Write a backstory before restarting.");
   }
+
+  async function logRestartEvent(
+    campaignId: string,
+    stage: string,
+    payload: Record<string, unknown> = {}
+  ) {
+    try {
+      await logCampaignEvent(db, campaignId, "campaign_restart_diagnostic", {
+        restartTraceId,
+        stage,
+        ...payload
+      });
+    } catch {
+      // Diagnostic logging must never be the reason restart fails.
+    }
+  }
+
+  await logRestartEvent(input.campaignId, "request_received", {
+    userId: input.userId,
+    backstoryLength: trimmedBackstory.length
+  });
 
   const source = await withTransaction(db, async (client) => {
     const campaign = (
@@ -2769,9 +2792,32 @@ export async function restartSinglePlayerCampaignForUser(
       throw createStatusError(404, "Campaign not found.");
     }
 
+    await logCampaignEvent(client, campaign.id, "campaign_restart_diagnostic", {
+      restartTraceId,
+      stage: "source_campaign_loaded",
+      mode: campaign.mode,
+      hasBegun: campaign.has_begun,
+      ownerUserMatches: campaign.owner_user_id === input.userId,
+      metadataKeys:
+        campaign.metadata && typeof campaign.metadata === "object"
+          ? Object.keys(campaign.metadata as Record<string, unknown>).sort()
+          : []
+    });
+
     await assertCampaignAccessForUser(client, campaign, input.userId);
 
+    await logCampaignEvent(client, campaign.id, "campaign_restart_diagnostic", {
+      restartTraceId,
+      stage: "access_confirmed",
+      userId: input.userId
+    });
+
     if (campaign.mode !== "single_player") {
+      await logCampaignEvent(client, campaign.id, "campaign_restart_diagnostic", {
+        restartTraceId,
+        stage: "rejected_non_singleplayer",
+        mode: campaign.mode
+      });
       throw createStatusError(
         400,
         "Campaign restart is available for singleplayer adventures."
@@ -2803,8 +2849,27 @@ export async function restartSinglePlayerCampaignForUser(
     ).rows[0];
 
     if (!player || !isProfileComplete(player)) {
+      await logCampaignEvent(client, campaign.id, "campaign_restart_diagnostic", {
+        restartTraceId,
+        stage: "rejected_incomplete_character",
+        hasPlayer: Boolean(player),
+        hasCharacterName: Boolean(player?.character_name?.trim()),
+        hasCharacterSheet: Boolean(player?.character_sheet?.trim()),
+        hasUsername: Boolean(player?.username?.trim())
+      });
       throw createStatusError(400, "A complete character is required to restart.");
     }
+
+    await logCampaignEvent(client, campaign.id, "campaign_restart_diagnostic", {
+      restartTraceId,
+      stage: "source_player_loaded",
+      playerId: player.id,
+      clientId: player.client_id,
+      characterName: player.character_name,
+      characterSheetLength: player.character_sheet.length,
+      hasPortraitAsset: Boolean(player.portrait_asset_id),
+      hasPortraitUrl: Boolean(player.portrait_public_url)
+    });
 
     return { campaign, player };
   });
@@ -2812,28 +2877,69 @@ export async function restartSinglePlayerCampaignForUser(
   const style = campaignOpeningStyleFromMetadata(source.campaign);
   const metadata = eventPayload(source.campaign.metadata);
   const genre = eventPayload(metadata.genre);
-  const restarted = await createCampaignForMode(db, {
-    mode: "single_player",
-    title: source.campaign.title,
-    campaignGenre: style.campaignGenre,
-    campaignGenreKind: genre.kind === "custom" ? "custom" : "preset",
-    campaignGenrePresetId: style.campaignGenrePresetId,
-    campaignGenrePromptBrief: style.campaignGenrePromptBrief,
-    customWorldName: style.customWorldName,
-    customWorldDescription: style.customWorldDescription,
-    ownerClientId: source.player.client_id,
-    playerName: source.player.username,
-    characterName: source.player.character_name,
-    characterSheet: characterSheetWithBackstory(
-      source.player.character_sheet,
-      trimmedBackstory
-    ),
-    eldermereStart: eldermereCampaignStartFromMetadata(source.campaign),
-    userId: input.userId,
-    runtime: input.runtime
+  const eldermereStart = eldermereCampaignStartFromMetadata(source.campaign);
+  const restartedCharacterSheet = characterSheetWithBackstory(
+    source.player.character_sheet,
+    trimmedBackstory
+  );
+
+  await logRestartEvent(source.campaign.id, "create_campaign_started", {
+    genreKind: genre.kind === "custom" ? "custom" : "preset",
+    campaignGenre: style.campaignGenre ?? null,
+    campaignGenrePresetId: style.campaignGenrePresetId ?? null,
+    hasCampaignGenrePromptBrief: Boolean(style.campaignGenrePromptBrief),
+    customWorldName: style.customWorldName ?? null,
+    hasCustomWorldDescription: Boolean(style.customWorldDescription),
+    eldermereStartRegion: eldermereStart?.region.name ?? null,
+    eldermereStartSettlement: eldermereStart?.settlement.name ?? null,
+    sourceCharacterSheetLength: source.player.character_sheet.length,
+    restartedCharacterSheetLength: restartedCharacterSheet.length,
+    backstoryLength: trimmedBackstory.length
+  });
+
+  let restarted: CampaignSummary;
+
+  try {
+    restarted = await createCampaignForMode(db, {
+      mode: "single_player",
+      title: source.campaign.title,
+      campaignGenre: style.campaignGenre,
+      campaignGenreKind: genre.kind === "custom" ? "custom" : "preset",
+      campaignGenrePresetId: style.campaignGenrePresetId,
+      campaignGenrePromptBrief: style.campaignGenrePromptBrief,
+      customWorldName: style.customWorldName,
+      customWorldDescription: style.customWorldDescription,
+      ownerClientId: source.player.client_id,
+      playerName: source.player.username,
+      characterName: source.player.character_name,
+      characterSheet: restartedCharacterSheet,
+      eldermereStart,
+      userId: input.userId,
+      runtime: input.runtime
+    });
+  } catch (error) {
+    await logRestartEvent(source.campaign.id, "create_campaign_failed", {
+      error: errorSummary(error)
+    });
+    throw error;
+  }
+
+  await logRestartEvent(source.campaign.id, "create_campaign_completed", {
+    restartedCampaignId: restarted.id,
+    restartedSessionId: restarted.sessionId,
+    restartedTitle: restarted.title
+  });
+  await logRestartEvent(restarted.id, "created_from_restart", {
+    sourceCampaignId: source.campaign.id,
+    sourcePlayerId: source.player.id,
+    sourcePortraitAssetId: source.player.portrait_asset_id ?? null
   });
 
   if (source.player.portrait_asset_id) {
+    await logRestartEvent(restarted.id, "portrait_copy_started", {
+      sourceCampaignId: source.campaign.id,
+      portraitAssetId: source.player.portrait_asset_id
+    });
     await db.query(
       `
         update players
@@ -2844,6 +2950,11 @@ export async function restartSinglePlayerCampaignForUser(
       `,
       [restarted.id, source.player.portrait_asset_id, input.userId]
     );
+    await logRestartEvent(restarted.id, "portrait_copy_completed", {
+      sourceCampaignId: source.campaign.id,
+      portraitAssetId: source.player.portrait_asset_id,
+      hasPortraitUrl: Boolean(source.player.portrait_public_url)
+    });
 
     return {
       ...restarted,
@@ -2853,6 +2964,10 @@ export async function restartSinglePlayerCampaignForUser(
         : {})
     };
   }
+
+  await logRestartEvent(restarted.id, "completed_without_portrait", {
+    sourceCampaignId: source.campaign.id
+  });
 
   return restarted;
 }
