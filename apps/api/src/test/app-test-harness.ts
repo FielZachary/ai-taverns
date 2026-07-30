@@ -195,6 +195,16 @@ type CampaignEventRecord = {
   created_at: Date;
 };
 
+type CombatEventRecord = {
+  id: string;
+  campaign_id: string;
+  active_combat_id: string | null;
+  turn_id: string | null;
+  event_type: string;
+  payload: unknown;
+  created_at: Date;
+};
+
 type ContextChunkRecord = {
   campaign_id: string;
   context_key: string;
@@ -262,6 +272,7 @@ class FakeDatabase {
   campaignInvites: CampaignInviteRecord[] = [];
   campaignInviteUses: CampaignInviteUseRecord[] = [];
   campaignEvents: CampaignEventRecord[] = [];
+  combatEvents: CombatEventRecord[] = [];
   mediaAssets: MediaAssetRecord[] = [];
   contextChunks: ContextChunkRecord[] = [];
   dmTurnTraces: DmTurnTraceRecord[] = [];
@@ -942,6 +953,31 @@ class FakeDatabase {
         created_at: new Date()
       } satisfies CampaignEventRecord;
       this.campaignEvents.push(record);
+      return { rows: [{ id: record.id } as T] };
+    }
+
+    if (normalizedSql.startsWith("insert into combat_events")) {
+      const hasActiveCombatId = normalizedSql.includes("active_combat_id");
+      const payloadIndex = hasActiveCombatId ? 4 : 3;
+      const record = {
+        id: `combat-event-${this.nextId++}`,
+        campaign_id: values[0] as string,
+        active_combat_id: hasActiveCombatId
+          ? ((values[1] as string | null) ?? null)
+          : null,
+        turn_id: hasActiveCombatId
+          ? ((values[2] as string | null) ?? null)
+          : ((values[1] as string | null) ?? null),
+        event_type: hasActiveCombatId
+          ? (values[3] as string)
+          : (values[2] as string),
+        payload:
+          typeof values[payloadIndex] === "string"
+            ? (JSON.parse(values[payloadIndex] as string) as unknown)
+            : values[payloadIndex],
+        created_at: new Date()
+      } satisfies CombatEventRecord;
+      this.combatEvents.push(record);
       return { rows: [{ id: record.id } as T] };
     }
 
@@ -3039,7 +3075,24 @@ before(async () => {
                   conditions: []
                 }
               }
-            }
+            },
+            combat_events: [
+              {
+                event: "damage",
+                actor: "npc:cutlass-raider",
+                target: targetPlayerKey,
+                roll: {
+                  dice: "1d6",
+                  rolls: [4],
+                  modifier: 2,
+                  total: 6
+                },
+                damage_type: "slashing",
+                amount: 6,
+                from_hp: targetCurrentHp,
+                to_hp: targetNextHp
+              }
+            ]
           });
 
           return {

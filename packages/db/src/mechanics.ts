@@ -240,8 +240,8 @@ export function persistedMechanicsState(
     actors[actorKey] = {
       characterName:
         typeof actor.characterName === "string" ? actor.characterName : "",
-      ...(Number.isInteger(currentHp) && currentHp >= 0 ? { currentHp } : {}),
-      ...(Number.isInteger(maxHp) && maxHp >= 0 ? { maxHp } : {}),
+      ...(Number.isInteger(currentHp) ? { currentHp: Math.max(0, currentHp) } : {}),
+      ...(Number.isInteger(maxHp) ? { maxHp: Math.max(0, maxHp) } : {}),
       ...(parseSpellSlots(actor.spellSlots)
         ? { spellSlots: parseSpellSlots(actor.spellSlots) }
         : {}),

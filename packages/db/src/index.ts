@@ -1847,6 +1847,11 @@ function numberField(record: Record<string, unknown>, key: string) {
   return Number.isInteger(value) && Number(value) >= 0 ? Number(value) : undefined;
 }
 
+function hpNumberField(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  return Number.isInteger(value) ? Math.max(0, Number(value)) : undefined;
+}
+
 function stringListField(record: Record<string, unknown>, key: string) {
   const value = record[key];
   return Array.isArray(value)
@@ -1885,11 +1890,11 @@ function applyMechanicsStateUpdate(
     nextActors[actorKey] = {
       ...(existing ?? { characterName: characterName ?? actorKey }),
       ...(characterName ? { characterName } : {}),
-      ...(numberField(rawActor, "currentHp") !== undefined
-        ? { currentHp: numberField(rawActor, "currentHp") }
+      ...(hpNumberField(rawActor, "currentHp") !== undefined
+        ? { currentHp: hpNumberField(rawActor, "currentHp") }
         : {}),
-      ...(numberField(rawActor, "maxHp") !== undefined
-        ? { maxHp: numberField(rawActor, "maxHp") }
+      ...(hpNumberField(rawActor, "maxHp") !== undefined
+        ? { maxHp: hpNumberField(rawActor, "maxHp") }
         : {}),
       ...(stringListField(rawActor, "conditions") !== undefined
         ? { conditions: stringListField(rawActor, "conditions") }
@@ -5035,6 +5040,45 @@ async function logDmMemoryPatchLog(
       JSON.stringify(input.payload)
     ]
   );
+}
+
+async function logCombatEvents(
+  db: Queryable,
+  input: {
+    campaignId: string;
+    turnId?: string | undefined;
+    events: Record<string, unknown>[];
+  }
+) {
+  for (const event of input.events) {
+    const eventType =
+      typeof event.event_type === "string" && event.event_type.trim()
+        ? event.event_type.trim()
+        : typeof event.event === "string" && event.event.trim()
+          ? event.event.trim()
+          : typeof event.type === "string" && event.type.trim()
+            ? event.type.trim()
+            : "combat_event";
+
+    await bestEffortRuntimeInsert(
+      db,
+      `
+        insert into combat_events (
+          campaign_id,
+          turn_id,
+          event_type,
+          payload
+        )
+        values ($1, $2, $3, $4::jsonb)
+      `,
+      [
+        input.campaignId,
+        input.turnId ?? null,
+        eventType,
+        JSON.stringify(event)
+      ]
+    );
+  }
 }
 
 function contextKeyEntries(router: ValidatedRouterOutput) {
@@ -9318,6 +9362,15 @@ async function askDungeonMaster(
         nextMechanicsState
       );
     }
+
+    if (combatValidation.accepted.length > 0) {
+      await logCombatEvents(db, {
+        campaignId: campaign.id,
+        turnId,
+        events: combatValidation.accepted
+      });
+    }
+
     const appliedInventoryPatches =
       inventoryValidation.accepted.length > 0
         ? await applyAcceptedInventoryPatches(
