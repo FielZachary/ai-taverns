@@ -260,6 +260,10 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("npc_dialogue"), /Persuasion partial success/i);
     assert.match(jobPrompt("npc_dialogue"), /failed Intimidation/i);
     assert.match(jobPrompt("npc_dialogue"), /conversational texture/i);
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /validate that the acting character actually has the offered object before the NPC sees, touches, evaluates, accepts, refuses, or comments on it/i
+    );
     assert.match(jobPrompt("npc_dialogue"), /bargaining, gifting, payment/i);
     assert.match(
       jobPrompt("investigation"),
@@ -479,6 +483,28 @@ describe("modular AI DM runtime contracts", () => {
       const prompt = jobPrompt(job);
       assert.match(prompt, /inventory_state_update/);
       assert.match(prompt, /Treat canonical character sheet Inventory, Equipment, and Currency sections/i);
+      assert.match(prompt, /Inventory possession gate/i);
+      assert.match(
+        prompt,
+        /before writing any public_narration, inspect current player submissions/i
+      );
+      assert.match(
+        prompt,
+        /pull from a bag, show, offer, sell, appraise/i
+      );
+      assert.match(
+        prompt,
+        /Player wording is not authoritative for possession/i
+      );
+      assert.match(prompt, /does not make X exist/i);
+      assert.match(
+        prompt,
+        /Weapon proficiency, class, background, and backstory do not imply/i
+      );
+      assert.match(
+        prompt,
+        /Do not narrate the item appearing, being held, being inspected, being offered, being used, being cast, or being reacted to by an NPC/i
+      );
       assert.match(
         prompt,
         /attempts to produce, present, show, appraise, sell, use, consume, equip, spend, give, trade, throw, load, unlock with, activate/i
