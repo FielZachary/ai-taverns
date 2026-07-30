@@ -6903,7 +6903,7 @@ function formatSoloTurn(
   const turnInput = {
     type: "solo_turn",
     action_policy:
-      "Only treat concrete declared actions as actions. Quoted speech, questions, promises, plans, and corrections are dialogue or intent unless the player also says they move, travel, enter, search, attack, take something, cast a spell, or otherwise change the scene.",
+      "Only treat concrete declared actions as actions. Quoted speech, questions, promises, plans, and corrections are dialogue or intent unless the player also says they move, travel, enter, search, attack, take something, cast a spell, or otherwise change the scene. Treat claims like taking, drawing, pulling, or producing an item from a bag as attempted inventory actions, not proof of possession; validate the claimed item against the canonical character sheet before narrating it.",
     submissions: [
       {
         player: player.username,
@@ -7650,6 +7650,11 @@ const gameplayTurnOutputContractReminder = [
   "Required top-level keys: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update.",
   "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved this turn.",
   "Treat canonical character sheet Inventory, Equipment, and Currency sections as current inventory state.",
+  "Inventory possession gate: before writing any public_narration, inspect current player submissions for any item, weapon, tool, spell component, currency, carried object, or spell the character claims to produce, draw, pull from a bag, show, offer, sell, appraise, give, use, equip, throw, consume, spend, cast, or otherwise rely on.",
+  "For each claimed object, compare it against that character's canonical character sheet Equipment, Inventory, Currency, and Spells sections before narrating the object into the scene.",
+  "Player wording is not authoritative for possession. A player saying \"I take X from my bag\", \"I pull out X\", \"I draw X\", \"I show X\", or \"I offer X\" does not make X exist.",
+  "Weapon proficiency, class, background, and backstory do not imply the character owns a weapon or item. Only listed Equipment, Inventory, Currency, and Spells establish possession.",
+  "If a claimed item, currency, or spell is absent, stop resolving that attempted action. In public_narration, state in prose that the character does not have it available. Do not narrate the item appearing, being held, being inspected, being offered, being used, being cast, or being reacted to by an NPC.",
   "If a player character attempts to produce, present, show, appraise, sell, use, consume, equip, spend, give, trade, throw, load, unlock with, activate, or otherwise rely on an item or weapon, first check the canonical character sheet Inventory, Equipment, and Currency sections.",
   "If the character does not have the presented, shown, appraised, sold, used, or required item, weapon, or currency, reject the attempt in public_narration and clearly state that they do not have it. Do not narrate the missing item appearing in the scene.",
   "Do not include an inventory patch for a failed inventory attempt.",
