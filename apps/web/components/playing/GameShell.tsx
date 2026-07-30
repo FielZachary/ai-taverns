@@ -144,6 +144,7 @@ type RoomRealtimeEvent =
 
 type GameShellProps = {
   initialCampaignId?: string;
+  initialBackstoryIntro?: boolean;
   userEmail?: string;
 };
 
@@ -240,7 +241,10 @@ async function fetchWithTimeout(
   }
 }
 
-export function GameShell({ initialCampaignId }: GameShellProps) {
+export function GameShell({
+  initialBackstoryIntro = false,
+  initialCampaignId
+}: GameShellProps) {
   const [messages, setMessages] = useState<GameMessage[]>(openingMessages);
   const [availableCampaigns, setAvailableCampaigns] = useState<CampaignSummary[]>([]);
   const [draft, setDraft] = useState("");
@@ -293,6 +297,9 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     backstory: string;
     storageKey: string;
   } | null>(null);
+  const [backstoryIntroCampaignId, setBackstoryIntroCampaignId] = useState<
+    string | null
+  >(initialBackstoryIntro && initialCampaignId ? initialCampaignId : null);
   const [backstoryIntroCountdown, setBackstoryIntroCountdown] = useState(
     backstoryIntroDelaySeconds
   );
@@ -607,7 +614,12 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
   }, [inputValidationMessage, playerProfile]);
 
   useEffect(() => {
-    if (!activeCampaign?.id || !hasAdventureBegun || !activeBackstory) {
+    if (
+      !activeCampaign?.id ||
+      !hasAdventureBegun ||
+      !activeBackstory ||
+      backstoryIntroCampaignId !== activeCampaign.id
+    ) {
       return;
     }
 
@@ -621,6 +633,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
       backstoryIntro?.storageKey === storageKey ||
       window.localStorage.getItem(storageKey) === "true"
     ) {
+      setBackstoryIntroCampaignId(null);
       return;
     }
 
@@ -629,13 +642,30 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
       storageKey
     });
     setBackstoryIntroCountdown(backstoryIntroDelaySeconds);
+    setBackstoryIntroCampaignId(null);
   }, [
     activeBackstory,
     activeCampaign?.id,
+    backstoryIntroCampaignId,
     backstoryIntro?.storageKey,
     hasAdventureBegun,
     playerId
   ]);
+
+  useEffect(() => {
+    if (!initialBackstoryIntro) {
+      return;
+    }
+
+    const url = new URL(window.location.href);
+
+    if (url.searchParams.get("intro") !== "backstory") {
+      return;
+    }
+
+    url.searchParams.delete("intro");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}`);
+  }, [initialBackstoryIntro]);
 
   useEffect(() => {
     if (!backstoryIntro || backstoryIntroCountdown <= 0) {
@@ -996,6 +1026,8 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     setRoomMessages([]);
     setRoomPlayers([]);
     setStreamingDmMessages([]);
+    setBackstoryIntro(null);
+    setBackstoryIntroCampaignId(null);
     setHasAdventureBegun(campaign.mode === "single_player");
     setPendingRollRequests([]);
     setNextInputNeeded("player_actions");
@@ -1228,6 +1260,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
       }
 
       const room = (await response.json()) as RoomSnapshot;
+      setBackstoryIntroCampaignId(activeCampaign.id);
       applyRoomSnapshot(room);
       const campaigns = await fetchCampaigns();
 

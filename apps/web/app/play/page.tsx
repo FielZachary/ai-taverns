@@ -5,19 +5,35 @@ import { getOptionalUser } from "@/lib/auth";
 type PlayPageProps = {
   searchParams: Promise<{
     campaignId?: string;
+    intro?: string;
   }>;
 };
 
 export default async function PlayPage({ searchParams }: PlayPageProps) {
   const user = await getOptionalUser();
-  const { campaignId } = await searchParams;
+  const { campaignId, intro } = await searchParams;
 
   if (!user) {
-    const next = campaignId
-      ? `/play?campaignId=${encodeURIComponent(campaignId)}`
-      : "/play";
+    const nextParams: string[] = [];
+
+    if (campaignId) {
+      nextParams.push(`campaignId=${encodeURIComponent(campaignId)}`);
+    }
+
+    if (intro) {
+      nextParams.push(`intro=${encodeURIComponent(intro)}`);
+    }
+
+    const nextQuery = nextParams.join("&");
+    const next = nextQuery ? `/play?${nextQuery}` : "/play";
     redirect(`/login?next=${encodeURIComponent(next)}`);
   }
 
-  return <GameShell initialCampaignId={campaignId} userEmail={user.email} />;
+  return (
+    <GameShell
+      initialBackstoryIntro={intro === "backstory"}
+      initialCampaignId={campaignId}
+      userEmail={user.email}
+    />
+  );
 }

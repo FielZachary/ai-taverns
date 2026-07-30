@@ -4744,7 +4744,9 @@ export function NewAdventureForm({
 
       setCreatedCampaign(campaignWithPortrait);
       window.location.assign(
-        `/play?campaignId=${encodeURIComponent(campaignWithPortrait.id)}`
+        `/play?campaignId=${encodeURIComponent(
+          campaignWithPortrait.id
+        )}&intro=backstory`
       );
     } catch (caught) {
       setError(

@@ -656,6 +656,136 @@ describe("GameShell", () => {
     expect(screen.getByText("Portrait status: ready")).toBeInTheDocument();
   });
 
+  it("does not show the backstory intro when switching between saved campaigns", async () => {
+    const firstCampaign = {
+      ...campaign,
+      id: "33333333-3333-4333-8333-333333333333",
+      sessionId: "provider-session-first",
+      title: "First Lantern"
+    } satisfies CampaignSummary;
+    const secondCampaign = {
+      ...campaign,
+      id: "44444444-4444-4444-8444-444444444444",
+      sessionId: "provider-session-second",
+      title: "Second Lantern"
+    } satisfies CampaignSummary;
+
+    listCampaignsMock.mockResolvedValue([firstCampaign, secondCampaign]);
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url === "/api/auth/claim-guest-state") {
+        return responseJson({});
+      }
+
+      if (url.startsWith("/api/room?")) {
+        const requestUrl = new URL(url, "https://app.example");
+        const roomId = requestUrl.searchParams.get("roomId");
+        const selectedCampaign =
+          roomId === secondCampaign.id ? secondCampaign : firstCampaign;
+
+        return responseJson(
+          roomSnapshot({
+            roomId: selectedCampaign.id,
+            sessionId: selectedCampaign.sessionId,
+            messages: [
+              {
+                id: `dm-${selectedCampaign.id}`,
+                role: "dm",
+                content: `${selectedCampaign.title} waits in the dark.`,
+                createdAt: "2026-07-12T00:00:00.000Z"
+              }
+            ],
+            players: [
+              {
+                id: "player-1",
+                slot: 0,
+                username: "Mira",
+                characterName: selectedCampaign.title,
+                characterSheet: `Name: ${selectedCampaign.title}\nBackstory\nMira carries a lighthouse debt into the ruins.`,
+                status: "waiting"
+              }
+            ]
+          })
+        );
+      }
+
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<GameShell initialCampaignId={firstCampaign.id} />);
+
+    expect(
+      await screen.findByText("First Lantern waits in the dark.")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { name: "Your Backstory" })
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Second Lantern" }));
+
+    expect(
+      await screen.findByText("Second Lantern waits in the dark.")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { name: "Your Backstory" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the backstory intro for an explicit campaign start launch", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      `/play?campaignId=${campaign.id}&intro=backstory`
+    );
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url === "/api/auth/claim-guest-state") {
+        return responseJson({});
+      }
+
+      if (url.startsWith("/api/room?")) {
+        return responseJson(
+          roomSnapshot({
+            players: [
+              {
+                id: "player-1",
+                slot: 0,
+                username: "Mira",
+                characterName: "Mira Vale",
+                characterSheet:
+                  "Name: Mira Vale\nBackstory\nMira grew up beside a lighthouse.",
+                status: "waiting"
+              }
+            ]
+          })
+        );
+      }
+
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <GameShell
+        initialBackstoryIntro
+        initialCampaignId={campaign.id}
+      />
+    );
+
+    expect(
+      await screen.findByRole("dialog", { name: "Your Backstory" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Mira grew up beside a lighthouse.")
+    ).toBeInTheDocument();
+    expect(window.location.search).toBe(`?campaignId=${campaign.id}`);
+  });
+
   it("does not overwrite an old multiplayer adventure with the previous character profile", async () => {
     const pokeCampaign = {
       ...multiplayerCampaign,

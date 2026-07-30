@@ -56,6 +56,26 @@ describe("play page auth gate", () => {
     );
   });
 
+  it("preserves the backstory intro launch intent through login", async () => {
+    getOptionalUserMock.mockResolvedValue(null);
+
+    await expect(
+      PlayPage({
+        searchParams: Promise.resolve({
+          campaignId: "campaign-1",
+          intro: "backstory"
+        })
+      })
+    ).rejects.toMatchObject({
+      destination:
+        "/login?next=%2Fplay%3FcampaignId%3Dcampaign-1%26intro%3Dbackstory"
+    });
+
+    expect(redirectMock).toHaveBeenCalledWith(
+      "/login?next=%2Fplay%3FcampaignId%3Dcampaign-1%26intro%3Dbackstory"
+    );
+  });
+
   it("renders the game shell for authenticated users", async () => {
     getOptionalUserMock.mockResolvedValue({
       id: "user-1",
@@ -63,12 +83,16 @@ describe("play page auth gate", () => {
     });
 
     const result = await PlayPage({
-      searchParams: Promise.resolve({ campaignId: "campaign-1" })
+      searchParams: Promise.resolve({
+        campaignId: "campaign-1",
+        intro: "backstory"
+      })
     });
 
     expect(result).toMatchObject({
       type: gameShellMock,
       props: {
+        initialBackstoryIntro: true,
         initialCampaignId: "campaign-1",
         userEmail: "hero@example.com"
       }
