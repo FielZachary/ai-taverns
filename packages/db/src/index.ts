@@ -2707,6 +2707,156 @@ export async function createCampaignForMode(
   }
 }
 
+function characterSheetWithBackstory(characterSheet: string, backstory: string) {
+  const normalizedSheet = characterSheet.replace(/\r\n/g, "\n").trim();
+  const trimmedBackstory = compactPromptText(backstory);
+  const backstorySection = `Backstory\n${trimmedBackstory}`;
+  const labelledBackstoryPattern =
+    /(^|\n)(?:#{1,6}\s*)?Backstory\s*\n[\s\S]*?(?=\n(?:#{1,6}\s*)?(?:Backstory Expansion|Core Stats|Ability Scores|Saving Throws|Skills|Proficiencies and Languages|Attacks|Features and Traits|Equipment|Inventory|Currency|Spells|DM Brief|Level Progression|Appearance)\b|$)/i;
+  const inlineBackstoryPattern =
+    /(^|\n)(?:Backstory|Background)\s*:\s*([^\n]+(?:\n(?![A-Z][A-Za-z ]+:\s).+)*)/i;
+
+  if (labelledBackstoryPattern.test(normalizedSheet)) {
+    return normalizedSheet.replace(
+      labelledBackstoryPattern,
+      (match, prefix: string) => {
+        const endsAtDocument = normalizedSheet.endsWith(match);
+        return `${prefix}${backstorySection}${endsAtDocument ? "" : "\n"}`;
+      }
+    );
+  }
+
+  if (inlineBackstoryPattern.test(normalizedSheet)) {
+    return normalizedSheet.replace(
+      inlineBackstoryPattern,
+      (_match, prefix: string) => `${prefix}${backstorySection}`
+    );
+  }
+
+  return [normalizedSheet, "", backstorySection].filter(Boolean).join("\n");
+}
+
+export async function restartSinglePlayerCampaignForUser(
+  db: pg.Pool,
+  input: {
+    campaignId: string;
+    backstory: string;
+    userId: string;
+    runtime: DungeonMasterRuntime;
+  }
+): Promise<CampaignSummary> {
+  const trimmedBackstory = input.backstory.trim();
+
+  if (!trimmedBackstory) {
+    throw createStatusError(400, "Write a backstory before restarting.");
+  }
+
+  const source = await withTransaction(db, async (client) => {
+    const campaign = (
+      await client.query<CampaignRow>(
+        `
+          select *
+          from campaigns
+          where id = $1 and status = 'active'
+          limit 1
+          for update
+        `,
+        [input.campaignId]
+      )
+    ).rows[0];
+
+    if (!campaign) {
+      throw createStatusError(404, "Campaign not found.");
+    }
+
+    await assertCampaignAccessForUser(client, campaign, input.userId);
+
+    if (campaign.mode !== "single_player") {
+      throw createStatusError(
+        400,
+        "Campaign restart is available for singleplayer adventures."
+      );
+    }
+
+    const player = (
+      await client.query<
+        PlayerRow & {
+          portrait_public_url?: string | null;
+        }
+      >(
+        `
+          select
+            players.*,
+            media_assets.public_url as portrait_public_url
+          from players
+          left join media_assets
+            on media_assets.id = players.portrait_asset_id
+           and media_assets.status = 'ready'
+          where players.campaign_id = $1
+            and players.user_id = $2
+            and players.status = 'active'
+          order by players.slot asc nulls last, players.created_at asc
+          limit 1
+        `,
+        [campaign.id, input.userId]
+      )
+    ).rows[0];
+
+    if (!player || !isProfileComplete(player)) {
+      throw createStatusError(400, "A complete character is required to restart.");
+    }
+
+    return { campaign, player };
+  });
+
+  const style = campaignOpeningStyleFromMetadata(source.campaign);
+  const metadata = eventPayload(source.campaign.metadata);
+  const genre = eventPayload(metadata.genre);
+  const restarted = await createCampaignForMode(db, {
+    mode: "single_player",
+    title: source.campaign.title,
+    campaignGenre: style.campaignGenre,
+    campaignGenreKind: genre.kind === "custom" ? "custom" : "preset",
+    campaignGenrePresetId: style.campaignGenrePresetId,
+    campaignGenrePromptBrief: style.campaignGenrePromptBrief,
+    customWorldName: style.customWorldName,
+    customWorldDescription: style.customWorldDescription,
+    ownerClientId: source.player.client_id,
+    playerName: source.player.username,
+    characterName: source.player.character_name,
+    characterSheet: characterSheetWithBackstory(
+      source.player.character_sheet,
+      trimmedBackstory
+    ),
+    eldermereStart: eldermereCampaignStartFromMetadata(source.campaign),
+    userId: input.userId,
+    runtime: input.runtime
+  });
+
+  if (source.player.portrait_asset_id) {
+    await db.query(
+      `
+        update players
+        set portrait_asset_id = $2
+        where campaign_id = $1
+          and user_id = $3
+          and status = 'active'
+      `,
+      [restarted.id, source.player.portrait_asset_id, input.userId]
+    );
+
+    return {
+      ...restarted,
+      portraitAssetId: source.player.portrait_asset_id,
+      ...(source.player.portrait_public_url
+        ? { portraitUrl: source.player.portrait_public_url }
+        : {})
+    };
+  }
+
+  return restarted;
+}
+
 export async function createCampaignForSession(
   db: pg.Pool,
   input: {

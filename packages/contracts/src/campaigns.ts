@@ -56,6 +56,14 @@ export const CampaignReadResponseSchema = z.object({
   campaign: CampaignSummarySchema
 });
 
+export const CampaignRestartRequestSchema = z.object({
+  backstory: z.string().min(1)
+});
+
+export const CampaignRestartResponseSchema = z.object({
+  campaign: CampaignSummarySchema
+});
+
 export const CharacterPortraitArtStyleSchema = z.enum([
   "painterly_fantasy",
   "storybook_illustration",
@@ -93,6 +101,15 @@ export const CharacterPortraitPreviewResponseSchema = z.object({
 });
 
 export const CharacterBackstoryModeSchema = z.enum(["generate", "add_details"]);
+
+export const CampaignRestartBackstoryParamsSchema = z.object({
+  campaignId: z.string().uuid()
+});
+
+export const CampaignRestartBackstoryRequestSchema = z.object({
+  mode: CharacterBackstoryModeSchema,
+  currentBackstory: z.string().optional()
+});
 
 export const CharacterBackstoryGenerateRequestSchema = z.object({
   mode: CharacterBackstoryModeSchema,
@@ -254,6 +271,13 @@ export type CampaignCreateResponse = z.infer<
 >;
 export type CampaignReadParams = z.infer<typeof CampaignReadParamsSchema>;
 export type CampaignReadResponse = z.infer<typeof CampaignReadResponseSchema>;
+export type CampaignRestartBackstoryRequest = z.infer<
+  typeof CampaignRestartBackstoryRequestSchema
+>;
+export type CampaignRestartRequest = z.infer<typeof CampaignRestartRequestSchema>;
+export type CampaignRestartResponse = z.infer<
+  typeof CampaignRestartResponseSchema
+>;
 export type CharacterPortraitArtStyle = z.infer<
   typeof CharacterPortraitArtStyleSchema
 >;

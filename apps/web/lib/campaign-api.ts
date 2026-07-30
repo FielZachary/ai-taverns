@@ -12,6 +12,7 @@ import {
   CampaignJoinResponseSchema,
   CampaignListResponseSchema,
   CampaignReadResponseSchema,
+  CampaignRestartResponseSchema,
   LobbyInviteJoinResponseSchema,
   LobbyInvitePreviewResponseSchema,
   type CampaignInviteCreateRequest,
@@ -24,6 +25,8 @@ import {
   type CharacterPortraitUploadRequest,
   type CampaignJoinPreviewRequest,
   type CampaignJoinRequest,
+  type CampaignRestartBackstoryRequest,
+  type CampaignRestartRequest,
   type CampaignSummary,
   type LobbyInviteJoinRequest
 } from "@ai-dnd/contracts";
@@ -168,6 +171,52 @@ export async function generateCharacterBackstory(
   );
 
   return data;
+}
+
+export async function generateCampaignRestartBackstory(
+  campaignId: string,
+  input: CampaignRestartBackstoryRequest
+) {
+  const response = await fetch(
+    `/api/campaigns/${encodeURIComponent(campaignId)}/restart/backstory`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(input)
+    }
+  );
+  const data = await parseJsonResponse(
+    response,
+    CharacterBackstoryGenerateResponseSchema,
+    "Backstory could not be created."
+  );
+
+  return data;
+}
+
+export async function restartCampaign(
+  campaignId: string,
+  input: CampaignRestartRequest
+) {
+  const response = await fetch(
+    `/api/campaigns/${encodeURIComponent(campaignId)}/restart`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(input)
+    }
+  );
+  const data = await parseJsonResponse(
+    response,
+    CampaignRestartResponseSchema,
+    "The campaign could not be restarted."
+  );
+
+  return data.campaign;
 }
 
 export async function uploadCharacterPortrait(

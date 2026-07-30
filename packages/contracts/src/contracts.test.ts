@@ -20,6 +20,9 @@ import {
   CampaignReadParamsSchema,
   CampaignReadResponseSchema,
   CampaignRegenerateRequestSchema,
+  CampaignRestartBackstoryRequestSchema,
+  CampaignRestartRequestSchema,
+  CampaignRestartResponseSchema,
   CampaignSoloTurnRequestSchema,
   CampaignSoloTurnResponseSchema,
   MechanicsSeedSchema,
@@ -220,6 +223,25 @@ test("campaign contracts accept list, create, and join preview payloads", () => 
   });
 
   assert.equal(readParams.campaignId, readResponse.campaign.id);
+
+  const restartBackstoryRequest = CampaignRestartBackstoryRequestSchema.parse({
+    mode: "add_details",
+    currentBackstory: "Mira keeps a salt-stained promise."
+  });
+  const restartRequest = CampaignRestartRequestSchema.parse({
+    backstory: "Mira keeps a sharper salt-stained promise."
+  });
+  const restartResponse = CampaignRestartResponseSchema.parse({
+    campaign: {
+      ...listResponse.campaigns[0]!,
+      id: "00000000-0000-4000-8000-000000000002",
+      mode: "single_player"
+    }
+  });
+
+  assert.equal(restartBackstoryRequest.mode, "add_details");
+  assert.match(restartRequest.backstory, /sharper/);
+  assert.equal(restartResponse.campaign.mode, "single_player");
 
   const preview = CampaignJoinPreviewResponseSchema.parse({
     code: "ABC234",

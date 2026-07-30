@@ -6,7 +6,7 @@ import {
   useRef,
   useState
 } from "react";
-import { Map, Settings } from "lucide-react";
+import { Map, RefreshCcw, Settings, Sparkles, Wand2 } from "lucide-react";
 import type { AiModelId, DiceRollRequest } from "@/lib/game-types";
 import { EldermereMapModal } from "./EldermereMapModal";
 
@@ -26,10 +26,18 @@ type PlayerInputProps = {
   requiredQueuedDice?: QueuedDice | null;
   validationMessage?: string;
   validationPulse: number;
+  restartBackstory?: string;
+  canRestartCampaign?: boolean;
+  isRestartingCampaign?: boolean;
   onDraftChange: (value: string) => void;
   onModeChange: (mode: PlayerInputMode) => void;
   onRollDice: (queuedDice: QueuedDice) => void;
   onSkipTurn?: () => void;
+  onGenerateRestartBackstory?: (
+    mode: "generate" | "add_details",
+    currentBackstory: string
+  ) => Promise<string>;
+  onRestartCampaign?: (backstory: string) => Promise<void> | void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 };
 
@@ -62,10 +70,15 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
       requiredQueuedDice,
       validationMessage,
       validationPulse,
+      restartBackstory = "",
+      canRestartCampaign = false,
+      isRestartingCampaign = false,
       onDraftChange,
       onModeChange,
       onRollDice,
       onSkipTurn,
+      onGenerateRestartBackstory,
+      onRestartCampaign,
       onSubmit
     },
     ref
@@ -73,10 +86,17 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
     const [isCallingAttention, setIsCallingAttention] = useState(false);
     const [isDicePickerOpen, setIsDicePickerOpen] = useState(false);
     const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
+    const [settingsTab, setSettingsTab] = useState<"model" | "restart">("model");
     const [isMapOpen, setIsMapOpen] = useState(false);
     const [selectedAiModel, setSelectedAiModel] =
       useState<AiModelId>("deepseek-v4-flash");
     const [queuedDice, setQueuedDice] = useState<QueuedDice>({});
+    const [restartBackstoryDraft, setRestartBackstoryDraft] =
+      useState(restartBackstory);
+    const [restartStatus, setRestartStatus] = useState("");
+    const [restartError, setRestartError] = useState("");
+    const [isGeneratingRestartBackstory, setIsGeneratingRestartBackstory] =
+      useState(false);
     const diceRollControlRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -144,6 +164,14 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
       setQueuedDice(requiredQueuedDice ?? {});
     }, [isRollRequired, requiredRoll?.id, requiredRollExpression, requiredQueuedDice]);
 
+    useEffect(() => {
+      if (isModelPickerOpen) {
+        setRestartBackstoryDraft(restartBackstory);
+        setRestartStatus("");
+        setRestartError("");
+      }
+    }, [isModelPickerOpen, restartBackstory]);
+
     function incrementDie(face: DiceFace) {
       setQueuedDice((currentDice) => ({
         ...currentDice,
@@ -173,6 +201,52 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
       setSelectedAiModel(modelId);
       window.localStorage.setItem(aiModelStorageKey, modelId);
       setIsModelPickerOpen(false);
+    }
+
+    async function generateRestartBackstory(mode: "generate" | "add_details") {
+      if (!onGenerateRestartBackstory || isGeneratingRestartBackstory) {
+        return;
+      }
+
+      setIsGeneratingRestartBackstory(true);
+      setRestartStatus("");
+      setRestartError("");
+
+      try {
+        const nextBackstory = await onGenerateRestartBackstory(
+          mode,
+          restartBackstoryDraft
+        );
+
+        setRestartBackstoryDraft(nextBackstory);
+        setRestartStatus(
+          mode === "generate" ? "Backstory generated." : "Details added."
+        );
+      } catch (error) {
+        setRestartError(
+          error instanceof Error ? error.message : "Backstory could not be created."
+        );
+      } finally {
+        setIsGeneratingRestartBackstory(false);
+      }
+    }
+
+    async function restartCampaignFromSettings() {
+      if (!onRestartCampaign || isRestartingCampaign || !restartBackstoryDraft.trim()) {
+        return;
+      }
+
+      setRestartStatus("");
+      setRestartError("");
+
+      try {
+        await onRestartCampaign(restartBackstoryDraft);
+        setIsModelPickerOpen(false);
+      } catch (error) {
+        setRestartError(
+          error instanceof Error ? error.message : "The campaign could not be restarted."
+        );
+      }
     }
 
     const selectedAiModelLabel =
@@ -226,6 +300,7 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
               disabled={isSending || !canSelectAiModel}
               onClick={() => {
                 if (canSelectAiModel) {
+                  setSettingsTab("model");
                   setIsModelPickerOpen(true);
                 }
               }}
@@ -337,11 +412,11 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
           <div className="model-settings-backdrop" role="presentation">
             <section
               className="model-settings-modal"
-              aria-label="AI model"
+              aria-label="AI model settings"
               role="dialog"
             >
               <header className="model-settings-header">
-                <h2>AI Model</h2>
+                <h2>Settings</h2>
                 <button
                   type="button"
                   onClick={() => setIsModelPickerOpen(false)}
@@ -349,23 +424,110 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
                   Close
                 </button>
               </header>
-              <div className="model-settings-options">
-                {aiModelOptions.map((option) => (
-                  <button
-                    className={
-                      option.id === selectedAiModel
-                        ? "model-settings-option active"
-                        : "model-settings-option"
-                    }
-                    key={option.id}
-                    type="button"
-                    aria-pressed={option.id === selectedAiModel}
-                    onClick={() => chooseAiModel(option.id)}
-                  >
-                    {option.label}
-                  </button>
-                ))}
+              <div className="model-settings-tabs" role="tablist" aria-label="Settings">
+                <button
+                  type="button"
+                  className={settingsTab === "model" ? "active" : ""}
+                  role="tab"
+                  aria-selected={settingsTab === "model"}
+                  onClick={() => setSettingsTab("model")}
+                >
+                  AI Model
+                </button>
+                <button
+                  type="button"
+                  className={settingsTab === "restart" ? "active" : ""}
+                  role="tab"
+                  aria-selected={settingsTab === "restart"}
+                  disabled={!canRestartCampaign}
+                  onClick={() => setSettingsTab("restart")}
+                >
+                  Restart
+                </button>
               </div>
+              {settingsTab === "model" ? (
+                <div className="model-settings-options" role="tabpanel">
+                  {aiModelOptions.map((option) => (
+                    <button
+                      className={
+                        option.id === selectedAiModel
+                          ? "model-settings-option active"
+                          : "model-settings-option"
+                      }
+                      key={option.id}
+                      type="button"
+                      aria-pressed={option.id === selectedAiModel}
+                      onClick={() => chooseAiModel(option.id)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="restart-settings-panel" role="tabpanel">
+                  <p>
+                    Start this character over in a fresh campaign. Character art,
+                    starting place, and character details are kept; this backstory
+                    can be edited before the DM opens the new scene.
+                  </p>
+                  <label>
+                    <span>Backstory</span>
+                    <textarea
+                      value={restartBackstoryDraft}
+                      rows={8}
+                      disabled={isGeneratingRestartBackstory || isRestartingCampaign}
+                      onChange={(event) =>
+                        setRestartBackstoryDraft(event.target.value)
+                      }
+                    />
+                  </label>
+                  <div className="restart-settings-actions">
+                    <button
+                      type="button"
+                      disabled={
+                        isGeneratingRestartBackstory || isRestartingCampaign
+                      }
+                      onClick={() => void generateRestartBackstory("generate")}
+                    >
+                      <Sparkles size={16} />
+                      Generate Story
+                    </button>
+                    <button
+                      type="button"
+                      disabled={
+                        isGeneratingRestartBackstory ||
+                        isRestartingCampaign ||
+                        !restartBackstoryDraft.trim()
+                      }
+                      onClick={() => void generateRestartBackstory("add_details")}
+                    >
+                      <Wand2 size={16} />
+                      Add Details
+                    </button>
+                  </div>
+                  {restartStatus ? (
+                    <p className="restart-settings-status">{restartStatus}</p>
+                  ) : null}
+                  {restartError ? (
+                    <p className="restart-settings-error" role="alert">
+                      {restartError}
+                    </p>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="restart-settings-submit"
+                    disabled={
+                      isGeneratingRestartBackstory ||
+                      isRestartingCampaign ||
+                      !restartBackstoryDraft.trim()
+                    }
+                    onClick={() => void restartCampaignFromSettings()}
+                  >
+                    <RefreshCcw size={16} />
+                    {isRestartingCampaign ? "Restarting..." : "Restart"}
+                  </button>
+                </div>
+              )}
             </section>
           </div>
         ) : null}

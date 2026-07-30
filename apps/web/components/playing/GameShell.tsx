@@ -27,9 +27,11 @@ import type {
 import {
   createCampaignInvite,
   disableCampaignInvite,
+  generateCampaignRestartBackstory,
   listCampaignNpcCards,
   listCampaignInvites,
   listCampaigns,
+  restartCampaign,
   updateCampaignNpcCard,
   type CampaignNpcCard,
   type CampaignSummary as ApiCampaignSummary
@@ -246,6 +248,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
   const [draft, setDraft] = useState("");
   const [inputMode, setInputMode] = useState<PlayerInputMode>("turn");
   const [isSending, setIsSending] = useState(false);
+  const [isRestartingCampaign, setIsRestartingCampaign] = useState(false);
   const [regeneratingMessageId, setRegeneratingMessageId] = useState<
     string | null
   >(null);
@@ -1248,6 +1251,78 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     }
   }
 
+  async function handleGenerateRestartBackstory(
+    mode: "generate" | "add_details",
+    currentBackstory: string
+  ) {
+    if (!activeCampaign || isRestartingCampaign) {
+      throw new Error("Campaign could not be loaded.");
+    }
+
+    const generated = await generateCampaignRestartBackstory(activeCampaign.id, {
+      mode,
+      currentBackstory
+    });
+
+    return generated.backstory;
+  }
+
+  async function handleRestartCampaign(backstory: string) {
+    if (!activeCampaign || isRestartingCampaign) {
+      return;
+    }
+
+    setIsRestartingCampaign(true);
+    setInputValidationMessage("");
+    setTableAlert("");
+
+    try {
+      const restarted = await restartCampaign(activeCampaign.id, { backstory });
+      const campaigns = await fetchCampaigns();
+      const restartedCampaign =
+        campaigns.find((campaign) => campaign.id === restarted.id) ??
+        (restarted as CampaignSummary);
+
+      setAvailableCampaigns(campaigns);
+      window.history.replaceState(
+        null,
+        "",
+        `/play?campaignId=${restartedCampaign.id}`
+      );
+      setActiveCampaignId(restartedCampaign.id);
+      setDraft("");
+      setRoomMessages([]);
+      setRoomPlayers([]);
+      setStreamingDmMessages([]);
+      setPendingRollRequests([]);
+      setNextInputNeeded("player_actions");
+      setInputTargets([]);
+      setInputPolicy("all_players");
+      setRoomCombat(undefined);
+      setIsInputSubmitted(false);
+      pendingSubmissionRef.current = null;
+      setOptimisticSubmittedPlayerId(null);
+      await loadCampaignMessages(restartedCampaign);
+      setTableAlert("Campaign restarted.");
+    } catch (error) {
+      setMessages((currentMessages) => [
+        ...currentMessages,
+        {
+          id: createClientId(),
+          role: "system",
+          content:
+            error instanceof Error
+              ? error.message
+              : "The campaign could not be restarted.",
+          createdAt: new Date().toISOString()
+        }
+      ]);
+    } finally {
+      setIsRestartingCampaign(false);
+      inputRef.current?.focus();
+    }
+  }
+
   async function sendTurn(
     messageText: string,
     options: { skipTurn?: boolean; model?: AiModelId } = {}
@@ -1895,10 +1970,15 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
               requiredQueuedDice={currentRequiredRollDice?.queuedDice}
               validationMessage={inputValidationMessage}
               validationPulse={inputValidationPulse}
+              restartBackstory={activeBackstory}
+              canRestartCampaign={Boolean(isSinglePlayer && activeCampaign)}
+              isRestartingCampaign={isRestartingCampaign}
               onDraftChange={setDraft}
               onModeChange={setInputMode}
               onRollDice={handleRollDice}
               onSkipTurn={!isSinglePlayer ? handleSkipTurn : undefined}
+              onGenerateRestartBackstory={handleGenerateRestartBackstory}
+              onRestartCampaign={handleRestartCampaign}
               onSubmit={handleSubmit}
             />
           </div>
