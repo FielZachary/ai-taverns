@@ -1113,6 +1113,75 @@ function adjustInventoryItemLines(
   return { lines: nextLines.length > 0 ? nextLines : ["None"], changed: true };
 }
 
+function inventoryPatchSummary(patch: Record<string, unknown>) {
+  const type = eventPayloadString(patch.type).toLowerCase();
+
+  if (type === "currency") {
+    const currency = normalizedCurrencyDenomination(patch.currency);
+    const delta = numberFromUnknown(patch.delta);
+
+    if (!currency || typeof delta !== "number") {
+      return "";
+    }
+
+    return `${delta > 0 ? "gained" : "spent"} ${Math.abs(delta)} ${currency}`;
+  }
+
+  if (type === "item") {
+    const operation = normalizedInventoryOperation(patch.operation);
+    const itemName = inventoryItemName(patch.item);
+    const quantity = Math.max(1, Math.floor(numberFromUnknown(patch.quantity) ?? 1));
+
+    if (!operation || !itemName) {
+      return "";
+    }
+
+    const itemText =
+      quantity > 1 || /^(?:a|an|the)\s+/i.test(itemName)
+        ? `${quantity > 1 ? `${quantity} ` : ""}${itemName}`
+        : `a ${itemName}`;
+    const verb =
+      operation === "add"
+        ? "gained"
+        : operation === "equip"
+          ? "equipped"
+          : operation === "unequip"
+            ? "unequipped"
+            : "dropped";
+
+    return `${verb} ${itemText}`;
+  }
+
+  return "";
+}
+
+function inventoryUpdateSentence(patches: Record<string, unknown>[]) {
+  const summaries = patches.map(inventoryPatchSummary).filter(Boolean);
+
+  if (summaries.length === 0) {
+    return "";
+  }
+
+  const joined =
+    summaries.length === 1
+      ? summaries[0]
+      : `${summaries.slice(0, -1).join(", ")} and ${summaries.at(-1)}`;
+
+  return `Inventory update: you ${joined}.`;
+}
+
+function narrationWithInventoryUpdate(
+  publicNarration: string,
+  appliedPatches: Record<string, unknown>[]
+) {
+  if (!appliedPatches.length || /\binventory update\s*:/i.test(publicNarration)) {
+    return publicNarration;
+  }
+
+  const sentence = inventoryUpdateSentence(appliedPatches);
+  return sentence ? `${publicNarration.trimEnd()}\n\n${sentence}` : publicNarration;
+}
+
 function validateInventoryPatches(
   patches: unknown[],
   players: PlayerRow[]
@@ -1205,6 +1274,7 @@ async function applyAcceptedInventoryPatches(
   patches: Record<string, unknown>[]
 ) {
   const sheetsByPlayerId = new Map(players.map((player) => [player.id, player.character_sheet]));
+  const appliedPatches: Record<string, unknown>[] = [];
 
   for (const patch of patches) {
     const player = players.find((candidate) =>
@@ -1255,6 +1325,7 @@ async function applyAcceptedInventoryPatches(
         `,
         [player.id, nextSheet]
       );
+      appliedPatches.push(patch);
       continue;
     }
 
@@ -1349,8 +1420,11 @@ async function applyAcceptedInventoryPatches(
         `,
         [player.id, nextSheet]
       );
+      appliedPatches.push(patch);
     }
   }
+
+  return appliedPatches;
 }
 
 function campaignWorldName(campaign: Pick<CampaignRow, "metadata" | "title">) {
@@ -8582,7 +8656,6 @@ async function askDungeonMaster(
 
     const rollRequests = normalizeRollRequests(contract.rollRequests);
     const rollRequestDiagnosticsReport = rollRequestDiagnostics(rollRequests);
-    const reply = contract.publicNarration;
     const combatValidation = outputEnvelope
       ? validateCombatEvents(outputEnvelope.combatEvents, {
           actors: mechanicsActorsForValidation(campaign)
@@ -8633,13 +8706,18 @@ async function askDungeonMaster(
         nextMechanicsState
       );
     }
-    if (inventoryValidation.accepted.length > 0) {
-      await applyAcceptedInventoryPatches(
-        db,
-        inventoryPlayers,
-        inventoryValidation.accepted
-      );
-    }
+    const appliedInventoryPatches =
+      inventoryValidation.accepted.length > 0
+        ? await applyAcceptedInventoryPatches(
+            db,
+            inventoryPlayers,
+            inventoryValidation.accepted
+          )
+        : [];
+    const reply = narrationWithInventoryUpdate(
+      contract.publicNarration,
+      appliedInventoryPatches
+    );
     const routerDebug = routerDebugFromPromptContext(promptContext);
     const debugWithCombatState: AiDebugInfo = {
       ...providerData.debug,
@@ -8652,6 +8730,7 @@ async function askDungeonMaster(
             inventoryState: {
               proposedPatches: contract.inventoryStateUpdate?.patches ?? [],
               acceptedPatches: inventoryValidation.accepted,
+              appliedPatches: appliedInventoryPatches,
               discardedPatches: inventoryValidation.discarded
             }
           }
