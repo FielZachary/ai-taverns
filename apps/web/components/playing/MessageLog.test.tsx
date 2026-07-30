@@ -443,6 +443,25 @@ describe("MessageLog", () => {
           }
         }
       },
+      askDmContextSelector: {
+        requestMessages: [
+          {
+            role: "system",
+            content: "You are the AI Taverns Ask DM context selector."
+          },
+          {
+            role: "user",
+            content: "Available context chunk keys JSON: world:road-tracks"
+          }
+        ],
+        rawResponse:
+          "{\"context_keys\":{\"relevant_world_context\":[\"world:road-tracks\"]}}",
+        parsedOutput: {
+          contextKeys: {
+            relevant_world_context: ["world:road-tracks"]
+          }
+        }
+      },
       requestMessages: [
         {
           role: "system",
@@ -498,6 +517,11 @@ describe("MessageLog", () => {
     expect(screen.getByText(plannerDebug.rawResponse)).toBeInTheDocument();
     expect(screen.getByText("Eldermere Planner Parsed Output")).toBeInTheDocument();
     expect(screen.getByText(/"name": "Selwick"/)).toBeInTheDocument();
+    expect(screen.getByText("Ask DM Selector Prompt Sent")).toBeInTheDocument();
+    expect(screen.getByText(/Ask DM context selector/)).toBeInTheDocument();
+    expect(screen.getByText("Ask DM Selector Output")).toBeInTheDocument();
+    expect(screen.getAllByText(/world:road-tracks/).length).toBeGreaterThanOrEqual(3);
+    expect(screen.getByText("Ask DM Selector Parsed Output")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /close debug details/i }));
 

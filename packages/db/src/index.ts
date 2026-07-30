@@ -4938,6 +4938,7 @@ async function logDmModelCall(
     phase:
       | "router"
       | "main"
+      | "ask_dm_context_selector"
       | "ask_dm"
       | "memory_updater"
       | "campaign_foundation_compiler"
@@ -5342,6 +5343,87 @@ function formatContextChunkIndexForRouter(index: ContextChunkIndex) {
   return JSON.stringify(index, null, 2);
 }
 
+function buildAskDmContextSelectorPrompt() {
+  return [
+    "You are the AI Taverns Ask DM context selector.",
+    "This is separate from the gameplay DM router. Do not choose or imply a gameplay job.",
+    "Select only context chunk keys that are relevant for answering the player's out-of-turn table question.",
+    "Ask DM answers must not advance time, resolve actions, mutate state, reveal hidden facts as discoveries, or invent continuity.",
+    "Prefer player_safe chunks. Include dm_only chunks only when they are needed for the DM to avoid contradicting canon; the answering prompt will still decide what can be said player-facing.",
+    "Only select context keys from the Available context chunk keys JSON provided in the user message.",
+    "Do not invent, rename, summarize, slugify, or transform context keys. Copy exact key strings only.",
+    "If no available key fits a category, return an empty array for that category.",
+    `Context categories: ${contextCategories.join(", ")}.`,
+    "Return exactly one JSON object with context_keys and optional reason.",
+    "context_keys must be an object whose keys are context categories and whose values are arrays of context chunk key strings, never an array of category names.",
+    'Example context_keys shape: {"npc_context":[],"player_character_context":[],"combat_context":[],"relevant_world_context":[],"quests_open_threads":[],"overarching_big_plot_secrets":[]}.'
+  ].join("\n");
+}
+
+function buildAskDmContextSelectorMessage(input: {
+  currentAction: string;
+  routerState: Record<string, unknown>;
+  availableContextChunks: ContextChunkIndex;
+}) {
+  return [
+    "Ask DM routing state JSON:",
+    JSON.stringify(input.routerState, null, 2),
+    "",
+    "Available context chunk keys JSON:",
+    formatContextChunkIndexForRouter(input.availableContextChunks),
+    "",
+    "Ask DM question input:",
+    input.currentAction
+  ].join("\n");
+}
+
+type AskDmContextSelectorOutput = {
+  contextKeys: RouterContextKeys;
+  reason?: string;
+  fallbackUsed: boolean;
+  errors: string[];
+};
+
+function validateAskDmContextSelectorOutput(
+  text: string | undefined
+): AskDmContextSelectorOutput {
+  const parsed = parseJsonRecord(text ?? "");
+  const errors: string[] = [];
+  const rawContextKeys = isRecord(parsed?.context_keys)
+    ? parsed.context_keys
+    : {};
+
+  if (!parsed) {
+    errors.push("selector output must be parseable JSON");
+  }
+
+  if (!isRecord(parsed?.context_keys)) {
+    errors.push("context_keys must be an object");
+  }
+
+  const contextKeys = contextCategories.reduce((keys, category) => {
+    const value = rawContextKeys[category];
+    const normalized = normalizeStringList(value);
+
+    if (
+      value !== undefined &&
+      (!Array.isArray(value) ||
+        value.some((item) => typeof item !== "string" || !item.trim()))
+    ) {
+      errors.push(`${category} context keys must be strings`);
+    }
+
+    return { ...keys, [category]: normalized };
+  }, emptyContextKeys());
+
+  return {
+    contextKeys: errors.length > 0 ? emptyContextKeys() : contextKeys,
+    ...(typeof parsed?.reason === "string" ? { reason: parsed.reason } : {}),
+    fallbackUsed: errors.length > 0,
+    errors
+  };
+}
+
 function formatContextChunkIndexForMemoryUpdater(index: ContextChunkIndex) {
   const entries = contextCategories.flatMap((category) =>
     index[category].map((entry) => ({
@@ -5628,6 +5710,164 @@ async function buildModularDmPromptContext(
         : {}),
       ...(routerData.debug.providerResponseId
         ? { providerResponseId: routerData.debug.providerResponseId }
+        : {})
+    }
+  };
+}
+
+async function buildAskDmPromptContext(
+  db: Queryable,
+  runtime: DungeonMasterRuntime,
+  campaign: Pick<CampaignRow, "id" | "metadata" | "mode">,
+  input: {
+    traceId: string;
+    turnId?: string | undefined;
+    currentAction: string;
+    baseInstructions: string;
+    history: GameMessage[];
+    model?: AiModelId;
+  }
+): Promise<
+  DmPromptContext & {
+    askDmContextSelectorDebug: NonNullable<AiDebugInfo["askDmContextSelector"]>;
+  }
+> {
+  const players = await getActiveCampaignPlayers(db, campaign.id);
+  const availableContextChunks = await listCampaignContextChunkIndex(
+    db,
+    campaign.id
+  );
+  const routerState = routerStateForCampaign(campaign, players);
+  const selectorInstructions = buildAskDmContextSelectorPrompt();
+  const selectorMessage = buildAskDmContextSelectorMessage({
+    currentAction: input.currentAction,
+    routerState,
+    availableContextChunks
+  });
+  const selectorStartedAt = Date.now();
+  const selectorData = await runtime.askProvider({
+    instructions: selectorInstructions,
+    message: selectorMessage,
+    history: input.history,
+    ...(input.model ? { model: input.model } : {})
+  });
+  const selector = validateAskDmContextSelectorOutput(selectorData.content);
+  const retrievalRouter: ValidatedRouterOutput = {
+    jobNeeded: "scene_director",
+    contextKeys: selector.contextKeys,
+    fallbackUsed: selector.fallbackUsed,
+    errors: selector.errors,
+    ...(selector.reason ? { reason: selector.reason } : {})
+  };
+
+  await logDmModelCall(db, {
+    campaignId: campaign.id,
+    traceId: input.traceId,
+    turnId: input.turnId,
+    phase: "ask_dm_context_selector",
+    providerData: selectorData,
+    durationMs: Date.now() - selectorStartedAt
+  });
+
+  await logTurnDebugTrace(db, {
+    campaignId: campaign.id,
+    traceId: input.traceId,
+    phase: "ask_dm_context_selector_response_received",
+    turnId: input.turnId,
+    elapsedMs: Date.now() - selectorStartedAt,
+    payload: {
+      routerState,
+      availableContextChunks,
+      selector: {
+        contextKeys: selector.contextKeys,
+        fallbackUsed: selector.fallbackUsed,
+        errors: selector.errors,
+        reason: selector.reason
+      },
+      provider: providerDebugSummary(selectorData.debug, {
+        includeRawResponse: true,
+        includeRequestMessages: true
+      })
+    }
+  });
+
+  const context = await retrieveSelectedContextChunks(
+    db,
+    campaign.id,
+    retrievalRouter
+  );
+
+  await logTurnDebugTrace(db, {
+    campaignId: campaign.id,
+    traceId: input.traceId,
+    phase: "ask_dm_context_snapshot",
+    turnId: input.turnId,
+    payload: {
+      requestedContextKeys: selector.contextKeys,
+      includedContextKeys: context.chunks.map((chunk) => chunk.id),
+      omittedContextKeys: context.omitted,
+      budget: {
+        maxContextChars: 24000,
+        includedContextChars: context.chunks.reduce(
+          (total, chunk) => total + chunk.bodyMarkdown.length,
+          0
+        )
+      }
+    }
+  });
+
+  const parsedOutput = {
+    contextKeys: selector.contextKeys,
+    fallbackUsed: selector.fallbackUsed,
+    errors: selector.errors,
+    reason: selector.reason
+  };
+
+  return {
+    instructions: input.baseInstructions,
+    message: [
+      "Selected context chunks:",
+      renderContextChunks(context.chunks),
+      "",
+      "Current Ask DM question:",
+      input.currentAction
+    ].join("\n"),
+    sections: [
+      {
+        kind: "ask_dm_context_selector",
+        contextKeys: selector.contextKeys,
+        fallbackUsed: selector.fallbackUsed,
+        errors: selector.errors,
+        reason: selector.reason,
+        routerState,
+        availableContextChunks
+      },
+      {
+        kind: "context_snapshot",
+        includedContextKeys: context.chunks.map((chunk) => chunk.id),
+        omittedContextKeys: context.omitted
+      }
+    ],
+    budget: {
+      maxContextChars: 24000,
+      includedContextChars: context.chunks.reduce(
+        (total, chunk) => total + chunk.bodyMarkdown.length,
+        0
+      )
+    },
+    askDmContextSelectorDebug: {
+      requestMessages: selectorData.debug.requestMessages,
+      rawResponse: selectorData.debug.rawResponse,
+      parsedOutput,
+      ...(selectorData.debug.model ? { model: selectorData.debug.model } : {}),
+      ...(selectorData.debug.temperature !== undefined
+        ? { temperature: selectorData.debug.temperature }
+        : {}),
+      ...(selectorData.debug.providerResponseId
+        ? { providerResponseId: selectorData.debug.providerResponseId }
+        : {}),
+      ...(selectorData.debug.providerTimings
+        ? { providerTimings: selectorData.debug.providerTimings }
         : {})
     }
   };
@@ -10286,6 +10526,8 @@ export async function askDungeonMasterQuestionForUser(
   const traceId = randomUUID();
   const startedAt = Date.now();
   const instructions = withEldermereTurnContext(askDmInstructions(), campaign);
+  const history = await getCampaignEventMessages(db, campaign.id);
+  const usesInjectedPromptContext = Boolean(runtime.buildPromptContext);
   const promptContext = runtime.buildPromptContext
       ? await runtime.buildPromptContext({
           campaignId: campaign.id,
@@ -10294,10 +10536,15 @@ export async function askDungeonMasterQuestionForUser(
           baseInstructions: instructions,
           ...(input.model ? { model: input.model } : {})
         })
-    : null;
-  const history = promptContext
-    ? []
-    : await getCampaignEventMessages(db, campaign.id);
+    : await buildAskDmPromptContext(db, runtime, campaign, {
+        traceId,
+        turnId: streamTurnId,
+        currentAction,
+        baseInstructions: instructions,
+        history,
+        ...(input.model ? { model: input.model } : {})
+      });
+  const providerHistory = usesInjectedPromptContext ? [] : history;
 
   await logTurnDebugTrace(db, {
     campaignId: campaign.id,
@@ -10307,8 +10554,9 @@ export async function askDungeonMasterQuestionForUser(
     elapsedMs: 0,
     payload: {
       sessionId: campaign.session_id,
-      historyCount: history.length,
+      historyCount: providerHistory.length,
       promptContextSections: promptContext?.sections ?? [],
+      promptContextBudget: promptContext?.budget,
       message: textStats(currentAction),
       instructions: textStats(instructions)
     }
@@ -10329,7 +10577,7 @@ export async function askDungeonMasterQuestionForUser(
     const providerData = await runtime.askProvider({
       message: promptContext?.message ?? currentAction,
       instructions: promptContext?.instructions ?? instructions,
-      history,
+      history: providerHistory,
       currentPlayerAction: trimmedQuestion,
       ...(input.model ? { model: input.model } : {}),
       ...(streamTurnId
@@ -10357,11 +10605,12 @@ export async function askDungeonMasterQuestionForUser(
       traceId,
       phase: "provider_response_received",
       turnId: streamTurnId,
-      elapsedMs: Date.now() - startedAt,
-      payload: {
-        durationMs: providerDurationMs,
-        historyCount: history.length,
-        promptContextSections: promptContext?.sections ?? [],
+        elapsedMs: Date.now() - startedAt,
+        payload: {
+          durationMs: providerDurationMs,
+          historyCount: providerHistory.length,
+          promptContextSections: promptContext?.sections ?? [],
+          promptContextBudget: promptContext?.budget,
         provider: providerDebugSummary(providerData.debug, {
           includeRawResponse: true,
           includeRequestMessages: true
@@ -10412,7 +10661,12 @@ export async function askDungeonMasterQuestionForUser(
         aiDebug: {
           ...providerData.debug,
           providerResponseId:
-            providerData.debug.providerResponseId ?? providerData.id
+            providerData.debug.providerResponseId ?? providerData.id,
+          ...("askDmContextSelectorDebug" in promptContext
+            ? {
+                askDmContextSelector: promptContext.askDmContextSelectorDebug
+              }
+            : {})
         }
       });
     });

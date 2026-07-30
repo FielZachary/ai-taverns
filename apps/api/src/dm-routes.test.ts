@@ -137,6 +137,19 @@ test("DM runtime routes handle authorized solo, ask-DM, regenerate, and traces",
   );
   assert.equal(solo.isResolving, false);
 
+  database.contextChunks.push({
+    campaign_id: created.campaign.id,
+    context_key: "world:road-tracks",
+    category: "relevant_world_context",
+    title: "Road Tracks",
+    visibility: "player_safe",
+    priority: 10,
+    body_markdown:
+      "# Road Tracks\n\n## Established Facts\n- The road tracks were made by a two-legged creature dragging a hooked pole.",
+    archived_at: null,
+    updated_at: new Date()
+  });
+
   const askResponse = await app.inject({
     method: "POST",
     url: `/api/campaigns/${created.campaign.id}/ask-dm`,
@@ -160,12 +173,45 @@ test("DM runtime routes handle authorized solo, ask-DM, regenerate, and traces",
   assert.ok(askAnswerEvent);
   const askAnswerPayload = askAnswerEvent.payload as {
     messageId?: string;
+    content?: string;
     aiDebug?: DebugFields;
   };
+  assert.match(
+    askAnswerPayload.content ?? "",
+    /two-legged creature dragging a hooked pole/
+  );
   assert.notEqual(askAnswerPayload.messageId, "provider-ask-dm-1");
   assert.equal(
     askAnswerPayload.aiDebug?.providerResponseId,
     "provider-ask-dm-1"
+  );
+  const askSelectorDebug = askAnswerPayload.aiDebug?.askDmContextSelector as
+    | {
+        requestMessages?: { role?: string; content?: string }[];
+        rawResponse?: string;
+        parsedOutput?: {
+          contextKeys?: {
+            relevant_world_context?: string[];
+          };
+        };
+      }
+    | undefined;
+  assert.match(
+    askSelectorDebug?.requestMessages?.at(-1)?.content ?? "",
+    /Available context chunk keys JSON:/
+  );
+  assert.deepEqual(
+    askSelectorDebug?.parsedOutput?.contextKeys?.relevant_world_context,
+    ["world:road-tracks"]
+  );
+  const askAnswerDebug = askAnswerPayload.aiDebug as
+    | {
+        requestMessages?: { role?: string; content?: string }[];
+      }
+    | undefined;
+  assert.match(
+    askAnswerDebug?.requestMessages?.at(-1)?.content ?? "",
+    /Selected context chunks:[\s\S]*Road Tracks/
   );
 
   const latestDmMessage = solo.messages
@@ -222,6 +268,19 @@ test("DM runtime routes handle authorized solo, ask-DM, regenerate, and traces",
     (trace) => trace.phase === "ask_dm_answer_parsed"
   );
   assert.ok(askTrace);
+  const askSelectorTrace = traces.traces.find(
+    (trace) => trace.phase === "ask_dm_context_selector_response_received"
+  );
+  assert.ok(askSelectorTrace);
+  const askContextSnapshotTrace = traces.traces.find(
+    (trace) => trace.phase === "ask_dm_context_snapshot"
+  );
+  assert.ok(askContextSnapshotTrace);
+  assert.deepEqual(
+    (askContextSnapshotTrace as { includedContextKeys?: unknown })
+      .includedContextKeys,
+    ["world:road-tracks"]
+  );
   const askProviderTrace = traces.traces.find(
     (trace) =>
       trace.phase === "provider_response_received" &&

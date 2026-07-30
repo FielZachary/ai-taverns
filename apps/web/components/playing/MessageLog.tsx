@@ -228,6 +228,22 @@ function MessageDebugModal({
             <h3>AI Output</h3>
             <pre>{debug.rawResponse}</pre>
           </section>
+          {debug.askDmContextSelector ? (
+            <>
+              <section>
+                <h3>Ask DM Selector Prompt Sent</h3>
+                <pre>{formatDebugPrompt(debug.askDmContextSelector)}</pre>
+              </section>
+              <section>
+                <h3>Ask DM Selector Output</h3>
+                <pre>{debug.askDmContextSelector.rawResponse}</pre>
+              </section>
+              <section>
+                <h3>Ask DM Selector Parsed Output</h3>
+                <pre>{formatDebugJson(debug.askDmContextSelector.parsedOutput)}</pre>
+              </section>
+            </>
+          ) : null}
           {debug.router ? (
             <>
               <section>

@@ -40,6 +40,7 @@ export type DebugFields = {
   combatAdjudication?: unknown;
   eldermereOpeningPlanner?: unknown;
   router?: unknown;
+  askDmContextSelector?: unknown;
 };
 
 type ConnectFn = () => Promise<{
@@ -3303,9 +3304,51 @@ before(async () => {
           };
         }
 
+        if (input.instructions.includes("AI Taverns Ask DM context selector")) {
+          const shouldSelectRoadTracks =
+            /tracks/i.test(input.message) &&
+            input.message.includes('"key": "world:road-tracks"');
+          const content = JSON.stringify({
+            context_keys: {
+              npc_context: [],
+              player_character_context: [],
+              combat_context: [],
+              relevant_world_context: shouldSelectRoadTracks
+                ? ["world:road-tracks"]
+                : [],
+              quests_open_threads: [],
+              overarching_big_plot_secrets: []
+            },
+            reason: "Deterministic Ask DM context selector response."
+          });
+
+          return {
+            id: "provider-ask-dm-selector-1",
+            content,
+            debug: {
+              requestMessages: [
+                {
+                  role: "system",
+                  content: input.instructions
+                },
+                {
+                  role: "user",
+                  content: input.message
+                }
+              ],
+              rawResponse: content,
+              model: "test-model",
+              temperature: 0.8,
+              providerTimings: []
+            }
+          };
+        }
+
         if (input.instructions.includes("out-of-turn table question")) {
           const answer =
-            "Those tracks look too broad for a wolf and too deliberate for a stray animal.";
+            input.message.includes("Road Tracks")
+              ? "The stored campaign context says the road tracks were made by a two-legged creature dragging a hooked pole."
+              : "Those tracks look too broad for a wolf and too deliberate for a stray animal.";
 
           input.onPublicNarrationDelta?.(answer.slice(0, 28));
           input.onPublicNarrationDelta?.(answer.slice(28));
