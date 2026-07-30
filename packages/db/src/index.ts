@@ -4938,6 +4938,7 @@ async function logDmModelCall(
     phase:
       | "router"
       | "main"
+      | "ask_dm"
       | "memory_updater"
       | "campaign_foundation_compiler"
       | "living_world_pressure_engine";
@@ -10282,6 +10283,8 @@ export async function askDungeonMasterQuestionForUser(
     trimmedQuestion
   );
   const streamTurnId = runtime.emitDmStreamEvent ? randomUUID() : undefined;
+  const traceId = randomUUID();
+  const startedAt = Date.now();
   const instructions = withEldermereTurnContext(askDmInstructions(), campaign);
   const promptContext = runtime.buildPromptContext
       ? await runtime.buildPromptContext({
@@ -10296,6 +10299,21 @@ export async function askDungeonMasterQuestionForUser(
     ? []
     : await getCampaignEventMessages(db, campaign.id);
 
+  await logTurnDebugTrace(db, {
+    campaignId: campaign.id,
+    traceId,
+    phase: "ask_dm_started",
+    turnId: streamTurnId,
+    elapsedMs: 0,
+    payload: {
+      sessionId: campaign.session_id,
+      historyCount: history.length,
+      promptContextSections: promptContext?.sections ?? [],
+      message: textStats(currentAction),
+      instructions: textStats(instructions)
+    }
+  });
+
   if (streamTurnId) {
     runtime.emitDmStreamEvent?.({
       type: "dm_stream_started",
@@ -10304,7 +10322,10 @@ export async function askDungeonMasterQuestionForUser(
     });
   }
 
+  let providerDebug: AiDebugInfo | undefined;
+
   try {
+    const providerStartedAt = Date.now();
     const providerData = await runtime.askProvider({
       message: promptContext?.message ?? currentAction,
       instructions: promptContext?.instructions ?? instructions,
@@ -10328,9 +10349,49 @@ export async function askDungeonMasterQuestionForUser(
           }
         : {})
     });
+    providerDebug = providerData.debug;
+    const providerDurationMs = Date.now() - providerStartedAt;
+
+    await logTurnDebugTrace(db, {
+      campaignId: campaign.id,
+      traceId,
+      phase: "provider_response_received",
+      turnId: streamTurnId,
+      elapsedMs: Date.now() - startedAt,
+      payload: {
+        durationMs: providerDurationMs,
+        historyCount: history.length,
+        promptContextSections: promptContext?.sections ?? [],
+        provider: providerDebugSummary(providerData.debug, {
+          includeRawResponse: true,
+          includeRequestMessages: true
+        })
+      }
+    });
+    await logDmModelCall(db, {
+      campaignId: campaign.id,
+      traceId,
+      turnId: streamTurnId,
+      phase: "ask_dm",
+      providerData,
+      durationMs: providerDurationMs
+    });
+
     const answer = answerFromAskDmProviderResponse(providerData.content);
     const questionMessageId = input.clientMessageId?.trim() || randomUUID();
-    const answerMessageId = providerData.id || randomUUID();
+    const answerMessageId = randomUUID();
+
+    await logTurnDebugTrace(db, {
+      campaignId: campaign.id,
+      traceId,
+      phase: "ask_dm_answer_parsed",
+      turnId: streamTurnId,
+      elapsedMs: Date.now() - startedAt,
+      payload: {
+        answer: textStats(answer),
+        providerResponseId: providerData.id ?? providerData.debug.providerResponseId
+      }
+    });
 
     await withTransaction(db, async (client) => {
       await logCampaignEvent(client, campaign.id, "dm_question", {
@@ -10348,7 +10409,11 @@ export async function askDungeonMasterQuestionForUser(
         playerId: player.id,
         inReplyToMessageId: questionMessageId,
         content: answer,
-        aiDebug: providerData.debug
+        aiDebug: {
+          ...providerData.debug,
+          providerResponseId:
+            providerData.debug.providerResponseId ?? providerData.id
+        }
       });
     });
 
@@ -10361,6 +10426,23 @@ export async function askDungeonMasterQuestionForUser(
       });
     }
   } catch (error) {
+    providerDebug ??= providerDebugFromError(error);
+
+    await logTurnDebugTrace(db, {
+      campaignId: campaign.id,
+      traceId,
+      phase: "ask_dm_failed",
+      turnId: streamTurnId,
+      elapsedMs: Date.now() - startedAt,
+      payload: {
+        error: errorSummary(error),
+        provider: providerDebugSummary(providerDebug, {
+          includeRawResponse: true,
+          includeRequestMessages: true
+        })
+      }
+    });
+
     if (streamTurnId) {
       runtime.emitDmStreamEvent?.({
         type: "dm_stream_failed",

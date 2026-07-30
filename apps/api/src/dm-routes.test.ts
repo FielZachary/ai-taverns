@@ -150,8 +150,23 @@ test("DM runtime routes handle authorized solo, ask-DM, regenerate, and traces",
   });
 
   assert.equal(askResponse.statusCode, 200, askResponse.body);
-  const ask = CampaignAskDmResponseSchema.parse(askResponse.json());
-  assert.equal(ask.messages.at(-1)?.role, "dm");
+  CampaignAskDmResponseSchema.parse(askResponse.json());
+  const askAnswerEvent = database.campaignEvents
+    .filter(
+      (event) =>
+        event.campaign_id === created.campaign.id && event.type === "dm_answer"
+    )
+    .at(-1);
+  assert.ok(askAnswerEvent);
+  const askAnswerPayload = askAnswerEvent.payload as {
+    messageId?: string;
+    aiDebug?: DebugFields;
+  };
+  assert.notEqual(askAnswerPayload.messageId, "provider-ask-dm-1");
+  assert.equal(
+    askAnswerPayload.aiDebug?.providerResponseId,
+    "provider-ask-dm-1"
+  );
 
   const latestDmMessage = solo.messages
     .filter((message) => message.role === "dm")
@@ -191,7 +206,7 @@ test("DM runtime routes handle authorized solo, ask-DM, regenerate, and traces",
 
   const tracesResponse = await app.inject({
     method: "GET",
-    url: `/api/campaigns/${created.campaign.id}/debug-traces?limit=20`,
+    url: `/api/campaigns/${created.campaign.id}/debug-traces?limit=200`,
     headers: {
       cookie
     }
@@ -203,6 +218,28 @@ test("DM runtime routes handle authorized solo, ask-DM, regenerate, and traces",
   assert.ok(
     traces.traces.some((trace) => trace.phase === "provider_response_received")
   );
+  const askTrace = traces.traces.find(
+    (trace) => trace.phase === "ask_dm_answer_parsed"
+  );
+  assert.ok(askTrace);
+  const askProviderTrace = traces.traces.find(
+    (trace) =>
+      trace.phase === "provider_response_received" &&
+      trace.provider &&
+      typeof trace.provider === "object" &&
+      "rawRequestMessages" in trace.provider &&
+      Array.isArray(
+        (trace.provider as { rawRequestMessages?: unknown }).rawRequestMessages
+      ) &&
+      (
+        trace.provider as {
+          rawRequestMessages?: { content?: string }[];
+        }
+      ).rawRequestMessages?.[0]?.content?.includes(
+        "out-of-turn table question"
+      )
+  );
+  assert.ok(askProviderTrace);
   const routerTrace = traces.traces.find(
     (trace) => trace.phase === "router_response_received"
   );
