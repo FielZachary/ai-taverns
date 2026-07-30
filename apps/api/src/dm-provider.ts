@@ -392,11 +392,31 @@ export function assertDungeonMasterProviderConfigured(model: AiModelId = default
 }
 
 function mapHistoryMessage(message: GameMessage): DeepSeekMessage {
+  if (message.kind === "ask_dm_question") {
+    return {
+      role: "user",
+      content: [
+        "Out-of-turn Ask DM table question.",
+        "This is table guidance only, not a committed character action and not scene advancement.",
+        message.content
+      ].join("\n")
+    };
+  }
+
   if (message.role === "dm") {
+    const publicNarration =
+      message.kind === "ask_dm_answer"
+        ? [
+            "Out-of-turn Ask DM table guidance.",
+            "Use this as clarification only; it is not in-fiction narration, a committed action, or scene advancement.",
+            message.content
+          ].join("\n")
+        : message.content;
+
     return {
       role: "assistant",
       content: JSON.stringify({
-        public_narration: message.content,
+        public_narration: publicNarration,
         roll_requests: [],
         next_input_needed: "player_actions",
         input_targets: [],
