@@ -4433,6 +4433,8 @@ h1 {
 }
 
 .message-label-stack {
+  display: grid;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -4445,13 +4447,17 @@ h1 {
 }
 
 .message-location-label {
-  margin: 2px 0 0;
-  color: rgba(214, 205, 190, 0.68);
+  margin: 0;
+  color: rgba(235, 230, 220, 0.78);
   font-family: var(--body-font);
   font-size: 0.72rem;
-  font-style: italic;
   font-weight: 600;
   line-height: 1.25;
+}
+
+.message-dm .message-label,
+.message-dm .message-location-label {
+  font-size: 0.96rem;
 }
 
 .message-label-detail {
