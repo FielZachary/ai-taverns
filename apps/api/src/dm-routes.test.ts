@@ -281,6 +281,18 @@ test("DM runtime routes handle authorized solo, ask-DM, regenerate, and traces",
       .includedContextKeys,
     ["world:road-tracks"]
   );
+  const askModelCalls = database.dmModelCalls.filter(
+    (call) =>
+      call.campaign_id === created.campaign.id &&
+      (call.phase === "ask_dm_context_selector" || call.phase === "ask_dm")
+  );
+  assert.deepEqual(
+    askModelCalls.map((call) => [call.phase, call.turn_id]),
+    [
+      ["ask_dm_context_selector", null],
+      ["ask_dm", null]
+    ]
+  );
   const askProviderTrace = traces.traces.find(
     (trace) =>
       trace.phase === "provider_response_received" &&

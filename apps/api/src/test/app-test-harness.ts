@@ -218,6 +218,19 @@ type DmTurnTraceRecord = {
   created_at: Date;
 };
 
+type DmModelCallRecord = {
+  id: string;
+  campaign_id: string;
+  trace_id: string;
+  turn_id: string | null;
+  phase: string;
+  provider: string | null;
+  model: string | null;
+  raw_response: string | null;
+  metadata: unknown;
+  created_at: Date;
+};
+
 type CampaignDmGuidanceRecord = {
   campaign_id: string;
   trace_id: string;
@@ -252,6 +265,7 @@ class FakeDatabase {
   mediaAssets: MediaAssetRecord[] = [];
   contextChunks: ContextChunkRecord[] = [];
   dmTurnTraces: DmTurnTraceRecord[] = [];
+  dmModelCalls: DmModelCallRecord[] = [];
   campaignDmGuidance: CampaignDmGuidanceRecord[] = [];
   livingWorldEngineRuns: LivingWorldEngineRunRecord[] = [];
   turns: TurnRecord[] = [];
@@ -1250,6 +1264,21 @@ class FakeDatabase {
     }
 
     if (normalizedSql.startsWith("insert into dm_model_calls")) {
+      this.dmModelCalls.push({
+        id: `dm-model-call-${this.nextId++}`,
+        campaign_id: values[0] as string,
+        trace_id: values[1] as string,
+        turn_id: (values[2] as string | null) ?? null,
+        phase: values[3] as string,
+        provider: (values[4] as string | null) ?? null,
+        model: (values[5] as string | null) ?? null,
+        raw_response: (values[6] as string | null) ?? null,
+        metadata:
+          typeof values[7] === "string"
+            ? JSON.parse(values[7] as string)
+            : values[7],
+        created_at: new Date()
+      });
       return { rows: [] as T[] };
     }
 

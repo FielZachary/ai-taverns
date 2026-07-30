@@ -10531,14 +10531,12 @@ export async function askDungeonMasterQuestionForUser(
   const promptContext = runtime.buildPromptContext
       ? await runtime.buildPromptContext({
           campaignId: campaign.id,
-          turnId: streamTurnId,
           currentAction,
           baseInstructions: instructions,
           ...(input.model ? { model: input.model } : {})
         })
     : await buildAskDmPromptContext(db, runtime, campaign, {
         traceId,
-        turnId: streamTurnId,
         currentAction,
         baseInstructions: instructions,
         history,
@@ -10550,10 +10548,10 @@ export async function askDungeonMasterQuestionForUser(
     campaignId: campaign.id,
     traceId,
     phase: "ask_dm_started",
-    turnId: streamTurnId,
     elapsedMs: 0,
     payload: {
       sessionId: campaign.session_id,
+      streamTurnId,
       historyCount: providerHistory.length,
       promptContextSections: promptContext?.sections ?? [],
       promptContextBudget: promptContext?.budget,
@@ -10604,13 +10602,13 @@ export async function askDungeonMasterQuestionForUser(
       campaignId: campaign.id,
       traceId,
       phase: "provider_response_received",
-      turnId: streamTurnId,
-        elapsedMs: Date.now() - startedAt,
-        payload: {
-          durationMs: providerDurationMs,
-          historyCount: providerHistory.length,
-          promptContextSections: promptContext?.sections ?? [],
-          promptContextBudget: promptContext?.budget,
+      elapsedMs: Date.now() - startedAt,
+      payload: {
+        durationMs: providerDurationMs,
+        streamTurnId,
+        historyCount: providerHistory.length,
+        promptContextSections: promptContext?.sections ?? [],
+        promptContextBudget: promptContext?.budget,
         provider: providerDebugSummary(providerData.debug, {
           includeRawResponse: true,
           includeRequestMessages: true
@@ -10620,7 +10618,6 @@ export async function askDungeonMasterQuestionForUser(
     await logDmModelCall(db, {
       campaignId: campaign.id,
       traceId,
-      turnId: streamTurnId,
       phase: "ask_dm",
       providerData,
       durationMs: providerDurationMs
@@ -10634,9 +10631,9 @@ export async function askDungeonMasterQuestionForUser(
       campaignId: campaign.id,
       traceId,
       phase: "ask_dm_answer_parsed",
-      turnId: streamTurnId,
       elapsedMs: Date.now() - startedAt,
       payload: {
+        streamTurnId,
         answer: textStats(answer),
         providerResponseId: providerData.id ?? providerData.debug.providerResponseId
       }
@@ -10686,9 +10683,9 @@ export async function askDungeonMasterQuestionForUser(
       campaignId: campaign.id,
       traceId,
       phase: "ask_dm_failed",
-      turnId: streamTurnId,
       elapsedMs: Date.now() - startedAt,
       payload: {
+        streamTurnId,
         error: errorSummary(error),
         provider: providerDebugSummary(providerDebug, {
           includeRawResponse: true,
