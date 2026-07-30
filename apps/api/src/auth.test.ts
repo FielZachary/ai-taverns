@@ -13,6 +13,8 @@ import {
   readCookie,
   signIn
 } from "./test/app-test-harness.js";
+import { buildApp } from "./app.js";
+import { loadConfig } from "./config.js";
 
 test("GET /api/auth/me returns unauthenticated without a session cookie", async () => {
   const response = await app.inject({
@@ -233,6 +235,134 @@ test("Google OAuth callback rejects bad state before calling Google", async () =
     );
   } finally {
     globalThis.fetch = fetchMock;
+  }
+});
+
+test("Google OAuth start reports missing provider configuration", async () => {
+  const noGoogleApp = await buildApp({
+    config: loadConfig({
+      NODE_ENV: "test",
+      DATABASE_URL: "postgres://postgres:postgres@localhost:5432/ai_taverns",
+      AUTH_COOKIE_NAME: "test_session"
+    }),
+    connectToDatabase: false
+  });
+
+  try {
+    const response = await noGoogleApp.inject({
+      method: "GET",
+      url: "/api/auth/google/start"
+    });
+
+    assert.equal(response.statusCode, 500);
+    assert.equal(
+      ApiErrorResponseSchema.parse(response.json()).error.message,
+      "Google sign-in is not configured."
+    );
+  } finally {
+    await noGoogleApp.close();
+  }
+});
+
+test("Google OAuth callback redirects malformed state cookies without calling Google", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async () => {
+    throw new Error("Google should not be called for malformed state cookies");
+  }) as typeof fetch;
+
+  try {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/auth/google/callback?code=google-code&state=bad-state-that-is-long-enough-for-schema",
+      headers: {
+        cookie: "test_session_google_state=not-base64-json"
+      }
+    });
+
+    assert.equal(response.statusCode, 302);
+    assert.equal(
+      response.headers.location,
+      "http://localhost:3000/login?error=google-auth"
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Google OAuth callback reports token exchange failures", async () => {
+  const startResponse = await app.inject({
+    method: "GET",
+    url: "/api/auth/google/start"
+  });
+  const startLocation = new URL(startResponse.headers.location as string);
+  const state = startLocation.searchParams.get("state");
+  assert.ok(state);
+  const stateCookie = readCookie(startResponse.headers["set-cookie"]);
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (async () =>
+    Response.json({ error: "invalid_grant" }, { status: 400 })) as typeof fetch;
+
+  try {
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/auth/google/callback?code=bad-code&state=${encodeURIComponent(state)}`,
+      headers: {
+        cookie: stateCookie
+      }
+    });
+
+    assert.equal(response.statusCode, 401);
+    assert.equal(
+      ApiErrorResponseSchema.parse(response.json()).error.message,
+      "Google sign-in could not be completed."
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Google OAuth callback rejects unverified Google emails", async () => {
+  const startResponse = await app.inject({
+    method: "GET",
+    url: "/api/auth/google/start"
+  });
+  const startLocation = new URL(startResponse.headers.location as string);
+  const state = startLocation.searchParams.get("state");
+  assert.ok(state);
+  const stateCookie = readCookie(startResponse.headers["set-cookie"]);
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (async (url) => {
+    if (url.toString() === "https://oauth2.googleapis.com/token") {
+      return Response.json({
+        access_token: "google-access-token"
+      });
+    }
+
+    return Response.json({
+      sub: "google-user-unverified",
+      email: "unverified@example.com",
+      email_verified: false
+    });
+  }) as typeof fetch;
+
+  try {
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/auth/google/callback?code=google-code&state=${encodeURIComponent(state)}`,
+      headers: {
+        cookie: stateCookie
+      }
+    });
+
+    assert.equal(response.statusCode, 401);
+    assert.equal(
+      ApiErrorResponseSchema.parse(response.json()).error.message,
+      "Google account email is not verified."
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
   }
 });
 
