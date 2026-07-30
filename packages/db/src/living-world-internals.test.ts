@@ -72,6 +72,183 @@ test("accepted memory patch SQL casts markdown text parameters", async () => {
   ]);
 });
 
+test("inventory update narration is formatted as an italic parenthetical", () => {
+  assert.equal(
+    __dbTestInternals.inventoryUpdateSentence([
+      {
+        type: "currency",
+        currency: "CP",
+        delta: -3
+      },
+      {
+        type: "item",
+        operation: "add",
+        item: "brass token",
+        quantity: 1
+      }
+    ]),
+    "*(Inventory update: you spent 3 CP and gained a brass token.)*"
+  );
+
+  assert.equal(
+    __dbTestInternals.narrationWithInventoryUpdate("The cup slides across.", [
+      {
+        type: "currency",
+        currency: "CP",
+        delta: -3
+      }
+    ]),
+    "The cup slides across.\n\n*(Inventory update: you spent 3 CP.)*"
+  );
+
+  assert.equal(
+    __dbTestInternals.narrationWithInventoryUpdate(
+      "The cup slides across.\n\nInventory update: you spent 3 CP.",
+      [
+        {
+          type: "currency",
+          currency: "CP",
+          delta: -3
+        }
+      ]
+    ),
+    "The cup slides across.\n\nInventory update: you spent 3 CP."
+  );
+});
+
+test("inventory patch validation accepts compact actor keys and normalizes fields", () => {
+  const player = {
+    id: "player-1",
+    client_id: "client-1"
+  } as Parameters<typeof __dbTestInternals.validateInventoryPatches>[1][number];
+
+  const validation = __dbTestInternals.validateInventoryPatches(
+    [
+      {
+        actorKey: "client-1",
+        type: "currency",
+        currency: "GP",
+        delta: "-2"
+      },
+      {
+        actor_key: "player:client-1",
+        type: "item",
+        operation: "received",
+        name: "brass key",
+        quantity: "2"
+      },
+      {
+        actor_key: "player:someone-else",
+        type: "item",
+        operation: "dance",
+        item: ""
+      }
+    ],
+    [player]
+  );
+
+  assert.deepEqual(validation.accepted, [
+    {
+      actorKey: "client-1",
+      actor_key: "client-1",
+      type: "currency",
+      currency: "GP",
+      delta: -2
+    },
+    {
+      actor_key: "player:client-1",
+      type: "item",
+      operation: "add",
+      name: "brass key",
+      item: "brass key",
+      quantity: 2
+    }
+  ]);
+  assert.equal(validation.discarded.length, 1);
+  assert.match(validation.discarded[0]?.reasons.join("\n") ?? "", /actor_key/);
+  assert.match(validation.discarded[0]?.reasons.join("\n") ?? "", /operation/);
+  assert.match(validation.discarded[0]?.reasons.join("\n") ?? "", /name/);
+});
+
+test("accepted inventory patches apply compact currency and item transitions", async () => {
+  const updates: string[] = [];
+  const db = fakeDb((_sql, values) => {
+    updates.push(String(values[1]));
+    return { rows: [] };
+  });
+  const player = {
+    id: "player-1",
+    campaign_id: "campaign-1",
+    client_id: "client-1",
+    user_id: null,
+    username: "Pike",
+    character_name: "Pike",
+    character_sheet:
+      "Core Stats\nLevel 1\n\nEquipment\nDagger\n\nInventory\nTorch x2\nRope\n\nCurrency\n5 GP",
+    slot: 1,
+    status: "ready",
+    last_seen_at: new Date()
+  } as unknown as Parameters<
+    typeof __dbTestInternals.applyAcceptedInventoryPatches
+  >[1][number];
+
+  const applied = await __dbTestInternals.applyAcceptedInventoryPatches(
+    db,
+    [player],
+    [
+      {
+        actor_key: "player:client-1",
+        type: "currency",
+        currency: "CP",
+        delta: -3
+      },
+      {
+        actor_key: "player:client-1",
+        type: "item",
+        operation: "add",
+        item: "brass key",
+        quantity: 1
+      },
+      {
+        actor_key: "player:client-1",
+        type: "item",
+        operation: "equip",
+        item: "brass key",
+        quantity: 1
+      },
+      {
+        actor_key: "player:client-1",
+        type: "item",
+        operation: "remove",
+        item: "Torch",
+        quantity: 1
+      },
+      {
+        actor_key: "player:client-1",
+        type: "item",
+        operation: "remove",
+        item: "silver crown",
+        quantity: 1
+      },
+      {
+        actor_key: "player:client-1",
+        type: "currency",
+        currency: "GP",
+        delta: -99
+      }
+    ]
+  );
+
+  assert.equal(applied.length, 4);
+  assert.equal(db.queries.length, 4);
+
+  const finalSheet = updates.at(-1) ?? "";
+  assert.match(finalSheet, /Currency\nGP: 4\nSP: 9\nCP: 7/);
+  assert.match(finalSheet, /Inventory\nTorch\nRope/);
+  assert.doesNotMatch(finalSheet, /Inventory[\s\S]*brass key/);
+  assert.match(finalSheet, /Equipment\nDagger\nbrass key/);
+});
+
 test("living world prompt formatting includes guidance and cadence context", () => {
   const campaign = {
     id: "campaign-1",

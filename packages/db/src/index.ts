@@ -641,6 +641,27 @@ type DungeonMasterReply = {
   setting?: CampaignSettingSummary | undefined;
 };
 
+type InventoryPatchDiscard = {
+  item: unknown;
+  reasons: string[];
+};
+
+type InventoryPatchValidation = {
+  accepted: Record<string, unknown>[];
+  discarded: InventoryPatchDiscard[];
+};
+
+const currencyDenominations = ["PP", "GP", "EP", "SP", "CP"] as const;
+type CurrencyDenomination = (typeof currencyDenominations)[number];
+
+const currencyCopperValue: Record<CurrencyDenomination, number> = {
+  PP: 1000,
+  GP: 100,
+  EP: 50,
+  SP: 10,
+  CP: 1
+};
+
 type EldermereOpeningPlannerDebug =
   NonNullable<AiDebugInfo["eldermereOpeningPlanner"]>;
 
@@ -755,6 +776,656 @@ function eventPayload(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function normalizedCurrencyDenomination(value: unknown): CurrencyDenomination | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  const aliases: Record<string, CurrencyDenomination> = {
+    cp: "CP",
+    copper: "CP",
+    coppers: "CP",
+    "copper piece": "CP",
+    "copper pieces": "CP",
+    sp: "SP",
+    silver: "SP",
+    silvers: "SP",
+    "silver piece": "SP",
+    "silver pieces": "SP",
+    ep: "EP",
+    electrum: "EP",
+    "electrum piece": "EP",
+    "electrum pieces": "EP",
+    gp: "GP",
+    gold: "GP",
+    golds: "GP",
+    "gold piece": "GP",
+    "gold pieces": "GP",
+    pp: "PP",
+    platinum: "PP",
+    "platinum piece": "PP",
+    "platinum pieces": "PP"
+  };
+
+  return aliases[normalized] ?? null;
+}
+
+function numberFromUnknown(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  return undefined;
+}
+
+function reasonCurrencyDenomination(
+  reason: unknown,
+  delta: number
+): CurrencyDenomination | null {
+  if (typeof reason !== "string") {
+    return null;
+  }
+
+  const normalized = reason.toLowerCase();
+  const magnitude = Math.abs(delta);
+  const amountPattern = Number.isInteger(magnitude)
+    ? String(magnitude).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    : null;
+  const denominationPatterns: Array<[CurrencyDenomination, RegExp]> = [
+    ["CP", /\b(?:cp|copper|coppers|copper pieces?)\b/i],
+    ["SP", /\b(?:sp|silver|silvers|silver pieces?)\b/i],
+    ["EP", /\b(?:ep|electrum|electrum pieces?)\b/i],
+    ["GP", /\b(?:gp|gold|golds|gold pieces?)\b/i],
+    ["PP", /\b(?:pp|platinum|platinum pieces?)\b/i]
+  ];
+
+  for (const [denomination, pattern] of denominationPatterns) {
+    if (!pattern.test(normalized)) {
+      continue;
+    }
+
+    if (!amountPattern || new RegExp(`\\b${amountPattern}\\b`).test(normalized)) {
+      return denomination;
+    }
+  }
+
+  return null;
+}
+
+function sectionHeadingPattern(sectionName: string) {
+  return new RegExp(
+    `(^|\\n)(#{1,6}\\s*)?${sectionName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\n`,
+    "i"
+  );
+}
+
+function replaceCharacterSheetSection(
+  characterSheet: string,
+  sectionName: string,
+  lines: string[]
+) {
+  const normalized = characterSheet.replace(/\r\n/g, "\n");
+  const heading = sectionHeadingPattern(sectionName).exec(normalized);
+  const sectionText = lines.length > 0 ? lines.join("\n") : "None";
+
+  if (!heading?.index && heading?.index !== 0) {
+    const separator = normalized.trimEnd() ? "\n\n" : "";
+    return `${normalized.trimEnd()}${separator}${sectionName}\n${sectionText}`;
+  }
+
+  const contentStart = heading.index + heading[0].length;
+  const nextHeading = /\n(?:#{1,6}\s*)?[A-Z][A-Za-z/& -]{1,60}\s*\n/g;
+  nextHeading.lastIndex = contentStart;
+  const nextMatch = nextHeading.exec(normalized);
+  const contentEnd = nextMatch?.index ?? normalized.length;
+
+  return [
+    normalized.slice(0, contentStart),
+    sectionText,
+    normalized.slice(contentEnd)
+  ].join("");
+}
+
+function extractCharacterSheetSectionLines(
+  characterSheet: string,
+  sectionName: string
+) {
+  const normalized = characterSheet.replace(/\r\n/g, "\n");
+  const heading = sectionHeadingPattern(sectionName).exec(normalized);
+
+  if (!heading) {
+    return [];
+  }
+
+  const contentStart = heading.index + heading[0].length;
+  const nextHeading = /\n(?:#{1,6}\s*)?[A-Z][A-Za-z/& -]{1,60}\s*\n/g;
+  nextHeading.lastIndex = contentStart;
+  const nextMatch = nextHeading.exec(normalized);
+  const contentEnd = nextMatch?.index ?? normalized.length;
+
+  return normalized
+    .slice(contentStart, contentEnd)
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && !/^none$/i.test(line));
+}
+
+function parseCurrencyLines(lines: string[]) {
+  const amounts: Record<CurrencyDenomination, number> = {
+    PP: 0,
+    GP: 0,
+    EP: 0,
+    SP: 0,
+    CP: 0
+  };
+  const passthrough: string[] = [];
+
+  for (const line of lines) {
+    const match =
+      line.match(/^\s*(?:[-*]\s*)?(PP|GP|EP|SP|CP)\s*[:x-]?\s*(-?\d+)\s*$/i) ??
+      line.match(/^\s*(?:[-*]\s*)?(-?\d+)\s+(PP|GP|EP|SP|CP)\s*$/i) ??
+      line.match(/^\s*(?:[-*]\s*)?(-?\d+)\s+(platinum|gold|electrum|silver|copper)(?:\s+pieces?)?\s*$/i);
+
+    if (!match) {
+      passthrough.push(line);
+      continue;
+    }
+
+    const firstValue = match[1];
+    const secondValue = match[2];
+    const firstIsAmount = typeof firstValue === "string" && /^-?\d+$/.test(firstValue);
+    const denomination = normalizedCurrencyDenomination(
+      firstIsAmount ? secondValue : firstValue
+    );
+    const amount = Number(firstIsAmount ? firstValue : secondValue);
+
+    if (!denomination || !Number.isFinite(amount)) {
+      passthrough.push(line);
+      continue;
+    }
+
+    amounts[denomination] += amount;
+  }
+
+  return { amounts, passthrough };
+}
+
+function totalCopper(amounts: Record<CurrencyDenomination, number>) {
+  return currencyDenominations.reduce(
+    (sum, denomination) =>
+      sum + amounts[denomination] * currencyCopperValue[denomination],
+    0
+  );
+}
+
+function currencyLinesFromCopper(
+  total: number,
+  passthrough: string[],
+  options?: { includeElectrum?: boolean }
+) {
+  let remaining = total;
+  const lines: string[] = [];
+  const renderDenominations: CurrencyDenomination[] = options?.includeElectrum
+    ? ["PP", "GP", "EP", "SP", "CP"]
+    : ["PP", "GP", "SP", "CP"];
+
+  for (const denomination of renderDenominations) {
+    const value = currencyCopperValue[denomination];
+    const amount = Math.floor(remaining / value);
+    remaining -= amount * value;
+
+    if (amount > 0) {
+      lines.push(`${denomination}: ${amount}`);
+    }
+  }
+
+  return [...lines, ...passthrough].length > 0 ? [...lines, ...passthrough] : ["None"];
+}
+
+function patchActorKeyMatchesPlayer(patchActorKey: unknown, player: PlayerRow) {
+  if (typeof patchActorKey !== "string") {
+    return false;
+  }
+
+  return (
+    patchActorKey === actorKeyForPlayer(player.id) ||
+    patchActorKey === `player:${player.client_id}` ||
+    patchActorKey === player.client_id ||
+    patchActorKey === player.id
+  );
+}
+
+function normalizedInventoryOperation(value: unknown) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase();
+
+  if (["gain", "gained", "add", "added", "receive", "received"].includes(normalized)) {
+    return "add";
+  }
+
+  if (
+    [
+      "remove",
+      "removed",
+      "drop",
+      "dropped",
+      "lose",
+      "lost",
+      "consume",
+      "consumed",
+      "spend",
+      "spent",
+      "give",
+      "gave",
+      "trade",
+      "traded"
+    ].includes(normalized)
+  ) {
+    return "remove";
+  }
+
+  if (["equip", "equipped"].includes(normalized)) {
+    return "equip";
+  }
+
+  if (["unequip", "unequipped", "stow", "stowed"].includes(normalized)) {
+    return "unequip";
+  }
+
+  return null;
+}
+
+function inventoryItemName(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : "";
+}
+
+function parseInventoryItemLine(line: string) {
+  const trimmed = line.replace(/^\s*[-*]\s*/, "").trim();
+  const suffixMatch = trimmed.match(/^(.+?)\s+x\s*(\d+)$/i);
+  const prefixMatch = trimmed.match(/^(\d+)\s+x?\s+(.+)$/i);
+
+  if (suffixMatch?.[1] && suffixMatch[2]) {
+    return {
+      name: suffixMatch[1].trim(),
+      quantity: Number(suffixMatch[2])
+    };
+  }
+
+  if (prefixMatch?.[1] && prefixMatch[2]) {
+    return {
+      name: prefixMatch[2].trim(),
+      quantity: Number(prefixMatch[1])
+    };
+  }
+
+  return { name: trimmed, quantity: 1 };
+}
+
+function formatInventoryItemLine(name: string, quantity: number) {
+  return quantity > 1 ? `${name} x${quantity}` : name;
+}
+
+function adjustInventoryItemLines(
+  lines: string[],
+  itemName: string,
+  delta: number
+) {
+  const nextLines = [...lines];
+  const index = nextLines.findIndex(
+    (line) =>
+      parseInventoryItemLine(line).name.toLowerCase() === itemName.toLowerCase()
+  );
+
+  if (index < 0) {
+    if (delta <= 0) {
+      return { lines, changed: false };
+    }
+
+    return {
+      lines: [...nextLines, formatInventoryItemLine(itemName, delta)],
+      changed: true
+    };
+  }
+
+  const parsed = parseInventoryItemLine(nextLines[index] ?? "");
+  const nextQuantity = parsed.quantity + delta;
+
+  if (nextQuantity < 0) {
+    return { lines, changed: false };
+  }
+
+  if (nextQuantity === 0) {
+    nextLines.splice(index, 1);
+  } else {
+    nextLines[index] = formatInventoryItemLine(parsed.name, nextQuantity);
+  }
+
+  return { lines: nextLines.length > 0 ? nextLines : ["None"], changed: true };
+}
+
+function inventoryPatchSummary(patch: Record<string, unknown>) {
+  const type = eventPayloadString(patch.type).toLowerCase();
+
+  if (type === "currency") {
+    const currency = normalizedCurrencyDenomination(patch.currency);
+    const delta = numberFromUnknown(patch.delta);
+
+    if (!currency || typeof delta !== "number") {
+      return "";
+    }
+
+    return `${delta > 0 ? "gained" : "spent"} ${Math.abs(delta)} ${currency}`;
+  }
+
+  if (type === "item") {
+    const operation = normalizedInventoryOperation(patch.operation);
+    const itemName = inventoryItemName(patch.item);
+    const quantity = Math.max(1, Math.floor(numberFromUnknown(patch.quantity) ?? 1));
+
+    if (!operation || !itemName) {
+      return "";
+    }
+
+    const itemText =
+      quantity > 1 || /^(?:a|an|the)\s+/i.test(itemName)
+        ? `${quantity > 1 ? `${quantity} ` : ""}${itemName}`
+        : `a ${itemName}`;
+    const verb =
+      operation === "add"
+        ? "gained"
+        : operation === "equip"
+          ? "equipped"
+          : operation === "unequip"
+            ? "unequipped"
+            : "dropped";
+
+    return `${verb} ${itemText}`;
+  }
+
+  return "";
+}
+
+function inventoryUpdateSentence(patches: Record<string, unknown>[]) {
+  const summaries = patches.map(inventoryPatchSummary).filter(Boolean);
+
+  if (summaries.length === 0) {
+    return "";
+  }
+
+  const joined =
+    summaries.length === 1
+      ? summaries[0]
+      : `${summaries.slice(0, -1).join(", ")} and ${summaries.at(-1)}`;
+
+  return `*(Inventory update: you ${joined}.)*`;
+}
+
+function narrationWithInventoryUpdate(
+  publicNarration: string,
+  appliedPatches: Record<string, unknown>[]
+) {
+  if (!appliedPatches.length || /\binventory update\s*:/i.test(publicNarration)) {
+    return publicNarration;
+  }
+
+  const sentence = inventoryUpdateSentence(appliedPatches);
+  return sentence ? `${publicNarration.trimEnd()}\n\n${sentence}` : publicNarration;
+}
+
+function validateInventoryPatches(
+  patches: unknown[],
+  players: PlayerRow[]
+): InventoryPatchValidation {
+  return patches.reduce<InventoryPatchValidation>(
+    (result, patch) => {
+      const reasons: string[] = [];
+      const record = eventPayload(patch);
+      const type = eventPayloadString(record.type).toLowerCase();
+      const actorKey = record.actor_key ?? record.actorKey;
+
+      if (!Object.keys(record).length) {
+        reasons.push("patch must be an object");
+      }
+
+      if (!players.some((player) => patchActorKeyMatchesPlayer(actorKey, player))) {
+        reasons.push("actor_key does not match an active player");
+      }
+
+      if (type !== "currency" && type !== "item") {
+        reasons.push("type must be currency or item");
+      }
+
+      if (type === "currency") {
+        const delta = numberFromUnknown(record.delta);
+
+        if (typeof delta !== "number" || !Number.isFinite(delta) || delta === 0) {
+          reasons.push("currency delta must be a non-zero number");
+        }
+
+        const currency =
+          reasonCurrencyDenomination(record.reason, delta ?? 0) ??
+          normalizedCurrencyDenomination(record.currency);
+
+        if (!currency) {
+          reasons.push("currency denomination is invalid");
+        }
+
+        if (reasons.length > 0) {
+          result.discarded.push({ item: patch, reasons });
+        } else {
+          result.accepted.push({
+            ...record,
+            type,
+            actor_key: actorKey,
+            currency,
+            delta
+          });
+        }
+
+        return result;
+      }
+
+      const operation = normalizedInventoryOperation(
+        record.operation ?? record.action ?? record.verb
+      );
+      const itemName = inventoryItemName(record.item ?? record.name);
+      const quantity = Math.max(1, Math.floor(numberFromUnknown(record.quantity) ?? 1));
+
+      if (!operation) {
+        reasons.push("item operation is invalid");
+      }
+
+      if (!itemName) {
+        reasons.push("item name is required");
+      }
+
+      if (reasons.length > 0) {
+        result.discarded.push({ item: patch, reasons });
+      } else {
+        result.accepted.push({
+          ...record,
+          type,
+          actor_key: actorKey,
+          operation,
+          item: itemName,
+          quantity
+        });
+      }
+
+      return result;
+    },
+    { accepted: [], discarded: [] }
+  );
+}
+
+async function applyAcceptedInventoryPatches(
+  db: Queryable,
+  players: PlayerRow[],
+  patches: Record<string, unknown>[]
+) {
+  const sheetsByPlayerId = new Map(players.map((player) => [player.id, player.character_sheet]));
+  const appliedPatches: Record<string, unknown>[] = [];
+
+  for (const patch of patches) {
+    const player = players.find((candidate) =>
+      patchActorKeyMatchesPlayer(patch.actor_key ?? patch.actorKey, candidate)
+    );
+
+    if (!player) {
+      continue;
+    }
+
+    if (patch.type === "currency") {
+      const currency = normalizedCurrencyDenomination(patch.currency);
+      const delta = numberFromUnknown(patch.delta);
+
+      if (!currency || typeof delta !== "number") {
+        continue;
+      }
+
+      const currentSheet = sheetsByPlayerId.get(player.id) ?? player.character_sheet;
+      const currentLines = extractCharacterSheetSectionLines(currentSheet, "Currency");
+      const parsed = parseCurrencyLines(currentLines);
+      const nextTotal =
+        totalCopper(parsed.amounts) + delta * currencyCopperValue[currency];
+
+      if (nextTotal < 0) {
+        continue;
+      }
+
+      const nextSheet = replaceCharacterSheetSection(
+        currentSheet,
+        "Currency",
+        currencyLinesFromCopper(nextTotal, parsed.passthrough, {
+          includeElectrum: parsed.amounts.EP > 0
+        })
+      );
+
+      if (nextSheet === currentSheet) {
+        continue;
+      }
+
+      sheetsByPlayerId.set(player.id, nextSheet);
+      await db.query(
+        `
+          update players
+          set character_sheet = $2,
+            updated_at = now()
+          where id = $1
+        `,
+        [player.id, nextSheet]
+      );
+      appliedPatches.push(patch);
+      continue;
+    }
+
+    if (patch.type === "item") {
+      const operation = normalizedInventoryOperation(patch.operation);
+      const itemName = inventoryItemName(patch.item);
+      const quantity = Math.max(1, Math.floor(numberFromUnknown(patch.quantity) ?? 1));
+
+      if (!operation || !itemName) {
+        continue;
+      }
+
+      const currentSheet = sheetsByPlayerId.get(player.id) ?? player.character_sheet;
+      let inventoryLines = extractCharacterSheetSectionLines(currentSheet, "Inventory");
+      let equipmentLines = extractCharacterSheetSectionLines(currentSheet, "Equipment");
+      let itemChanged = false;
+
+      if (operation === "add") {
+        const adjusted = adjustInventoryItemLines(inventoryLines, itemName, quantity);
+        inventoryLines = adjusted.lines;
+        itemChanged = adjusted.changed;
+      } else if (operation === "remove") {
+        const adjustedInventory = adjustInventoryItemLines(
+          inventoryLines,
+          itemName,
+          -quantity
+        );
+
+        if (adjustedInventory.changed) {
+          inventoryLines = adjustedInventory.lines;
+          itemChanged = true;
+        } else {
+          const adjustedEquipment = adjustInventoryItemLines(
+            equipmentLines,
+            itemName,
+            -quantity
+          );
+          equipmentLines = adjustedEquipment.lines;
+          itemChanged = adjustedEquipment.changed;
+        }
+      } else if (operation === "equip") {
+        const removed = adjustInventoryItemLines(inventoryLines, itemName, -quantity);
+
+        if (!removed.changed) {
+          continue;
+        }
+
+        inventoryLines = removed.lines;
+        equipmentLines = adjustInventoryItemLines(
+          equipmentLines,
+          itemName,
+          quantity
+        ).lines;
+        itemChanged = true;
+      } else if (operation === "unequip") {
+        const removed = adjustInventoryItemLines(equipmentLines, itemName, -quantity);
+
+        if (!removed.changed) {
+          continue;
+        }
+
+        equipmentLines = removed.lines;
+        inventoryLines = adjustInventoryItemLines(
+          inventoryLines,
+          itemName,
+          quantity
+        ).lines;
+        itemChanged = true;
+      }
+
+      if (!itemChanged) {
+        continue;
+      }
+
+      const nextSheet = replaceCharacterSheetSection(
+        replaceCharacterSheetSection(currentSheet, "Inventory", inventoryLines),
+        "Equipment",
+        equipmentLines
+      );
+
+      if (nextSheet === currentSheet) {
+        continue;
+      }
+
+      sheetsByPlayerId.set(player.id, nextSheet);
+      await db.query(
+        `
+          update players
+          set character_sheet = $2,
+            updated_at = now()
+          where id = $1
+        `,
+        [player.id, nextSheet]
+      );
+      appliedPatches.push(patch);
+    }
+  }
+
+  return appliedPatches;
 }
 
 function campaignWorldName(campaign: Pick<CampaignRow, "metadata" | "title">) {
@@ -6982,6 +7653,9 @@ const gameplayTurnOutputContractReminder = [
   "If a player character attempts to use, consume, equip, spend, give, trade, throw, load, unlock with, activate, or otherwise rely on an item, first check the canonical character sheet Inventory, Equipment, and Currency sections.",
   "If the character does not have the required item or currency, reject the attempt in public_narration and clearly state that they do not have it. Do not include an inventory patch for the failed attempt.",
   "If public_narration says a player character gained, lost, spent, consumed, equipped, unequipped, or transferred an item/currency, inventory_state_update must include the matching patch.",
+  "Inventory patch schema: currency patches use {actor_key,type:\"currency\",currency:\"CP\"|\"SP\"|\"EP\"|\"GP\"|\"PP\",delta,reason}; item patches use {actor_key,type:\"item\",operation:\"add\"|\"remove\"|\"equip\"|\"unequip\",item,quantity,reason}.",
+  "Use the exact coin denomination that changed. Copper is CP, silver is SP, electrum is EP, gold is GP, platinum is PP; never label copper as GP.",
+  "If inventory_state_update.patches is non-empty, public_narration must include a concise player-visible Inventory update sentence naming what changed, such as 'Inventory update: you gained a brass key' or 'Inventory update: you dropped the torch.'",
   "Only include patches for changes that are explicit and resolved.",
   "If the action is attempted but uncertain, request the needed roll, choice, or payment and leave patches empty.",
   "input_policy must be all_players or only_targeted_players; never use acting_player.",
@@ -7983,7 +8657,6 @@ async function askDungeonMaster(
 
     const rollRequests = normalizeRollRequests(contract.rollRequests);
     const rollRequestDiagnosticsReport = rollRequestDiagnostics(rollRequests);
-    const reply = contract.publicNarration;
     const combatValidation = outputEnvelope
       ? validateCombatEvents(outputEnvelope.combatEvents, {
           actors: mechanicsActorsForValidation(campaign)
@@ -8007,6 +8680,13 @@ async function askDungeonMaster(
           )
         )
       : { accepted: [], discarded: [] };
+    const inventoryPlayers = contract.inventoryStateUpdate?.patches.length
+      ? await getActiveCampaignPlayers(db, campaign.id)
+      : [];
+    const inventoryValidation = validateInventoryPatches(
+      contract.inventoryStateUpdate?.patches ?? [],
+      inventoryPlayers
+    );
     const mechanicsState = resolveMechanicsState(campaign, []);
     const normalizedInputControl = normalizeCombatInputControl(
       applyMechanicsStateUpdate(mechanicsState, contract.mechanicsStateUpdate, nowIso()),
@@ -8027,6 +8707,18 @@ async function askDungeonMaster(
         nextMechanicsState
       );
     }
+    const appliedInventoryPatches =
+      inventoryValidation.accepted.length > 0
+        ? await applyAcceptedInventoryPatches(
+            db,
+            inventoryPlayers,
+            inventoryValidation.accepted
+          )
+        : [];
+    const reply = narrationWithInventoryUpdate(
+      contract.publicNarration,
+      appliedInventoryPatches
+    );
     const routerDebug = routerDebugFromPromptContext(promptContext);
     const debugWithCombatState: AiDebugInfo = {
       ...providerData.debug,
@@ -8034,6 +8726,16 @@ async function askDungeonMaster(
         combat: nextMechanicsState.combat,
         actors: nextMechanicsState.actors
       },
+      ...(contract.inventoryStateUpdate || inventoryValidation.discarded.length > 0
+        ? {
+            inventoryState: {
+              proposedPatches: contract.inventoryStateUpdate?.patches ?? [],
+              acceptedPatches: inventoryValidation.accepted,
+              appliedPatches: appliedInventoryPatches,
+              discardedPatches: inventoryValidation.discarded
+            }
+          }
+        : {}),
       ...(routerDebug ? { router: routerDebug } : {})
     };
 
@@ -8096,7 +8798,9 @@ async function askDungeonMaster(
         acceptedCombatEventsCount: combatValidation.accepted.length,
         discardedCombatEvents: combatValidation.discarded,
         acceptedImmediateContextUpdatesCount: memoryValidation.accepted.length,
-        discardedImmediateContextUpdates: memoryValidation.discarded
+        discardedImmediateContextUpdates: memoryValidation.discarded,
+        acceptedInventoryPatchesCount: inventoryValidation.accepted.length,
+        discardedInventoryPatches: inventoryValidation.discarded
       }
     });
 
@@ -9879,10 +10583,14 @@ function createStatusError(statusCode: number, message: string): Error {
 }
 
 export const __dbTestInternals = {
+  applyAcceptedInventoryPatches,
   applyAcceptedMemoryPatch,
   campaignContextStorageDebugState,
   formatDmGuidance,
   formatLivingWorldPressureEngineRequest,
   getLatestLivingWorldCoveredMessageCount,
-  normalizeNewContextChunkPatch
+  inventoryUpdateSentence,
+  narrationWithInventoryUpdate,
+  normalizeNewContextChunkPatch,
+  validateInventoryPatches
 };

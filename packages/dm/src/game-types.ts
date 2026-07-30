@@ -33,6 +33,12 @@ export type AiDebugInfo = {
   temperature?: number;
   combatState?: unknown;
   combatAdjudication?: unknown;
+  inventoryState?: {
+    proposedPatches?: unknown[];
+    acceptedPatches?: unknown[];
+    appliedPatches?: unknown[];
+    discardedPatches?: unknown[];
+  };
   contextStorageState?: unknown;
   livingWorldPressureEngine?: {
     traceId?: string;

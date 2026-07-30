@@ -58,11 +58,28 @@ function MessageBody({ content }: { content: string }) {
 
   return (
     <div className="message-body">
-      {paragraphs.map((paragraph, index) => (
-        <p key={`${index}-${paragraph.slice(0, 16)}`}>
-          {renderInlineMarkdown(paragraph)}
-        </p>
-      ))}
+      {paragraphs.map((paragraph, index) => {
+        const inventoryUpdate = paragraph.match(
+          /^\*?\(?(Inventory update:\s*[\s\S]+?)\)?\*?$/
+        )?.[1];
+
+        if (inventoryUpdate) {
+          return (
+            <p
+              className="message-inventory-update"
+              key={`${index}-${inventoryUpdate.slice(0, 16)}`}
+            >
+              ({inventoryUpdate})
+            </p>
+          );
+        }
+
+        return (
+          <p key={`${index}-${paragraph.slice(0, 16)}`}>
+            {renderInlineMarkdown(paragraph)}
+          </p>
+        );
+      })}
     </div>
   );
 }
