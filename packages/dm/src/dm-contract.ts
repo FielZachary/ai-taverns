@@ -505,6 +505,7 @@ export type DmContractResponse = {
   inputTargets: string[];
   inputPolicy: InputPolicy;
   mechanicsStateUpdate?: Record<string, unknown>;
+  inventoryStateUpdate?: { patches: unknown[] };
   setting?: {
     displayLocation?: string;
     worldName?: string;
@@ -550,6 +551,13 @@ export function parseDmContract(
   const mechanicsStateUpdate = asObject(
     parsed.mechanics_state_update ?? parsed.mechanicsStateUpdate
   );
+  const rawInventoryStateUpdate = asObject(
+    parsed.inventory_state_update ?? parsed.inventoryStateUpdate
+  );
+  const inventoryPatches = Array.isArray(rawInventoryStateUpdate?.patches)
+    ? rawInventoryStateUpdate.patches
+    : [];
+  const inventoryStateUpdate = { patches: inventoryPatches };
   const displayLocation =
     stringValue(setting?.display_location) ||
     stringValue(setting?.displayLocation);
@@ -630,6 +638,7 @@ export function parseDmContract(
     inputTargets,
     inputPolicy,
     ...(mechanicsStateUpdate ? { mechanicsStateUpdate } : {}),
+    inventoryStateUpdate,
     ...(settingValue ? { setting: settingValue } : {})
   };
 }
@@ -674,6 +683,13 @@ export function recoverDmContractAfterParseFailure(
   const mechanicsStateUpdate = asObject(
     parsed.mechanics_state_update ?? parsed.mechanicsStateUpdate
   );
+  const rawInventoryStateUpdate = asObject(
+    parsed.inventory_state_update ?? parsed.inventoryStateUpdate
+  );
+  const inventoryPatches = Array.isArray(rawInventoryStateUpdate?.patches)
+    ? rawInventoryStateUpdate.patches
+    : [];
+  const inventoryStateUpdate = { patches: inventoryPatches };
   const setting = asObject(parsed.setting);
   const displayLocation =
     stringValue(setting?.display_location) ||
@@ -701,6 +717,7 @@ export function recoverDmContractAfterParseFailure(
       inputTargets,
       inputPolicy,
       ...(mechanicsStateUpdate ? { mechanicsStateUpdate } : {}),
+      inventoryStateUpdate,
       ...(settingValue ? { setting: settingValue } : {})
     },
     report: {

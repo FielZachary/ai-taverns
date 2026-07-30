@@ -359,6 +359,42 @@ describe("parseDmContract", () => {
     });
   });
 
+  it("preserves inventory state updates from DM JSON", () => {
+    const result = parseDmContract(
+      JSON.stringify({
+        public_narration:
+          "The barkeep takes the coins and slides the cup across. Inventory update: you spent 3 CP.",
+        roll_requests: [],
+        next_input_needed: "player_actions",
+        input_targets: [],
+        input_policy: "all_players",
+        inventory_state_update: {
+          patches: [
+            {
+              actor_key: "player:owner-client",
+              type: "currency",
+              currency: "CP",
+              delta: -3,
+              reason: "Paid 3 copper for a drink."
+            }
+          ]
+        }
+      })
+    );
+
+    assert.deepEqual(result.inventoryStateUpdate, {
+      patches: [
+        {
+          actor_key: "player:owner-client",
+          type: "currency",
+          currency: "CP",
+          delta: -3,
+          reason: "Paid 3 copper for a drink."
+        }
+      ]
+    });
+  });
+
   it("does not treat character sheet combat terms as the submitted action", () => {
     const result = parseDmContract(
       contract(
