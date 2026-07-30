@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import {
   CampaignInviteCreateParamsSchema,
@@ -22,6 +23,10 @@ import {
   CampaignListResponseSchema,
   CampaignReadParamsSchema,
   CampaignReadResponseSchema,
+  CampaignRestartBackstoryParamsSchema,
+  CampaignRestartBackstoryRequestSchema,
+  CampaignRestartRequestSchema,
+  CampaignRestartResponseSchema,
   CharacterPortraitGenerateParamsSchema,
   CharacterPortraitGenerateRequestSchema,
   CharacterPortraitPreviewRequestSchema,
@@ -56,7 +61,8 @@ import {
   listCampaignSummariesForUser,
   updatePlayerSafeNpcCardMarkdown,
   previewLobbyInvite,
-  previewCampaignJoinByCode
+  previewCampaignJoinByCode,
+  restartSinglePlayerCampaignForUser
 } from "@ai-dnd/db";
 import type { ApiConfig } from "../config.js";
 import {
@@ -70,6 +76,12 @@ import { requireAuthenticatedUser } from "./auth.js";
 type CampaignRouteOptions = {
   config: ApiConfig;
   dmRuntime?: DungeonMasterRuntime | undefined;
+};
+
+type RestartBackstoryContextRow = {
+  metadata: unknown;
+  mode: CampaignMode;
+  character_sheet: string;
 };
 
 const characterPortraitUploadBodyLimitBytes = 12 * 1024 * 1024;
@@ -614,6 +626,130 @@ export async function registerCampaignRoutes(
     });
   });
 
+  fastify.post("/campaigns/:campaignId/restart/backstory", async (request) => {
+    const params = CampaignRestartBackstoryParamsSchema.parse(request.params);
+    const body = CampaignRestartBackstoryRequestSchema.parse(request.body);
+    const currentBackstory = body.currentBackstory?.trim();
+    const user = await requireAuthenticatedUser(
+      fastify,
+      config,
+      request.cookies[config.authCookieName]
+    );
+
+    if (body.mode === "add_details" && !currentBackstory) {
+      throw createHttpError(400, "Write a backstory before adding details.");
+    }
+
+    const context = (
+      await fastify.pg.query<RestartBackstoryContextRow>(
+        `
+          select
+            campaigns.metadata,
+            campaigns.mode,
+            players.character_sheet
+          from campaigns
+          join players on players.campaign_id = campaigns.id
+          where campaigns.id = $1
+            and campaigns.status = 'active'
+            and players.user_id = $2
+            and players.status = 'active'
+          order by players.slot asc nulls last, players.created_at asc
+          limit 1
+        `,
+        [params.campaignId, user.id]
+      )
+    ).rows[0];
+
+    if (!context) {
+      throw createHttpError(404, "Campaign not found.");
+    }
+
+    if (context.mode !== "single_player") {
+      throw createHttpError(
+        400,
+        "Campaign restart is available for singleplayer adventures."
+      );
+    }
+
+    const metadata =
+      context.metadata && typeof context.metadata === "object"
+        ? (context.metadata as Record<string, unknown>)
+        : {};
+    const genre =
+      metadata.genre && typeof metadata.genre === "object"
+        ? (metadata.genre as Record<string, unknown>)
+        : {};
+    const campaignGenreKind = genre.kind === "custom" ? "custom" : "preset";
+    const campaignGenrePresetId =
+      typeof genre.presetId === "string" ? genre.presetId : undefined;
+    const campaignGenre =
+      typeof genre.label === "string" ? genre.label : undefined;
+    const customWorldName =
+      typeof genre.customWorldName === "string" ? genre.customWorldName : undefined;
+    const customWorldDescription =
+      typeof genre.customWorldDescription === "string"
+        ? genre.customWorldDescription
+        : undefined;
+    const worldContext = characterBackstoryWorldContext({
+      campaignGenreKind,
+      campaignGenrePresetId,
+      campaignGenre,
+      customWorldName,
+      customWorldDescription
+    });
+    const characterSheet = context.character_sheet.trim();
+    const nameBank = backstoryNameBank({
+      characterSheet,
+      currentBackstory,
+      campaignGenreKind,
+      campaignGenrePresetId,
+      campaignGenre,
+      customWorldName
+    });
+    const includeEldermereStart = isEldermereBackstoryRequest({
+      campaignGenrePresetId
+    });
+    const message =
+      body.mode === "generate"
+        ? buildGenerateBackstoryPrompt({
+            characterSheet,
+            includeEldermereStart,
+            nameBank,
+            worldContext
+          })
+        : buildAddBackstoryDetailsPrompt({
+            characterSheet,
+            currentBackstory,
+            includeEldermereStart,
+            nameBank,
+            worldContext
+          });
+    const providerResponse = await runtime.askProvider({
+      instructions: backstoryJsonInstructions,
+      message
+    });
+    const generated = parseBackstoryProviderResponse(providerResponse.content);
+    const validatedStart =
+      includeEldermereStart && generated.eldermereStart
+        ? resolveEldermereCampaignStart(generated.eldermereStart)
+        : undefined;
+
+    return CharacterBackstoryGenerateResponseSchema.parse({
+      backstory: generated.backstory,
+      ...(validatedStart
+        ? {
+            eldermereStart: {
+              regionName: validatedStart.region.name,
+              settlementName: validatedStart.settlement.name,
+              ...(generated.eldermereStart?.reason
+                ? { reason: generated.eldermereStart.reason }
+                : {})
+            }
+          }
+        : {})
+    });
+  });
+
   fastify.post("/campaigns", async (request, reply) => {
     const body = CampaignCreateRequestSchema.parse(request.body);
     const mode: CampaignMode =
@@ -712,6 +848,74 @@ export async function registerCampaignRoutes(
 
     reply.status(201);
     return CampaignCreateResponseSchema.parse({ campaign: responseCampaign });
+  });
+
+  fastify.post("/campaigns/:campaignId/restart", async (request, reply) => {
+    const restartTraceId = randomUUID();
+    const params = CampaignRestartBackstoryParamsSchema.parse(request.params);
+    const body = CampaignRestartRequestSchema.parse(request.body);
+    request.log.info(
+      {
+        restartTraceId,
+        campaignId: params.campaignId,
+        backstoryLength: body.backstory.trim().length
+      },
+      "campaign restart request received"
+    );
+    const user = await requireAuthenticatedUser(
+      fastify,
+      config,
+      request.cookies[config.authCookieName]
+    );
+    request.log.info(
+      {
+        restartTraceId,
+        campaignId: params.campaignId,
+        userId: user.id
+      },
+      "campaign restart authenticated"
+    );
+
+    try {
+      const campaign = await restartSinglePlayerCampaignForUser(fastify.pg, {
+        campaignId: params.campaignId,
+        backstory: body.backstory,
+        userId: user.id,
+        runtime,
+        restartTraceId
+      });
+      request.log.info(
+        {
+          restartTraceId,
+          sourceCampaignId: params.campaignId,
+          restartedCampaignId: campaign.id,
+          restartedSessionId: campaign.sessionId,
+          portraitCopied: Boolean(campaign.portraitAssetId)
+        },
+        "campaign restart completed"
+      );
+
+      reply.status(201);
+      return CampaignRestartResponseSchema.parse({ campaign });
+    } catch (error) {
+      request.log.error(
+        {
+          restartTraceId,
+          campaignId: params.campaignId,
+          userId: user.id,
+          error:
+            error instanceof Error
+              ? {
+                  name: error.name,
+                  message: error.message,
+                  stack: error.stack
+                }
+              : error
+        },
+        "campaign restart failed"
+      );
+      throw error;
+    }
   });
 
   fastify.post("/campaigns/portrait/preview", async (request) => {

@@ -2419,6 +2419,7 @@ export async function createCampaignForMode(
     eldermereStart?: EldermereCampaignStart | undefined;
     userId: string;
     runtime?: DungeonMasterRuntime | undefined;
+    openingResolutionMode?: "await" | "background" | undefined;
   }
 ): Promise<CampaignSummary> {
   const sessionId = `ai-dnd-${randomUUID()}`;
@@ -2592,7 +2593,7 @@ export async function createCampaignForMode(
     }
   });
 
-  try {
+  const resolveOpening = async () => {
     let foundationCompilerPromise:
       | Promise<ContextStorageDebugState | undefined>
       | undefined;
@@ -2701,10 +2702,295 @@ export async function createCampaignForMode(
       campaignId: createdState.campaign.id,
       userId: input.userId
     });
+  };
+
+  if (input.openingResolutionMode === "background") {
+    void resolveOpening().catch(async (error) => {
+      await markTurnFailed(db, openingTurn.id, error);
+      await logCampaignEvent(db, createdState.campaign.id, "turn_failed", {
+        turnId: openingTurn.id,
+        error:
+          error instanceof Error ? error.message : "DM provider call failed.",
+        reason: "background_opening_failed"
+      });
+    });
+
+    return createdState.summary;
+  }
+
+  try {
+    return await resolveOpening();
   } catch (error) {
     await markTurnFailed(db, openingTurn.id, error);
     throw error;
   }
+}
+
+function characterSheetWithBackstory(characterSheet: string, backstory: string) {
+  const normalizedSheet = characterSheet.replace(/\r\n/g, "\n").trim();
+  const trimmedBackstory = compactPromptText(backstory);
+  const backstorySection = `Backstory\n${trimmedBackstory}`;
+  const labelledBackstoryPattern =
+    /(^|\n)(?:#{1,6}\s*)?Backstory\s*\n[\s\S]*?(?=\n(?:#{1,6}\s*)?(?:Backstory Expansion|Core Stats|Ability Scores|Saving Throws|Skills|Proficiencies and Languages|Attacks|Features and Traits|Equipment|Inventory|Currency|Spells|DM Brief|Level Progression|Appearance)\b|$)/i;
+  const inlineBackstoryPattern =
+    /(^|\n)(?:Backstory|Background)\s*:\s*([^\n]+(?:\n(?![A-Z][A-Za-z ]+:\s).+)*)/i;
+
+  if (labelledBackstoryPattern.test(normalizedSheet)) {
+    return normalizedSheet.replace(
+      labelledBackstoryPattern,
+      (match, prefix: string) => {
+        const endsAtDocument = normalizedSheet.endsWith(match);
+        return `${prefix}${backstorySection}${endsAtDocument ? "" : "\n"}`;
+      }
+    );
+  }
+
+  if (inlineBackstoryPattern.test(normalizedSheet)) {
+    return normalizedSheet.replace(
+      inlineBackstoryPattern,
+      (_match, prefix: string) => `${prefix}${backstorySection}`
+    );
+  }
+
+  return [normalizedSheet, "", backstorySection].filter(Boolean).join("\n");
+}
+
+export async function restartSinglePlayerCampaignForUser(
+  db: pg.Pool,
+  input: {
+    campaignId: string;
+    backstory: string;
+    userId: string;
+    runtime: DungeonMasterRuntime;
+    restartTraceId?: string | undefined;
+  }
+): Promise<CampaignSummary> {
+  const restartTraceId = input.restartTraceId ?? randomUUID();
+  const trimmedBackstory = input.backstory.trim();
+
+  if (!trimmedBackstory) {
+    throw createStatusError(400, "Write a backstory before restarting.");
+  }
+
+  async function logRestartEvent(
+    campaignId: string,
+    stage: string,
+    payload: Record<string, unknown> = {}
+  ) {
+    try {
+      await logCampaignEvent(db, campaignId, "campaign_restart_diagnostic", {
+        restartTraceId,
+        stage,
+        ...payload
+      });
+    } catch {
+      // Diagnostic logging must never be the reason restart fails.
+    }
+  }
+
+  await logRestartEvent(input.campaignId, "request_received", {
+    userId: input.userId,
+    backstoryLength: trimmedBackstory.length
+  });
+
+  const source = await withTransaction(db, async (client) => {
+    const campaign = (
+      await client.query<CampaignRow>(
+        `
+          select *
+          from campaigns
+          where id = $1 and status = 'active'
+          limit 1
+          for update
+        `,
+        [input.campaignId]
+      )
+    ).rows[0];
+
+    if (!campaign) {
+      throw createStatusError(404, "Campaign not found.");
+    }
+
+    await logCampaignEvent(client, campaign.id, "campaign_restart_diagnostic", {
+      restartTraceId,
+      stage: "source_campaign_loaded",
+      mode: campaign.mode,
+      hasBegun: campaign.has_begun,
+      ownerUserMatches: campaign.owner_user_id === input.userId,
+      metadataKeys:
+        campaign.metadata && typeof campaign.metadata === "object"
+          ? Object.keys(campaign.metadata as Record<string, unknown>).sort()
+          : []
+    });
+
+    await assertCampaignAccessForUser(client, campaign, input.userId);
+
+    await logCampaignEvent(client, campaign.id, "campaign_restart_diagnostic", {
+      restartTraceId,
+      stage: "access_confirmed",
+      userId: input.userId
+    });
+
+    if (campaign.mode !== "single_player") {
+      await logCampaignEvent(client, campaign.id, "campaign_restart_diagnostic", {
+        restartTraceId,
+        stage: "rejected_non_singleplayer",
+        mode: campaign.mode
+      });
+      throw createStatusError(
+        400,
+        "Campaign restart is available for singleplayer adventures."
+      );
+    }
+
+    const player = (
+      await client.query<
+        PlayerRow & {
+          portrait_public_url?: string | null;
+        }
+      >(
+        `
+          select
+            players.*,
+            media_assets.public_url as portrait_public_url
+          from players
+          left join media_assets
+            on media_assets.id = players.portrait_asset_id
+           and media_assets.status = 'ready'
+          where players.campaign_id = $1
+            and players.user_id = $2
+            and players.status = 'active'
+          order by players.slot asc nulls last, players.created_at asc
+          limit 1
+        `,
+        [campaign.id, input.userId]
+      )
+    ).rows[0];
+
+    if (!player || !isProfileComplete(player)) {
+      await logCampaignEvent(client, campaign.id, "campaign_restart_diagnostic", {
+        restartTraceId,
+        stage: "rejected_incomplete_character",
+        hasPlayer: Boolean(player),
+        hasCharacterName: Boolean(player?.character_name?.trim()),
+        hasCharacterSheet: Boolean(player?.character_sheet?.trim()),
+        hasUsername: Boolean(player?.username?.trim())
+      });
+      throw createStatusError(400, "A complete character is required to restart.");
+    }
+
+    await logCampaignEvent(client, campaign.id, "campaign_restart_diagnostic", {
+      restartTraceId,
+      stage: "source_player_loaded",
+      playerId: player.id,
+      clientId: player.client_id,
+      characterName: player.character_name,
+      characterSheetLength: player.character_sheet.length,
+      hasPortraitAsset: Boolean(player.portrait_asset_id),
+      hasPortraitUrl: Boolean(player.portrait_public_url)
+    });
+
+    return { campaign, player };
+  });
+
+  const style = campaignOpeningStyleFromMetadata(source.campaign);
+  const metadata = eventPayload(source.campaign.metadata);
+  const genre = eventPayload(metadata.genre);
+  const eldermereStart = eldermereCampaignStartFromMetadata(source.campaign);
+  const restartedCharacterSheet = characterSheetWithBackstory(
+    source.player.character_sheet,
+    trimmedBackstory
+  );
+
+  await logRestartEvent(source.campaign.id, "create_campaign_started", {
+    genreKind: genre.kind === "custom" ? "custom" : "preset",
+    campaignGenre: style.campaignGenre ?? null,
+    campaignGenrePresetId: style.campaignGenrePresetId ?? null,
+    hasCampaignGenrePromptBrief: Boolean(style.campaignGenrePromptBrief),
+    customWorldName: style.customWorldName ?? null,
+    hasCustomWorldDescription: Boolean(style.customWorldDescription),
+    eldermereStartRegion: eldermereStart?.region.name ?? null,
+    eldermereStartSettlement: eldermereStart?.settlement.name ?? null,
+    sourceCharacterSheetLength: source.player.character_sheet.length,
+    restartedCharacterSheetLength: restartedCharacterSheet.length,
+    backstoryLength: trimmedBackstory.length
+  });
+
+  let restarted: CampaignSummary;
+
+  try {
+    restarted = await createCampaignForMode(db, {
+      mode: "single_player",
+      title: source.campaign.title,
+      campaignGenre: style.campaignGenre,
+      campaignGenreKind: genre.kind === "custom" ? "custom" : "preset",
+      campaignGenrePresetId: style.campaignGenrePresetId,
+      campaignGenrePromptBrief: style.campaignGenrePromptBrief,
+      customWorldName: style.customWorldName,
+      customWorldDescription: style.customWorldDescription,
+      ownerClientId: source.player.client_id,
+      playerName: source.player.username,
+      characterName: source.player.character_name,
+      characterSheet: restartedCharacterSheet,
+      eldermereStart,
+      userId: input.userId,
+      runtime: input.runtime,
+      openingResolutionMode: "background"
+    });
+  } catch (error) {
+    await logRestartEvent(source.campaign.id, "create_campaign_failed", {
+      error: errorSummary(error)
+    });
+    throw error;
+  }
+
+  await logRestartEvent(source.campaign.id, "create_campaign_completed", {
+    restartedCampaignId: restarted.id,
+    restartedSessionId: restarted.sessionId,
+    restartedTitle: restarted.title,
+    openingResolutionMode: "background"
+  });
+  await logRestartEvent(restarted.id, "created_from_restart", {
+    sourceCampaignId: source.campaign.id,
+    sourcePlayerId: source.player.id,
+    sourcePortraitAssetId: source.player.portrait_asset_id ?? null
+  });
+
+  if (source.player.portrait_asset_id) {
+    await logRestartEvent(restarted.id, "portrait_copy_started", {
+      sourceCampaignId: source.campaign.id,
+      portraitAssetId: source.player.portrait_asset_id
+    });
+    await db.query(
+      `
+        update players
+        set portrait_asset_id = $2
+        where campaign_id = $1
+          and user_id = $3
+          and status = 'active'
+      `,
+      [restarted.id, source.player.portrait_asset_id, input.userId]
+    );
+    await logRestartEvent(restarted.id, "portrait_copy_completed", {
+      sourceCampaignId: source.campaign.id,
+      portraitAssetId: source.player.portrait_asset_id,
+      hasPortraitUrl: Boolean(source.player.portrait_public_url)
+    });
+
+    return {
+      ...restarted,
+      portraitAssetId: source.player.portrait_asset_id,
+      ...(source.player.portrait_public_url
+        ? { portraitUrl: source.player.portrait_public_url }
+        : {})
+    };
+  }
+
+  await logRestartEvent(restarted.id, "completed_without_portrait", {
+    sourceCampaignId: source.campaign.id
+  });
+
+  return restarted;
 }
 
 export async function createCampaignForSession(
@@ -6903,7 +7189,7 @@ function formatSoloTurn(
   const turnInput = {
     type: "solo_turn",
     action_policy:
-      "Only treat concrete declared actions as actions. Quoted speech, questions, promises, plans, and corrections are dialogue or intent unless the player also says they move, travel, enter, search, attack, take something, cast a spell, or otherwise change the scene.",
+      "Only treat concrete declared actions as actions. Quoted speech, questions, promises, plans, and corrections are dialogue or intent unless the player also says they move, travel, enter, search, attack, take something, cast a spell, or otherwise change the scene. Treat claims like taking, drawing, pulling, or producing an item from a bag as attempted inventory actions, not proof of possession; validate the claimed item against the canonical character sheet before narrating it.",
     submissions: [
       {
         player: player.username,
@@ -7650,8 +7936,14 @@ const gameplayTurnOutputContractReminder = [
   "Required top-level keys: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update.",
   "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved this turn.",
   "Treat canonical character sheet Inventory, Equipment, and Currency sections as current inventory state.",
-  "If a player character attempts to use, consume, equip, spend, give, trade, throw, load, unlock with, activate, or otherwise rely on an item, first check the canonical character sheet Inventory, Equipment, and Currency sections.",
-  "If the character does not have the required item or currency, reject the attempt in public_narration and clearly state that they do not have it. Do not include an inventory patch for the failed attempt.",
+  "Inventory possession gate: before writing any public_narration, inspect current player submissions for any item, weapon, tool, spell component, currency, carried object, or spell the character claims to produce, draw, pull from a bag, show, offer, sell, appraise, give, use, equip, throw, consume, spend, cast, or otherwise rely on.",
+  "For each claimed object, compare it against that character's canonical character sheet Equipment, Inventory, Currency, and Spells sections before narrating the object into the scene.",
+  "Player wording is not authoritative for possession. A player saying \"I take X from my bag\", \"I pull out X\", \"I draw X\", \"I show X\", or \"I offer X\" does not make X exist.",
+  "Weapon proficiency, class, background, and backstory do not imply the character owns a weapon or item. Only listed Equipment, Inventory, Currency, and Spells establish possession.",
+  "If a claimed item, currency, or spell is absent, stop resolving that attempted action. In public_narration, state in prose that the character does not have it available. Do not narrate the item appearing, being held, being inspected, being offered, being used, being cast, or being reacted to by an NPC.",
+  "If a player character attempts to produce, present, show, appraise, sell, use, consume, equip, spend, give, trade, throw, load, unlock with, activate, or otherwise rely on an item or weapon, first check the canonical character sheet Inventory, Equipment, and Currency sections.",
+  "If the character does not have the presented, shown, appraised, sold, used, or required item, weapon, or currency, reject the attempt in public_narration and clearly state that they do not have it. Do not narrate the missing item appearing in the scene.",
+  "Do not include an inventory patch for a failed inventory attempt.",
   "If public_narration says a player character gained, lost, spent, consumed, equipped, unequipped, or transferred an item/currency, inventory_state_update must include the matching patch.",
   "Inventory patch schema: currency patches use {actor_key,type:\"currency\",currency:\"CP\"|\"SP\"|\"EP\"|\"GP\"|\"PP\",delta,reason}; item patches use {actor_key,type:\"item\",operation:\"add\"|\"remove\"|\"equip\"|\"unequip\",item,quantity,reason}.",
   "Use the exact coin denomination that changed. Copper is CP, silver is SP, electrum is EP, gold is GP, platinum is PP; never label copper as GP.",

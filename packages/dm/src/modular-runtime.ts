@@ -1095,8 +1095,14 @@ export function jobPrompt(
     "Inventory state:",
     "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved this turn.",
     "Treat canonical character sheet Inventory, Equipment, and Currency sections as current inventory state.",
-    "If a player character attempts to use, consume, equip, spend, give, trade, throw, load, unlock with, activate, or otherwise rely on an item, first check the canonical character sheet Inventory, Equipment, and Currency sections.",
-    "If the character does not have the required item or currency, reject the attempt in public_narration and clearly state that they do not have it. Do not include an inventory patch for the failed attempt.",
+    "Inventory possession gate: before writing any public_narration, inspect current player submissions for any item, weapon, tool, spell component, currency, carried object, or spell the character claims to produce, draw, pull from a bag, show, offer, sell, appraise, give, use, equip, throw, consume, spend, cast, or otherwise rely on.",
+    "For each claimed object, compare it against that character's canonical character sheet Equipment, Inventory, Currency, and Spells sections before narrating the object into the scene.",
+    "Player wording is not authoritative for possession. A player saying \"I take X from my bag\", \"I pull out X\", \"I draw X\", \"I show X\", or \"I offer X\" does not make X exist.",
+    "Weapon proficiency, class, background, and backstory do not imply the character owns a weapon or item. Only listed Equipment, Inventory, Currency, and Spells establish possession.",
+    "If a claimed item, currency, or spell is absent, stop resolving that attempted action. In public_narration, state in prose that the character does not have it available. Do not narrate the item appearing, being held, being inspected, being offered, being used, being cast, or being reacted to by an NPC.",
+    "If a player character attempts to produce, present, show, appraise, sell, use, consume, equip, spend, give, trade, throw, load, unlock with, activate, or otherwise rely on an item or weapon, first check the canonical character sheet Inventory, Equipment, and Currency sections.",
+    "If the character does not have the presented, shown, appraised, sold, used, or required item, weapon, or currency, reject the attempt in public_narration and clearly state that they do not have it. Do not narrate the missing item appearing in the scene.",
+    "Do not include an inventory patch for a failed inventory attempt.",
     "If public_narration says a player character gained, lost, spent, consumed, equipped, unequipped, or transferred an item/currency, inventory_state_update must include the matching patch.",
     "Inventory patch schema: currency patches use {actor_key,type:\"currency\",currency:\"CP\"|\"SP\"|\"EP\"|\"GP\"|\"PP\",delta,reason}; item patches use {actor_key,type:\"item\",operation:\"add\"|\"remove\"|\"equip\"|\"unequip\",item,quantity,reason}.",
     "Use the exact coin denomination that changed. Copper is CP, silver is SP, electrum is EP, gold is GP, platinum is PP; never label copper as GP.",
@@ -1154,12 +1160,20 @@ export function jobPrompt(
       "Treat every NPC as a person with a present want, a private concern, a social role, and a limit. Their dialogue should come from those pressures.",
       "Keep NPC voice distinct through word choice, rhythm, formality, evasiveness, humor, anger, fear, confidence, or class/cultural position. Do not overdo dialect.",
       "Before an NPC answers, decide what they know, what they believe, what they suspect, what they want from the player, and what they are trying not to reveal.",
+      "NPC knowledge is local, not omniscient. Before an NPC states or implies a fact, decide the concrete path by which they know it: witnessed it, were told by a named source, read a record, inferred from visible evidence, heard a rumor, or do not know.",
+      "Do not let NPCs use player character backstory, DM-only secrets, quest truth, or recent offscreen events as their own knowledge unless the NPC's own selected context or recent conversation gives them a concrete knowledge path.",
+      "DM staging material is for pacing, foreshadowing, pressure, clue placement, and contradiction checks. It is not automatically known by any NPC. NPCs may not state, imply, confirm, or act on DM staging facts unless NPC-owned context establishes how they know.",
+      "If an NPC makes an inference, keep it uncertain and bounded. They may suspect from visible clues, but they must not jump from a clue to a precise hidden relationship, private motive, secret name, or recent player action.",
+      "When the player challenges how an NPC knows something, do not invent a new backstory justification. If the source is not already established, have the NPC hedge, correct themself, admit it was an inference, refuse to explain, or ask a question.",
+      "Treat information as something NPCs value. Useful facts should usually be partial, motivated, costly, risky, biased, or conditional rather than freely given.",
+      "Prefer one meaningful reveal plus a new question, demand, cost, refusal, or lead over a complete explanation. Do not answer a broad question by dumping every relevant secret the model knows.",
       "Let NPCs ask follow-up questions, challenge contradictions, demand proof, bargain, stall, threaten, soften, misdirect, or volunteer information when it fits their motives.",
       "Do not make social checks into mind control. Persuasion cannot force self-destruction, Deception cannot change hard evidence by itself, and Intimidation can create fear without creating loyalty.",
       "When no roll is needed, let the NPC respond naturally and move the conversation forward.",
       "When uncertainty matters, request Deception, Persuasion, Intimidation, Insight, Performance, or another fitting check, then pause for dice.",
       "When resolving dice results, narrate the NPC's reaction as a visible emotional and tactical shift, not just success or failure.",
       "End with the NPC's new stance, demand, offer, refusal, question, or opening, then hand control back to the player.",
+      "For buying, selling, appraisal, gifting, bribes, trades, or showing an object to an NPC, validate that the acting character actually has the offered object before the NPC sees, touches, evaluates, accepts, refuses, or comments on it.",
       "For bargaining, gifting, payment, theft, rewards, bribes, and trade, include inventory or currency patches only when the exchange is accepted and completed in the resolved turn. If terms are still being negotiated, leave patches empty.",
       ...rollAdjudicationGuidance,
       ...socialRollGuidance,
@@ -1476,17 +1490,53 @@ export function renderContextChunks(chunks: ContextChunk[]) {
     return "No selected context chunks were retrieved.";
   }
 
-  return chunks
-    .map((chunk) =>
+  const playerSafeChunks = chunks.filter(
+    (chunk) => chunk.visibility === "player_safe"
+  );
+  const dmOnlyChunks = chunks.filter((chunk) => chunk.visibility === "dm_only");
+
+  const renderChunk = (
+    chunk: ContextChunk,
+    tagName: "context_chunk" | "dm_staging_chunk"
+  ) =>
+    [
+      `<${tagName} id="${chunk.id}" type="${chunk.category}" visibility="${chunk.visibility}">`,
+      `# ${chunk.title}`,
+      "",
+      chunk.bodyMarkdown.trim(),
+      `</${tagName}>`
+    ].join("\n");
+
+  const sections: string[] = [];
+
+  if (playerSafeChunks.length > 0) {
+    sections.push(
       [
-        `<context_chunk id="${chunk.id}" type="${chunk.category}" visibility="${chunk.visibility}">`,
-        `# ${chunk.title}`,
+        "Player-safe context and established surface facts:",
+        "These facts may guide narration and may be stated by NPCs when their own context, role, or recent conversation supports knowing them.",
         "",
-        chunk.bodyMarkdown.trim(),
-        "</context_chunk>"
+        playerSafeChunks
+          .map((chunk) => renderChunk(chunk, "context_chunk"))
+          .join("\n\n")
       ].join("\n")
-    )
-    .join("\n\n");
+    );
+  }
+
+  if (dmOnlyChunks.length > 0) {
+    sections.push(
+      [
+        "DM staging material:",
+        "Use this material for pacing, foreshadowing, pressure, clue placement, and contradiction checks.",
+        "This material is not automatically known by any NPC. Do not let an NPC state, imply, confirm, or act on these facts unless NPC-owned context or recent conversation establishes a concrete knowledge path.",
+        "",
+        dmOnlyChunks
+          .map((chunk) => renderChunk(chunk, "dm_staging_chunk"))
+          .join("\n\n")
+      ].join("\n")
+    );
+  }
+
+  return sections.join("\n\n");
 }
 
 export function validateMainDmOutput(text: string | undefined): MainDmOutput {

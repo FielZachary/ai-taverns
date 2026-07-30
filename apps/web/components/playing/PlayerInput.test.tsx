@@ -70,6 +70,50 @@ describe("PlayerInput", () => {
     expect(screen.queryByRole("dialog", { name: /ai model/i })).not.toBeInTheDocument();
   });
 
+  it("shows restart settings and submits the edited backstory", async () => {
+    const onGenerateRestartBackstory = vi
+      .fn()
+      .mockResolvedValue("Mira returns to the lighthouse with a sharper vow.");
+    const onRestartCampaign = vi.fn().mockResolvedValue(undefined);
+
+    renderPlayerInput({
+      canRestartCampaign: true,
+      restartBackstory: "Mira grew up beside a lighthouse.",
+      onGenerateRestartBackstory,
+      onRestartCampaign
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /ai model: deepseek v4 flash/i })
+    );
+    fireEvent.click(screen.getByRole("tab", { name: /restart/i }));
+
+    expect(screen.getByText(/Start this character over/i)).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: /backstory/i })).toHaveValue(
+      "Mira grew up beside a lighthouse."
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /add details/i }));
+
+    await waitFor(() => {
+      expect(onGenerateRestartBackstory).toHaveBeenCalledWith(
+        "add_details",
+        "Mira grew up beside a lighthouse."
+      );
+    });
+    expect(screen.getByRole("textbox", { name: /backstory/i })).toHaveValue(
+      "Mira returns to the lighthouse with a sharper vow."
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /^restart$/i }));
+
+    await waitFor(() => {
+      expect(onRestartCampaign).toHaveBeenCalledWith(
+        "Mira returns to the lighthouse with a sharper vow."
+      );
+    });
+  });
+
   it("does not open model settings when model selection is disabled", () => {
     renderPlayerInput({ canSelectAiModel: false });
 
