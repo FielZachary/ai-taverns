@@ -517,6 +517,9 @@ describe("modular AI DM runtime contracts", () => {
     ] as const) {
       const prompt = jobPrompt(job);
       assert.match(prompt, /inventory_state_update/);
+      assert.match(prompt, /include a setting object/i);
+      assert.match(prompt, /scene_location/i);
+      assert.match(prompt, /display_location/i);
       assert.match(prompt, /Treat canonical character sheet Inventory, Equipment, and Currency sections/i);
       assert.match(prompt, /Inventory possession gate/i);
       assert.match(

@@ -86,6 +86,30 @@ describe("MessageLog", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders a DM scene location under the Dungeon Master label", () => {
+    renderMessageLog({
+      messages: [
+        gameMessage({
+          id: "dm-location-message",
+          role: "dm",
+          setting: {
+            displayLocation: "Ironhold",
+            regionName: "Ferrant Concord",
+            settlementName: "Ironhold",
+            sceneLocation: "Crag Market Street"
+          },
+          content: "Steam hisses from the grates."
+        })
+      ]
+    });
+
+    const location = screen.getByText(
+      "Ferrant Concord / Ironhold / Crag Market Street"
+    );
+
+    expect(location).toHaveClass("message-location-label");
+  });
+
   it("renders bold markdown emphasis inside message paragraphs", () => {
     renderMessageLog({
       messages: [

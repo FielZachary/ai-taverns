@@ -7,8 +7,9 @@ export const openingSceneRequest = [
   `${internalOpeningRequestPrefix}:`,
   "Begin this new campaign by speaking first as the Dungeon Master.",
   "Create an immediate fantasy opening scene with a clear situation, sensory detail, and a direct question for the party.",
-  "Also include a `setting` object in the JSON response with `display_location`, `world_name`, and `starting_location` when known.",
+  "Also include a `setting` object in the JSON response with `display_location`, `world_name`, `region_name`, `settlement_name`, `scene_location`, and `starting_location` when known.",
   "`display_location` should be a short location label for the campaign sidebar, such as a village, tavern, road, ruin, city district, region, or named world. Do not use a genre label.",
+  "`scene_location` should be the current local scene label, such as a tavern, street, room, road, ruin, district, or wilderness landmark.",
   "Do not ask the players what kind of world they want. Drop them into the world now."
 ].join(" ");
 
@@ -509,6 +510,9 @@ export type DmContractResponse = {
   setting?: {
     displayLocation?: string;
     worldName?: string;
+    regionName?: string;
+    settlementName?: string;
+    sceneLocation?: string;
     startingLocation?: string;
   };
 };
@@ -563,6 +567,13 @@ export function parseDmContract(
     stringValue(setting?.displayLocation);
   const worldName =
     stringValue(setting?.world_name) || stringValue(setting?.worldName);
+  const regionName =
+    stringValue(setting?.region_name) || stringValue(setting?.regionName);
+  const settlementName =
+    stringValue(setting?.settlement_name) ||
+    stringValue(setting?.settlementName);
+  const sceneLocation =
+    stringValue(setting?.scene_location) || stringValue(setting?.sceneLocation);
   const startingLocation =
     stringValue(setting?.starting_location) ||
     stringValue(setting?.startingLocation);
@@ -622,10 +633,24 @@ export function parseDmContract(
   publicNarration = narrationWithRollInstructions(publicNarration, rollRequests);
 
   const settingValue =
-    displayLocation || worldName || startingLocation
+    displayLocation ||
+    worldName ||
+    regionName ||
+    settlementName ||
+    sceneLocation ||
+    startingLocation
       ? {
-          displayLocation: displayLocation || startingLocation || worldName,
+          displayLocation:
+            displayLocation ||
+            sceneLocation ||
+            settlementName ||
+            startingLocation ||
+            regionName ||
+            worldName,
           ...(worldName ? { worldName } : {}),
+          ...(regionName ? { regionName } : {}),
+          ...(settlementName ? { settlementName } : {}),
+          ...(sceneLocation ? { sceneLocation } : {}),
           ...(startingLocation ? { startingLocation } : {})
         }
       : undefined;
@@ -696,14 +721,35 @@ export function recoverDmContractAfterParseFailure(
     stringValue(setting?.displayLocation);
   const worldName =
     stringValue(setting?.world_name) || stringValue(setting?.worldName);
+  const regionName =
+    stringValue(setting?.region_name) || stringValue(setting?.regionName);
+  const settlementName =
+    stringValue(setting?.settlement_name) ||
+    stringValue(setting?.settlementName);
+  const sceneLocation =
+    stringValue(setting?.scene_location) || stringValue(setting?.sceneLocation);
   const startingLocation =
     stringValue(setting?.starting_location) ||
     stringValue(setting?.startingLocation);
   const settingValue =
-    displayLocation || worldName || startingLocation
+    displayLocation ||
+    worldName ||
+    regionName ||
+    settlementName ||
+    sceneLocation ||
+    startingLocation
       ? {
-          displayLocation: displayLocation || startingLocation || worldName,
+          displayLocation:
+            displayLocation ||
+            sceneLocation ||
+            settlementName ||
+            startingLocation ||
+            regionName ||
+            worldName,
           ...(worldName ? { worldName } : {}),
+          ...(regionName ? { regionName } : {}),
+          ...(settlementName ? { settlementName } : {}),
+          ...(sceneLocation ? { sceneLocation } : {}),
           ...(startingLocation ? { startingLocation } : {})
         }
       : undefined;
