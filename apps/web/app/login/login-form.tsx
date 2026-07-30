@@ -66,22 +66,18 @@ export function LoginForm() {
     setMessage("Check your email for a sign-in link.");
   }
 
-  async function handleGoogleSignIn() {
-    setState("error");
-    setMessage("Google sign-in will return after the owned auth migration.");
-  }
+  const googleSignInHref = `/api/auth/google/start?nextPath=${encodeURIComponent(nextPath)}`;
 
   return (
     <form className="auth-form" onSubmit={handleSubmit}>
-      <button
+      <a
         className="google-auth-button"
-        type="button"
-        disabled={state === "sending"}
-        onClick={() => void handleGoogleSignIn()}
+        href={googleSignInHref}
+        aria-disabled={state === "sending"}
       >
         <span aria-hidden="true">G</span>
         Enter with Google
-      </button>
+      </a>
       <div className="auth-divider">
         <span>or</span>
       </div>

@@ -117,13 +117,12 @@ describe("LoginForm", () => {
       .not.toBeInTheDocument();
   });
 
-  it("shows the Google sign-in placeholder error", () => {
-    renderLoginForm();
+  it("links Google sign-in to the owned auth start route with the safe next path", () => {
+    renderLoginForm("/new-adventure?invite=abc");
 
-    fireEvent.click(screen.getByRole("button", { name: /enter with google/i }));
-
-    expect(
-      screen.getByText("Google sign-in will return after the owned auth migration.")
-    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /enter with google/i })).toHaveAttribute(
+      "href",
+      "/api/auth/google/start?nextPath=%2Fnew-adventure%3Finvite%3Dabc"
+    );
   });
 });
