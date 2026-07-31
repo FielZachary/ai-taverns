@@ -641,6 +641,27 @@ describe("DM provider helpers", () => {
     );
   });
 
+  it("does not append investigation DC guidance when no roll is requested", () => {
+    const result = parseDmContract(
+      JSON.stringify({
+        public_narration: "The symbols are strange, but you need a closer look.",
+        resolution_mode: "resolved_without_dice",
+        roll_requests: [],
+        next_input_needed: "player_actions",
+        input_targets: [],
+        input_policy: "all_players",
+        mechanics_state_update: {},
+        inventory_state_update: { patches: [] }
+      }),
+      { dmJob: "investigation" }
+    );
+
+    assert.equal(
+      result.publicNarration,
+      "The symbols are strange, but you need a closer look."
+    );
+  });
+
   it("diagnoses unsupported roll request dice without rejecting them", () => {
     assert.deepEqual(
       rollRequestDiagnostics([
