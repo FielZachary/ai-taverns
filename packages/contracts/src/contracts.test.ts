@@ -37,6 +37,7 @@ import {
   RoomSocketEventSchema,
   RoomSnapshotSchema,
   RoomSubmitRequestSchema,
+  hookPointsForMetric,
   hookSnapshotForMetrics,
   hookStageForScore
 } from "./index.js";
@@ -519,6 +520,7 @@ test("hook scoring derives stable activation stages", () => {
   assert.equal(hookStageForScore(25), "activated");
   assert.equal(hookStageForScore(50), "engaged");
   assert.equal(hookStageForScore(75), "hooked");
+  assert.equal(hookPointsForMetric("portrait_added"), 10);
 
   const snapshot = hookSnapshotForMetrics([
     "campaign_created_or_joined",
