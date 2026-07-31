@@ -304,7 +304,7 @@ describe("NewAdventureForm", () => {
     ).toBeInTheDocument();
   });
 
-  it("limits rolled stats to the initial roll plus one reroll", async () => {
+  it("lets each rolled stat score be rerolled once", async () => {
     render(<NewAdventureForm />);
 
     await continueFlow();
@@ -318,15 +318,21 @@ describe("NewAdventureForm", () => {
     fireEvent.click(rollScores);
     fireEvent.click(screen.getByRole("button", { name: "Finish stat roll" }));
 
-    const rerollScores = screen.getByRole("button", { name: "Reroll Scores" });
-    expect(rerollScores).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Roll Scores" })).toBeDisabled();
     expect(screen.getByRole("button", { name: /reroll score 1/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /reroll score 2/i })).toBeEnabled();
 
-    fireEvent.click(rerollScores);
+    fireEvent.click(screen.getByRole("button", { name: /reroll score 1/i }));
     fireEvent.click(screen.getByRole("button", { name: "Finish stat roll" }));
 
-    expect(screen.getByRole("button", { name: "Reroll Scores" })).toBeDisabled();
     expect(screen.getByRole("button", { name: /reroll score 1/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /reroll score 2/i })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: /reroll score 2/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Finish stat roll" }));
+
+    expect(screen.getByRole("button", { name: /reroll score 2/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /reroll score 3/i })).toBeEnabled();
   });
 
   it("renders class cards with class artwork backgrounds", async () => {
