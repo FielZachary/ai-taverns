@@ -16,6 +16,10 @@ export const DiceRollRequestSchema = z
     modifier: z.number().int().optional(),
     label: z.string().min(1),
     reason: z.string().optional(),
+    targetDc: z.number().int().positive().optional(),
+    target_dc: z.number().int().positive().optional(),
+    dc: z.number().int().positive().optional(),
+    threshold: z.number().int().positive().optional(),
     advantageState: z.enum(["normal", "advantage", "disadvantage"]).optional(),
     advantage_state: z.enum(["normal", "advantage", "disadvantage"]).optional()
   })

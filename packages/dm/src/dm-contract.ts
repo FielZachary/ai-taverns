@@ -135,6 +135,7 @@ function parseJsonObject(text: string) {
 export type DmContractParseOptions = {
   currentAction?: string;
   currentPlayerAction?: string;
+  dmJob?: string;
   allowResolvedCombatWithoutRolls?: boolean;
 };
 
@@ -319,15 +320,39 @@ function inferredRollRequestPlayer(
   return rollIdTarget ? titleCaseIdentifier(rollIdTarget) : "";
 }
 
-function formatRollInstruction(request: DiceRollRequest, index: number) {
+function visibleDcText(request: DiceRollRequest, includeDc: boolean) {
+  if (!includeDc) {
+    return "";
+  }
+
+  if (request.targetDc === undefined) {
+    return "";
+  }
+
+  const reason = request.reason?.trim();
+  return reason
+    ? ` DC ${request.targetDc} reveals ${reason}`
+    : ` DC ${request.targetDc} reveals useful information`;
+}
+
+function formatRollInstruction(
+  request: DiceRollRequest,
+  index: number,
+  options?: { includeDc?: boolean }
+) {
   const verb = index === 0 ? "Roll" : "then roll";
   return `${verb} ${request.dice}${modifierText(request.modifier)}${advantageText(
     request.advantageState
-  )} for ${request.label}`;
+  )} for ${request.label}${visibleDcText(request, options?.includeDc === true)}`;
 }
 
-function rollInstructionsFromRequests(requests: DiceRollRequest[]) {
-  const instructions = requests.map(formatRollInstruction);
+function rollInstructionsFromRequests(
+  requests: DiceRollRequest[],
+  options?: { includeDc?: boolean }
+) {
+  const instructions = requests.map((request, index) =>
+    formatRollInstruction(request, index, options)
+  );
 
   if (instructions.length === 1) {
     return `${instructions[0]}.`;
@@ -392,18 +417,31 @@ function normalizePublicNarrationParagraphs(publicNarration: string) {
 
 function narrationWithRollInstructions(
   publicNarration: string,
-  rollRequests: DiceRollRequest[]
+  rollRequests: DiceRollRequest[],
+  options?: DmContractParseOptions
 ) {
   const normalizedNarration = normalizePublicNarrationParagraphs(publicNarration);
+  const requests =
+    options?.dmJob === "investigation"
+      ? rollRequests.map((request) => ({
+          ...request,
+          targetDc: request.targetDc ?? 15,
+          reason: request.reason || "the information your investigation can uncover"
+        }))
+      : rollRequests;
 
   if (
-    rollRequests.length === 0 ||
-    hasRollRequestDiceCoverage(normalizedNarration, rollRequests)
+    requests.length === 0 ||
+    hasRollRequestDiceCoverage(normalizedNarration, requests)
   ) {
-    return normalizedNarration;
+    if (options?.dmJob !== "investigation" || /\bDC\s*\d+\b/i.test(normalizedNarration)) {
+      return normalizedNarration;
+    }
   }
 
-  return `${normalizedNarration}\n\n${rollInstructionsFromRequests(rollRequests)}`;
+  return `${normalizedNarration}\n\n${rollInstructionsFromRequests(requests, {
+    includeDc: options?.dmJob === "investigation"
+  })}`;
 }
 
 export function normalizeRollRequest(
@@ -435,6 +473,12 @@ export function normalizeRollRequest(
       stringValue(request.advantageState) ||
         stringValue(request.advantage_state)
     );
+  const targetDc =
+    numberValue(request.targetDc) ??
+    numberValue(request.target_dc) ??
+    numberValue(request.dc) ??
+    numberValue(request.threshold);
+  const reason = stringValue(request.reason);
 
   return {
     id,
@@ -442,6 +486,8 @@ export function normalizeRollRequest(
     label,
     ...(player ? { player } : {}),
     ...(modifier === undefined ? {} : { modifier }),
+    ...(reason ? { reason } : {}),
+    ...(targetDc === undefined ? {} : { targetDc }),
     ...(advantageState ? { advantageState } : {})
   };
 }
@@ -532,8 +578,6 @@ export function parseDmContract(
   content: string | undefined,
   options?: DmContractParseOptions
 ): DmContractResponse {
-  void options;
-
   const parsed = parseJsonObject(content?.trim() ?? "");
 
   if (!parsed) {
@@ -630,7 +674,11 @@ export function parseDmContract(
     );
   }
 
-  publicNarration = narrationWithRollInstructions(publicNarration, rollRequests);
+  publicNarration = narrationWithRollInstructions(
+    publicNarration,
+    rollRequests,
+    options
+  );
 
   const settingValue =
     displayLocation ||
