@@ -42,6 +42,14 @@ vi.mock("@/lib/campaign-api", () => ({
   uploadCharacterPortrait: uploadCharacterPortraitMock
 }));
 
+vi.mock("@/components/playing/DiceRollReveal3D", () => ({
+  DiceRollReveal3D: ({ onComplete }: { onComplete: () => void }) => (
+    <button type="button" onClick={onComplete}>
+      Finish stat roll
+    </button>
+  )
+}));
+
 async function finishFlowTransition() {
   await act(async () => {
     vi.advanceTimersByTime(480);
@@ -294,6 +302,31 @@ describe("NewAdventureForm", () => {
     expect(
       screen.getByRole("heading", { name: /choose your species/i })
     ).toBeInTheDocument();
+  });
+
+  it("limits rolled stats to the initial roll plus one reroll", async () => {
+    render(<NewAdventureForm />);
+
+    await continueFlow();
+    await continueFlow();
+    await nextCharacterStep();
+    await nextCharacterStep();
+    await nextCharacterStep();
+
+    const rollScores = screen.getByRole("button", { name: "Roll Scores" });
+
+    fireEvent.click(rollScores);
+    fireEvent.click(screen.getByRole("button", { name: "Finish stat roll" }));
+
+    const rerollScores = screen.getByRole("button", { name: "Reroll Scores" });
+    expect(rerollScores).toBeEnabled();
+    expect(screen.getByRole("button", { name: /reroll score 1/i })).toBeEnabled();
+
+    fireEvent.click(rerollScores);
+    fireEvent.click(screen.getByRole("button", { name: "Finish stat roll" }));
+
+    expect(screen.getByRole("button", { name: "Reroll Scores" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /reroll score 1/i })).toBeDisabled();
   });
 
   it("renders class cards with class artwork backgrounds", async () => {
