@@ -156,6 +156,80 @@ const playerResourceTabs: { id: PlayerResourcesTab; label: string }[] = [
   { id: "eldermere_lore", label: "Eldermere Lore" }
 ];
 
+const eldermereCommonLore = [
+  "The Second Dominion left ruins, Old Roads, relics, and dangerous places behind.",
+  "The Graywake shattered that empire roughly 340 years ago and began the long divine silence called the Hush.",
+  "The present age is the Kindling, when omens, dreams, masks, and miracles have started returning.",
+  "Ordinary spellcraft can be taught, but the strongest magic often consumes rare Wellglass scavenged from old ruins.",
+  "Faith matters everywhere, but no god gives plain and reliable instructions."
+];
+
+const eldermereDivineForces = [
+  {
+    name: "The Hearth-Warden",
+    summary:
+      "Home, hospitality, protection, guest-right, and the duties neighbors owe one another."
+  },
+  {
+    name: "The Iron Judge",
+    summary:
+      "Law, oaths, judgment, punishment, duty, and hard promises that must be answered."
+  },
+  {
+    name: "The Deep Currents",
+    summary:
+      "The sea, tides, loss, memory, sailors, drowned places, and what the water keeps."
+  },
+  {
+    name: "The Verdant Choir",
+    summary:
+      "Forests, growth, old life, living roots, green rites, and the will of wild places."
+  },
+  {
+    name: "The Ashen Scholar",
+    summary:
+      "Knowledge, endings, secrets, ash, forbidden ledgers, and dangerous learning."
+  }
+];
+
+const eldermereRegions = [
+  {
+    name: "Cael Ambrose",
+    summary:
+      "A fertile feudal heartland of farms, river towns, Old Roads, guest-right customs, and noble obligations."
+  },
+  {
+    name: "Thornwake Vale",
+    summary:
+      "An old-growth forest confederation ruled by rotating grove-speakers and older green loyalties."
+  },
+  {
+    name: "The Ferrant Concord",
+    summary:
+      "A guild-republic of reclaimed mine tunnels, foundries, volcanic heights, ore, ambition, and hard bargains."
+  },
+  {
+    name: "The Salt Concordat",
+    summary:
+      "A league of port city-states bound by maritime law, fleets, lighthouse holdings, sea faith, and drowned ruins."
+  },
+  {
+    name: "Ashfell Marches",
+    summary:
+      "A proud horse-and-raid clan confederation of high plains, oath-rings, border pressure, and hard hospitality."
+  },
+  {
+    name: "The Veiled Reach",
+    summary:
+      "A magic-poor highland theocracy of austere monasteries, guarded passes, hoarded Wellglass, and forbidden ledgers."
+  },
+  {
+    name: "The Sundered Vale",
+    summary:
+      "A lawless ruin-delving frontier of broken ground, blue fire, unstable claims, and places that never went quiet."
+  }
+];
+
 const playerResourceTitleIds: Record<PlayerResourcesTab, string> = {
   character_sheet: "character-sheet-title",
   inventory: "player-inventory-title",
@@ -1038,54 +1112,46 @@ export function CharacterSheetOverlay({
             </div>
             <div className="eldermere-lore-copy">
               <p>
-                Eldermere is a fractured realm where old roads, drowned cities,
-                ashland fortresses, and living forests still remember the age
-                before the sundering.
+                Eldermere is an anchored high-fantasy world built on the bones
+                of the fallen Second Dominion. Old roads, drowned cities,
+                ashland fortresses, living forests, and half-working ruins still
+                shape what ordinary people fear, worship, trade, and fight over.
               </p>
-              <div className="eldermere-lore-grid">
-                <article>
-                  <h3>Cael Ambrose</h3>
-                  <p>
-                    The fertile heartland around Suncross, threaded by roads,
-                    farms, old claims, and noble obligations.
-                  </p>
-                </article>
-                <article>
-                  <h3>Ashfell Marches</h3>
-                  <p>
-                    Grey northern country of border towns, open moor, and
-                    watchful settlements along the Sern.
-                  </p>
-                </article>
-                <article>
-                  <h3>Thornwake Vale</h3>
-                  <p>
-                    A deep green western vale where Sallowholt and Bramblegate
-                    sit beneath older, less forgiving woods.
-                  </p>
-                </article>
-                <article>
-                  <h3>Salt Concordat</h3>
-                  <p>
-                    A sea power of ports, ships, lighthouse holdings, and the
-                    haunted glow of the Drowned City.
-                  </p>
-                </article>
-                <article>
-                  <h3>Cinderspine</h3>
-                  <p>
-                    Ironhold and Cragfoot cling to volcanic heights ruled by
-                    smoke, ore, ambition, and hard bargains.
-                  </p>
-                </article>
-                <article>
-                  <h3>Sundered Vale</h3>
-                  <p>
-                    Broken ground and blue fire around Stakehold and Rimshaft,
-                    where ruin has never gone fully quiet.
-                  </p>
-                </article>
-              </div>
+              <section className="eldermere-lore-section">
+                <h3>Things Most People Know</h3>
+                <ul className="eldermere-lore-list">
+                  {eldermereCommonLore.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </section>
+              <section className="eldermere-lore-section">
+                <h3>The Five Divine Forces</h3>
+                <p>
+                  People worship the gods through household rites, temple
+                  law, sea offerings, grove customs, and guarded scholarship.
+                  The gods speak through signs, not simple orders.
+                </p>
+                <div className="eldermere-lore-grid">
+                  {eldermereDivineForces.map((force) => (
+                    <article key={force.name}>
+                      <h4>{force.name}</h4>
+                      <p>{force.summary}</p>
+                    </article>
+                  ))}
+                </div>
+              </section>
+              <section className="eldermere-lore-section">
+                <h3>Regions at a Glance</h3>
+                <div className="eldermere-lore-grid">
+                  {eldermereRegions.map((region) => (
+                    <article key={region.name}>
+                      <h4>{region.name}</h4>
+                      <p>{region.summary}</p>
+                    </article>
+                  ))}
+                </div>
+              </section>
             </div>
           </section>
         )}
