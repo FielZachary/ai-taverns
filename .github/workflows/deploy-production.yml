@@ -130,7 +130,15 @@ jobs:
           cp -a "$release"/. "$DEPLOY_PATH"/
 
           cd "$DEPLOY_PATH"
-          COMPOSE_BAKE=false $compose up -d --build --remove-orphans
+          docker build \
+            --file infra/docker/api.Dockerfile \
+            --tag infra-api \
+            .
+          docker build \
+            --file infra/docker/web.Dockerfile \
+            --tag infra-web \
+            .
+          $compose up -d --no-build --remove-orphans
           ready=0
           for attempt in $(seq 1 60); do
             ready=1
