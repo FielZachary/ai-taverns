@@ -548,6 +548,8 @@ describe("DM provider helpers", () => {
       check: "Investigation",
       player: "Nia",
       modifier: -1,
+      target_dc: 14,
+      reason: "how the sigils fit together",
       advantageState: "disadvantage"
     });
 
@@ -555,6 +557,8 @@ describe("DM provider helpers", () => {
     assert.equal(request?.label, "Investigation");
     assert.equal(request?.player, "Nia");
     assert.equal(request?.modifier, -1);
+    assert.equal(request?.targetDc, 14);
+    assert.equal(request?.reason, "how the sigils fit together");
     assert.equal(request?.advantageState, "disadvantage");
 
     const magicMissileRequest = normalizeRollRequest({
@@ -578,6 +582,63 @@ describe("DM provider helpers", () => {
     assert.deepEqual(normalizeRollRequest(null), null);
     assert.equal(normalizeRollRequests({ reason: "Stealth" }).length, 1);
     assert.deepEqual(normalizeRollRequests(undefined), []);
+  });
+
+  it("adds visible DC guidance for investigation roll requests only", () => {
+    const investigation = parseDmContract(
+      JSON.stringify({
+        public_narration: "The symbols resist easy reading.",
+        resolution_mode: "needs_dice",
+        roll_requests: [
+          {
+            dice: "1d20",
+            modifier: 6,
+            label: "Study the Dominion symbols",
+            target_dc: 15,
+            reason: "the correct pressure and sequence pattern"
+          }
+        ],
+        next_input_needed: "dice_results",
+        input_targets: [],
+        input_policy: "all_players",
+        mechanics_state_update: {},
+        inventory_state_update: { patches: [] }
+      }),
+      { dmJob: "investigation" }
+    );
+
+    assert.match(
+      investigation.publicNarration,
+      /Roll 1d20 \+ 6 for Study the Dominion symbols DC 15 reveals the correct pressure and sequence pattern\./
+    );
+    assert.equal(investigation.rollRequests[0]?.targetDc, 15);
+
+    const sceneDirector = parseDmContract(
+      JSON.stringify({
+        public_narration: "The cliff face is slick.",
+        resolution_mode: "needs_dice",
+        roll_requests: [
+          {
+            dice: "1d20",
+            modifier: 2,
+            label: "Athletics",
+            target_dc: 13,
+            reason: "a stable handhold"
+          }
+        ],
+        next_input_needed: "dice_results",
+        input_targets: [],
+        input_policy: "all_players",
+        mechanics_state_update: {},
+        inventory_state_update: { patches: [] }
+      }),
+      { dmJob: "scene_director" }
+    );
+
+    assert.equal(
+      sceneDirector.publicNarration,
+      "The cliff face is slick.\n\nRoll 1d20 + 2 for Athletics."
+    );
   });
 
   it("diagnoses unsupported roll request dice without rejecting them", () => {

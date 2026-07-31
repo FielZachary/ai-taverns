@@ -3986,6 +3986,14 @@ function normalizeRollRequest(value: unknown): DiceRollRequest | null {
           candidate.advantage_state === "normal"
         ? candidate.advantage_state
         : undefined;
+  const targetDc = [
+    candidate.targetDc,
+    candidate.target_dc,
+    candidate.dc,
+    candidate.threshold
+  ]
+    .map((value) => Number(value))
+    .find((value) => Number.isInteger(value) && value > 0);
 
   const id =
     typeof candidate.id === "string" && candidate.id.trim()
@@ -4003,6 +4011,7 @@ function normalizeRollRequest(value: unknown): DiceRollRequest | null {
     label,
     reason:
       typeof candidate.reason === "string" ? candidate.reason.trim() : undefined,
+    targetDc,
     advantageState
   };
 }
@@ -9318,7 +9327,8 @@ async function askDungeonMaster(
     const contractParseOptions = {
         ...contractOptions,
         currentAction: message,
-        ...(currentPlayerAction ? { currentPlayerAction } : {})
+        ...(currentPlayerAction ? { currentPlayerAction } : {}),
+        ...(promptContext?.jobNeeded ? { dmJob: promptContext.jobNeeded } : {})
       };
     let contract: DmContractResponse;
 
