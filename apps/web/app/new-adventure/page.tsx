@@ -23,5 +23,11 @@ export default async function NewAdventurePage({
     redirect(`/login?next=${encodeURIComponent(next)}`);
   }
 
-  return <NewAdventureForm initialInviteToken={inviteToken} />;
+  return (
+    <NewAdventureForm
+      initialInviteToken={inviteToken}
+      userEmail={user.email}
+      userId={user.id}
+    />
+  );
 }

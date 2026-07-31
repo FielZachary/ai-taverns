@@ -100,6 +100,11 @@ import {
   type StreamingDmMessage
 } from "./game-shell-messages";
 import { extractPlayerBackstory } from "./backstory-intro";
+import {
+  identifyAnalyticsUser,
+  trackAnalytics,
+  trackCampaignReturn
+} from "@/lib/analytics";
 
 const openingMessages: GameMessage[] = [];
 const aiModelStorageKey = "ai-dnd.aiModel";
@@ -159,6 +164,7 @@ type RoomRealtimeEvent =
 type GameShellProps = {
   initialCampaignId?: string;
   userEmail?: string;
+  userId?: string;
 };
 
 type ActiveDiceReveal = {
@@ -330,7 +336,11 @@ async function fetchWithTimeout(
   }
 }
 
-export function GameShell({ initialCampaignId }: GameShellProps) {
+export function GameShell({
+  initialCampaignId,
+  userEmail,
+  userId
+}: GameShellProps) {
   const [messages, setMessages] = useState<GameMessage[]>(openingMessages);
   const [availableCampaigns, setAvailableCampaigns] = useState<CampaignSummary[]>([]);
   const [draft, setDraft] = useState("");
@@ -571,6 +581,22 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
       ? "You can only start once the adventure has begun"
     : undefined;
 
+  function analyticsBaseProperties(campaign: CampaignSummary | undefined = activeCampaign) {
+    return {
+      userId,
+      guestId: playerId || undefined,
+      campaignId: campaign?.id,
+      campaignMode: campaign?.mode,
+      playerMessageCount: roomMessages.filter((message) => message.role === "player")
+        .length,
+      dmMessageCount: roomMessages.filter((message) => message.role === "dm")
+        .length,
+      totalMessageCount: roomMessages.length,
+      hasDiceRequest: pendingRollRequests.length > 0,
+      combatActive: Boolean(roomCombat?.active)
+    } as const;
+  }
+
   const applyRoomSnapshot = useCallback(
     (room: RoomSnapshot) => {
       setRoomPlayers(room.players);
@@ -646,6 +672,30 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
       }
 
       const room = (await response.json()) as RoomSnapshot;
+      const playerMessageCount = room.messages.filter(
+        (message) => message.role === "player"
+      ).length;
+      const dmMessageCount = room.messages.filter((message) => message.role === "dm")
+        .length;
+
+      trackAnalytics({
+        name: "Campaign Loaded",
+        properties: {
+          userId,
+          guestId: playerId || undefined,
+          campaignId: campaign.id,
+          campaignMode: campaign.mode,
+          playerMessageCount,
+          dmMessageCount,
+          totalMessageCount: room.messages.length,
+          hasDiceRequest: rollRequestsFromRoom(room).length > 0,
+          combatActive: Boolean(room.combat?.active)
+        }
+      });
+      trackCampaignReturn({
+        campaignId: campaign.id,
+        campaignMode: campaign.mode
+      });
       setMessages(openingMessages);
 
       if (campaign.mode === "single_player") {
@@ -666,7 +716,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     } finally {
       setIsLoadingMessages(false);
     }
-  }, [applyRoomSnapshot]);
+  }, [applyRoomSnapshot, playerId, userId]);
 
   const fetchCampaigns = useCallback(async () => {
     return listCampaigns();
@@ -690,6 +740,12 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
       return;
     }
 
+    identifyAnalyticsUser({
+      userId,
+      email: userEmail,
+      guestId: playerId
+    });
+
     void fetch("/api/auth/claim-guest-state", {
       method: "POST",
       headers: {
@@ -699,7 +755,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
         clientId: playerId
       })
     }).catch(() => undefined);
-  }, [playerId]);
+  }, [playerId, userEmail, userId]);
 
   useEffect(() => {
     if (
@@ -1109,6 +1165,10 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     }
 
     window.history.replaceState(null, "", `/play?campaignId=${campaign.id}`);
+    trackAnalytics({
+      name: "Campaign Switched",
+      properties: analyticsBaseProperties(campaign)
+    });
     setActiveCampaignId(campaign.id);
     setDraft("");
     setRoomMessages([]);
@@ -1266,6 +1326,11 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
       await navigator.clipboard.writeText(url);
       setCampaignInvites((currentInvites) => [invite, ...currentInvites]);
       setInviteStatus("Invite link copied.");
+      trackAnalytics({
+        name: "Campaign Invite Created",
+        properties: analyticsBaseProperties(),
+        milestones: ["multiplayer_invite_created"]
+      });
     } catch (caught) {
       setInviteError(
         caught instanceof Error
@@ -1308,6 +1373,10 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
         currentInvites.map((invite) => disabledById.get(invite.id) ?? invite)
       );
       setInviteStatus("Invite links disabled.");
+      trackAnalytics({
+        name: "Campaign Invite Disabled",
+        properties: analyticsBaseProperties()
+      });
     } catch (caught) {
       setInviteError(
         caught instanceof Error
@@ -1350,6 +1419,11 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
       const campaigns = await fetchCampaigns();
 
       setAvailableCampaigns(campaigns);
+      trackAnalytics({
+        name: "Multiplayer Adventure Begun",
+        properties: analyticsBaseProperties(),
+        milestones: ["multiplayer_adventure_begun"]
+      });
     } catch {
       setMessages((currentMessages) => [
         ...currentMessages,
@@ -1515,6 +1589,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     );
 
     try {
+      const startedAt = Date.now();
       const request = buildTurnSubmissionRequest({
         campaign: activeCampaign,
         singlePlayer: isSinglePlayer,
@@ -1546,6 +1621,52 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
       const room = (await response.json()) as RoomSnapshot;
       applyRoomSnapshot(room);
       const latestMessage = room.messages[room.messages.length - 1];
+      const playerMessageCount = room.messages.filter(
+        (message) => message.role === "player"
+      ).length;
+      const dmMessageCount = room.messages.filter((message) => message.role === "dm")
+        .length;
+      const milestones = [
+        ...(playerMessageCount === 1 ? (["first_player_message"] as const) : []),
+        ...(playerMessageCount === 5 ? (["five_player_messages"] as const) : [])
+      ];
+
+      trackAnalytics({
+        name: "Player Message Sent",
+        properties: {
+          ...analyticsBaseProperties(),
+          campaignId: activeCampaign.id,
+          campaignMode: activeCampaign.mode,
+          messageLength: content.length,
+          turnNumber: playerMessageCount,
+          model: request.body.model,
+          skipTurn,
+          hasDiceRequest: rollRequestsFromRoom(room).length > 0,
+          combatActive: Boolean(room.combat?.active),
+          responseLatencyMs: Date.now() - startedAt,
+          playerMessageCount,
+          dmMessageCount,
+          totalMessageCount: room.messages.length
+        },
+        milestones
+      });
+
+      if (latestMessage?.role === "dm") {
+        trackAnalytics({
+          name: "DM Response Received",
+          properties: {
+            ...analyticsBaseProperties(),
+            campaignId: activeCampaign.id,
+            campaignMode: activeCampaign.mode,
+            hasDiceRequest: rollRequestsFromRoom(room).length > 0,
+            combatActive: Boolean(room.combat?.active),
+            responseLatencyMs: Date.now() - startedAt,
+            playerMessageCount,
+            dmMessageCount,
+            totalMessageCount: room.messages.length
+          }
+        });
+      }
 
       if (isSinglePlayer) {
         setMessages(room.messages.length > 0 ? room.messages : openingMessages);
@@ -1595,6 +1716,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     setInputValidationMessage("");
 
     try {
+      const startedAt = Date.now();
       const response = await fetch(
         `/api/campaigns/${encodeURIComponent(activeCampaign.id)}/regenerate`,
         {
@@ -1616,6 +1738,22 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
 
       const room = (await response.json()) as RoomSnapshot;
       applyRoomSnapshot(room);
+      trackAnalytics({
+        name: "Regenerate Response Submitted",
+        properties: {
+          ...analyticsBaseProperties(),
+          campaignId: activeCampaign.id,
+          campaignMode: activeCampaign.mode,
+          responseLatencyMs: Date.now() - startedAt,
+          playerMessageCount: room.messages.filter(
+            (message) => message.role === "player"
+          ).length,
+          dmMessageCount: room.messages.filter((message) => message.role === "dm")
+            .length,
+          totalMessageCount: room.messages.length
+        },
+        milestones: ["regenerated_response"]
+      });
 
       if (isSinglePlayer) {
         setMessages(room.messages.length > 0 ? room.messages : openingMessages);
@@ -1673,6 +1811,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     setIsSending(true);
 
     try {
+      const startedAt = Date.now();
       const response = await fetch(
         `/api/campaigns/${encodeURIComponent(activeCampaign.id)}/ask-dm`,
         {
@@ -1698,6 +1837,24 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
 
       const room = (await response.json()) as RoomSnapshot;
       applyRoomSnapshot(room);
+      trackAnalytics({
+        name: "Ask DM Submitted",
+        properties: {
+          ...analyticsBaseProperties(),
+          campaignId: activeCampaign.id,
+          campaignMode: activeCampaign.mode,
+          messageLength: question.length,
+          model,
+          responseLatencyMs: Date.now() - startedAt,
+          playerMessageCount: room.messages.filter(
+            (message) => message.role === "player"
+          ).length,
+          dmMessageCount: room.messages.filter((message) => message.role === "dm")
+            .length,
+          totalMessageCount: room.messages.length
+        },
+        milestones: ["asked_dm"]
+      });
 
       if (isSinglePlayer) {
         setMessages(room.messages.length > 0 ? room.messages : openingMessages);
@@ -1773,6 +1930,7 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     );
 
     try {
+      const startedAt = Date.now();
       const request = buildRollSubmissionRequest({
         campaign,
         singlePlayer,
@@ -1802,6 +1960,23 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
 
       const room = (await response.json()) as RoomSnapshot;
       applyRoomSnapshot(room);
+      trackAnalytics({
+        name: "Dice Roll Submitted",
+        properties: {
+          ...analyticsBaseProperties(campaign),
+          diceSubmissionCount: rollSubmissions.length,
+          hasDiceRequest: rollRequestsFromRoom(room).length > 0,
+          combatActive: Boolean(room.combat?.active),
+          responseLatencyMs: Date.now() - startedAt,
+          playerMessageCount: room.messages.filter(
+            (message) => message.role === "player"
+          ).length,
+          dmMessageCount: room.messages.filter((message) => message.role === "dm")
+            .length,
+          totalMessageCount: room.messages.length
+        },
+        milestones: ["dice_submitted"]
+      });
 
       if (singlePlayer) {
         setMessages(room.messages.length > 0 ? room.messages : openingMessages);
@@ -1899,6 +2074,13 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     }
 
     const queuedRoll = rollQueuedDice(queuedDice);
+    trackAnalytics({
+      name: "Dice Roll Queued",
+      properties: {
+        ...analyticsBaseProperties(),
+        diceSubmissionCount: 1
+      }
+    });
 
     setInputValidationMessage("");
     setActiveDiceReveal({
@@ -1935,6 +2117,10 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
     setNpcCards((cards) =>
       cards.map((card) => (card.id === updatedCard.id ? updatedCard : card))
     );
+    trackAnalytics({
+      name: "NPC Card Updated",
+      properties: analyticsBaseProperties()
+    });
 
     return updatedCard;
   }
@@ -1992,6 +2178,14 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
             onViewCharacterSheet={() => {
               setPlayerResourcesInitialTab("character_sheet");
               setIsCharacterSheetOpen(true);
+              trackAnalytics({
+                name: "Character Sheet Opened",
+                properties: {
+                  ...analyticsBaseProperties(),
+                  resourceTab: "character_sheet"
+                },
+                milestones: ["used_player_resources"]
+              });
             }}
           />
           <div className="story-column">
@@ -2026,6 +2220,14 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
               onViewEldermereLore={() => {
                 setPlayerResourcesInitialTab("eldermere_lore");
                 setIsCharacterSheetOpen(true);
+                trackAnalytics({
+                  name: "Player Resource Tab Opened",
+                  properties: {
+                    ...analyticsBaseProperties(),
+                    resourceTab: "eldermere_lore"
+                  },
+                  milestones: ["used_player_resources"]
+                });
               }}
             />
 
@@ -2137,6 +2339,19 @@ export function GameShell({ initialCampaignId }: GameShellProps) {
           npcCards={npcCards}
           npcCardsError={npcCardsError}
           onClose={() => setIsCharacterSheetOpen(false)}
+          onTabChange={(tab) =>
+            trackAnalytics({
+              name:
+                tab === "character_sheet"
+                  ? "Character Sheet Opened"
+                  : "Player Resource Tab Opened",
+              properties: {
+                ...analyticsBaseProperties(),
+                resourceTab: tab
+              },
+              milestones: ["used_player_resources"]
+            })
+          }
           onNpcCardUpdate={handleUpdateNpcCard}
         />
       ) : null}

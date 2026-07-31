@@ -20,13 +20,25 @@ import {
   submitSoloTurnForUser
 } from "@ai-dnd/db";
 import type { ApiConfig } from "../config.js";
+import type { ServerAnalytics } from "../analytics.js";
 import { askDungeonMasterProvider } from "../dm-provider.js";
 import { requireAuthenticatedUser } from "./auth.js";
 
 type DmRouteOptions = {
   config: ApiConfig;
+  analytics?: ServerAnalytics;
   dmRuntime?: DungeonMasterRuntime | undefined;
 };
+
+function messageCounts(snapshot: RoomSnapshot) {
+  return {
+    playerMessageCount: snapshot.messages.filter((message) => message.role === "player")
+      .length,
+    dmMessageCount: snapshot.messages.filter((message) => message.role === "dm")
+      .length,
+    totalMessageCount: snapshot.messages.length
+  };
+}
 
 function createHttpError(statusCode: number, message: string): Error {
   const error = new Error(message) as Error & { statusCode: number };
@@ -48,7 +60,7 @@ export async function registerDmRoutes(
   fastify: FastifyInstance,
   options: DmRouteOptions
 ) {
-  const { config } = options;
+  const { config, analytics } = options;
   const baseRuntime = options.dmRuntime ?? {
     askProvider: askDungeonMasterProvider
   };
@@ -88,6 +100,7 @@ export async function registerDmRoutes(
       request.cookies[config.authCookieName]
     );
 
+    const startedAt = Date.now();
     const snapshot = CampaignSoloTurnResponseSchema.parse(
       await submitSoloTurnForUser(fastify.pg, runtime, {
         campaignId: params.campaignId,
@@ -102,6 +115,44 @@ export async function registerDmRoutes(
     );
 
     await publishRoomSnapshotUpdate(fastify, snapshot);
+    const counts = messageCounts(snapshot);
+    const milestones = [
+      ...(counts.playerMessageCount === 1 ? (["first_player_message"] as const) : []),
+      ...(counts.playerMessageCount === 5 ? (["five_player_messages"] as const) : []),
+      ...(rollSubmissions?.length ? (["dice_submitted"] as const) : [])
+    ];
+
+    analytics?.track({
+      name: rollSubmissions?.length ? "Dice Roll Submitted" : "Player Message Sent",
+      distinctId: `user:${user.id}`,
+      properties: {
+        userId: user.id,
+        campaignId: params.campaignId,
+        campaignMode: "single_player",
+        messageLength: message?.length ?? 0,
+        turnNumber: counts.playerMessageCount,
+        model: body.model,
+        hasDiceRequest: snapshot.pendingRollRequests.length > 0,
+        diceSubmissionCount: rollSubmissions?.length ?? 0,
+        combatActive: snapshot.combat.active,
+        responseLatencyMs: Date.now() - startedAt,
+        ...counts
+      },
+      milestones
+    });
+    analytics?.track({
+      name: "DM Response Received",
+      distinctId: `user:${user.id}`,
+      properties: {
+        userId: user.id,
+        campaignId: params.campaignId,
+        campaignMode: "single_player",
+        hasDiceRequest: snapshot.pendingRollRequests.length > 0,
+        combatActive: snapshot.combat.active,
+        responseLatencyMs: Date.now() - startedAt,
+        ...counts
+      }
+    });
 
     return snapshot;
   });
@@ -122,6 +173,7 @@ export async function registerDmRoutes(
       request.cookies[config.authCookieName]
     );
 
+    const startedAt = Date.now();
     const snapshot = CampaignAskDmResponseSchema.parse(
       await askDungeonMasterQuestionForUser(fastify.pg, runtime, {
         campaignId: params.campaignId,
@@ -133,6 +185,20 @@ export async function registerDmRoutes(
     );
 
     await publishRoomSnapshotUpdate(fastify, snapshot);
+    analytics?.track({
+      name: "Ask DM Submitted",
+      distinctId: `user:${user.id}`,
+      properties: {
+        userId: user.id,
+        campaignId: params.campaignId,
+        campaignMode: snapshot.mode,
+        messageLength: question.length,
+        model: body.model,
+        responseLatencyMs: Date.now() - startedAt,
+        ...messageCounts(snapshot)
+      },
+      milestones: ["asked_dm"]
+    });
 
     return snapshot;
   });
@@ -152,6 +218,7 @@ export async function registerDmRoutes(
       request.cookies[config.authCookieName]
     );
 
+    const startedAt = Date.now();
     const snapshot = CampaignRegenerateResponseSchema.parse(
       await regenerateCampaignResponseForUser(fastify.pg, runtime, {
         campaignId: params.campaignId,
@@ -161,6 +228,18 @@ export async function registerDmRoutes(
     );
 
     await publishRoomSnapshotUpdate(fastify, snapshot);
+    analytics?.track({
+      name: "Regenerate Response Submitted",
+      distinctId: `user:${user.id}`,
+      properties: {
+        userId: user.id,
+        campaignId: params.campaignId,
+        campaignMode: snapshot.mode,
+        responseLatencyMs: Date.now() - startedAt,
+        ...messageCounts(snapshot)
+      },
+      milestones: ["regenerated_response"]
+    });
 
     return snapshot;
   });

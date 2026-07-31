@@ -40,6 +40,10 @@ test("loadConfig applies development defaults and trims web origins", () => {
   assert.equal(config.spacesBucket, undefined);
   assert.equal(config.spacesAccessKeyId, undefined);
   assert.equal(config.spacesSecretAccessKey, undefined);
+  assert.equal(config.mixpanelProjectToken, undefined);
+  assert.equal(config.mixpanelProjectId, "4049394");
+  assert.equal(config.mixpanelEnabled, false);
+  assert.equal(config.mixpanelDebug, false);
 });
 
 test("loadConfig applies production security defaults and explicit overrides", () => {
@@ -69,7 +73,11 @@ test("loadConfig applies production security defaults and explicit overrides", (
     SPACES_REGION: "sgp1",
     SPACES_BUCKET: "ai-taverns-media",
     DIGITALOCEAN_SPACES_ACCESS_KEY: "spaces-key",
-    DIGITALOCEAN_SPACES_SECRET_KEY: "spaces-secret"
+    DIGITALOCEAN_SPACES_SECRET_KEY: "spaces-secret",
+    MIXPANEL_PROJECT_TOKEN: "mixpanel-token",
+    MIXPANEL_PROJECT_ID: "4049394",
+    MIXPANEL_ENABLED: "true",
+    MIXPANEL_DEBUG: "true"
   });
 
   assert.deepEqual(config, {
@@ -98,7 +106,11 @@ test("loadConfig applies production security defaults and explicit overrides", (
     spacesRegion: "sgp1",
     spacesBucket: "ai-taverns-media",
     spacesAccessKeyId: "spaces-key",
-    spacesSecretAccessKey: "spaces-secret"
+    spacesSecretAccessKey: "spaces-secret",
+    mixpanelProjectToken: "mixpanel-token",
+    mixpanelProjectId: "4049394",
+    mixpanelEnabled: true,
+    mixpanelDebug: true
   });
 });
 

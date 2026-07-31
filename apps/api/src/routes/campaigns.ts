@@ -65,6 +65,7 @@ import {
   restartSinglePlayerCampaignForUser
 } from "@ai-dnd/db";
 import type { ApiConfig } from "../config.js";
+import type { ServerAnalytics } from "../analytics.js";
 import {
   generateCharacterPortraitPreview,
   generateCharacterPortraitForCampaign,
@@ -75,8 +76,32 @@ import { requireAuthenticatedUser } from "./auth.js";
 
 type CampaignRouteOptions = {
   config: ApiConfig;
+  analytics?: ServerAnalytics;
   dmRuntime?: DungeonMasterRuntime | undefined;
 };
+
+function sheetField(sheet: string | undefined, label: string) {
+  return sheet?.match(new RegExp(`^${label}:\\s*(.+)$`, "im"))?.[1]?.trim();
+}
+
+function spellCountFromSheet(sheet: string | undefined) {
+  if (!sheet) {
+    return 0;
+  }
+
+  const spellsSection = sheet.match(/^Spells\n([\s\S]*?)(?:\n\n|$)/m)?.[1] ?? "";
+
+  if (!spellsSection || spellsSection === "None") {
+    return 0;
+  }
+
+  return spellsSection
+    .split("\n")
+    .flatMap((line) => line.split(":").slice(1).join(":").split(","))
+    .map((spell) => spell.trim())
+    .filter((spell) => spell && !/^dc|spell|slots?|[+-]?\d/.test(spell.toLowerCase()))
+    .length;
+}
 
 type RestartBackstoryContextRow = {
   metadata: unknown;
@@ -534,7 +559,7 @@ export async function registerCampaignRoutes(
   fastify: FastifyInstance,
   options: CampaignRouteOptions
 ) {
-  const { config } = options;
+  const { config, analytics } = options;
   const runtime = options.dmRuntime ?? {
     askProvider: askDungeonMasterProvider
   };
@@ -845,6 +870,42 @@ export async function registerCampaignRoutes(
             portraitUrl: portrait.portraitUrl
           }
         : campaign;
+    analytics?.track({
+      name: "Campaign Created",
+      distinctId: `user:${user.id}`,
+      properties: {
+        userId: user.id,
+        campaignId: campaign.id,
+        campaignMode: mode,
+        campaignGenre,
+        campaignGenreKind,
+        campaignGenrePresetId,
+        hasCustomWorld: campaignGenreKind === "custom",
+        hasEldermereStart: Boolean(body.eldermereStart),
+        hasBackstory: Boolean(
+          body.characterSheet?.trim().includes("Backstory\n") &&
+            !body.characterSheet.includes(
+              "AI Taverns should generate a fitting backstory"
+            )
+        ),
+        hasPortrait: portrait?.status === "ready",
+        portraitSource: portrait?.status === "ready" ? "generated" : undefined,
+        characterClass: sheetField(body.characterSheet, "Class"),
+        characterSpecies: sheetField(body.characterSheet, "Species"),
+        characterBuildMode: sheetField(body.characterSheet, "Build Mode")
+          ?.toLowerCase()
+          .includes("quick")
+          ? "quick"
+          : "custom",
+        spellCount: spellCountFromSheet(body.characterSheet),
+        equipmentCompleted: Boolean(body.characterSheet?.includes("\nEquipment\n"))
+      },
+      milestones: [
+        "campaign_created_or_joined",
+        "character_completed",
+        ...(portrait?.status === "ready" ? (["portrait_added"] as const) : [])
+      ]
+    });
 
     reply.status(201);
     return CampaignCreateResponseSchema.parse({ campaign: responseCampaign });
@@ -896,6 +957,15 @@ export async function registerCampaignRoutes(
       );
 
       reply.status(201);
+      analytics?.track({
+        name: "Campaign Restarted",
+        distinctId: `user:${user.id}`,
+        properties: {
+          userId: user.id,
+          campaignId: campaign.id,
+          campaignMode: campaign.mode
+        }
+      });
       return CampaignRestartResponseSchema.parse({ campaign });
     } catch (error) {
       request.log.error(
@@ -921,7 +991,7 @@ export async function registerCampaignRoutes(
   fastify.post("/campaigns/portrait/preview", async (request) => {
     const body = CharacterPortraitPreviewRequestSchema.parse(request.body);
 
-    await requireAuthenticatedUser(
+    const user = await requireAuthenticatedUser(
       fastify,
       config,
       request.cookies[config.authCookieName]
@@ -941,6 +1011,18 @@ export async function registerCampaignRoutes(
     if (portrait.status !== "ready") {
       throw createHttpError(502, portrait.reason, { expose: true });
     }
+
+    analytics?.track({
+      name: "Character Portrait Previewed",
+      distinctId: `user:${user.id}`,
+      properties: {
+        userId: user.id,
+        campaignGenre: body.campaignGenre,
+        portraitSource: "preview",
+        characterClass: sheetField(body.characterSheet, "Class"),
+        characterSpecies: sheetField(body.characterSheet, "Species")
+      }
+    });
 
     return CharacterPortraitPreviewResponseSchema.parse({
       imageDataUrl: portrait.imageDataUrl,
@@ -998,6 +1080,17 @@ export async function registerCampaignRoutes(
         userId: user.id
       });
 
+      analytics?.track({
+        name: "Character Portrait Requested",
+        distinctId: `user:${user.id}`,
+        properties: {
+          userId: user.id,
+          campaignId: params.campaignId,
+          campaignMode: campaign.mode,
+          portraitSource: "generated"
+        }
+      });
+
       return CharacterPortraitResponseSchema.parse({ campaign });
     }
 
@@ -1018,6 +1111,18 @@ export async function registerCampaignRoutes(
     const campaign = await getCampaignSummaryForUser(fastify.pg, {
       campaignId: params.campaignId,
       userId: user.id
+    });
+    analytics?.track({
+      name: "Character Portrait Requested",
+      distinctId: `user:${user.id}`,
+      properties: {
+        userId: user.id,
+        campaignId: params.campaignId,
+        campaignMode: campaign.mode,
+        hasPortrait: true,
+        portraitSource: "generated"
+      },
+      milestones: ["portrait_added"]
     });
 
     return CharacterPortraitResponseSchema.parse({
@@ -1064,6 +1169,18 @@ export async function registerCampaignRoutes(
       const campaign = await getCampaignSummaryForUser(fastify.pg, {
         campaignId: params.campaignId,
         userId: user.id
+      });
+      analytics?.track({
+        name: "Character Portrait Uploaded",
+        distinctId: `user:${user.id}`,
+        properties: {
+          userId: user.id,
+          campaignId: params.campaignId,
+          campaignMode: campaign.mode,
+          hasPortrait: true,
+          portraitSource: "upload"
+        },
+        milestones: ["portrait_added"]
       });
 
       return CharacterPortraitResponseSchema.parse({
@@ -1149,6 +1266,16 @@ export async function registerCampaignRoutes(
       maxUses: body.maxUses,
       expiresAt: body.expiresAt
     });
+    analytics?.track({
+      name: "Campaign Invite Created",
+      distinctId: `user:${user.id}`,
+      properties: {
+        userId: user.id,
+        campaignId: params.campaignId,
+        campaignMode: "multiplayer"
+      },
+      milestones: ["multiplayer_invite_created"]
+    });
 
     reply.status(201);
     return CampaignInviteCreateResponseSchema.parse(response);
@@ -1168,6 +1295,15 @@ export async function registerCampaignRoutes(
         inviteId: params.inviteId,
         userId: user.id
       });
+      analytics?.track({
+        name: "Campaign Invite Disabled",
+        distinctId: `user:${user.id}`,
+        properties: {
+          userId: user.id,
+          campaignId: params.campaignId,
+          campaignMode: "multiplayer"
+        }
+      });
 
       return CampaignInviteDisableResponseSchema.parse({ invite });
     }
@@ -1176,15 +1312,25 @@ export async function registerCampaignRoutes(
   fastify.get("/invites/:token/preview", async (request) => {
     const params = LobbyInvitePreviewParamsSchema.parse(request.params);
 
-    await requireAuthenticatedUser(
+    const user = await requireAuthenticatedUser(
       fastify,
       config,
       request.cookies[config.authCookieName]
     );
 
-    return LobbyInvitePreviewResponseSchema.parse(
-      await previewLobbyInvite(fastify.pg, params.token)
-    );
+    const preview = await previewLobbyInvite(fastify.pg, params.token);
+    analytics?.track({
+      name: "Campaign Invite Previewed",
+      distinctId: `user:${user.id}`,
+      properties: {
+        userId: user.id,
+        joinSource: "invite",
+        hasBegun: false,
+        availableSlots: preview.availableSlots
+      }
+    });
+
+    return LobbyInvitePreviewResponseSchema.parse(preview);
   });
 
   fastify.post("/invites/:token/join", async (request) => {
@@ -1203,6 +1349,27 @@ export async function registerCampaignRoutes(
       characterSheet: body.characterSheet ?? "",
       mechanicsSeed: body.mechanicsSeed,
       userId: user.id
+    });
+    analytics?.track({
+      name: "Campaign Joined",
+      distinctId: `user:${user.id}`,
+      properties: {
+        userId: user.id,
+        campaignId: campaign.id,
+        campaignMode: "multiplayer",
+        joinSource: "invite",
+        inviteUsed: true,
+        characterClass: sheetField(body.characterSheet, "Class"),
+        characterSpecies: sheetField(body.characterSheet, "Species"),
+        characterBuildMode: sheetField(body.characterSheet, "Build Mode")
+          ?.toLowerCase()
+          .includes("quick")
+          ? "quick"
+          : "custom",
+        spellCount: spellCountFromSheet(body.characterSheet),
+        equipmentCompleted: Boolean(body.characterSheet?.includes("\nEquipment\n"))
+      },
+      milestones: ["campaign_created_or_joined", "character_completed"]
     });
 
     return LobbyInviteJoinResponseSchema.parse({ campaign });
@@ -1237,6 +1404,27 @@ export async function registerCampaignRoutes(
       characterSheet: body.characterSheet ?? "",
       mechanicsSeed: body.mechanicsSeed,
       userId: user.id
+    });
+    analytics?.track({
+      name: "Campaign Joined",
+      distinctId: `user:${user.id}`,
+      properties: {
+        userId: user.id,
+        campaignId: campaign.id,
+        campaignMode: "multiplayer",
+        joinSource: "code",
+        inviteUsed: false,
+        characterClass: sheetField(body.characterSheet, "Class"),
+        characterSpecies: sheetField(body.characterSheet, "Species"),
+        characterBuildMode: sheetField(body.characterSheet, "Build Mode")
+          ?.toLowerCase()
+          .includes("quick")
+          ? "quick"
+          : "custom",
+        spellCount: spellCountFromSheet(body.characterSheet),
+        equipmentCompleted: Boolean(body.characterSheet?.includes("\nEquipment\n"))
+      },
+      milestones: ["campaign_created_or_joined", "character_completed"]
     });
 
     return CampaignJoinResponseSchema.parse({ campaign });
