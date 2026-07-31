@@ -308,4 +308,21 @@ None
     ).toBeInTheDocument();
     expect(within(backstoryPanel).queryByText("World Terms")).not.toBeInTheDocument();
   });
+
+  it("shows a player-safe Eldermere lore primer with gods and canonical regions", () => {
+    renderCharacterSheetOverlay({
+      initialTab: "eldermere_lore"
+    });
+
+    const lorePanel = screen.getByRole("region", { name: "Eldermere Lore" });
+
+    expect(within(lorePanel).getByText(/fallen Second Dominion/)).toBeInTheDocument();
+    expect(within(lorePanel).getByText(/the long divine silence called the Hush/)).toBeInTheDocument();
+    expect(within(lorePanel).getByText("The Five Divine Forces")).toBeInTheDocument();
+    expect(within(lorePanel).getByText("The Hearth-Warden")).toBeInTheDocument();
+    expect(within(lorePanel).getByText("The Ashen Scholar")).toBeInTheDocument();
+    expect(within(lorePanel).getByText("The Ferrant Concord")).toBeInTheDocument();
+    expect(within(lorePanel).getByText("The Veiled Reach")).toBeInTheDocument();
+    expect(within(lorePanel).queryByText("Cinderspine")).not.toBeInTheDocument();
+  });
 });
