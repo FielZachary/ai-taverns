@@ -430,10 +430,11 @@ function narrationWithRollInstructions(
         }))
       : rollRequests;
 
-  if (
-    requests.length === 0 ||
-    hasRollRequestDiceCoverage(normalizedNarration, requests)
-  ) {
+  if (requests.length === 0) {
+    return normalizedNarration;
+  }
+
+  if (hasRollRequestDiceCoverage(normalizedNarration, requests)) {
     if (options?.dmJob !== "investigation" || /\bDC\s*\d+\b/i.test(normalizedNarration)) {
       return normalizedNarration;
     }
