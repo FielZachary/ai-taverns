@@ -304,6 +304,14 @@ describe("modular AI DM runtime contracts", () => {
       jobPrompt("investigation"),
       /Distinguish discovering, seeing, identifying, or learning about an item/i
     );
+    assert.match(
+      jobPrompt("investigation"),
+      /state the target DC or threshold in public_narration before the player rolls/i
+    );
+    assert.match(
+      jobPrompt("investigation"),
+      /what category of information that DC can unlock without revealing the hidden answer/i
+    );
     assert.match(jobPrompt("combat"), /strict turn ownership/i);
     assert.match(jobPrompt("combat"), /Group combat narration by action\/result beat/i);
     assert.match(jobPrompt("combat"), /Bold visible mechanics inside public_narration using Markdown/i);
