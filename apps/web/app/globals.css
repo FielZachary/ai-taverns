@@ -1595,23 +1595,16 @@ h1 {
     radial-gradient(circle at 50% 18%, rgba(255, 237, 179, 0.12), transparent 52%);
 }
 
-.spell-option-card.selected,
-.spell-option-card:hover {
+.spell-option-card.selected {
   border-color: rgba(244, 207, 122, 0.72);
   box-shadow: 0 14px 32px rgba(0, 0, 0, 0.2);
 }
 
-.spell-option-card.selected::after,
-.spell-option-card:hover::after {
+.spell-option-card.selected::after {
   background:
     linear-gradient(90deg, rgba(173, 71, 43, 0.2), transparent),
     linear-gradient(180deg, rgba(10, 7, 5, 0.46), rgba(10, 7, 5, 0.78)),
     radial-gradient(circle at 50% 18%, rgba(255, 237, 179, 0.18), transparent 52%);
-}
-
-.spell-option-card:focus-within {
-  outline: 2px solid rgba(244, 207, 122, 0.82);
-  outline-offset: 2px;
 }
 
 .spell-option-card.dlc-spell-option {
