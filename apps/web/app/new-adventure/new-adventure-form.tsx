@@ -137,7 +137,7 @@ function roomSocketUrl(campaign: CampaignSummary) {
 
   return url.toString();
 }
-type SpellLevelLabel = "Cantrip" | "1st level" | "2nd level" | "3rd level";
+export type SpellLevelLabel = "Cantrip" | "1st level" | "2nd level" | "3rd level";
 type SpellGroup = {
   level: SpellLevelLabel;
   base: string[];

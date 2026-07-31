@@ -4,6 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import { UserRound, X } from "lucide-react";
 import type { CampaignNpcCard } from "@/lib/campaign-api";
 import {
+  spellDetailFor,
+  spellEffectSummaryFor,
+  type SpellLevelLabel
+} from "@/app/new-adventure/new-adventure-form";
+import {
   extractPlayerBackstory,
   formatBackstoryParagraphs
 } from "./backstory-intro";
@@ -33,6 +38,7 @@ type SheetTableRow = {
   range: string;
   hitDc: string;
   effect: string;
+  onClick?: () => void;
 };
 
 export type PlayerResourcesTab =
@@ -384,6 +390,14 @@ function listWithoutLabels(lines: string[] = []) {
   return lines.map((line) => line.replace(/^[^:]+:\s*/, "").trim()).filter(Boolean);
 }
 
+function spellStatValue(lines: string[], label: string) {
+  const line = lines.find((spellLine) =>
+    spellLine.toLowerCase().startsWith(`${label.toLowerCase()}:`)
+  );
+
+  return line?.split(":").slice(1).join(":").trim() ?? "";
+}
+
 function parseAttackLine(line: string): SheetTableRow {
   const [rawName = line, rawDetails = ""] = line.split(/:\s(.+)/);
   const detailParts = rawDetails
@@ -410,13 +424,49 @@ function parseAttackLine(line: string): SheetTableRow {
   };
 }
 
-function spellTableRow(name: string): SheetTableRow {
+function spellTableRow(
+  name: string,
+  level: SpellLevelLabel | null,
+  spellStats: { attackBonus: string; saveDc: string }
+): SheetTableRow {
+  const spellDetail = spellDetailFor(name, level);
+  const rollText = spellDetail.rolls;
+
   return {
     name,
-    range: "",
-    hitDc: "",
-    effect: ""
+    range: spellDetail.range,
+    hitDc: spellHitDcForRolls(rollText, spellStats),
+    effect: spellEffectSummaryFor(name)
   };
+}
+
+function spellHitDcForRolls(
+  rolls: string,
+  spellStats: { attackBonus: string; saveDc: string }
+) {
+  if (/^Resolve with your spell save DC or spell attack bonus/i.test(rolls)) {
+    return "Varies";
+  }
+
+  if (/spell attack roll/i.test(rolls)) {
+    return spellStats.attackBonus
+      ? `Spell attack ${spellStats.attackBonus}`
+      : "Spell attack";
+  }
+
+  if (/saving throw|spell save dc/i.test(rolls)) {
+    return spellStats.saveDc ? `DC ${spellStats.saveDc}` : "Spell save DC";
+  }
+
+  if (/no attack roll|usually no attack roll/i.test(rolls)) {
+    return "No attack roll";
+  }
+
+  if (/healing|temporary hit point/i.test(rolls)) {
+    return "Healing roll";
+  }
+
+  return "Varies";
 }
 
 const spellLevels: Record<string, string> = {
@@ -481,6 +531,13 @@ const spellGroupOrder = [
   "Level 9",
   "Other"
 ];
+
+const spellLevelLabels: Record<string, SpellLevelLabel> = {
+  Cantrips: "Cantrip",
+  "Level 1": "1st level",
+  "Level 2": "2nd level",
+  "Level 3": "3rd level"
+};
 
 function parseSpellList(value = "") {
   return value
@@ -590,7 +647,19 @@ function SheetTable({
           {rows.length > 0 ? (
             rows.map((row, index) => (
               <tr key={`${row.name}-${index}`}>
-                <td>{row.name}</td>
+                <td>
+                  {row.onClick ? (
+                    <button
+                      className="dnd-sheet-table-action"
+                      type="button"
+                      onClick={row.onClick}
+                    >
+                      {row.name}
+                    </button>
+                  ) : (
+                    row.name
+                  )}
+                </td>
                 <td>{row.range}</td>
                 <td>{row.hitDc}</td>
                 <td>{row.effect}</td>
@@ -620,7 +689,15 @@ function AttackPanel({ lines }: { lines?: string[] }) {
   );
 }
 
-function SpellPanel({ lines }: { lines?: string[] }) {
+function SpellPanel({
+  lines,
+  spellStats,
+  onSpellClick
+}: {
+  lines?: string[];
+  spellStats: { attackBonus: string; saveDc: string };
+  onSpellClick?: (spell: string, level: SpellLevelLabel | null) => void;
+}) {
   const { spellGroups, details } = parseSpellLines(lines);
 
   return (
@@ -631,7 +708,19 @@ function SpellPanel({ lines }: { lines?: string[] }) {
             {spellGroups.map((group) => (
               <div className="dnd-spell-group" key={group.label}>
                 <h4>{group.label}</h4>
-                <SheetTable rows={group.spells.map(spellTableRow)} empty="None" />
+                <SheetTable
+                  rows={group.spells.map((spell) => {
+                    const level = spellLevelLabels[group.label] ?? null;
+
+                    return {
+                      ...spellTableRow(spell, level, spellStats),
+                      onClick: onSpellClick
+                        ? () => onSpellClick(spell, level)
+                        : undefined
+                    };
+                  })}
+                  empty="None"
+                />
               </div>
             ))}
           </div>
@@ -699,6 +788,10 @@ export function CharacterSheetOverlay({
   >(() => Object.fromEntries(npcFieldLabels.map((label) => [label, ""])));
   const [npcSaveStatus, setNpcSaveStatus] = useState("");
   const [isSavingNpc, setIsSavingNpc] = useState(false);
+  const [activeSpellDetail, setActiveSpellDetail] = useState<{
+    name: string;
+    level: SpellLevelLabel | null;
+  } | null>(null);
   const sheet = parseCharacterSheet(characterSheet.trim());
   const playerBackstory = extractPlayerBackstory(characterSheet);
   const backstoryParagraphs = formatBackstoryParagraphs(playerBackstory);
@@ -721,7 +814,14 @@ export function CharacterSheetOverlay({
   const currencyLines = sheet.sections.Currency ?? [];
   const proficiencyLines = sheet.sections["Proficiencies and Languages"] ?? [];
   const spells = sheet.sections.Spells ?? [];
+  const spellStats = {
+    attackBonus: spellStatValue(spells, "Spell attack bonus"),
+    saveDc: spellStatValue(spells, "Spell save DC")
+  };
   const dmBrief = sheet.sections["DM Brief"] ?? [];
+  const activeSpellRuleProfile = activeSpellDetail
+    ? spellDetailFor(activeSpellDetail.name, activeSpellDetail.level)
+    : null;
 
   useEffect(() => {
     setActiveTab(initialTab);
@@ -864,7 +964,11 @@ export function CharacterSheetOverlay({
                   <SheetBox label="Hit Dice" value={statValue(sheet, "Hit Dice")} />
                 </div>
                 <AttackPanel lines={attackLines} />
-                <SpellPanel lines={spells} />
+                <SpellPanel
+                  lines={spells}
+                  spellStats={spellStats}
+                  onSpellClick={(name, level) => setActiveSpellDetail({ name, level })}
+                />
                 <LinedPanel title="Equipment" lines={equipmentLines} />
                 <LinedPanel title="Inventory" lines={inventoryLines} />
                 <LinedPanel title="Currency" lines={currencyLines} />
@@ -917,7 +1021,11 @@ export function CharacterSheetOverlay({
             </div>
             <div className="player-resource-grid player-weapons-spells-grid">
               <AttackPanel lines={attackLines} />
-              <SpellPanel lines={spells} />
+              <SpellPanel
+                lines={spells}
+                spellStats={spellStats}
+                onSpellClick={(name, level) => setActiveSpellDetail({ name, level })}
+              />
             </div>
           </section>
         ) : activeTab === "backstory" ? (
@@ -1118,6 +1226,61 @@ export function CharacterSheetOverlay({
               </button>
             </div>
           </div>
+        </div>
+      ) : null}
+
+      {activeSpellDetail && activeSpellRuleProfile ? (
+        <div
+          className="spell-detail-modal-backdrop"
+          role="presentation"
+          onClick={() => setActiveSpellDetail(null)}
+        >
+          <section
+            aria-modal="true"
+            aria-labelledby="spell-detail-modal-title"
+            className="spell-detail-modal"
+            role="dialog"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="spell-detail-modal-header">
+              <div>
+                <span>{activeSpellDetail.level ?? "Spell"}</span>
+                <h2 id="spell-detail-modal-title">{activeSpellDetail.name}</h2>
+              </div>
+              <button
+                type="button"
+                aria-label="Close spell details"
+                onClick={() => setActiveSpellDetail(null)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="spell-detail-modal-body">
+              <p>{activeSpellRuleProfile.description}</p>
+              <section>
+                <h3>Rolls Involved</h3>
+                <p>{activeSpellRuleProfile.rolls}</p>
+              </section>
+            </div>
+            <dl className="spell-detail-meta">
+              <div>
+                <dt>School</dt>
+                <dd>{activeSpellRuleProfile.school}</dd>
+              </div>
+              <div>
+                <dt>Duration</dt>
+                <dd>{activeSpellRuleProfile.duration}</dd>
+              </div>
+              <div>
+                <dt>Casting Time</dt>
+                <dd>{activeSpellRuleProfile.castingTime}</dd>
+              </div>
+              <div>
+                <dt>Range</dt>
+                <dd>{activeSpellRuleProfile.range}</dd>
+              </div>
+            </dl>
+          </section>
         </div>
       ) : null}
     </section>
