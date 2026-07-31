@@ -1595,16 +1595,12 @@ h1 {
     radial-gradient(circle at 50% 18%, rgba(255, 237, 179, 0.12), transparent 52%);
 }
 
-.spell-option-card.selected,
-.spell-option-card:hover,
-.spell-option-card:focus-within {
+.spell-option-card.selected {
   border-color: rgba(244, 207, 122, 0.72);
   box-shadow: 0 14px 32px rgba(0, 0, 0, 0.2);
 }
 
-.spell-option-card.selected::after,
-.spell-option-card:hover::after,
-.spell-option-card:focus-within::after {
+.spell-option-card.selected::after {
   background:
     linear-gradient(90deg, rgba(173, 71, 43, 0.2), transparent),
     linear-gradient(180deg, rgba(10, 7, 5, 0.46), rgba(10, 7, 5, 0.78)),
@@ -3697,15 +3693,41 @@ h1 {
 
 .eldermere-lore-copy {
   display: grid;
-  gap: 14px;
+  gap: 18px;
   color: var(--ink);
 }
 
-.eldermere-lore-copy > p {
+.eldermere-lore-copy p {
   margin: 0;
   color: var(--muted);
   font-size: 0.94rem;
   line-height: 1.55;
+}
+
+.eldermere-lore-section {
+  display: grid;
+  gap: 10px;
+}
+
+.eldermere-lore-section > h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.eldermere-lore-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.eldermere-lore-list li::marker {
+  color: var(--gold-bright);
 }
 
 .eldermere-lore-grid {
@@ -3720,7 +3742,7 @@ h1 {
   background: rgba(250, 235, 199, 0.08);
 }
 
-.eldermere-lore-grid h3 {
+.eldermere-lore-grid h4 {
   margin: 0 0 6px;
   color: var(--gold-bright);
   font-size: 1rem;
@@ -4249,6 +4271,36 @@ h1 {
 .dnd-sheet-table th:nth-child(3),
 .dnd-sheet-table td:nth-child(3) {
   width: 17%;
+}
+
+.dnd-sheet-table button.dnd-sheet-table-action {
+  appearance: none;
+  display: inline;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: var(--gold-bright);
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+  font: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  min-width: 0;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: rgba(244, 207, 122, 0.42);
+  text-underline-offset: 3px;
+}
+
+.dnd-sheet-table button.dnd-sheet-table-action:hover,
+.dnd-sheet-table button.dnd-sheet-table-action:focus-visible {
+  color: var(--gold-bright);
+  background: transparent;
+  box-shadow: none;
+  outline: 1px solid rgba(244, 207, 122, 0.4);
+  outline-offset: 3px;
+  text-decoration-color: currentColor;
 }
 
 .dnd-spell-details {

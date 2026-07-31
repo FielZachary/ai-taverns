@@ -4,6 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import { UserRound, X } from "lucide-react";
 import type { CampaignNpcCard } from "@/lib/campaign-api";
 import {
+  spellDetailFor,
+  spellEffectSummaryFor,
+  type SpellLevelLabel
+} from "@/app/new-adventure/new-adventure-form";
+import {
   extractPlayerBackstory,
   formatBackstoryParagraphs
 } from "./backstory-intro";
@@ -16,6 +21,7 @@ type CharacterSheetOverlayProps = {
   npcCards?: CampaignNpcCard[];
   npcCardsError?: string;
   onClose: () => void;
+  onTabChange?: (tab: PlayerResourcesTab) => void;
   onNpcCardUpdate?: (input: {
     npcCardId: string;
     markdown: string;
@@ -33,6 +39,7 @@ type SheetTableRow = {
   range: string;
   hitDc: string;
   effect: string;
+  onClick?: () => void;
 };
 
 export type PlayerResourcesTab =
@@ -148,6 +155,80 @@ const playerResourceTabs: { id: PlayerResourcesTab; label: string }[] = [
   { id: "backstory", label: "Backstory" },
   { id: "npc_cards", label: "NPC Cards" },
   { id: "eldermere_lore", label: "Eldermere Lore" }
+];
+
+const eldermereCommonLore = [
+  "The Second Dominion left ruins, Old Roads, relics, and dangerous places behind.",
+  "The Graywake shattered that empire roughly 340 years ago and began the long divine silence called the Hush.",
+  "The present age is the Kindling, when omens, dreams, masks, and miracles have started returning.",
+  "Ordinary spellcraft can be taught, but the strongest magic often consumes rare Wellglass scavenged from old ruins.",
+  "Faith matters everywhere, but no god gives plain and reliable instructions."
+];
+
+const eldermereDivineForces = [
+  {
+    name: "The Hearth-Warden",
+    summary:
+      "Home, hospitality, protection, guest-right, and the duties neighbors owe one another."
+  },
+  {
+    name: "The Iron Judge",
+    summary:
+      "Law, oaths, judgment, punishment, duty, and hard promises that must be answered."
+  },
+  {
+    name: "The Deep Currents",
+    summary:
+      "The sea, tides, loss, memory, sailors, drowned places, and what the water keeps."
+  },
+  {
+    name: "The Verdant Choir",
+    summary:
+      "Forests, growth, old life, living roots, green rites, and the will of wild places."
+  },
+  {
+    name: "The Ashen Scholar",
+    summary:
+      "Knowledge, endings, secrets, ash, forbidden ledgers, and dangerous learning."
+  }
+];
+
+const eldermereRegions = [
+  {
+    name: "Cael Ambrose",
+    summary:
+      "A fertile feudal heartland of farms, river towns, Old Roads, guest-right customs, and noble obligations."
+  },
+  {
+    name: "Thornwake Vale",
+    summary:
+      "An old-growth forest confederation ruled by rotating grove-speakers and older green loyalties."
+  },
+  {
+    name: "The Ferrant Concord",
+    summary:
+      "A guild-republic of reclaimed mine tunnels, foundries, volcanic heights, ore, ambition, and hard bargains."
+  },
+  {
+    name: "The Salt Concordat",
+    summary:
+      "A league of port city-states bound by maritime law, fleets, lighthouse holdings, sea faith, and drowned ruins."
+  },
+  {
+    name: "Ashfell Marches",
+    summary:
+      "A proud horse-and-raid clan confederation of high plains, oath-rings, border pressure, and hard hospitality."
+  },
+  {
+    name: "The Veiled Reach",
+    summary:
+      "A magic-poor highland theocracy of austere monasteries, guarded passes, hoarded Wellglass, and forbidden ledgers."
+  },
+  {
+    name: "The Sundered Vale",
+    summary:
+      "A lawless ruin-delving frontier of broken ground, blue fire, unstable claims, and places that never went quiet."
+  }
 ];
 
 const playerResourceTitleIds: Record<PlayerResourcesTab, string> = {
@@ -310,6 +391,14 @@ function listWithoutLabels(lines: string[] = []) {
   return lines.map((line) => line.replace(/^[^:]+:\s*/, "").trim()).filter(Boolean);
 }
 
+function spellStatValue(lines: string[], label: string) {
+  const line = lines.find((spellLine) =>
+    spellLine.toLowerCase().startsWith(`${label.toLowerCase()}:`)
+  );
+
+  return line?.split(":").slice(1).join(":").trim() ?? "";
+}
+
 function parseAttackLine(line: string): SheetTableRow {
   const [rawName = line, rawDetails = ""] = line.split(/:\s(.+)/);
   const detailParts = rawDetails
@@ -336,13 +425,49 @@ function parseAttackLine(line: string): SheetTableRow {
   };
 }
 
-function spellTableRow(name: string): SheetTableRow {
+function spellTableRow(
+  name: string,
+  level: SpellLevelLabel | null,
+  spellStats: { attackBonus: string; saveDc: string }
+): SheetTableRow {
+  const spellDetail = spellDetailFor(name, level);
+  const rollText = spellDetail.rolls;
+
   return {
     name,
-    range: "",
-    hitDc: "",
-    effect: ""
+    range: spellDetail.range,
+    hitDc: spellHitDcForRolls(rollText, spellStats),
+    effect: spellEffectSummaryFor(name)
   };
+}
+
+function spellHitDcForRolls(
+  rolls: string,
+  spellStats: { attackBonus: string; saveDc: string }
+) {
+  if (/^Resolve with your spell save DC or spell attack bonus/i.test(rolls)) {
+    return "Varies";
+  }
+
+  if (/spell attack roll/i.test(rolls)) {
+    return spellStats.attackBonus
+      ? `Spell attack ${spellStats.attackBonus}`
+      : "Spell attack";
+  }
+
+  if (/saving throw|spell save dc/i.test(rolls)) {
+    return spellStats.saveDc ? `DC ${spellStats.saveDc}` : "Spell save DC";
+  }
+
+  if (/no attack roll|usually no attack roll/i.test(rolls)) {
+    return "No attack roll";
+  }
+
+  if (/healing|temporary hit point/i.test(rolls)) {
+    return "Healing roll";
+  }
+
+  return "Varies";
 }
 
 const spellLevels: Record<string, string> = {
@@ -407,6 +532,13 @@ const spellGroupOrder = [
   "Level 9",
   "Other"
 ];
+
+const spellLevelLabels: Record<string, SpellLevelLabel> = {
+  Cantrips: "Cantrip",
+  "Level 1": "1st level",
+  "Level 2": "2nd level",
+  "Level 3": "3rd level"
+};
 
 function parseSpellList(value = "") {
   return value
@@ -516,7 +648,19 @@ function SheetTable({
           {rows.length > 0 ? (
             rows.map((row, index) => (
               <tr key={`${row.name}-${index}`}>
-                <td>{row.name}</td>
+                <td>
+                  {row.onClick ? (
+                    <button
+                      className="dnd-sheet-table-action"
+                      type="button"
+                      onClick={row.onClick}
+                    >
+                      {row.name}
+                    </button>
+                  ) : (
+                    row.name
+                  )}
+                </td>
                 <td>{row.range}</td>
                 <td>{row.hitDc}</td>
                 <td>{row.effect}</td>
@@ -546,7 +690,15 @@ function AttackPanel({ lines }: { lines?: string[] }) {
   );
 }
 
-function SpellPanel({ lines }: { lines?: string[] }) {
+function SpellPanel({
+  lines,
+  spellStats,
+  onSpellClick
+}: {
+  lines?: string[];
+  spellStats: { attackBonus: string; saveDc: string };
+  onSpellClick?: (spell: string, level: SpellLevelLabel | null) => void;
+}) {
   const { spellGroups, details } = parseSpellLines(lines);
 
   return (
@@ -557,7 +709,19 @@ function SpellPanel({ lines }: { lines?: string[] }) {
             {spellGroups.map((group) => (
               <div className="dnd-spell-group" key={group.label}>
                 <h4>{group.label}</h4>
-                <SheetTable rows={group.spells.map(spellTableRow)} empty="None" />
+                <SheetTable
+                  rows={group.spells.map((spell) => {
+                    const level = spellLevelLabels[group.label] ?? null;
+
+                    return {
+                      ...spellTableRow(spell, level, spellStats),
+                      onClick: onSpellClick
+                        ? () => onSpellClick(spell, level)
+                        : undefined
+                    };
+                  })}
+                  empty="None"
+                />
               </div>
             ))}
           </div>
@@ -610,6 +774,7 @@ export function CharacterSheetOverlay({
   npcCards = [],
   npcCardsError = "",
   onClose,
+  onTabChange,
   onNpcCardUpdate
 }: CharacterSheetOverlayProps) {
   const [activeTab, setActiveTab] = useState<PlayerResourcesTab>(initialTab);
@@ -625,6 +790,10 @@ export function CharacterSheetOverlay({
   >(() => Object.fromEntries(npcFieldLabels.map((label) => [label, ""])));
   const [npcSaveStatus, setNpcSaveStatus] = useState("");
   const [isSavingNpc, setIsSavingNpc] = useState(false);
+  const [activeSpellDetail, setActiveSpellDetail] = useState<{
+    name: string;
+    level: SpellLevelLabel | null;
+  } | null>(null);
   const sheet = parseCharacterSheet(characterSheet.trim());
   const playerBackstory = extractPlayerBackstory(characterSheet);
   const backstoryParagraphs = formatBackstoryParagraphs(playerBackstory);
@@ -647,7 +816,14 @@ export function CharacterSheetOverlay({
   const currencyLines = sheet.sections.Currency ?? [];
   const proficiencyLines = sheet.sections["Proficiencies and Languages"] ?? [];
   const spells = sheet.sections.Spells ?? [];
+  const spellStats = {
+    attackBonus: spellStatValue(spells, "Spell attack bonus"),
+    saveDc: spellStatValue(spells, "Spell save DC")
+  };
   const dmBrief = sheet.sections["DM Brief"] ?? [];
+  const activeSpellRuleProfile = activeSpellDetail
+    ? spellDetailFor(activeSpellDetail.name, activeSpellDetail.level)
+    : null;
 
   useEffect(() => {
     setActiveTab(initialTab);
@@ -703,7 +879,10 @@ export function CharacterSheetOverlay({
               key={tab.id}
               role="tab"
               type="button"
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => {
+                setActiveTab(tab.id);
+                onTabChange?.(tab.id);
+              }}
             >
               {tab.label}
             </button>
@@ -790,7 +969,11 @@ export function CharacterSheetOverlay({
                   <SheetBox label="Hit Dice" value={statValue(sheet, "Hit Dice")} />
                 </div>
                 <AttackPanel lines={attackLines} />
-                <SpellPanel lines={spells} />
+                <SpellPanel
+                  lines={spells}
+                  spellStats={spellStats}
+                  onSpellClick={(name, level) => setActiveSpellDetail({ name, level })}
+                />
                 <LinedPanel title="Equipment" lines={equipmentLines} />
                 <LinedPanel title="Inventory" lines={inventoryLines} />
                 <LinedPanel title="Currency" lines={currencyLines} />
@@ -843,7 +1026,11 @@ export function CharacterSheetOverlay({
             </div>
             <div className="player-resource-grid player-weapons-spells-grid">
               <AttackPanel lines={attackLines} />
-              <SpellPanel lines={spells} />
+              <SpellPanel
+                lines={spells}
+                spellStats={spellStats}
+                onSpellClick={(name, level) => setActiveSpellDetail({ name, level })}
+              />
             </div>
           </section>
         ) : activeTab === "backstory" ? (
@@ -930,54 +1117,46 @@ export function CharacterSheetOverlay({
             </div>
             <div className="eldermere-lore-copy">
               <p>
-                Eldermere is a fractured realm where old roads, drowned cities,
-                ashland fortresses, and living forests still remember the age
-                before the sundering.
+                Eldermere is an anchored high-fantasy world built on the bones
+                of the fallen Second Dominion. Old roads, drowned cities,
+                ashland fortresses, living forests, and half-working ruins still
+                shape what ordinary people fear, worship, trade, and fight over.
               </p>
-              <div className="eldermere-lore-grid">
-                <article>
-                  <h3>Cael Ambrose</h3>
-                  <p>
-                    The fertile heartland around Suncross, threaded by roads,
-                    farms, old claims, and noble obligations.
-                  </p>
-                </article>
-                <article>
-                  <h3>Ashfell Marches</h3>
-                  <p>
-                    Grey northern country of border towns, open moor, and
-                    watchful settlements along the Sern.
-                  </p>
-                </article>
-                <article>
-                  <h3>Thornwake Vale</h3>
-                  <p>
-                    A deep green western vale where Sallowholt and Bramblegate
-                    sit beneath older, less forgiving woods.
-                  </p>
-                </article>
-                <article>
-                  <h3>Salt Concordat</h3>
-                  <p>
-                    A sea power of ports, ships, lighthouse holdings, and the
-                    haunted glow of the Drowned City.
-                  </p>
-                </article>
-                <article>
-                  <h3>Cinderspine</h3>
-                  <p>
-                    Ironhold and Cragfoot cling to volcanic heights ruled by
-                    smoke, ore, ambition, and hard bargains.
-                  </p>
-                </article>
-                <article>
-                  <h3>Sundered Vale</h3>
-                  <p>
-                    Broken ground and blue fire around Stakehold and Rimshaft,
-                    where ruin has never gone fully quiet.
-                  </p>
-                </article>
-              </div>
+              <section className="eldermere-lore-section">
+                <h3>Things Most People Know</h3>
+                <ul className="eldermere-lore-list">
+                  {eldermereCommonLore.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </section>
+              <section className="eldermere-lore-section">
+                <h3>The Five Divine Forces</h3>
+                <p>
+                  People worship the gods through household rites, temple
+                  law, sea offerings, grove customs, and guarded scholarship.
+                  The gods speak through signs, not simple orders.
+                </p>
+                <div className="eldermere-lore-grid">
+                  {eldermereDivineForces.map((force) => (
+                    <article key={force.name}>
+                      <h4>{force.name}</h4>
+                      <p>{force.summary}</p>
+                    </article>
+                  ))}
+                </div>
+              </section>
+              <section className="eldermere-lore-section">
+                <h3>Regions at a Glance</h3>
+                <div className="eldermere-lore-grid">
+                  {eldermereRegions.map((region) => (
+                    <article key={region.name}>
+                      <h4>{region.name}</h4>
+                      <p>{region.summary}</p>
+                    </article>
+                  ))}
+                </div>
+              </section>
             </div>
           </section>
         )}
@@ -1052,6 +1231,61 @@ export function CharacterSheetOverlay({
               </button>
             </div>
           </div>
+        </div>
+      ) : null}
+
+      {activeSpellDetail && activeSpellRuleProfile ? (
+        <div
+          className="spell-detail-modal-backdrop"
+          role="presentation"
+          onClick={() => setActiveSpellDetail(null)}
+        >
+          <section
+            aria-modal="true"
+            aria-labelledby="spell-detail-modal-title"
+            className="spell-detail-modal"
+            role="dialog"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="spell-detail-modal-header">
+              <div>
+                <span>{activeSpellDetail.level ?? "Spell"}</span>
+                <h2 id="spell-detail-modal-title">{activeSpellDetail.name}</h2>
+              </div>
+              <button
+                type="button"
+                aria-label="Close spell details"
+                onClick={() => setActiveSpellDetail(null)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="spell-detail-modal-body">
+              <p>{activeSpellRuleProfile.description}</p>
+              <section>
+                <h3>Rolls Involved</h3>
+                <p>{activeSpellRuleProfile.rolls}</p>
+              </section>
+            </div>
+            <dl className="spell-detail-meta">
+              <div>
+                <dt>School</dt>
+                <dd>{activeSpellRuleProfile.school}</dd>
+              </div>
+              <div>
+                <dt>Duration</dt>
+                <dd>{activeSpellRuleProfile.duration}</dd>
+              </div>
+              <div>
+                <dt>Casting Time</dt>
+                <dd>{activeSpellRuleProfile.castingTime}</dd>
+              </div>
+              <div>
+                <dt>Range</dt>
+                <dd>{activeSpellRuleProfile.range}</dd>
+              </div>
+            </dl>
+          </section>
         </div>
       ) : null}
     </section>

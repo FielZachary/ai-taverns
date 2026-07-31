@@ -1,6 +1,14 @@
 "use client";
 
-import { CSSProperties, FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  CSSProperties,
+  FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from "react";
 import {
   Check,
   Dice5,
@@ -29,6 +37,11 @@ import {
 } from "@/lib/campaign-api";
 import { defaultCharacterSheet } from "@/components/playing/PlayerPanel";
 import { DiceRollReveal3D } from "@/components/playing/DiceRollReveal3D";
+import {
+  analyticsGuestId,
+  identifyAnalyticsUser,
+  trackAnalytics
+} from "@/lib/analytics";
 import type {
   EldermereCampaignStart,
   MechanicsSeed,
@@ -73,6 +86,8 @@ type JoinPreview = {
 
 type NewAdventureFormProps = {
   initialInviteToken?: string;
+  userEmail?: string;
+  userId?: string;
 };
 
 const defaultCampaignPreparationMessage = "Preparing your campaign";
@@ -137,7 +152,7 @@ function roomSocketUrl(campaign: CampaignSummary) {
 
   return url.toString();
 }
-type SpellLevelLabel = "Cantrip" | "1st level" | "2nd level" | "3rd level";
+export type SpellLevelLabel = "Cantrip" | "1st level" | "2nd level" | "3rd level";
 type SpellGroup = {
   level: SpellLevelLabel;
   base: string[];
@@ -3443,7 +3458,9 @@ function PreparationLoaderLayout({
 }
 
 export function NewAdventureForm({
-  initialInviteToken = ""
+  initialInviteToken = "",
+  userEmail,
+  userId
 }: NewAdventureFormProps) {
   const normalizedInitialInviteToken = initialInviteToken.trim();
   const [stepIndex, setStepIndex] = useState(
@@ -3523,6 +3540,8 @@ export function NewAdventureForm({
   const [uploadedPortraitFileName, setUploadedPortraitFileName] = useState("");
   const [flowTransition, setFlowTransition] =
     useState<FlowTransitionState>("idle");
+  const stepStartedAtRef = useRef(Date.now());
+  const trackedOnboardingRef = useRef(false);
   const isFlowTransitioning = flowTransition !== "idle";
   const isJoinFlow = mode === "multiplayer" && multiplayerIntent === "join";
   const isCustomGenre = campaignGenre === "custom";
@@ -3921,6 +3940,58 @@ export function NewAdventureForm({
     portraitPreviewDataUrl
   ]);
 
+  const analyticsBaseProperties = useCallback(() => {
+    return {
+      guestId: ownerClientId || analyticsGuestId(),
+      userId,
+      campaignMode: mode,
+      campaignGenre: selectedGenre.label,
+      campaignGenreKind: isCustomGenre ? "custom" : "preset",
+      campaignGenrePresetId: isCustomGenre ? undefined : selectedGenre.id,
+      characterClass,
+      characterSpecies,
+      characterBuildMode,
+      spellCount: selectedSpells.length,
+      skillCount: selectedSkills.length,
+      hasBackstory: Boolean(backstory.trim()),
+      hasCustomWorld: isCustomGenre,
+      hasEldermereStart: Boolean(eldermereStart),
+      equipmentCompleted: isEquipmentSummaryStep || chosenEquipmentGear.length > 0
+    } as const;
+  }, [
+    backstory,
+    characterBuildMode,
+    characterClass,
+    characterSpecies,
+    chosenEquipmentGear.length,
+    eldermereStart,
+    isCustomGenre,
+    isEquipmentSummaryStep,
+    mode,
+    ownerClientId,
+    selectedGenre.id,
+    selectedGenre.label,
+    selectedSkills.length,
+    selectedSpells.length,
+    userId
+  ]);
+
+  function trackStepCompleted() {
+    trackAnalytics({
+      name: "Character Step Completed",
+      properties: {
+        ...analyticsBaseProperties(),
+        step: isCharacterStep ? currentCharacterStep : stepTitle,
+        stepIndex: isCharacterStep ? characterStepIndex : stepIndex,
+        timeSpentSeconds: Math.max(
+          0,
+          Math.round((Date.now() - stepStartedAtRef.current) / 1000)
+        )
+      }
+    });
+    stepStartedAtRef.current = Date.now();
+  }
+
   useEffect(() => {
     setCharacterSheet(characterSheetPreview);
   }, [characterSheetPreview]);
@@ -3937,6 +4008,26 @@ export function NewAdventureForm({
     localStorage.setItem(playerIdStorageKey, nextPlayerId);
     setOwnerClientId(nextPlayerId);
   }, []);
+
+  useEffect(() => {
+    identifyAnalyticsUser({
+      userId,
+      email: userEmail,
+      guestId: ownerClientId || undefined
+    });
+
+    if (!trackedOnboardingRef.current) {
+      trackedOnboardingRef.current = true;
+      trackAnalytics({
+        name: "Onboarding Started",
+        properties: {
+          ...analyticsBaseProperties(),
+          inviteUsed: Boolean(inviteToken),
+          joinSource: inviteToken ? "invite" : undefined
+        }
+      });
+    }
+  }, [analyticsBaseProperties, inviteToken, ownerClientId, userEmail, userId]);
 
   useEffect(() => {
     if (
@@ -4481,6 +4572,15 @@ export function NewAdventureForm({
       source: isInviteJoinFlow ? "invite" : "code",
       hasBegun: "hasBegun" in data ? data.hasBegun : false
     });
+    trackAnalytics({
+      name: "Campaign Invite Previewed",
+      properties: {
+        ...analyticsBaseProperties(),
+        joinSource: isInviteJoinFlow ? "invite" : "code",
+        hasBegun: "hasBegun" in data ? data.hasBegun : false,
+        availableSlots: data.availableSlots
+      }
+    });
   }
 
   function transitionFlow(updateFlow: () => void) {
@@ -4529,6 +4629,8 @@ export function NewAdventureForm({
       );
       return;
     }
+
+    trackStepCompleted();
 
     if (isJoinFlow && isCampaignDetailsStep) {
       try {
@@ -4591,6 +4693,7 @@ export function NewAdventureForm({
     }
 
     setError("");
+    stepStartedAtRef.current = Date.now();
 
     if (isEquipmentCharacterStep && equipmentChoiceStepIndex > 0) {
       transitionFlow(() =>
@@ -4620,7 +4723,7 @@ export function NewAdventureForm({
       return createdCampaign;
     }
 
-    return createCampaignViaApi({
+    const campaign = await createCampaignViaApi({
       mode,
       title: campaignDisplayName,
       campaignGenre: selectedGenre.label,
@@ -4642,6 +4745,29 @@ export function NewAdventureForm({
         ? { eldermereStart }
         : {})
     });
+
+    trackAnalytics({
+      name: "Character Created",
+      properties: {
+        ...analyticsBaseProperties(),
+        campaignId: campaign.id,
+        campaignMode: campaign.mode,
+        hasPortrait: Boolean(campaign.portraitUrl),
+        equipmentCompleted: true
+      },
+      milestones: ["campaign_created_or_joined", "character_completed"]
+    });
+    trackAnalytics({
+      name: "Campaign Created",
+      properties: {
+        ...analyticsBaseProperties(),
+        campaignId: campaign.id,
+        campaignMode: campaign.mode,
+        hasPortrait: Boolean(campaign.portraitUrl)
+      }
+    });
+
+    return campaign;
   }
 
   async function createCharacterArt() {
@@ -4653,6 +4779,13 @@ export function NewAdventureForm({
     setIsCreatingArt(true);
     setPortraitPreviewDataUrl("");
     setUploadedPortraitFileName("");
+    trackAnalytics({
+      name: "Character Portrait Requested",
+      properties: {
+        ...analyticsBaseProperties(),
+        portraitSource: "generated"
+      }
+    });
   }
 
   function readImageFileAsDataUrl(file: File) {
@@ -4688,6 +4821,15 @@ export function NewAdventureForm({
       setPortraitPreviewDataUrl(imageDataUrl);
       setUploadedPortraitFileName(file.name);
       setIsCreatingArt(false);
+      trackAnalytics({
+        name: "Character Portrait Uploaded",
+        properties: {
+          ...analyticsBaseProperties(),
+          hasPortrait: true,
+          portraitSource: "upload"
+        },
+        milestones: ["portrait_added"]
+      });
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -4762,6 +4904,17 @@ export function NewAdventureForm({
           guidelines: characterArtGuidelines,
           artStyle: characterArtStyle
         });
+        trackAnalytics({
+          name: "Character Portrait Uploaded",
+          properties: {
+            ...analyticsBaseProperties(),
+            campaignId: campaign.id,
+            campaignMode: campaign.mode,
+            hasPortrait: true,
+            portraitSource: "upload"
+          },
+          milestones: ["portrait_added"]
+        });
       } else if (!portraitPreviewDataUrl) {
         setIsCreatingArt(true);
         await generateCharacterPortrait(campaign.id, {
@@ -4769,6 +4922,15 @@ export function NewAdventureForm({
           artStyle: characterArtStyle,
           imageModel: characterImageModel,
           background: true
+        });
+        trackAnalytics({
+          name: "Character Portrait Requested",
+          properties: {
+            ...analyticsBaseProperties(),
+            campaignId: campaign.id,
+            campaignMode: campaign.mode,
+            portraitSource: "generated"
+          }
         });
       }
 
@@ -4808,6 +4970,28 @@ export function NewAdventureForm({
             gameCode: normalizedGameCode,
             ...joinPayload
           });
+      trackAnalytics({
+        name: "Character Created",
+        properties: {
+          ...analyticsBaseProperties(),
+          campaignId: campaign.id,
+          campaignMode: campaign.mode,
+          joinSource: isInviteJoinFlow ? "invite" : "code",
+          inviteUsed: isInviteJoinFlow,
+          equipmentCompleted: true
+        },
+        milestones: ["campaign_created_or_joined", "character_completed"]
+      });
+      trackAnalytics({
+        name: "Campaign Joined",
+        properties: {
+          ...analyticsBaseProperties(),
+          campaignId: campaign.id,
+          campaignMode: campaign.mode,
+          joinSource: isInviteJoinFlow ? "invite" : "code",
+          inviteUsed: isInviteJoinFlow
+        }
+      });
 
       window.location.assign(
         `/play?campaignId=${encodeURIComponent(campaign.id)}`
@@ -4880,7 +5064,17 @@ export function NewAdventureForm({
                     } as CSSProperties
                   }
                   aria-pressed={mode === "single_player"}
-                  onClick={() => setMode("single_player")}
+                  onClick={() => {
+                    setMode("single_player");
+                    trackAnalytics({
+                      name: "Campaign Mode Selected",
+                      properties: {
+                        ...analyticsBaseProperties(),
+                        mode: "single_player",
+                        campaignMode: "single_player"
+                      }
+                    });
+                  }}
                 >
                   <span className="mode-banner-frame" aria-hidden="true" />
                   <span>
@@ -4898,7 +5092,17 @@ export function NewAdventureForm({
                     } as CSSProperties
                   }
                   aria-pressed={mode === "multiplayer"}
-                  onClick={() => setMode("multiplayer")}
+                  onClick={() => {
+                    setMode("multiplayer");
+                    trackAnalytics({
+                      name: "Campaign Mode Selected",
+                      properties: {
+                        ...analyticsBaseProperties(),
+                        mode: "multiplayer",
+                        campaignMode: "multiplayer"
+                      }
+                    });
+                  }}
                 >
                   <span className="mode-banner-frame" aria-hidden="true" />
                   <span>
@@ -4917,7 +5121,16 @@ export function NewAdventureForm({
                   type="button"
                   className={multiplayerIntent === "create" ? "selected" : ""}
                   aria-pressed={multiplayerIntent === "create"}
-                  onClick={() => setMultiplayerIntent("create")}
+                  onClick={() => {
+                    setMultiplayerIntent("create");
+                    trackAnalytics({
+                      name: "Multiplayer Intent Selected",
+                      properties: {
+                        ...analyticsBaseProperties(),
+                        multiplayerIntent: "create"
+                      }
+                    });
+                  }}
                 >
                   <strong>Create Game</strong>
                   <small>Start a new table and share its game code.</small>
@@ -4926,7 +5139,16 @@ export function NewAdventureForm({
                   type="button"
                   className={multiplayerIntent === "join" ? "selected" : ""}
                   aria-pressed={multiplayerIntent === "join"}
-                  onClick={() => setMultiplayerIntent("join")}
+                  onClick={() => {
+                    setMultiplayerIntent("join");
+                    trackAnalytics({
+                      name: "Multiplayer Intent Selected",
+                      properties: {
+                        ...analyticsBaseProperties(),
+                        multiplayerIntent: "join"
+                      }
+                    });
+                  }}
                 >
                   <strong>Join Game</strong>
                   <small>Enter a code, build your character, and join the table.</small>
@@ -4989,6 +5211,18 @@ export function NewAdventureForm({
                       onClick={() => {
                         setCampaignGenre(genre.id);
                         setEldermereStart(null);
+                        trackAnalytics({
+                          name: "Campaign World Selected",
+                          properties: {
+                            ...analyticsBaseProperties(),
+                            campaignGenre: genre.label,
+                            campaignGenreKind:
+                              genre.id === "custom" ? "custom" : "preset",
+                            campaignGenrePresetId:
+                              genre.id === "custom" ? undefined : genre.id,
+                            hasCustomWorld: genre.id === "custom"
+                          }
+                        });
                       }}
                       style={
                         {
@@ -5040,6 +5274,13 @@ export function NewAdventureForm({
                         onClick={() => {
                           setCharacterBuildMode("quick");
                           applyQuickBuildDefaults();
+                          trackAnalytics({
+                            name: "Character Creation Started",
+                            properties: {
+                              ...analyticsBaseProperties(),
+                              characterBuildMode: "quick"
+                            }
+                          });
                         }}
                       >
                         <strong>Quick Build</strong>
@@ -5052,6 +5293,13 @@ export function NewAdventureForm({
                         onClick={() => {
                           setCharacterBuildMode("custom");
                           applyCustomBuildDefaults();
+                          trackAnalytics({
+                            name: "Character Creation Started",
+                            properties: {
+                              ...analyticsBaseProperties(),
+                              characterBuildMode: "custom"
+                            }
+                          });
                         }}
                       >
                         <strong>Custom Build</strong>
@@ -5071,7 +5319,17 @@ export function NewAdventureForm({
                           className={characterClass === option.id ? "selected" : ""}
                           aria-pressed={characterClass === option.id}
                           key={option.id}
-                          onClick={() => handleClassChange(option.id)}
+                          onClick={() => {
+                            handleClassChange(option.id);
+                            trackAnalytics({
+                              name: "Character Step Completed",
+                              properties: {
+                                ...analyticsBaseProperties(),
+                                step: "Class",
+                                characterClass: option.id
+                              }
+                            });
+                          }}
                           style={
                             {
                               "--class-art-url": `url(${classArtByClass[option.id]})`
@@ -5096,7 +5354,17 @@ export function NewAdventureForm({
                           className={characterSpecies === option ? "selected" : ""}
                           aria-pressed={characterSpecies === option}
                           key={option}
-                          onClick={() => setCharacterSpecies(option)}
+                          onClick={() => {
+                            setCharacterSpecies(option);
+                            trackAnalytics({
+                              name: "Character Step Completed",
+                              properties: {
+                                ...analyticsBaseProperties(),
+                                step: "Species",
+                                characterSpecies: option
+                              }
+                            });
+                          }}
                           style={
                             {
                               "--species-art-url": `url(${speciesArtBySpecies[option]})`

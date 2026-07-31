@@ -42,7 +42,17 @@ const ConfigSchema = z.object({
   SPACES_ACCESS_KEY_ID: z.string().min(1).optional(),
   SPACES_SECRET_ACCESS_KEY: z.string().min(1).optional(),
   DIGITALOCEAN_SPACES_ACCESS_KEY: z.string().min(1).optional(),
-  DIGITALOCEAN_SPACES_SECRET_KEY: z.string().min(1).optional()
+  DIGITALOCEAN_SPACES_SECRET_KEY: z.string().min(1).optional(),
+  MIXPANEL_PROJECT_TOKEN: z.string().min(1).optional(),
+  MIXPANEL_PROJECT_ID: z.string().min(1).default("4049394"),
+  MIXPANEL_ENABLED: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((value) => (value === undefined ? undefined : value === "true")),
+  MIXPANEL_DEBUG: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((value) => (value === undefined ? undefined : value === "true"))
 });
 
 export type ApiConfig = {
@@ -72,6 +82,10 @@ export type ApiConfig = {
   spacesBucket: string | undefined;
   spacesAccessKeyId: string | undefined;
   spacesSecretAccessKey: string | undefined;
+  mixpanelProjectToken: string | undefined;
+  mixpanelProjectId: string;
+  mixpanelEnabled: boolean;
+  mixpanelDebug: boolean;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
@@ -115,6 +129,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     spacesAccessKeyId:
       parsed.SPACES_ACCESS_KEY_ID ?? parsed.DIGITALOCEAN_SPACES_ACCESS_KEY,
     spacesSecretAccessKey:
-      parsed.SPACES_SECRET_ACCESS_KEY ?? parsed.DIGITALOCEAN_SPACES_SECRET_KEY
+      parsed.SPACES_SECRET_ACCESS_KEY ?? parsed.DIGITALOCEAN_SPACES_SECRET_KEY,
+    mixpanelProjectToken: parsed.MIXPANEL_PROJECT_TOKEN,
+    mixpanelProjectId: parsed.MIXPANEL_PROJECT_ID,
+    mixpanelEnabled:
+      parsed.MIXPANEL_ENABLED ?? Boolean(parsed.MIXPANEL_PROJECT_TOKEN),
+    mixpanelDebug: parsed.MIXPANEL_DEBUG ?? false
   };
 }

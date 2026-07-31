@@ -57,8 +57,9 @@ Dagger: thrown 20/60 ft, +5 to hit, 1d4+3 piercing
 
 Spells
 Cantrips: Mage Hand, Fire Bolt
-Known / Prepared: Shield, Misty Step
+Known / Prepared: Shield, Misty Step, Web
 Spell save DC: 13
+Spell attack bonus: +5
 
 Equipment
 Leather armor
@@ -133,12 +134,30 @@ describe("CharacterSheetOverlay", () => {
     expect(within(dialog).getByText("1d6+3 piercing")).toBeInTheDocument();
     expect(within(dialog).getByRole("heading", { name: "Cantrips" })).toBeInTheDocument();
     expect(within(dialog).getByText("Mage Hand")).toBeInTheDocument();
+    expect(within(dialog).getByText("120 feet")).toBeInTheDocument();
+    expect(within(dialog).getByText("Spell attack +5")).toBeInTheDocument();
     expect(within(dialog).getByRole("heading", { name: "Level 1" })).toBeInTheDocument();
+    expect(within(dialog).getAllByText("No attack roll").length).toBeGreaterThan(0);
+    expect(within(dialog).getAllByText("DC 13").length).toBeGreaterThan(0);
     expect(within(dialog).getByRole("heading", { name: "Level 2" })).toBeInTheDocument();
     expect(within(dialog).getByText("Spell save DC: 13")).toBeInTheDocument();
     expect(within(dialog).getByText("Brass key")).toBeInTheDocument();
     expect(within(dialog).getByText("Always maps the exits.")).toBeInTheDocument();
     expect(within(dialog).getByText("Secret heir to the moon court.")).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Mage Hand" }));
+
+    const spellDialog = screen.getByRole("dialog", { name: "Mage Hand" });
+
+    expect(within(spellDialog).getByText("Cantrip")).toBeInTheDocument();
+    expect(within(spellDialog).getByText("Rolls Involved")).toBeInTheDocument();
+    expect(within(spellDialog).getByText("Range")).toBeInTheDocument();
+
+    fireEvent.click(
+      within(spellDialog).getByRole("button", { name: /close spell details/i })
+    );
+
+    expect(screen.queryByRole("dialog", { name: "Mage Hand" })).not.toBeInTheDocument();
 
     fireEvent.click(within(dialog).getByRole("button", { name: /close player resources/i }));
 
@@ -199,6 +218,15 @@ None
     ).toBeInTheDocument();
     expect(within(weaponsPanel).getByText("Mage Hand")).toBeInTheDocument();
     expect(within(weaponsPanel).getByText("Misty Step")).toBeInTheDocument();
+    expect(within(weaponsPanel).getAllByText("Self").length).toBeGreaterThan(0);
+    expect(within(weaponsPanel).getAllByText("No attack roll").length).toBeGreaterThan(0);
+
+    fireEvent.click(within(weaponsPanel).getByRole("button", { name: "Misty Step" }));
+
+    const spellDialog = screen.getByRole("dialog", { name: "Misty Step" });
+
+    expect(within(spellDialog).getByText("2nd level")).toBeInTheDocument();
+    expect(within(spellDialog).getByText("Casting Time")).toBeInTheDocument();
   });
 
   it("renders NPC cards from context chunks and opens editable NPC fields", async () => {
@@ -307,5 +335,22 @@ None
       within(backstoryPanel).getByText(/You were born in the Ashfell Marches/)
     ).toBeInTheDocument();
     expect(within(backstoryPanel).queryByText("World Terms")).not.toBeInTheDocument();
+  });
+
+  it("shows a player-safe Eldermere lore primer with gods and canonical regions", () => {
+    renderCharacterSheetOverlay({
+      initialTab: "eldermere_lore"
+    });
+
+    const lorePanel = screen.getByRole("region", { name: "Eldermere Lore" });
+
+    expect(within(lorePanel).getByText(/fallen Second Dominion/)).toBeInTheDocument();
+    expect(within(lorePanel).getByText(/the long divine silence called the Hush/)).toBeInTheDocument();
+    expect(within(lorePanel).getByText("The Five Divine Forces")).toBeInTheDocument();
+    expect(within(lorePanel).getByText("The Hearth-Warden")).toBeInTheDocument();
+    expect(within(lorePanel).getByText("The Ashen Scholar")).toBeInTheDocument();
+    expect(within(lorePanel).getByText("The Ferrant Concord")).toBeInTheDocument();
+    expect(within(lorePanel).getByText("The Veiled Reach")).toBeInTheDocument();
+    expect(within(lorePanel).queryByText("Cinderspine")).not.toBeInTheDocument();
   });
 });
