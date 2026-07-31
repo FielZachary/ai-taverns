@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   ApiErrorResponseSchema,
+  AnalyticsEventSchema,
   AuthClaimGuestStateRequestSchema,
   AuthClaimGuestStateResponseSchema,
   AuthMeResponseSchema,
@@ -35,7 +36,9 @@ import {
   RoomRealtimeEventSchema,
   RoomSocketEventSchema,
   RoomSnapshotSchema,
-  RoomSubmitRequestSchema
+  RoomSubmitRequestSchema,
+  hookSnapshotForMetrics,
+  hookStageForScore
 } from "./index.js";
 
 test("health contract accepts the API health response", () => {
@@ -509,4 +512,62 @@ test("DM provider contracts accept turn and prep payloads", () => {
   assert.equal(request.history?.[0]?.role, "player");
   assert.equal(prep.ownerClientId, "client-1");
   assert.equal(response.message.role, "dm");
+});
+
+test("hook scoring derives stable activation stages", () => {
+  assert.equal(hookStageForScore(0), "visitor");
+  assert.equal(hookStageForScore(25), "activated");
+  assert.equal(hookStageForScore(50), "engaged");
+  assert.equal(hookStageForScore(75), "hooked");
+
+  const snapshot = hookSnapshotForMetrics([
+    "campaign_created_or_joined",
+    "character_completed",
+    "first_player_message",
+    "five_player_messages",
+    "returned_after_24h"
+  ]);
+
+  assert.equal(snapshot.score, 80);
+  assert.equal(snapshot.stage, "hooked");
+  assert.equal(snapshot.isHooked, true);
+  assert.deepEqual(
+    snapshot.deltas.map((delta) => delta.metric),
+    [
+      "campaign_created_or_joined",
+      "character_completed",
+      "first_player_message",
+      "five_player_messages",
+      "returned_after_24h"
+    ]
+  );
+});
+
+test("analytics event contract accepts hook enrichment", () => {
+  const event = AnalyticsEventSchema.parse({
+    name: "Player Message Sent",
+    properties: {
+      app: "ai-taverns",
+      schemaVersion: 1,
+      source: "web",
+      distinctId: "guest-1",
+      guestId: "guest-1",
+      campaignId: "00000000-0000-4000-8000-000000000001",
+      campaignMode: "single_player",
+      playerMessageCount: 5,
+      hookScore: 80,
+      hookStage: "hooked",
+      isHooked: true,
+      hookDeltas: [
+        {
+          metric: "five_player_messages",
+          points: 20
+        }
+      ]
+    }
+  });
+
+  assert.equal(event.name, "Player Message Sent");
+  assert.equal(event.properties.hookStage, "hooked");
+  assert.equal(event.properties.hookDeltas?.[0]?.metric, "five_player_messages");
 });

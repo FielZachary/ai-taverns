@@ -19,5 +19,11 @@ export default async function PlayPage({ searchParams }: PlayPageProps) {
     redirect(`/login?next=${encodeURIComponent(next)}`);
   }
 
-  return <GameShell initialCampaignId={campaignId} userEmail={user.email} />;
+  return (
+    <GameShell
+      initialCampaignId={campaignId}
+      userEmail={user.email}
+      userId={user.id}
+    />
+  );
 }

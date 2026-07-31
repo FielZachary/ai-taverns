@@ -26,9 +26,11 @@ import {
   upsertUserByEmail
 } from "@ai-dnd/db";
 import type { ApiConfig } from "../config.js";
+import type { ServerAnalytics } from "../analytics.js";
 
 export type AuthRouteOptions = {
   config: ApiConfig;
+  analytics?: ServerAnalytics;
 };
 
 function hashToken(token: string): string {
@@ -321,7 +323,7 @@ export async function registerAuthRoutes(
   fastify: FastifyInstance,
   options: AuthRouteOptions
 ) {
-  const { config } = options;
+  const { config, analytics } = options;
 
   fastify.get("/auth/google/start", async (request, reply) => {
     const credentials = requireGoogleOAuthConfig(config);
@@ -415,6 +417,25 @@ export async function registerAuthRoutes(
         sessionToken,
         sessionCookieOptions(config, session.expiresAt)
       );
+      analytics?.identify({
+        distinctId: `user:${user.id}`,
+        properties: {
+          $email: user.email,
+          displayName: user.displayName,
+          authProvider: "google"
+        },
+        setOnce: {
+          firstSeenAt: now.toISOString()
+        }
+      });
+      analytics?.track({
+        name: "User Signed In",
+        distinctId: `user:${user.id}`,
+        properties: {
+          userId: user.id,
+          authProvider: "google"
+        }
+      });
 
       return reply.redirect(
         new URL(stateCookie.nextPath ?? "/play", config.authPublicAppOrigin).toString()
@@ -506,6 +527,25 @@ export async function registerAuthRoutes(
         sessionToken,
         sessionCookieOptions(config, sessionExpiresAt)
       );
+      analytics?.identify({
+        distinctId: `user:${user.id}`,
+        properties: {
+          $email: user.email,
+          displayName: user.displayName,
+          authProvider: "passwordless"
+        },
+        setOnce: {
+          firstSeenAt: now.toISOString()
+        }
+      });
+      analytics?.track({
+        name: "User Signed In",
+        distinctId: `user:${user.id}`,
+        properties: {
+          userId: user.id,
+          authProvider: "passwordless"
+        }
+      });
 
       const response = {
         authenticated: true,

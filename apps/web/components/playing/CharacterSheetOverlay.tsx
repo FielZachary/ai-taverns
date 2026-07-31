@@ -21,6 +21,7 @@ type CharacterSheetOverlayProps = {
   npcCards?: CampaignNpcCard[];
   npcCardsError?: string;
   onClose: () => void;
+  onTabChange?: (tab: PlayerResourcesTab) => void;
   onNpcCardUpdate?: (input: {
     npcCardId: string;
     markdown: string;
@@ -773,6 +774,7 @@ export function CharacterSheetOverlay({
   npcCards = [],
   npcCardsError = "",
   onClose,
+  onTabChange,
   onNpcCardUpdate
 }: CharacterSheetOverlayProps) {
   const [activeTab, setActiveTab] = useState<PlayerResourcesTab>(initialTab);
@@ -877,7 +879,10 @@ export function CharacterSheetOverlay({
               key={tab.id}
               role="tab"
               type="button"
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => {
+                setActiveTab(tab.id);
+                onTabChange?.(tab.id);
+              }}
             >
               {tab.label}
             </button>
