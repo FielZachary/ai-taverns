@@ -100,14 +100,23 @@ jobs:
       - name: Upload deployment archive
         run: |
           set -euo pipefail
-          scp -i ~/.ssh/production_deploy_key -P "$SSH_PORT" \
+          scp \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=20 \
+            -i ~/.ssh/production_deploy_key \
+            -P "$SSH_PORT" \
             "/tmp/ai-taverns-${GITHUB_SHA}.tar.gz" \
             "$SSH_USER@${{ secrets.PRODUCTION_SSH_HOST }}:/tmp/ai-taverns-${GITHUB_SHA}.tar.gz"
 
       - name: Rebuild production stack
         run: |
           set -euo pipefail
-          ssh -i ~/.ssh/production_deploy_key -p "$SSH_PORT" "$SSH_USER@${{ secrets.PRODUCTION_SSH_HOST }}" \
+          ssh \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=20 \
+            -i ~/.ssh/production_deploy_key \
+            -p "$SSH_PORT" \
+            "$SSH_USER@${{ secrets.PRODUCTION_SSH_HOST }}" \
             "SHA='$GITHUB_SHA' DEPLOY_PATH='$DEPLOY_PATH' PRODUCTION_ORIGIN='$PRODUCTION_ORIGIN' bash -s" <<'REMOTE'
           set -euo pipefail
 
@@ -130,11 +139,13 @@ jobs:
           cp -a "$release"/. "$DEPLOY_PATH"/
 
           cd "$DEPLOY_PATH"
-          docker build \
+          BUILDKIT_PROGRESS=plain docker build \
+            --progress=plain \
             --file infra/docker/api.Dockerfile \
             --tag infra-api \
             .
-          docker build \
+          BUILDKIT_PROGRESS=plain docker build \
+            --progress=plain \
             --file infra/docker/web.Dockerfile \
             --tag infra-web \
             .
