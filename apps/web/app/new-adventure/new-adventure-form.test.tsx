@@ -42,6 +42,14 @@ vi.mock("@/lib/campaign-api", () => ({
   uploadCharacterPortrait: uploadCharacterPortraitMock
 }));
 
+vi.mock("@/components/playing/DiceRollReveal3D", () => ({
+  DiceRollReveal3D: ({ onComplete }: { onComplete: () => void }) => (
+    <button type="button" onClick={onComplete}>
+      Finish stat roll
+    </button>
+  )
+}));
+
 async function finishFlowTransition() {
   await act(async () => {
     vi.advanceTimersByTime(480);
@@ -294,6 +302,37 @@ describe("NewAdventureForm", () => {
     expect(
       screen.getByRole("heading", { name: /choose your species/i })
     ).toBeInTheDocument();
+  });
+
+  it("lets each rolled stat score be rerolled once", async () => {
+    render(<NewAdventureForm />);
+
+    await continueFlow();
+    await continueFlow();
+    await nextCharacterStep();
+    await nextCharacterStep();
+    await nextCharacterStep();
+
+    const rollScores = screen.getByRole("button", { name: "Roll Scores" });
+
+    fireEvent.click(rollScores);
+    fireEvent.click(screen.getByRole("button", { name: "Finish stat roll" }));
+
+    expect(screen.getByRole("button", { name: "Roll Scores" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /reroll score 1/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /reroll score 2/i })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: /reroll score 1/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Finish stat roll" }));
+
+    expect(screen.getByRole("button", { name: /reroll score 1/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /reroll score 2/i })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: /reroll score 2/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Finish stat roll" }));
+
+    expect(screen.getByRole("button", { name: /reroll score 2/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /reroll score 3/i })).toBeEnabled();
   });
 
   it("renders class cards with class artwork backgrounds", async () => {

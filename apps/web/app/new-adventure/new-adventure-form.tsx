@@ -3482,6 +3482,9 @@ export function NewAdventureForm({
     ...emptyStatRollAssignments
   });
   const [activeStatRoll, setActiveStatRoll] = useState<ActiveStatRoll | null>(null);
+  const [rerolledStatRollIndexes, setRerolledStatRollIndexes] = useState<
+    Set<number>
+  >(new Set());
   const [statGenerationMode, setStatGenerationMode] =
     useState<StatGenerationMode>("roll");
   const [subclass, setSubclass] = useState("Champion");
@@ -3580,6 +3583,11 @@ export function NewAdventureForm({
   const areAllStatsRolled = abilityDefinitions.every(
     ({ key }) => abilityScores[key] !== null
   );
+  const hasStartedStatRolls = statRollValues.some((value) => value !== null);
+  const areAllStatRollValuesFilled = statRollValues.every(
+    (value) => value !== null
+  );
+  const canRollAllStats = !activeStatRoll && !hasStartedStatRolls;
   const assignedStatRollIndexes = useMemo(
     () =>
       new Set(
@@ -4178,6 +4186,7 @@ export function NewAdventureForm({
     setAbilityScores({ ...emptyAbilityScores });
     setStatRollValues([...emptyStatRollValues]);
     setStatRollAssignments({ ...emptyStatRollAssignments });
+    setRerolledStatRollIndexes(new Set());
     setSubclass(selectedClass.subclassOptions[0]);
     setClassFeatureChoice(selectedClass.featureOptions[0]);
     setSelectedSkills([...selectedClass.defaultSkills] as SkillName[]);
@@ -4195,17 +4204,19 @@ export function NewAdventureForm({
     setAbilityScores({ ...emptyAbilityScores });
     setStatRollValues([...emptyStatRollValues]);
     setStatRollAssignments({ ...emptyStatRollAssignments });
+    setRerolledStatRollIndexes(new Set());
     setEquipmentSelections({});
     setEquipmentChoiceStepIndex(0);
     setActiveEquipmentModal(null);
   }
 
   function rollAllStats() {
-    if (activeStatRoll) {
+    if (!canRollAllStats) {
       return;
     }
 
     setStatGenerationMode("roll");
+    setRerolledStatRollIndexes(new Set());
     const statRolls = abilityDefinitions.map(() => rollFourD6DropLowest());
     const values = statRolls.map((statRoll) => statRoll.total);
     const animationRolls = statRolls.flatMap((statRoll) => statRoll.rolls).slice(0, 8);
@@ -4223,6 +4234,23 @@ export function NewAdventureForm({
   function rollStatPoolValue(index: number) {
     if (activeStatRoll) {
       return;
+    }
+
+    const isReroll = statRollValues[index] !== null;
+
+    if (
+      isReroll &&
+      (!areAllStatRollValuesFilled || rerolledStatRollIndexes.has(index))
+    ) {
+      return;
+    }
+
+    if (isReroll) {
+      setRerolledStatRollIndexes((currentIndexes) => {
+        const nextIndexes = new Set(currentIndexes);
+        nextIndexes.add(index);
+        return nextIndexes;
+      });
     }
 
     setStatGenerationMode("roll");
@@ -4309,6 +4337,7 @@ export function NewAdventureForm({
     setAbilityScores({ ...pointBuyDefaultScores });
     setStatRollValues([...emptyStatRollValues]);
     setStatRollAssignments({ ...emptyStatRollAssignments });
+    setRerolledStatRollIndexes(new Set());
   }
 
   function switchToRollScores() {
@@ -4320,6 +4349,7 @@ export function NewAdventureForm({
     setAbilityScores({ ...emptyAbilityScores });
     setStatRollValues([...emptyStatRollValues]);
     setStatRollAssignments({ ...emptyStatRollAssignments });
+    setRerolledStatRollIndexes(new Set());
   }
 
   function updatePointBuyScore(key: AbilityKey, change: -1 | 1) {
@@ -5137,8 +5167,8 @@ export function NewAdventureForm({
                           type="button"
                           className="stat-mode-button"
                           disabled={
-                            Boolean(activeStatRoll) ||
-                            statGenerationMode === "point_buy"
+                            statGenerationMode === "point_buy" ||
+                            !canRollAllStats
                           }
                           onClick={rollAllStats}
                         >
@@ -5152,6 +5182,11 @@ export function NewAdventureForm({
                         {abilityDefinitions.map((ability, index) => {
                           const value = statRollValues[index];
                           const isAssigned = assignedStatRollIndexes.has(index);
+                          const canRollScore =
+                            !activeStatRoll &&
+                            (value === null ||
+                              (areAllStatRollValuesFilled &&
+                                !rerolledStatRollIndexes.has(index)));
 
                           return (
                             <div
@@ -5161,8 +5196,10 @@ export function NewAdventureForm({
                               <button
                                 type="button"
                                 className="stat-roll-pool-button"
-                                aria-label={`Roll score ${index + 1}`}
-                                disabled={Boolean(activeStatRoll)}
+                                aria-label={`${
+                                  value === null ? "Roll" : "Reroll"
+                                } score ${index + 1}`}
+                                disabled={!canRollScore}
                                 onClick={() => rollStatPoolValue(index)}
                               >
                                 <Dice5 size={16} />
