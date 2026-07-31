@@ -5,6 +5,7 @@ import { UserRound, X } from "lucide-react";
 import type { CampaignNpcCard } from "@/lib/campaign-api";
 import {
   spellDetailFor,
+  spellEffectSummaryFor,
   type SpellLevelLabel
 } from "@/app/new-adventure/new-adventure-form";
 import {
@@ -315,6 +316,14 @@ function listWithoutLabels(lines: string[] = []) {
   return lines.map((line) => line.replace(/^[^:]+:\s*/, "").trim()).filter(Boolean);
 }
 
+function spellStatValue(lines: string[], label: string) {
+  const line = lines.find((spellLine) =>
+    spellLine.toLowerCase().startsWith(`${label.toLowerCase()}:`)
+  );
+
+  return line?.split(":").slice(1).join(":").trim() ?? "";
+}
+
 function parseAttackLine(line: string): SheetTableRow {
   const [rawName = line, rawDetails = ""] = line.split(/:\s(.+)/);
   const detailParts = rawDetails
@@ -341,13 +350,49 @@ function parseAttackLine(line: string): SheetTableRow {
   };
 }
 
-function spellTableRow(name: string): SheetTableRow {
+function spellTableRow(
+  name: string,
+  level: SpellLevelLabel | null,
+  spellStats: { attackBonus: string; saveDc: string }
+): SheetTableRow {
+  const spellDetail = spellDetailFor(name, level);
+  const rollText = spellDetail.rolls;
+
   return {
     name,
-    range: "",
-    hitDc: "",
-    effect: ""
+    range: spellDetail.range,
+    hitDc: spellHitDcForRolls(rollText, spellStats),
+    effect: spellEffectSummaryFor(name)
   };
+}
+
+function spellHitDcForRolls(
+  rolls: string,
+  spellStats: { attackBonus: string; saveDc: string }
+) {
+  if (/^Resolve with your spell save DC or spell attack bonus/i.test(rolls)) {
+    return "Varies";
+  }
+
+  if (/spell attack roll/i.test(rolls)) {
+    return spellStats.attackBonus
+      ? `Spell attack ${spellStats.attackBonus}`
+      : "Spell attack";
+  }
+
+  if (/saving throw|spell save dc/i.test(rolls)) {
+    return spellStats.saveDc ? `DC ${spellStats.saveDc}` : "Spell save DC";
+  }
+
+  if (/no attack roll|usually no attack roll/i.test(rolls)) {
+    return "No attack roll";
+  }
+
+  if (/healing|temporary hit point/i.test(rolls)) {
+    return "Healing roll";
+  }
+
+  return "Varies";
 }
 
 const spellLevels: Record<string, string> = {
@@ -572,9 +617,11 @@ function AttackPanel({ lines }: { lines?: string[] }) {
 
 function SpellPanel({
   lines,
+  spellStats,
   onSpellClick
 }: {
   lines?: string[];
+  spellStats: { attackBonus: string; saveDc: string };
   onSpellClick?: (spell: string, level: SpellLevelLabel | null) => void;
 }) {
   const { spellGroups, details } = parseSpellLines(lines);
@@ -588,12 +635,16 @@ function SpellPanel({
               <div className="dnd-spell-group" key={group.label}>
                 <h4>{group.label}</h4>
                 <SheetTable
-                  rows={group.spells.map((spell) => ({
-                    ...spellTableRow(spell),
-                    onClick: onSpellClick
-                      ? () => onSpellClick(spell, spellLevelLabels[group.label] ?? null)
-                      : undefined
-                  }))}
+                  rows={group.spells.map((spell) => {
+                    const level = spellLevelLabels[group.label] ?? null;
+
+                    return {
+                      ...spellTableRow(spell, level, spellStats),
+                      onClick: onSpellClick
+                        ? () => onSpellClick(spell, level)
+                        : undefined
+                    };
+                  })}
                   empty="None"
                 />
               </div>
@@ -689,6 +740,10 @@ export function CharacterSheetOverlay({
   const currencyLines = sheet.sections.Currency ?? [];
   const proficiencyLines = sheet.sections["Proficiencies and Languages"] ?? [];
   const spells = sheet.sections.Spells ?? [];
+  const spellStats = {
+    attackBonus: spellStatValue(spells, "Spell attack bonus"),
+    saveDc: spellStatValue(spells, "Spell save DC")
+  };
   const dmBrief = sheet.sections["DM Brief"] ?? [];
   const activeSpellRuleProfile = activeSpellDetail
     ? spellDetailFor(activeSpellDetail.name, activeSpellDetail.level)
@@ -837,6 +892,7 @@ export function CharacterSheetOverlay({
                 <AttackPanel lines={attackLines} />
                 <SpellPanel
                   lines={spells}
+                  spellStats={spellStats}
                   onSpellClick={(name, level) => setActiveSpellDetail({ name, level })}
                 />
                 <LinedPanel title="Equipment" lines={equipmentLines} />
@@ -893,6 +949,7 @@ export function CharacterSheetOverlay({
               <AttackPanel lines={attackLines} />
               <SpellPanel
                 lines={spells}
+                spellStats={spellStats}
                 onSpellClick={(name, level) => setActiveSpellDetail({ name, level })}
               />
             </div>

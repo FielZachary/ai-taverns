@@ -57,8 +57,9 @@ Dagger: thrown 20/60 ft, +5 to hit, 1d4+3 piercing
 
 Spells
 Cantrips: Mage Hand, Fire Bolt
-Known / Prepared: Shield, Misty Step
+Known / Prepared: Shield, Misty Step, Web
 Spell save DC: 13
+Spell attack bonus: +5
 
 Equipment
 Leather armor
@@ -133,7 +134,11 @@ describe("CharacterSheetOverlay", () => {
     expect(within(dialog).getByText("1d6+3 piercing")).toBeInTheDocument();
     expect(within(dialog).getByRole("heading", { name: "Cantrips" })).toBeInTheDocument();
     expect(within(dialog).getByText("Mage Hand")).toBeInTheDocument();
+    expect(within(dialog).getByText("120 feet")).toBeInTheDocument();
+    expect(within(dialog).getByText("Spell attack +5")).toBeInTheDocument();
     expect(within(dialog).getByRole("heading", { name: "Level 1" })).toBeInTheDocument();
+    expect(within(dialog).getAllByText("No attack roll").length).toBeGreaterThan(0);
+    expect(within(dialog).getAllByText("DC 13").length).toBeGreaterThan(0);
     expect(within(dialog).getByRole("heading", { name: "Level 2" })).toBeInTheDocument();
     expect(within(dialog).getByText("Spell save DC: 13")).toBeInTheDocument();
     expect(within(dialog).getByText("Brass key")).toBeInTheDocument();
@@ -213,6 +218,8 @@ None
     ).toBeInTheDocument();
     expect(within(weaponsPanel).getByText("Mage Hand")).toBeInTheDocument();
     expect(within(weaponsPanel).getByText("Misty Step")).toBeInTheDocument();
+    expect(within(weaponsPanel).getAllByText("Self").length).toBeGreaterThan(0);
+    expect(within(weaponsPanel).getAllByText("No attack roll").length).toBeGreaterThan(0);
 
     fireEvent.click(within(weaponsPanel).getByRole("button", { name: "Misty Step" }));
 
