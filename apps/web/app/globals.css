@@ -4251,6 +4251,27 @@ h1 {
   width: 17%;
 }
 
+.dnd-sheet-table-action {
+  display: inline;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  font-weight: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: rgba(244, 207, 122, 0.42);
+  text-underline-offset: 3px;
+}
+
+.dnd-sheet-table-action:hover,
+.dnd-sheet-table-action:focus-visible {
+  color: var(--gold-bright);
+  outline: none;
+  text-decoration-color: currentColor;
+}
+
 .dnd-spell-details {
   display: grid;
   gap: 4px;

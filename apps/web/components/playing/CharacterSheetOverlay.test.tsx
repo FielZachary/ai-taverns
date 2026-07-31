@@ -140,6 +140,20 @@ describe("CharacterSheetOverlay", () => {
     expect(within(dialog).getByText("Always maps the exits.")).toBeInTheDocument();
     expect(within(dialog).getByText("Secret heir to the moon court.")).toBeInTheDocument();
 
+    fireEvent.click(within(dialog).getByRole("button", { name: "Mage Hand" }));
+
+    const spellDialog = screen.getByRole("dialog", { name: "Mage Hand" });
+
+    expect(within(spellDialog).getByText("Cantrip")).toBeInTheDocument();
+    expect(within(spellDialog).getByText("Rolls Involved")).toBeInTheDocument();
+    expect(within(spellDialog).getByText("Range")).toBeInTheDocument();
+
+    fireEvent.click(
+      within(spellDialog).getByRole("button", { name: /close spell details/i })
+    );
+
+    expect(screen.queryByRole("dialog", { name: "Mage Hand" })).not.toBeInTheDocument();
+
     fireEvent.click(within(dialog).getByRole("button", { name: /close player resources/i }));
 
     expect(props.onClose).toHaveBeenCalledTimes(1);
@@ -199,6 +213,13 @@ None
     ).toBeInTheDocument();
     expect(within(weaponsPanel).getByText("Mage Hand")).toBeInTheDocument();
     expect(within(weaponsPanel).getByText("Misty Step")).toBeInTheDocument();
+
+    fireEvent.click(within(weaponsPanel).getByRole("button", { name: "Misty Step" }));
+
+    const spellDialog = screen.getByRole("dialog", { name: "Misty Step" });
+
+    expect(within(spellDialog).getByText("2nd level")).toBeInTheDocument();
+    expect(within(spellDialog).getByText("Casting Time")).toBeInTheDocument();
   });
 
   it("renders NPC cards from context chunks and opens editable NPC fields", async () => {

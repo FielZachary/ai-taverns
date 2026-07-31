@@ -4,6 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { UserRound, X } from "lucide-react";
 import type { CampaignNpcCard } from "@/lib/campaign-api";
 import {
+  spellDetailFor,
+  type SpellLevelLabel
+} from "@/app/new-adventure/new-adventure-form";
+import {
   extractPlayerBackstory,
   formatBackstoryParagraphs
 } from "./backstory-intro";
@@ -33,6 +37,7 @@ type SheetTableRow = {
   range: string;
   hitDc: string;
   effect: string;
+  onClick?: () => void;
 };
 
 export type PlayerResourcesTab =
@@ -408,6 +413,13 @@ const spellGroupOrder = [
   "Other"
 ];
 
+const spellLevelLabels: Record<string, SpellLevelLabel> = {
+  Cantrips: "Cantrip",
+  "Level 1": "1st level",
+  "Level 2": "2nd level",
+  "Level 3": "3rd level"
+};
+
 function parseSpellList(value = "") {
   return value
     .split(",")
@@ -516,7 +528,19 @@ function SheetTable({
           {rows.length > 0 ? (
             rows.map((row, index) => (
               <tr key={`${row.name}-${index}`}>
-                <td>{row.name}</td>
+                <td>
+                  {row.onClick ? (
+                    <button
+                      className="dnd-sheet-table-action"
+                      type="button"
+                      onClick={row.onClick}
+                    >
+                      {row.name}
+                    </button>
+                  ) : (
+                    row.name
+                  )}
+                </td>
                 <td>{row.range}</td>
                 <td>{row.hitDc}</td>
                 <td>{row.effect}</td>
@@ -546,7 +570,13 @@ function AttackPanel({ lines }: { lines?: string[] }) {
   );
 }
 
-function SpellPanel({ lines }: { lines?: string[] }) {
+function SpellPanel({
+  lines,
+  onSpellClick
+}: {
+  lines?: string[];
+  onSpellClick?: (spell: string, level: SpellLevelLabel | null) => void;
+}) {
   const { spellGroups, details } = parseSpellLines(lines);
 
   return (
@@ -557,7 +587,15 @@ function SpellPanel({ lines }: { lines?: string[] }) {
             {spellGroups.map((group) => (
               <div className="dnd-spell-group" key={group.label}>
                 <h4>{group.label}</h4>
-                <SheetTable rows={group.spells.map(spellTableRow)} empty="None" />
+                <SheetTable
+                  rows={group.spells.map((spell) => ({
+                    ...spellTableRow(spell),
+                    onClick: onSpellClick
+                      ? () => onSpellClick(spell, spellLevelLabels[group.label] ?? null)
+                      : undefined
+                  }))}
+                  empty="None"
+                />
               </div>
             ))}
           </div>
@@ -625,6 +663,10 @@ export function CharacterSheetOverlay({
   >(() => Object.fromEntries(npcFieldLabels.map((label) => [label, ""])));
   const [npcSaveStatus, setNpcSaveStatus] = useState("");
   const [isSavingNpc, setIsSavingNpc] = useState(false);
+  const [activeSpellDetail, setActiveSpellDetail] = useState<{
+    name: string;
+    level: SpellLevelLabel | null;
+  } | null>(null);
   const sheet = parseCharacterSheet(characterSheet.trim());
   const playerBackstory = extractPlayerBackstory(characterSheet);
   const backstoryParagraphs = formatBackstoryParagraphs(playerBackstory);
@@ -648,6 +690,9 @@ export function CharacterSheetOverlay({
   const proficiencyLines = sheet.sections["Proficiencies and Languages"] ?? [];
   const spells = sheet.sections.Spells ?? [];
   const dmBrief = sheet.sections["DM Brief"] ?? [];
+  const activeSpellRuleProfile = activeSpellDetail
+    ? spellDetailFor(activeSpellDetail.name, activeSpellDetail.level)
+    : null;
 
   useEffect(() => {
     setActiveTab(initialTab);
@@ -790,7 +835,10 @@ export function CharacterSheetOverlay({
                   <SheetBox label="Hit Dice" value={statValue(sheet, "Hit Dice")} />
                 </div>
                 <AttackPanel lines={attackLines} />
-                <SpellPanel lines={spells} />
+                <SpellPanel
+                  lines={spells}
+                  onSpellClick={(name, level) => setActiveSpellDetail({ name, level })}
+                />
                 <LinedPanel title="Equipment" lines={equipmentLines} />
                 <LinedPanel title="Inventory" lines={inventoryLines} />
                 <LinedPanel title="Currency" lines={currencyLines} />
@@ -843,7 +891,10 @@ export function CharacterSheetOverlay({
             </div>
             <div className="player-resource-grid player-weapons-spells-grid">
               <AttackPanel lines={attackLines} />
-              <SpellPanel lines={spells} />
+              <SpellPanel
+                lines={spells}
+                onSpellClick={(name, level) => setActiveSpellDetail({ name, level })}
+              />
             </div>
           </section>
         ) : activeTab === "backstory" ? (
@@ -1052,6 +1103,61 @@ export function CharacterSheetOverlay({
               </button>
             </div>
           </div>
+        </div>
+      ) : null}
+
+      {activeSpellDetail && activeSpellRuleProfile ? (
+        <div
+          className="spell-detail-modal-backdrop"
+          role="presentation"
+          onClick={() => setActiveSpellDetail(null)}
+        >
+          <section
+            aria-modal="true"
+            aria-labelledby="spell-detail-modal-title"
+            className="spell-detail-modal"
+            role="dialog"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="spell-detail-modal-header">
+              <div>
+                <span>{activeSpellDetail.level ?? "Spell"}</span>
+                <h2 id="spell-detail-modal-title">{activeSpellDetail.name}</h2>
+              </div>
+              <button
+                type="button"
+                aria-label="Close spell details"
+                onClick={() => setActiveSpellDetail(null)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="spell-detail-modal-body">
+              <p>{activeSpellRuleProfile.description}</p>
+              <section>
+                <h3>Rolls Involved</h3>
+                <p>{activeSpellRuleProfile.rolls}</p>
+              </section>
+            </div>
+            <dl className="spell-detail-meta">
+              <div>
+                <dt>School</dt>
+                <dd>{activeSpellRuleProfile.school}</dd>
+              </div>
+              <div>
+                <dt>Duration</dt>
+                <dd>{activeSpellRuleProfile.duration}</dd>
+              </div>
+              <div>
+                <dt>Casting Time</dt>
+                <dd>{activeSpellRuleProfile.castingTime}</dd>
+              </div>
+              <div>
+                <dt>Range</dt>
+                <dd>{activeSpellRuleProfile.range}</dd>
+              </div>
+            </dl>
+          </section>
         </div>
       ) : null}
     </section>
