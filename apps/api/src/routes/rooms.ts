@@ -18,13 +18,25 @@ import {
   submitRoomTurnForUser
 } from "@ai-dnd/db";
 import type { ApiConfig } from "../config.js";
+import type { ServerAnalytics } from "../analytics.js";
 import { askDungeonMasterProvider } from "../dm-provider.js";
 import { requireAuthenticatedUser } from "./auth.js";
 
 type RoomRouteOptions = {
   config: ApiConfig;
+  analytics?: ServerAnalytics;
   dmRuntime?: DungeonMasterRuntime | undefined;
 };
+
+function messageCounts(snapshot: RoomSnapshot) {
+  return {
+    playerMessageCount: snapshot.messages.filter((message) => message.role === "player")
+      .length,
+    dmMessageCount: snapshot.messages.filter((message) => message.role === "dm")
+      .length,
+    totalMessageCount: snapshot.messages.length
+  };
+}
 
 function roomIdentity(roomId: string | undefined, sessionId: string | undefined) {
   const resolvedSessionId = sessionId?.trim() || "new-adventure";
@@ -54,7 +66,7 @@ export async function registerRoomRoutes(
   fastify: FastifyInstance,
   options: RoomRouteOptions
 ) {
-  const { config } = options;
+  const { config, analytics } = options;
   const baseRuntime = options.dmRuntime ?? {
     askProvider: askDungeonMasterProvider
   };
@@ -126,6 +138,7 @@ export async function registerRoomRoutes(
       request.cookies[config.authCookieName]
     );
 
+    const startedAt = Date.now();
     const snapshot = RoomBeginResponseSchema.parse(
       await beginRoomForUser(fastify.pg, {
         ...identity,
@@ -135,6 +148,18 @@ export async function registerRoomRoutes(
     );
 
     await publishRoomSnapshotUpdate(fastify, snapshot);
+    analytics?.track({
+      name: "Multiplayer Adventure Begun",
+      distinctId: `user:${user.id}`,
+      properties: {
+        userId: user.id,
+        campaignId: snapshot.roomId,
+        campaignMode: "multiplayer",
+        responseLatencyMs: Date.now() - startedAt,
+        ...messageCounts(snapshot)
+      },
+      milestones: ["multiplayer_adventure_begun"]
+    });
 
     return snapshot;
   });
@@ -161,6 +186,7 @@ export async function registerRoomRoutes(
     const rollRequestId = body.rollRequestId?.trim();
     const clientMessageId = body.clientMessageId?.trim();
 
+    const startedAt = Date.now();
     const snapshot = RoomSubmitResponseSchema.parse(
       await submitRoomTurnForUser(fastify.pg, {
         ...identity,
@@ -178,6 +204,49 @@ export async function registerRoomRoutes(
     );
 
     await publishRoomSnapshotUpdate(fastify, snapshot);
+    const counts = messageCounts(snapshot);
+    const rollSubmissionCount = body.rollSubmissions?.length ?? 0;
+    const milestones = [
+      ...(counts.playerMessageCount === 1 ? (["first_player_message"] as const) : []),
+      ...(counts.playerMessageCount === 5 ? (["five_player_messages"] as const) : []),
+      ...(rollSubmissionCount > 0 ? (["dice_submitted"] as const) : [])
+    ];
+
+    analytics?.track({
+      name: rollSubmissionCount > 0 ? "Dice Roll Submitted" : "Player Message Sent",
+      distinctId: `user:${user.id}`,
+      properties: {
+        userId: user.id,
+        campaignId: snapshot.roomId,
+        campaignMode: "multiplayer",
+        messageLength: message?.length ?? 0,
+        turnNumber: counts.playerMessageCount,
+        model: body.model,
+        skipTurn,
+        hasDiceRequest: snapshot.pendingRollRequests.length > 0,
+        diceSubmissionCount: rollSubmissionCount,
+        combatActive: snapshot.combat.active,
+        responseLatencyMs: Date.now() - startedAt,
+        ...counts
+      },
+      milestones
+    });
+
+    if (snapshot.messages.some((roomMessage) => roomMessage.role === "dm")) {
+      analytics?.track({
+        name: "DM Response Received",
+        distinctId: `user:${user.id}`,
+        properties: {
+          userId: user.id,
+          campaignId: snapshot.roomId,
+          campaignMode: "multiplayer",
+          hasDiceRequest: snapshot.pendingRollRequests.length > 0,
+          combatActive: snapshot.combat.active,
+          responseLatencyMs: Date.now() - startedAt,
+          ...counts
+        }
+      });
+    }
 
     return snapshot;
   });

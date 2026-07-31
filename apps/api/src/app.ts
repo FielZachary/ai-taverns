@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { DungeonMasterRuntime } from "@ai-dnd/db";
 import { loadConfig, type ApiConfig } from "./config.js";
+import { createServerAnalytics } from "./analytics.js";
 import { handleRouteError } from "./errors.js";
 import { postgresPlugin } from "./plugins/postgres.js";
 import { roomRealtimePlugin } from "./plugins/room-realtime.js";
@@ -45,6 +46,10 @@ export async function buildApp(
             level: config.logLevel
           }
   });
+  const analytics = createServerAnalytics({
+    config,
+    log: fastify.log
+  });
 
   fastify.setErrorHandler(handleRouteError);
   fastify.setNotFoundHandler((request, reply) => {
@@ -81,16 +86,19 @@ export async function buildApp(
   await registerHealthRoutes(fastify);
   await fastify.register(registerAuthRoutes, {
     prefix: "/api",
-    config
+    config,
+    analytics
   });
   await fastify.register(registerCampaignRoutes, {
     prefix: "/api",
     config,
+    analytics,
     dmRuntime: options.dmRuntime
   });
   await fastify.register(registerRoomRoutes, {
     prefix: "/api",
     config,
+    analytics,
     dmRuntime: options.dmRuntime
   });
   await fastify.register(registerRealtimeRoutes, {
@@ -100,6 +108,7 @@ export async function buildApp(
   await fastify.register(registerDmRoutes, {
     prefix: "/api",
     config,
+    analytics,
     dmRuntime: options.dmRuntime
   });
   return fastify;
