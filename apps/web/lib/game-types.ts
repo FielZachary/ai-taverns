@@ -116,6 +116,8 @@ export type DiceRollRequest = {
   label: string;
   player?: string;
   modifier?: number;
+  reason?: string;
+  targetDc?: number;
   advantageState?: string;
 };
 

@@ -1162,7 +1162,7 @@ export function jobPrompt(
       "Handle discovery, mysteries, hidden information, and clue progression.",
       "Reveal clues gradually and avoid dead ends on failed rolls.",
       "When requesting an Investigation, Perception, Insight, Arcana, History, Nature, Religion, Survival, or other discovery roll, state the target DC or threshold in public_narration before the player rolls.",
-      "Tell the player what category of information that DC can unlock without revealing the hidden answer. Example: \"Make an Investigation check. DC 14 reveals how the lock was disturbed; DC 18 may reveal whether the same hand altered the ledger.\" Then set next_input_needed to dice_results and include a structured roll_requests entry.",
+      "Tell the player what category of information that DC can unlock without revealing the hidden answer. Example: \"Make an Investigation check. DC 14 reveals how the lock was disturbed; DC 18 may reveal whether the same hand altered the ledger.\" Then set next_input_needed to dice_results and include a structured roll_requests entry with a specific skill/tool label, target_dc, and a reason describing the non-spoiler information category.",
       "Distinguish discovering, seeing, identifying, or learning about an item from taking possession of it. Only add inventory when the character actually takes, receives, pockets, collects, or is handed the item."
     ],
     npc_dialogue: [
