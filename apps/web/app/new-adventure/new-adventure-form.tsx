@@ -4723,6 +4723,7 @@ export function NewAdventureForm({
       return createdCampaign;
     }
 
+    const createStartedAt = Date.now();
     const campaign = await createCampaignViaApi({
       mode,
       title: campaignDisplayName,
@@ -4752,6 +4753,10 @@ export function NewAdventureForm({
         ...analyticsBaseProperties(),
         campaignId: campaign.id,
         campaignMode: campaign.mode,
+        minutesSinceCampaignCreated: Math.floor(
+          (Date.now() - createStartedAt) / 60_000
+        ),
+        campaignAgeHours: 0,
         hasPortrait: Boolean(campaign.portraitUrl),
         equipmentCompleted: true
       },
@@ -4763,6 +4768,10 @@ export function NewAdventureForm({
         ...analyticsBaseProperties(),
         campaignId: campaign.id,
         campaignMode: campaign.mode,
+        minutesSinceCampaignCreated: Math.floor(
+          (Date.now() - createStartedAt) / 60_000
+        ),
+        campaignAgeHours: 0,
         hasPortrait: Boolean(campaign.portraitUrl)
       }
     });
@@ -4989,7 +4998,8 @@ export function NewAdventureForm({
           campaignId: campaign.id,
           campaignMode: campaign.mode,
           joinSource: isInviteJoinFlow ? "invite" : "code",
-          inviteUsed: isInviteJoinFlow
+          inviteUsed: isInviteJoinFlow,
+          campaignAgeHours: 0
         }
       });
 

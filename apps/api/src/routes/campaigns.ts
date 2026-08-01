@@ -880,6 +880,8 @@ export async function registerCampaignRoutes(
         campaignGenre,
         campaignGenreKind,
         campaignGenrePresetId,
+        minutesSinceCampaignCreated: 0,
+        campaignAgeHours: 0,
         hasCustomWorld: campaignGenreKind === "custom",
         hasEldermereStart: Boolean(body.eldermereStart),
         hasBackstory: Boolean(

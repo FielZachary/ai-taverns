@@ -10,7 +10,7 @@ import {
   CampaignSoloTurnRequestSchema,
   CampaignSoloTurnResponseSchema
 } from "@ai-dnd/contracts";
-import type { RoomSnapshot } from "@ai-dnd/contracts";
+import type { HookMetric, RoomSnapshot } from "@ai-dnd/contracts";
 import {
   askDungeonMasterQuestionForUser,
   type DungeonMasterRuntime,
@@ -38,6 +38,23 @@ function messageCounts(snapshot: RoomSnapshot) {
       .length,
     totalMessageCount: snapshot.messages.length
   };
+}
+
+function latestDmMessage(snapshot: RoomSnapshot) {
+  return [...snapshot.messages].reverse().find((message) => message.role === "dm");
+}
+
+function dmResponseType(snapshot: RoomSnapshot) {
+  return latestDmMessage(snapshot)?.kind ?? "turn";
+}
+
+function hasStateChange(snapshot: RoomSnapshot) {
+  return (
+    snapshot.pendingRollRequests.length > 0 ||
+    snapshot.combat.active ||
+    snapshot.nextInputNeeded !== "player_actions" ||
+    snapshot.inputTargets.length > 0
+  );
 }
 
 function createHttpError(statusCode: number, message: string): Error {
@@ -121,25 +138,39 @@ export async function registerDmRoutes(
       ...(counts.playerMessageCount === 5 ? (["five_player_messages"] as const) : []),
       ...(rollSubmissions?.length ? (["dice_submitted"] as const) : [])
     ];
+    const dmMilestones: HookMetric[] =
+      counts.dmMessageCount === 5 ? ["five_dm_responses"] : [];
+
+    const playerTurnProperties = {
+      userId: user.id,
+      campaignId: params.campaignId,
+      campaignMode: "single_player" as const,
+      messageLength: message?.length ?? 0,
+      turnNumber: counts.playerMessageCount,
+      model: body.model,
+      hasDiceRequest: snapshot.pendingRollRequests.length > 0,
+      diceSubmissionCount: rollSubmissions?.length ?? 0,
+      rollType: rollSubmissions?.length ? "dm_requested_roll" : undefined,
+      requestedByDm: Boolean(rollSubmissions?.length),
+      combatActive: snapshot.combat.active,
+      responseLatencyMs: Date.now() - startedAt,
+      hasStateChange: hasStateChange(snapshot),
+      ...counts
+    };
 
     analytics?.track({
       name: rollSubmissions?.length ? "Dice Roll Submitted" : "Player Message Sent",
       distinctId: `user:${user.id}`,
-      properties: {
-        userId: user.id,
-        campaignId: params.campaignId,
-        campaignMode: "single_player",
-        messageLength: message?.length ?? 0,
-        turnNumber: counts.playerMessageCount,
-        model: body.model,
-        hasDiceRequest: snapshot.pendingRollRequests.length > 0,
-        diceSubmissionCount: rollSubmissions?.length ?? 0,
-        combatActive: snapshot.combat.active,
-        responseLatencyMs: Date.now() - startedAt,
-        ...counts
-      },
+      properties: playerTurnProperties,
       milestones
     });
+    if (!rollSubmissions?.length && counts.playerMessageCount === 1) {
+      analytics?.track({
+        name: "First Player Message Sent",
+        distinctId: `user:${user.id}`,
+        properties: playerTurnProperties
+      });
+    }
     analytics?.track({
       name: "DM Response Received",
       distinctId: `user:${user.id}`,
@@ -150,8 +181,11 @@ export async function registerDmRoutes(
         hasDiceRequest: snapshot.pendingRollRequests.length > 0,
         combatActive: snapshot.combat.active,
         responseLatencyMs: Date.now() - startedAt,
+        responseType: dmResponseType(snapshot),
+        hasStateChange: hasStateChange(snapshot),
         ...counts
-      }
+      },
+      milestones: dmMilestones
     });
 
     return snapshot;
@@ -185,6 +219,7 @@ export async function registerDmRoutes(
     );
 
     await publishRoomSnapshotUpdate(fastify, snapshot);
+    const counts = messageCounts(snapshot);
     analytics?.track({
       name: "Ask DM Submitted",
       distinctId: `user:${user.id}`,
@@ -195,7 +230,9 @@ export async function registerDmRoutes(
         messageLength: question.length,
         model: body.model,
         responseLatencyMs: Date.now() - startedAt,
-        ...messageCounts(snapshot)
+        responseType: dmResponseType(snapshot),
+        hasStateChange: hasStateChange(snapshot),
+        ...counts
       },
       milestones: ["asked_dm"]
     });
@@ -228,6 +265,7 @@ export async function registerDmRoutes(
     );
 
     await publishRoomSnapshotUpdate(fastify, snapshot);
+    const counts = messageCounts(snapshot);
     analytics?.track({
       name: "Regenerate Response Submitted",
       distinctId: `user:${user.id}`,
@@ -236,7 +274,9 @@ export async function registerDmRoutes(
         campaignId: params.campaignId,
         campaignMode: snapshot.mode,
         responseLatencyMs: Date.now() - startedAt,
-        ...messageCounts(snapshot)
+        responseType: "regenerated",
+        hasStateChange: hasStateChange(snapshot),
+        ...counts
       },
       milestones: ["regenerated_response"]
     });
