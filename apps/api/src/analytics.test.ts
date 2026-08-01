@@ -150,6 +150,14 @@ test("server analytics sends profile, event, and hook milestone updates", () => 
     }
   ]);
 
+  const milestoneEventCalls = calls.filter(
+    (call) => call.type === "track" && call.name === "Hook Milestone Reached"
+  );
+  assert.deepEqual(
+    milestoneEventCalls.map((call) => call.properties?.hookMilestone),
+    ["first_player_message", "asked_dm"]
+  );
+
   const incrementCall = calls.find((call) => call.type === "people.increment");
   assert.equal(incrementCall?.property, "hook_score_lifetime");
   assert.equal(incrementCall?.value, 20);
@@ -161,6 +169,75 @@ test("server analytics sends profile, event, and hook milestone updates", () => 
   );
   assert.equal(milestoneProfile?.properties?.hook_asked_dm, true);
   assert.equal(milestoneProfile?.properties?.latest_hook_score_delta, 20);
+});
+
+test("server analytics sends plain events without milestone side effects", () => {
+  const calls: Array<{
+    type: string;
+    name?: string;
+    properties?: Record<string, unknown>;
+  }> = [];
+
+  mockedMixpanel.init = () => ({
+    track(
+      name: string,
+      properties: Record<string, unknown>,
+      callback: MixpanelCallback
+    ) {
+      calls.push({ type: "track", name, properties });
+      callback();
+    },
+    people: {
+      set(
+        _distinctId: string,
+        _properties: Record<string, unknown>,
+        callback: MixpanelCallback
+      ) {
+        calls.push({ type: "people.set" });
+        callback();
+      },
+      set_once(
+        _distinctId: string,
+        _properties: Record<string, unknown>,
+        callback: MixpanelCallback
+      ) {
+        calls.push({ type: "people.set_once" });
+        callback();
+      },
+      increment(
+        _distinctId: string,
+        _property: string,
+        _value: number,
+        callback: MixpanelCallback
+      ) {
+        calls.push({ type: "people.increment" });
+        callback();
+      }
+    }
+  });
+
+  const analytics = createServerAnalytics({
+    config: loadConfig({
+      MIXPANEL_PROJECT_TOKEN: "token",
+      MIXPANEL_ENABLED: "true"
+    })
+  });
+
+  analytics.track({
+    name: "Campaign Loaded",
+    distinctId: "user:1",
+    properties: {
+      userId: "1",
+      campaignId: "00000000-0000-4000-8000-000000000001"
+    }
+  });
+
+  assert.deepEqual(
+    calls.map((call) => call.type),
+    ["track"]
+  );
+  assert.equal(calls[0]?.name, "Campaign Loaded");
+  assert.equal(calls[0]?.properties?.hookDeltas, undefined);
 });
 
 test("server analytics reports Mixpanel callback errors without throwing", () => {
@@ -225,5 +302,5 @@ test("server analytics reports Mixpanel callback errors without throwing", () =>
     milestones: ["asked_dm"]
   });
 
-  assert.equal(warnings.length, 5);
+  assert.equal(warnings.length, 6);
 });
