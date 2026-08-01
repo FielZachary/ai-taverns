@@ -521,6 +521,8 @@ test("hook scoring derives stable activation stages", () => {
   assert.equal(hookStageForScore(50), "engaged");
   assert.equal(hookStageForScore(75), "hooked");
   assert.equal(hookPointsForMetric("portrait_added"), 10);
+  assert.equal(hookPointsForMetric("five_dm_responses"), 10);
+  assert.equal(hookPointsForMetric("returned_after_7d"), 15);
 
   const snapshot = hookSnapshotForMetrics([
     "campaign_created_or_joined",
@@ -557,6 +559,15 @@ test("analytics event contract accepts hook enrichment", () => {
       campaignId: "00000000-0000-4000-8000-000000000001",
       campaignMode: "single_player",
       playerMessageCount: 5,
+      dmMessageCount: 5,
+      minutesSinceCampaignCreated: 14,
+      hoursSinceFirstSeen: 26,
+      hoursSinceLastActivity: 25,
+      returnedAfterDays: 1,
+      responseType: "turn",
+      hasStateChange: true,
+      rollType: "d20",
+      requestedByDm: true,
       hookScore: 80,
       hookStage: "hooked",
       isHooked: true,

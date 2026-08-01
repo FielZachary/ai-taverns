@@ -122,6 +122,21 @@ export function createServerAnalytics(input: {
         return;
       }
 
+      milestones.forEach((metric) => {
+        sendFireAndForget(
+          (callback) =>
+            client.track(
+              "Hook Milestone Reached",
+              {
+                ...event.properties,
+                hookMilestone: metric
+              },
+              callback
+            ),
+          onError
+        );
+      });
+
       const incrementBy = hookDeltas.reduce(
         (total, delta) => total + delta.points,
         0

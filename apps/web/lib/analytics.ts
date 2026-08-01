@@ -24,7 +24,12 @@ const analyticsAliasStoragePrefix = "ai-taverns.analytics.alias";
 const analyticsCampaignSeenStoragePrefix = "ai-taverns.analytics.campaignSeen";
 const analyticsCampaignReturnStoragePrefix =
   "ai-taverns.analytics.campaignReturn24h";
+const analyticsCampaignReturn7dStoragePrefix =
+  "ai-taverns.analytics.campaignReturn7d";
+const analyticsCampaignLastActivityStoragePrefix =
+  "ai-taverns.analytics.campaignLastActivity";
 const oneDayMs = 24 * 60 * 60 * 1000;
+const sevenDaysMs = 7 * oneDayMs;
 
 let initialized = false;
 let identifiedDistinctId = "";
@@ -232,20 +237,32 @@ export function trackCampaignReturn(input: {
 
   const seenKey = `${analyticsCampaignSeenStoragePrefix}.${input.campaignId}`;
   const returnedKey = `${analyticsCampaignReturnStoragePrefix}.${input.campaignId}`;
+  const returned7dKey = `${analyticsCampaignReturn7dStoragePrefix}.${input.campaignId}`;
+  const lastActivityKey = `${analyticsCampaignLastActivityStoragePrefix}.${input.campaignId}`;
   const firstSeen = Number(window.localStorage.getItem(seenKey) ?? "0");
+  const lastActivity = Number(
+    window.localStorage.getItem(lastActivityKey) ?? "0"
+  );
   const now = Date.now();
 
   if (!firstSeen) {
     window.localStorage.setItem(seenKey, String(now));
+    window.localStorage.setItem(lastActivityKey, String(now));
     return;
   }
+
+  const hoursSinceFirstSeen = Math.floor((now - firstSeen) / (60 * 60 * 1000));
+  const hoursSinceLastActivity = lastActivity
+    ? Math.floor((now - lastActivity) / (60 * 60 * 1000))
+    : hoursSinceFirstSeen;
 
   trackAnalytics({
     name: "Session Resumed",
     properties: {
       campaignId: input.campaignId,
       campaignMode: input.campaignMode,
-      hoursSinceFirstSeen: Math.floor((now - firstSeen) / (60 * 60 * 1000))
+      hoursSinceFirstSeen,
+      hoursSinceLastActivity
     }
   });
 
@@ -258,9 +275,32 @@ export function trackCampaignReturn(input: {
       name: "Campaign Returned After 24h",
       properties: {
         campaignId: input.campaignId,
-        campaignMode: input.campaignMode
+        campaignMode: input.campaignMode,
+        hoursSinceFirstSeen,
+        hoursSinceLastActivity,
+        returnedAfterDays: 1
       },
       milestones: ["returned_after_24h"]
     });
   }
+
+  if (
+    now - firstSeen >= sevenDaysMs &&
+    window.localStorage.getItem(returned7dKey) !== "true"
+  ) {
+    window.localStorage.setItem(returned7dKey, "true");
+    trackAnalytics({
+      name: "Campaign Returned After 7d",
+      properties: {
+        campaignId: input.campaignId,
+        campaignMode: input.campaignMode,
+        hoursSinceFirstSeen,
+        hoursSinceLastActivity,
+        returnedAfterDays: 7
+      },
+      milestones: ["returned_after_7d"]
+    });
+  }
+
+  window.localStorage.setItem(lastActivityKey, String(now));
 }

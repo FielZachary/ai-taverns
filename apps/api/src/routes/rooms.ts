@@ -9,7 +9,7 @@ import {
   RoomSubmitRequestSchema,
   RoomSubmitResponseSchema
 } from "@ai-dnd/contracts";
-import type { RoomSnapshot } from "@ai-dnd/contracts";
+import type { HookMetric, RoomSnapshot } from "@ai-dnd/contracts";
 import {
   beginRoomForUser,
   type DungeonMasterRuntime,
@@ -36,6 +36,23 @@ function messageCounts(snapshot: RoomSnapshot) {
       .length,
     totalMessageCount: snapshot.messages.length
   };
+}
+
+function latestDmMessage(snapshot: RoomSnapshot) {
+  return [...snapshot.messages].reverse().find((message) => message.role === "dm");
+}
+
+function dmResponseType(snapshot: RoomSnapshot) {
+  return latestDmMessage(snapshot)?.kind ?? "turn";
+}
+
+function hasStateChange(snapshot: RoomSnapshot) {
+  return (
+    snapshot.pendingRollRequests.length > 0 ||
+    snapshot.combat.active ||
+    snapshot.nextInputNeeded !== "player_actions" ||
+    snapshot.inputTargets.length > 0
+  );
 }
 
 function roomIdentity(roomId: string | undefined, sessionId: string | undefined) {
@@ -211,26 +228,40 @@ export async function registerRoomRoutes(
       ...(counts.playerMessageCount === 5 ? (["five_player_messages"] as const) : []),
       ...(rollSubmissionCount > 0 ? (["dice_submitted"] as const) : [])
     ];
+    const dmMilestones: HookMetric[] =
+      counts.dmMessageCount === 5 ? ["five_dm_responses"] : [];
+
+    const playerTurnProperties = {
+      userId: user.id,
+      campaignId: snapshot.roomId,
+      campaignMode: "multiplayer" as const,
+      messageLength: message?.length ?? 0,
+      turnNumber: counts.playerMessageCount,
+      model: body.model,
+      skipTurn,
+      hasDiceRequest: snapshot.pendingRollRequests.length > 0,
+      diceSubmissionCount: rollSubmissionCount,
+      rollType: rollSubmissionCount > 0 ? "dm_requested_roll" : undefined,
+      requestedByDm: rollSubmissionCount > 0,
+      combatActive: snapshot.combat.active,
+      responseLatencyMs: Date.now() - startedAt,
+      hasStateChange: hasStateChange(snapshot),
+      ...counts
+    };
 
     analytics?.track({
       name: rollSubmissionCount > 0 ? "Dice Roll Submitted" : "Player Message Sent",
       distinctId: `user:${user.id}`,
-      properties: {
-        userId: user.id,
-        campaignId: snapshot.roomId,
-        campaignMode: "multiplayer",
-        messageLength: message?.length ?? 0,
-        turnNumber: counts.playerMessageCount,
-        model: body.model,
-        skipTurn,
-        hasDiceRequest: snapshot.pendingRollRequests.length > 0,
-        diceSubmissionCount: rollSubmissionCount,
-        combatActive: snapshot.combat.active,
-        responseLatencyMs: Date.now() - startedAt,
-        ...counts
-      },
+      properties: playerTurnProperties,
       milestones
     });
+    if (rollSubmissionCount === 0 && counts.playerMessageCount === 1) {
+      analytics?.track({
+        name: "First Player Message Sent",
+        distinctId: `user:${user.id}`,
+        properties: playerTurnProperties
+      });
+    }
 
     if (snapshot.messages.some((roomMessage) => roomMessage.role === "dm")) {
       analytics?.track({
@@ -243,8 +274,11 @@ export async function registerRoomRoutes(
           hasDiceRequest: snapshot.pendingRollRequests.length > 0,
           combatActive: snapshot.combat.active,
           responseLatencyMs: Date.now() - startedAt,
+          responseType: dmResponseType(snapshot),
+          hasStateChange: hasStateChange(snapshot),
           ...counts
-        }
+        },
+        milestones: dmMilestones
       });
     }
 
