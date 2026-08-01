@@ -15,7 +15,7 @@ import {
   Send,
   X
 } from "lucide-react";
-import type { CampaignInvite } from "@ai-dnd/contracts";
+import type { CampaignInvite, HookMetric } from "@ai-dnd/contracts";
 import type {
   AiModelId,
   DiceRollRequest,
@@ -144,6 +144,32 @@ function selectedAiModelFromForm(form: HTMLFormElement): AiModelId {
 }
 
 type CampaignSummary = ApiCampaignSummary & ChatSummary;
+
+function dmResponseType(message: GameMessage | undefined) {
+  if (message?.kind) {
+    return message.kind;
+  }
+
+  return message?.role === "dm" ? "turn" : undefined;
+}
+
+function hasStateChange(room: RoomSnapshot) {
+  return (
+    rollRequestsFromRoom(room).length > 0 ||
+    Boolean(room.combat?.active) ||
+    room.nextInputNeeded !== "player_actions" ||
+    (room.inputTargets?.length ?? 0) > 0
+  );
+}
+
+function analyticsMessageCounts(room: RoomSnapshot) {
+  return {
+    playerMessageCount: room.messages.filter((message) => message.role === "player")
+      .length,
+    dmMessageCount: room.messages.filter((message) => message.role === "dm").length,
+    totalMessageCount: room.messages.length
+  };
+}
 
 type ApiErrorResponse = {
   error?: string | {
@@ -1621,37 +1647,46 @@ export function GameShell({
       const room = (await response.json()) as RoomSnapshot;
       applyRoomSnapshot(room);
       const latestMessage = room.messages[room.messages.length - 1];
-      const playerMessageCount = room.messages.filter(
-        (message) => message.role === "player"
-      ).length;
-      const dmMessageCount = room.messages.filter((message) => message.role === "dm")
-        .length;
+      const counts = analyticsMessageCounts(room);
       const milestones = [
-        ...(playerMessageCount === 1 ? (["first_player_message"] as const) : []),
-        ...(playerMessageCount === 5 ? (["five_player_messages"] as const) : [])
+        ...(counts.playerMessageCount === 1
+          ? (["first_player_message"] as const)
+          : []),
+        ...(counts.playerMessageCount === 5
+          ? (["five_player_messages"] as const)
+          : [])
       ];
+      const playerTurnProperties = {
+        ...analyticsBaseProperties(),
+        campaignId: activeCampaign.id,
+        campaignMode: activeCampaign.mode,
+        messageLength: content.length,
+        turnNumber: counts.playerMessageCount,
+        model: request.body.model,
+        skipTurn,
+        hasDiceRequest: rollRequestsFromRoom(room).length > 0,
+        combatActive: Boolean(room.combat?.active),
+        responseLatencyMs: Date.now() - startedAt,
+        hasStateChange: hasStateChange(room),
+        ...counts
+      };
 
       trackAnalytics({
         name: "Player Message Sent",
-        properties: {
-          ...analyticsBaseProperties(),
-          campaignId: activeCampaign.id,
-          campaignMode: activeCampaign.mode,
-          messageLength: content.length,
-          turnNumber: playerMessageCount,
-          model: request.body.model,
-          skipTurn,
-          hasDiceRequest: rollRequestsFromRoom(room).length > 0,
-          combatActive: Boolean(room.combat?.active),
-          responseLatencyMs: Date.now() - startedAt,
-          playerMessageCount,
-          dmMessageCount,
-          totalMessageCount: room.messages.length
-        },
+        properties: playerTurnProperties,
         milestones
       });
+      if (counts.playerMessageCount === 1) {
+        trackAnalytics({
+          name: "First Player Message Sent",
+          properties: playerTurnProperties
+        });
+      }
 
       if (latestMessage?.role === "dm") {
+        const dmMilestones: HookMetric[] =
+          counts.dmMessageCount === 5 ? ["five_dm_responses"] : [];
+
         trackAnalytics({
           name: "DM Response Received",
           properties: {
@@ -1661,10 +1696,11 @@ export function GameShell({
             hasDiceRequest: rollRequestsFromRoom(room).length > 0,
             combatActive: Boolean(room.combat?.active),
             responseLatencyMs: Date.now() - startedAt,
-            playerMessageCount,
-            dmMessageCount,
-            totalMessageCount: room.messages.length
-          }
+            responseType: dmResponseType(latestMessage),
+            hasStateChange: hasStateChange(room),
+            ...counts
+          },
+          milestones: dmMilestones
         });
       }
 
@@ -1738,6 +1774,8 @@ export function GameShell({
 
       const room = (await response.json()) as RoomSnapshot;
       applyRoomSnapshot(room);
+      const counts = analyticsMessageCounts(room);
+      const latestMessage = room.messages[room.messages.length - 1];
       trackAnalytics({
         name: "Regenerate Response Submitted",
         properties: {
@@ -1745,12 +1783,9 @@ export function GameShell({
           campaignId: activeCampaign.id,
           campaignMode: activeCampaign.mode,
           responseLatencyMs: Date.now() - startedAt,
-          playerMessageCount: room.messages.filter(
-            (message) => message.role === "player"
-          ).length,
-          dmMessageCount: room.messages.filter((message) => message.role === "dm")
-            .length,
-          totalMessageCount: room.messages.length
+          responseType: "regenerated",
+          hasStateChange: hasStateChange(room),
+          ...counts
         },
         milestones: ["regenerated_response"]
       });
@@ -1759,7 +1794,6 @@ export function GameShell({
         setMessages(room.messages.length > 0 ? room.messages : openingMessages);
       }
 
-      const latestMessage = room.messages[room.messages.length - 1];
       setAvailableCampaigns((currentCampaigns) =>
         updateCampaignPreview(
           currentCampaigns,
@@ -1837,6 +1871,8 @@ export function GameShell({
 
       const room = (await response.json()) as RoomSnapshot;
       applyRoomSnapshot(room);
+      const counts = analyticsMessageCounts(room);
+      const latestMessage = room.messages[room.messages.length - 1];
       trackAnalytics({
         name: "Ask DM Submitted",
         properties: {
@@ -1846,12 +1882,9 @@ export function GameShell({
           messageLength: question.length,
           model,
           responseLatencyMs: Date.now() - startedAt,
-          playerMessageCount: room.messages.filter(
-            (message) => message.role === "player"
-          ).length,
-          dmMessageCount: room.messages.filter((message) => message.role === "dm")
-            .length,
-          totalMessageCount: room.messages.length
+          responseType: dmResponseType(latestMessage),
+          hasStateChange: hasStateChange(room),
+          ...counts
         },
         milestones: ["asked_dm"]
       });
@@ -1860,7 +1893,6 @@ export function GameShell({
         setMessages(room.messages.length > 0 ? room.messages : openingMessages);
       }
 
-      const latestMessage = room.messages[room.messages.length - 1];
       setAvailableCampaigns((currentCampaigns) =>
         updateCampaignPreview(
           currentCampaigns,
@@ -1960,20 +1992,19 @@ export function GameShell({
 
       const room = (await response.json()) as RoomSnapshot;
       applyRoomSnapshot(room);
+      const counts = analyticsMessageCounts(room);
       trackAnalytics({
         name: "Dice Roll Submitted",
         properties: {
           ...analyticsBaseProperties(campaign),
           diceSubmissionCount: rollSubmissions.length,
+          rollType: rollSubmissions.length > 0 ? "dm_requested_roll" : undefined,
+          requestedByDm: true,
           hasDiceRequest: rollRequestsFromRoom(room).length > 0,
           combatActive: Boolean(room.combat?.active),
           responseLatencyMs: Date.now() - startedAt,
-          playerMessageCount: room.messages.filter(
-            (message) => message.role === "player"
-          ).length,
-          dmMessageCount: room.messages.filter((message) => message.role === "dm")
-            .length,
-          totalMessageCount: room.messages.length
+          hasStateChange: hasStateChange(room),
+          ...counts
         },
         milestones: ["dice_submitted"]
       });

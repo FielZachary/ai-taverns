@@ -150,6 +150,14 @@ test("server analytics sends profile, event, and hook milestone updates", () => 
     }
   ]);
 
+  const milestoneEventCalls = calls.filter(
+    (call) => call.type === "track" && call.name === "Hook Milestone Reached"
+  );
+  assert.deepEqual(
+    milestoneEventCalls.map((call) => call.properties?.hookMilestone),
+    ["first_player_message", "asked_dm"]
+  );
+
   const incrementCall = calls.find((call) => call.type === "people.increment");
   assert.equal(incrementCall?.property, "hook_score_lifetime");
   assert.equal(incrementCall?.value, 20);
@@ -225,5 +233,5 @@ test("server analytics reports Mixpanel callback errors without throwing", () =>
     milestones: ["asked_dm"]
   });
 
-  assert.equal(warnings.length, 5);
+  assert.equal(warnings.length, 6);
 });
