@@ -2,6 +2,8 @@ import type { FastifyInstance } from "fastify";
 import {
   RoomBeginRequestSchema,
   RoomBeginResponseSchema,
+  RoomCombatCheatSheetGenerateRequestSchema,
+  RoomCombatCheatSheetGenerateResponseSchema,
   RoomPlayerUpdateRequestSchema,
   RoomPlayerUpdateResponseSchema,
   RoomReadQuerySchema,
@@ -13,12 +15,15 @@ import type { HookMetric, RoomSnapshot } from "@ai-dnd/contracts";
 import {
   beginRoomForUser,
   type DungeonMasterRuntime,
+  getCombatCheatSheetTargetForUser,
   getRoomForUser,
   registerRoomPlayerForUser,
+  saveCombatCheatSheetForUser,
   submitRoomTurnForUser
 } from "@ai-dnd/db";
 import type { ApiConfig } from "../config.js";
 import type { ServerAnalytics } from "../analytics.js";
+import { generateCombatCheatSheet } from "../combat-cheat-sheet.js";
 import { askDungeonMasterProvider } from "../dm-provider.js";
 import { requireAuthenticatedUser } from "./auth.js";
 
@@ -142,6 +147,52 @@ export async function registerRoomRoutes(
     );
 
     await publishRoomSnapshotUpdate(fastify, snapshot);
+
+    return snapshot;
+  });
+
+  fastify.post("/room/player/combat-cheat-sheet", async (request) => {
+    const body = RoomCombatCheatSheetGenerateRequestSchema.parse(request.body);
+    const identity = roomIdentity(body.roomId, body.sessionId);
+    const playerId = body.playerId?.trim();
+    const user = await requireAuthenticatedUser(
+      fastify,
+      config,
+      request.cookies[config.authCookieName]
+    );
+
+    const target = await getCombatCheatSheetTargetForUser(fastify.pg, {
+      ...identity,
+      ...(playerId ? { playerId } : {}),
+      userId: user.id
+    });
+    const generated = await generateCombatCheatSheet(target);
+    const snapshot = RoomCombatCheatSheetGenerateResponseSchema.parse(
+      await saveCombatCheatSheetForUser(fastify.pg, {
+        ...identity,
+        playerId: target.playerId,
+        userId: user.id,
+        markdown: generated.markdown,
+        sourceHash: generated.sourceHash
+      })
+    );
+
+    await publishRoomSnapshotUpdate(fastify, snapshot);
+    analytics?.track({
+      name: "Combat Cheat Sheet Generated",
+      distinctId: `user:${user.id}`,
+      properties: {
+        userId: user.id,
+        campaignId: snapshot.roomId,
+        campaignMode: snapshot.mode,
+        characterName: target.characterName,
+        className:
+          target.characterSheet.match(/^Class:\s*(.+)$/im)?.[1]?.trim() ??
+          undefined,
+        markdownLength: generated.markdown.length
+      },
+      milestones: ["used_player_resources"]
+    });
 
     return snapshot;
   });

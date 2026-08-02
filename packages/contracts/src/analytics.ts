@@ -87,6 +87,7 @@ export const AnalyticsEventNameSchema = z.enum([
   "Regenerate Response Submitted",
   "Character Sheet Opened",
   "Player Resource Tab Opened",
+  "Combat Cheat Sheet Generated",
   "NPC Card Updated",
   "Character Portrait Previewed",
   "Character Portrait Requested",
@@ -137,6 +138,7 @@ export const AnalyticsEventSchema = z.object({
       responseType: z.string().min(1).optional(),
       hasStateChange: z.boolean().optional(),
       resourceTab: z.string().min(1).optional(),
+      markdownLength: z.number().int().nonnegative().optional(),
       hookDeltas: z.array(HookScoreDeltaSchema).optional(),
       hookMilestone: HookMetricSchema.optional()
     })
