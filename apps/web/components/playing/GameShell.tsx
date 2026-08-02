@@ -192,6 +192,8 @@ type GameShellProps = {
   initialCampaignId?: string;
   userEmail?: string;
   userId?: string;
+  routePath?: "/play" | "/debug";
+  allowUnlistedInitialCampaign?: boolean;
 };
 
 type ActiveDiceReveal = {
@@ -366,7 +368,9 @@ async function fetchWithTimeout(
 export function GameShell({
   initialCampaignId,
   userEmail,
-  userId
+  userId,
+  routePath = "/play",
+  allowUnlistedInitialCampaign = false
 }: GameShellProps) {
   const [messages, setMessages] = useState<GameMessage[]>(openingMessages);
   const [availableCampaigns, setAvailableCampaigns] = useState<CampaignSummary[]>([]);
@@ -434,6 +438,19 @@ export function GameShell({
   const [combatCheatSheetError, setCombatCheatSheetError] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const roomPollInFlightRef = useRef(false);
+  const initialDebugCampaign = useMemo<CampaignSummary | null>(() => {
+    if (!allowUnlistedInitialCampaign || !initialCampaignId) {
+      return null;
+    }
+
+    return {
+      id: initialCampaignId,
+      sessionId: initialCampaignId,
+      mode: "single_player",
+      title: `Debug ${initialCampaignId.slice(0, 8)}`,
+      preview: "Loaded from pasted campaign id"
+    };
+  }, [allowUnlistedInitialCampaign, initialCampaignId]);
 
   const activeCampaign = useMemo(
     () =>
@@ -734,6 +751,17 @@ export function GameShell({
         campaignId: campaign.id,
         campaignMode: campaign.mode
       });
+      setAvailableCampaigns((currentCampaigns) =>
+        currentCampaigns.map((currentCampaign) =>
+          currentCampaign.id === campaign.id
+            ? {
+                ...currentCampaign,
+                mode: room.mode,
+                sessionId: room.sessionId || currentCampaign.sessionId
+              }
+            : currentCampaign
+        )
+      );
       setMessages(openingMessages);
 
       if (campaign.mode === "single_player") {
@@ -917,10 +945,9 @@ export function GameShell({
           return;
         }
 
-        setAvailableCampaigns(campaigns);
-
         const selectedCampaign =
           campaigns.find((campaign) => campaign.id === initialCampaignId) ??
+          initialDebugCampaign ??
           campaigns[0];
 
         if (!selectedCampaign) {
@@ -928,6 +955,12 @@ export function GameShell({
           return;
         }
 
+        setAvailableCampaigns(
+          initialDebugCampaign &&
+            !campaigns.some((campaign) => campaign.id === initialDebugCampaign.id)
+            ? [initialDebugCampaign, ...campaigns]
+            : campaigns
+        );
         setActiveCampaignId(selectedCampaign.id);
         await loadCampaignMessages(selectedCampaign);
       } catch {
@@ -947,7 +980,7 @@ export function GameShell({
     return () => {
       shouldIgnore = true;
     };
-  }, [fetchCampaigns, initialCampaignId, loadCampaignMessages]);
+  }, [fetchCampaigns, initialCampaignId, initialDebugCampaign, loadCampaignMessages]);
 
   useEffect(() => {
     let shouldIgnore = false;
@@ -1190,7 +1223,7 @@ export function GameShell({
   }, [activeCampaign, applyRoomSnapshot, isSinglePlayer]);
 
   function handleStartNewChat() {
-    window.location.assign("/new-adventure");
+    window.location.assign(routePath === "/debug" ? "/debug" : "/new-adventure");
   }
 
   async function handleSelectChat(campaignId: string) {
@@ -1202,7 +1235,11 @@ export function GameShell({
       return;
     }
 
-    window.history.replaceState(null, "", `/play?campaignId=${campaign.id}`);
+    window.history.replaceState(
+      null,
+      "",
+      `${routePath}?campaignId=${encodeURIComponent(campaign.id)}`
+    );
     trackAnalytics({
       name: "Campaign Switched",
       properties: analyticsBaseProperties(campaign)

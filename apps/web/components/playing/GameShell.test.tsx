@@ -656,6 +656,99 @@ describe("GameShell", () => {
     expect(screen.getByText("Portrait status: ready")).toBeInTheDocument();
   });
 
+  it("loads an unlisted initial campaign when debug mode allows pasted IDs", async () => {
+    const debugCampaignId = "99999999-9999-4999-8999-999999999999";
+    listCampaignsMock.mockResolvedValue([]);
+    const longMessage = "The long tale begins. ".repeat(80).trim();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.startsWith("/api/room?")) {
+        const requestUrl = new URL(url, "https://app.example");
+
+        expect(requestUrl.searchParams.get("roomId")).toBe(debugCampaignId);
+        expect(requestUrl.searchParams.get("sessionId")).toBe(debugCampaignId);
+
+        return responseJson(
+          roomSnapshot({
+            roomId: debugCampaignId,
+            sessionId: "provider-debug-session",
+            messages: [
+              {
+                id: "debug-dm-message",
+                role: "dm",
+                content: longMessage,
+                createdAt: "2026-07-12T00:00:00.000Z"
+              }
+            ]
+          })
+        );
+      }
+
+      if (url === "/api/auth/claim-guest-state") {
+        return responseJson({});
+      }
+
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <GameShell
+        allowUnlistedInitialCampaign
+        initialCampaignId={debugCampaignId}
+        routePath="/debug"
+      />
+    );
+
+    expect(await screen.findByText(longMessage)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Debug 99999999" })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
+  });
+
+  it("keeps campaign switching on the debug route when rendered for debug", async () => {
+    listCampaignsMock.mockResolvedValue([campaign, multiplayerCampaign]);
+    const replaceStateSpy = vi.spyOn(window.history, "replaceState");
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url === "/api/auth/claim-guest-state") {
+        return responseJson({});
+      }
+
+      if (url.startsWith("/api/room?")) {
+        const requestUrl = new URL(url, "https://app.example");
+        const roomId = requestUrl.searchParams.get("roomId");
+
+        return responseJson(
+          roomId === multiplayerCampaign.id
+            ? multiplayerRoomSnapshot({ hasBegun: true })
+            : roomSnapshot()
+        );
+      }
+
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<GameShell initialCampaignId={campaign.id} routePath="/debug" />);
+
+    expect(await screen.findByRole("button", { name: campaign.title }))
+      .toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: multiplayerCampaign.title }));
+
+    await waitFor(() => {
+      expect(replaceStateSpy).toHaveBeenCalledWith(
+        null,
+        "",
+        `/debug?campaignId=${encodeURIComponent(multiplayerCampaign.id)}`
+      );
+    });
+  });
+
   it("does not overwrite an old multiplayer adventure with the previous character profile", async () => {
     const pokeCampaign = {
       ...multiplayerCampaign,
@@ -673,7 +766,8 @@ describe("GameShell", () => {
     listCampaignsMock.mockResolvedValue([pokeCampaign, jinCampaign]);
 
     const fetchMock = vi.fn(
-      async (input: RequestInfo | URL, _init?: RequestInit) => {
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        void init;
         const url = String(input);
 
         if (url === "/api/auth/claim-guest-state") {
