@@ -4,6 +4,7 @@ import type { DiceRollRequest, GameMessage } from "@/lib/game-types";
 import { defaultCharacterSheet, type PlayerProfile } from "./PlayerPanel";
 import {
   activeCharacterSheetForRoom,
+  activeResourcePlayerForRoom,
   currentPlayerRollRequests,
   displayedRoomPlayersWithOptimisticSubmission,
   getMissingPlayerProfileFields,
@@ -671,6 +672,41 @@ describe("game shell state helpers", () => {
         playerProfile: fallbackProfile
       })
     ).toBe("Profile sheet");
+  });
+
+  it("selects the active resource player with the same room fallback as character sheets", () => {
+    const roomPlayers: RoomPlayer[] = [
+      {
+        ...currentRoomPlayer,
+        id: "stale-local-player",
+        characterSheet: ""
+      },
+      {
+        id: "player-2",
+        slot: 2,
+        username: "Bran",
+        characterName: "Bran",
+        characterSheet: "Bran sheet",
+        combatCheatSheet: "**Shortbow** deals **1d6+3** piercing damage.",
+        combatCheatSheetUpdatedAt: "2026-08-02T12:00:00.000Z",
+        status: "waiting"
+      }
+    ];
+
+    expect(
+      activeResourcePlayerForRoom({
+        currentRoomPlayer: {
+          ...currentRoomPlayer,
+          characterSheet: "Current sheet"
+        },
+        roomPlayers
+      })?.id
+    ).toBe(currentRoomPlayer.id);
+    expect(
+      activeResourcePlayerForRoom({
+        roomPlayers
+      })?.combatCheatSheet
+    ).toBe("**Shortbow** deals **1d6+3** piercing damage.");
   });
 
   it("detects when multiplayer input is waiting on another player's roll", () => {

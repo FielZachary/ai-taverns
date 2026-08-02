@@ -348,10 +348,18 @@ async function askTestDungeonMasterProvider(
   const isAskDmCall = input.instructions.includes(
     "out-of-turn table question"
   );
+  const isCombatCheatSheetCall = input.instructions.includes(
+    "player-facing combat cheat sheet"
+  );
   const content = isPlannerCall
     ? testOpeningPlanContent()
     : isAskDmCall
       ? testAskDmAnswerContent()
+      : isCombatCheatSheetCall
+        ? JSON.stringify({
+            cheatSheetMarkdown:
+              "## Cheat Sheet\n\n**Longsword** is your best melee weapon. It attacks at **+6 to hit** and deals **1d8 + 3 slashing** damage."
+          })
       : testDmContractContent();
 
   if (!isPlannerCall && !isAskDmCall) {

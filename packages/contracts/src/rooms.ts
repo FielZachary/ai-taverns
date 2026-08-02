@@ -44,6 +44,9 @@ export const RoomPlayerSchema = z.object({
   username: z.string(),
   characterName: z.string(),
   characterSheet: z.string(),
+  combatCheatSheet: z.string().nullable().optional(),
+  combatCheatSheetUpdatedAt: z.string().datetime().nullable().optional(),
+  combatCheatSheetSourceHash: z.string().nullable().optional(),
   portraitAssetId: z.string().uuid().optional(),
   portraitUrl: z.string().min(1).optional(),
   portraitStatus: z.enum(["pending", "ready", "failed"]).optional(),
@@ -112,6 +115,12 @@ export const RoomPlayerUpdateRequestSchema = z.object({
   mechanicsSeed: MechanicsSeedSchema.optional()
 });
 
+export const RoomCombatCheatSheetGenerateRequestSchema = z.object({
+  roomId: z.string().optional(),
+  sessionId: z.string().optional(),
+  playerId: z.string().optional()
+});
+
 export const RoomBeginRequestSchema = z.object({
   roomId: z.string().optional(),
   sessionId: z.string().optional()
@@ -132,6 +141,7 @@ export const RoomSubmitRequestSchema = z.object({
 
 export const RoomReadResponseSchema = RoomSnapshotSchema;
 export const RoomPlayerUpdateResponseSchema = RoomSnapshotSchema;
+export const RoomCombatCheatSheetGenerateResponseSchema = RoomSnapshotSchema;
 export const RoomBeginResponseSchema = RoomSnapshotSchema;
 export const RoomSubmitResponseSchema = RoomSnapshotSchema;
 
@@ -195,6 +205,9 @@ export type RoomSnapshot = z.infer<typeof RoomSnapshotSchema>;
 export type RoomReadQuery = z.infer<typeof RoomReadQuerySchema>;
 export type RoomPlayerUpdateRequest = z.infer<
   typeof RoomPlayerUpdateRequestSchema
+>;
+export type RoomCombatCheatSheetGenerateRequest = z.infer<
+  typeof RoomCombatCheatSheetGenerateRequestSchema
 >;
 export type RoomBeginRequest = z.infer<typeof RoomBeginRequestSchema>;
 export type RoomSubmitRequest = z.infer<typeof RoomSubmitRequestSchema>;

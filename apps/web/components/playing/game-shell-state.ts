@@ -18,6 +18,9 @@ export type RoomPlayer = {
   username: string;
   characterName: string;
   characterSheet: string;
+  combatCheatSheet?: string | null;
+  combatCheatSheetUpdatedAt?: string | null;
+  combatCheatSheetSourceHash?: string | null;
   portraitAssetId?: string;
   portraitUrl?: string;
   portraitStatus?: "pending" | "ready" | "failed";
@@ -191,6 +194,19 @@ export function activeCharacterSheetForRoom({
     roomPlayers.find((roomPlayer) => roomPlayer.characterSheet.trim())
       ?.characterSheet ||
     playerProfile.characterSheet
+  );
+}
+
+export function activeResourcePlayerForRoom({
+  currentRoomPlayer,
+  roomPlayers
+}: {
+  currentRoomPlayer?: RoomPlayer;
+  roomPlayers: RoomPlayer[];
+}) {
+  return (
+    currentRoomPlayer ??
+    roomPlayers.find((roomPlayer) => roomPlayer.characterSheet.trim())
   );
 }
 
