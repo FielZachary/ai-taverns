@@ -696,6 +696,7 @@ describe("GameShell", () => {
     render(
       <GameShell
         allowUnlistedInitialCampaign
+        includeAllMessages
         initialCampaignId={debugCampaignId}
         routePath="/debug"
       />
@@ -706,6 +707,11 @@ describe("GameShell", () => {
       "aria-current",
       "page"
     );
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).includes("debugAllMessages=true")
+      )
+    ).toBe(true);
   });
 
   it("keeps campaign switching on the debug route when rendered for debug", async () => {

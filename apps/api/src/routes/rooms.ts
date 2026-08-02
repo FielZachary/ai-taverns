@@ -112,7 +112,8 @@ export async function registerRoomRoutes(
     return RoomReadResponseSchema.parse(
       await getRoomForUser(fastify.pg, {
         ...identity,
-        userId: user.id
+        userId: user.id,
+        ...(query.debugAllMessages ? { messageLimit: null } : {})
       })
     );
   });
