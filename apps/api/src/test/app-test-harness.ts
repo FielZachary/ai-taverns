@@ -109,6 +109,9 @@ type PlayerRecord = {
   username: string;
   character_name: string;
   character_sheet: string;
+  combat_cheat_sheet?: string | null;
+  combat_cheat_sheet_updated_at?: Date | null;
+  combat_cheat_sheet_source_hash?: string | null;
   slot: number | null;
   status: "active" | "left" | "kicked";
   last_seen_at: Date;
@@ -2179,6 +2182,29 @@ class FakeDatabase {
       }
 
       return { rows: [] as T[] };
+    }
+
+    if (normalizedSql.startsWith("update players set combat_cheat_sheet = $3")) {
+      const campaignId = values[0] as string;
+      const clientId = values[1] as string;
+      const markdown = values[2] as string;
+      const sourceHash = values[3] as string;
+      const player = this.players.find(
+        (candidate) =>
+          candidate.campaign_id === campaignId &&
+          candidate.client_id === clientId &&
+          candidate.status === "active"
+      );
+
+      if (player) {
+        player.combat_cheat_sheet = markdown;
+        player.combat_cheat_sheet_updated_at = new Date();
+        player.combat_cheat_sheet_source_hash = sourceHash;
+        player.last_seen_at = new Date();
+        player.updated_at = new Date();
+      }
+
+      return { rows: player ? ([player] as T[]) : ([] as T[]) };
     }
 
     if (normalizedSql.startsWith("select count(*) as active_players from players")) {

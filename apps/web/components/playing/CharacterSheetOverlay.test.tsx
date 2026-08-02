@@ -229,6 +229,53 @@ None
     expect(within(spellDialog).getByText("Casting Time")).toBeInTheDocument();
   });
 
+  it("renders a combat cheat sheet with a regenerate action", () => {
+    const onGenerateCombatCheatSheet = vi.fn(async () => undefined);
+
+    renderCharacterSheetOverlay({
+      combatCheatSheet:
+        "## Cheat Sheet\n\n**Shortbow** is your safest ranged option. It attacks at **+5 to hit** and deals **1d6 + 3 piercing** damage.",
+      combatCheatSheetUpdatedAt: "2026-08-02T10:00:00.000Z",
+      onGenerateCombatCheatSheet
+    });
+
+    fireEvent.click(screen.getByRole("tab", { name: "Cheat Sheet" }));
+
+    const cheatSheetPanel = screen.getByRole("region", { name: "Cheat Sheet" });
+
+    expect(
+      within(cheatSheetPanel).getByText("Shortbow", { selector: "strong" })
+    ).toBeInTheDocument();
+    expect(
+      within(cheatSheetPanel).getByText("+5 to hit", { selector: "strong" })
+    ).toBeInTheDocument();
+
+    fireEvent.click(within(cheatSheetPanel).getByRole("button", { name: /regenerate/i }));
+
+    expect(onGenerateCombatCheatSheet).toHaveBeenCalledTimes(1);
+  });
+
+  it("auto-generates the combat cheat sheet the first time the empty tab opens", async () => {
+    const onGenerateCombatCheatSheet = vi.fn(async () => undefined);
+
+    renderCharacterSheetOverlay({
+      onGenerateCombatCheatSheet
+    });
+
+    expect(onGenerateCombatCheatSheet).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Cheat Sheet" }));
+
+    await waitFor(() => {
+      expect(onGenerateCombatCheatSheet).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.click(screen.getByRole("tab", { name: "Character Sheet" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Cheat Sheet" }));
+
+    expect(onGenerateCombatCheatSheet).toHaveBeenCalledTimes(1);
+  });
+
   it("renders NPC cards from context chunks and opens editable NPC fields", async () => {
     const props = renderCharacterSheetOverlay({
       npcCards: [

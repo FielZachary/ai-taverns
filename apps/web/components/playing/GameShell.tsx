@@ -59,6 +59,7 @@ import {
 } from "./PlayerInput";
 import {
   activeCharacterSheetForRoom,
+  activeResourcePlayerForRoom,
   currentPlayerRollRequests,
   displayedRoomPlayersWithOptimisticSubmission,
   getMissingPlayerProfileFields,
@@ -428,6 +429,9 @@ export function GameShell({
   const [npcCards, setNpcCards] = useState<CampaignNpcCard[]>([]);
   const [isLoadingNpcCards, setIsLoadingNpcCards] = useState(false);
   const [npcCardsError, setNpcCardsError] = useState("");
+  const [isGeneratingCombatCheatSheet, setIsGeneratingCombatCheatSheet] =
+    useState(false);
+  const [combatCheatSheetError, setCombatCheatSheetError] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const roomPollInFlightRef = useRef(false);
 
@@ -551,6 +555,14 @@ export function GameShell({
         playerProfile
       }),
     [currentRoomPlayer, displayedRoomPlayers, playerProfile]
+  );
+  const activeResourcePlayer = useMemo(
+    () =>
+      activeResourcePlayerForRoom({
+        currentRoomPlayer,
+        roomPlayers: displayedRoomPlayers
+      }),
+    [currentRoomPlayer, displayedRoomPlayers]
   );
   const activeBackstory = useMemo(
     () => extractPlayerBackstory(activeCharacterSheet),
@@ -2156,6 +2168,59 @@ export function GameShell({
     return updatedCard;
   }
 
+  async function handleGenerateCombatCheatSheet() {
+    if (!activeCampaign?.id) {
+      setCombatCheatSheetError("Campaign could not be loaded.");
+      return;
+    }
+
+    setIsGeneratingCombatCheatSheet(true);
+    setCombatCheatSheetError("");
+
+    try {
+      const response = await fetch("/api/room/player/combat-cheat-sheet", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          roomId: activeCampaign.id,
+          sessionId: activeCampaign.sessionId,
+          playerId: activeResourcePlayer?.id
+        })
+      });
+
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as {
+          error?: string | { message?: string };
+        } | null;
+        const message =
+          typeof body?.error === "string"
+            ? body.error
+            : body?.error?.message ||
+              "Combat cheat sheet could not be generated.";
+
+        throw new Error(message);
+      }
+
+      const room = (await response.json()) as RoomSnapshot;
+
+      applyRoomSnapshot(room);
+      trackAnalytics({
+        name: "Combat Cheat Sheet Generated",
+        properties: analyticsBaseProperties()
+      });
+    } catch (error) {
+      setCombatCheatSheetError(
+        error instanceof Error
+          ? error.message
+          : "Combat cheat sheet could not be generated."
+      );
+    } finally {
+      setIsGeneratingCombatCheatSheet(false);
+    }
+  }
+
   if (!activeCampaign && isLoadingCampaigns) {
     return (
       <main className="table-page">
@@ -2365,7 +2430,11 @@ export function GameShell({
         <CharacterSheetOverlay
           characterSheet={activeCharacterSheet}
           initialTab={playerResourcesInitialTab}
-          portraitUrl={currentRoomPlayer?.portraitUrl}
+          portraitUrl={activeResourcePlayer?.portraitUrl}
+          combatCheatSheet={activeResourcePlayer?.combatCheatSheet}
+          combatCheatSheetUpdatedAt={activeResourcePlayer?.combatCheatSheetUpdatedAt}
+          isGeneratingCombatCheatSheet={isGeneratingCombatCheatSheet}
+          combatCheatSheetError={combatCheatSheetError}
           isLoadingNpcCards={isLoadingNpcCards}
           npcCards={npcCards}
           npcCardsError={npcCardsError}
@@ -2383,6 +2452,7 @@ export function GameShell({
               milestones: ["used_player_resources"]
             })
           }
+          onGenerateCombatCheatSheet={handleGenerateCombatCheatSheet}
           onNpcCardUpdate={handleUpdateNpcCard}
         />
       ) : null}
