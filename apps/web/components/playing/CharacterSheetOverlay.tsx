@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { UserRound, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { RefreshCw, UserRound, X } from "lucide-react";
 import type { CampaignNpcCard } from "@/lib/campaign-api";
 import {
   spellDetailFor,
@@ -17,11 +17,16 @@ type CharacterSheetOverlayProps = {
   characterSheet: string;
   initialTab?: PlayerResourcesTab;
   portraitUrl?: string;
+  combatCheatSheet?: string | null;
+  combatCheatSheetUpdatedAt?: string | null;
+  isGeneratingCombatCheatSheet?: boolean;
+  combatCheatSheetError?: string;
   isLoadingNpcCards?: boolean;
   npcCards?: CampaignNpcCard[];
   npcCardsError?: string;
   onClose: () => void;
   onTabChange?: (tab: PlayerResourcesTab) => void;
+  onGenerateCombatCheatSheet?: () => Promise<void>;
   onNpcCardUpdate?: (input: {
     npcCardId: string;
     markdown: string;
@@ -44,6 +49,7 @@ type SheetTableRow = {
 
 export type PlayerResourcesTab =
   | "character_sheet"
+  | "cheat_sheet"
   | "inventory"
   | "weapons_spells"
   | "backstory"
@@ -150,6 +156,7 @@ const compactNpcFields = new Set(["Name", "Location", "Last Seen"]);
 
 const playerResourceTabs: { id: PlayerResourcesTab; label: string }[] = [
   { id: "character_sheet", label: "Character Sheet" },
+  { id: "cheat_sheet", label: "Cheat Sheet" },
   { id: "inventory", label: "Inventory" },
   { id: "weapons_spells", label: "Weapons & Spells" },
   { id: "backstory", label: "Backstory" },
@@ -233,6 +240,7 @@ const eldermereRegions = [
 
 const playerResourceTitleIds: Record<PlayerResourcesTab, string> = {
   character_sheet: "character-sheet-title",
+  cheat_sheet: "combat-cheat-sheet-title",
   inventory: "player-inventory-title",
   weapons_spells: "player-weapons-spells-title",
   backstory: "player-backstory-title",
@@ -766,15 +774,55 @@ function LinedPanel({
   );
 }
 
+function renderBoldMarkdownParts(text: string) {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((part, index) => {
+    const boldMatch = part.match(/^\*\*([^*]+)\*\*$/);
+
+    if (boldMatch?.[1]) {
+      return <strong key={`${part}-${index}`}>{boldMatch[1]}</strong>;
+    }
+
+    return part;
+  });
+}
+
+function CombatCheatSheetMarkdown({ markdown }: { markdown: string }) {
+  const lines = markdown
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !/^#{1,6}\s+cheat sheet$/i.test(line));
+
+  return (
+    <div className="combat-cheat-sheet-copy">
+      {lines.map((line, index) => {
+        const normalizedLine = line.replace(/^[-*]\s+/, "");
+
+        return (
+          <p key={`${index}-${normalizedLine.slice(0, 24)}`}>
+            {renderBoldMarkdownParts(normalizedLine)}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
 export function CharacterSheetOverlay({
   characterSheet,
   initialTab = "character_sheet",
   portraitUrl,
+  combatCheatSheet = null,
+  combatCheatSheetUpdatedAt = null,
+  isGeneratingCombatCheatSheet = false,
+  combatCheatSheetError = "",
   isLoadingNpcCards = false,
   npcCards = [],
   npcCardsError = "",
   onClose,
   onTabChange,
+  onGenerateCombatCheatSheet,
   onNpcCardUpdate
 }: CharacterSheetOverlayProps) {
   const [activeTab, setActiveTab] = useState<PlayerResourcesTab>(initialTab);
@@ -794,6 +842,7 @@ export function CharacterSheetOverlay({
     name: string;
     level: SpellLevelLabel | null;
   } | null>(null);
+  const autoGenerateCombatCheatSheetKeyRef = useRef<string | null>(null);
   const sheet = parseCharacterSheet(characterSheet.trim());
   const playerBackstory = extractPlayerBackstory(characterSheet);
   const backstoryParagraphs = formatBackstoryParagraphs(playerBackstory);
@@ -828,6 +877,32 @@ export function CharacterSheetOverlay({
   useEffect(() => {
     setActiveTab(initialTab);
   }, [initialTab]);
+
+  useEffect(() => {
+    if (
+      activeTab !== "cheat_sheet" ||
+      combatCheatSheet ||
+      isGeneratingCombatCheatSheet ||
+      !onGenerateCombatCheatSheet
+    ) {
+      return;
+    }
+
+    const sourceKey = characterSheet.trim();
+
+    if (!sourceKey || autoGenerateCombatCheatSheetKeyRef.current === sourceKey) {
+      return;
+    }
+
+    autoGenerateCombatCheatSheetKeyRef.current = sourceKey;
+    void onGenerateCombatCheatSheet();
+  }, [
+    activeTab,
+    characterSheet,
+    combatCheatSheet,
+    isGeneratingCombatCheatSheet,
+    onGenerateCombatCheatSheet
+  ]);
 
   useEffect(() => {
     if (!selectedNpc) {
@@ -992,6 +1067,51 @@ export function CharacterSheetOverlay({
               </section>
             </div>
           </>
+        ) : activeTab === "cheat_sheet" ? (
+          <section
+            aria-labelledby="combat-cheat-sheet-title"
+            className="player-resource-panel combat-cheat-sheet-panel"
+            role="region"
+          >
+            <div className="npc-cards-header">
+              <div>
+                <p className="eyebrow">Player Resources</p>
+                <h2 id="combat-cheat-sheet-title">Cheat Sheet</h2>
+              </div>
+              <button
+                className="combat-cheat-sheet-generate"
+                type="button"
+                disabled={
+                  isGeneratingCombatCheatSheet || !onGenerateCombatCheatSheet
+                }
+                onClick={() => void onGenerateCombatCheatSheet?.()}
+              >
+                <RefreshCw
+                  size={16}
+                  className={isGeneratingCombatCheatSheet ? "spinning" : undefined}
+                />
+                <span>{combatCheatSheet ? "Regenerate" : "Generate"}</span>
+              </button>
+            </div>
+
+            {combatCheatSheetUpdatedAt ? (
+              <p className="combat-cheat-sheet-meta">
+                Updated {new Date(combatCheatSheetUpdatedAt).toLocaleString()}
+              </p>
+            ) : null}
+            {combatCheatSheetError ? (
+              <p className="npc-cards-status" role="alert">
+                {combatCheatSheetError}
+              </p>
+            ) : null}
+            {combatCheatSheet ? (
+              <CombatCheatSheetMarkdown markdown={combatCheatSheet} />
+            ) : (
+              <p className="npc-cards-status">
+                Generate a combat cheat sheet from your current character sheet.
+              </p>
+            )}
+          </section>
         ) : activeTab === "inventory" ? (
           <section
             aria-labelledby="player-inventory-title"

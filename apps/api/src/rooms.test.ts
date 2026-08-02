@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   ApiErrorResponseSchema,
   CampaignCreateResponseSchema,
+  RoomCombatCheatSheetGenerateResponseSchema,
   RoomBeginResponseSchema,
   RoomPlayerUpdateResponseSchema,
   RoomReadResponseSchema,
@@ -17,6 +18,8 @@ import {
   setProviderOverride,
   signIn
 } from "./test/app-test-harness.js";
+
+const originalTestProvider = process.env.AI_TAVERNS_TEST_DM_PROVIDER;
 
 async function createMultiplayerRoom(label: string) {
   const ownerCookie = await signIn(`${label}-owner@example.com`);
@@ -211,6 +214,178 @@ test("room routes read, update player, begin, and submit through Fastify", async
     ).length,
     2
   );
+});
+
+test("room player combat cheat sheet generates and stores cached markdown", async () => {
+  process.env.AI_TAVERNS_TEST_DM_PROVIDER = "true";
+
+  try {
+    const { campaignId, joinerCookie, joinerClientId } =
+      await createMultiplayerRoom("combat-cheat-sheet");
+    const profileResponse = await app.inject({
+      method: "POST",
+      url: "/api/room/player",
+      headers: {
+        cookie: joinerCookie
+      },
+      payload: {
+        roomId: campaignId,
+        playerId: joinerClientId,
+        username: "Joined Player",
+        characterName: "Joined Character",
+        characterSheet: [
+          "Character Name: Vey",
+          "Class: Fighter",
+          "Level: 5",
+          "",
+          "Core Stats",
+          "Armor Class: 19",
+          "",
+          "Attacks",
+          "Longsword: +6 to hit, 1d8+3 slashing"
+        ].join("\n")
+      }
+    });
+
+    assert.equal(profileResponse.statusCode, 200);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/room/player/combat-cheat-sheet",
+      headers: {
+        cookie: joinerCookie
+      },
+      payload: {
+        roomId: campaignId,
+        playerId: joinerClientId
+      }
+    });
+
+    assert.equal(response.statusCode, 200, response.body);
+    const snapshot = RoomCombatCheatSheetGenerateResponseSchema.parse(
+      response.json()
+    );
+    const player = snapshot.players.find(
+      (candidate) => candidate.id === joinerClientId
+    );
+
+    assert.match(player?.combatCheatSheet ?? "", /## Cheat Sheet/);
+    assert.match(player?.combatCheatSheet ?? "", /\*\*Longsword\*\*/);
+    assert.ok(player?.combatCheatSheetUpdatedAt);
+    assert.ok(player?.combatCheatSheetSourceHash);
+  } finally {
+    if (originalTestProvider === undefined) {
+      delete process.env.AI_TAVERNS_TEST_DM_PROVIDER;
+    } else {
+      process.env.AI_TAVERNS_TEST_DM_PROVIDER = originalTestProvider;
+    }
+  }
+});
+
+test("room owner can generate a combat cheat sheet for an older owner player row", async () => {
+  process.env.AI_TAVERNS_TEST_DM_PROVIDER = "true";
+
+  try {
+    const { campaignId, ownerCookie, ownerClientId } =
+      await createMultiplayerRoom("combat-cheat-sheet-owner");
+    const ownerPlayer = database.players.find(
+      (player) => player.campaign_id === campaignId && player.client_id === ownerClientId
+    );
+
+    assert.ok(ownerPlayer);
+    ownerPlayer.user_id = null;
+    ownerPlayer.character_sheet = [
+      "Character Name: Mara",
+      "Class: Fighter",
+      "Level: 5",
+      "",
+      "Attacks",
+      "Longsword: +6 to hit, 1d8+3 slashing"
+    ].join("\n");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/room/player/combat-cheat-sheet",
+      headers: {
+        cookie: ownerCookie
+      },
+      payload: {
+        roomId: campaignId,
+        playerId: ownerClientId
+      }
+    });
+
+    assert.equal(response.statusCode, 200, response.body);
+    const snapshot = RoomCombatCheatSheetGenerateResponseSchema.parse(
+      response.json()
+    );
+    const player = snapshot.players.find(
+      (candidate) => candidate.id === ownerClientId
+    );
+
+    assert.match(player?.combatCheatSheet ?? "", /\*\*Longsword\*\*/);
+  } finally {
+    if (originalTestProvider === undefined) {
+      delete process.env.AI_TAVERNS_TEST_DM_PROVIDER;
+    } else {
+      process.env.AI_TAVERNS_TEST_DM_PROVIDER = originalTestProvider;
+    }
+  }
+});
+
+test("room player combat cheat sheet falls back from stale client ids", async () => {
+  process.env.AI_TAVERNS_TEST_DM_PROVIDER = "true";
+
+  try {
+    const { campaignId, joinerCookie, joinerClientId } =
+      await createMultiplayerRoom("combat-cheat-sheet-stale-id");
+    const joinerPlayer = database.players.find(
+      (player) =>
+        player.campaign_id === campaignId && player.client_id === joinerClientId
+    );
+
+    assert.ok(joinerPlayer);
+    joinerPlayer.character_sheet = [
+      "Character Name: Vey",
+      "Class: Rogue",
+      "Level: 3",
+      "",
+      "Attacks",
+      "Shortbow: +5 to hit, 1d6+3 piercing, range 80/320 ft",
+      "",
+      "Features and Traits",
+      "Sneak Attack"
+    ].join("\n");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/room/player/combat-cheat-sheet",
+      headers: {
+        cookie: joinerCookie
+      },
+      payload: {
+        roomId: campaignId,
+        playerId: "stale-local-browser-id"
+      }
+    });
+
+    assert.equal(response.statusCode, 200, response.body);
+    const snapshot = RoomCombatCheatSheetGenerateResponseSchema.parse(
+      response.json()
+    );
+    const player = snapshot.players.find(
+      (candidate) => candidate.id === joinerClientId
+    );
+
+    assert.match(player?.combatCheatSheet ?? "", /## Cheat Sheet/);
+    assert.ok(player?.combatCheatSheetSourceHash);
+  } finally {
+    if (originalTestProvider === undefined) {
+      delete process.env.AI_TAVERNS_TEST_DM_PROVIDER;
+    } else {
+      process.env.AI_TAVERNS_TEST_DM_PROVIDER = originalTestProvider;
+    }
+  }
 });
 
 test("multiplayer combat catches up NPC turns instead of rejecting players", async () => {

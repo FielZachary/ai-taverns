@@ -475,6 +475,9 @@ type PlayerRow = {
   username: string;
   character_name: string;
   character_sheet: string;
+  combat_cheat_sheet?: string | null;
+  combat_cheat_sheet_updated_at?: Date | string | null;
+  combat_cheat_sheet_source_hash?: string | null;
   slot: number | null;
   status: PlayerStatus;
   last_seen_at: Date | string;
@@ -533,6 +536,18 @@ export type CharacterPortraitTarget = {
   username: string;
   characterName: string;
   characterSheet: string;
+};
+
+export type CombatCheatSheetTarget = {
+  campaignId: string;
+  sessionId: string;
+  playerDbId: string;
+  playerId: string;
+  username: string;
+  characterName: string;
+  characterSheet: string;
+  existingCombatCheatSheet: string | null;
+  existingCombatCheatSheetSourceHash: string | null;
 };
 
 type TurnRow = {
@@ -4518,6 +4533,11 @@ function rowToRoomPlayer(
       player.character_sheet,
       actor
     ),
+    combatCheatSheet: player.combat_cheat_sheet ?? null,
+    combatCheatSheetUpdatedAt: player.combat_cheat_sheet_updated_at
+      ? toIso(player.combat_cheat_sheet_updated_at)
+      : null,
+    combatCheatSheetSourceHash: player.combat_cheat_sheet_source_hash ?? null,
     status: submittedPlayerIds.has(player.id) ? "submitted" : "waiting",
     lastSeenAt: toIso(player.last_seen_at),
     ...(player.portrait_asset_id
@@ -9905,6 +9925,18 @@ export async function registerRoomPlayerForUser(
         set username = excluded.username,
             character_name = excluded.character_name,
             character_sheet = excluded.character_sheet,
+            combat_cheat_sheet = case
+              when players.character_sheet is distinct from excluded.character_sheet then null
+              else players.combat_cheat_sheet
+            end,
+            combat_cheat_sheet_updated_at = case
+              when players.character_sheet is distinct from excluded.character_sheet then null
+              else players.combat_cheat_sheet_updated_at
+            end,
+            combat_cheat_sheet_source_hash = case
+              when players.character_sheet is distinct from excluded.character_sheet then null
+              else players.combat_cheat_sheet_source_hash
+            end,
             user_id = coalesce(players.user_id, excluded.user_id),
             status = 'active',
             kicked_at = null,
@@ -9956,6 +9988,145 @@ export async function registerRoomPlayerForUser(
   });
 
   return buildRoomSnapshot(db, campaign);
+}
+
+export async function getCombatCheatSheetTargetForUser(
+  db: pg.Pool,
+  input: {
+    roomId: string;
+    sessionId: string;
+    playerId?: string | undefined;
+    userId: string;
+  }
+): Promise<CombatCheatSheetTarget> {
+  const campaign = await resolveRoomCampaign(db, input.roomId, input.sessionId);
+
+  if (!campaign) {
+    throw createStatusError(404, "Campaign not found.");
+  }
+
+  await assertCampaignAccessForUser(db, campaign, input.userId);
+
+  const players = (
+    await db.query<PlayerRow>(
+      `
+        select *
+        from players
+        where campaign_id = $1
+          and status = 'active'
+        order by slot asc nulls last, created_at asc
+      `,
+      [campaign.id]
+    )
+  ).rows;
+  const requestedPlayer = input.playerId
+    ? players.find((candidate) => candidate.client_id === input.playerId)
+    : undefined;
+  const userPlayer = players.find(
+    (candidate) => candidate.user_id === input.userId
+  );
+  const ownerPlayer =
+    campaign.owner_user_id === input.userId && campaign.owner_client_id
+      ? players.find(
+          (candidate) => candidate.client_id === campaign.owner_client_id
+        )
+      : undefined;
+  const player = requestedPlayer ?? userPlayer ?? ownerPlayer;
+
+  if (!player) {
+    throw createStatusError(404, "Player not found.");
+  }
+
+  if (
+    player.user_id &&
+    player.user_id !== input.userId &&
+    campaign.owner_user_id !== input.userId
+  ) {
+    throw createStatusError(403, "You cannot update that player.");
+  }
+
+  return {
+    campaignId: campaign.id,
+    sessionId: campaign.session_id,
+    playerDbId: player.id,
+    playerId: player.client_id,
+    username: player.username,
+    characterName: player.character_name,
+    characterSheet: player.character_sheet,
+    existingCombatCheatSheet: player.combat_cheat_sheet ?? null,
+    existingCombatCheatSheetSourceHash:
+      player.combat_cheat_sheet_source_hash ?? null
+  };
+}
+
+export async function saveCombatCheatSheetForUser(
+  db: pg.Pool,
+  input: {
+    roomId: string;
+    sessionId: string;
+    playerId: string;
+    userId: string;
+    markdown: string;
+    sourceHash: string;
+  }
+): Promise<RoomSnapshot> {
+  const campaign = await resolveRoomCampaign(db, input.roomId, input.sessionId);
+
+  if (!campaign) {
+    throw createStatusError(404, "Campaign not found.");
+  }
+
+  await assertCampaignAccessForUser(db, campaign, input.userId);
+
+  const player = (
+    await db.query<PlayerRow>(
+      `
+        select *
+        from players
+        where campaign_id = $1
+          and client_id = $2
+          and status = 'active'
+        limit 1
+      `,
+      [campaign.id, input.playerId]
+    )
+  ).rows[0];
+
+  if (!player) {
+    throw createStatusError(404, "Player not found.");
+  }
+
+  if (
+    player.user_id &&
+    player.user_id !== input.userId &&
+    campaign.owner_user_id !== input.userId
+  ) {
+    throw createStatusError(403, "You cannot update that player.");
+  }
+
+  const updated = await db.query<PlayerRow>(
+    `
+      update players
+      set combat_cheat_sheet = $3,
+          combat_cheat_sheet_updated_at = now(),
+          combat_cheat_sheet_source_hash = $4,
+          last_seen_at = now()
+      where campaign_id = $1
+        and client_id = $2
+        and status = 'active'
+      returning *
+    `,
+    [campaign.id, player.client_id, input.markdown, input.sourceHash]
+  );
+
+  if (!updated.rows[0]) {
+    throw createStatusError(404, "Player not found.");
+  }
+
+  return buildRoomSnapshot(db, {
+    ...campaign,
+    updated_at: new Date()
+  });
 }
 
 export async function beginRoomForUser(
