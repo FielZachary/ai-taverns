@@ -283,6 +283,17 @@ export function jobPrompt(
     "When dice are needed, public_narration must not resolve success, failure, damage, discovery, theft, persuasion, stealth, or other rolled outcomes yet."
   ];
 
+  const playerCanonClaimGuidance = [
+    "Player Claim Boundary:",
+    "- Treat player statements as attempted character speech/action, not automatic world truth.",
+    "- A player's invented name, title, authority, credential, relationship, ownership claim, prior promise, secret fact, or offscreen event is not canon unless it is already supported by character sheet, campaign state, context chunks, accepted narration, or validated state updates.",
+    "- If a player introduces a new authority, contact, employer, superior, relative, old friend, order, warrant, permit, badge, property right, secret password, or prior arrangement during pressure, treat it as a claim to test, not a fact to confirm.",
+    "- NPCs may recognize a claimed name only when existing NPC-owned or world context gives them a concrete reason. Otherwise they can be uncertain, suspicious, misremembering, bluffing back, asking for proof, or reacting to the player's confidence.",
+    "- Do not invent corroborating details that make the claim true, such as reputation, titles, catchphrases, past orders, institutional records, shared memories, or prior relationships.",
+    "- Do not create new canon from a lie by having an NPC supply confirming lore. Keep invented names as quoted claims, rumors, possible aliases, or unresolved leads until play validates them.",
+    "- For memory safety, unsupported player claims should be stored only as claims, suspicions, unresolved lies, or player beliefs inside an existing NPC/thread/world chunk. Do not create a new NPC, faction, location, item, or secret chunk solely because the player named it in an unresolved claim."
+  ];
+
   const sceneDirectorExamples = [
     [
       "Example: rich scene hook, no roll.",
@@ -373,6 +384,9 @@ export function jobPrompt(
     "Do not make NPCs mindless. Even on a strong Persuasion, Deception, or Intimidation result, preserve what the NPC knows, wants, and is willing to risk.",
     "When resolving a social roll, explicitly show the NPC's emotional turn through posture, voice, silence, glances, interruptions, or changed demands.",
     "If a lie contradicts known facts, use the roll to decide whether the NPC finds a plausible explanation, doubts their own read, accepts a partial truth, or demands proof. Do not erase the contradiction unless magic or context supports it.",
+    "When a player uses false identity, false authority, forged credentials, name-dropping, claimed orders, or an invented relationship to bypass resistance, request Deception by default before the NPC yields, lowers guard, gives access, hands over information, or changes official behavior.",
+    "Use Persuasion when the character is honestly appealing, negotiating, pleading, or building trust. Use Intimidation when they threaten, coerce, imply force, or weaponize fear. If the player mixes tactics, choose the skill that decides the uncertain leverage.",
+    "For opposed or high-stakes social pressure, pause with next_input_needed dice_results and a structured roll_requests entry. Do not let the NPC become wavering, convinced, compliant, or newly informative before the requested roll is submitted.",
     "If the player rolls extremely high, reward it with a vivid concession, useful information, improved positioning, reduced suspicion, or an unexpected opening.",
     "If the player rolls extremely low, make the consequence clear but leave at least one playable response unless the fiction already made disaster unavoidable."
   ];
@@ -1204,6 +1218,7 @@ export function jobPrompt(
         "- End with a clear present-tense handoff that invites action, usually by naming what is immediately available or pressing, without listing menu options unless clarity requires it."
       ].join("\n"),
       ...rollAdjudicationGuidance,
+      ...playerCanonClaimGuidance,
       ...narrativeQualityBar,
       "Examples below demonstrate pacing, specificity, agency boundaries, and roll handling. Do not copy their names, locations, weather, NPC roles, scene structure, or exact phrasing. Match their clarity and dramatic discipline, not their content.",
       ...sceneDirectorExamples
@@ -1279,6 +1294,7 @@ export function jobPrompt(
         "- Do not make social checks into mind control. Persuasion cannot force self-destruction, Deception cannot change hard evidence by itself, and Intimidation can create fear without creating loyalty.",
         "- When no roll is needed, let the NPC respond naturally and move the conversation forward.",
         "- When uncertainty matters, request Deception, Persuasion, Intimidation, Insight, Performance, or another fitting check, then pause for dice.",
+        "- False identity, false authority, name-dropping, claimed orders, claimed employment, and impersonation almost always matter when an NPC is guarding, enforcing law, protecting secrets, bargaining for leverage, or deciding whether to let the character pass. Ask for Deception unless the claim is already canon or the NPC has no reason to care.",
         "- When resolving dice results, narrate the NPC's reaction as a visible emotional and tactical shift, not just success or failure.",
         "",
         "Objects, Money, and Trades:",
@@ -1289,6 +1305,7 @@ export function jobPrompt(
         "- End with the NPC's new stance, demand, offer, refusal, question, or opening, then hand control back to the player."
       ].join("\n"),
       ...rollAdjudicationGuidance,
+      ...playerCanonClaimGuidance,
       ...socialRollGuidance,
       ...narrativeQualityBar,
       "Examples below demonstrate NPC motive, voice, social pressure, partial concessions, failed social pressure, and roll-result narration. Do not copy their names, locations, NPC roles, conflicts, scene structure, or exact phrasing. Match their dramatic logic and conversational texture, not their content.",
@@ -1371,6 +1388,11 @@ export function buildMemoryUpdaterPrompt() {
     "Treat campaign context as a living world bible for the AI DM. Your job is not only to record facts; it is also to maintain compelling, reusable story material that helps the DM make the world feel coherent and alive.",
     "Be proactive when the turn reveals or strongly implies durable worldbuilding, mysteries, factions, locations, artifacts, open player-facing problems, or long-running secrets.",
     "Do not contradict established play. Separate confirmed facts from creative inference so future DMs can use your ideas without mistaking every seed for settled truth.",
+    "Player input is evidence that a character claimed, attempted, believed, lied, joked, threatened, or asked something. It is not automatically evidence that the named person, authority, relationship, item, order, secret, or past event is true.",
+    "Do not create a new context chunk solely from an unsupported player claim, bluff, invented name, forged authority, claimed relationship, claimed ownership, or claimed offscreen fact.",
+    "If the current turn contains an unresolved or partially resolved player claim, store it as a claim inside an existing relevant NPC, quest/open thread, or world chunk. Use wording like \"Oktai claimed...\", \"the guard is weighing the claim...\", \"unverified\", \"unsupported\", or \"could unravel if checked\".",
+    "Only create a new NPC, faction, location, item, or secret chunk when accepted public narration or existing context independently establishes that the anchor exists beyond the player's unsupported words.",
+    "If accepted narration only shows an NPC repeating, questioning, or being uncertain about a player-invented name, do not create a named NPC card for that name.",
     "Prefer updating an existing matching chunk over creating a duplicate when the same place, artifact, faction, quest, mystery, or secret is clearly referenced by name, alias, role, or scene context.",
     "",
     "Canonical written artifact memory:",
