@@ -282,7 +282,7 @@ const campaignWorldBannerUrls: Record<string, string> = {
   eldermere: "/new-adventure/eldermere-banner.jpg",
   custom: "/new-adventure/custom-world-banner.jpg"
 };
-const newAdventureEntryVideoUrl = "/new-adventure/closing-animation-mask.webm";
+const newAdventureEntryTransitionMs = 520;
 const optionArtRoot = "/new-adventure/options";
 const weaponCategories: EquipmentCategory[] = [
   "simpleWeapon",
@@ -3538,44 +3538,29 @@ function PortraitPreparationLoader() {
   return <PreparationLoaderLayout currentMessage="Generating portrait" />;
 }
 
-function NewAdventureEntryLoadingScreen() {
-  return (
-    <main className="new-adventure-loading-screen" aria-label="Loading adventure">
-      <section className="new-adventure-loading-center" aria-live="polite">
-        <PreparationLoaderLayout currentMessage="Loading Adventure" />
-      </section>
-    </main>
-  );
-}
-
-function NewAdventureEntryTransitionOverlay({
-  entryState,
-  onTransitionFinished
+function NewAdventureEntryLoadingPanel({
+  isExiting = false
 }: {
-  entryState: NewAdventureEntryState;
-  onTransitionFinished: () => void;
+  isExiting?: boolean;
 }) {
-  useEffect(() => {
-    if (entryState !== "transitioning") {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(onTransitionFinished, 1_400);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [entryState, onTransitionFinished]);
-
   return (
-    <video
-      autoPlay
-      className="new-adventure-entry-video"
-      muted
-      onEnded={onTransitionFinished}
-      onError={onTransitionFinished}
-      playsInline
-      preload="auto"
-      src={newAdventureEntryVideoUrl}
-    />
+    <div
+      className={
+        isExiting
+          ? "new-adventure-entry-loader exiting"
+          : "new-adventure-entry-loader"
+      }
+      aria-live="polite"
+    >
+      <p className="rune-loader">
+        Loading
+        <span className="rune-loader-dots" aria-hidden="true">
+          <span>.</span>
+          <span>.</span>
+          <span>.</span>
+        </span>
+      </p>
+    </div>
   );
 }
 
@@ -3833,6 +3818,19 @@ export function NewAdventureForm({
       currentState === "ready" ? currentState : "ready"
     );
   }, []);
+
+  useEffect(() => {
+    if (entryState !== "transitioning") {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(
+      finishEntryTransition,
+      newAdventureEntryTransitionMs
+    );
+
+    return () => window.clearTimeout(timeoutId);
+  }, [entryState, finishEntryTransition]);
 
   useEffect(() => {
     if (entryState !== "preloading") {
@@ -5261,10 +5259,6 @@ export function NewAdventureForm({
     void handleNext();
   }
 
-  if (entryState === "preloading") {
-    return <NewAdventureEntryLoadingScreen />;
-  }
-
   if (isCreating && !isJoinFlow) {
     return (
       <main className="campaign-creation-screen" aria-label="Creating campaign">
@@ -5276,17 +5270,37 @@ export function NewAdventureForm({
   }
 
   const activeEquipmentChoice = equipmentChoices[equipmentChoiceStepIndex];
+  const shouldShowEntryLoader = entryState !== "ready";
+  const shouldShowAdventureFlow = entryState !== "preloading";
 
   return (
-    <>
     <main className="new-adventure-page" aria-label="Create a new adventure">
       <div className="new-adventure-heading">
         <p className="eyebrow">New Adventure</p>
         <h1>{stepTitle}</h1>
       </div>
 
-      <form className="new-adventure-form" onSubmit={handleSubmit}>
-        <div className={`new-adventure-flow new-adventure-flow-${flowTransition}`}>
+      <form
+        className={
+          entryState === "transitioning"
+            ? "new-adventure-form new-adventure-form-entry-transitioning"
+            : "new-adventure-form"
+        }
+        onSubmit={handleSubmit}
+      >
+        {shouldShowEntryLoader ? (
+          <NewAdventureEntryLoadingPanel
+            isExiting={entryState === "transitioning"}
+          />
+        ) : null}
+        {shouldShowAdventureFlow ? (
+        <div
+          className={`new-adventure-flow new-adventure-flow-${flowTransition}${
+            entryState === "transitioning"
+              ? " new-adventure-flow-entry-revealing"
+              : ""
+          }`}
+        >
           {stepIndex === 0 ? (
             <>
               <div className="mode-picker" role="radiogroup" aria-label="Campaign mode">
@@ -6361,6 +6375,7 @@ export function NewAdventureForm({
             </div>
           ) : null}
         </div>
+        ) : null}
 
           <div className="new-adventure-error-slot">
             {error ? (
@@ -6572,12 +6587,5 @@ export function NewAdventureForm({
         />
       ) : null}
     </main>
-    {entryState === "transitioning" ? (
-      <NewAdventureEntryTransitionOverlay
-        entryState={entryState}
-        onTransitionFinished={finishEntryTransition}
-      />
-    ) : null}
-    </>
   );
 }
