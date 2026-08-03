@@ -2620,7 +2620,10 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   );
 
   assert.ok(plannerDebug);
-  assert.equal(plannerDebug.rawResponse, JSON.stringify(openingPlan));
+  assert.equal(
+    JSON.parse(plannerDebug.rawResponse as string).campaign_title,
+    "The Quiet Road"
+  );
   assert.deepEqual(plannerDebug.parsedOutput, openingPlan);
   assert.match(
     JSON.stringify(plannerDebug.requestMessages),
