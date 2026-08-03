@@ -591,6 +591,9 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(buildMemoryUpdaterPrompt(), /Create a new NPC card/i);
     assert.match(buildMemoryUpdaterPrompt(), /Make each NPC feel like a compelling character/i);
     assert.match(buildMemoryUpdaterPrompt(), /## Disposition Towards You/);
+    assert.match(buildMemoryUpdaterPrompt(), /Never infer gender or pronouns/i);
+    assert.match(buildMemoryUpdaterPrompt(), /neutral wording until play establishes pronouns/i);
+    assert.match(buildMemoryUpdaterPrompt(), /do not silently normalize the conflict/i);
     assert.match(buildMemoryUpdaterPrompt(), /campaign context as a living world bible/i);
     assert.match(buildMemoryUpdaterPrompt(), /Canonical written artifact memory/i);
     assert.match(buildMemoryUpdaterPrompt(), /preserve the revealed text word for word/i);
