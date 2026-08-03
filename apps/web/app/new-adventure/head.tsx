@@ -12,12 +12,6 @@ export default function Head() {
       {criticalNewAdventureImagePreloads.map((href) => (
         <link as="image" href={href} key={href} rel="preload" />
       ))}
-      <link
-        as="video"
-        href="/new-adventure/closing-animation-mask.webm"
-        rel="preload"
-        type="video/webm"
-      />
     </>
   );
 }
