@@ -35,7 +35,8 @@ body {
   font-family: var(--body-font);
 }
 
-body:has(.new-adventure-page) {
+body:has(.new-adventure-page),
+body:has(.new-adventure-loading-screen) {
   overflow: hidden;
   overscroll-behavior: none;
 }
@@ -2626,11 +2627,60 @@ h1 {
   min-height: 0;
 }
 
+.new-adventure-loading-screen,
 .campaign-creation-screen {
+  position: relative;
   display: grid;
   min-height: 100dvh;
+  overflow: hidden;
   place-items: center;
   padding: 28px;
+}
+
+.new-adventure-loading-screen {
+  isolation: isolate;
+  background: #120f0d;
+}
+
+.new-adventure-loading-screen::before,
+.new-adventure-loading-screen::after {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+}
+
+.new-adventure-loading-screen::before {
+  z-index: -2;
+  background-image: url("/new-adventure/flow-bg.png");
+  background-position: center;
+  background-size: cover;
+  opacity: 0.12;
+}
+
+.new-adventure-loading-screen::after {
+  z-index: -1;
+  background:
+    radial-gradient(circle at 50% 48%, rgba(18, 15, 13, 0.08) 0 28%, rgba(18, 15, 13, 0.62) 70%, rgba(18, 15, 13, 0.92) 100%),
+    linear-gradient(90deg, rgba(18, 15, 13, 0.84), rgba(18, 15, 13, 0.2) 24%, rgba(18, 15, 13, 0.2) 76%, rgba(18, 15, 13, 0.84)),
+    linear-gradient(180deg, rgba(18, 15, 13, 0.82), transparent 26%, transparent 70%, rgba(18, 15, 13, 0.78));
+}
+
+.new-adventure-loading-center {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  animation: new-adventure-loading-pulse 1.8s ease-in-out infinite;
+}
+
+.new-adventure-entry-video {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  width: 100%;
+  height: 100%;
+  background: #120f0d;
+  object-fit: cover;
 }
 
 .campaign-creation-center {
@@ -3005,6 +3055,9 @@ h1 {
 .new-adventure-page *,
 .new-adventure-page *::before,
 .new-adventure-page *::after,
+.new-adventure-loading-screen *,
+.new-adventure-loading-screen *::before,
+.new-adventure-loading-screen *::after,
 .campaign-creation-screen *,
 .campaign-creation-screen *::before,
 .campaign-creation-screen *::after,
@@ -3030,6 +3083,17 @@ h1 {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes new-adventure-loading-pulse {
+  0%,
+  100% {
+    opacity: 0.78;
+  }
+
+  50% {
+    opacity: 1;
   }
 }
 
