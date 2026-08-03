@@ -663,7 +663,6 @@ type EldermereOpeningPlan = {
   campaignFoundation?: Record<string, unknown> | undefined;
   forbiddenOpeningTerms: string[];
   narratorInstructions: string[];
-  openingQualityChecks: string[];
 };
 
 function extractExistingPromptNames(...values: Array<string | undefined>) {
@@ -2657,7 +2656,8 @@ export async function createCampaignForMode(
       campaignGenrePromptBrief: input.campaignGenrePromptBrief,
       customWorldName: input.customWorldName,
       customWorldDescription: input.customWorldDescription
-    }
+    },
+    omitGenericSettingRequest: hasEldermereWorldProfile(createdState.campaign)
   });
 
   const resolveOpening = async () => {
@@ -2718,7 +2718,7 @@ export async function createCampaignForMode(
           openingTurn.id,
           undefined,
           { allowResolvedCombatWithoutRolls: true },
-          { buildPromptContext: false }
+          { buildPromptContext: false, contractKind: "opening" }
         );
     const resolvedTurn = await finishResolvedTurn(db, {
       campaignId: createdState.campaign.id,
@@ -7655,6 +7655,7 @@ function formatOpeningSceneRequest(input: {
   mode: CampaignMode;
   players: PlayerRow[];
   style: CampaignOpeningStyle;
+  omitGenericSettingRequest?: boolean;
 }) {
   const mechanicsState = resolveMechanicsState(input.campaign, input.players);
   const modeDirection =
@@ -7672,6 +7673,13 @@ function formatOpeningSceneRequest(input: {
     players: input.players,
     style: input.style
   });
+  const currentPlayerAction = input.omitGenericSettingRequest
+    ? openingSceneRequest
+        .replace(
+          / Also include a `setting` object in the JSON response with `display_location`, `world_name`, `region_name`, `settlement_name`, `scene_location`, and `starting_location` when known\. `display_location` should be a short location label for the campaign sidebar, such as a village, tavern, road, ruin, city district, region, or named world\. Do not use a genre label\. `scene_location` should be the current local scene label, such as a tavern, street, room, road, ruin, district, or wilderness landmark\./,
+          ""
+        )
+    : openingSceneRequest;
 
   return [
     formatCanonicalCharacterContext(input.players, mechanicsState),
@@ -7681,7 +7689,7 @@ function formatOpeningSceneRequest(input: {
     formatMechanicsPromptContext(mechanicsState),
     "",
     "Current player action:",
-    openingSceneRequest,
+    currentPlayerAction,
     "",
     "Campaign opening setup:",
     `Mode: ${input.mode}`,
@@ -7852,10 +7860,7 @@ function eldermereOpeningPlannerInstructions() {
         forbidden_opening_terms: [
           "setting terms or lore names that should not appear in the first player-facing narration"
         ],
-        narrator_instructions: ["instructions for the second narrator call"],
-        opening_quality_checks: [
-          "check the narrator should pass before output"
-        ]
+        narrator_instructions: ["instructions for the second narrator call"]
       },
       null,
       2
@@ -7888,7 +7893,6 @@ function formatEldermereNarratorOpeningRequest(input: {
     "",
     "Narrator boundary:",
     "Write the player-facing opener only from the Eldermere opening plan above, the canonical character sheets, and the website DM instructions.",
-    "Do not use the full Eldermere world bible. Do not introduce extra Eldermere lore, factions, institutions, ancient ages, regions, gods, magic resources, or historical terms beyond the allowed_player_facing_terms.",
     "Keep the first scene anchored in the planned region and starting location; do not relocate the opener to another settlement, region, road, tavern, faction hall, or invented landmark unless the plan explicitly places it inside the starting location.",
     "Make at least one player backstory anchor visible in the first scene through a clue, NPC demand, debt, danger, opportunity, sensory trigger, or emotional pressure. Do not retell the whole backstory.",
     "If a useful idea appears in dm_private_context, imply it only through concrete visible facts or pressure; do not reveal it as confirmed exposition.",
@@ -8160,11 +8164,6 @@ function parseEldermereOpeningPlan(content: string) {
       parsed,
       "narrator_instructions",
       errors
-    ),
-    openingQualityChecks: readStringArray(
-      parsed,
-      "opening_quality_checks",
-      errors
     )
   };
 
@@ -8228,8 +8227,7 @@ function openingPlanToJson(plan: EldermereOpeningPlan) {
       ? { campaign_foundation: plan.campaignFoundation }
       : {}),
     forbidden_opening_terms: plan.forbiddenOpeningTerms,
-    narrator_instructions: plan.narratorInstructions,
-    opening_quality_checks: plan.openingQualityChecks
+    narrator_instructions: plan.narratorInstructions
   };
 }
 
@@ -8408,6 +8406,12 @@ const gameplayTurnOutputContractReminder = [
   "initiativeOrder should include active combatants only; exclude captives, bystanders, and noncombatants unless they can act in the fight."
 ];
 
+const openingSceneOutputContractReminder = [
+  "Opening output reminder:",
+  "Return only one valid JSON object. Do not include prose, Markdown, or commentary outside JSON.",
+  "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved in the opener."
+];
+
 const gameplayTurnModeReminder: Record<CampaignMode, string[]> = {
   single_player: [
     "Singleplayer combat reminder:",
@@ -8425,8 +8429,13 @@ const gameplayTurnModeReminder: Record<CampaignMode, string[]> = {
 
 function appendGameplayTurnOutputContractReminder(
   message: string,
-  mode: CampaignMode
+  mode: CampaignMode,
+  contractKind: "gameplay" | "opening" = "gameplay"
 ) {
+  if (contractKind === "opening") {
+    return [message, "", ...openingSceneOutputContractReminder].join("\n");
+  }
+
   return [
     message,
     "",
@@ -9007,6 +9016,7 @@ async function askEldermereOpeningNarrator(
     contractOptions,
     {
       buildPromptContext: false,
+      contractKind: "opening",
       includeEldermereTurnContext: false,
       suppressStreaming: true
     }
@@ -9046,6 +9056,7 @@ async function askEldermereOpeningNarrator(
     contractOptions,
     {
       buildPromptContext: false,
+      contractKind: "opening",
       includeEldermereTurnContext: false,
       suppressStreaming: true
     }
@@ -9214,6 +9225,7 @@ async function askDungeonMaster(
   contractOptions?: DmContractParseOptions,
   options?: {
     buildPromptContext?: boolean;
+    contractKind?: "gameplay" | "opening";
     includeEldermereTurnContext?: boolean;
     model?: AiModelId;
     suppressStreaming?: boolean;
@@ -9277,7 +9289,8 @@ async function askDungeonMaster(
       : null;
     const providerMessage = appendGameplayTurnOutputContractReminder(
       promptContext?.message ?? message,
-      campaign.mode
+      campaign.mode,
+      options?.contractKind
     );
     const providerStartedAt = Date.now();
     const providerData = await runtime.askProvider({
@@ -10256,7 +10269,8 @@ export async function beginRoomForUser(
     campaign: beginState.campaign,
     mode: "multiplayer",
     players: beginState.players,
-    style: campaignOpeningStyleFromMetadata(beginState.campaign)
+    style: campaignOpeningStyleFromMetadata(beginState.campaign),
+    omitGenericSettingRequest: hasEldermereWorldProfile(beginState.campaign)
   });
 
   try {
@@ -10317,7 +10331,7 @@ export async function beginRoomForUser(
           openingTurn.id,
           undefined,
           { allowResolvedCombatWithoutRolls: true },
-          { buildPromptContext: false }
+          { buildPromptContext: false, contractKind: "opening" }
         );
     const resolvedTurn = await finishResolvedTurn(db, {
       campaignId: beginState.campaign.id,
