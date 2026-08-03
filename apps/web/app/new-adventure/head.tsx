@@ -14,9 +14,9 @@ export default function Head() {
       ))}
       <link
         as="video"
-        href="/new-adventure/closing-animation-fast.mp4"
+        href="/new-adventure/closing-animation-mask.webm"
         rel="preload"
-        type="video/mp4"
+        type="video/webm"
       />
     </>
   );

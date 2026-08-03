@@ -282,7 +282,7 @@ const campaignWorldBannerUrls: Record<string, string> = {
   eldermere: "/new-adventure/eldermere-banner.jpg",
   custom: "/new-adventure/custom-world-banner.jpg"
 };
-const newAdventureEntryVideoUrl = "/new-adventure/closing-animation-fast.mp4";
+const newAdventureEntryVideoUrl = "/new-adventure/closing-animation-mask.webm";
 const optionArtRoot = "/new-adventure/options";
 const weaponCategories: EquipmentCategory[] = [
   "simpleWeapon",
@@ -3538,7 +3538,17 @@ function PortraitPreparationLoader() {
   return <PreparationLoaderLayout currentMessage="Generating portrait" />;
 }
 
-function NewAdventureEntryLoader({
+function NewAdventureEntryLoadingScreen() {
+  return (
+    <main className="new-adventure-loading-screen" aria-label="Loading adventure">
+      <section className="new-adventure-loading-center" aria-live="polite">
+        <PreparationLoaderLayout currentMessage="Loading Adventure" />
+      </section>
+    </main>
+  );
+}
+
+function NewAdventureEntryTransitionOverlay({
   entryState,
   onTransitionFinished
 }: {
@@ -3556,23 +3566,16 @@ function NewAdventureEntryLoader({
   }, [entryState, onTransitionFinished]);
 
   return (
-    <main className="new-adventure-loading-screen" aria-label="Loading adventure">
-      <section className="new-adventure-loading-center" aria-live="polite">
-        <PreparationLoaderLayout currentMessage="Loading Adventure" />
-      </section>
-      {entryState === "transitioning" ? (
-        <video
-          autoPlay
-          className="new-adventure-entry-video"
-          muted
-          onEnded={onTransitionFinished}
-          onError={onTransitionFinished}
-          playsInline
-          preload="auto"
-          src={newAdventureEntryVideoUrl}
-        />
-      ) : null}
-    </main>
+    <video
+      autoPlay
+      className="new-adventure-entry-video"
+      muted
+      onEnded={onTransitionFinished}
+      onError={onTransitionFinished}
+      playsInline
+      preload="auto"
+      src={newAdventureEntryVideoUrl}
+    />
   );
 }
 
@@ -5258,13 +5261,8 @@ export function NewAdventureForm({
     void handleNext();
   }
 
-  if (entryState !== "ready") {
-    return (
-      <NewAdventureEntryLoader
-        entryState={entryState}
-        onTransitionFinished={finishEntryTransition}
-      />
-    );
+  if (entryState === "preloading") {
+    return <NewAdventureEntryLoadingScreen />;
   }
 
   if (isCreating && !isJoinFlow) {
@@ -5280,6 +5278,7 @@ export function NewAdventureForm({
   const activeEquipmentChoice = equipmentChoices[equipmentChoiceStepIndex];
 
   return (
+    <>
     <main className="new-adventure-page" aria-label="Create a new adventure">
       <div className="new-adventure-heading">
         <p className="eyebrow">New Adventure</p>
@@ -6573,5 +6572,12 @@ export function NewAdventureForm({
         />
       ) : null}
     </main>
+    {entryState === "transitioning" ? (
+      <NewAdventureEntryTransitionOverlay
+        entryState={entryState}
+        onTransitionFinished={finishEntryTransition}
+      />
+    ) : null}
+    </>
   );
 }
