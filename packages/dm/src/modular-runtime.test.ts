@@ -293,6 +293,26 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("npc_dialogue"),
+      /Treat player statements as attempted character speech\/action, not automatic world truth/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /new authority, contact, employer, superior, relative, old friend, order, warrant, permit, badge, property right, secret password, or prior arrangement/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /request Deception by default before the NPC yields, lowers guard, gives access, hands over information, or changes official behavior/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /Do not let the NPC become wavering, convinced, compliant, or newly informative before the requested roll is submitted/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /False identity, false authority, name-dropping, claimed orders, claimed employment, and impersonation almost always matter/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
       /Prefer one meaningful reveal plus a new question, demand, cost, refusal, or lead/i
     );
     assert.match(
@@ -300,6 +320,10 @@ describe("modular AI DM runtime contracts", () => {
       /validate that the acting character actually has the offered object before the NPC sees, touches, evaluates, accepts, refuses, or comments on it/i
     );
     assert.match(jobPrompt("npc_dialogue"), /bargaining, gifting, payment/i);
+    assert.match(
+      jobPrompt("scene_director"),
+      /Do not create new canon from a lie by having an NPC supply confirming lore/i
+    );
     assert.match(
       jobPrompt("investigation"),
       /Distinguish discovering, seeing, identifying, or learning about an item/i
@@ -595,6 +619,18 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(buildMemoryUpdaterPrompt(), /neutral wording until play establishes pronouns/i);
     assert.match(buildMemoryUpdaterPrompt(), /do not silently normalize the conflict/i);
     assert.match(buildMemoryUpdaterPrompt(), /campaign context as a living world bible/i);
+    assert.match(
+      buildMemoryUpdaterPrompt(),
+      /Player input is evidence that a character claimed, attempted, believed, lied, joked, threatened, or asked something/i
+    );
+    assert.match(
+      buildMemoryUpdaterPrompt(),
+      /Do not create a new context chunk solely from an unsupported player claim, bluff, invented name, forged authority, claimed relationship, claimed ownership, or claimed offscreen fact/i
+    );
+    assert.match(
+      buildMemoryUpdaterPrompt(),
+      /If accepted narration only shows an NPC repeating, questioning, or being uncertain about a player-invented name, do not create a named NPC card/i
+    );
     assert.match(buildMemoryUpdaterPrompt(), /Canonical written artifact memory/i);
     assert.match(buildMemoryUpdaterPrompt(), /preserve the revealed text word for word/i);
     assert.match(buildMemoryUpdaterPrompt(), /notes, notebooks, ledgers, journals, letters/i);
