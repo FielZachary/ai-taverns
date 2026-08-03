@@ -207,6 +207,44 @@ type CampaignEventRecord = {
   created_at: Date;
 };
 
+function recentRoomEventRank(type: string) {
+  switch (type) {
+    case "dm_answer":
+      return 0;
+    case "turn_resolved":
+    case "adventure_begun":
+      return 1;
+    case "dm_question":
+      return 2;
+    case "turn_submitted":
+      return 3;
+    default:
+      return 4;
+  }
+}
+
+function chronologicalRoomEventRank(type: string) {
+  switch (type) {
+    case "turn_submitted":
+    case "dm_question":
+      return 0;
+    case "turn_resolved":
+    case "adventure_begun":
+    case "dm_answer":
+      return 1;
+    default:
+      return 2;
+  }
+}
+
+function compareEventIdAsc(left: CampaignEventRecord, right: CampaignEventRecord) {
+  return left.id.localeCompare(right.id);
+}
+
+function compareEventIdDesc(left: CampaignEventRecord, right: CampaignEventRecord) {
+  return right.id.localeCompare(left.id);
+}
+
 type CombatEventRecord = {
   id: string;
   campaign_id: string;
@@ -2304,27 +2342,56 @@ class FakeDatabase {
         };
       }
 
-      return {
-        rows: this.campaignEvents
-          .filter((event) => {
-            const visibleTypes = normalizedSql.includes("limit 1")
-              ? ["turn_submitted", "turn_resolved", "adventure_begun"]
-              : [
-                "turn_submitted",
-                "turn_resolved",
-                "adventure_begun",
-                "dm_question",
-                "dm_answer"
-                ];
+      const limitOneQuery = normalizedSql.includes("limit 1");
+      const visibleTypes = limitOneQuery
+        ? ["turn_submitted", "turn_resolved", "adventure_begun"]
+        : [
+            "turn_submitted",
+            "turn_resolved",
+            "adventure_begun",
+            "dm_question",
+            "dm_answer"
+          ];
+      const events = this.campaignEvents
+        .filter(
+          (event) =>
+            event.campaign_id === campaignId && visibleTypes.includes(event.type)
+        )
+        .slice();
 
-            return (
-              event.campaign_id === campaignId &&
-              visibleTypes.includes(event.type)
-            );
-          })
-          .slice()
-          .reverse()
-          .slice(0, normalizedSql.includes("limit 1") ? 1 : undefined) as T[]
+      if (limitOneQuery) {
+        return {
+          rows: events
+            .sort(
+              (left, right) =>
+                right.created_at.getTime() - left.created_at.getTime() ||
+                compareEventIdDesc(left, right)
+            )
+            .slice(0, 1) as T[]
+        };
+      }
+
+      const limit =
+        normalizedSql.includes("limit $2") && typeof values[1] === "number"
+          ? (values[1] as number)
+          : undefined;
+      const recentEvents = events
+        .sort(
+          (left, right) =>
+            right.created_at.getTime() - left.created_at.getTime() ||
+            recentRoomEventRank(left.type) - recentRoomEventRank(right.type) ||
+            compareEventIdDesc(left, right)
+        )
+        .slice(0, limit);
+
+      return {
+        rows: recentEvents.sort(
+          (left, right) =>
+            left.created_at.getTime() - right.created_at.getTime() ||
+            chronologicalRoomEventRank(left.type) -
+              chronologicalRoomEventRank(right.type) ||
+            compareEventIdAsc(left, right)
+        ) as T[]
       };
     }
 
