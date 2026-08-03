@@ -102,7 +102,8 @@ export const RoomSnapshotSchema = z.object({
 
 export const RoomReadQuerySchema = z.object({
   roomId: z.string().optional(),
-  sessionId: z.string().optional()
+  sessionId: z.string().optional(),
+  debugAllMessages: z.coerce.boolean().optional()
 });
 
 export const RoomPlayerUpdateRequestSchema = z.object({

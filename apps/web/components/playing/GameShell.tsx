@@ -194,6 +194,7 @@ type GameShellProps = {
   userId?: string;
   routePath?: "/play" | "/debug";
   allowUnlistedInitialCampaign?: boolean;
+  includeAllMessages?: boolean;
 };
 
 type ActiveDiceReveal = {
@@ -370,7 +371,8 @@ export function GameShell({
   userEmail,
   userId,
   routePath = "/play",
-  allowUnlistedInitialCampaign = false
+  allowUnlistedInitialCampaign = false,
+  includeAllMessages = false
 }: GameShellProps) {
   const [messages, setMessages] = useState<GameMessage[]>(openingMessages);
   const [availableCampaigns, setAvailableCampaigns] = useState<CampaignSummary[]>([]);
@@ -451,6 +453,7 @@ export function GameShell({
       preview: "Loaded from pasted campaign id"
     };
   }, [allowUnlistedInitialCampaign, initialCampaignId]);
+  const roomReadDebugParam = includeAllMessages ? "&debugAllMessages=true" : "";
 
   const activeCampaign = useMemo(
     () =>
@@ -719,11 +722,13 @@ export function GameShell({
       const response = await fetch(
         `/api/room?roomId=${encodeURIComponent(
           campaign.id
-        )}&sessionId=${encodeURIComponent(campaign.sessionId)}`
+        )}&sessionId=${encodeURIComponent(campaign.sessionId)}${roomReadDebugParam}`
       );
 
       if (!response.ok) {
-        throw new Error("Campaign messages could not be loaded.");
+        throw new Error(
+          await getApiErrorMessage(response, "Campaign messages could not be loaded.")
+        );
       }
 
       const room = (await response.json()) as RoomSnapshot;
@@ -777,12 +782,23 @@ export function GameShell({
       } else {
         applyRoomSnapshot(room);
       }
-    } catch {
-      setMessages(openingMessages);
+    } catch (error) {
+      setMessages([
+        ...openingMessages,
+        {
+          id: createClientId(),
+          role: "system",
+          content:
+            error instanceof Error
+              ? error.message
+              : "Campaign messages could not be loaded.",
+          createdAt: new Date().toISOString()
+        }
+      ]);
     } finally {
       setIsLoadingMessages(false);
     }
-  }, [applyRoomSnapshot, playerId, userId]);
+  }, [applyRoomSnapshot, playerId, roomReadDebugParam, userId]);
 
   const fetchCampaigns = useCallback(async () => {
     return listCampaigns();
@@ -1051,7 +1067,9 @@ export function GameShell({
         const response = await fetchWithTimeout(
           `/api/room?roomId=${encodeURIComponent(
             activeCampaign.id
-          )}&sessionId=${encodeURIComponent(activeCampaign.sessionId)}`,
+          )}&sessionId=${encodeURIComponent(
+            activeCampaign.sessionId
+          )}${roomReadDebugParam}`,
           { cache: "no-store" }
         );
 
@@ -1220,7 +1238,7 @@ export function GameShell({
       socket?.close();
       window.clearInterval(interval);
     };
-  }, [activeCampaign, applyRoomSnapshot, isSinglePlayer]);
+  }, [activeCampaign, applyRoomSnapshot, isSinglePlayer, roomReadDebugParam]);
 
   function handleStartNewChat() {
     window.location.assign(routePath === "/debug" ? "/debug" : "/new-adventure");

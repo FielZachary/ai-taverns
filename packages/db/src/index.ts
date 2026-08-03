@@ -4643,7 +4643,8 @@ function eventSetting(payload: Record<string, unknown>, role: "player" | "dm") {
 
 async function buildRoomSnapshot(
   db: Queryable,
-  campaign: CampaignRow
+  campaign: CampaignRow,
+  options: { messageLimit?: number | null } = {}
 ): Promise<RoomSnapshot> {
   const currentTurn = await getCurrentRoomTurn(db, campaign.id);
   const submissions = currentTurn ? await getTurnSubmissions(db, currentTurn.id) : [];
@@ -4702,7 +4703,7 @@ async function buildRoomSnapshot(
             else 4
           end asc,
           id desc
-        limit 100
+        ${options.messageLimit === null ? "" : "limit $2"}
       ) recent_events
       order by created_at asc,
         case type
@@ -4715,7 +4716,9 @@ async function buildRoomSnapshot(
         end asc,
         id asc
     `,
-    [campaign.id]
+    options.messageLimit === null
+      ? [campaign.id]
+      : [campaign.id, options.messageLimit ?? 100]
   );
   const messages = events.rows
     .map((event): RoomSnapshot["messages"][number] | null => {
@@ -9825,6 +9828,7 @@ export async function getRoomForUser(
     roomId: string;
     sessionId: string;
     userId: string;
+    messageLimit?: number | null | undefined;
   }
 ): Promise<RoomSnapshot> {
   const campaign = await resolveRoomCampaign(db, input.roomId, input.sessionId);
@@ -9847,10 +9851,14 @@ export async function getRoomForUser(
     [campaign.id, input.userId]
   );
 
-  return buildRoomSnapshot(db, {
-    ...campaign,
-    updated_at: player.rows[0] ? new Date() : campaign.updated_at
-  });
+  return buildRoomSnapshot(
+    db,
+    {
+      ...campaign,
+      updated_at: player.rows[0] ? new Date() : campaign.updated_at
+    },
+    input.messageLimit === undefined ? {} : { messageLimit: input.messageLimit }
+  );
 }
 
 export async function registerRoomPlayerForUser(
