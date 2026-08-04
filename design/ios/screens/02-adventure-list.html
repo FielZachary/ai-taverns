@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>S2 Adventures — AI Taverns iOS</title>
+<link rel="stylesheet" href="_frame.css">
+</head>
+<body>
+<h1>S2 · Adventures</h1>
+<p class="pkg-note">Spec: <code>spec/02-adventure-list.md</code>. Replaces the desktop
+<code>ChatHistorySidebar</code>. Native list with swipe actions, search, and a prominent new-adventure button.</p>
+
+<div class="board">
+
+  <!-- Frame A: list -->
+  <div class="stage">
+    <h2>02a · Campaign list</h2>
+    <div class="device">
+      <div class="statusbar"><span>9:41</span><span>􀙇 􀋂</span></div>
+      <div class="navbar">
+        <div class="title lg">Adventures</div>
+        <div class="co" style="top:118px;right:14px;">1</div>
+        <div class="icon-btn" style="background:var(--gold);color:#241505;border:0;">＋</div>
+      </div>
+      <div style="padding:10px 16px 0;">
+        <div class="textfield" style="min-height:38px;border-radius:10px;font-size:15px;">🔍&nbsp; Search adventures</div>
+      </div>
+      <div style="flex:1;padding:12px 16px;display:flex;flex-direction:column;gap:10px;overflow:hidden;">
+        <div class="co" style="top:250px;left:6px;">2</div>
+        <div class="card" style="border-color:var(--gold);">
+          <div class="row" style="margin-bottom:6px;">
+            <div style="font-family:var(--heading);font-size:16px;letter-spacing:.04em;flex:1;">The Hush Over Eldermere</div>
+            <span class="pill turn">Active</span>
+          </div>
+          <div style="font-size:14px;color:var(--muted);line-height:1.4;margin-bottom:8px;">DM: "The chapel doors groan open, and the smell of wet ash rolls out to meet you…"</div>
+          <div class="row" style="gap:8px;">
+            <span class="pill">Solo</span>
+            <span style="font-size:12px;color:var(--muted);margin-left:auto;">Today, 9:12</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:6px;">
+            <div style="font-family:var(--heading);font-size:16px;letter-spacing:.04em;flex:1;">Blood on the Old Roads</div>
+          </div>
+          <div style="font-size:14px;color:var(--muted);line-height:1.4;margin-bottom:8px;">Waiting on Marra to submit her turn…</div>
+          <div class="row" style="gap:8px;">
+            <span class="pill gold">Multiplayer</span>
+            <span class="pill">Waiting</span>
+            <span style="font-size:12px;color:var(--muted);margin-left:auto;">Yesterday</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:6px;">
+            <div style="font-family:var(--heading);font-size:16px;letter-spacing:.04em;flex:1;">Gnome of the Gravemarsh</div>
+          </div>
+          <div style="font-size:14px;color:var(--muted);line-height:1.4;margin-bottom:8px;">You: "I pocket the brass key before the innkeep turns around."</div>
+          <div class="row" style="gap:8px;">
+            <span class="pill">Solo</span>
+            <span style="font-size:12px;color:var(--muted);margin-left:auto;">Jul 28</span>
+          </div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><span class="fi fi-sword ti" aria-hidden="true"></span>Play</div>
+        <div class="tab on"><span class="fi fi-scroll ti" aria-hidden="true"></span>Adventures</div>
+        <div class="tab"><span class="fi fi-pack ti" aria-hidden="true"></span>Resources</div>
+        <div class="tab"><span class="fi fi-settings ti" aria-hidden="true"></span>Settings</div>
+      </div>
+    </div>
+    <div class="notes">
+      <p><b>1</b> New adventure: gold plus button, opens the S6 wizard as fullScreenCover.</p>
+      <p><b>2</b> Row anatomy: Cinzel title, one-line last-message preview (serif tone for DM lines), mode pill + updated time. Active campaign gets a gold border + Active pill. Tap row = set active campaign, switch to Play tab.</p>
+    </div>
+  </div>
+
+  <!-- Frame B: swipe actions -->
+  <div class="stage">
+    <h2>02b · Swipe actions</h2>
+    <div class="device">
+      <div class="statusbar"><span>9:41</span><span>􀙇 􀋂</span></div>
+      <div class="navbar"><div class="title lg">Adventures</div>
+        <div class="icon-btn" style="background:var(--gold);color:#241505;border:0;">＋</div></div>
+      <div style="flex:1;padding:12px 16px;display:flex;flex-direction:column;gap:10px;">
+        <div style="display:flex;gap:0;overflow:hidden;border-radius:10px;">
+          <div class="card" style="flex:none;width:225px;border-radius:10px 0 0 10px;border-right:0;">
+            <div style="font-family:var(--heading);font-size:16px;">Blood on the Old Roads</div>
+            <div style="font-size:13px;color:var(--muted);margin-top:6px;">Multiplayer · Yesterday</div>
+          </div>
+          <div class="co" style="top:150px;right:20px;">1</div>
+          <div style="flex:none;width:68px;background:#6b5730;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--ink);font-size:12px;gap:4px;"><span style="font-size:18px;">✏️</span>Rename</div>
+          <div style="flex:none;width:68px;background:var(--ember);display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--ink);font-size:12px;gap:4px;border-radius:0 10px 10px 0;"><span style="font-size:18px;">🗄</span>Archive</div>
+        </div>
+        <div class="card" style="opacity:.55;">
+          <div style="font-family:var(--heading);font-size:16px;">Gnome of the Gravemarsh</div>
+          <div style="font-size:13px;color:var(--muted);margin-top:6px;">Solo · Jul 28</div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><span class="fi fi-sword ti" aria-hidden="true"></span>Play</div>
+        <div class="tab on"><span class="fi fi-scroll ti" aria-hidden="true"></span>Adventures</div>
+        <div class="tab"><span class="fi fi-pack ti" aria-hidden="true"></span>Resources</div>
+        <div class="tab"><span class="fi fi-settings ti" aria-hidden="true"></span>Settings</div>
+      </div>
+    </div>
+    <div class="notes">
+      <p><b>1</b> Trailing swipe: Rename (opens alert with text field) and Archive (confirm dialog, then DELETE/archive API). Long-press shows the same actions in a context menu with a campaign preview.</p>
+    </div>
+  </div>
+
+  <!-- Frame C: empty state -->
+  <div class="stage">
+    <h2>02c · Empty state</h2>
+    <div class="device">
+      <div class="statusbar"><span>9:41</span><span>􀙇 􀋂</span></div>
+      <div class="navbar"><div class="title lg">Adventures</div></div>
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:0 40px;text-align:center;">
+        <div style="font-size:44px;"><span class="fi fi-castle" aria-hidden="true" style="--fi-size:44px;--fi-color:var(--gold);"></span></div>
+        <div style="font-family:var(--heading);font-size:20px;letter-spacing:.05em;">No adventures yet</div>
+        <div style="font-size:15px;color:var(--muted);line-height:1.5;">Create your first campaign and let the Dungeon Master set the scene.</div>
+        <div class="btn primary" style="width:100%;margin-top:8px;">Begin a new adventure</div>
+        <div class="btn small" style="margin-top:2px;">Join with a game code</div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><span class="fi fi-sword ti" aria-hidden="true"></span>Play</div>
+        <div class="tab on"><span class="fi fi-scroll ti" aria-hidden="true"></span>Adventures</div>
+        <div class="tab"><span class="fi fi-pack ti" aria-hidden="true"></span>Resources</div>
+        <div class="tab"><span class="fi fi-settings ti" aria-hidden="true"></span>Settings</div>
+      </div>
+    </div>
+    <div class="notes">
+      <p>Both buttons route into the S6 wizard; "Join with a game code" deep-links to the Mode step with Join preselected. Play and Resources tabs show equivalent empty states pointing here.</p>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
