@@ -113,7 +113,7 @@ const defaultAiModel: AiModelId = "deepseek-v4-flash";
 const playerIdStorageKey = "ai-dnd.playerId";
 const backstoryIntroSeenStoragePrefix = "ai-dnd.backstoryIntroSeen";
 const roomRequestTimeoutMs = 8_000;
-const turnSubmissionRequestTimeoutMs = 15_000;
+const turnSubmissionRequestTimeoutMs = 30_000;
 const fallbackRoomPollMs = 25_000;
 const dungeonMasterTurnTimeoutMessage =
   "The dungeon master wasn't able to respond to that, please press the retry button on the right to re-send your message";
