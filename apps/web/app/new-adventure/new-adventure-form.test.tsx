@@ -1091,11 +1091,21 @@ describe("spell metadata helpers", () => {
   it("builds a complete spell detail profile", () => {
     expect(spellDetailFor("Fireball", "3rd level")).toEqual(
       expect.objectContaining({
+        levelLabel: "3rd level",
         school: "Evocation",
         duration: "Instantaneous",
         castingTime: "1 action",
-        range: "120 feet or more"
+        range: "150 feet",
+        components: ["V", "S", "M"],
+        material: "A tiny ball of bat guano and sulfur.",
+        rolls: "8d6 fire damage at spell slot level 3 | DEX saving throw; success: half | 20-foot sphere"
       })
+    );
+    expect(spellDetailFor("Fireball", "3rd level").description.join(" ")).toContain(
+      "A bright streak flashes from your pointing finger"
+    );
+    expect(spellDetailFor("Fireball", "3rd level").higherLevel.join(" ")).toContain(
+      "When you cast this spell using a spell slot of 4th level or higher"
     );
   });
 });

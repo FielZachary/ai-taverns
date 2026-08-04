@@ -25,6 +25,11 @@ import {
   customCampaignGenre
 } from "@/lib/campaign-genres";
 import {
+  spellRuleDetailsFor,
+  type SpellLevelLabel,
+  type SpellRuleProfile
+} from "@/lib/spell-rules";
+import {
   createCampaign as createCampaignViaApi,
   generateCharacterPortrait,
   generateCharacterBackstory,
@@ -71,6 +76,8 @@ import halfOrcSpeciesArt from "../../../../assets/races art/half-orc.png";
 import halflingSpeciesArt from "../../../../assets/races art/halfling.png";
 import humanSpeciesArt from "../../../../assets/races art/human.png";
 import tieflingSpeciesArt from "../../../../assets/races art/tiefling.png";
+
+export type { SpellLevelLabel, SpellRuleProfile } from "@/lib/spell-rules";
 
 type CampaignMode = "single_player" | "multiplayer";
 type MultiplayerIntent = "create" | "join";
@@ -153,7 +160,6 @@ function roomSocketUrl(campaign: CampaignSummary) {
 
   return url.toString();
 }
-export type SpellLevelLabel = "Cantrip" | "1st level" | "2nd level" | "3rd level";
 type SpellGroup = {
   level: SpellLevelLabel;
   base: string[];
@@ -176,14 +182,6 @@ type SpellSelectionLimits = {
 };
 type SpellSelectionCounts = Record<SpellLevelLabel, number> & {
   leveledSpells: number;
-};
-type SpellRuleProfile = {
-  description: string;
-  rolls: string;
-  school: string;
-  duration: string;
-  castingTime: string;
-  range: string;
 };
 type ActiveStatRoll = {
   id: string;
@@ -1267,6 +1265,12 @@ export function spellRollsFor(spell: string) {
 }
 
 export function spellDetailFor(spell: string, level: SpellLevelLabel | null): SpellRuleProfile {
+  const srdSpellDetail = spellRuleDetailsFor(spell);
+
+  if (srdSpellDetail) {
+    return srdSpellDetail;
+  }
+
   const summary = spellEffectSummaryFor(spell);
   const school = spellSchoolFor(spell);
   const duration = spellDurationFor(spell, level);
@@ -1275,12 +1279,21 @@ export function spellDetailFor(spell: string, level: SpellLevelLabel | null): Sp
   const levelText = level ?? "spell";
 
   return {
-    description: `${spell} is a ${levelText} ${school.toLowerCase()} option. ${summary} Use it when that effect would change the scene clearly: damage an enemy, protect an ally, reveal information, move through danger, or create a tactical opening. The DM may still ask for targets, a point of origin, or visible positioning before resolving it.`,
+    name: spell,
+    levelLabel: level ?? undefined,
+    description: [
+      `${spell} is a ${levelText} ${school.toLowerCase()} option. ${summary} Use it when that effect would change the scene clearly: damage an enemy, protect an ally, reveal information, move through danger, or create a tactical opening.`,
+      "A verbatim SRD rules record is not available for this spell in the bundled open-reference sources, so the DM may still ask for targets, a point of origin, visible positioning, or the official sourcebook text before resolving it."
+    ],
+    higherLevel: [],
     rolls: spellRollsFor(spell),
     school,
     duration,
     castingTime,
-    range
+    range,
+    components: [],
+    ritual: false,
+    concentration: /^Concentration/i.test(duration)
   };
 }
 const spellCatalog = {
@@ -6736,12 +6749,18 @@ export function NewAdventureForm({
             aria-labelledby="spell-detail-modal-title"
             className="spell-detail-modal"
             role="dialog"
+            style={{
+              "--spell-art-url": `url("${spellArtPathFor(activeSpellDetail)}")`
+            } as CSSProperties}
             onClick={(event) => event.stopPropagation()}
           >
             <div className="spell-detail-modal-header">
               <div>
-                <span>{activeSpellLevel ?? "Spell"}</span>
+                <span>{activeSpellRuleProfile.levelLabel ?? activeSpellLevel ?? "Spell"}</span>
                 <h2 id="spell-detail-modal-title">{activeSpellDetail}</h2>
+                {activeSpellRuleProfile.srdName ? (
+                  <small>SRD name: {activeSpellRuleProfile.srdName}</small>
+                ) : null}
               </div>
               <button
                 type="button"
@@ -6752,7 +6771,17 @@ export function NewAdventureForm({
               </button>
             </div>
             <div className="spell-detail-modal-body">
-              <p>{activeSpellRuleProfile.description}</p>
+              {activeSpellRuleProfile.description.map((paragraph) => (
+                <p key={paragraph}>{paragraph}</p>
+              ))}
+              {activeSpellRuleProfile.higherLevel.length > 0 ? (
+                <section>
+                  <h3>Scaling</h3>
+                  {activeSpellRuleProfile.higherLevel.map((paragraph) => (
+                    <p key={paragraph}>{paragraph}</p>
+                  ))}
+                </section>
+              ) : null}
               <section>
                 <h3>Rolls Involved</h3>
                 <p>{activeSpellRuleProfile.rolls}</p>
@@ -6775,6 +6804,40 @@ export function NewAdventureForm({
                 <dt>Range</dt>
                 <dd>{activeSpellRuleProfile.range}</dd>
               </div>
+              <div>
+                <dt>Components</dt>
+                <dd>
+                  {activeSpellRuleProfile.components.length > 0
+                    ? activeSpellRuleProfile.components.join(", ")
+                    : "Not listed"}
+                </dd>
+              </div>
+              {activeSpellRuleProfile.material ? (
+                <div>
+                  <dt>Material</dt>
+                  <dd>{activeSpellRuleProfile.material}</dd>
+                </div>
+              ) : null}
+              <div>
+                <dt>Ritual</dt>
+                <dd>{activeSpellRuleProfile.ritual ? "Yes" : "No"}</dd>
+              </div>
+              {activeSpellRuleProfile.classes?.length ? (
+                <div>
+                  <dt>Classes</dt>
+                  <dd>{activeSpellRuleProfile.classes.join(", ")}</dd>
+                </div>
+              ) : null}
+              {activeSpellRuleProfile.sourceUrl ? (
+                <div>
+                  <dt>Source</dt>
+                  <dd>
+                    <a href={activeSpellRuleProfile.sourceUrl} target="_blank" rel="noreferrer">
+                      SRD
+                    </a>
+                  </dd>
+                </div>
+              ) : null}
             </dl>
           </section>
         </div>
