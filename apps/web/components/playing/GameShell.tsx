@@ -1244,18 +1244,22 @@ export function GameShell({
           realtimeEvent.type === "dm_stream_failed" &&
           realtimeEvent.roomId === activeCampaign.id
         ) {
+          const shouldSuppressMessage = Boolean(retryableTurnRef.current);
+
           setStreamingDmMessages((currentMessages) =>
             removeStreamingDmMessage(currentMessages, realtimeEvent.turnId)
           );
-          setMessages((currentMessages) => [
-            ...currentMessages,
-            {
-              id: createClientId(),
-              role: "system",
-              content: realtimeEvent.message,
-              createdAt: new Date().toISOString()
-            }
-          ]);
+          if (!shouldSuppressMessage) {
+            setMessages((currentMessages) => [
+              ...currentMessages,
+              {
+                id: createClientId(),
+                role: "system",
+                content: realtimeEvent.message,
+                createdAt: new Date().toISOString()
+              }
+            ]);
+          }
           void refreshRoom();
         }
       });

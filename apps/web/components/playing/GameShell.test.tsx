@@ -446,6 +446,21 @@ describe("GameShell", () => {
       "false"
     );
 
+    act(() => {
+      MockWebSocket.instances[0].emitMessage({
+        type: "dm_stream_failed",
+        roomId: campaign.id,
+        turnId: "turn-timeout",
+        message:
+          "The operation was aborted due to timeout Trace ID: 0f27fc6e-5dbc-4b01-90ac-3d5ee2d693e4"
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText(/The operation was aborted due to timeout/))
+        .not.toBeInTheDocument();
+    });
+
     fireEvent.click(screen.getByRole("button", { name: "Retry last turn" }));
 
     await waitFor(() => {
