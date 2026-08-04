@@ -61,6 +61,7 @@ export type MainDmOutput = {
 export type CombatActorState = {
   currentHp?: number;
   maxHp?: number;
+  armorClass?: number;
   resources?: Record<string, unknown>;
   conditions?: string[];
 };
@@ -486,6 +487,7 @@ export function jobPrompt(
     "Roll NPC and enemy initiative yourself every time, reveal each NPC/enemy initiative roll and total in public_narration, and encode the resulting order in mechanics_state_update or combat_events.",
     "Never ask players to roll initiative, saving throws, attacks, damage, checks, or any other dice for NPCs or enemies; NPC and enemy dice are DM-side rolls that must still be visible to the players.",
     "When combat begins, include mechanics_state_update.combat with active true, round 1, turnOwner, and provisional initiativeOrder using actor keys from the current scene and character sheets only.",
+    "For every NPC or enemy actor key introduced in initiativeOrder, include a matching mechanics_state_update.actors entry with characterName, currentHp, maxHp, armorClass, and conditions so later HP and turn updates have canonical state to modify.",
     "After all requested player initiative rolls are submitted, initiative is resolved. If the first actor is an NPC, immediately resolve that NPC turn before returning control to players. Saying an NPC moves first is not a handoff; the NPC must act now.",
     "Do not include bystanders, captives, scenery, or passive creatures in initiativeOrder unless they can meaningfully act in the fight.",
     "Turn ownership:",
@@ -611,6 +613,29 @@ export function jobPrompt(
                 "npc:cutthroat-1",
                 "npc:cutthroat-2"
               ]
+            },
+            actors: {
+              "npc:bandit-captain": {
+                characterName: "Bandit captain",
+                currentHp: 32,
+                maxHp: 32,
+                armorClass: 15,
+                conditions: []
+              },
+              "npc:cutthroat-1": {
+                characterName: "Cutthroat",
+                currentHp: 11,
+                maxHp: 11,
+                armorClass: 12,
+                conditions: []
+              },
+              "npc:cutthroat-2": {
+                characterName: "Cutthroat",
+                currentHp: 11,
+                maxHp: 11,
+                armorClass: 12,
+                conditions: []
+              }
             }
           },
           inventory_state_update: { patches: [] }

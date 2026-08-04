@@ -716,7 +716,10 @@ test("solo combat turn can start initiative through mechanics state update", asy
           turnOwner?: string | null;
           initiativeOrder?: string[];
         };
-        actors?: Record<string, { characterName?: string; currentHp?: number }>;
+        actors?: Record<
+          string,
+          { characterName?: string; currentHp?: number; armorClass?: number }
+        >;
       }
     | undefined;
 
@@ -734,6 +737,7 @@ test("solo combat turn can start initiative through mechanics state update", asy
     "npc:drowned-choir-raider-2"
   ]);
   assert.equal(combatState?.actors?.["npc:mara"]?.characterName, "Mara");
+  assert.equal(combatState?.actors?.["npc:mara"]?.armorClass, 14);
 
   assert.equal(getProviderInputs().length, 1);
 });

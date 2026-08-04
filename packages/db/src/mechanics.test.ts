@@ -139,3 +139,32 @@ test("mechanics state clamps persisted negative HP to zero", () => {
   assert.equal(state.actors["player:vayne"]?.maxHp, 20);
   assert.deepEqual(state.actors["player:vayne"]?.conditions, ["unconscious"]);
 });
+
+test("mechanics state preserves persisted NPC armor class", () => {
+  const state = resolveMechanicsState(
+    {
+      metadata: {
+        mechanicsState: {
+          combat: {
+            active: true,
+            round: 1,
+            turnOwner: "player:vayne",
+            initiativeOrder: ["player:vayne", "npc:acolyte-1"]
+          },
+          actors: {
+            "npc:acolyte-1": {
+              characterName: "Unbound Word Acolyte",
+              currentHp: 9,
+              maxHp: 9,
+              armorClass: 13,
+              conditions: []
+            }
+          }
+        }
+      }
+    },
+    []
+  );
+
+  assert.equal(state.actors["npc:acolyte-1"]?.armorClass, 13);
+});
