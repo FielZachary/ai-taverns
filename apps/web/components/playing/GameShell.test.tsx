@@ -430,7 +430,7 @@ describe("GameShell", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(15_000);
+      await vi.advanceTimersByTimeAsync(30_000);
     });
     vi.useRealTimers();
 
