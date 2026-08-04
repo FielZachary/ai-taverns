@@ -40,6 +40,52 @@ describe("parseDmContract", () => {
     assert.equal(result.resolutionMode, "resolved_without_dice");
   });
 
+  it("normalizes narration highlights from exact public narration phrases", () => {
+    const result = parseDmContract(
+      JSON.stringify({
+        public_narration:
+          "Captain Vael lowers the black key onto the Harbor Watch ledger. What do you do?",
+        narration_highlights: [
+          { text: "Captain Vael", color_role: "npc" },
+          { text: "black key", color_role: "object" },
+          { text: "missing phrase", color_role: "clue" },
+          { text: "Harbor Watch", color_role: "invalid" }
+        ],
+        roll_requests: [],
+        next_input_needed: "player_actions"
+      })
+    );
+
+    assert.deepEqual(result.narrationHighlights, [
+      { text: "Captain Vael", colorRole: "npc" },
+      { text: "black key", colorRole: "object" }
+    ]);
+  });
+
+  it("preserves many exact narration highlights for combat math", () => {
+    const phrases = Array.from({ length: 8 }, (_, index) => {
+      const roll = 10 + index;
+      return `rolled a ${roll}`;
+    });
+    const result = parseDmContract(
+      JSON.stringify({
+        public_narration: `${phrases.join(". ")}. What do you do?`,
+        narration_highlights: phrases.map((text) => ({
+          text,
+          color_role: "clue"
+        })),
+        roll_requests: [],
+        next_input_needed: "player_actions"
+      })
+    );
+
+    assert.equal(result.narrationHighlights.length, phrases.length);
+    assert.deepEqual(
+      result.narrationHighlights.map((highlight) => highlight.text),
+      phrases
+    );
+  });
+
   it("infers and validates resolution_mode", () => {
     const resolved = parseDmContract(
       JSON.stringify({
@@ -185,6 +231,39 @@ describe("parseDmContract", () => {
       sceneLocation: "Saltwatch Chapel",
       startingLocation: "Harbor Road"
     });
+  });
+
+  it("preserves combat roll metadata from roll requests", () => {
+    const result = parseDmContract(
+      JSON.stringify({
+        public_narration:
+          "Your second flurry strike lands. Roll 1d4 + 2 for Flurry of Blows Damage.",
+        roll_requests: [
+          {
+            id: "oktai-flurry-damage-2",
+            dice: "1d4",
+            label: "Flurry of Blows Damage",
+            modifier: 2,
+            player: "player:oktai",
+            combat: {
+              actionId: "oktai-round1-turn",
+              actorKey: "player:oktai",
+              targetActorKey: "npc:acolyte-1",
+              kind: "damage_roll",
+              sourceAttackRollId: "oktai-flurry-attack-2",
+              damageType: "bludgeoning"
+            }
+          }
+        ],
+        next_input_needed: "dice_results"
+      })
+    );
+
+    assert.equal(
+      result.rollRequests[0]?.combat?.targetActorKey,
+      "npc:acolyte-1"
+    );
+    assert.equal(result.rollRequests[0]?.combat?.kind, "damage_roll");
   });
 
   it("infers multiplayer initiative roll targets from initiative labels", () => {
@@ -641,6 +720,41 @@ describe("DM provider helpers", () => {
     );
   });
 
+  it("does not duplicate investigation check prose that already includes a DC", () => {
+    const publicNarration =
+      "Make an Insight check. DC 14 reveals a gut feeling about the safe path based on the hum and air currents; DC 18 may reveal that the traps react to *intent* or *fear* rather than just weight.";
+    const result = parseDmContract(
+      JSON.stringify({
+        public_narration: publicNarration,
+        resolution_mode: "needs_dice",
+        roll_requests: [
+          {
+            dice: "1d20",
+            modifier: 3,
+            skill: "Insight",
+            target_dc: 14,
+            reason:
+              "a gut feeling about the safe path; DC 18 may reveal the traps react to intent or fear"
+          }
+        ],
+        next_input_needed: "dice_results",
+        input_targets: ["player:oktai"],
+        input_policy: "only_targeted_players",
+        mechanics_state_update: {},
+        inventory_state_update: { patches: [] }
+      }),
+      { dmJob: "investigation" }
+    );
+
+    assert.equal(result.publicNarration, publicNarration);
+    assert.equal(result.rollRequests[0]?.label, "Insight");
+    assert.equal(
+      result.rollRequests[0]?.reason,
+      "a gut feeling about the safe path; DC 18 may reveal the traps react to intent or fear"
+    );
+    assert.equal(result.rollRequests[0]?.targetDc, 14);
+  });
+
   it("does not append investigation DC guidance when no roll is requested", () => {
     const result = parseDmContract(
       JSON.stringify({
@@ -659,6 +773,50 @@ describe("DM provider helpers", () => {
     assert.equal(
       result.publicNarration,
       "The symbols are strange, but you need a closer look."
+    );
+  });
+
+  it("preserves structured single-line breaks in public narration", () => {
+    const result = parseDmContract(
+      JSON.stringify({
+        public_narration: [
+          "Combat begins.",
+          "",
+          "**Inquisitor Manifold initiative roll: 14.**",
+          "**Unbound Word Acolyte 1 initiative roll: 10.**",
+          "**Unbound Word Acolyte 2 initiative roll: 8.**",
+          "**Unbound Word Acolyte 3 initiative roll: 12.**",
+          "",
+          "**Initiative Order:**",
+          "1. Oktai Uni (16)",
+          "2. Inquisitor Manifold (14)",
+          "3. Unbound Word Acolyte 3 (12)"
+        ].join("\n"),
+        resolution_mode: "resolved_without_dice",
+        roll_requests: [],
+        next_input_needed: "player_actions",
+        input_targets: ["player:oktai"],
+        input_policy: "only_targeted_players",
+        mechanics_state_update: {},
+        inventory_state_update: { patches: [] }
+      })
+    );
+
+    assert.equal(
+      result.publicNarration,
+      [
+        "Combat begins.",
+        "",
+        "**Inquisitor Manifold initiative roll: 14.**",
+        "**Unbound Word Acolyte 1 initiative roll: 10.**",
+        "**Unbound Word Acolyte 2 initiative roll: 8.**",
+        "**Unbound Word Acolyte 3 initiative roll: 12.**",
+        "",
+        "**Initiative Order:**",
+        "1. Oktai Uni (16)",
+        "2. Inquisitor Manifold (14)",
+        "3. Unbound Word Acolyte 3 (12)"
+      ].join("\n")
     );
   });
 

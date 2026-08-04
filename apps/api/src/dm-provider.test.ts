@@ -216,8 +216,11 @@ test("provider routes Qwen model selections to Qwen credentials", async () => {
   let requestUrl = "";
   let authorization = "";
   let requestBody: {
+    enable_thinking?: boolean;
+    max_completion_tokens?: number;
     model?: string;
     messages: { role: string; content: string }[];
+    response_format?: { type?: string };
   } | undefined;
 
   globalThis.fetch = async (url, init) => {
@@ -243,14 +246,52 @@ test("provider routes Qwen model selections to Qwen credentials", async () => {
   const response = await askDungeonMasterProvider({
     instructions: "Return a JSON DM response.",
     message: "Begin.",
-    model: "qwen-3-7-flash"
+    model: "qwen-3-5-plus"
   });
 
   assert.equal(requestUrl, "https://qwen.example.test/v1/chat/completions");
   assert.equal(authorization, "Bearer test-qwen-key");
   assert.equal(requestBody?.model, "custom-qwen-flash");
+  assert.equal(requestBody?.enable_thinking, false);
+  assert.equal(requestBody?.max_completion_tokens, 4096);
+  assert.deepEqual(requestBody?.response_format, { type: "json_object" });
   assert.equal(response.id, "qwen-chat-1");
   assert.equal(response.debug.model, "custom-qwen-flash");
+});
+
+test("provider defaults Qwen chat requests to the QwenCloud compatible endpoint", async () => {
+  delete process.env.QWEN_BASE_URL;
+  process.env.QWEN_MODEL = "qwen3.5-plus";
+  let requestUrl = "";
+
+  globalThis.fetch = async (url) => {
+    requestUrl = String(url);
+
+    return jsonResponse({
+      id: "qwen-default-chat-1",
+      model: "qwen3.5-plus",
+      choices: [
+        {
+          finish_reason: "stop",
+          message: {
+            content:
+              '{"public_narration":"A lantern flares.","roll_requests":[],"next_input_needed":"player_actions","input_targets":[],"input_policy":"all_players"}'
+          }
+        }
+      ]
+    });
+  };
+
+  await askDungeonMasterProvider({
+    instructions: "Return a JSON DM response.",
+    message: "Begin.",
+    model: "qwen-3-5-plus"
+  });
+
+  assert.equal(
+    requestUrl,
+    "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions"
+  );
 });
 
 test("DeepSeek provider ignores combat language without routed DM job", async () => {

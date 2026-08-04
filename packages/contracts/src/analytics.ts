@@ -92,6 +92,7 @@ export const AnalyticsEventNameSchema = z.enum([
   "Character Portrait Previewed",
   "Character Portrait Requested",
   "Character Portrait Uploaded",
+  "Character Revived",
   "Campaign Restarted",
   "Hook Milestone Reached"
 ]);

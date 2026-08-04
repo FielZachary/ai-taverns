@@ -1,6 +1,19 @@
 export type GameMessageRole = "player" | "dm" | "system";
 export type GameMessageKind = "turn" | "ask_dm_question" | "ask_dm_answer";
 
+export type NarrationHighlightRole =
+  | "npc"
+  | "place"
+  | "clue"
+  | "danger"
+  | "faction"
+  | "object";
+
+export type NarrationHighlight = {
+  text: string;
+  colorRole: NarrationHighlightRole;
+};
+
 export type AiDebugMessage = {
   role: "system" | "user" | "assistant";
   content: string;
@@ -100,6 +113,7 @@ export type GameMessage = {
     sceneLocation?: string;
     startingLocation?: string;
   };
+  narrationHighlights?: NarrationHighlight[];
   content: string;
   createdAt: string;
   debug?: AiDebugInfo;
@@ -114,6 +128,26 @@ export type DiceRollRequest = {
   reason?: string;
   targetDc?: number;
   advantageState?: "normal" | "advantage" | "disadvantage";
+  combat?: {
+    actionId?: string;
+    actorKey?: string;
+    targetActorKey?: string;
+    kind?:
+      | "attack_roll"
+      | "damage_roll"
+      | "saving_throw"
+      | "ability_check"
+      | "initiative";
+    attackName?: string;
+    sequence?: number;
+    sourceAttackRollId?: string;
+    damageType?: string;
+    onHitDamage?: {
+      dice?: string;
+      modifier?: number;
+      damageType?: string;
+    };
+  };
 };
 
 export type InputPolicy = "all_players" | "only_targeted_players";

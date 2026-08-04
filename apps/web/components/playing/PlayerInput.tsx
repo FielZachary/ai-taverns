@@ -32,6 +32,7 @@ type PlayerInputProps = {
   onDraftChange: (value: string) => void;
   onModeChange: (mode: PlayerInputMode) => void;
   onRollDice: (queuedDice: QueuedDice) => void;
+  onRetryLastTurn?: () => void;
   onSkipTurn?: () => void;
   onGenerateRestartBackstory?: (
     mode: "generate" | "add_details",
@@ -45,7 +46,7 @@ const diceFaces: DiceFace[] = ["d4", "d6", "d8", "d10", "d12", "d20"];
 const aiModelStorageKey = "ai-dnd.aiModel";
 const aiModelOptions: { id: AiModelId; label: string }[] = [
   { id: "deepseek-v4-flash", label: "DeepSeek V4 Flash" },
-  { id: "qwen-3-7-flash", label: "Qwen 3.7 Flash" }
+  { id: "qwen-3-5-plus", label: "Qwen 3.5 Plus" }
 ];
 
 function queuedDiceTotal(queuedDice: QueuedDice) {
@@ -76,6 +77,7 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
       onDraftChange,
       onModeChange,
       onRollDice,
+      onRetryLastTurn,
       onSkipTurn,
       onGenerateRestartBackstory,
       onRestartCampaign,
@@ -152,6 +154,8 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
         : "";
     const isLocked = !isAskMode && (Boolean(lockMessage) || isSubmitted);
     const isRollRequired = !isAskMode && Boolean(requiredRoll);
+    const canRetryLastTurn =
+      !isAskMode && Boolean(onRetryLastTurn) && !isLocked && !isSending;
     const canSkipTurn =
       !isAskMode && Boolean(onSkipTurn) && !isLocked && !isRollRequired && !isSending;
     const queuedCount = useMemo(() => queuedDiceTotal(queuedDice), [queuedDice]);
@@ -259,7 +263,7 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
           validationMessage ? "turn-form-warning" : ""
         } ${isCallingAttention ? "turn-form-attention" : ""} ${
           isLocked ? "turn-form-submitted" : ""
-        }`}
+        } ${canRetryLastTurn ? "turn-form-has-retry" : ""}`}
         onSubmit={onSubmit}
       >
         <input type="hidden" name="aiModel" value={selectedAiModel} />
@@ -400,6 +404,17 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
             <div className="turn-form-submitted-label" aria-live="polite">
               {overlayMessage}
             </div>
+          ) : null}
+          {canRetryLastTurn ? (
+            <button
+              className="turn-retry-button"
+              type="button"
+              aria-label="Retry last turn"
+              title="Retry last turn"
+              onClick={onRetryLastTurn}
+            >
+              <RefreshCcw size={17} aria-hidden="true" />
+            </button>
           ) : null}
           <button
             className="turn-submit-arrow"

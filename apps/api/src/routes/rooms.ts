@@ -8,6 +8,8 @@ import {
   RoomPlayerUpdateResponseSchema,
   RoomReadQuerySchema,
   RoomReadResponseSchema,
+  RoomReviveRequestSchema,
+  RoomReviveResponseSchema,
   RoomSubmitRequestSchema,
   RoomSubmitResponseSchema
 } from "@ai-dnd/contracts";
@@ -18,6 +20,7 @@ import {
   getCombatCheatSheetTargetForUser,
   getRoomForUser,
   registerRoomPlayerForUser,
+  reviveSinglePlayerCharacterForUser,
   saveCombatCheatSheetForUser,
   submitRoomTurnForUser
 } from "@ai-dnd/db";
@@ -112,7 +115,8 @@ export async function registerRoomRoutes(
     return RoomReadResponseSchema.parse(
       await getRoomForUser(fastify.pg, {
         ...identity,
-        userId: user.id
+        userId: user.id,
+        ...(query.debugAllMessages ? { messageLimit: null } : {})
       })
     );
   });
@@ -332,6 +336,37 @@ export async function registerRoomRoutes(
         milestones: dmMilestones
       });
     }
+
+    return snapshot;
+  });
+
+  fastify.post("/room/revive", async (request) => {
+    const body = RoomReviveRequestSchema.parse(request.body);
+    const identity = roomIdentity(body.roomId, body.sessionId);
+    const user = await requireAuthenticatedUser(
+      fastify,
+      config,
+      request.cookies[config.authCookieName]
+    );
+
+    const snapshot = RoomReviveResponseSchema.parse(
+      await reviveSinglePlayerCharacterForUser(fastify.pg, {
+        campaignId: identity.roomId,
+        userId: user.id
+      })
+    );
+
+    await publishRoomSnapshotUpdate(fastify, snapshot);
+    analytics?.track({
+      name: "Character Revived",
+      distinctId: `user:${user.id}`,
+      properties: {
+        userId: user.id,
+        campaignId: snapshot.roomId,
+        campaignMode: snapshot.mode,
+        ...messageCounts(snapshot)
+      }
+    });
 
     return snapshot;
   });

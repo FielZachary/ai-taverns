@@ -8,6 +8,42 @@ export const DiceRollResultSchema = z.object({
   total: z.number().int()
 });
 
+export const DiceRollCombatContextSchema = z
+  .object({
+    actionId: z.string().min(1).optional(),
+    actorKey: z.string().min(1).optional(),
+    targetActorKey: z.string().min(1).optional(),
+    kind: z
+      .enum([
+        "attack_roll",
+        "damage_roll",
+        "saving_throw",
+        "ability_check",
+        "initiative"
+      ])
+      .optional(),
+    attackName: z.string().min(1).optional(),
+    sequence: z.number().int().positive().optional(),
+    sourceAttackRollId: z.string().min(1).optional(),
+    damageType: z.string().min(1).optional(),
+    onHitDamage: z
+      .object({
+        dice: z.string().min(1).optional(),
+        modifier: z.number().int().optional(),
+        damageType: z.string().min(1).optional()
+      })
+      .passthrough()
+      .optional()
+  })
+  .passthrough();
+
+export const DiceRollDeathSaveContextSchema = z
+  .object({
+    actorKey: z.string().min(1),
+    attempt: z.number().int().positive().optional()
+  })
+  .passthrough();
+
 export const DiceRollRequestSchema = z
   .object({
     id: z.string().min(1).optional(),
@@ -21,7 +57,10 @@ export const DiceRollRequestSchema = z
     dc: z.number().int().positive().optional(),
     threshold: z.number().int().positive().optional(),
     advantageState: z.enum(["normal", "advantage", "disadvantage"]).optional(),
-    advantage_state: z.enum(["normal", "advantage", "disadvantage"]).optional()
+    advantage_state: z.enum(["normal", "advantage", "disadvantage"]).optional(),
+    combat: DiceRollCombatContextSchema.optional(),
+    deathSave: DiceRollDeathSaveContextSchema.optional(),
+    death_save: DiceRollDeathSaveContextSchema.optional()
   })
   .passthrough();
 
@@ -63,6 +102,11 @@ export const RoomMessageSettingSchema = z.object({
   startingLocation: z.string().min(1).optional()
 });
 
+export const RoomMessageNarrationHighlightSchema = z.object({
+  text: z.string().min(1),
+  colorRole: z.enum(["npc", "place", "clue", "danger", "faction", "object"])
+});
+
 export const RoomMessageSchema = z
   .object({
     id: z.string().min(1),
@@ -71,6 +115,7 @@ export const RoomMessageSchema = z
     playerName: z.string().optional(),
     characterName: z.string().optional(),
     setting: RoomMessageSettingSchema.optional(),
+    narrationHighlights: z.array(RoomMessageNarrationHighlightSchema).optional(),
     content: z.string(),
     createdAt: z.string().datetime()
   })
@@ -97,12 +142,24 @@ export const RoomSnapshotSchema = z.object({
     turnOwnerCharacterName: z.string().nullable(),
     initiativeOrder: z.array(z.string())
   }),
+  death: z
+    .object({
+      state: z.enum(["dying", "stable", "dead"]).nullable(),
+      actorKey: z.string().nullable(),
+      characterName: z.string().nullable(),
+      successes: z.number().int().nonnegative(),
+      failures: z.number().int().nonnegative(),
+      canRevive: z.boolean(),
+      canCreateNewCampaign: z.boolean()
+    })
+    .optional(),
   updatedAt: z.string().datetime()
 });
 
 export const RoomReadQuerySchema = z.object({
   roomId: z.string().optional(),
-  sessionId: z.string().optional()
+  sessionId: z.string().optional(),
+  debugAllMessages: z.coerce.boolean().optional()
 });
 
 export const RoomPlayerUpdateRequestSchema = z.object({
@@ -144,6 +201,13 @@ export const RoomPlayerUpdateResponseSchema = RoomSnapshotSchema;
 export const RoomCombatCheatSheetGenerateResponseSchema = RoomSnapshotSchema;
 export const RoomBeginResponseSchema = RoomSnapshotSchema;
 export const RoomSubmitResponseSchema = RoomSnapshotSchema;
+
+export const RoomReviveRequestSchema = z.object({
+  roomId: z.string().optional(),
+  sessionId: z.string().optional()
+});
+
+export const RoomReviveResponseSchema = RoomSnapshotSchema;
 
 export const RoomRealtimeEventSchema = z.discriminatedUnion("type", [
   z.object({
@@ -199,6 +263,7 @@ export const RoomSocketEventSchema = z.union([
 ]);
 
 export type DiceRollRequest = z.infer<typeof DiceRollRequestSchema>;
+export type DiceRollCombatContext = z.infer<typeof DiceRollCombatContextSchema>;
 export type DiceRollResult = z.infer<typeof DiceRollResultSchema>;
 export type DiceRollSubmission = z.infer<typeof DiceRollSubmissionSchema>;
 export type RoomSnapshot = z.infer<typeof RoomSnapshotSchema>;

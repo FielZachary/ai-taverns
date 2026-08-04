@@ -11,6 +11,7 @@ import {
   X
 } from "lucide-react";
 import type { AiDebugInfo, GameMessage } from "@/lib/game-types";
+import type { NarrationHighlight } from "@/lib/game-types";
 
 export type ChatPlayerStatus = {
   id: string;
@@ -26,13 +27,15 @@ type MessageLogProps = {
   waitingPlayers?: ChatPlayerStatus[];
   regeneratingMessageId?: string | null;
   regeneratableMessageId?: string | null;
+  retryMessageId?: string | null;
   onInspectMap?: () => void;
   onRegenerateResponse?: (messageId: string) => void;
+  onRetryLastTurn?: () => void;
   onViewEldermereLore?: () => void;
 };
 
 function renderInlineMarkdown(content: string) {
-  const segments = content.split(/(\*\*[^*]+?\*\*)/g);
+  const segments = content.split(/(\*\*[^*]+?\*\*|\*[^*]+?\*)/g);
 
   return segments.map((segment, index) => {
     const boldMatch = segment.match(/^\*\*([^*]+?)\*\*$/);
@@ -41,7 +44,92 @@ function renderInlineMarkdown(content: string) {
       return <strong key={`${index}-${boldMatch[1].slice(0, 16)}`}>{boldMatch[1]}</strong>;
     }
 
+    const italicMatch = segment.match(/^\*([^*]+?)\*$/);
+
+    if (italicMatch?.[1]) {
+      return <em key={`${index}-${italicMatch[1].slice(0, 16)}`}>{italicMatch[1]}</em>;
+    }
+
     return segment;
+  });
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function renderHighlightedInlineMarkdown(
+  content: string,
+  highlights: NarrationHighlight[]
+) {
+  const usableHighlights = highlights
+    .filter((highlight) => highlight.text && content.includes(highlight.text))
+    .sort((left, right) => right.text.length - left.text.length);
+
+  if (usableHighlights.length === 0) {
+    return renderInlineMarkdown(content);
+  }
+
+  const pattern = new RegExp(
+    usableHighlights.map((highlight) => escapeRegExp(highlight.text)).join("|"),
+    "g"
+  );
+  const parts: Array<string | { text: string; colorRole: string }> = [];
+  let cursor = 0;
+
+  for (const match of content.matchAll(pattern)) {
+    const matchText = match[0];
+    const index = match.index ?? 0;
+    const highlight = usableHighlights.find((item) => item.text === matchText);
+
+    if (!highlight || index < cursor) {
+      continue;
+    }
+
+    if (index > cursor) {
+      parts.push(content.slice(cursor, index));
+    }
+
+    parts.push({ text: matchText, colorRole: highlight.colorRole });
+    cursor = index + matchText.length;
+  }
+
+  if (cursor < content.length) {
+    parts.push(content.slice(cursor));
+  }
+
+  return parts.map((part, index) => {
+    if (typeof part === "string") {
+      return renderInlineMarkdown(part).map((node, nodeIndex) => (
+        <span key={`plain-${index}-${nodeIndex}`}>{node}</span>
+      ));
+    }
+
+    return (
+      <span
+        className={`message-narration-highlight message-narration-highlight-${part.colorRole}`}
+        key={`highlight-${index}-${part.text}`}
+      >
+        {part.text}
+      </span>
+    );
+  });
+}
+
+function renderInlineContentWithLineBreaks(
+  content: string,
+  highlights: NarrationHighlight[]
+) {
+  return content.split("\n").flatMap((line, index) => {
+    const renderedLine = (
+      <span key={`line-${index}`}>
+        {renderHighlightedInlineMarkdown(line, highlights)}
+      </span>
+    );
+
+    return index === 0
+      ? [renderedLine]
+      : [<br key={`break-${index}`} />, renderedLine];
   });
 }
 
@@ -73,7 +161,13 @@ function playerFacingMessageContent(message: GameMessage) {
   return message.content;
 }
 
-function MessageBody({ content }: { content: string }) {
+function MessageBody({
+  content,
+  highlights = []
+}: {
+  content: string;
+  highlights?: NarrationHighlight[];
+}) {
   const paragraphs = content
     .trim()
     .split(/\n{2,}/)
@@ -104,7 +198,7 @@ function MessageBody({ content }: { content: string }) {
 
         return (
           <p key={`${index}-${paragraph.slice(0, 16)}`}>
-            {renderInlineMarkdown(paragraph)}
+            {renderInlineContentWithLineBreaks(paragraph, highlights)}
           </p>
         );
       })}
@@ -389,8 +483,10 @@ export function MessageLog({
   waitingPlayers = [],
   regeneratingMessageId,
   regeneratableMessageId,
+  retryMessageId,
   onInspectMap,
   onRegenerateResponse,
+  onRetryLastTurn,
   onViewEldermereLore
 }: MessageLogProps) {
   const logRef = useRef<HTMLDivElement>(null);
@@ -449,6 +545,10 @@ export function MessageLog({
           message.id === regeneratableMessageId;
         const canRewindToMessage =
           canRegenerateMessage && !isLatestRegeneratableMessage;
+        const canRetryMessage =
+          message.role === "system" &&
+          message.id === retryMessageId &&
+          Boolean(onRetryLastTurn);
         const locationLabel = messageLocationLabel(message);
         const messageContent = playerFacingMessageContent(message);
 
@@ -470,8 +570,9 @@ export function MessageLog({
                     <p className="message-location-label">{locationLabel}</p>
                   ) : null}
                 </div>
-                {message.role === "dm" &&
-                (message.debug || canRegenerateMessage) ? (
+                {(message.role === "dm" &&
+                  (message.debug || canRegenerateMessage)) ||
+                canRetryMessage ? (
                   <div className="message-actions">
                     {message.debug ? (
                       <button
@@ -518,13 +619,28 @@ export function MessageLog({
                         <RefreshCcw size={15} />
                       </button>
                     ) : null}
+                    {canRetryMessage ? (
+                      <button
+                        type="button"
+                        className="message-action-button"
+                        onClick={onRetryLastTurn}
+                        disabled={isSending}
+                        aria-label="Retry last turn"
+                        title="Retry last turn"
+                      >
+                        <RefreshCcw size={15} />
+                      </button>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
               {message.role === "dm" && !messageContent.trim() ? (
                 <RuneLoader label="Reading the runes" />
               ) : (
-                <MessageBody content={messageContent} />
+                <MessageBody
+                  content={messageContent}
+                  highlights={message.narrationHighlights}
+                />
               )}
               <MessageResourceCard
                 message={message}

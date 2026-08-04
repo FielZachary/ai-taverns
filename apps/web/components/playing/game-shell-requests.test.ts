@@ -53,7 +53,7 @@ describe("game shell request helpers", () => {
         message: "Nyx skips their turn.",
         skipTurn: true,
         clientMessageId: "message-2",
-        model: "qwen-3-7-flash"
+        model: "qwen-3-5-plus"
       })
     ).toEqual({
       endpoint: "/api/room/submit",
@@ -64,7 +64,7 @@ describe("game shell request helpers", () => {
         message: "Nyx skips their turn.",
         skipTurn: true,
         clientMessageId: "message-2",
-        model: "qwen-3-7-flash"
+        model: "qwen-3-5-plus"
       }
     });
   });
@@ -97,7 +97,7 @@ describe("game shell request helpers", () => {
         playerId: "player-1",
         rollSubmissions,
         clientMessageId: "message-4",
-        model: "qwen-3-7-flash"
+        model: "qwen-3-5-plus"
       })
     ).toEqual({
       endpoint: "/api/room/submit",
@@ -107,7 +107,7 @@ describe("game shell request helpers", () => {
         playerId: "player-1",
         rollSubmissions,
         clientMessageId: "message-4",
-        model: "qwen-3-7-flash"
+        model: "qwen-3-5-plus"
       }
     });
   });

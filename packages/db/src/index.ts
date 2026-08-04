@@ -35,6 +35,7 @@ import {
   type DmNextInputNeeded,
   type DmJobName,
   type InputPolicy,
+  type NarrationHighlight,
   type RouterContextKeys,
   type ValidatedRouterOutput
 } from "@ai-dnd/dm";
@@ -54,10 +55,16 @@ import type {
 } from "@ai-dnd/contracts";
 import {
   actorKeyForPlayer,
+  applyDeathSavingThrow,
   applyAcceptedCast,
   assertMechanicsActionAllowed,
+  firstDyingPlayerActorKey,
+  isDeadActor,
+  isDyingPlayerActor,
+  isStableActor,
   mechanicsStateWithActor,
   projectMechanicsIntoCharacterSheet,
+  reviveDeadPlayerActor,
   resolveMechanicsState
 } from "./mechanics.js";
 
@@ -663,7 +670,6 @@ type EldermereOpeningPlan = {
   campaignFoundation?: Record<string, unknown> | undefined;
   forbiddenOpeningTerms: string[];
   narratorInstructions: string[];
-  openingQualityChecks: string[];
 };
 
 function extractExistingPromptNames(...values: Array<string | undefined>) {
@@ -691,6 +697,7 @@ type ResolutionMode = "needs_dice" | "resolved_without_dice";
 type DungeonMasterReply = {
   id: string;
   content: string;
+  narrationHighlights: NarrationHighlight[];
   debug: AiDebugInfo;
   rollRequests: DiceRollRequest[];
   inputTargets: string[];
@@ -740,7 +747,7 @@ type DmPromptContext = {
 
 const dungeonMasterContractInstructions = [
   "You are the AI Taverns DnD Dungeon Master.",
-  "Return exactly one valid JSON object. Do not use Markdown outside the JSON object; Markdown emphasis is allowed inside public_narration strings when the job guidance asks for it.",
+  "Return exactly one valid JSON object. Do not use Markdown outside the JSON object or Markdown emphasis inside public_narration strings.",
   "Use public_narration for player-facing narration.",
   "Use roll_requests only for player-controlled dice the website must collect.",
   "In roll_requests, dice must be bare dice notation only, such as 1d20, 3d4, or 8d6. Do not include + or - modifiers in dice; put static bonuses or penalties in modifier. Example: Magic Missile uses dice \"3d4\" and modifier 3, not dice \"3d4+3\".",
@@ -748,9 +755,13 @@ const dungeonMasterContractInstructions = [
   "When the party's current location is known, include a setting object with display_location, world_name, region_name, settlement_name, scene_location, and starting_location when available.",
   "Use scene_location for the current local scene label, such as a tavern, street, room, road, ruin, district, or wilderness landmark.",
   "Use display_location as the short UI label for the current location; do not use a genre label.",
-  "Required top-level keys: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update.",
+  "Required top-level keys: public_narration, narration_highlights, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update, combat_events, proposed_context_updates.",
+  "Unless opener-specific guidance says otherwise, narration_highlights must be an array of 0-1 player-visible important names, places, clues, objects, threats, factions, or details from public_narration during normal play. Use [] when nothing is truly worth highlighting; it is completely okay to highlight nothing.",
+  "Each narration_highlights item must use exactly {\"text\":\"exact phrase copied from public_narration\",\"color_role\":\"npc|place|clue|danger|faction|object\"}.",
+  "Do not put colors, HTML, CSS, or Markdown emphasis into public_narration or narration_highlights. The UI will choose colors from color_role.",
   "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved this turn."
 ].join("\n");
+const playerTurnDmTimeoutMs = 15_000;
 
 export type DungeonMasterRuntime = {
   askProvider(input: {
@@ -760,6 +771,7 @@ export type DungeonMasterRuntime = {
     currentPlayerAction?: string;
     dmJob?: DmJobName;
     model?: AiModelId;
+    signal?: AbortSignal;
     onPublicNarrationDelta?: (text: string) => void;
   }): Promise<DungeonMasterProviderResponse>;
   emitDmStreamEvent?(event: DmStreamEvent | RoomSocketEvent): void;
@@ -1915,6 +1927,41 @@ function stringListField(record: Record<string, unknown>, key: string) {
     : undefined;
 }
 
+function deathSavesField(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const successes = Number(value.successes);
+  const failures = Number(value.failures);
+
+  if (
+    !Number.isInteger(successes) ||
+    !Number.isInteger(failures) ||
+    successes < 0 ||
+    failures < 0
+  ) {
+    return undefined;
+  }
+
+  return {
+    successes: Math.min(3, successes),
+    failures: Math.min(3, failures)
+  };
+}
+
+function allegianceField(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  return value === "player" ||
+    value === "ally" ||
+    value === "hostile" ||
+    value === "neutral"
+    ? value
+    : undefined;
+}
+
 function applyMechanicsStateUpdate(
   state: MechanicsState,
   update: Record<string, unknown> | undefined,
@@ -1925,6 +1972,9 @@ function applyMechanicsStateUpdate(
   }
 
   const rawActors = isRecord(update.actors) ? update.actors : update;
+  const rawCombat = isRecord(update.combat) ? update.combat : undefined;
+  const combatWillBeActive =
+    state.combat.active || (rawCombat ? rawCombat.active === true : false);
   const nextActors = { ...state.actors };
   let changed = false;
 
@@ -1934,26 +1984,43 @@ function applyMechanicsStateUpdate(
     }
 
     const existing = nextActors[actorKey];
+    const currentHp = hpNumberField(rawActor, "currentHp");
+    const maxHp = hpNumberField(rawActor, "maxHp");
+    const armorClass = numberField(rawActor, "armorClass");
     const characterName =
       typeof rawActor.characterName === "string" && rawActor.characterName.trim()
         ? rawActor.characterName
         : existing?.characterName;
+    const isNewCombatNpc =
+      !existing &&
+      combatWillBeActive &&
+      actorKey.startsWith("npc:") &&
+      Boolean(characterName) &&
+      currentHp !== undefined &&
+      maxHp !== undefined &&
+      armorClass !== undefined;
 
-    if (!existing && !characterName) {
+    if (!existing && !isNewCombatNpc) {
       continue;
     }
 
     nextActors[actorKey] = {
       ...(existing ?? { characterName: characterName ?? actorKey }),
       ...(characterName ? { characterName } : {}),
-      ...(hpNumberField(rawActor, "currentHp") !== undefined
-        ? { currentHp: hpNumberField(rawActor, "currentHp") }
+      ...(currentHp !== undefined ? { currentHp } : {}),
+      ...(maxHp !== undefined ? { maxHp } : {}),
+      ...(armorClass !== undefined ? { armorClass } : {}),
+      ...(allegianceField(rawActor, "allegiance") !== undefined
+        ? { allegiance: allegianceField(rawActor, "allegiance") }
         : {}),
-      ...(hpNumberField(rawActor, "maxHp") !== undefined
-        ? { maxHp: hpNumberField(rawActor, "maxHp") }
+      ...(typeof rawActor.isPlayerControlled === "boolean"
+        ? { isPlayerControlled: rawActor.isPlayerControlled }
         : {}),
       ...(stringListField(rawActor, "conditions") !== undefined
         ? { conditions: stringListField(rawActor, "conditions") }
+        : {}),
+      ...(deathSavesField(rawActor, "deathSaves") !== undefined
+        ? { deathSaves: deathSavesField(rawActor, "deathSaves") }
         : {}),
       ...(rawActor.concentration === null || isRecord(rawActor.concentration)
         ? { concentration: rawActor.concentration as MechanicsState["actors"][string]["concentration"] }
@@ -1962,7 +2029,6 @@ function applyMechanicsStateUpdate(
     changed = true;
   }
 
-  const rawCombat = isRecord(update.combat) ? update.combat : undefined;
   const nextCombat = rawCombat
     ? {
         ...state.combat,
@@ -2657,7 +2723,8 @@ export async function createCampaignForMode(
       campaignGenrePromptBrief: input.campaignGenrePromptBrief,
       customWorldName: input.customWorldName,
       customWorldDescription: input.customWorldDescription
-    }
+    },
+    omitGenericSettingRequest: hasEldermereWorldProfile(createdState.campaign)
   });
 
   const resolveOpening = async () => {
@@ -2718,7 +2785,7 @@ export async function createCampaignForMode(
           openingTurn.id,
           undefined,
           { allowResolvedCombatWithoutRolls: true },
-          { buildPromptContext: false }
+          { buildPromptContext: false, contractKind: "opening" }
         );
     const resolvedTurn = await finishResolvedTurn(db, {
       campaignId: createdState.campaign.id,
@@ -2732,6 +2799,7 @@ export async function createCampaignForMode(
       nextInputNeeded: opening.nextInputNeeded,
       resolutionMode: opening.resolutionMode,
       setting: opening.setting,
+      narrationHighlights: opening.narrationHighlights,
       aiDebug: opening.debug
     });
 
@@ -3973,6 +4041,78 @@ function normalizeDiceAndModifier(dice: string, modifier: number | undefined) {
   };
 }
 
+function stringProperty(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function integerProperty(record: Record<string, unknown>, key: string) {
+  const value = Number(record[key]);
+  return Number.isInteger(value) ? value : undefined;
+}
+
+type CombatRollKind = NonNullable<NonNullable<DiceRollRequest["combat"]>["kind"]>;
+
+function combatRollKind(value: string | undefined): CombatRollKind | undefined {
+  return value === "attack_roll" ||
+    value === "damage_roll" ||
+    value === "saving_throw" ||
+    value === "ability_check" ||
+    value === "initiative"
+    ? value
+    : undefined;
+}
+
+function normalizeCombatRollDamage(value: Record<string, unknown>) {
+  const normalized: NonNullable<
+    NonNullable<DiceRollRequest["combat"]>["onHitDamage"]
+  > = {};
+  const dice = stringProperty(value, "dice");
+  const modifier = integerProperty(value, "modifier");
+  const damageType = stringProperty(value, "damageType");
+
+  if (dice) normalized.dice = dice;
+  if (modifier !== undefined) normalized.modifier = modifier;
+  if (damageType) normalized.damageType = damageType;
+
+  return normalized;
+}
+
+function normalizeCombatRollContext(
+  value: unknown
+): NonNullable<DiceRollRequest["combat"]> | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const onHitDamage = isRecord(value.onHitDamage)
+    ? normalizeCombatRollDamage(value.onHitDamage)
+    : undefined;
+  const kind = combatRollKind(stringProperty(value, "kind"));
+  const sequence = integerProperty(value, "sequence");
+  const normalized: NonNullable<DiceRollRequest["combat"]> = {};
+  const actionId = stringProperty(value, "actionId");
+  const actorKey = stringProperty(value, "actorKey");
+  const targetActorKey = stringProperty(value, "targetActorKey");
+  const attackName = stringProperty(value, "attackName");
+  const sourceAttackRollId = stringProperty(value, "sourceAttackRollId");
+  const damageType = stringProperty(value, "damageType");
+
+  if (actionId) normalized.actionId = actionId;
+  if (actorKey) normalized.actorKey = actorKey;
+  if (targetActorKey) normalized.targetActorKey = targetActorKey;
+  if (kind) normalized.kind = kind;
+  if (attackName) normalized.attackName = attackName;
+  if (sequence !== undefined && sequence > 0) normalized.sequence = sequence;
+  if (sourceAttackRollId) normalized.sourceAttackRollId = sourceAttackRollId;
+  if (damageType) normalized.damageType = damageType;
+  if (onHitDamage && Object.keys(onHitDamage).length > 0) {
+    normalized.onHitDamage = onHitDamage;
+  }
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
 function normalizeRollRequest(value: unknown): DiceRollRequest | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -4014,6 +4154,7 @@ function normalizeRollRequest(value: unknown): DiceRollRequest | null {
     typeof candidate.id === "string" && candidate.id.trim()
       ? candidate.id.trim()
       : randomUUID();
+  const combat = normalizeCombatRollContext(candidate.combat);
 
   return {
     id,
@@ -4027,7 +4168,8 @@ function normalizeRollRequest(value: unknown): DiceRollRequest | null {
     reason:
       typeof candidate.reason === "string" ? candidate.reason.trim() : undefined,
     targetDc,
-    advantageState
+    advantageState,
+    ...(combat ? { combat } : {})
   };
 }
 
@@ -4037,6 +4179,120 @@ function normalizeRollRequests(value: unknown): DiceRollRequest[] {
         .map((request) => normalizeRollRequest(request))
         .filter((request): request is DiceRollRequest => Boolean(request))
     : [];
+}
+
+function combatRollContextsFromAction(currentAction: string) {
+  const contexts: NonNullable<DiceRollRequest["combat"]>[] = [];
+  const pattern = /^Combat roll context JSON:\s*(\{.*\})$/gim;
+  const turnInputJson = currentAction.match(
+    /Current turn input JSON:\n([\s\S]+)$/m
+  )?.[1];
+  const actionTexts = [currentAction];
+
+  if (turnInputJson) {
+    try {
+      const turnInput = JSON.parse(turnInputJson) as { submissions?: unknown[] };
+      const submissionTexts = Array.isArray(turnInput.submissions)
+        ? turnInput.submissions.flatMap((submission) =>
+            isRecord(submission) && typeof submission.content === "string"
+              ? [submission.content]
+              : []
+          )
+        : [];
+      actionTexts.push(...submissionTexts);
+    } catch {
+      // Fall back to scanning the raw prompt text below.
+    }
+  }
+
+  for (const actionText of actionTexts) {
+    for (const match of actionText.matchAll(pattern)) {
+      const rawJson = match[1];
+
+      if (!rawJson) {
+        continue;
+      }
+
+      try {
+        const context = normalizeCombatRollContext(JSON.parse(rawJson));
+
+        if (context) {
+          contexts.push(context);
+        }
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  return contexts;
+}
+
+function mechanicsStateUpdateHasHpUpdate(
+  update: Record<string, unknown> | undefined,
+  actorKey: string
+) {
+  if (!update) {
+    return false;
+  }
+
+  const rawActors = isRecord(update.actors) ? update.actors : update;
+  const rawActor = rawActors[actorKey];
+
+  return isRecord(rawActor) && hpNumberField(rawActor, "currentHp") !== undefined;
+}
+
+function narrationMentionsDamage(publicNarration: string) {
+  return /\b(damage|damaged|takes?|deals?|bludgeoning|piercing|slashing|acid|cold|fire|force|lightning|necrotic|poison|psychic|radiant|thunder)\b/i.test(
+    publicNarration
+  );
+}
+
+function combatStateDiagnostics(input: {
+  currentAction: string;
+  publicNarration: string;
+  mechanicsState: MechanicsState;
+  mechanicsStateUpdate: Record<string, unknown> | undefined;
+}) {
+  const diagnostics: Array<{
+    severity: "warning";
+    code: "missing_target_hp_update_after_combat_damage";
+    targetActorKey: string;
+    message: string;
+  }> = [];
+
+  if (!input.mechanicsState.combat.active || !narrationMentionsDamage(input.publicNarration)) {
+    return diagnostics;
+  }
+
+  for (const context of combatRollContextsFromAction(input.currentAction)) {
+    if (context.kind !== "damage_roll" || !context.targetActorKey) {
+      continue;
+    }
+
+    if (!input.mechanicsState.actors[context.targetActorKey]) {
+      continue;
+    }
+
+    if (
+      mechanicsStateUpdateHasHpUpdate(
+        input.mechanicsStateUpdate,
+        context.targetActorKey
+      )
+    ) {
+      continue;
+    }
+
+    diagnostics.push({
+      severity: "warning",
+      code: "missing_target_hp_update_after_combat_damage",
+      targetActorKey: context.targetActorKey,
+      message:
+        "A submitted combat damage roll resolved damage in narration, but mechanics_state_update did not update the target actor's currentHp."
+    });
+  }
+
+  return diagnostics;
 }
 
 function pendingRollRequestsFromCampaign(campaign: CampaignRow) {
@@ -4238,15 +4494,58 @@ function modifierText(modifier: number | undefined) {
 
 function formatRollSubmission(
   request: DiceRollRequest,
-  submittedResult?: DiceRollResult
+  submittedResult?: DiceRollResult,
+  resolvedResult?: DiceRollResult
 ) {
-  const result = validateRollSubmissionResult(request, submittedResult);
+  const result = resolvedResult ?? validateRollSubmissionResult(request, submittedResult);
   const rollText =
     result.rolls.length === 1 ? String(result.rolls[0]) : result.rolls.join(", ");
 
-  return `I rolled ${request.dice}${modifierText(request.modifier)}: ${
+  const base = `I rolled ${request.dice}${modifierText(request.modifier)}: ${
     result.total
   } (${rollText}) for ${request.label}.`;
+
+  return request.combat
+    ? `${base}\nCombat roll context JSON: ${JSON.stringify(request.combat)}`
+    : base;
+}
+
+function deathSaveContextFromRequest(request: DiceRollRequest) {
+  const context = request.deathSave ?? request.death_save;
+
+  if (!context || typeof context.actorKey !== "string") {
+    return null;
+  }
+
+  return {
+    actorKey: context.actorKey,
+    attempt:
+      Number.isInteger(context.attempt) && Number(context.attempt) > 0
+        ? Number(context.attempt)
+        : undefined
+  };
+}
+
+function deathSaveRollRequest(input: {
+  actorKey: string;
+  actor: MechanicsState["actors"][string];
+}): DiceRollRequest {
+  const current = input.actor.deathSaves ?? { successes: 0, failures: 0 };
+  const attempt = current.successes + current.failures + 1;
+
+  return {
+    id: `death-save:${input.actorKey}:${attempt}`,
+    player: input.actorKey,
+    dice: "1d20",
+    modifier: 0,
+    label: "Death Saving Throw",
+    reason: "Your character is at 0 HP and must cling to life.",
+    targetDc: 10,
+    deathSave: {
+      actorKey: input.actorKey,
+      attempt
+    }
+  };
 }
 
 function rollSubmissionsFromPayload(
@@ -4294,7 +4593,8 @@ function validatePendingRollSubmissions(
     return {
       content: "",
       remainingRollRequests: pendingRollRequests,
-      clientMessageId: undefined
+      clientMessageId: undefined,
+      resolvedRolls: []
     };
   }
 
@@ -4313,6 +4613,10 @@ function validatePendingRollSubmissions(
     inputControl?.inputPolicy !== "only_targeted_players" &&
     inputControl?.inputTargets.length === 0;
 
+  const resolvedRolls: Array<{
+    request: DiceRollRequest;
+    result: DiceRollResult;
+  }> = [];
   const content = submittedRolls
     .map((submission, index) => {
       const pendingRollRequest = pendingRollRequests[index];
@@ -4333,14 +4637,25 @@ function validatePendingRollSubmissions(
         throw createStatusError(403, "That roll is waiting on another player.");
       }
 
-      return formatRollSubmission(pendingRollRequest, submission.rollResult);
+      const result = validateRollSubmissionResult(
+        pendingRollRequest,
+        submission.rollResult
+      );
+      resolvedRolls.push({ request: pendingRollRequest, result });
+
+      return formatRollSubmission(
+        pendingRollRequest,
+        submission.rollResult,
+        result
+      );
     })
     .join("\n");
 
   return {
     content,
     remainingRollRequests: pendingRollRequests.slice(submittedRolls.length),
-    clientMessageId: submittedRolls[0]?.clientMessageId
+    clientMessageId: submittedRolls[0]?.clientMessageId,
+    resolvedRolls
   };
 }
 
@@ -4367,6 +4682,49 @@ async function setPendingRollRequests(
     `,
     [campaignId, JSON.stringify(requests), JSON.stringify(currentRequest)]
   );
+}
+
+async function applySubmittedDeathSavingThrows(input: {
+  db: Queryable;
+  campaign: CampaignRow;
+  resolvedRolls: Array<{ request: DiceRollRequest; result: DiceRollResult }>;
+}) {
+  const deathSaveRolls = input.resolvedRolls.flatMap((roll) => {
+    const context = deathSaveContextFromRequest(roll.request);
+    const naturalRoll = roll.result.rolls[0];
+
+    return context && Number.isInteger(naturalRoll)
+      ? [{ actorKey: context.actorKey, roll: Number(naturalRoll) }]
+      : [];
+  });
+
+  if (deathSaveRolls.length === 0) {
+    return input.campaign;
+  }
+
+  let state = resolveMechanicsState(input.campaign, []);
+
+  for (const deathSaveRoll of deathSaveRolls) {
+    state = applyDeathSavingThrow({
+      state,
+      actorKey: deathSaveRoll.actorKey,
+      roll: deathSaveRoll.roll,
+      updatedAt: nowIso()
+    }).state;
+  }
+
+  await writeMechanicsStateForLockedCampaign(input.db, input.campaign.id, state);
+
+  const nextCampaign = {
+    ...input.campaign,
+    metadata: {
+      ...eventPayload(input.campaign.metadata),
+      mechanicsState: state
+    }
+  };
+  input.campaign.metadata = nextCampaign.metadata;
+
+  return nextCampaign;
 }
 
 function metadataWithPendingRollRequests(
@@ -4576,6 +4934,43 @@ function roomCombatSnapshot(
   };
 }
 
+function roomDeathSnapshot(mechanicsState: MechanicsState): RoomSnapshot["death"] {
+  const entry = Object.entries(mechanicsState.actors).find(
+    ([actorKey, actor]) =>
+      actorKey.startsWith("player:") &&
+      (isDeadActor(actor) || isStableActor(actor) || isDyingPlayerActor(actor))
+  );
+
+  if (!entry) {
+    return {
+      state: null,
+      actorKey: null,
+      characterName: null,
+      successes: 0,
+      failures: 0,
+      canRevive: false,
+      canCreateNewCampaign: false
+    };
+  }
+
+  const [actorKey, actor] = entry;
+  const state = isDeadActor(actor)
+    ? "dead"
+    : isStableActor(actor)
+      ? "stable"
+      : "dying";
+
+  return {
+    state,
+    actorKey,
+    characterName: actor.characterName || null,
+    successes: actor.deathSaves?.successes ?? (state === "stable" ? 3 : 0),
+    failures: actor.deathSaves?.failures ?? (state === "dead" ? 3 : 0),
+    canRevive: state === "dead",
+    canCreateNewCampaign: state === "dead"
+  };
+}
+
 function eventAiDebug(payload: Record<string, unknown>, role: "player" | "dm") {
   if (role !== "dm") {
     return undefined;
@@ -4641,9 +5036,62 @@ function eventSetting(payload: Record<string, unknown>, role: "player" | "dm") {
   };
 }
 
+const narrationHighlightRoles = new Set([
+  "npc",
+  "place",
+  "clue",
+  "danger",
+  "faction",
+  "object"
+]);
+const maxStoredNarrationHighlights = 24;
+
+function eventNarrationHighlights(
+  payload: Record<string, unknown>,
+  role: "player" | "dm",
+  content: string
+): NarrationHighlight[] | undefined {
+  if (role !== "dm" || !Array.isArray(payload.narrationHighlights)) {
+    return undefined;
+  }
+
+  const seen = new Set<string>();
+  const highlights: NarrationHighlight[] = [];
+
+  for (const item of payload.narrationHighlights) {
+    const record = eventPayload(item);
+    const text = typeof record.text === "string" ? record.text.trim() : "";
+    const colorRole =
+      typeof record.colorRole === "string" ? record.colorRole.trim() : "";
+    const key = `${text.toLowerCase()}::${colorRole}`;
+
+    if (
+      !text ||
+      !narrationHighlightRoles.has(colorRole) ||
+      !content.includes(text) ||
+      seen.has(key)
+    ) {
+      continue;
+    }
+
+    highlights.push({
+      text,
+      colorRole: colorRole as NarrationHighlight["colorRole"]
+    });
+    seen.add(key);
+
+    if (highlights.length >= maxStoredNarrationHighlights) {
+      break;
+    }
+  }
+
+  return highlights.length > 0 ? highlights : undefined;
+}
+
 async function buildRoomSnapshot(
   db: Queryable,
-  campaign: CampaignRow
+  campaign: CampaignRow,
+  options: { messageLimit?: number | null } = {}
 ): Promise<RoomSnapshot> {
   const currentTurn = await getCurrentRoomTurn(db, campaign.id);
   const submissions = currentTurn ? await getTurnSubmissions(db, currentTurn.id) : [];
@@ -4702,7 +5150,7 @@ async function buildRoomSnapshot(
             else 4
           end asc,
           id desc
-        limit 100
+        ${options.messageLimit === null ? "" : "limit $2"}
       ) recent_events
       order by created_at asc,
         case type
@@ -4715,7 +5163,9 @@ async function buildRoomSnapshot(
         end asc,
         id asc
     `,
-    [campaign.id]
+    options.messageLimit === null
+      ? [campaign.id]
+      : [campaign.id, options.messageLimit ?? 100]
   );
   const messages = events.rows
     .map((event): RoomSnapshot["messages"][number] | null => {
@@ -4729,6 +5179,11 @@ async function buildRoomSnapshot(
       const role = payload.role === "player" ? "player" : "dm";
       const debug = eventAiDebug(payload, role);
       const setting = eventSetting(payload, role);
+      const narrationHighlights = eventNarrationHighlights(
+        payload,
+        role,
+        content
+      );
 
       return {
         id: String(payload.messageId || event.id),
@@ -4743,6 +5198,7 @@ async function buildRoomSnapshot(
           ? { characterName: payload.characterName }
           : {}),
         ...(setting ? { setting } : {}),
+        ...(narrationHighlights ? { narrationHighlights } : {}),
         ...(debug ? { debug } : {})
       };
     })
@@ -4767,8 +5223,87 @@ async function buildRoomSnapshot(
     inputTargets: inputTargetsFromCampaign(campaign),
     inputPolicy: inputPolicyFromCampaign(campaign),
     combat: roomCombatSnapshot(mechanicsState, playersResult.rows),
+    death: roomDeathSnapshot(mechanicsState),
     updatedAt: toIso(campaign.updated_at)
   };
+}
+
+function revivalNarration(input: {
+  characterName: string;
+  maxHp: number;
+  worldName: string;
+}) {
+  const name = input.characterName || "you";
+
+  return [
+    "You have died.",
+    "",
+    "For two days, the world goes on without asking your permission.",
+    "",
+    `Your body lies cold beneath the old stone breath of ${input.worldName}. Dust settles in your hair. Blood dries dark at your side. Somewhere above, the roads of Eldermere keep their faint blue-white glow, indifferent and faithful as stars. Those who saw you fall carry the fact of it differently: some with grief, some with anger, some with the sharp private shame of having survived.`,
+    "",
+    "But death in Eldermere is not always a closed door. Sometimes it is an old road under snowfall, a line of Wellglass light running where no road should be. In the dark beyond breath, something vast and quiet turns its attention toward you: not a god speaking in thunder, not a priest's miracle, but the memory of divinity left in the bones of the world. A Hearth-Warden ember. A Dominion wound. A promise that refuses to rot.",
+    "",
+    `The light finds ${name}'s soul where it has drifted loose from the body and threads it back through every broken place. It hurts like birth and battle at once. Your lungs seize. Your heart strikes once, then again, then hard enough to drag the world back into color.`,
+    "",
+    `You wake with a full breath and full strength, restored to ${input.maxHp} HP. Two days have passed. Everyone who mattered had reason to believe you were dead. Now Eldermere has made a liar of death, and the world will have to decide what that means.`,
+    "",
+    "What do you do?"
+  ].join("\n");
+}
+
+async function appendNpcDeathBeliefContext(input: {
+  db: Queryable;
+  campaignId: string;
+  characterName: string;
+}) {
+  const npcs = await input.db.query<{
+    context_key: string;
+    title: string;
+    body_markdown: string;
+    visibility: "player_safe" | "dm_only";
+  }>(
+    `
+      select context_key, title, body_markdown, visibility
+      from campaign_context_chunks
+      where campaign_id = $1
+        and category = 'npc_context'
+        and archived_at is null
+      order by priority desc, updated_at desc
+    `,
+    [input.campaignId]
+  );
+  const stampedAt = new Date().toISOString();
+
+  for (const npc of npcs.rows) {
+    const marker = `revival-death-belief:${input.characterName}`;
+    const section = [
+      "",
+      `## Belief About ${input.characterName}'s Death`,
+      `<!-- ${marker} ${stampedAt} -->`,
+      `${npc.title} believes ${input.characterName} died. For the two days before the impossible revival, carry that belief as emotionally real: grief, guilt, suspicion, relief, anger, denial, duty, or cold calculation should follow from this NPC's established personality and relationship to ${input.characterName}. If ${input.characterName} returns, this NPC should react to the impossible return rather than forgetting the death.`
+    ].join("\n");
+    const body = String(npc.body_markdown ?? "");
+    const nextBody = body.includes(marker)
+      ? body.replace(
+          new RegExp(
+            `## Belief About ${input.characterName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}'s Death[\\s\\S]*?(?=\\n## |$)`
+          ),
+          section.trimStart()
+        )
+      : `${body.trimEnd()}\n${section}`;
+
+    await input.db.query(
+      `
+        update campaign_context_chunks
+        set body_markdown = $3,
+            updated_at = now()
+        where campaign_id = $1
+          and context_key = $2
+      `,
+      [input.campaignId, npc.context_key, nextBody]
+    );
+  }
 }
 
 function previewText(value: string | undefined, maxLength = 1000) {
@@ -5326,7 +5861,8 @@ function routerStateForCampaign(
       label: request.label,
       dice: request.dice,
       player: request.player,
-      modifier: request.modifier
+      modifier: request.modifier,
+      combat: request.combat
     })),
     active_players: players.map((player) => ({
       actorKey: actorKeyForPlayer(player.id),
@@ -5708,10 +6244,23 @@ async function buildModularDmPromptContext(
     history: input.history,
     ...(input.model ? { model: input.model } : {})
   });
-  const router = validateRouterOutput(
+  const parsedRouter = validateRouterOutput(
     routerData.content,
     routerFallbackJob(routerState)
   );
+  const shouldForceDeathSaveJob =
+    /\bDeath Saving Throw\b/i.test(input.currentAction) ||
+    JSON.stringify(routerState).includes("Death Saving Throw");
+  const router =
+    shouldForceDeathSaveJob && parsedRouter.jobNeeded !== "death_saving_throws"
+      ? {
+          ...parsedRouter,
+          jobNeeded: "death_saving_throws" as const,
+          reason: parsedRouter.reason
+            ? `${parsedRouter.reason} Forced to death_saving_throws by mechanics state.`
+            : "Forced to death_saving_throws by mechanics state."
+        }
+      : parsedRouter;
 
   await logDmModelCall(db, {
     campaignId: campaign.id,
@@ -7589,6 +8138,70 @@ function normalizeCombatInputControl(
   };
 }
 
+function normalizeDeathSaveInputControl(
+  state: MechanicsState,
+  input: {
+    mode: CampaignMode;
+    nextInputNeeded: DmNextInputNeeded;
+    rollRequests: DiceRollRequest[];
+    inputTargets: string[];
+    inputPolicy: InputPolicy;
+  }
+): {
+  mechanicsState: MechanicsState;
+  rollRequests: DiceRollRequest[];
+  nextInputNeeded: DmNextInputNeeded;
+  inputTargets: string[];
+  inputPolicy: InputPolicy;
+} {
+  if (input.rollRequests.length > 0 || input.nextInputNeeded === "dice_results") {
+    return {
+      mechanicsState: state,
+      rollRequests: input.rollRequests,
+      nextInputNeeded: input.nextInputNeeded,
+      inputTargets: input.inputTargets,
+      inputPolicy: input.inputPolicy
+    };
+  }
+
+  const dyingActorKey =
+    state.combat.turnOwner && isDyingPlayerActor(state.actors[state.combat.turnOwner])
+      ? state.combat.turnOwner
+      : input.mode === "single_player"
+        ? firstDyingPlayerActorKey(state)
+        : null;
+
+  if (!dyingActorKey) {
+    return {
+      mechanicsState: state,
+      rollRequests: input.rollRequests,
+      nextInputNeeded: input.nextInputNeeded,
+      inputTargets: input.inputTargets,
+      inputPolicy: input.inputPolicy
+    };
+  }
+
+  const actor = state.actors[dyingActorKey];
+
+  if (!actor) {
+    return {
+      mechanicsState: state,
+      rollRequests: input.rollRequests,
+      nextInputNeeded: input.nextInputNeeded,
+      inputTargets: input.inputTargets,
+      inputPolicy: input.inputPolicy
+    };
+  }
+
+  return {
+    mechanicsState: state,
+    rollRequests: [deathSaveRollRequest({ actorKey: dyingActorKey, actor })],
+    nextInputNeeded: "dice_results",
+    inputTargets: [dyingActorKey],
+    inputPolicy: "only_targeted_players"
+  };
+}
+
 function formatSoloTurn(
   campaign: CampaignRow,
   player: PlayerRow,
@@ -7652,6 +8265,7 @@ function formatOpeningSceneRequest(input: {
   mode: CampaignMode;
   players: PlayerRow[];
   style: CampaignOpeningStyle;
+  omitGenericSettingRequest?: boolean;
 }) {
   const mechanicsState = resolveMechanicsState(input.campaign, input.players);
   const modeDirection =
@@ -7669,6 +8283,13 @@ function formatOpeningSceneRequest(input: {
     players: input.players,
     style: input.style
   });
+  const currentPlayerAction = input.omitGenericSettingRequest
+    ? openingSceneRequest
+        .replace(
+          / Also include a `setting` object in the JSON response with `display_location`, `world_name`, `region_name`, `settlement_name`, `scene_location`, and `starting_location` when known\. `display_location` should be a short location label for the campaign sidebar, such as a village, tavern, road, ruin, city district, region, or named world\. Do not use a genre label\. `scene_location` should be the current local scene label, such as a tavern, street, room, road, ruin, district, or wilderness landmark\./,
+          ""
+        )
+    : openingSceneRequest;
 
   return [
     formatCanonicalCharacterContext(input.players, mechanicsState),
@@ -7678,7 +8299,7 @@ function formatOpeningSceneRequest(input: {
     formatMechanicsPromptContext(mechanicsState),
     "",
     "Current player action:",
-    openingSceneRequest,
+    currentPlayerAction,
     "",
     "Campaign opening setup:",
     `Mode: ${input.mode}`,
@@ -7849,10 +8470,7 @@ function eldermereOpeningPlannerInstructions() {
         forbidden_opening_terms: [
           "setting terms or lore names that should not appear in the first player-facing narration"
         ],
-        narrator_instructions: ["instructions for the second narrator call"],
-        opening_quality_checks: [
-          "check the narrator should pass before output"
-        ]
+        narrator_instructions: ["instructions for the second narrator call"]
       },
       null,
       2
@@ -7885,7 +8503,6 @@ function formatEldermereNarratorOpeningRequest(input: {
     "",
     "Narrator boundary:",
     "Write the player-facing opener only from the Eldermere opening plan above, the canonical character sheets, and the website DM instructions.",
-    "Do not use the full Eldermere world bible. Do not introduce extra Eldermere lore, factions, institutions, ancient ages, regions, gods, magic resources, or historical terms beyond the allowed_player_facing_terms.",
     "Keep the first scene anchored in the planned region and starting location; do not relocate the opener to another settlement, region, road, tavern, faction hall, or invented landmark unless the plan explicitly places it inside the starting location.",
     "Make at least one player backstory anchor visible in the first scene through a clue, NPC demand, debt, danger, opportunity, sensory trigger, or emotional pressure. Do not retell the whole backstory.",
     "If a useful idea appears in dm_private_context, imply it only through concrete visible facts or pressure; do not reveal it as confirmed exposition.",
@@ -8157,11 +8774,6 @@ function parseEldermereOpeningPlan(content: string) {
       parsed,
       "narrator_instructions",
       errors
-    ),
-    openingQualityChecks: readStringArray(
-      parsed,
-      "opening_quality_checks",
-      errors
     )
   };
 
@@ -8225,8 +8837,7 @@ function openingPlanToJson(plan: EldermereOpeningPlan) {
       ? { campaign_foundation: plan.campaignFoundation }
       : {}),
     forbidden_opening_terms: plan.forbiddenOpeningTerms,
-    narrator_instructions: plan.narratorInstructions,
-    opening_quality_checks: plan.openingQualityChecks
+    narrator_instructions: plan.narratorInstructions
   };
 }
 
@@ -8357,10 +8968,57 @@ function answerFromAskDmProviderResponse(content: string) {
   throw new Error("The DM provider returned an empty answer.");
 }
 
+function narrationHighlightsFromProviderResponse(
+  content: string,
+  publicNarration: string
+): NarrationHighlight[] {
+  const parsed = parseJsonRecord(content);
+  const rawHighlights = parsed.narration_highlights ?? parsed.narrationHighlights;
+
+  if (!Array.isArray(rawHighlights)) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const highlights: NarrationHighlight[] = [];
+
+  for (const item of rawHighlights) {
+    const record = eventPayload(item);
+    const text = typeof record.text === "string" ? record.text.trim() : "";
+    const rawColorRole = record.color_role ?? record.colorRole;
+    const colorRole =
+      typeof rawColorRole === "string" ? rawColorRole.trim() : "";
+    const key = `${text.toLowerCase()}::${colorRole}`;
+
+    if (
+      !text ||
+      !narrationHighlightRoles.has(colorRole) ||
+      !publicNarration.includes(text) ||
+      seen.has(key)
+    ) {
+      continue;
+    }
+
+    highlights.push({
+      text,
+      colorRole: colorRole as NarrationHighlight["colorRole"]
+    });
+    seen.add(key);
+
+    if (highlights.length >= maxStoredNarrationHighlights) {
+      break;
+    }
+  }
+
+  return highlights;
+}
+
 const gameplayTurnOutputContractReminder = [
   "Output contract reminder:",
   "Return only one valid JSON object. Do not include prose, Markdown, or commentary outside JSON.",
-  "Required top-level keys: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update.",
+  "Required top-level keys: public_narration, narration_highlights, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update, combat_events, proposed_context_updates.",
+  "Outside active combat, narration_highlights must contain 0-1 exact phrase copied from public_narration, with color_role npc, place, clue, danger, faction, or object. Use [] when nothing is truly worth highlighting; it is completely okay to highlight nothing.",
+  "Do not use bold, Markdown, HTML, CSS, hex colors, or color names inside public_narration or narration_highlights. The app renders colors from color_role.",
   "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved this turn.",
   "Treat canonical character sheet Inventory, Equipment, and Currency sections as current inventory state.",
   "Inventory possession gate: before writing any public_narration, inspect current player submissions for any item, weapon, tool, spell component, currency, carried object, or spell the character claims to produce, draw, pull from a bag, show, offer, sell, appraise, give, use, equip, throw, consume, spend, cast, or otherwise rely on.",
@@ -8387,33 +9045,50 @@ const gameplayTurnOutputContractReminder = [
   "Roll NPC and enemy initiative yourself every time, reveal each NPC/enemy initiative roll and total in public_narration, and encode the resulting order in mechanics_state_update or combat_events.",
   "Never ask players to roll initiative, saving throws, attacks, damage, checks, or any other dice for NPCs or enemies; NPC and enemy dice are DM-side rolls that must still be visible to the players.",
   "Also include non-empty mechanics_state_update.combat with active, round, turnOwner, and provisional initiativeOrder as actor-key strings when initiative roll_requests pauses resolution.",
-  "If combat turnOwner is or becomes npc:*, resolve NPC turns before returning control to players.",
+  "For every new npc:* actor key introduced in initiativeOrder, include mechanics_state_update.actors for that key with characterName, currentHp, maxHp, armorClass, conditions, allegiance, and isPlayerControlled.",
+  "Non-player-controlled catch-up loop: when a player-controlled turn is fully resolved, no roll_requests are pending, and combat remains active, advance through initiativeOrder and resolve every consecutive non-player-controlled actor in this same response until control reaches a living player-controlled actor or combat ends.",
+  "If a non-player-controlled turn requires a player-facing roll, reaction, or tactical choice before it can finish, pause on that non-player-controlled turn with next_input_needed set to dice_results or player_actions as appropriate, input_targets set to the affected player actor key, and mechanics_state_update.combat.turnOwner still set to the acting non-player-controlled actor.",
+  "Non-player-controlled actors include allies, enemies, summons, and neutral combatants whose turns are not controlled by a player, even when their actor keys are npc:*.",
+  "Do not merely announce future turns such as 'Acolyte 3 is up next' or 'then Acolyte 1 and Acolyte 2 will act'; resolve those turns now, or pause on the acting non-player-controlled turn only because a player-facing roll, reaction, or tactical choice is required.",
+  "Do not write OOC notes like '(resolving NPC turns now)' as a substitute for actually resolving those turns in public_narration and mechanics_state_update.",
+  "Only return next_input_needed player_actions in active combat after mechanics_state_update.combat.turnOwner is a living player-controlled actor, after combat has ended, or while pausing on a non-player-controlled turn for a required player reaction or tactical choice.",
+  "For each non-player-controlled turn in the catch-up loop, choose movement, action, and tactics; roll NPC-side dice yourself; show visible combat math; apply HP, condition, resource, and combat turn changes in mechanics_state_update; add combat_events when available; then continue to the next initiative actor.",
   "During active combat, if next control belongs to a player turnOwner and no roll_requests are pending, set input_policy only_targeted_players and input_targets to that player actor key only; do not use all_players for ordinary turn-based combat.",
   "Off-turn player combat declarations are only stated intent, not actions already in motion; never say they are mid-swing, following immediately, or resolving before the next initiative actor.",
   "When multiple player submissions arrive in active combat, resolve the current turn owner's valid action first, keep other submissions as pending intent, and if the next actor is an enemy resolve that enemy turn before later player intent.",
   "If the stored turnOwner is an NPC key or NPC character name, do not let submitted player attacks or spells preempt that NPC turn.",
   "If a declared action needs a concrete tactical choice before dice can be interpreted, such as target, targets, spell area, Magic Missile dart distribution, weapon target, movement destination, or affected creatures, do not request dice yet.",
   "For missing tactical choices, return next_input_needed player_actions, roll_requests [], input_policy only_targeted_players, input_targets set to the acting player, and ask only for the missing choice.",
+  "For combat attack and damage roll_requests, include combat metadata: {actionId, actorKey, targetActorKey, kind, attackName, sequence, sourceAttackRollId when resolving damage, damageType, and onHitDamage for attack rolls that can hit}. Reuse the same actionId across all rolls for one declared combat action.",
   "When a player action, spell, feature, or weapon would deal damage and that damage roll was not already submitted, do not roll damage yourself. Request the player's damage roll with next_input_needed dice_results and a structured roll_requests entry. This includes automatic-hit effects such as Magic Missile. Do not update target HP until damage is submitted.",
-  "Resolve NPC attacks fully using explicit wording: 'attack roll: X vs AC Y - hit/miss'; on a hit, immediately state 'damage roll: dice = total damage', update player HP, then return control.",
-  "For NPC hits, public_narration must include the words attack roll, vs AC, and damage roll before injury narration.",
+  "Resolve NPC attacks fully using conversational visible math in prose, such as 'they rolled a 17 against your AC of 14, so the cutlass catches your ribs'; on a hit, state damage in prose, such as 'the damage comes to 6 slashing from 1d6 + 2', update player HP, then continue the non-player-controlled catch-up loop until control reaches a player actor, combat ends, or a player-facing roll, reaction, or tactical choice is required.",
+  "For NPC hits, public_narration must include the NPC's roll, the target AC, whether it hit, the damage dice and total, the damage type, and the HP change before injury narration finishes.",
+  "During active combat, ignore the normal 0-1 narration_highlights limit. Highlight every visible combat math span in public_narration, using separate exact phrases when one sentence contains both dice/math and damage/HP numbers. Use color_role clue for roll totals, attack/save/check math, AC, DC, and dice notation such as 1d20, 1d6 + 2, or 8d6. Use color_role danger for damage amount plus damage type, HP changes, and 0 HP or defeat mechanics.",
   "When a player spell or feature forces an NPC or enemy saving throw, roll that save yourself before narrating success or failure, reveal the save roll and total, compare it to the player's known spell save DC when available, and do not put the NPC/enemy save in roll_requests.",
-  "Never narrate a spell or feature as failing, succeeding, taking hold, being resisted, or being shaken off because of an NPC/enemy save unless public_narration first includes the visible save math line: '<Target> <Ability> save: X vs DC Y - success/failure'.",
+  "Never narrate a spell or feature as failing, succeeding, taking hold, being resisted, or being shaken off because of an NPC/enemy save unless public_narration first includes the visible save math in prose, such as '<Target> rolled an 11 against your spell save DC of 13, so the spell takes hold.'",
   "Do not end an NPC turn with only a wind-up like lunges, swings, aims, starts casting, or bears down unless a player-facing roll or reaction is required first.",
   "When the final active enemy is defeated, set combat active false, turnOwner null, and initiativeOrder empty; do not say a specific combatant is up next after combat ends.",
   "Build combat actor names and keys only from the current scene and character sheets; never copy example NPC names into initiativeOrder.",
   "initiativeOrder should include active combatants only; exclude captives, bystanders, and noncombatants unless they can act in the fight."
 ];
 
+const openingSceneOutputContractReminder = [
+  "Opening output reminder:",
+  "Return only one valid JSON object. Do not include prose, Markdown, or commentary outside JSON.",
+  "Include narration_highlights with exactly 3 exact phrases copied from public_narration and color_role npc, place, clue, danger, faction, or object when the opener has 3 worthwhile visible terms. Use [] only if there is genuinely nothing worth highlighting; it is completely okay to highlight nothing.",
+  "Do not use bold, Markdown, HTML, CSS, hex colors, or color names inside public_narration for these highlights. The app renders colors from color_role.",
+  "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved in the opener."
+];
+
 const gameplayTurnModeReminder: Record<CampaignMode, string[]> = {
   single_player: [
     "Singleplayer combat reminder:",
-    "Do not end with next_input_needed player_actions while turnOwner is npc:*; set turnOwner to the solo player actor key unless combat has ended.",
+    "Do not end with next_input_needed player_actions while turnOwner is a non-player-controlled actor unless pausing on that actor's turn for a required player reaction or tactical choice; otherwise resolve every consecutive non-player-controlled turn before returning control unless combat has ended.",
     "In singleplayer active combat, return control with turnOwner set to the player actor key, not null."
   ],
   multiplayer: [
     "Multiplayer combat reminder:",
-    "In active initiative combat, do not end with next_input_needed player_actions while turnOwner is npc:*; resolve NPC turns until control reaches a player actor or combat ends.",
+    "In active initiative combat, do not end with next_input_needed player_actions while turnOwner is a non-player-controlled actor unless pausing on that actor's turn for a required player reaction or tactical choice; otherwise resolve every consecutive non-player-controlled turn until control reaches a player actor or combat ends.",
     "In active initiative combat, when control reaches a player actor and no roll_requests are pending, set turnOwner to that player actor, input_policy only_targeted_players, and input_targets to that actor key.",
     "Use turnOwner null with an all-player prompt only when combat is inactive or the scene is explicitly outside strict initiative.",
     "For multiplayer player-controlled initiative, saving throws, checks, attacks, and other targeted player rolls, set each roll_requests item's player field to the targeted character's actor key or character name."
@@ -8422,8 +9097,13 @@ const gameplayTurnModeReminder: Record<CampaignMode, string[]> = {
 
 function appendGameplayTurnOutputContractReminder(
   message: string,
-  mode: CampaignMode
+  mode: CampaignMode,
+  contractKind: "gameplay" | "opening" = "gameplay"
 ) {
+  if (contractKind === "opening") {
+    return [message, "", ...openingSceneOutputContractReminder].join("\n");
+  }
+
   return [
     message,
     "",
@@ -9004,6 +9684,7 @@ async function askEldermereOpeningNarrator(
     contractOptions,
     {
       buildPromptContext: false,
+      contractKind: "opening",
       includeEldermereTurnContext: false,
       suppressStreaming: true
     }
@@ -9043,6 +9724,7 @@ async function askEldermereOpeningNarrator(
     contractOptions,
     {
       buildPromptContext: false,
+      contractKind: "opening",
       includeEldermereTurnContext: false,
       suppressStreaming: true
     }
@@ -9211,9 +9893,11 @@ async function askDungeonMaster(
   contractOptions?: DmContractParseOptions,
   options?: {
     buildPromptContext?: boolean;
+    contractKind?: "gameplay" | "opening";
     includeEldermereTurnContext?: boolean;
     model?: AiModelId;
     suppressStreaming?: boolean;
+    timeoutMs?: number;
   }
 ): Promise<DungeonMasterReply> {
   const traceId = randomUUID();
@@ -9274,9 +9958,13 @@ async function askDungeonMaster(
       : null;
     const providerMessage = appendGameplayTurnOutputContractReminder(
       promptContext?.message ?? message,
-      campaign.mode
+      campaign.mode,
+      options?.contractKind
     );
     const providerStartedAt = Date.now();
+    const timeoutSignal = options?.timeoutMs
+      ? AbortSignal.timeout(options.timeoutMs)
+      : undefined;
     const providerData = await runtime.askProvider({
       message: providerMessage,
       instructions: promptContext?.instructions ?? instructionsWithWorldContext,
@@ -9284,6 +9972,7 @@ async function askDungeonMaster(
       ...(currentPlayerAction ? { currentPlayerAction } : {}),
       ...(promptContext?.jobNeeded ? { dmJob: promptContext.jobNeeded } : {}),
       ...(options?.model ? { model: options.model } : {}),
+      ...(timeoutSignal ? { signal: timeoutSignal } : {}),
       ...(streamEmitter && streamTurnId
         ? {
             onPublicNarrationDelta: (text: string) => {
@@ -9382,7 +10071,6 @@ async function askDungeonMaster(
     }
 
     const rollRequests = normalizeRollRequests(contract.rollRequests);
-    const rollRequestDiagnosticsReport = rollRequestDiagnostics(rollRequests);
     const combatValidation = outputEnvelope
       ? validateCombatEvents(outputEnvelope.combatEvents, {
           actors: mechanicsActorsForValidation(campaign)
@@ -9414,7 +10102,7 @@ async function askDungeonMaster(
       inventoryPlayers
     );
     const mechanicsState = resolveMechanicsState(campaign, []);
-    const normalizedInputControl = normalizeCombatInputControl(
+    const combatInputControl = normalizeCombatInputControl(
       applyMechanicsStateUpdate(mechanicsState, contract.mechanicsStateUpdate, nowIso()),
       {
         mode: campaign.mode,
@@ -9424,7 +10112,28 @@ async function askDungeonMaster(
         inputPolicy: contract.inputPolicy
       }
     );
+    const normalizedInputControl = normalizeDeathSaveInputControl(
+      combatInputControl.mechanicsState,
+      {
+        mode: campaign.mode,
+        nextInputNeeded: contract.nextInputNeeded,
+        rollRequests,
+        inputTargets: combatInputControl.inputTargets,
+        inputPolicy: combatInputControl.inputPolicy
+      }
+    );
+    const normalizedRollRequests = normalizedInputControl.rollRequests;
+    const normalizedNextInputNeeded = normalizedInputControl.nextInputNeeded;
+    const rollRequestDiagnosticsReport = rollRequestDiagnostics(
+      normalizedRollRequests
+    );
     const nextMechanicsState = normalizedInputControl.mechanicsState;
+    const combatStateDiagnosticsReport = combatStateDiagnostics({
+      currentAction: message,
+      publicNarration: contract.publicNarration,
+      mechanicsState,
+      mechanicsStateUpdate: contract.mechanicsStateUpdate
+    });
 
     if (nextMechanicsState !== mechanicsState) {
       await writeMechanicsStateForLockedCampaign(
@@ -9461,6 +10170,13 @@ async function askDungeonMaster(
         combat: nextMechanicsState.combat,
         actors: nextMechanicsState.actors
       },
+      ...(combatStateDiagnosticsReport.length > 0
+        ? {
+            combatAdjudication: {
+              diagnostics: combatStateDiagnosticsReport
+            }
+          }
+        : {}),
       ...(contract.inventoryStateUpdate || inventoryValidation.discarded.length > 0
         ? {
             inventoryState: {
@@ -9489,10 +10205,12 @@ async function askDungeonMaster(
         outputEnvelopeError: outputEnvelopeError
           ? errorSummary(outputEnvelopeError)
           : undefined,
-        rollRequestsCount: rollRequests.length,
-        rollRequestLabels: rollRequests.map((request) => request.label),
+        rollRequestsCount: normalizedRollRequests.length,
+        rollRequestLabels: normalizedRollRequests.map((request) => request.label),
         rollRequestDiagnostics: rollRequestDiagnosticsReport,
-        nextInputNeeded: contract.nextInputNeeded,
+        combatStateDiagnostics: combatStateDiagnosticsReport,
+        nextInputNeeded: normalizedNextInputNeeded,
+        originalNextInputNeeded: contract.nextInputNeeded,
         contractParseRecovered: Boolean(contractParseRecovery),
         contractParseRecovery: contractParseRecovery?.report,
         inputPolicy: normalizedInputControl.inputPolicy,
@@ -9512,7 +10230,21 @@ async function askDungeonMaster(
         elapsedMs: Date.now() - startedAt,
         payload: {
           diagnostics: rollRequestDiagnosticsReport,
-          rollRequests
+          rollRequests: normalizedRollRequests
+        }
+      });
+    }
+
+    if (combatStateDiagnosticsReport.length > 0) {
+      await logTurnDebugTrace(db, {
+        campaignId: campaign.id,
+        traceId,
+        phase: "combat_state_diagnostics",
+        turnId,
+        elapsedMs: Date.now() - startedAt,
+        payload: {
+          diagnostics: combatStateDiagnosticsReport,
+          mechanicsStateUpdate: contract.mechanicsStateUpdate
         }
       });
     }
@@ -9528,8 +10260,9 @@ async function askDungeonMaster(
           : undefined,
         contractParseRecovered: Boolean(contractParseRecovery),
         contractParseRecovery: contractParseRecovery?.report,
-        rollRequestsCount: rollRequests.length,
+        rollRequestsCount: normalizedRollRequests.length,
         rollRequestDiagnostics: rollRequestDiagnosticsReport,
+        combatStateDiagnostics: combatStateDiagnosticsReport,
         acceptedCombatEventsCount: combatValidation.accepted.length,
         discardedCombatEvents: combatValidation.discarded,
         acceptedImmediateContextUpdatesCount: memoryValidation.accepted.length,
@@ -9561,20 +10294,24 @@ async function askDungeonMaster(
       elapsedMs: Date.now() - startedAt,
       payload: {
         reply: textStats(reply),
-        rollRequestsCount: rollRequests.length,
-        nextInputNeeded: contract.nextInputNeeded
+        rollRequestsCount: normalizedRollRequests.length,
+        nextInputNeeded: normalizedNextInputNeeded
       }
     });
 
     return {
       id: providerData.id ?? randomUUID(),
       content: reply,
+      narrationHighlights: contract.narrationHighlights,
       debug: debugWithCombatState,
-      rollRequests,
+      rollRequests: normalizedRollRequests,
       inputTargets: normalizedInputControl.inputTargets,
       inputPolicy: normalizedInputControl.inputPolicy,
-      nextInputNeeded: contract.nextInputNeeded,
-      resolutionMode: contract.resolutionMode,
+      nextInputNeeded: normalizedNextInputNeeded,
+      resolutionMode:
+        normalizedNextInputNeeded === "dice_results"
+          ? "needs_dice"
+          : contract.resolutionMode,
       setting: contract.setting
     };
   } catch (error) {
@@ -9661,6 +10398,24 @@ function settingMetadata(setting: CampaignSettingSummary | undefined) {
   };
 }
 
+function narrationHighlightsMetadata(
+  narrationHighlights: NarrationHighlight[] | undefined,
+  maxHighlights = 3
+) {
+  if (!narrationHighlights?.length) {
+    return {};
+  }
+
+  return {
+    narrationHighlights: narrationHighlights
+      .slice(0, maxHighlights)
+      .map((highlight) => ({
+        text: highlight.text,
+        colorRole: highlight.colorRole
+      }))
+  };
+}
+
 async function persistEldermereOpeningPlan(
   db: Queryable,
   campaignId: string,
@@ -9734,12 +10489,19 @@ async function finishResolvedTurn(
     nextInputNeeded?: DmNextInputNeeded;
     resolutionMode?: "needs_dice" | "resolved_without_dice";
     setting?: CampaignSettingSummary | undefined;
+    narrationHighlights?: NarrationHighlight[] | undefined;
     aiDebug?: AiDebugInfo | undefined;
   }
 ) {
   const pendingRollRequests = input.pendingRollRequests ?? [];
   const currentPendingRollRequest = pendingRollRequests[0] ?? null;
   const settingPatch = settingMetadata(input.setting);
+  const maxNarrationHighlights =
+    input.eventType === "adventure_begun" ? 3 : maxStoredNarrationHighlights;
+  const narrationHighlightsPatch = narrationHighlightsMetadata(
+    input.narrationHighlights,
+    maxNarrationHighlights
+  );
   let dmEventId: string | undefined;
 
   await withTransaction(db, async (client) => {
@@ -9766,6 +10528,7 @@ async function finishResolvedTurn(
       role: "dm",
       content: input.reply,
       ...settingPatch,
+      ...narrationHighlightsPatch,
       pendingRollRequest: currentPendingRollRequest,
       pendingRollRequests,
       nextInputNeeded:
@@ -9825,6 +10588,7 @@ export async function getRoomForUser(
     roomId: string;
     sessionId: string;
     userId: string;
+    messageLimit?: number | null | undefined;
   }
 ): Promise<RoomSnapshot> {
   const campaign = await resolveRoomCampaign(db, input.roomId, input.sessionId);
@@ -9847,10 +10611,14 @@ export async function getRoomForUser(
     [campaign.id, input.userId]
   );
 
-  return buildRoomSnapshot(db, {
-    ...campaign,
-    updated_at: player.rows[0] ? new Date() : campaign.updated_at
-  });
+  return buildRoomSnapshot(
+    db,
+    {
+      ...campaign,
+      updated_at: player.rows[0] ? new Date() : campaign.updated_at
+    },
+    input.messageLimit === undefined ? {} : { messageLimit: input.messageLimit }
+  );
 }
 
 export async function registerRoomPlayerForUser(
@@ -10248,7 +11016,8 @@ export async function beginRoomForUser(
     campaign: beginState.campaign,
     mode: "multiplayer",
     players: beginState.players,
-    style: campaignOpeningStyleFromMetadata(beginState.campaign)
+    style: campaignOpeningStyleFromMetadata(beginState.campaign),
+    omitGenericSettingRequest: hasEldermereWorldProfile(beginState.campaign)
   });
 
   try {
@@ -10309,7 +11078,7 @@ export async function beginRoomForUser(
           openingTurn.id,
           undefined,
           { allowResolvedCombatWithoutRolls: true },
-          { buildPromptContext: false }
+          { buildPromptContext: false, contractKind: "opening" }
         );
     const resolvedTurn = await finishResolvedTurn(db, {
       campaignId: beginState.campaign.id,
@@ -10323,6 +11092,7 @@ export async function beginRoomForUser(
       nextInputNeeded: opening.nextInputNeeded,
       resolutionMode: opening.resolutionMode,
       setting: opening.setting,
+      narrationHighlights: opening.narrationHighlights,
       aiDebug: opening.debug
     });
 
@@ -10571,6 +11341,11 @@ export async function submitRoomTurnForUser(
     );
 
     if (isRollSubmission) {
+      await applySubmittedDeathSavingThrows({
+        db: client,
+        campaign: campaignRow,
+        resolvedRolls: rollSubmission.resolvedRolls
+      });
       await setPendingRollRequests(
         client,
         campaignRow.id,
@@ -10675,7 +11450,10 @@ export async function submitRoomTurnForUser(
         submitState.turn.id,
         undefined,
         undefined,
-        input.model ? { model: input.model } : undefined
+        {
+          ...(input.model ? { model: input.model } : {}),
+          timeoutMs: playerTurnDmTimeoutMs
+        }
       );
       const resolvedTurn = await finishResolvedTurn(db, {
         campaignId: submitState.campaign.id,
@@ -10688,6 +11466,7 @@ export async function submitRoomTurnForUser(
         inputPolicy: reply.inputPolicy,
         nextInputNeeded: reply.nextInputNeeded,
         resolutionMode: reply.resolutionMode,
+        narrationHighlights: reply.narrationHighlights,
         aiDebug: reply.debug
       });
 
@@ -10908,6 +11687,10 @@ export async function askDungeonMasterQuestionForUser(
     });
 
     const answer = answerFromAskDmProviderResponse(providerData.content);
+    const answerHighlights = narrationHighlightsFromProviderResponse(
+      providerData.content,
+      answer
+    );
     const questionMessageId = input.clientMessageId?.trim() || randomUUID();
     const answerMessageId = randomUUID();
 
@@ -10939,6 +11722,7 @@ export async function askDungeonMasterQuestionForUser(
         playerId: player.id,
         inReplyToMessageId: questionMessageId,
         content: answer,
+        ...narrationHighlightsMetadata(answerHighlights, 1),
         aiDebug: {
           ...providerData.debug,
           providerResponseId:
@@ -11135,6 +11919,11 @@ export async function submitSoloTurnForUser(
     const submittedContent = submissionResult.rows[0]?.content ?? trimmedContent;
 
     if (isRollSubmission) {
+      await applySubmittedDeathSavingThrows({
+        db: client,
+        campaign,
+        resolvedRolls: rollSubmission.resolvedRolls
+      });
       await setPendingRollRequests(
         client,
         campaign.id,
@@ -11217,7 +12006,10 @@ export async function submitSoloTurnForUser(
       soloState.turn.id,
       soloState.content,
       undefined,
-      input.model ? { model: input.model } : undefined
+      {
+        ...(input.model ? { model: input.model } : {}),
+        timeoutMs: playerTurnDmTimeoutMs
+      }
     );
     const resolvedTurn = await finishResolvedTurn(db, {
       campaignId: soloState.campaign.id,
@@ -11230,6 +12022,7 @@ export async function submitSoloTurnForUser(
       inputPolicy: reply.inputPolicy,
       nextInputNeeded: reply.nextInputNeeded,
       resolutionMode: reply.resolutionMode,
+      narrationHighlights: reply.narrationHighlights,
       aiDebug: reply.debug
     });
 
@@ -11264,6 +12057,146 @@ export async function submitSoloTurnForUser(
   );
 
   return buildRoomSnapshot(db, updatedCampaign ?? soloState.campaign);
+}
+
+export async function reviveSinglePlayerCharacterForUser(
+  db: pg.Pool,
+  input: {
+    campaignId: string;
+    userId: string;
+  }
+): Promise<RoomSnapshot> {
+  const reviveState = await withTransaction(db, async (client) => {
+    const campaign = (
+      await client.query<CampaignRow>(
+        `
+          select *
+          from campaigns
+          where id = $1 and status = 'active'
+          for update
+        `,
+        [input.campaignId]
+      )
+    ).rows[0];
+
+    if (!campaign) {
+      throw createStatusError(404, "Campaign not found.");
+    }
+
+    await assertCampaignAccessForUser(client, campaign, input.userId);
+
+    if (campaign.mode !== "single_player") {
+      throw createStatusError(
+        400,
+        "Character revival is available for singleplayer adventures."
+      );
+    }
+
+    const player = await getActivePlayerForUser(client, campaign.id, input.userId);
+
+    if (!player) {
+      throw createStatusError(400, "A solo player profile is required.");
+    }
+
+    const actorKey = actorKeyForPlayer(player.id);
+    const mechanicsState = resolveMechanicsState(campaign, [player]);
+    const actor = mechanicsState.actors[actorKey];
+
+    if (!actor || !isDeadActor(actor)) {
+      throw createStatusError(409, "That character is not dead.");
+    }
+
+    const characterName = actor.characterName || player.character_name;
+
+    await appendNpcDeathBeliefContext({
+      db: client,
+      campaignId: campaign.id,
+      characterName
+    });
+
+    const revivedMechanicsState = reviveDeadPlayerActor({
+      state: mechanicsState,
+      actorKey,
+      updatedAt: nowIso()
+    });
+    const currentMetadata = eventPayload(campaign.metadata);
+    const elapsedDays =
+      Number.isInteger(currentMetadata.elapsedDays) &&
+      Number(currentMetadata.elapsedDays) >= 0
+        ? Number(currentMetadata.elapsedDays)
+        : 0;
+    const nextMetadata = {
+      ...currentMetadata,
+      elapsedDays: elapsedDays + 2,
+      lastRevival: {
+        characterName,
+        revivedAt: nowIso(),
+        skippedDays: 2,
+        restoredHp: revivedMechanicsState.actors[actorKey]?.currentHp ?? actor.maxHp ?? 1
+      },
+      mechanicsState: revivedMechanicsState
+    };
+    const turn = await ensureCollectingTurn(client, campaign.id);
+    const modelMessageId = randomUUID();
+    const content = revivalNarration({
+      characterName,
+      maxHp: revivedMechanicsState.actors[actorKey]?.currentHp ?? actor.maxHp ?? 1,
+      worldName: campaignWorldName(campaign)
+    });
+
+    await client.query(
+      `
+        update campaigns
+        set metadata = $2::jsonb,
+            updated_at = now()
+        where id = $1
+      `,
+      [campaign.id, JSON.stringify(nextMetadata)]
+    );
+    await client.query(
+      `
+        update turns
+        set status = 'resolved',
+            model_message_id = $2,
+            resolved_at = now(),
+            updated_at = now(),
+            error = null
+        where id = $1
+      `,
+      [turn.id, modelMessageId]
+    );
+    await logCampaignEvent(client, campaign.id, "turn_resolved", {
+      turnId: turn.id,
+      modelMessageId,
+      messageId: modelMessageId,
+      role: "dm",
+      content,
+      nextInputNeeded: "player_actions",
+      resolutionMode: "resolved_without_dice",
+      inputTargets: [],
+      inputPolicy: "all_players",
+      pendingRollRequest: null,
+      pendingRollRequests: []
+    });
+    await logCampaignEvent(client, campaign.id, "character_revived", {
+      turnId: turn.id,
+      actorKey,
+      characterName,
+      restoredHp: revivedMechanicsState.actors[actorKey]?.currentHp ?? actor.maxHp ?? 1,
+      skippedDays: 2
+    });
+    await setPendingRollRequests(client, campaign.id, []);
+    await setPendingInputTargets(client, campaign.id, [], "all_players", "player_actions");
+    await ensureCollectingTurn(client, campaign.id);
+
+    return {
+      ...campaign,
+      metadata: nextMetadata,
+      updated_at: new Date()
+    };
+  });
+
+  return buildRoomSnapshot(db, reviveState);
 }
 
 function eventPayloadString(value: unknown) {
@@ -11480,6 +12413,7 @@ export async function regenerateCampaignResponseForUser(
       nextInputNeeded: reply.nextInputNeeded,
       resolutionMode: reply.resolutionMode,
       setting: reply.setting,
+      narrationHighlights: reply.narrationHighlights,
       aiDebug: reply.debug
     });
 

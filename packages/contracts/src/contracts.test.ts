@@ -26,11 +26,13 @@ import {
   CampaignRestartResponseSchema,
   CampaignSoloTurnRequestSchema,
   CampaignSoloTurnResponseSchema,
+  MechanicsStateSchema,
   MechanicsSeedSchema,
   HealthResponseSchema,
   DmProviderPrepRequestSchema,
   DmProviderTurnRequestSchema,
   DmProviderTurnResponseSchema,
+  DiceRollRequestSchema,
   DmStreamEventSchema,
   RoomPlayerUpdateRequestSchema,
   RoomRealtimeEventSchema,
@@ -282,6 +284,53 @@ test("mechanics seed contract accepts structured character mechanics", () => {
       }
     })
   );
+});
+
+test("mechanics actor contract accepts canonical combat stats for NPCs", () => {
+  const state = MechanicsStateSchema.parse({
+    combat: {
+      active: true,
+      round: 1,
+      turnOwner: "player:owner",
+      initiativeOrder: ["player:owner", "npc:mara"]
+    },
+    actors: {
+      "npc:mara": {
+        characterName: "Mara",
+        currentHp: 45,
+        maxHp: 45,
+        armorClass: 14,
+        allegiance: "hostile",
+        isPlayerControlled: false,
+        conditions: []
+      }
+    }
+  });
+
+  assert.equal(state.actors["npc:mara"]?.armorClass, 14);
+  assert.equal(state.actors["npc:mara"]?.allegiance, "hostile");
+  assert.equal(state.actors["npc:mara"]?.isPlayerControlled, false);
+});
+
+test("dice roll contract accepts combat roll metadata", () => {
+  const request = DiceRollRequestSchema.parse({
+    id: "oktai-flurry-damage-2",
+    dice: "1d4",
+    label: "Flurry of Blows Damage",
+    modifier: 2,
+    player: "player:oktai",
+    combat: {
+      actionId: "oktai-round1-turn",
+      actorKey: "player:oktai",
+      targetActorKey: "npc:acolyte-1",
+      kind: "damage_roll",
+      sourceAttackRollId: "oktai-flurry-attack-2",
+      damageType: "bludgeoning"
+    }
+  });
+
+  assert.equal(request.combat?.targetActorKey, "npc:acolyte-1");
+  assert.equal(request.combat?.kind, "damage_roll");
 });
 
 test("room contracts accept snapshots and mutation payloads", () => {

@@ -14,6 +14,7 @@ infra/staging.env
 infra/production.env
 infra/backups/
 .local-media/
+apps/web/app/debug/
 *.tsbuildinfo
 npm-debug.log*
 .vercel

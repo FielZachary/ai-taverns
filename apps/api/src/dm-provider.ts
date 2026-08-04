@@ -69,6 +69,7 @@ export type DungeonMasterProviderInput = {
   currentPlayerAction?: string;
   dmJob?: DmJobName;
   model?: AiModelId;
+  signal?: AbortSignal;
   onPublicNarrationDelta?: (text: string) => void;
 };
 
@@ -166,15 +167,15 @@ function providerModelForSettings(config: ModelProviderConfig) {
 }
 
 function providerConfigForModel(model: AiModelId = defaultAiModel): ModelProviderConfig {
-  if (model === "qwen-3-7-flash") {
+  if (model === "qwen-3-5-plus") {
     return {
       selectedModel: model,
       providerName: "Qwen",
       apiKeyEnv: "QWEN_API_KEY",
       baseUrlEnv: "QWEN_BASE_URL",
       modelEnv: "QWEN_MODEL",
-      defaultBaseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-      defaultModel: "qwen3.7-flash"
+      defaultBaseUrl: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+      defaultModel: "qwen3.5-plus"
     };
   }
 
@@ -561,7 +562,8 @@ async function requestDeepSeek(
   temperature: number,
   attempt: number,
   settings: ReturnType<typeof resolvedProviderSettings>,
-  onPublicNarrationDelta?: (text: string) => void
+  onPublicNarrationDelta?: (text: string) => void,
+  signal?: AbortSignal
 ) {
   let response: Response;
   const requestBody = JSON.stringify({
@@ -570,8 +572,9 @@ async function requestDeepSeek(
     ...(settings.providerName === "DeepSeek"
       ? { thinking: { type: "disabled" } }
       : {}),
+    ...(settings.providerName === "Qwen" ? { enable_thinking: false } : {}),
     temperature,
-    max_tokens: 4096,
+    max_completion_tokens: 4096,
     ...(onPublicNarrationDelta
       ? { stream: true }
       : { response_format: { type: "json_object" } })
@@ -603,6 +606,11 @@ async function requestDeepSeek(
   }
 
   try {
+    const timeoutSignal = AbortSignal.timeout(175_000);
+    const requestSignal = signal
+      ? AbortSignal.any([signal, timeoutSignal])
+      : timeoutSignal;
+
     response = await fetch(`${settings.baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
@@ -610,7 +618,7 @@ async function requestDeepSeek(
         Authorization: `Bearer ${settings.apiKey}`
       },
       body: requestBody,
-      signal: AbortSignal.timeout(175_000)
+      signal: requestSignal
     });
   } catch (error) {
     timing.completedAt = new Date().toISOString();
@@ -785,6 +793,7 @@ export async function askDungeonMasterProvider({
   currentPlayerAction,
   dmJob,
   model,
+  signal,
   onPublicNarrationDelta
 }: DungeonMasterProviderInput): Promise<DungeonMasterProviderResponse> {
   if (shouldUseTestProvider()) {
@@ -831,7 +840,8 @@ export async function askDungeonMasterProvider({
     temperature,
     1,
     settings,
-    onPublicNarrationDelta
+    onPublicNarrationDelta,
+    signal
   );
   timings.push(timing);
   let content = data.choices?.[0]?.message?.content?.trim();
@@ -843,7 +853,8 @@ export async function askDungeonMasterProvider({
       temperature,
       2,
       settings,
-      undefined
+      undefined,
+      signal
     ));
     fallbackBufferedAfterEmptyStream = Boolean(onPublicNarrationDelta);
     timings.push(timing);

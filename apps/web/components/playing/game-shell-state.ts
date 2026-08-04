@@ -48,6 +48,15 @@ export type RoomSnapshot = {
     turnOwnerCharacterName: string | null;
     initiativeOrder: string[];
   };
+  death?: {
+    state: "dying" | "stable" | "dead" | null;
+    actorKey: string | null;
+    characterName: string | null;
+    successes: number;
+    failures: number;
+    canRevive: boolean;
+    canCreateNewCampaign: boolean;
+  };
   updatedAt?: string;
 };
 

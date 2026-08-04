@@ -293,6 +293,54 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("npc_dialogue"),
+      /Treat player statements as attempted character speech\/action, not automatic world truth/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /new authority, contact, employer, superior, relative, old friend, order, warrant, permit, badge, property right, secret password, or prior arrangement/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /request Deception by default before the NPC yields, lowers guard, gives access, hands over information, or changes official behavior/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /Do not let the NPC become wavering, convinced, compliant, or newly informative before the requested roll is submitted/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /If an NPC has asked for the same substantive truth, confession, proof, or explanation once/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /do not have the NPC ask the same question a third time/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /On the second consistent answer, choose one decisive path/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /state the success DC in public_narration before the roll and include the same target_dc in roll_requests/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /If you roll 13 or higher, that is enough to convince Manifold/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /A social roll must settle the immediate social question/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /Failure should create a new state: confinement, confiscation, escort, alarm, threat, price, lost trust, or a harder bargain/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /False identity, false authority, name-dropping, claimed orders, claimed employment, and impersonation almost always matter/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
       /Prefer one meaningful reveal plus a new question, demand, cost, refusal, or lead/i
     );
     assert.match(
@@ -300,6 +348,10 @@ describe("modular AI DM runtime contracts", () => {
       /validate that the acting character actually has the offered object before the NPC sees, touches, evaluates, accepts, refuses, or comments on it/i
     );
     assert.match(jobPrompt("npc_dialogue"), /bargaining, gifting, payment/i);
+    assert.match(
+      jobPrompt("scene_director"),
+      /Do not create new canon from a lie by having an NPC supply confirming lore/i
+    );
     assert.match(
       jobPrompt("investigation"),
       /Distinguish discovering, seeing, identifying, or learning about an item/i
@@ -315,7 +367,30 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("investigation"), /target_dc/i);
     assert.match(jobPrompt("combat"), /strict turn ownership/i);
     assert.match(jobPrompt("combat"), /Group combat narration by action\/result beat/i);
-    assert.match(jobPrompt("combat"), /Bold visible mechanics inside public_narration using Markdown/i);
+    assert.match(
+      jobPrompt("combat"),
+      /Do not bold visible mechanics or use Markdown emphasis inside public_narration/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /copy exact plain-text math-bearing phrases into narration_highlights instead of adding Markdown/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /ignore the normal 0-1 narration_highlights limit/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Highlight every visible combat math span in public_narration/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Use color_role clue for roll totals, attack\/save\/check math, AC, DC, and dice notation/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Use color_role danger for damage amount plus damage type, HP changes, and 0 HP or defeat mechanics/i
+    );
     assert.match(
       jobPrompt("combat"),
       /Do not put a visible mechanics sentence in its own standalone paragraph/i
@@ -326,10 +401,12 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
-      /\*\*Attack: 14 vs AC 10 - hit\. Damage: 5 piercing\.\*\*/
+      /You rolled a 19 against their AC of 16/i
     );
-    assert.match(jobPrompt("combat"), /attack roll: X vs AC Y - hit\/miss/i);
-    assert.match(jobPrompt("combat"), /Dexterity save: X vs DC Y - success\/failure/i);
+    assert.doesNotMatch(jobPrompt("combat"), /\*\*/);
+    assert.match(jobPrompt("combat"), /use conversational wording with 'you rolled'/i);
+    assert.match(jobPrompt("combat"), /they rolled a 17 against your AC of 14/i);
+    assert.match(jobPrompt("combat"), /rolled a 9 against DC 14 and fails/i);
     assert.match(jobPrompt("combat"), /list each target's save result separately/i);
     assert.match(jobPrompt("combat"), /full damage, the halved damage/i);
     assert.match(jobPrompt("combat"), /turnOwner is an NPC actor key/i);
@@ -375,6 +452,28 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
+      /For every NPC or enemy actor key introduced in initiativeOrder/i
+    );
+    assert.match(jobPrompt("combat"), /armorClass/i);
+    assert.match(jobPrompt("combat"), /isPlayerControlled/i);
+    assert.match(jobPrompt("combat"), /combat metadata/i);
+    assert.match(jobPrompt("combat"), /Reuse the same actionId/i);
+    assert.match(jobPrompt("combat"), /Non-player-controlled catch-up loop/i);
+    assert.match(
+      jobPrompt("combat"),
+      /resolve every consecutive non-player-controlled actor/i
+    );
+    assert.match(jobPrompt("combat"), /Do not merely announce future turns/i);
+    assert.match(
+      jobPrompt("combat"),
+      /Only return next_input_needed player_actions in active combat after mechanics_state_update\.combat\.turnOwner is a living player-controlled actor/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /player turn resolved, all non-player turns catch up before control returns/i
+    );
+    assert.match(
+      jobPrompt("combat"),
       /Saying an NPC moves first is not a handoff/i
     );
     assert.match(
@@ -417,11 +516,23 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
-      /\*\*Warden lift-guard 1 attack roll: 18 vs Komer's AC 15 - hit\. Damage roll: 1d6 \+ 2 = 5 piercing damage\.\*\* The spearpoint/i
+      /They rolled an 18 against Komer's AC of 15, so the spearpoint/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /"text": "They rolled an 18 against Komer's AC of 15",\n\s+"color_role": "clue"/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /"text": "5 piercing",\n\s+"color_role": "danger"/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /"text": "1d6 \+ 2",\n\s+"color_role": "clue"/i
     );
     assert.doesNotMatch(
       jobPrompt("combat"),
-      /Warden lift-guard 1 attack roll:[^"]*\\n\\nThe spearpoint/i
+      /They rolled an 18 against Komer's AC of 15[^"]*\\n\\nThe spearpoint/i
     );
     assert.match(
       jobPrompt("combat"),
@@ -483,9 +594,9 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
-      /Warden Captain Hesk Wisdom save: 11 vs DC 13 - failure/i
+      /Warden Captain Hesk rolled an 11 against POKE's spell save DC of 13/i
     );
-    assert.match(jobPrompt("combat"), /Robed priest Dexterity save: 16 vs DC 14 - success/i);
+    assert.match(jobPrompt("combat"), /The robed priest rolled a 16 against DC 14 and succeeds/i);
     assert.match(jobPrompt("combat"), /final enemy defeated and combat ends/i);
     assert.match(jobPrompt("combat"), /Never silently modify HP/);
     assert.match(
@@ -591,7 +702,22 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(buildMemoryUpdaterPrompt(), /Create a new NPC card/i);
     assert.match(buildMemoryUpdaterPrompt(), /Make each NPC feel like a compelling character/i);
     assert.match(buildMemoryUpdaterPrompt(), /## Disposition Towards You/);
+    assert.match(buildMemoryUpdaterPrompt(), /Never infer gender or pronouns/i);
+    assert.match(buildMemoryUpdaterPrompt(), /neutral wording until play establishes pronouns/i);
+    assert.match(buildMemoryUpdaterPrompt(), /do not silently normalize the conflict/i);
     assert.match(buildMemoryUpdaterPrompt(), /campaign context as a living world bible/i);
+    assert.match(
+      buildMemoryUpdaterPrompt(),
+      /Player input is evidence that a character claimed, attempted, believed, lied, joked, threatened, or asked something/i
+    );
+    assert.match(
+      buildMemoryUpdaterPrompt(),
+      /Do not create a new context chunk solely from an unsupported player claim, bluff, invented name, forged authority, claimed relationship, claimed ownership, or claimed offscreen fact/i
+    );
+    assert.match(
+      buildMemoryUpdaterPrompt(),
+      /If accepted narration only shows an NPC repeating, questioning, or being uncertain about a player-invented name, do not create a named NPC card/i
+    );
     assert.match(buildMemoryUpdaterPrompt(), /Canonical written artifact memory/i);
     assert.match(buildMemoryUpdaterPrompt(), /preserve the revealed text word for word/i);
     assert.match(buildMemoryUpdaterPrompt(), /notes, notebooks, ledgers, journals, letters/i);
