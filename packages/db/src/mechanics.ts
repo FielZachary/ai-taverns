@@ -233,6 +233,7 @@ export function persistedMechanicsState(
 
     const currentHp = Number(actor.currentHp);
     const maxHp = Number(actor.maxHp);
+    const armorClass = Number(actor.armorClass);
     const conditions = Array.isArray(actor.conditions)
       ? actor.conditions.filter((item): item is string => typeof item === "string")
       : [];
@@ -242,6 +243,9 @@ export function persistedMechanicsState(
         typeof actor.characterName === "string" ? actor.characterName : "",
       ...(Number.isInteger(currentHp) ? { currentHp: Math.max(0, currentHp) } : {}),
       ...(Number.isInteger(maxHp) ? { maxHp: Math.max(0, maxHp) } : {}),
+      ...(Number.isInteger(armorClass)
+        ? { armorClass: Math.max(0, armorClass) }
+        : {}),
       ...(parseSpellSlots(actor.spellSlots)
         ? { spellSlots: parseSpellSlots(actor.spellSlots) }
         : {}),

@@ -663,6 +663,41 @@ describe("DM provider helpers", () => {
     );
   });
 
+  it("does not duplicate investigation check prose that already includes a DC", () => {
+    const publicNarration =
+      "Make an Insight check. DC 14 reveals a gut feeling about the safe path based on the hum and air currents; DC 18 may reveal that the traps react to *intent* or *fear* rather than just weight.";
+    const result = parseDmContract(
+      JSON.stringify({
+        public_narration: publicNarration,
+        resolution_mode: "needs_dice",
+        roll_requests: [
+          {
+            dice: "1d20",
+            modifier: 3,
+            skill: "Insight",
+            target_dc: 14,
+            reason:
+              "a gut feeling about the safe path; DC 18 may reveal the traps react to intent or fear"
+          }
+        ],
+        next_input_needed: "dice_results",
+        input_targets: ["player:oktai"],
+        input_policy: "only_targeted_players",
+        mechanics_state_update: {},
+        inventory_state_update: { patches: [] }
+      }),
+      { dmJob: "investigation" }
+    );
+
+    assert.equal(result.publicNarration, publicNarration);
+    assert.equal(result.rollRequests[0]?.label, "Insight");
+    assert.equal(
+      result.rollRequests[0]?.reason,
+      "a gut feeling about the safe path; DC 18 may reveal the traps react to intent or fear"
+    );
+    assert.equal(result.rollRequests[0]?.targetDc, 14);
+  });
+
   it("does not append investigation DC guidance when no roll is requested", () => {
     const result = parseDmContract(
       JSON.stringify({
@@ -681,6 +716,50 @@ describe("DM provider helpers", () => {
     assert.equal(
       result.publicNarration,
       "The symbols are strange, but you need a closer look."
+    );
+  });
+
+  it("preserves structured single-line breaks in public narration", () => {
+    const result = parseDmContract(
+      JSON.stringify({
+        public_narration: [
+          "Combat begins.",
+          "",
+          "**Inquisitor Manifold initiative roll: 14.**",
+          "**Unbound Word Acolyte 1 initiative roll: 10.**",
+          "**Unbound Word Acolyte 2 initiative roll: 8.**",
+          "**Unbound Word Acolyte 3 initiative roll: 12.**",
+          "",
+          "**Initiative Order:**",
+          "1. Oktai Uni (16)",
+          "2. Inquisitor Manifold (14)",
+          "3. Unbound Word Acolyte 3 (12)"
+        ].join("\n"),
+        resolution_mode: "resolved_without_dice",
+        roll_requests: [],
+        next_input_needed: "player_actions",
+        input_targets: ["player:oktai"],
+        input_policy: "only_targeted_players",
+        mechanics_state_update: {},
+        inventory_state_update: { patches: [] }
+      })
+    );
+
+    assert.equal(
+      result.publicNarration,
+      [
+        "Combat begins.",
+        "",
+        "**Inquisitor Manifold initiative roll: 14.**",
+        "**Unbound Word Acolyte 1 initiative roll: 10.**",
+        "**Unbound Word Acolyte 2 initiative roll: 8.**",
+        "**Unbound Word Acolyte 3 initiative roll: 12.**",
+        "",
+        "**Initiative Order:**",
+        "1. Oktai Uni (16)",
+        "2. Inquisitor Manifold (14)",
+        "3. Unbound Word Acolyte 3 (12)"
+      ].join("\n")
     );
   });
 
