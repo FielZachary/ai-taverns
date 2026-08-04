@@ -109,11 +109,19 @@ vi.mock("./PlayerInput", async () => {
         draft: string;
         isSending: boolean;
         canSelectAiModel?: boolean;
+        onRetryLastTurn?: () => void;
         onDraftChange: (value: string) => void;
         onSubmit: (event: FormEvent<HTMLFormElement>) => void;
       }
     >(function MockPlayerInput(
-      { draft, isSending, canSelectAiModel, onDraftChange, onSubmit },
+      {
+        draft,
+        isSending,
+        canSelectAiModel,
+        onRetryLastTurn,
+        onDraftChange,
+        onSubmit
+      },
       ref
     ) {
       return (
@@ -127,6 +135,11 @@ vi.mock("./PlayerInput", async () => {
           <button disabled={isSending || !draft.trim()} type="submit">
             Send
           </button>
+          {onRetryLastTurn ? (
+            <button onClick={onRetryLastTurn} type="button">
+              Retry last turn
+            </button>
+          ) : null}
         </form>
       );
     })
@@ -282,6 +295,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -352,6 +366,109 @@ describe("GameShell", () => {
       "data-sending",
       "false"
     );
+  });
+
+  it("times out a stuck turn request and retries the last submitted message", async () => {
+    let submitAttempts = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url.startsWith("/api/room?")) {
+        return responseJson(roomSnapshot());
+      }
+
+      if (url === "/api/auth/claim-guest-state") {
+        return responseJson({});
+      }
+
+      if (
+        url === `/api/campaigns/${campaign.id}/solo-turn` &&
+        init?.method === "POST"
+      ) {
+        submitAttempts += 1;
+
+        if (submitAttempts === 1) {
+          return await new Promise<Response>((_resolve, reject) => {
+            init.signal?.addEventListener("abort", () => {
+              reject(new DOMException("The operation was aborted.", "AbortError"));
+            });
+          });
+        }
+
+        return responseJson(
+          roomSnapshot({
+            messages: [
+              {
+                id: "player-retry",
+                role: "player",
+                content: "I test the iron handle.",
+                createdAt: "2026-07-12T00:00:00.000Z"
+              },
+              {
+                id: "dm-retry",
+                role: "dm",
+                content: "The handle turns with a reluctant scrape.",
+                createdAt: "2026-07-12T00:00:01.000Z"
+              }
+            ]
+          })
+        );
+      }
+
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<GameShell initialCampaignId={campaign.id} />);
+
+    expect(
+      await screen.findByText("The lantern guttered beside the sealed door.")
+    ).toBeInTheDocument();
+
+    vi.useFakeTimers();
+    fireEvent.change(screen.getByRole("textbox", { name: "Turn draft" }), {
+      target: {
+        value: "I test the iron handle."
+      }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000);
+    });
+    vi.useRealTimers();
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "The dungeon master wasn't able to respond to that, please press the retry button on the right to re-send your message"
+        )
+      ).toBeInTheDocument();
+    });
+    expect(screen.getByLabelText("Message log")).toHaveAttribute(
+      "data-sending",
+      "false"
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry last turn" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("The handle turns with a reluctant scrape."))
+        .toBeInTheDocument();
+    });
+
+    const submitBodies = fetchMock.mock.calls
+      .filter(
+        ([input, init]) =>
+          String(input) === `/api/campaigns/${campaign.id}/solo-turn` &&
+          init?.method === "POST"
+      )
+      .map(([, init]) => JSON.parse(String(init?.body)));
+
+    expect(submitBodies).toHaveLength(2);
+    expect(submitBodies[1]).toMatchObject({
+      message: "I test the iron handle."
+    });
   });
 
   it("surfaces regenerate failures without leaving the table busy", async () => {

@@ -755,6 +755,7 @@ const dungeonMasterContractInstructions = [
   "Do not put colors, HTML, CSS, or Markdown emphasis into public_narration for these highlights. The UI will choose colors from color_role.",
   "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved this turn."
 ].join("\n");
+const playerTurnDmTimeoutMs = 15_000;
 
 export type DungeonMasterRuntime = {
   askProvider(input: {
@@ -764,6 +765,7 @@ export type DungeonMasterRuntime = {
     currentPlayerAction?: string;
     dmJob?: DmJobName;
     model?: AiModelId;
+    signal?: AbortSignal;
     onPublicNarrationDelta?: (text: string) => void;
   }): Promise<DungeonMasterProviderResponse>;
   emitDmStreamEvent?(event: DmStreamEvent | RoomSocketEvent): void;
@@ -9341,6 +9343,7 @@ async function askDungeonMaster(
     includeEldermereTurnContext?: boolean;
     model?: AiModelId;
     suppressStreaming?: boolean;
+    timeoutMs?: number;
   }
 ): Promise<DungeonMasterReply> {
   const traceId = randomUUID();
@@ -9405,6 +9408,9 @@ async function askDungeonMaster(
       options?.contractKind
     );
     const providerStartedAt = Date.now();
+    const timeoutSignal = options?.timeoutMs
+      ? AbortSignal.timeout(options.timeoutMs)
+      : undefined;
     const providerData = await runtime.askProvider({
       message: providerMessage,
       instructions: promptContext?.instructions ?? instructionsWithWorldContext,
@@ -9412,6 +9418,7 @@ async function askDungeonMaster(
       ...(currentPlayerAction ? { currentPlayerAction } : {}),
       ...(promptContext?.jobNeeded ? { dmJob: promptContext.jobNeeded } : {}),
       ...(options?.model ? { model: options.model } : {}),
+      ...(timeoutSignal ? { signal: timeoutSignal } : {}),
       ...(streamEmitter && streamTurnId
         ? {
             onPublicNarrationDelta: (text: string) => {
@@ -10837,7 +10844,10 @@ export async function submitRoomTurnForUser(
         submitState.turn.id,
         undefined,
         undefined,
-        input.model ? { model: input.model } : undefined
+        {
+          ...(input.model ? { model: input.model } : {}),
+          timeoutMs: playerTurnDmTimeoutMs
+        }
       );
       const resolvedTurn = await finishResolvedTurn(db, {
         campaignId: submitState.campaign.id,
@@ -11385,7 +11395,10 @@ export async function submitSoloTurnForUser(
       soloState.turn.id,
       soloState.content,
       undefined,
-      input.model ? { model: input.model } : undefined
+      {
+        ...(input.model ? { model: input.model } : {}),
+        timeoutMs: playerTurnDmTimeoutMs
+      }
     );
     const resolvedTurn = await finishResolvedTurn(db, {
       campaignId: soloState.campaign.id,

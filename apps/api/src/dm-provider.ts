@@ -69,6 +69,7 @@ export type DungeonMasterProviderInput = {
   currentPlayerAction?: string;
   dmJob?: DmJobName;
   model?: AiModelId;
+  signal?: AbortSignal;
   onPublicNarrationDelta?: (text: string) => void;
 };
 
@@ -561,7 +562,8 @@ async function requestDeepSeek(
   temperature: number,
   attempt: number,
   settings: ReturnType<typeof resolvedProviderSettings>,
-  onPublicNarrationDelta?: (text: string) => void
+  onPublicNarrationDelta?: (text: string) => void,
+  signal?: AbortSignal
 ) {
   let response: Response;
   const requestBody = JSON.stringify({
@@ -603,6 +605,11 @@ async function requestDeepSeek(
   }
 
   try {
+    const timeoutSignal = AbortSignal.timeout(175_000);
+    const requestSignal = signal
+      ? AbortSignal.any([signal, timeoutSignal])
+      : timeoutSignal;
+
     response = await fetch(`${settings.baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
@@ -610,7 +617,7 @@ async function requestDeepSeek(
         Authorization: `Bearer ${settings.apiKey}`
       },
       body: requestBody,
-      signal: AbortSignal.timeout(175_000)
+      signal: requestSignal
     });
   } catch (error) {
     timing.completedAt = new Date().toISOString();
@@ -785,6 +792,7 @@ export async function askDungeonMasterProvider({
   currentPlayerAction,
   dmJob,
   model,
+  signal,
   onPublicNarrationDelta
 }: DungeonMasterProviderInput): Promise<DungeonMasterProviderResponse> {
   if (shouldUseTestProvider()) {
@@ -831,7 +839,8 @@ export async function askDungeonMasterProvider({
     temperature,
     1,
     settings,
-    onPublicNarrationDelta
+    onPublicNarrationDelta,
+    signal
   );
   timings.push(timing);
   let content = data.choices?.[0]?.message?.content?.trim();
@@ -843,7 +852,8 @@ export async function askDungeonMasterProvider({
       temperature,
       2,
       settings,
-      undefined
+      undefined,
+      signal
     ));
     fallbackBufferedAfterEmptyStream = Boolean(onPublicNarrationDelta);
     timings.push(timing);
