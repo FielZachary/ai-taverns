@@ -179,6 +179,27 @@ describe("MessageLog", () => {
     );
   });
 
+  it("renders a right-side retry action on the timeout system message", () => {
+    const onRetryLastTurn = vi.fn();
+
+    renderMessageLog({
+      messages: [
+        gameMessage({
+          id: "timeout-message",
+          role: "system",
+          content:
+            "The dungeon master wasn't able to respond to that, please press the retry button on the right to re-send your message"
+        })
+      ],
+      retryMessageId: "timeout-message",
+      onRetryLastTurn
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry last turn" }));
+
+    expect(onRetryLastTurn).toHaveBeenCalledTimes(1);
+  });
+
   it("renders inventory update notes as muted italic parentheticals", () => {
     renderMessageLog({
       messages: [

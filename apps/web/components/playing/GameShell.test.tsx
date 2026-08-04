@@ -70,13 +70,17 @@ vi.mock("./MessageLog", () => ({
     isSending,
     regeneratingMessageId,
     regeneratableMessageId,
-    onRegenerateResponse
+    retryMessageId,
+    onRegenerateResponse,
+    onRetryLastTurn
   }: {
     messages: GameMessage[];
     isSending: boolean;
     regeneratingMessageId?: string | null;
     regeneratableMessageId?: string | null;
+    retryMessageId?: string | null;
     onRegenerateResponse?: (messageId: string) => void;
+    onRetryLastTurn?: () => void;
   }) => (
     <section aria-label="Message log" data-sending={String(isSending)}>
       {messages.map((message) => (
@@ -91,6 +95,11 @@ vi.mock("./MessageLog", () => ({
               type="button"
             >
               Regenerate
+            </button>
+          ) : null}
+          {message.id === retryMessageId ? (
+            <button onClick={onRetryLastTurn} type="button">
+              Retry last turn
             </button>
           ) : null}
         </article>
@@ -109,19 +118,11 @@ vi.mock("./PlayerInput", async () => {
         draft: string;
         isSending: boolean;
         canSelectAiModel?: boolean;
-        onRetryLastTurn?: () => void;
         onDraftChange: (value: string) => void;
         onSubmit: (event: FormEvent<HTMLFormElement>) => void;
       }
     >(function MockPlayerInput(
-      {
-        draft,
-        isSending,
-        canSelectAiModel,
-        onRetryLastTurn,
-        onDraftChange,
-        onSubmit
-      },
+      { draft, isSending, canSelectAiModel, onDraftChange, onSubmit },
       ref
     ) {
       return (
@@ -135,11 +136,6 @@ vi.mock("./PlayerInput", async () => {
           <button disabled={isSending || !draft.trim()} type="submit">
             Send
           </button>
-          {onRetryLastTurn ? (
-            <button onClick={onRetryLastTurn} type="button">
-              Retry last turn
-            </button>
-          ) : null}
         </form>
       );
     })

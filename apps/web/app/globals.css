@@ -5078,41 +5078,6 @@ h1 {
     filter 180ms ease;
 }
 
-.turn-form-has-retry .turn-submit-arrow {
-  right: 54px;
-}
-
-.turn-form .turn-retry-button {
-  position: absolute;
-  right: 10px;
-  bottom: 24px;
-  z-index: 3;
-  display: grid;
-  width: 36px;
-  height: 36px;
-  min-height: 0;
-  place-items: center;
-  border: 1px solid rgba(244, 207, 122, 0.34);
-  border-radius: 6px;
-  padding: 0;
-  color: var(--gold-bright);
-  background: rgba(18, 13, 10, 0.82);
-  box-shadow: 0 0 12px rgba(0, 0, 0, 0.24);
-  transition:
-    border-color 180ms ease,
-    background 180ms ease,
-    color 180ms ease,
-    transform 180ms ease;
-}
-
-.turn-form .turn-retry-button:hover,
-.turn-form .turn-retry-button:focus-visible {
-  border-color: rgba(244, 207, 122, 0.72);
-  color: var(--ink);
-  background: var(--gold-bright);
-  transform: translateY(-1px);
-}
-
 .turn-form .turn-submit-arrow:not(:disabled):hover,
 .turn-form .turn-submit-arrow:not(:disabled):focus-visible {
   background: var(--gold-bright);

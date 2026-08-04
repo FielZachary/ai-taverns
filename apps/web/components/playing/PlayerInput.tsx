@@ -32,7 +32,6 @@ type PlayerInputProps = {
   onDraftChange: (value: string) => void;
   onModeChange: (mode: PlayerInputMode) => void;
   onRollDice: (queuedDice: QueuedDice) => void;
-  onRetryLastTurn?: () => void;
   onSkipTurn?: () => void;
   onGenerateRestartBackstory?: (
     mode: "generate" | "add_details",
@@ -77,7 +76,6 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
       onDraftChange,
       onModeChange,
       onRollDice,
-      onRetryLastTurn,
       onSkipTurn,
       onGenerateRestartBackstory,
       onRestartCampaign,
@@ -154,8 +152,6 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
         : "";
     const isLocked = !isAskMode && (Boolean(lockMessage) || isSubmitted);
     const isRollRequired = !isAskMode && Boolean(requiredRoll);
-    const canRetryLastTurn =
-      !isAskMode && Boolean(onRetryLastTurn) && !isLocked && !isSending;
     const canSkipTurn =
       !isAskMode && Boolean(onSkipTurn) && !isLocked && !isRollRequired && !isSending;
     const queuedCount = useMemo(() => queuedDiceTotal(queuedDice), [queuedDice]);
@@ -263,7 +259,7 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
           validationMessage ? "turn-form-warning" : ""
         } ${isCallingAttention ? "turn-form-attention" : ""} ${
           isLocked ? "turn-form-submitted" : ""
-        } ${canRetryLastTurn ? "turn-form-has-retry" : ""}`}
+        }`}
         onSubmit={onSubmit}
       >
         <input type="hidden" name="aiModel" value={selectedAiModel} />
@@ -404,17 +400,6 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
             <div className="turn-form-submitted-label" aria-live="polite">
               {overlayMessage}
             </div>
-          ) : null}
-          {canRetryLastTurn ? (
-            <button
-              className="turn-retry-button"
-              type="button"
-              aria-label="Retry last turn"
-              title="Retry last turn"
-              onClick={onRetryLastTurn}
-            >
-              <RefreshCcw size={17} aria-hidden="true" />
-            </button>
           ) : null}
           <button
             className="turn-submit-arrow"

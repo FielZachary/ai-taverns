@@ -184,6 +184,7 @@ type ApiErrorResponse = {
 type RetryableTurn = {
   message: string;
   model: AiModelId;
+  errorMessageId: string;
 };
 
 type RoomRealtimeEvent =
@@ -1845,21 +1846,32 @@ export function GameShell({
             : "The room connection flickered. Your turn may need to be sent again.";
 
       if (isTurnTimeout && !skipTurn) {
+        const errorMessageId = createClientId();
         setRetryableTurnState({
           message: content,
-          model: options.model ?? selectedAiModelFromStorage()
+          model: options.model ?? selectedAiModelFromStorage(),
+          errorMessageId
         });
+        setMessages((currentMessages) => [
+          ...currentMessages,
+          {
+            id: errorMessageId,
+            role: "system",
+            content: message,
+            createdAt: new Date().toISOString()
+          }
+        ]);
+      } else {
+        setMessages((currentMessages) => [
+          ...currentMessages,
+          {
+            id: createClientId(),
+            role: "system",
+            content: message,
+            createdAt: new Date().toISOString()
+          }
+        ]);
       }
-
-      setMessages((currentMessages) => [
-        ...currentMessages,
-        {
-          id: createClientId(),
-          role: "system",
-          content: message,
-          createdAt: new Date().toISOString()
-        }
-      ]);
       pendingSubmissionRef.current = null;
       setOptimisticSubmittedPlayerId(null);
       setIsInputSubmitted(false);
@@ -2435,11 +2447,13 @@ export function GameShell({
               hideSendingIndicator={isShowingStreamingDmMessage}
               regeneratingMessageId={regeneratingMessageId}
               regeneratableMessageId={regeneratableMessageId}
+              retryMessageId={retryableTurn?.errorMessageId}
               waitingPlayers={waitingPlayers}
               onInspectMap={() => setIsMessageMapOpen(true)}
               onRegenerateResponse={(messageId) =>
                 void handleRegenerateResponse(messageId)
               }
+              onRetryLastTurn={retryableTurn ? handleRetryLastTurn : undefined}
               onViewEldermereLore={() => {
                 setPlayerResourcesInitialTab("eldermere_lore");
                 setIsCharacterSheetOpen(true);
@@ -2533,7 +2547,6 @@ export function GameShell({
               onDraftChange={setDraft}
               onModeChange={setInputMode}
               onRollDice={handleRollDice}
-              onRetryLastTurn={retryableTurn ? handleRetryLastTurn : undefined}
               onSkipTurn={!isSinglePlayer ? handleSkipTurn : undefined}
               onGenerateRestartBackstory={handleGenerateRestartBackstory}
               onRestartCampaign={handleRestartCampaign}
