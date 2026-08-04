@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>S11 Weapons & Spells, Backstory — AI Taverns iOS</title>
+<link rel="stylesheet" href="_frame.css">
+</head>
+<body>
+<h1>S11 · Weapons &amp; Spells, Spell detail, Backstory</h1>
+<p class="pkg-note">Spec: <code>spec/11-spells-backstory.md</code>. Web tables become expandable rows;
+spell rows open a detail sheet. Thumbnails from <code>apps/web/public/spell-archetypes/</code>.</p>
+
+<div class="board">
+
+  <!-- Frame A: weapons & spells -->
+  <div class="stage">
+    <h2>11a · Weapons &amp; Spells</h2>
+    <div class="device">
+      <div class="statusbar"><span>9:41</span><span>􀙇 􀋂</span></div>
+      <div class="navbar">
+        <div class="icon-btn" style="border:0;background:none;">‹</div>
+        <div class="title" style="flex:1;">Weapons &amp; Spells</div>
+      </div>
+      <div style="padding:10px 16px 0;">
+        <div class="textfield" style="min-height:36px;border-radius:10px;font-size:14px;">🔍&nbsp; Search</div>
+      </div>
+      <div style="flex:1;padding:12px 16px;display:flex;flex-direction:column;gap:12px;overflow:hidden;">
+        <div>
+          <div style="font-size:12px;color:var(--muted);letter-spacing:.08em;margin-bottom:8px;">WEAPONS</div>
+          <div class="card" style="padding:0;">
+            <div class="row" style="padding:12px 14px;">
+              <span class="fi fi-sword" aria-hidden="true"></span>
+              <div style="flex:1;">
+                <div style="font-size:14px;font-weight:600;">Longsword</div>
+                <div style="font-size:12px;color:var(--muted);">+5 to hit · 1d8+3 slashing · versatile 1d10</div>
+              </div>
+            </div>
+            <hr class="hr">
+            <div class="row" style="padding:12px 14px;">
+              <span>🏹</span>
+              <div style="flex:1;">
+                <div style="font-size:14px;font-weight:600;">Light Crossbow</div>
+                <div style="font-size:12px;color:var(--muted);">+5 to hit · 1d8+3 piercing · 80/320 ft</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="row" style="margin-bottom:8px;">
+            <div style="font-size:12px;color:var(--muted);letter-spacing:.08em;flex:1;">SPELLS — LEVEL 1</div>
+            <div class="co" style="top:430px;right:16px;">1</div>
+            <span class="pill gold">Slots 2/2</span>
+          </div>
+          <div class="card" style="padding:0;">
+            <div class="row" style="padding:12px 14px;">
+              <div class="art" style="width:40px;height:40px;border-radius:8px;flex:none;">
+                <img src="../../../apps/web/public/spell-archetypes/shield.webp" alt="" onerror="this.style.display='none'"></div>
+              <div style="flex:1;">
+                <div style="font-size:14px;font-weight:600;">Shield</div>
+                <div style="font-size:12px;color:var(--muted);">Reaction · +5 AC until next turn</div>
+              </div>
+              <span class="chev">›</span>
+            </div>
+            <hr class="hr">
+            <div class="row" style="padding:12px 14px;">
+              <div class="art" style="width:40px;height:40px;border-radius:8px;flex:none;">
+                <img src="../../../apps/web/public/spell-archetypes/fire.webp" alt="" onerror="this.style.display='none'"></div>
+              <div style="flex:1;">
+                <div style="font-size:14px;font-weight:600;">Burning Hands</div>
+                <div style="font-size:12px;color:var(--muted);">Action · 3d6 fire, DEX save · 15-ft cone</div>
+              </div>
+              <span class="chev">›</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="home"></div>
+    </div>
+    <div class="notes">
+      <p><b>1</b> Slot pill per level (from character state). Search filters weapons and spells. Rows carry the key numbers so most questions never need the detail sheet.</p>
+    </div>
+  </div>
+
+  <!-- Frame B: spell detail sheet -->
+  <div class="stage">
+    <h2>11b · Spell detail sheet</h2>
+    <div class="device">
+      <div class="statusbar"><span>9:41</span><span>􀙇 􀋂</span></div>
+      <div style="flex:1;"></div>
+      <div class="sheet-back"></div>
+      <div class="sheet" style="height:430px;">
+        <div class="grabber"></div>
+        <div class="row" style="margin-bottom:12px;">
+          <div class="art" style="width:52px;height:52px;border-radius:10px;flex:none;">
+            <img src="../../../apps/web/public/spell-archetypes/fire.webp" alt="" onerror="this.style.display='none'"></div>
+          <div>
+            <div style="font-family:var(--heading);font-size:18px;letter-spacing:.04em;">Burning Hands</div>
+            <div style="font-size:12px;color:var(--muted);">Level 1 · Evocation</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+          <div class="stat" style="text-align:left;padding:8px 12px;"><div class="k">CASTING TIME</div><div style="font-size:14px;font-weight:600;margin-top:2px;">1 action</div></div>
+          <div class="stat" style="text-align:left;padding:8px 12px;"><div class="k">RANGE</div><div style="font-size:14px;font-weight:600;margin-top:2px;">Self, 15-ft cone</div></div>
+          <div class="stat" style="text-align:left;padding:8px 12px;"><div class="k">DURATION</div><div style="font-size:14px;font-weight:600;margin-top:2px;">Instant</div></div>
+          <div class="stat" style="text-align:left;padding:8px 12px;"><div class="k">SAVE</div><div style="font-size:14px;font-weight:600;margin-top:2px;">DEX vs DC 13</div></div>
+        </div>
+        <div style="font-size:14px;line-height:1.55;color:var(--ink);">A thin sheet of flames shoots from your fingertips. Each creature in the cone takes <b style="color:var(--gold-bright)">3d6 fire damage</b>, halved on a successful save. Flammable objects ignite.</div>
+      </div>
+      <div class="home" style="z-index:6;"></div>
+    </div>
+    <div class="notes"><p>Medium-detent sheet: archetype art, name Cinzel 18, level/school caption, 2×2 fact grid (casting time, range, duration, roll/save/DC), effect prose with numbers in gold-bright. Same component serves the wizard spell picker (08a).</p></div>
+  </div>
+
+  <!-- Frame C: backstory -->
+  <div class="stage">
+    <h2>11c · Backstory</h2>
+    <div class="device">
+      <div class="statusbar"><span>9:41</span><span>􀙇 􀋂</span></div>
+      <div class="navbar">
+        <div class="icon-btn" style="border:0;background:none;">‹</div>
+        <div class="title" style="flex:1;">Backstory</div>
+      </div>
+      <div style="flex:1;padding:16px;overflow:hidden;">
+        <div style="font-family:var(--serif);font-size:16px;line-height:1.65;color:var(--ink);">
+          Garrick Thorne was a soldier of the Marchwatch before the company disbanded in disgrace. He carries his old captain's longsword and a debt he doesn't talk about.
+          <br><br>
+          He came to the Ash Chapel road chasing a rumor: that the thing his company was paid to bury three winters ago has started digging itself out.
+        </div>
+      </div>
+      <div class="home"></div>
+    </div>
+    <div class="notes"><p>Serif reading view, 16/1.65, 16pt margins. Read-only in v1 (edits happen at creation). Long content scrolls; no cards, no chrome — it should read like a page from a novel.</p></div>
+  </div>
+
+</div>
+</body>
+</html>

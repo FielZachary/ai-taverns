@@ -70,13 +70,17 @@ vi.mock("./MessageLog", () => ({
     isSending,
     regeneratingMessageId,
     regeneratableMessageId,
-    onRegenerateResponse
+    retryMessageId,
+    onRegenerateResponse,
+    onRetryLastTurn
   }: {
     messages: GameMessage[];
     isSending: boolean;
     regeneratingMessageId?: string | null;
     regeneratableMessageId?: string | null;
+    retryMessageId?: string | null;
     onRegenerateResponse?: (messageId: string) => void;
+    onRetryLastTurn?: () => void;
   }) => (
     <section aria-label="Message log" data-sending={String(isSending)}>
       {messages.map((message) => (
@@ -91,6 +95,11 @@ vi.mock("./MessageLog", () => ({
               type="button"
             >
               Regenerate
+            </button>
+          ) : null}
+          {message.id === retryMessageId ? (
+            <button onClick={onRetryLastTurn} type="button">
+              Retry last turn
             </button>
           ) : null}
         </article>
@@ -109,19 +118,11 @@ vi.mock("./PlayerInput", async () => {
         draft: string;
         isSending: boolean;
         canSelectAiModel?: boolean;
-        onRetryLastTurn?: () => void;
         onDraftChange: (value: string) => void;
         onSubmit: (event: FormEvent<HTMLFormElement>) => void;
       }
     >(function MockPlayerInput(
-      {
-        draft,
-        isSending,
-        canSelectAiModel,
-        onRetryLastTurn,
-        onDraftChange,
-        onSubmit
-      },
+      { draft, isSending, canSelectAiModel, onDraftChange, onSubmit },
       ref
     ) {
       return (
@@ -135,11 +136,6 @@ vi.mock("./PlayerInput", async () => {
           <button disabled={isSending || !draft.trim()} type="submit">
             Send
           </button>
-          {onRetryLastTurn ? (
-            <button onClick={onRetryLastTurn} type="button">
-              Retry last turn
-            </button>
-          ) : null}
         </form>
       );
     })
@@ -449,6 +445,21 @@ describe("GameShell", () => {
       "data-sending",
       "false"
     );
+
+    act(() => {
+      MockWebSocket.instances[0].emitMessage({
+        type: "dm_stream_failed",
+        roomId: campaign.id,
+        turnId: "turn-timeout",
+        message:
+          "The operation was aborted due to timeout Trace ID: 0f27fc6e-5dbc-4b01-90ac-3d5ee2d693e4"
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText(/The operation was aborted due to timeout/))
+        .not.toBeInTheDocument();
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "Retry last turn" }));
 

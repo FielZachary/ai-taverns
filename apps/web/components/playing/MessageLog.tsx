@@ -27,8 +27,10 @@ type MessageLogProps = {
   waitingPlayers?: ChatPlayerStatus[];
   regeneratingMessageId?: string | null;
   regeneratableMessageId?: string | null;
+  retryMessageId?: string | null;
   onInspectMap?: () => void;
   onRegenerateResponse?: (messageId: string) => void;
+  onRetryLastTurn?: () => void;
   onViewEldermereLore?: () => void;
 };
 
@@ -458,8 +460,10 @@ export function MessageLog({
   waitingPlayers = [],
   regeneratingMessageId,
   regeneratableMessageId,
+  retryMessageId,
   onInspectMap,
   onRegenerateResponse,
+  onRetryLastTurn,
   onViewEldermereLore
 }: MessageLogProps) {
   const logRef = useRef<HTMLDivElement>(null);
@@ -518,6 +522,10 @@ export function MessageLog({
           message.id === regeneratableMessageId;
         const canRewindToMessage =
           canRegenerateMessage && !isLatestRegeneratableMessage;
+        const canRetryMessage =
+          message.role === "system" &&
+          message.id === retryMessageId &&
+          Boolean(onRetryLastTurn);
         const locationLabel = messageLocationLabel(message);
         const messageContent = playerFacingMessageContent(message);
 
@@ -539,8 +547,9 @@ export function MessageLog({
                     <p className="message-location-label">{locationLabel}</p>
                   ) : null}
                 </div>
-                {message.role === "dm" &&
-                (message.debug || canRegenerateMessage) ? (
+                {(message.role === "dm" &&
+                  (message.debug || canRegenerateMessage)) ||
+                canRetryMessage ? (
                   <div className="message-actions">
                     {message.debug ? (
                       <button
@@ -583,6 +592,18 @@ export function MessageLog({
                         disabled={isSending || regeneratingMessageId === message.id}
                         aria-label="Regenerate AI response"
                         title="Regenerate AI response"
+                      >
+                        <RefreshCcw size={15} />
+                      </button>
+                    ) : null}
+                    {canRetryMessage ? (
+                      <button
+                        type="button"
+                        className="message-action-button"
+                        onClick={onRetryLastTurn}
+                        disabled={isSending}
+                        aria-label="Retry last turn"
+                        title="Retry last turn"
                       >
                         <RefreshCcw size={15} />
                       </button>
