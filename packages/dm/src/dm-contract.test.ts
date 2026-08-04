@@ -62,6 +62,30 @@ describe("parseDmContract", () => {
     ]);
   });
 
+  it("preserves many exact narration highlights for combat math", () => {
+    const phrases = Array.from({ length: 8 }, (_, index) => {
+      const roll = 10 + index;
+      return `rolled a ${roll}`;
+    });
+    const result = parseDmContract(
+      JSON.stringify({
+        public_narration: `${phrases.join(". ")}. What do you do?`,
+        narration_highlights: phrases.map((text) => ({
+          text,
+          color_role: "clue"
+        })),
+        roll_requests: [],
+        next_input_needed: "player_actions"
+      })
+    );
+
+    assert.equal(result.narrationHighlights.length, phrases.length);
+    assert.deepEqual(
+      result.narrationHighlights.map((highlight) => highlight.text),
+      phrases
+    );
+  });
+
   it("infers and validates resolution_mode", () => {
     const resolved = parseDmContract(
       JSON.stringify({

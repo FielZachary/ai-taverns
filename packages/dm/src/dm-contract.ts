@@ -185,6 +185,7 @@ const narrationHighlightRoles = new Set([
   "faction",
   "object"
 ]);
+const maxNarrationHighlights = 24;
 
 function normalizeNarrationHighlights(
   value: unknown,
@@ -217,7 +218,7 @@ function normalizeNarrationHighlights(
     highlights.push({ text, colorRole });
     seen.add(key);
 
-    if (highlights.length >= 3) {
+    if (highlights.length >= maxNarrationHighlights) {
       break;
     }
   }
