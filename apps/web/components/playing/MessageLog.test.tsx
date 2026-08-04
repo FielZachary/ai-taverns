@@ -154,6 +154,31 @@ describe("MessageLog", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders narration highlights with color role classes", () => {
+    renderMessageLog({
+      messages: [
+        gameMessage({
+          id: "dm-highlight-message",
+          role: "dm",
+          content: "Captain Vael lowers the black key onto the table.",
+          narrationHighlights: [
+            { text: "Captain Vael", colorRole: "npc" },
+            { text: "black key", colorRole: "object" }
+          ]
+        })
+      ]
+    });
+
+    expect(screen.getByText("Captain Vael")).toHaveClass(
+      "message-narration-highlight",
+      "message-narration-highlight-npc"
+    );
+    expect(screen.getByText("black key")).toHaveClass(
+      "message-narration-highlight",
+      "message-narration-highlight-object"
+    );
+  });
+
   it("renders inventory update notes as muted italic parentheticals", () => {
     renderMessageLog({
       messages: [

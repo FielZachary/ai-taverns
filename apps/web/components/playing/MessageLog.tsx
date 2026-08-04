@@ -11,6 +11,7 @@ import {
   X
 } from "lucide-react";
 import type { AiDebugInfo, GameMessage } from "@/lib/game-types";
+import type { NarrationHighlight } from "@/lib/game-types";
 
 export type ChatPlayerStatus = {
   id: string;
@@ -45,6 +46,68 @@ function renderInlineMarkdown(content: string) {
   });
 }
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function renderHighlightedInlineMarkdown(
+  content: string,
+  highlights: NarrationHighlight[]
+) {
+  const usableHighlights = highlights
+    .filter((highlight) => highlight.text && content.includes(highlight.text))
+    .sort((left, right) => right.text.length - left.text.length);
+
+  if (usableHighlights.length === 0) {
+    return renderInlineMarkdown(content);
+  }
+
+  const pattern = new RegExp(
+    usableHighlights.map((highlight) => escapeRegExp(highlight.text)).join("|"),
+    "g"
+  );
+  const parts: Array<string | { text: string; colorRole: string }> = [];
+  let cursor = 0;
+
+  for (const match of content.matchAll(pattern)) {
+    const matchText = match[0];
+    const index = match.index ?? 0;
+    const highlight = usableHighlights.find((item) => item.text === matchText);
+
+    if (!highlight || index < cursor) {
+      continue;
+    }
+
+    if (index > cursor) {
+      parts.push(content.slice(cursor, index));
+    }
+
+    parts.push({ text: matchText, colorRole: highlight.colorRole });
+    cursor = index + matchText.length;
+  }
+
+  if (cursor < content.length) {
+    parts.push(content.slice(cursor));
+  }
+
+  return parts.map((part, index) => {
+    if (typeof part === "string") {
+      return renderInlineMarkdown(part).map((node, nodeIndex) => (
+        <span key={`plain-${index}-${nodeIndex}`}>{node}</span>
+      ));
+    }
+
+    return (
+      <span
+        className={`message-narration-highlight message-narration-highlight-${part.colorRole}`}
+        key={`highlight-${index}-${part.text}`}
+      >
+        {part.text}
+      </span>
+    );
+  });
+}
+
 function playerFacingMessageContent(message: GameMessage) {
   if (message.kind !== "ask_dm_answer") {
     return message.content;
@@ -73,7 +136,13 @@ function playerFacingMessageContent(message: GameMessage) {
   return message.content;
 }
 
-function MessageBody({ content }: { content: string }) {
+function MessageBody({
+  content,
+  highlights = []
+}: {
+  content: string;
+  highlights?: NarrationHighlight[];
+}) {
   const paragraphs = content
     .trim()
     .split(/\n{2,}/)
@@ -104,7 +173,7 @@ function MessageBody({ content }: { content: string }) {
 
         return (
           <p key={`${index}-${paragraph.slice(0, 16)}`}>
-            {renderInlineMarkdown(paragraph)}
+            {renderHighlightedInlineMarkdown(paragraph, highlights)}
           </p>
         );
       })}
@@ -524,7 +593,10 @@ export function MessageLog({
               {message.role === "dm" && !messageContent.trim() ? (
                 <RuneLoader label="Reading the runes" />
               ) : (
-                <MessageBody content={messageContent} />
+                <MessageBody
+                  content={messageContent}
+                  highlights={message.narrationHighlights}
+                />
               )}
               <MessageResourceCard
                 message={message}

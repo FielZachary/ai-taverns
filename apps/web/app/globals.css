@@ -4576,6 +4576,34 @@ h1 {
   font-style: italic;
 }
 
+.message-narration-highlight {
+  color: var(--narration-highlight-color, var(--gold-bright));
+}
+
+.message-narration-highlight-npc {
+  --narration-highlight-color: #e8b86c;
+}
+
+.message-narration-highlight-place {
+  --narration-highlight-color: #87c7dc;
+}
+
+.message-narration-highlight-clue {
+  --narration-highlight-color: #b8d978;
+}
+
+.message-narration-highlight-danger {
+  --narration-highlight-color: #ee8b73;
+}
+
+.message-narration-highlight-faction {
+  --narration-highlight-color: #c8a7f0;
+}
+
+.message-narration-highlight-object {
+  --narration-highlight-color: #d8c077;
+}
+
 .message-waiting {
   color: var(--muted);
 }
