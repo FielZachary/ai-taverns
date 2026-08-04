@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { MechanicsState } from "@ai-dnd/contracts";
 import {
+  applyDeathSavingThrow,
   assertMechanicsActionAllowed,
+  firstDyingPlayerActorKey,
+  isDyingPlayerActor,
+  reviveDeadPlayerActor,
   resolveMechanicsState
 } from "./mechanics.js";
 
@@ -171,4 +175,116 @@ test("mechanics state preserves persisted NPC armor class", () => {
   assert.equal(state.actors["npc:acolyte-1"]?.armorClass, 13);
   assert.equal(state.actors["npc:acolyte-1"]?.allegiance, "hostile");
   assert.equal(state.actors["npc:acolyte-1"]?.isPlayerControlled, false);
+});
+
+function dyingState(
+  deathSaves: { successes: number; failures: number } = {
+    successes: 0,
+    failures: 0
+  }
+): MechanicsState {
+  return {
+    combat: {
+      active: true,
+      round: 4,
+      turnOwner: "player:vayne",
+      initiativeOrder: ["player:vayne", "npc:cutlass-raider"]
+    },
+    actors: {
+      "player:vayne": {
+        characterName: "Vayne",
+        currentHp: 0,
+        maxHp: 20,
+        allegiance: "ally",
+        isPlayerControlled: true,
+        conditions: ["unconscious"],
+        deathSaves
+      }
+    }
+  };
+}
+
+test("death save helper detects dying player actors", () => {
+  const state = dyingState();
+
+  assert.equal(firstDyingPlayerActorKey(state), "player:vayne");
+  assert.equal(isDyingPlayerActor(state.actors["player:vayne"]), true);
+});
+
+test("death save natural 1 counts as two failures", () => {
+  const result = applyDeathSavingThrow({
+    state: dyingState({ successes: 1, failures: 0 }),
+    actorKey: "player:vayne",
+    roll: 1
+  });
+  const actor = result.state.actors["player:vayne"];
+
+  assert.equal(result.outcome, "failure");
+  assert.deepEqual(actor?.deathSaves, { successes: 1, failures: 2 });
+  assert.deepEqual(actor?.conditions, ["unconscious"]);
+});
+
+test("death save natural 20 revives at 1 HP", () => {
+  const result = applyDeathSavingThrow({
+    state: dyingState({ successes: 0, failures: 2 }),
+    actorKey: "player:vayne",
+    roll: 20
+  });
+  const actor = result.state.actors["player:vayne"];
+
+  assert.equal(result.outcome, "revived");
+  assert.equal(actor?.currentHp, 1);
+  assert.equal(actor?.deathSaves, undefined);
+  assert.deepEqual(actor?.conditions, []);
+});
+
+test("three death save successes stabilize at 0 HP", () => {
+  const result = applyDeathSavingThrow({
+    state: dyingState({ successes: 2, failures: 1 }),
+    actorKey: "player:vayne",
+    roll: 12
+  });
+  const actor = result.state.actors["player:vayne"];
+
+  assert.equal(result.outcome, "stabilized");
+  assert.equal(actor?.currentHp, 0);
+  assert.equal(actor?.deathSaves, undefined);
+  assert.deepEqual(actor?.conditions, ["unconscious", "stable"]);
+});
+
+test("three death save failures kill the character", () => {
+  const result = applyDeathSavingThrow({
+    state: dyingState({ successes: 1, failures: 2 }),
+    actorKey: "player:vayne",
+    roll: 3
+  });
+  const actor = result.state.actors["player:vayne"];
+
+  assert.equal(result.outcome, "dead");
+  assert.equal(actor?.currentHp, 0);
+  assert.equal(actor?.deathSaves, undefined);
+  assert.deepEqual(actor?.conditions, ["dead"]);
+});
+
+test("revive dead player restores full HP and clears death conditions", () => {
+  const deadState = applyDeathSavingThrow({
+    state: dyingState({ successes: 0, failures: 2 }),
+    actorKey: "player:vayne",
+    roll: 2
+  }).state;
+  const revived = reviveDeadPlayerActor({
+    state: deadState,
+    actorKey: "player:vayne"
+  });
+  const actor = revived.actors["player:vayne"];
+
+  assert.equal(actor?.currentHp, 20);
+  assert.equal(actor?.deathSaves, undefined);
+  assert.deepEqual(actor?.conditions, []);
+  assert.deepEqual(revived.combat, {
+    active: false,
+    round: 0,
+    turnOwner: null,
+    initiativeOrder: []
+  });
 });

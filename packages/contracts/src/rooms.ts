@@ -37,6 +37,13 @@ export const DiceRollCombatContextSchema = z
   })
   .passthrough();
 
+export const DiceRollDeathSaveContextSchema = z
+  .object({
+    actorKey: z.string().min(1),
+    attempt: z.number().int().positive().optional()
+  })
+  .passthrough();
+
 export const DiceRollRequestSchema = z
   .object({
     id: z.string().min(1).optional(),
@@ -51,7 +58,9 @@ export const DiceRollRequestSchema = z
     threshold: z.number().int().positive().optional(),
     advantageState: z.enum(["normal", "advantage", "disadvantage"]).optional(),
     advantage_state: z.enum(["normal", "advantage", "disadvantage"]).optional(),
-    combat: DiceRollCombatContextSchema.optional()
+    combat: DiceRollCombatContextSchema.optional(),
+    deathSave: DiceRollDeathSaveContextSchema.optional(),
+    death_save: DiceRollDeathSaveContextSchema.optional()
   })
   .passthrough();
 
@@ -133,6 +142,17 @@ export const RoomSnapshotSchema = z.object({
     turnOwnerCharacterName: z.string().nullable(),
     initiativeOrder: z.array(z.string())
   }),
+  death: z
+    .object({
+      state: z.enum(["dying", "stable", "dead"]).nullable(),
+      actorKey: z.string().nullable(),
+      characterName: z.string().nullable(),
+      successes: z.number().int().nonnegative(),
+      failures: z.number().int().nonnegative(),
+      canRevive: z.boolean(),
+      canCreateNewCampaign: z.boolean()
+    })
+    .optional(),
   updatedAt: z.string().datetime()
 });
 
@@ -181,6 +201,13 @@ export const RoomPlayerUpdateResponseSchema = RoomSnapshotSchema;
 export const RoomCombatCheatSheetGenerateResponseSchema = RoomSnapshotSchema;
 export const RoomBeginResponseSchema = RoomSnapshotSchema;
 export const RoomSubmitResponseSchema = RoomSnapshotSchema;
+
+export const RoomReviveRequestSchema = z.object({
+  roomId: z.string().optional(),
+  sessionId: z.string().optional()
+});
+
+export const RoomReviveResponseSchema = RoomSnapshotSchema;
 
 export const RoomRealtimeEventSchema = z.discriminatedUnion("type", [
   z.object({

@@ -3,6 +3,7 @@ export const dmJobNames = [
   "investigation",
   "npc_dialogue",
   "combat",
+  "death_saving_throws",
   "clarification"
 ] as const;
 
@@ -250,6 +251,7 @@ export function buildRouterPrompt() {
     "Do not invent, rename, summarize, slugify, or transform context keys. Copy exact key strings only.",
     "If no available key fits a category, return an empty array for that category.",
     "If routing state says combat_active is true, default to combat for player input unless the input is clearly noncombat and does not affect combat turn flow.",
+    "If pending_roll_requests include a Death Saving Throw, or the active player is at 0 HP and dying, choose death_saving_throws.",
     "Choose clarification when the player's intended action is too underspecified to adjudicate safely, especially combat actions like casting a spell, making an attack, using a weapon, or targeting an area effect without a clear target, target area, or necessary tactical detail.",
     "Do not choose clarification merely because an action is risky, opposed, or requires dice; route those to the relevant gameplay job and request rolls there.",
     `Allowed jobs: ${dmJobNames.join(", ")}.`,
@@ -1518,6 +1520,30 @@ export function jobPrompt(
       "Examples below demonstrate combat pacing, visible math, paragraph grouping, turn ownership, roll pauses, and state-safe narration. Do not copy their names, actor keys, enemies, abilities, locations, or exact phrasing. Match their clarity and discipline, not their content.",
       ...combatExamples
     ],
+    death_saving_throws: [
+      [
+        "Death Saving Throws Job:",
+        "",
+        "Purpose:",
+        "- Resolve player death saving throws with strict mechanics and grave, beautiful narration.",
+        "- This job is only for a player character at 0 HP who is dying, stable, revived by a natural 20, or dead after three failures.",
+        "",
+        "Mechanics Authority:",
+        "- Treat authoritative mechanicsState as truth for current HP, conditions, and deathSaves. Do not recount successes or failures from transcript memory when mechanicsState disagrees.",
+        "- A natural 1 counts as two death save failures. A natural 20 returns the character to 1 HP and consciousness unless server-provided mechanicsState already says otherwise.",
+        "- If the submitted roll means three failures, the character really dies. Say plainly that they have died and include mechanics_state_update with currentHp 0 and condition dead.",
+        "- If the submitted roll means three successes, the character is stable at 0 HP and unconscious. Say that clearly and do not imply they can act normally.",
+        "",
+        "Roll Handling:",
+        "- When current input includes a Death Saving Throw result, narrate that exact roll visibly before the consequence, using wording like 'you rolled a 14 against DC 10 and succeed' or 'you rolled a 3 against DC 10 and fail.'",
+        "- If the character remains dying after the result, do not return ordinary player action control. Ask for the next Death Saving Throw with roll_requests containing dice \"1d20\", modifier 0, label \"Death Saving Throw\", next_input_needed dice_results, and input_targets set to the dying actor key.",
+        "- Do not ask what the unconscious character does while they are still dying.",
+        "",
+        "Death And Revival Boundary:",
+        "- Do not soften death into a temporary setback inside this job. Revival is a separate player choice handled after death.",
+        "- Do not include UI button text in public_narration; the website presents Revive your character and Create new Campaign."
+      ].join("\n")
+    ],
     clarification: [
       "Ask one concise clarifying question.",
       ...clarificationReasonGuidance,
@@ -1553,6 +1579,7 @@ export function jobPrompt(
       investigation: [],
       npc_dialogue: [],
       combat: soloCombatGuidance,
+      death_saving_throws: [],
       clarification: []
     },
     multiplayer: {
@@ -1560,6 +1587,7 @@ export function jobPrompt(
       investigation: [],
       npc_dialogue: [],
       combat: multiplayerCombatGuidance,
+      death_saving_throws: [],
       clarification: []
     }
   };

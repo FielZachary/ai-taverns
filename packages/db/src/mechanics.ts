@@ -1,4 +1,5 @@
 import type {
+  MechanicsActorState,
   MechanicsSeed,
   MechanicsState,
   SpellSlotLevel,
@@ -14,6 +15,11 @@ type PlayerLike = {
 type CampaignLike = {
   metadata: unknown;
 };
+
+function withoutDeathSaves(actor: MechanicsActorState): MechanicsActorState {
+  const { deathSaves: _deathSaves, ...rest } = actor;
+  return rest;
+}
 
 export const defaultCombatState: MechanicsState["combat"] = {
   active: false,
@@ -89,6 +95,66 @@ function cloneSlots(slots: Record<string, SpellSlotState> | undefined) {
     : undefined;
 }
 
+function cloneDeathSaves(
+  deathSaves: MechanicsState["actors"][string]["deathSaves"] | undefined
+) {
+  return deathSaves
+    ? {
+        successes: deathSaves.successes,
+        failures: deathSaves.failures
+      }
+    : undefined;
+}
+
+function parseDeathSaves(
+  value: unknown
+): MechanicsState["actors"][string]["deathSaves"] | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const successes = Number(value.successes);
+  const failures = Number(value.failures);
+
+  if (
+    !Number.isInteger(successes) ||
+    !Number.isInteger(failures) ||
+    successes < 0 ||
+    failures < 0
+  ) {
+    return undefined;
+  }
+
+  return {
+    successes: Math.min(3, successes),
+    failures: Math.min(3, failures)
+  };
+}
+
+function withoutConditions(
+  conditions: string[] | undefined,
+  removed: string[]
+) {
+  const removedSet = new Set(removed.map((condition) => condition.toLowerCase()));
+
+  return (conditions ?? []).filter(
+    (condition) => !removedSet.has(condition.toLowerCase())
+  );
+}
+
+function withCondition(
+  conditions: string[] | undefined,
+  condition: string
+) {
+  const existing = withoutConditions(conditions, []);
+
+  return existing.some(
+    (item) => item.trim().toLowerCase() === condition.toLowerCase()
+  )
+    ? existing
+    : [...existing, condition];
+}
+
 export function actorKeyForPlayer(playerId: string) {
   return `player:${playerId}`;
 }
@@ -138,6 +204,7 @@ export function actorFromMechanicsSeed(
       ...fallback,
       characterName,
       spellSlots: cloneSlots(fallback.spellSlots),
+      deathSaves: cloneDeathSaves(fallback.deathSaves),
       concentration: fallback.concentration ?? null,
       conditions: [...(fallback.conditions ?? [])]
     };
@@ -259,6 +326,9 @@ export function persistedMechanicsState(
         : {}),
       ...(parseSpellSlots(actor.spellSlots)
         ? { spellSlots: parseSpellSlots(actor.spellSlots) }
+        : {}),
+      ...(parseDeathSaves(actor.deathSaves)
+        ? { deathSaves: parseDeathSaves(actor.deathSaves) }
         : {}),
       concentration: isRecord(actor.concentration)
         ? {
@@ -459,6 +529,7 @@ function actorWithSheetFallback(
     currentHp: actor.currentHp ?? fallback.currentHp,
     maxHp: actor.maxHp ?? fallback.maxHp,
     spellSlots: actor.spellSlots ?? cloneSlots(fallback.spellSlots),
+    deathSaves: cloneDeathSaves(actor.deathSaves ?? fallback.deathSaves),
     concentration: actor.concentration ?? null,
     conditions: actor.conditions ?? []
   };
@@ -582,6 +653,167 @@ export function projectMechanicsIntoCharacterSheet(
   return projected;
 }
 
+export function isDeadActor(
+  actor: MechanicsState["actors"][string] | undefined
+) {
+  return (actor?.conditions ?? []).some(
+    (condition) => condition.trim().toLowerCase() === "dead"
+  );
+}
+
+export function isStableActor(
+  actor: MechanicsState["actors"][string] | undefined
+) {
+  return (actor?.conditions ?? []).some(
+    (condition) => condition.trim().toLowerCase() === "stable"
+  );
+}
+
+export function isDyingPlayerActor(
+  actor: MechanicsState["actors"][string] | undefined
+): actor is MechanicsActorState {
+  return Boolean(
+    actor &&
+      actor.isPlayerControlled === true &&
+      actor.currentHp !== undefined &&
+      actor.currentHp <= 0 &&
+      !isDeadActor(actor) &&
+      !isStableActor(actor)
+  );
+}
+
+export function firstDyingPlayerActorKey(state: MechanicsState) {
+  return (
+    Object.entries(state.actors).find(
+      ([actorKey, actor]) =>
+        actorKey.startsWith("player:") && isDyingPlayerActor(actor)
+    )?.[0] ?? null
+  );
+}
+
+export type DeathSaveOutcome =
+  | "success"
+  | "failure"
+  | "stabilized"
+  | "dead"
+  | "revived";
+
+export function applyDeathSavingThrow(input: {
+  state: MechanicsState;
+  actorKey: string;
+  roll: number;
+  updatedAt?: string | undefined;
+}): { state: MechanicsState; outcome: DeathSaveOutcome } {
+  const actor = input.state.actors[input.actorKey];
+
+  if (!isDyingPlayerActor(actor)) {
+    return { state: input.state, outcome: isDeadActor(actor) ? "dead" : "success" };
+  }
+
+  if (input.roll === 20) {
+    return {
+      outcome: "revived",
+      state: {
+        ...input.state,
+        updatedAt: input.updatedAt,
+        actors: {
+          ...input.state.actors,
+          [input.actorKey]: {
+            ...withoutDeathSaves(actor),
+            currentHp: 1,
+            conditions: withoutConditions(actor.conditions, [
+              "unconscious",
+              "stable",
+              "dying",
+              "dead"
+            ])
+          }
+        }
+      }
+    };
+  }
+
+  const current = actor.deathSaves ?? { successes: 0, failures: 0 };
+  const nextDeathSaves =
+    input.roll === 1
+      ? { ...current, failures: Math.min(3, current.failures + 2) }
+      : input.roll < 10
+        ? { ...current, failures: Math.min(3, current.failures + 1) }
+        : { ...current, successes: Math.min(3, current.successes + 1) };
+
+  const died = nextDeathSaves.failures >= 3;
+  const stabilized = !died && nextDeathSaves.successes >= 3;
+  const actorBase = died || stabilized ? withoutDeathSaves(actor) : actor;
+  const nextActor: MechanicsActorState = {
+    ...actorBase,
+    currentHp: 0,
+    ...(died || stabilized ? {} : { deathSaves: nextDeathSaves }),
+    conditions: died
+      ? withCondition(
+          withoutConditions(actor.conditions, ["unconscious", "stable", "dying"]),
+          "dead"
+        )
+      : stabilized
+        ? withCondition(
+            withoutConditions(actor.conditions, ["dying", "dead"]),
+            "stable"
+          )
+        : withCondition(
+            withoutConditions(actor.conditions, ["stable", "dead"]),
+            "unconscious"
+          )
+  };
+
+  return {
+    outcome: died
+      ? "dead"
+      : stabilized
+        ? "stabilized"
+        : input.roll < 10
+          ? "failure"
+          : "success",
+    state: {
+      ...input.state,
+      updatedAt: input.updatedAt,
+      actors: {
+        ...input.state.actors,
+        [input.actorKey]: nextActor
+      }
+    }
+  };
+}
+
+export function reviveDeadPlayerActor(input: {
+  state: MechanicsState;
+  actorKey: string;
+  updatedAt?: string | undefined;
+}) {
+  const actor = input.state.actors[input.actorKey];
+
+  if (!actor || !isDeadActor(actor)) {
+    return input.state;
+  }
+
+  return {
+    ...input.state,
+    updatedAt: input.updatedAt,
+    combat: defaultCombatState,
+    actors: {
+      ...input.state.actors,
+      [input.actorKey]: {
+        ...withoutDeathSaves(actor),
+        currentHp: actor.maxHp ?? actor.currentHp ?? 1,
+        conditions: withoutConditions(actor.conditions, [
+          "dead",
+          "unconscious",
+          "stable",
+          "dying"
+        ])
+      }
+    }
+  };
+}
+
 function normalizeText(value: string) {
   return value
     .trim()
@@ -650,6 +882,10 @@ export function assertMechanicsActionAllowed(input: {
 
   if (!actor) {
     return;
+  }
+
+  if (isDeadActor(actor)) {
+    throw new Error("That character is dead.");
   }
 
   if (input.state.combat.active && input.state.combat.turnOwner) {

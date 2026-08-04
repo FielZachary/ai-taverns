@@ -10,7 +10,9 @@ import {
 } from "react";
 import {
   Copy,
+  HeartPulse,
   Link,
+  Plus,
   Play,
   Send,
   X
@@ -432,6 +434,7 @@ export function GameShell({
   const [inputTargets, setInputTargets] = useState<string[]>([]);
   const [inputPolicy, setInputPolicy] = useState<InputPolicy>("all_players");
   const [roomCombat, setRoomCombat] = useState<RoomSnapshot["combat"]>();
+  const [roomDeath, setRoomDeath] = useState<RoomSnapshot["death"]>();
   const [campaignInvites, setCampaignInvites] = useState<CampaignInvite[]>([]);
   const [inviteStatus, setInviteStatus] = useState("");
   const [inviteError, setInviteError] = useState("");
@@ -520,6 +523,7 @@ export function GameShell({
     [currentRoomPlayer, isSinglePlayer, pendingRollRequests, playerProfile]
   );
   const currentPendingRollRequest = currentPendingRollRequests[0] ?? null;
+  const isCharacterDead = roomDeath?.state === "dead";
   const hasPendingDiceInput =
     nextInputNeeded === "dice_results" || pendingRollRequests.length > 0;
   const currentRequiredRollDice = useMemo(
@@ -662,6 +666,8 @@ export function GameShell({
       ? currentCombatTurnOwnerName
         ? `Waiting on ${currentCombatTurnOwnerName}'s combat turn`
         : "Waiting on another combat turn"
+    : isCharacterDead
+      ? "Choose what happens after death."
     : !isSinglePlayer && !hasAdventureBegun
       ? "You can only start once the adventure has begun"
     : undefined;
@@ -696,6 +702,7 @@ export function GameShell({
       setInputTargets(room.inputTargets ?? []);
       setInputPolicy(room.inputPolicy ?? "all_players");
       setRoomCombat(room.combat);
+      setRoomDeath(room.death);
 
       const currentPlayer = room.players.find(
         (roomPlayer) => roomPlayer.id === playerId
@@ -806,6 +813,7 @@ export function GameShell({
         setInputTargets(room.inputTargets ?? []);
         setInputPolicy(room.inputPolicy ?? "all_players");
         setRoomCombat(room.combat);
+        setRoomDeath(room.death);
       } else {
         applyRoomSnapshot(room);
       }
@@ -1089,6 +1097,7 @@ export function GameShell({
       setInputTargets([]);
       setInputPolicy("all_players");
       setRoomCombat(undefined);
+      setRoomDeath(undefined);
       return;
     }
 
@@ -1296,6 +1305,76 @@ export function GameShell({
     window.location.assign(routePath === "/debug" ? "/debug" : "/new-adventure");
   }
 
+  function handleCreateNewCampaignAfterDeath() {
+    window.location.assign("/new-adventure");
+  }
+
+  async function handleReviveCharacter() {
+    if (!activeCampaign || isSending || isRoomResolving || isRestartingCampaign) {
+      return;
+    }
+
+    setIsSending(true);
+    setInputValidationMessage("");
+    setTableAlert("");
+
+    try {
+      const response = await fetchWithTimeout(
+        "/api/room/revive",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            roomId: activeCampaign.id,
+            sessionId: activeCampaign.sessionId
+          })
+        },
+        turnSubmissionRequestTimeoutMs
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          await getApiErrorMessage(response, "Your character could not be revived.")
+        );
+      }
+
+      const room = (await response.json()) as RoomSnapshot;
+
+      applyRoomSnapshot(room);
+      setMessages(room.messages.length > 0 ? room.messages : openingMessages);
+      setTableAlert("Your character has returned.");
+      setAvailableCampaigns((currentCampaigns) =>
+        updateCampaignPreview(
+          currentCampaigns,
+          activeCampaign.id,
+          room.messages.at(-1)?.content ?? "Your character has returned."
+        )
+      );
+      trackAnalytics({
+        name: "Character Revived",
+        properties: analyticsBaseProperties()
+      });
+    } catch (error) {
+      setMessages((currentMessages) => [
+        ...currentMessages,
+        {
+          id: createClientId(),
+          role: "system",
+          content:
+            error instanceof Error
+              ? error.message
+              : "Your character could not be revived.",
+          createdAt: new Date().toISOString()
+        }
+      ]);
+    } finally {
+      setIsSending(false);
+      inputRef.current?.focus();
+    }
+  }
+
   async function handleSelectChat(campaignId: string) {
     const campaign = availableCampaigns.find(
       (availableCampaign) => availableCampaign.id === campaignId
@@ -1326,6 +1405,7 @@ export function GameShell({
     setInputTargets([]);
     setInputPolicy("all_players");
     setRoomCombat(undefined);
+    setRoomDeath(undefined);
     setInputValidationMessage("");
     setTableAlert("");
     setIsInputSubmitted(false);
@@ -1638,6 +1718,7 @@ export function GameShell({
       setInputTargets([]);
       setInputPolicy("all_players");
       setRoomCombat(undefined);
+      setRoomDeath(undefined);
       setIsInputSubmitted(false);
       pendingSubmissionRef.current = null;
       setOptimisticSubmittedPlayerId(null);
@@ -2525,6 +2606,40 @@ export function GameShell({
                   <Play size={17} />
                   Begin Adventure
                 </button>
+              </section>
+            ) : null}
+
+            {isCharacterDead ? (
+              <section className="death-choice-panel" aria-label="Character death">
+                <div>
+                  <strong>
+                    {roomDeath?.characterName
+                      ? `${roomDeath.characterName} has died.`
+                      : "Your character has died."}
+                  </strong>
+                  <p>
+                    Death is real here. Continue with a new tale, or let
+                    Eldermere return this soul to a changed world.
+                  </p>
+                </div>
+                <div className="death-choice-actions">
+                  <button
+                    type="button"
+                    disabled={isSending || isRoomResolving}
+                    onClick={() => void handleReviveCharacter()}
+                  >
+                    <HeartPulse size={17} />
+                    Revive your character
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-action"
+                    onClick={handleCreateNewCampaignAfterDeath}
+                  >
+                    <Plus size={17} />
+                    Create new Campaign
+                  </button>
+                </div>
               </section>
             ) : null}
 
