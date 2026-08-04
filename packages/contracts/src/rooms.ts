@@ -8,6 +8,35 @@ export const DiceRollResultSchema = z.object({
   total: z.number().int()
 });
 
+export const DiceRollCombatContextSchema = z
+  .object({
+    actionId: z.string().min(1).optional(),
+    actorKey: z.string().min(1).optional(),
+    targetActorKey: z.string().min(1).optional(),
+    kind: z
+      .enum([
+        "attack_roll",
+        "damage_roll",
+        "saving_throw",
+        "ability_check",
+        "initiative"
+      ])
+      .optional(),
+    attackName: z.string().min(1).optional(),
+    sequence: z.number().int().positive().optional(),
+    sourceAttackRollId: z.string().min(1).optional(),
+    damageType: z.string().min(1).optional(),
+    onHitDamage: z
+      .object({
+        dice: z.string().min(1).optional(),
+        modifier: z.number().int().optional(),
+        damageType: z.string().min(1).optional()
+      })
+      .passthrough()
+      .optional()
+  })
+  .passthrough();
+
 export const DiceRollRequestSchema = z
   .object({
     id: z.string().min(1).optional(),
@@ -21,7 +50,8 @@ export const DiceRollRequestSchema = z
     dc: z.number().int().positive().optional(),
     threshold: z.number().int().positive().optional(),
     advantageState: z.enum(["normal", "advantage", "disadvantage"]).optional(),
-    advantage_state: z.enum(["normal", "advantage", "disadvantage"]).optional()
+    advantage_state: z.enum(["normal", "advantage", "disadvantage"]).optional(),
+    combat: DiceRollCombatContextSchema.optional()
   })
   .passthrough();
 
@@ -206,6 +236,7 @@ export const RoomSocketEventSchema = z.union([
 ]);
 
 export type DiceRollRequest = z.infer<typeof DiceRollRequestSchema>;
+export type DiceRollCombatContext = z.infer<typeof DiceRollCombatContextSchema>;
 export type DiceRollResult = z.infer<typeof DiceRollResultSchema>;
 export type DiceRollSubmission = z.infer<typeof DiceRollSubmissionSchema>;
 export type RoomSnapshot = z.infer<typeof RoomSnapshotSchema>;

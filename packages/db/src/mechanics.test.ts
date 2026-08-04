@@ -157,6 +157,8 @@ test("mechanics state preserves persisted NPC armor class", () => {
               currentHp: 9,
               maxHp: 9,
               armorClass: 13,
+              allegiance: "hostile",
+              isPlayerControlled: false,
               conditions: []
             }
           }
@@ -167,4 +169,6 @@ test("mechanics state preserves persisted NPC armor class", () => {
   );
 
   assert.equal(state.actors["npc:acolyte-1"]?.armorClass, 13);
+  assert.equal(state.actors["npc:acolyte-1"]?.allegiance, "hostile");
+  assert.equal(state.actors["npc:acolyte-1"]?.isPlayerControlled, false);
 });

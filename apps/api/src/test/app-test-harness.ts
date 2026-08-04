@@ -3308,6 +3308,8 @@ before(async () => {
                   currentHp: 31,
                   maxHp: 45,
                   armorClass: 14,
+                  allegiance: "hostile",
+                  isPlayerControlled: false,
                   conditions: []
                 },
                 "npc:drowned-choir-raider-1": {
@@ -3315,6 +3317,8 @@ before(async () => {
                   currentHp: 0,
                   maxHp: 16,
                   armorClass: 13,
+                  allegiance: "hostile",
+                  isPlayerControlled: false,
                   conditions: ["down"]
                 },
                 "npc:drowned-choir-raider-2": {
@@ -3322,6 +3326,8 @@ before(async () => {
                   currentHp: 0,
                   maxHp: 16,
                   armorClass: 13,
+                  allegiance: "hostile",
+                  isPlayerControlled: false,
                   conditions: ["down"]
                 }
               }
@@ -3341,6 +3347,43 @@ before(async () => {
                   role: "user",
                   content: input.message
                 }
+              ],
+              rawResponse: content,
+              model: "test-model",
+              temperature: 0.8,
+              providerTimings: []
+            }
+          };
+        }
+
+        if (
+          input.message.includes("I rolled 1d4 + 2") &&
+          input.message.includes("Acolyte Damage")
+        ) {
+          const content = JSON.stringify({
+            public_narration:
+              "Your fist lands hard. Acolyte Damage: 1d4 + 2 = 5 bludgeoning damage.",
+            roll_requests: [],
+            next_input_needed: "player_actions",
+            input_targets: ["player:owner"],
+            input_policy: "only_targeted_players",
+            mechanics_state_update: {
+              combat: {
+                active: true,
+                round: 1,
+                turnOwner: "player:owner",
+                initiativeOrder: ["player:owner", "npc:acolyte-1"]
+              }
+            },
+            combat_events: []
+          });
+
+          return {
+            id: "provider-acolyte-damage-missing-hp",
+            content,
+            debug: {
+              requestMessages: [
+                { role: "user", content: input.message }
               ],
               rawResponse: content,
               model: "test-model",
@@ -3379,7 +3422,14 @@ before(async () => {
                     label: "Fireball damage",
                     advantage_state: "normal",
                     reason:
-                      "Resolve the surprise Fireball damage before initiative"
+                      "Resolve the surprise Fireball damage before initiative",
+                    combat: {
+                      actionId: "seren-surprise-fireball",
+                      actorKey: playerActorKey ?? "player:owner",
+                      targetActorKey: "npc:mara",
+                      kind: "damage_roll",
+                      damageType: "fire"
+                    }
                   }
                 : {
                     player: "Owner",
@@ -3411,6 +3461,8 @@ before(async () => {
                   currentHp: 45,
                   maxHp: 45,
                   armorClass: 14,
+                  allegiance: "hostile",
+                  isPlayerControlled: false,
                   conditions: []
                 },
                 "npc:drowned-choir-raider-1": {
@@ -3418,6 +3470,8 @@ before(async () => {
                   currentHp: 16,
                   maxHp: 16,
                   armorClass: 13,
+                  allegiance: "hostile",
+                  isPlayerControlled: false,
                   conditions: []
                 },
                 "npc:drowned-choir-raider-2": {
@@ -3425,6 +3479,8 @@ before(async () => {
                   currentHp: 16,
                   maxHp: 16,
                   armorClass: 13,
+                  allegiance: "hostile",
+                  isPlayerControlled: false,
                   conditions: []
                 }
               }

@@ -128,6 +128,26 @@ export type DiceRollRequest = {
   reason?: string;
   targetDc?: number;
   advantageState?: "normal" | "advantage" | "disadvantage";
+  combat?: {
+    actionId?: string;
+    actorKey?: string;
+    targetActorKey?: string;
+    kind?:
+      | "attack_roll"
+      | "damage_roll"
+      | "saving_throw"
+      | "ability_check"
+      | "initiative";
+    attackName?: string;
+    sequence?: number;
+    sourceAttackRollId?: string;
+    damageType?: string;
+    onHitDamage?: {
+      dice?: string;
+      modifier?: number;
+      damageType?: string;
+    };
+  };
 };
 
 export type InputPolicy = "all_players" | "only_targeted_players";

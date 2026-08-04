@@ -133,6 +133,21 @@ export type DiceRollRequest = {
   reason?: string;
   targetDc?: number;
   advantageState?: string;
+  combat?: {
+    actionId?: string;
+    actorKey?: string;
+    targetActorKey?: string;
+    kind?: string;
+    attackName?: string;
+    sequence?: number;
+    sourceAttackRollId?: string;
+    damageType?: string;
+    onHitDamage?: {
+      dice?: string;
+      modifier?: number;
+      damageType?: string;
+    };
+  };
 };
 
 export type InputPolicy = "all_players" | "only_targeted_players";

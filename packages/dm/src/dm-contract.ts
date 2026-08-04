@@ -98,6 +98,77 @@ function numberValue(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
+function positiveIntegerValue(value: unknown) {
+  return typeof value === "number" && Number.isInteger(value) && value > 0
+    ? value
+    : undefined;
+}
+
+type CombatRollKind = NonNullable<NonNullable<DiceRollRequest["combat"]>["kind"]>;
+
+function combatRollKind(value: string | undefined): CombatRollKind | undefined {
+  return value === "attack_roll" ||
+    value === "damage_roll" ||
+    value === "saving_throw" ||
+    value === "ability_check" ||
+    value === "initiative"
+    ? value
+    : undefined;
+}
+
+function normalizeCombatRollDamage(value: Record<string, unknown>) {
+  const normalized: NonNullable<
+    NonNullable<DiceRollRequest["combat"]>["onHitDamage"]
+  > = {};
+  const dice = stringValue(value.dice);
+  const modifier = numberValue(value.modifier);
+  const damageType = stringValue(value.damageType);
+
+  if (dice) normalized.dice = dice;
+  if (modifier !== undefined) normalized.modifier = modifier;
+  if (damageType) normalized.damageType = damageType;
+
+  return normalized;
+}
+
+function normalizeCombatRollContext(
+  value: unknown
+): NonNullable<DiceRollRequest["combat"]> | undefined {
+  const context = asObject(value);
+
+  if (!context) {
+    return undefined;
+  }
+
+  const onHitDamage = asObject(context.onHitDamage);
+  const normalizedOnHitDamage = onHitDamage
+    ? normalizeCombatRollDamage(onHitDamage)
+    : undefined;
+  const normalized: NonNullable<DiceRollRequest["combat"]> = {};
+  const kind = combatRollKind(stringValue(context.kind));
+  const actionId = stringValue(context.actionId);
+  const actorKey = stringValue(context.actorKey);
+  const targetActorKey = stringValue(context.targetActorKey);
+  const attackName = stringValue(context.attackName);
+  const sequence = positiveIntegerValue(context.sequence);
+  const sourceAttackRollId = stringValue(context.sourceAttackRollId);
+  const damageType = stringValue(context.damageType);
+
+  if (actionId) normalized.actionId = actionId;
+  if (actorKey) normalized.actorKey = actorKey;
+  if (targetActorKey) normalized.targetActorKey = targetActorKey;
+  if (kind) normalized.kind = kind;
+  if (attackName) normalized.attackName = attackName;
+  if (sequence !== undefined) normalized.sequence = sequence;
+  if (sourceAttackRollId) normalized.sourceAttackRollId = sourceAttackRollId;
+  if (damageType) normalized.damageType = damageType;
+  if (normalizedOnHitDamage && Object.keys(normalizedOnHitDamage).length > 0) {
+    normalized.onHitDamage = normalizedOnHitDamage;
+  }
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
 function stringArray(value: unknown) {
   return Array.isArray(value)
     ? value
@@ -551,6 +622,7 @@ export function normalizeRollRequest(
     numberValue(request.dc) ??
     numberValue(request.threshold);
   const reason = stringValue(request.reason);
+  const combat = normalizeCombatRollContext(request.combat);
 
   return {
     id,
@@ -560,7 +632,8 @@ export function normalizeRollRequest(
     ...(modifier === undefined ? {} : { modifier }),
     ...(reason ? { reason } : {}),
     ...(targetDc === undefined ? {} : { targetDc }),
-    ...(advantageState ? { advantageState } : {})
+    ...(advantageState ? { advantageState } : {}),
+    ...(combat ? { combat } : {})
   };
 }
 

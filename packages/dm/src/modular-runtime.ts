@@ -62,6 +62,8 @@ export type CombatActorState = {
   currentHp?: number;
   maxHp?: number;
   armorClass?: number;
+  allegiance?: "player" | "ally" | "hostile" | "neutral";
+  isPlayerControlled?: boolean;
   resources?: Record<string, unknown>;
   conditions?: string[];
 };
@@ -264,6 +266,28 @@ export function jobPrompt(
   mode: DmPromptMode = "multiplayer",
   options: { routerReason?: string | undefined } = {}
 ) {
+  const completeOutputExample = (example: Record<string, unknown>) => {
+    const {
+      public_narration,
+      narration_highlights,
+      combat_events,
+      proposed_context_updates,
+      ...rest
+    } = example;
+
+    return {
+      public_narration,
+      narration_highlights: Array.isArray(narration_highlights)
+        ? narration_highlights
+        : [],
+      ...rest,
+      combat_events: Array.isArray(combat_events) ? combat_events : [],
+      proposed_context_updates: Array.isArray(proposed_context_updates)
+        ? proposed_context_updates
+        : []
+    };
+  };
+
   const narrativeQualityBar = [
     "Prefer concrete nouns and active details over abstract mood labels.",
     "Anchor every scene in physical space: near/far, entrances/exits, landmarks, crowds, obstacles, weather, light, or sound.",
@@ -301,7 +325,7 @@ export function jobPrompt(
       'Player input: "I look around the square before deciding where to go."',
       "Good response:",
       JSON.stringify(
-        {
+        completeOutputExample({
           public_narration: [
             "The square is already awake, though the sun has barely cleared the rooftops. A fishmonger rinses silver scales from his cutting board into the gutter, a pair of apprentices argue over a tipped handcart, and somewhere behind the bakery shutters a woman laughs so loudly that several heads turn at once. Rain from the night before still clings to the cobbles, turning every wagon rut into a thin mirror of gray morning light.",
             "At the center of the square, an old fountain coughs more than it flows. Someone has tied a strip of red cloth around the statue above it: not decoration, you suspect, but a warning or a plea. Most people give it a glance and then look away. The exception is a narrow-faced clerk in a green coat, who keeps circling the fountain with a ledger tucked under one arm, stopping every few steps to compare the cloth against something written on the page.",
@@ -312,10 +336,10 @@ export function jobPrompt(
           roll_requests: [],
           next_input_needed: "player_actions",
           input_targets: [],
-          input_policy: "acting_player",
+          input_policy: "all_players",
           mechanics_state_update: {},
           inventory_state_update: { patches: [] }
-        },
+        }),
         null,
         2
       )
@@ -325,7 +349,7 @@ export function jobPrompt(
       'Player input: "I tell the gate guard I have business with trade partners in the city, and while she checks her papers I try to lift something from her belt pouch."',
       "Good response:",
       JSON.stringify(
-        {
+        completeOutputExample({
           public_narration: [
             "The guard does not move aside. Her quill pauses halfway down the entry line, and her eyes come back to you with the flat patience of someone who has heard a hundred versions of that answer before.",
             '"Trade partners," she repeats. "Name of the house, name of the factor, and the street they keep offices on." The guard tilts the clipboard just enough that the rain-specked page is hidden from view. Behind her, one of the other sentries shifts his spear from shoulder to hand, not alarmed yet, but listening.',
@@ -343,10 +367,10 @@ export function jobPrompt(
           ],
           next_input_needed: "dice_results",
           input_targets: [],
-          input_policy: "acting_player",
+          input_policy: "all_players",
           mechanics_state_update: {},
           inventory_state_update: { patches: [] }
-        },
+        }),
         null,
         2
       )
@@ -356,7 +380,7 @@ export function jobPrompt(
       'Player input: "I rolled a 5 on Sleight of Hand."',
       "Good response:",
       JSON.stringify(
-        {
+        completeOutputExample({
           public_narration: [
             "Your fingers brush the pouch flap, but the leather sticks for the smallest, worst possible moment. The guard feels the tug before you can withdraw.",
             'Her hand snaps down over your wrist. The clipboard drops against her thigh with a wet slap, and the bored look vanishes from her face. "That," she says, loud enough for the nearest sentry to turn, "was a very poor answer."',
@@ -368,10 +392,10 @@ export function jobPrompt(
           roll_requests: [],
           next_input_needed: "player_actions",
           input_targets: [],
-          input_policy: "acting_player",
+          input_policy: "all_players",
           mechanics_state_update: {},
           inventory_state_update: { patches: [] }
-        },
+        }),
         null,
         2
       )
@@ -399,7 +423,7 @@ export function jobPrompt(
       "Context: The player claimed to know a local merchant, but the NPC guard knows that merchant died months ago.",
       "Good response:",
       JSON.stringify(
-        {
+        completeOutputExample({
           public_narration: [
             "For a moment, the guard looks certain she has caught you. Her hand stays near the hilt of her short sword, and the two sentries behind her stop pretending not to listen.",
             'Then your face changes. Not into innocence exactly, but into something worse for her certainty: shock, grief, and the horrible blankness of someone hearing bad news too late. "Dead?" you say, and the word comes out thin enough that the guard\'s expression falters. "No. No, that cannot be right. He wrote to me after the spring floods. He said the Tankard was still standing. He said..."',
@@ -413,10 +437,10 @@ export function jobPrompt(
           roll_requests: [],
           next_input_needed: "player_actions",
           input_targets: [],
-          input_policy: "acting_player",
+          input_policy: "all_players",
           mechanics_state_update: {},
           inventory_state_update: { patches: [] }
-        },
+        }),
         null,
         2
       )
@@ -427,7 +451,7 @@ export function jobPrompt(
       "Context: The clerk is frightened of his employer and does not want to be seen helping the party.",
       "Good response:",
       JSON.stringify(
-        {
+        completeOutputExample({
           public_narration: [
             "The clerk's mouth tightens at the word paid. He looks toward the archive door, then toward the frosted office window where his supervisor's silhouette moves behind the glass.",
             '"Lower your voice," he says, and for the first time his polished little mask of procedure cracks. His fingers worry the edge of the receipt book until the paper bends. "You think I wanted my name on those ledgers? You think I had a choice?"',
@@ -440,10 +464,10 @@ export function jobPrompt(
           roll_requests: [],
           next_input_needed: "player_actions",
           input_targets: [],
-          input_policy: "acting_player",
+          input_policy: "all_players",
           mechanics_state_update: {},
           inventory_state_update: { patches: [] }
-        },
+        }),
         null,
         2
       )
@@ -454,7 +478,7 @@ export function jobPrompt(
       "Context: The tavern owner is scared, but the room is full of locals who know him and dislike threats from outsiders.",
       "Good response:",
       JSON.stringify(
-        {
+        completeOutputExample({
           public_narration: [
             "The tavern goes quiet in the wrong way.",
             "The owner does flinch. You see it in the quick pull of his shoulders and the way his hand tightens around the rag behind the bar. But fear is not the same thing as surrender, and you have chosen your threat in a room full of people who know the smell of this place better than they know your name.",
@@ -467,10 +491,10 @@ export function jobPrompt(
           roll_requests: [],
           next_input_needed: "player_actions",
           input_targets: [],
-          input_policy: "acting_player",
+          input_policy: "all_players",
           mechanics_state_update: {},
           inventory_state_update: { patches: [] }
-        },
+        }),
         null,
         2
       )
@@ -487,7 +511,7 @@ export function jobPrompt(
     "Roll NPC and enemy initiative yourself every time, reveal each NPC/enemy initiative roll and total in public_narration, and encode the resulting order in mechanics_state_update or combat_events.",
     "Never ask players to roll initiative, saving throws, attacks, damage, checks, or any other dice for NPCs or enemies; NPC and enemy dice are DM-side rolls that must still be visible to the players.",
     "When combat begins, include mechanics_state_update.combat with active true, round 1, turnOwner, and provisional initiativeOrder using actor keys from the current scene and character sheets only.",
-    "For every NPC or enemy actor key introduced in initiativeOrder, include a matching mechanics_state_update.actors entry with characterName, currentHp, maxHp, armorClass, and conditions so later HP and turn updates have canonical state to modify.",
+    "For every NPC or enemy actor key introduced in initiativeOrder, include a matching mechanics_state_update.actors entry with characterName, currentHp, maxHp, armorClass, conditions, allegiance, and isPlayerControlled so later HP and turn updates have canonical state to modify.",
     "After all requested player initiative rolls are submitted, initiative is resolved. If the first actor is an NPC, immediately resolve that NPC turn before returning control to players. Saying an NPC moves first is not a handoff; the NPC must act now.",
     "Do not include bystanders, captives, scenery, or passive creatures in initiativeOrder unless they can meaningfully act in the fight.",
     "Turn ownership:",
@@ -495,7 +519,15 @@ export function jobPrompt(
     "If turnOwner is an NPC actor key or NPC name, resolve that NPC turn before resolving submitted player attacks, spells, or combat actions.",
     "Off-turn player combat declarations are intent, not actions already in motion. Do not narrate them as mid-swing, already casting, or resolving before the current initiative actor.",
     "When multiple player submissions arrive, resolve the current turn owner's valid action first and treat other submissions as pending intent.",
-    "Do not end with next_input_needed player_actions while turnOwner is npc:*; resolve NPC turns until control returns to player control.",
+    "Non-player-controlled catch-up loop:",
+    "When a player-controlled turn is fully resolved, no roll_requests are pending, and combat is still active, advance through initiativeOrder and resolve every consecutive non-player-controlled actor in the same response until control reaches a living player-controlled actor or combat ends.",
+    "If a non-player-controlled turn requires a player-facing roll, reaction, or tactical choice before it can finish, pause on that non-player-controlled turn with next_input_needed set to dice_results or player_actions as appropriate, input_targets set to the affected player actor key, and mechanics_state_update.combat.turnOwner still set to the acting non-player-controlled actor.",
+    "Non-player-controlled actors include allies, enemies, summons, and neutral combatants whose turns are not controlled by a player, even when their actor keys are npc:*.",
+    "Do not stop after resolving only one non-player-controlled actor if more non-player-controlled actors act before the next player-controlled turn.",
+    "Do not merely announce future turns such as 'Acolyte 3 is up next' or 'then Acolyte 1 and Acolyte 2 will act'. Resolve those turns now, or pause on the acting non-player-controlled turn only because a player-facing roll, reaction, or tactical choice is required.",
+    "Do not write OOC notes like '(resolving NPC turns now)' as a substitute for actually resolving those turns in public_narration and mechanics_state_update.",
+    "Only return next_input_needed player_actions in active combat after mechanics_state_update.combat.turnOwner is a living player-controlled actor, after combat has ended, or while pausing on a non-player-controlled turn for a required player reaction or tactical choice.",
+    "For each non-player-controlled turn in the catch-up loop, choose movement, action, and tactics; roll NPC-side dice yourself; show visible combat math; apply HP, condition, resource, and combat turn changes in mechanics_state_update; add combat_events when available; then continue to the next initiative actor.",
     "When a player turn begins and that player has not already submitted a concrete action for this turn, do not infer an attack, spell, target, movement, or roll. Return next_input_needed player_actions with roll_requests [], target the turn owner, and ask what they do.",
     "If public_narration says a player is up or asks 'What do you do?', the JSON must stay in player-action mode: resolution_mode resolved_without_dice, next_input_needed player_actions, and roll_requests [].",
     "Never request an attack roll, spell attack roll, damage roll, saving throw, or check for a player merely because initiative has reached that player. First ask for the player's declared action.",
@@ -507,6 +539,7 @@ export function jobPrompt(
     "When requesting dice, set resolution_mode to needs_dice and next_input_needed to dice_results.",
     "When resolution_mode is needs_dice, public_narration must not resolve the rolled outcome.",
     "Name rolls clearly: attack roll, damage roll, saving throw, initiative, concentration check, death save, or relevant skill/tool check.",
+    "For combat attack and damage roll_requests, include combat metadata: {actionId, actorKey, targetActorKey, kind, attackName, sequence, sourceAttackRollId when resolving damage, damageType, and onHitDamage for attack rolls that can hit}. Reuse the same actionId across all rolls for one declared combat action.",
     "input_policy must be all_players or only_targeted_players; never use acting_player.",
     "Use known modifiers, proficiency, advantage, or disadvantage from the character sheet or combat context when available. If unknown, ask for the base roll clearly without inventing bonuses.",
     "In roll_requests, dice must be bare dice notation only, such as 1d20, 3d4, or 8d6. Do not include + or - modifiers in dice; put static bonuses or penalties in modifier. Example: Magic Missile uses dice \"3d4\" and modifier 3, not dice \"3d4+3\".",
@@ -551,7 +584,8 @@ export function jobPrompt(
     "In resolved combat beats, combine description, visible mechanics, and consequence into compact paragraphs when they belong to the same actor, target group, or turn.",
     "Do not put a visible mechanics sentence in its own standalone paragraph during resolved combat; attach it to the description or consequence paragraph for that beat.",
     "A resolved combat turn with multiple actor turns usually needs one paragraph per actor/effect plus a final handoff paragraph, not one paragraph per mechanical line.",
-    "Bold visible mechanics inside public_narration using Markdown, such as **Attack: 14 vs AC 10 - hit. Damage: 5 piercing.** or **Burning Hands damage: 10 fire.**",
+    "Do not bold visible mechanics or use Markdown emphasis inside public_narration. Keep combat math as plain text.",
+    "When one combat math phrase should receive visual emphasis, copy that exact plain-text phrase into narration_highlights with color_role danger instead of adding Markdown.",
     "Put mechanics before flourish when mechanics decide the outcome.",
     "Use vivid physical detail, but do not bury hit/miss, damage, HP, turn owner, or pending rolls inside ornate prose.",
     "End every resolved combat beat with a clear handoff: whose turn or what immediate pressure remains, then 'What do you do?' on its own line when awaiting player action.",
@@ -583,7 +617,7 @@ export function jobPrompt(
       "Context: The bandit captain and two cutthroats are alert, armed, and watching the player approach.",
       "Good response:",
       JSON.stringify(
-        {
+        completeOutputExample({
           public_narration: [
             "Your sword clears the scabbard with a bright scrape, and the bandit captain's lazy grin disappears. She was waiting for this. Her boots shift in the mud, blade coming up as the two cutthroats beside her spread out to either side of the road.",
             "You have the will to strike, but they are not surprised. The fight begins before anyone's steel lands.",
@@ -620,6 +654,8 @@ export function jobPrompt(
                 currentHp: 32,
                 maxHp: 32,
                 armorClass: 15,
+                allegiance: "hostile",
+                isPlayerControlled: false,
                 conditions: []
               },
               "npc:cutthroat-1": {
@@ -627,6 +663,8 @@ export function jobPrompt(
                 currentHp: 11,
                 maxHp: 11,
                 armorClass: 12,
+                allegiance: "hostile",
+                isPlayerControlled: false,
                 conditions: []
               },
               "npc:cutthroat-2": {
@@ -634,12 +672,14 @@ export function jobPrompt(
                 currentHp: 11,
                 maxHp: 11,
                 armorClass: 12,
+                allegiance: "hostile",
+                isPlayerControlled: false,
                 conditions: []
               }
             }
           },
           inventory_state_update: { patches: [] }
-        },
+        }),
         null,
         2
       )
@@ -651,13 +691,19 @@ export function jobPrompt(
       "Bad response to avoid: listing the initiative order, saying the wardens move first, then returning next_input_needed player_actions with turnOwner still set to npc:warden-lift-guard-1.",
       "Good response:",
       JSON.stringify(
-        {
+        completeOutputExample({
           public_narration: [
-            "The first lift warden moves before Komer can bring the greataxe up. **Warden lift-guard 1 attack roll: 18 vs Komer's AC 15 - hit. Damage roll: 1d6 + 2 = 5 piercing damage.** The spearpoint snaps forward under Komer's guard and punches into his shoulder. Komer drops from 16 HP to 11 HP.",
-            "The second warden follows in the opening. **Warden lift-guard 2 attack roll: 10 vs Komer's AC 15 - miss.** Komer twists aside, and the second spear skids off the haft of his greataxe with a bright scrape.",
+            "The first lift warden moves before Komer can bring the greataxe up. Warden lift-guard 1 attack roll: 18 vs Komer's AC 15 - hit. Damage roll: 1d6 + 2 = 5 piercing damage. The spearpoint snaps forward under Komer's guard and punches into his shoulder. Komer drops from 16 HP to 11 HP.",
+            "The second warden follows in the opening. Warden lift-guard 2 attack roll: 10 vs Komer's AC 15 - miss. Komer twists aside, and the second spear skids off the haft of his greataxe with a bright scrape.",
             "Komer, both wardens are in reach and your greataxe is already in motion.",
             "What do you do?"
           ].join("\n\n"),
+          narration_highlights: [
+            {
+              text: "Warden lift-guard 1 attack roll: 18 vs Komer's AC 15 - hit.",
+              color_role: "danger"
+            }
+          ],
           resolution_mode: "resolved_without_dice",
           roll_requests: [],
           next_input_needed: "player_actions",
@@ -681,7 +727,77 @@ export function jobPrompt(
             }
           },
           inventory_state_update: { patches: [] }
-        },
+        }),
+        null,
+        2
+      )
+    ].join("\n"),
+    [
+      "Example: player turn resolved, all non-player turns catch up before control returns.",
+      "Player input: Oktai submitted Flurry of Blows damage against Acolyte 3.",
+      "Context: Combat is active. Initiative order is player:oktai, npc:manifold, npc:acolyte-3, npc:acolyte-1, npc:acolyte-2. Current turnOwner is player:oktai. Oktai's damage roll fully resolves his turn. Manifold, Acolyte 3, Acolyte 1, and Acolyte 2 all act before Oktai's next turn.",
+      "Bad response to avoid: saying 'Combat continues. It is now Acolyte 3's turn. Then Acolyte 1 and Acolyte 2 will act. (OOC: Resolving NPC turns now.)' while returning next_input_needed player_actions and turnOwner npc:acolyte-3.",
+      "Good response:",
+      JSON.stringify(
+        completeOutputExample({
+          public_narration: [
+            "Your fist hammers Acolyte 3 backward. Flurry of Blows Damage: 1d4 + 2 = 3 bludgeoning. Acolyte 3 drops from 7 HP to 4 HP and sprawls prone beside the silver pool.",
+            "Manifold takes his turn immediately, driving Acolyte 1 away from the pool. Manifold attack roll: 16 vs AC 13 - hit. Damage roll: 1d8 + 3 = 7 slashing damage. Acolyte 1 staggers, robes torn and bloody.",
+            "Acolyte 3 spends half their movement rising, then lashes silver shards at you. Acolyte 3 attack roll: 11 vs AC 12 - miss. The shards hiss past your shoulder and burst against the stone.",
+            "Acolyte 1 answers Manifold with a hooked dagger. Acolyte 1 attack roll: 14 vs Manifold's AC 15 - miss. Manifold turns the blade aside.",
+            "Acolyte 2 chants over the Wellspring, but the unstable silver backlashes. Acolyte 2 Arcana check: 8 vs DC 13 - failure. The pool spits light, leaving Acolyte 2 rattled and exposed.",
+            "The initiative returns to you, Oktai. What do you do?"
+          ].join("\n\n"),
+          narration_highlights: [
+            {
+              text: "Manifold attack roll: 16 vs AC 13 - hit.",
+              color_role: "danger"
+            }
+          ],
+          resolution_mode: "resolved_without_dice",
+          roll_requests: [],
+          next_input_needed: "player_actions",
+          input_targets: ["player:oktai"],
+          input_policy: "only_targeted_players",
+          mechanics_state_update: {
+            actors: {
+              "npc:acolyte-3": {
+                currentHp: 4,
+                conditions: []
+              },
+              "npc:acolyte-1": {
+                currentHp: 4
+              },
+              "npc:acolyte-2": {
+                conditions: ["rattled"]
+              }
+            },
+            combat: {
+              active: true,
+              round: 2,
+              turnOwner: "player:oktai",
+              initiativeOrder: [
+                "player:oktai",
+                "npc:manifold",
+                "npc:acolyte-3",
+                "npc:acolyte-1",
+                "npc:acolyte-2"
+              ]
+            }
+          },
+          combat_events: [
+            {
+              event: "turn_catchup",
+              actors: [
+                "npc:manifold",
+                "npc:acolyte-3",
+                "npc:acolyte-1",
+                "npc:acolyte-2"
+              ]
+            }
+          ],
+          inventory_state_update: { patches: [] }
+        }),
         null,
         2
       )
@@ -693,7 +809,7 @@ export function jobPrompt(
       "Bad response to avoid: only saying Doran moves first, listing the initiative order, or returning next_input_needed player_actions while turnOwner is still npc:doran-ironhand.",
       "Good response:",
       JSON.stringify(
-        {
+        completeOutputExample({
           public_narration: [
             "Doran Ironhand moves before the darts can finish their line.",
             "He snaps his right hand down and twists behind the iron-rimmed table, using it as hard cover while his left hand slams a brass alarm token against the stone.",
@@ -725,7 +841,7 @@ export function jobPrompt(
             }
           },
           inventory_state_update: { patches: [] }
-        },
+        }),
         null,
         2
       )
@@ -736,7 +852,7 @@ export function jobPrompt(
       "Context: The player is hidden. The clustered enemies are unaware and have not entered initiative yet.",
       "Good response:",
       JSON.stringify(
-        {
+        completeOutputExample({
           public_narration: [
             "You hold the spell until the raiders bunch beneath the broken archway, their voices low, their attention fixed on the road below. None of them look up.",
             "The bead of fire leaves your hand like a falling star. For one breath, it is only a spark in the rain-dark air. Then it blossoms among them.",
@@ -756,7 +872,7 @@ export function jobPrompt(
           input_policy: "all_players",
           mechanics_state_update: {},
           inventory_state_update: { patches: [] }
-        },
+        }),
         null,
         2
       )
@@ -768,7 +884,7 @@ export function jobPrompt(
       "Bad response to avoid: requesting Magic Missile damage before POKE chooses which warden or wardens the darts hit.",
       "Good response:",
       JSON.stringify(
-        {
+        completeOutputExample({
           public_narration: [
             "Three silver darts gather at POKE's fingertips, humming with force as the wardens spread across the plaza.",
             "POKE, there are four wardens in range and three darts ready to fly. Choose how to distribute the darts among them before damage is rolled."
@@ -793,7 +909,7 @@ export function jobPrompt(
             }
           },
           inventory_state_update: { patches: [] }
-        },
+        }),
         null,
         2
       )
@@ -805,7 +921,7 @@ export function jobPrompt(
       "Bad response to avoid: rolling Magic Missile damage yourself, narrating 3d4 + 3 = 12 force damage, or reducing Doran's HP before POKE submits the damage roll.",
       "Good response:",
       JSON.stringify(
-        {
+        completeOutputExample({
           public_narration: [
             "Three silver darts gather at POKE's fingertips, thread through the thinning smoke, and lock onto Doran Ironhand.",
             "Magic Missile automatically hits Doran. POKE, roll Magic Missile damage: 3d4 + 3."
@@ -836,7 +952,7 @@ export function jobPrompt(
             }
           },
           inventory_state_update: { patches: [] }
-        },
+        }),
         null,
         2
       )
@@ -848,13 +964,19 @@ export function jobPrompt(
       "Bad response to avoid: saying the spell fails, Hesk resists, Hesk shakes it off, or Hesk is charmed without first showing her Wisdom save total vs POKE's spell save DC.",
       "Good response:",
       JSON.stringify(
-        {
+        completeOutputExample({
           public_narration: [
             "POKE's voice drops into the honeyed cadence of the charm spell, silver motes warming to gold as the magic reaches for Hesk's thoughts.",
-            "**Warden Captain Hesk Wisdom save: 11 vs DC 13 - failure.** Her crossbow lowers by a fraction. The hard line of her jaw loosens, and she looks at POKE with sudden, uneasy familiarity rather than open hostility. The four wardens behind her keep their weapons raised, watching their captain for a signal that does not come.",
+            "Warden Captain Hesk Wisdom save: 11 vs DC 13 - failure. Her crossbow lowers by a fraction. The hard line of her jaw loosens, and she looks at POKE with sudden, uneasy familiarity rather than open hostility. The four wardens behind her keep their weapons raised, watching their captain for a signal that does not come.",
             "POKE, Hesk is charmed by you for now, but her squad has not been charmed and Komer's greataxe is still very visible.",
             "What do you do?"
           ].join("\n\n"),
+          narration_highlights: [
+            {
+              text: "Warden Captain Hesk Wisdom save: 11 vs DC 13 - failure.",
+              color_role: "danger"
+            }
+          ],
           resolution_mode: "resolved_without_dice",
           roll_requests: [],
           next_input_needed: "player_actions",
@@ -880,7 +1002,7 @@ export function jobPrompt(
             }
           },
           inventory_state_update: { patches: [] }
-        },
+        }),
         null,
         2
       )
@@ -891,9 +1013,9 @@ export function jobPrompt(
       "Context: Combat is active. Current turnOwner is npc:cutlass-raider. The player submitted a concrete spell intent before their turn.",
       "Good response:",
       JSON.stringify(
-        {
+        completeOutputExample({
           public_narration: [
-            "The cutlass raider is already moving. His turn resolves first. **Cutlass raider attack roll: 17 vs AC 14 - hit. Damage roll: 1d6 + 2 = 6 slashing damage.** He slips inside your guard and carves a hard line across your ribs before springing back out of reach. You drop from 24 HP to 18 HP.",
+            "The cutlass raider is already moving. His turn resolves first. Cutlass raider attack roll: 17 vs AC 14 - hit. Damage roll: 1d6 + 2 = 6 slashing damage. He slips inside your guard and carves a hard line across your ribs before springing back out of reach. You drop from 24 HP to 18 HP.",
             "The raider's momentum carries him past you, and the opening is finally yours. Your declared Scorching Ray intent is still waiting for your turn, but no attack roll is resolved until you confirm the action now that the board has changed.",
             "What do you do?"
           ].join("\n\n"),
@@ -920,7 +1042,7 @@ export function jobPrompt(
             }
           },
           inventory_state_update: { patches: [] }
-        },
+        }),
         null,
         2
       )
@@ -932,9 +1054,9 @@ export function jobPrompt(
       "Bad response to avoid: saying the wounded warden snarls, braces, waits, watches, hesitates, or simply stays dangerous without taking an action.",
       "Good response:",
       JSON.stringify(
-        {
+        completeOutputExample({
           public_narration: [
-            "The wounded warden uses Komer's hesitation immediately. **Warden lift-guard 1 attack roll: 12 vs Komer's AC 18 - miss.** His spearpoint snaps for Komer's chest, but it skids off Komer's chain mail with a bright scrape. The failed thrust leaves him overextended.",
+            "The wounded warden uses Komer's hesitation immediately. Warden lift-guard 1 attack roll: 12 vs Komer's AC 18 - miss. His spearpoint snaps for Komer's chest, but it skids off Komer's chain mail with a bright scrape. The failed thrust leaves him overextended.",
             "POKE, the warden is wounded and exposed while Komer holds the line.",
             "What do you do?"
           ].join("\n\n"),
@@ -956,7 +1078,7 @@ export function jobPrompt(
             }
           },
           inventory_state_update: { patches: [] }
-        },
+        }),
         null,
         2
       )
@@ -968,9 +1090,9 @@ export function jobPrompt(
       "Bad response to avoid: requesting Tart's attack roll, spell attack roll, damage roll, saving throw, or check before Tart declares an action.",
       "Good response:",
       JSON.stringify(
-        {
+        completeOutputExample({
           public_narration: [
-            "The green-eyed figure moves first. **Green-eye figure attack roll: 16 vs Por's AC 16 - hit. Damage roll: 1d6 + 3 = 7 slashing damage.** The claw rakes across Por's forearm, tearing through his sleeve and leaving three shallow but bleeding gashes. Por drops from 34 HP to 27 HP and steps back with his sword raised.",
+            "The green-eyed figure moves first. Green-eye figure attack roll: 16 vs Por's AC 16 - hit. Damage roll: 1d6 + 3 = 7 slashing damage. The claw rakes across Por's forearm, tearing through his sleeve and leaving three shallow but bleeding gashes. Por drops from 34 HP to 27 HP and steps back with his sword raised.",
             "Tart, the creature is within striking distance and Por is hurt.",
             "What do you do?"
           ].join("\n\n"),
@@ -997,7 +1119,7 @@ export function jobPrompt(
             }
           },
           inventory_state_update: { patches: [] }
-        },
+        }),
         null,
         2
       )
@@ -1009,10 +1131,16 @@ export function jobPrompt(
       "Bad response to avoid: inventing greataxe damage like 'Damage roll: 1d12 + 2 = 14 slashing damage,' updating the warden's HP, or narrating defeat before Komer rolls damage.",
       "Good response:",
       JSON.stringify(
-        {
+        completeOutputExample({
           public_narration: [
-            "Komer's greataxe crashes through the warden's guard. **Attack roll: 19 vs AC 16 - hit.** Roll greataxe damage: 1d12 + 2."
+            "Komer's greataxe crashes through the warden's guard. Attack roll: 19 vs AC 16 - hit. Roll greataxe damage: 1d12 + 2."
           ].join("\n\n"),
+          narration_highlights: [
+            {
+              text: "Attack roll: 19 vs AC 16 - hit.",
+              color_role: "danger"
+            }
+          ],
           resolution_mode: "needs_dice",
           roll_requests: [
             {
@@ -1039,7 +1167,7 @@ export function jobPrompt(
             }
           },
           inventory_state_update: { patches: [] }
-        },
+        }),
         null,
         2
       )
@@ -1050,14 +1178,20 @@ export function jobPrompt(
       "Context: Fireball hit a scarred guardswoman at 4 HP, a robed priest at 7 HP, and two prone gate guards at 5 HP each. The caster's spell save DC is 14.",
       "Good response:",
       JSON.stringify(
-        {
+        completeOutputExample({
           public_narration: [
             "The fireball detonates against the portcullis in a white-orange roar, hot enough to make the rain burst into steam before it reaches the stones.",
-            "**Scarred guardswoman Dexterity save: 9 vs DC 14 - failure. Robed priest Dexterity save: 16 vs DC 14 - success. Gate guard Dexterity save: 7 vs DC 14 - failure. Gate guard Dexterity save: 12 vs DC 14 - failure. Damage roll: 8d6 = 33 fire damage.** The priest succeeds and takes half damage: 16 fire damage. The guardswoman and both gate guards fail and take 33 fire damage.",
+            "Scarred guardswoman Dexterity save: 9 vs DC 14 - failure. Robed priest Dexterity save: 16 vs DC 14 - success. Gate guard Dexterity save: 7 vs DC 14 - failure. Gate guard Dexterity save: 12 vs DC 14 - failure. Damage roll: 8d6 = 33 fire damage. The priest succeeds and takes half damage: 16 fire damage. The guardswoman and both gate guards fail and take 33 fire damage.",
             "The scarred guardswoman is thrown backward, her sword spinning away as she drops from 4 HP to 0 HP. The robed priest slams into the iron bars behind him and slides down through the smoke, dropping from 7 HP to 0 HP despite twisting away from the worst of the blast. The two prone gate guards do not rise; both drop from 5 HP to 0 HP.",
             "The roar collapses into the hiss of rain on scorched stone. No enemies remain standing, and the wicket gate hangs open through the smoke.",
             "What do you do?"
           ].join("\n\n"),
+          narration_highlights: [
+            {
+              text: "Damage roll: 8d6 = 33 fire damage.",
+              color_role: "danger"
+            }
+          ],
           resolution_mode: "resolved_without_dice",
           roll_requests: [],
           next_input_needed: "player_actions",
@@ -1086,7 +1220,7 @@ export function jobPrompt(
             }
           },
           inventory_state_update: { patches: [] }
-        },
+        }),
         null,
         2
       )
@@ -1097,9 +1231,9 @@ export function jobPrompt(
       "Context: The skeleton has 7 HP remaining and is the final active enemy.",
       "Good response:",
       JSON.stringify(
-        {
+        completeOutputExample({
           public_narration: [
-            "Your strike lands cleanly. **Attack roll: 19 vs AC 13 - hit. Damage roll: 11 = 11 bludgeoning damage.**",
+            "Your strike lands cleanly. Attack roll: 19 vs AC 13 - hit. Damage roll: 11 = 11 bludgeoning damage.",
             "The mace crashes through the skeleton's raised arm and into its ribcage. Bone splinters across the flagstones, the blue corpse-light in its skull guttering once before going dark. What remains collapses in a dry clatter at your feet.",
             "For a moment, the chamber is all echo and dust. No other enemies move. The fight is over.",
             "What do you do?"
@@ -1123,7 +1257,7 @@ export function jobPrompt(
             }
           },
           inventory_state_update: { patches: [] }
-        },
+        }),
         null,
         2
       )
@@ -1171,8 +1305,9 @@ export function jobPrompt(
       "- Minimum output fields: public_narration, narration_highlights, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update, combat_events, proposed_context_updates.",
       "- narration_highlights must be 0-1 exact phrase copied from public_narration during normal play. Each item must use {text, color_role}, where color_role is npc, place, clue, danger, faction, or object. Use [] when nothing is truly worth highlighting; it is completely okay to highlight nothing.",
       "- Only public_narration is prose-visible to players; narration_highlights is display metadata rendered by the app.",
-      "- Do not use Markdown outside the JSON object; Markdown emphasis is allowed inside public_narration strings when the job guidance asks for it.",
-      "- Do not use Markdown, HTML, CSS, hex colors, or color names inside public_narration for narration_highlights.",
+      "- Do not use Markdown outside the JSON object or Markdown emphasis inside public_narration strings.",
+      "- Use narration_highlights for UI emphasis: copy 0-1 exact plain-text phrase from public_narration with color_role npc, place, clue, danger, faction, or object.",
+      "- Do not use Markdown, HTML, CSS, hex colors, or color names inside public_narration or narration_highlights.",
       "",
       "Visibility Boundary:",
       "- Do not reveal hidden context, DM-only memory, raw context metadata, internal reasoning, proposed patches, or secrets unless the active job reveals them through player-facing play.",
@@ -1328,7 +1463,7 @@ export function jobPrompt(
         "- If an NPC has asked for the same substantive truth, confession, proof, or explanation once, and the player gives a consistent answer again, do not have the NPC ask the same question a third time.",
         "- On the second consistent answer, choose one decisive path: request a social roll, accept a bounded version of the answer, impose a concrete consequence, or change the NPC's demand.",
         "- Use Persuasion when the character is honestly trying to convince an NPC that their account, fear, sincerity, or ignorance is genuine. Use Deception when the account is false or performed to mislead. Use Intimidation when fear or coercion is the leverage.",
-        "- For player-facing social rolls, state the success DC in public_narration before the roll and include the same target_dc in roll_requests. Use wording like: **If you roll 13 or higher, that is enough to convince Manifold that you are telling the truth as you understand it.**",
+        "- For player-facing social rolls, state the success DC in public_narration before the roll and include the same target_dc in roll_requests. Use wording like: If you roll 13 or higher, that is enough to convince Manifold that you are telling the truth as you understand it.",
         "- A social roll must settle the immediate social question. Do not resolve a failed roll by having the NPC merely ask the same question again. Failure should create a new state: confinement, confiscation, escort, alarm, threat, price, lost trust, or a harder bargain. Success should also create a new state: belief, partial trust, a concession, a revealed lead, delayed punishment, or a concrete offer.",
         "",
         "Objects, Money, and Trades:",
