@@ -373,7 +373,15 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
-      /copy that exact plain-text phrase into narration_highlights with color_role danger/i
+      /copy exact plain-text math-bearing phrases into narration_highlights with color_role danger/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Highlight exact public_narration phrases that contain roll totals, AC\/DC numbers, damage amounts, HP numbers, and dice notation/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Combat narration_highlights may use up to 3 exact phrases/i
     );
     assert.match(
       jobPrompt("combat"),
