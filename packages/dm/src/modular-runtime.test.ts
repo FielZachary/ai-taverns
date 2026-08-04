@@ -367,7 +367,14 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("investigation"), /target_dc/i);
     assert.match(jobPrompt("combat"), /strict turn ownership/i);
     assert.match(jobPrompt("combat"), /Group combat narration by action\/result beat/i);
-    assert.match(jobPrompt("combat"), /Bold visible mechanics inside public_narration using Markdown/i);
+    assert.match(
+      jobPrompt("combat"),
+      /Do not bold visible mechanics or use Markdown emphasis inside public_narration/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /copy that exact plain-text phrase into narration_highlights with color_role danger/i
+    );
     assert.match(
       jobPrompt("combat"),
       /Do not put a visible mechanics sentence in its own standalone paragraph/i
@@ -378,8 +385,9 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
-      /\*\*Attack: 14 vs AC 10 - hit\. Damage: 5 piercing\.\*\*/
+      /Attack roll: 19 vs AC 16 - hit/i
     );
+    assert.doesNotMatch(jobPrompt("combat"), /\*\*/);
     assert.match(jobPrompt("combat"), /attack roll: X vs AC Y - hit\/miss/i);
     assert.match(jobPrompt("combat"), /Dexterity save: X vs DC Y - success\/failure/i);
     assert.match(jobPrompt("combat"), /list each target's save result separately/i);
@@ -491,7 +499,11 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
-      /\*\*Warden lift-guard 1 attack roll: 18 vs Komer's AC 15 - hit\. Damage roll: 1d6 \+ 2 = 5 piercing damage\.\*\* The spearpoint/i
+      /Warden lift-guard 1 attack roll: 18 vs Komer's AC 15 - hit\. Damage roll: 1d6 \+ 2 = 5 piercing damage\. The spearpoint/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /"text": "Warden lift-guard 1 attack roll: 18 vs Komer's AC 15 - hit\."/i
     );
     assert.doesNotMatch(
       jobPrompt("combat"),
