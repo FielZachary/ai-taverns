@@ -309,6 +309,34 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("npc_dialogue"),
+      /If an NPC has asked for the same substantive truth, confession, proof, or explanation once/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /do not have the NPC ask the same question a third time/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /On the second consistent answer, choose one decisive path/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /state the success DC in public_narration before the roll and include the same target_dc in roll_requests/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /If you roll 13 or higher, that is enough to convince Manifold/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /A social roll must settle the immediate social question/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /Failure should create a new state: confinement, confiscation, escort, alarm, threat, price, lost trust, or a harder bargain/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
       /False identity, false authority, name-dropping, claimed orders, claimed employment, and impersonation almost always matter/i
     );
     assert.match(
