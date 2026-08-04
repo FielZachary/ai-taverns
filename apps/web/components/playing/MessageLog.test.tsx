@@ -154,6 +154,24 @@ describe("MessageLog", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders italic markdown emphasis inside message paragraphs", () => {
+    renderMessageLog({
+      messages: [
+        gameMessage({
+          id: "dm-italic-message",
+          role: "dm",
+          content:
+            "DC 18 may reveal that the traps react to *intent* or *fear* rather than just weight."
+        })
+      ]
+    });
+
+    expect(screen.getByText("intent").tagName).toBe("EM");
+    expect(screen.getByText("fear").tagName).toBe("EM");
+    expect(screen.queryByText(/\*intent\*/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/\*fear\*/)).not.toBeInTheDocument();
+  });
+
   it("renders narration highlights with color role classes", () => {
     renderMessageLog({
       messages: [

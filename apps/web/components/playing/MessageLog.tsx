@@ -35,13 +35,19 @@ type MessageLogProps = {
 };
 
 function renderInlineMarkdown(content: string) {
-  const segments = content.split(/(\*\*[^*]+?\*\*)/g);
+  const segments = content.split(/(\*\*[^*]+?\*\*|\*[^*]+?\*)/g);
 
   return segments.map((segment, index) => {
     const boldMatch = segment.match(/^\*\*([^*]+?)\*\*$/);
 
     if (boldMatch?.[1]) {
       return <strong key={`${index}-${boldMatch[1].slice(0, 16)}`}>{boldMatch[1]}</strong>;
+    }
+
+    const italicMatch = segment.match(/^\*([^*]+?)\*$/);
+
+    if (italicMatch?.[1]) {
+      return <em key={`${index}-${italicMatch[1].slice(0, 16)}`}>{italicMatch[1]}</em>;
     }
 
     return segment;
