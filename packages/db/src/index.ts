@@ -55,10 +55,16 @@ import type {
 } from "@ai-dnd/contracts";
 import {
   actorKeyForPlayer,
+  applyDeathSavingThrow,
   applyAcceptedCast,
   assertMechanicsActionAllowed,
+  firstDyingPlayerActorKey,
+  isDeadActor,
+  isDyingPlayerActor,
+  isStableActor,
   mechanicsStateWithActor,
   projectMechanicsIntoCharacterSheet,
+  reviveDeadPlayerActor,
   resolveMechanicsState
 } from "./mechanics.js";
 
@@ -1921,6 +1927,31 @@ function stringListField(record: Record<string, unknown>, key: string) {
     : undefined;
 }
 
+function deathSavesField(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const successes = Number(value.successes);
+  const failures = Number(value.failures);
+
+  if (
+    !Number.isInteger(successes) ||
+    !Number.isInteger(failures) ||
+    successes < 0 ||
+    failures < 0
+  ) {
+    return undefined;
+  }
+
+  return {
+    successes: Math.min(3, successes),
+    failures: Math.min(3, failures)
+  };
+}
+
 function allegianceField(record: Record<string, unknown>, key: string) {
   const value = record[key];
   return value === "player" ||
@@ -1987,6 +2018,9 @@ function applyMechanicsStateUpdate(
         : {}),
       ...(stringListField(rawActor, "conditions") !== undefined
         ? { conditions: stringListField(rawActor, "conditions") }
+        : {}),
+      ...(deathSavesField(rawActor, "deathSaves") !== undefined
+        ? { deathSaves: deathSavesField(rawActor, "deathSaves") }
         : {}),
       ...(rawActor.concentration === null || isRecord(rawActor.concentration)
         ? { concentration: rawActor.concentration as MechanicsState["actors"][string]["concentration"] }
@@ -4460,9 +4494,10 @@ function modifierText(modifier: number | undefined) {
 
 function formatRollSubmission(
   request: DiceRollRequest,
-  submittedResult?: DiceRollResult
+  submittedResult?: DiceRollResult,
+  resolvedResult?: DiceRollResult
 ) {
-  const result = validateRollSubmissionResult(request, submittedResult);
+  const result = resolvedResult ?? validateRollSubmissionResult(request, submittedResult);
   const rollText =
     result.rolls.length === 1 ? String(result.rolls[0]) : result.rolls.join(", ");
 
@@ -4473,6 +4508,44 @@ function formatRollSubmission(
   return request.combat
     ? `${base}\nCombat roll context JSON: ${JSON.stringify(request.combat)}`
     : base;
+}
+
+function deathSaveContextFromRequest(request: DiceRollRequest) {
+  const context = request.deathSave ?? request.death_save;
+
+  if (!context || typeof context.actorKey !== "string") {
+    return null;
+  }
+
+  return {
+    actorKey: context.actorKey,
+    attempt:
+      Number.isInteger(context.attempt) && Number(context.attempt) > 0
+        ? Number(context.attempt)
+        : undefined
+  };
+}
+
+function deathSaveRollRequest(input: {
+  actorKey: string;
+  actor: MechanicsState["actors"][string];
+}): DiceRollRequest {
+  const current = input.actor.deathSaves ?? { successes: 0, failures: 0 };
+  const attempt = current.successes + current.failures + 1;
+
+  return {
+    id: `death-save:${input.actorKey}:${attempt}`,
+    player: input.actorKey,
+    dice: "1d20",
+    modifier: 0,
+    label: "Death Saving Throw",
+    reason: "Your character is at 0 HP and must cling to life.",
+    targetDc: 10,
+    deathSave: {
+      actorKey: input.actorKey,
+      attempt
+    }
+  };
 }
 
 function rollSubmissionsFromPayload(
@@ -4520,7 +4593,8 @@ function validatePendingRollSubmissions(
     return {
       content: "",
       remainingRollRequests: pendingRollRequests,
-      clientMessageId: undefined
+      clientMessageId: undefined,
+      resolvedRolls: []
     };
   }
 
@@ -4539,6 +4613,10 @@ function validatePendingRollSubmissions(
     inputControl?.inputPolicy !== "only_targeted_players" &&
     inputControl?.inputTargets.length === 0;
 
+  const resolvedRolls: Array<{
+    request: DiceRollRequest;
+    result: DiceRollResult;
+  }> = [];
   const content = submittedRolls
     .map((submission, index) => {
       const pendingRollRequest = pendingRollRequests[index];
@@ -4559,14 +4637,25 @@ function validatePendingRollSubmissions(
         throw createStatusError(403, "That roll is waiting on another player.");
       }
 
-      return formatRollSubmission(pendingRollRequest, submission.rollResult);
+      const result = validateRollSubmissionResult(
+        pendingRollRequest,
+        submission.rollResult
+      );
+      resolvedRolls.push({ request: pendingRollRequest, result });
+
+      return formatRollSubmission(
+        pendingRollRequest,
+        submission.rollResult,
+        result
+      );
     })
     .join("\n");
 
   return {
     content,
     remainingRollRequests: pendingRollRequests.slice(submittedRolls.length),
-    clientMessageId: submittedRolls[0]?.clientMessageId
+    clientMessageId: submittedRolls[0]?.clientMessageId,
+    resolvedRolls
   };
 }
 
@@ -4593,6 +4682,49 @@ async function setPendingRollRequests(
     `,
     [campaignId, JSON.stringify(requests), JSON.stringify(currentRequest)]
   );
+}
+
+async function applySubmittedDeathSavingThrows(input: {
+  db: Queryable;
+  campaign: CampaignRow;
+  resolvedRolls: Array<{ request: DiceRollRequest; result: DiceRollResult }>;
+}) {
+  const deathSaveRolls = input.resolvedRolls.flatMap((roll) => {
+    const context = deathSaveContextFromRequest(roll.request);
+    const naturalRoll = roll.result.rolls[0];
+
+    return context && Number.isInteger(naturalRoll)
+      ? [{ actorKey: context.actorKey, roll: Number(naturalRoll) }]
+      : [];
+  });
+
+  if (deathSaveRolls.length === 0) {
+    return input.campaign;
+  }
+
+  let state = resolveMechanicsState(input.campaign, []);
+
+  for (const deathSaveRoll of deathSaveRolls) {
+    state = applyDeathSavingThrow({
+      state,
+      actorKey: deathSaveRoll.actorKey,
+      roll: deathSaveRoll.roll,
+      updatedAt: nowIso()
+    }).state;
+  }
+
+  await writeMechanicsStateForLockedCampaign(input.db, input.campaign.id, state);
+
+  const nextCampaign = {
+    ...input.campaign,
+    metadata: {
+      ...eventPayload(input.campaign.metadata),
+      mechanicsState: state
+    }
+  };
+  input.campaign.metadata = nextCampaign.metadata;
+
+  return nextCampaign;
 }
 
 function metadataWithPendingRollRequests(
@@ -4799,6 +4931,43 @@ function roomCombatSnapshot(
     turnOwnerCharacterName:
       turnOwnerPlayer?.character_name || turnOwnerActor?.characterName || null,
     initiativeOrder: mechanicsState.combat.initiativeOrder
+  };
+}
+
+function roomDeathSnapshot(mechanicsState: MechanicsState): RoomSnapshot["death"] {
+  const entry = Object.entries(mechanicsState.actors).find(
+    ([actorKey, actor]) =>
+      actorKey.startsWith("player:") &&
+      (isDeadActor(actor) || isStableActor(actor) || isDyingPlayerActor(actor))
+  );
+
+  if (!entry) {
+    return {
+      state: null,
+      actorKey: null,
+      characterName: null,
+      successes: 0,
+      failures: 0,
+      canRevive: false,
+      canCreateNewCampaign: false
+    };
+  }
+
+  const [actorKey, actor] = entry;
+  const state = isDeadActor(actor)
+    ? "dead"
+    : isStableActor(actor)
+      ? "stable"
+      : "dying";
+
+  return {
+    state,
+    actorKey,
+    characterName: actor.characterName || null,
+    successes: actor.deathSaves?.successes ?? (state === "stable" ? 3 : 0),
+    failures: actor.deathSaves?.failures ?? (state === "dead" ? 3 : 0),
+    canRevive: state === "dead",
+    canCreateNewCampaign: state === "dead"
   };
 }
 
@@ -5054,8 +5223,87 @@ async function buildRoomSnapshot(
     inputTargets: inputTargetsFromCampaign(campaign),
     inputPolicy: inputPolicyFromCampaign(campaign),
     combat: roomCombatSnapshot(mechanicsState, playersResult.rows),
+    death: roomDeathSnapshot(mechanicsState),
     updatedAt: toIso(campaign.updated_at)
   };
+}
+
+function revivalNarration(input: {
+  characterName: string;
+  maxHp: number;
+  worldName: string;
+}) {
+  const name = input.characterName || "you";
+
+  return [
+    "You have died.",
+    "",
+    "For two days, the world goes on without asking your permission.",
+    "",
+    `Your body lies cold beneath the old stone breath of ${input.worldName}. Dust settles in your hair. Blood dries dark at your side. Somewhere above, the roads of Eldermere keep their faint blue-white glow, indifferent and faithful as stars. Those who saw you fall carry the fact of it differently: some with grief, some with anger, some with the sharp private shame of having survived.`,
+    "",
+    "But death in Eldermere is not always a closed door. Sometimes it is an old road under snowfall, a line of Wellglass light running where no road should be. In the dark beyond breath, something vast and quiet turns its attention toward you: not a god speaking in thunder, not a priest's miracle, but the memory of divinity left in the bones of the world. A Hearth-Warden ember. A Dominion wound. A promise that refuses to rot.",
+    "",
+    `The light finds ${name}'s soul where it has drifted loose from the body and threads it back through every broken place. It hurts like birth and battle at once. Your lungs seize. Your heart strikes once, then again, then hard enough to drag the world back into color.`,
+    "",
+    `You wake with a full breath and full strength, restored to ${input.maxHp} HP. Two days have passed. Everyone who mattered had reason to believe you were dead. Now Eldermere has made a liar of death, and the world will have to decide what that means.`,
+    "",
+    "What do you do?"
+  ].join("\n");
+}
+
+async function appendNpcDeathBeliefContext(input: {
+  db: Queryable;
+  campaignId: string;
+  characterName: string;
+}) {
+  const npcs = await input.db.query<{
+    context_key: string;
+    title: string;
+    body_markdown: string;
+    visibility: "player_safe" | "dm_only";
+  }>(
+    `
+      select context_key, title, body_markdown, visibility
+      from campaign_context_chunks
+      where campaign_id = $1
+        and category = 'npc_context'
+        and archived_at is null
+      order by priority desc, updated_at desc
+    `,
+    [input.campaignId]
+  );
+  const stampedAt = new Date().toISOString();
+
+  for (const npc of npcs.rows) {
+    const marker = `revival-death-belief:${input.characterName}`;
+    const section = [
+      "",
+      `## Belief About ${input.characterName}'s Death`,
+      `<!-- ${marker} ${stampedAt} -->`,
+      `${npc.title} believes ${input.characterName} died. For the two days before the impossible revival, carry that belief as emotionally real: grief, guilt, suspicion, relief, anger, denial, duty, or cold calculation should follow from this NPC's established personality and relationship to ${input.characterName}. If ${input.characterName} returns, this NPC should react to the impossible return rather than forgetting the death.`
+    ].join("\n");
+    const body = String(npc.body_markdown ?? "");
+    const nextBody = body.includes(marker)
+      ? body.replace(
+          new RegExp(
+            `## Belief About ${input.characterName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}'s Death[\\s\\S]*?(?=\\n## |$)`
+          ),
+          section.trimStart()
+        )
+      : `${body.trimEnd()}\n${section}`;
+
+    await input.db.query(
+      `
+        update campaign_context_chunks
+        set body_markdown = $3,
+            updated_at = now()
+        where campaign_id = $1
+          and context_key = $2
+      `,
+      [input.campaignId, npc.context_key, nextBody]
+    );
+  }
 }
 
 function previewText(value: string | undefined, maxLength = 1000) {
@@ -5996,10 +6244,23 @@ async function buildModularDmPromptContext(
     history: input.history,
     ...(input.model ? { model: input.model } : {})
   });
-  const router = validateRouterOutput(
+  const parsedRouter = validateRouterOutput(
     routerData.content,
     routerFallbackJob(routerState)
   );
+  const shouldForceDeathSaveJob =
+    /\bDeath Saving Throw\b/i.test(input.currentAction) ||
+    JSON.stringify(routerState).includes("Death Saving Throw");
+  const router =
+    shouldForceDeathSaveJob && parsedRouter.jobNeeded !== "death_saving_throws"
+      ? {
+          ...parsedRouter,
+          jobNeeded: "death_saving_throws" as const,
+          reason: parsedRouter.reason
+            ? `${parsedRouter.reason} Forced to death_saving_throws by mechanics state.`
+            : "Forced to death_saving_throws by mechanics state."
+        }
+      : parsedRouter;
 
   await logDmModelCall(db, {
     campaignId: campaign.id,
@@ -7877,6 +8138,70 @@ function normalizeCombatInputControl(
   };
 }
 
+function normalizeDeathSaveInputControl(
+  state: MechanicsState,
+  input: {
+    mode: CampaignMode;
+    nextInputNeeded: DmNextInputNeeded;
+    rollRequests: DiceRollRequest[];
+    inputTargets: string[];
+    inputPolicy: InputPolicy;
+  }
+): {
+  mechanicsState: MechanicsState;
+  rollRequests: DiceRollRequest[];
+  nextInputNeeded: DmNextInputNeeded;
+  inputTargets: string[];
+  inputPolicy: InputPolicy;
+} {
+  if (input.rollRequests.length > 0 || input.nextInputNeeded === "dice_results") {
+    return {
+      mechanicsState: state,
+      rollRequests: input.rollRequests,
+      nextInputNeeded: input.nextInputNeeded,
+      inputTargets: input.inputTargets,
+      inputPolicy: input.inputPolicy
+    };
+  }
+
+  const dyingActorKey =
+    state.combat.turnOwner && isDyingPlayerActor(state.actors[state.combat.turnOwner])
+      ? state.combat.turnOwner
+      : input.mode === "single_player"
+        ? firstDyingPlayerActorKey(state)
+        : null;
+
+  if (!dyingActorKey) {
+    return {
+      mechanicsState: state,
+      rollRequests: input.rollRequests,
+      nextInputNeeded: input.nextInputNeeded,
+      inputTargets: input.inputTargets,
+      inputPolicy: input.inputPolicy
+    };
+  }
+
+  const actor = state.actors[dyingActorKey];
+
+  if (!actor) {
+    return {
+      mechanicsState: state,
+      rollRequests: input.rollRequests,
+      nextInputNeeded: input.nextInputNeeded,
+      inputTargets: input.inputTargets,
+      inputPolicy: input.inputPolicy
+    };
+  }
+
+  return {
+    mechanicsState: state,
+    rollRequests: [deathSaveRollRequest({ actorKey: dyingActorKey, actor })],
+    nextInputNeeded: "dice_results",
+    inputTargets: [dyingActorKey],
+    inputPolicy: "only_targeted_players"
+  };
+}
+
 function formatSoloTurn(
   campaign: CampaignRow,
   player: PlayerRow,
@@ -9746,7 +10071,6 @@ async function askDungeonMaster(
     }
 
     const rollRequests = normalizeRollRequests(contract.rollRequests);
-    const rollRequestDiagnosticsReport = rollRequestDiagnostics(rollRequests);
     const combatValidation = outputEnvelope
       ? validateCombatEvents(outputEnvelope.combatEvents, {
           actors: mechanicsActorsForValidation(campaign)
@@ -9778,7 +10102,7 @@ async function askDungeonMaster(
       inventoryPlayers
     );
     const mechanicsState = resolveMechanicsState(campaign, []);
-    const normalizedInputControl = normalizeCombatInputControl(
+    const combatInputControl = normalizeCombatInputControl(
       applyMechanicsStateUpdate(mechanicsState, contract.mechanicsStateUpdate, nowIso()),
       {
         mode: campaign.mode,
@@ -9787,6 +10111,21 @@ async function askDungeonMaster(
         inputTargets: contract.inputTargets,
         inputPolicy: contract.inputPolicy
       }
+    );
+    const normalizedInputControl = normalizeDeathSaveInputControl(
+      combatInputControl.mechanicsState,
+      {
+        mode: campaign.mode,
+        nextInputNeeded: contract.nextInputNeeded,
+        rollRequests,
+        inputTargets: combatInputControl.inputTargets,
+        inputPolicy: combatInputControl.inputPolicy
+      }
+    );
+    const normalizedRollRequests = normalizedInputControl.rollRequests;
+    const normalizedNextInputNeeded = normalizedInputControl.nextInputNeeded;
+    const rollRequestDiagnosticsReport = rollRequestDiagnostics(
+      normalizedRollRequests
     );
     const nextMechanicsState = normalizedInputControl.mechanicsState;
     const combatStateDiagnosticsReport = combatStateDiagnostics({
@@ -9866,11 +10205,12 @@ async function askDungeonMaster(
         outputEnvelopeError: outputEnvelopeError
           ? errorSummary(outputEnvelopeError)
           : undefined,
-        rollRequestsCount: rollRequests.length,
-        rollRequestLabels: rollRequests.map((request) => request.label),
+        rollRequestsCount: normalizedRollRequests.length,
+        rollRequestLabels: normalizedRollRequests.map((request) => request.label),
         rollRequestDiagnostics: rollRequestDiagnosticsReport,
         combatStateDiagnostics: combatStateDiagnosticsReport,
-        nextInputNeeded: contract.nextInputNeeded,
+        nextInputNeeded: normalizedNextInputNeeded,
+        originalNextInputNeeded: contract.nextInputNeeded,
         contractParseRecovered: Boolean(contractParseRecovery),
         contractParseRecovery: contractParseRecovery?.report,
         inputPolicy: normalizedInputControl.inputPolicy,
@@ -9890,7 +10230,7 @@ async function askDungeonMaster(
         elapsedMs: Date.now() - startedAt,
         payload: {
           diagnostics: rollRequestDiagnosticsReport,
-          rollRequests
+          rollRequests: normalizedRollRequests
         }
       });
     }
@@ -9920,7 +10260,7 @@ async function askDungeonMaster(
           : undefined,
         contractParseRecovered: Boolean(contractParseRecovery),
         contractParseRecovery: contractParseRecovery?.report,
-        rollRequestsCount: rollRequests.length,
+        rollRequestsCount: normalizedRollRequests.length,
         rollRequestDiagnostics: rollRequestDiagnosticsReport,
         combatStateDiagnostics: combatStateDiagnosticsReport,
         acceptedCombatEventsCount: combatValidation.accepted.length,
@@ -9954,8 +10294,8 @@ async function askDungeonMaster(
       elapsedMs: Date.now() - startedAt,
       payload: {
         reply: textStats(reply),
-        rollRequestsCount: rollRequests.length,
-        nextInputNeeded: contract.nextInputNeeded
+        rollRequestsCount: normalizedRollRequests.length,
+        nextInputNeeded: normalizedNextInputNeeded
       }
     });
 
@@ -9964,11 +10304,14 @@ async function askDungeonMaster(
       content: reply,
       narrationHighlights: contract.narrationHighlights,
       debug: debugWithCombatState,
-      rollRequests,
+      rollRequests: normalizedRollRequests,
       inputTargets: normalizedInputControl.inputTargets,
       inputPolicy: normalizedInputControl.inputPolicy,
-      nextInputNeeded: contract.nextInputNeeded,
-      resolutionMode: contract.resolutionMode,
+      nextInputNeeded: normalizedNextInputNeeded,
+      resolutionMode:
+        normalizedNextInputNeeded === "dice_results"
+          ? "needs_dice"
+          : contract.resolutionMode,
       setting: contract.setting
     };
   } catch (error) {
@@ -10998,6 +11341,11 @@ export async function submitRoomTurnForUser(
     );
 
     if (isRollSubmission) {
+      await applySubmittedDeathSavingThrows({
+        db: client,
+        campaign: campaignRow,
+        resolvedRolls: rollSubmission.resolvedRolls
+      });
       await setPendingRollRequests(
         client,
         campaignRow.id,
@@ -11571,6 +11919,11 @@ export async function submitSoloTurnForUser(
     const submittedContent = submissionResult.rows[0]?.content ?? trimmedContent;
 
     if (isRollSubmission) {
+      await applySubmittedDeathSavingThrows({
+        db: client,
+        campaign,
+        resolvedRolls: rollSubmission.resolvedRolls
+      });
       await setPendingRollRequests(
         client,
         campaign.id,
@@ -11704,6 +12057,146 @@ export async function submitSoloTurnForUser(
   );
 
   return buildRoomSnapshot(db, updatedCampaign ?? soloState.campaign);
+}
+
+export async function reviveSinglePlayerCharacterForUser(
+  db: pg.Pool,
+  input: {
+    campaignId: string;
+    userId: string;
+  }
+): Promise<RoomSnapshot> {
+  const reviveState = await withTransaction(db, async (client) => {
+    const campaign = (
+      await client.query<CampaignRow>(
+        `
+          select *
+          from campaigns
+          where id = $1 and status = 'active'
+          for update
+        `,
+        [input.campaignId]
+      )
+    ).rows[0];
+
+    if (!campaign) {
+      throw createStatusError(404, "Campaign not found.");
+    }
+
+    await assertCampaignAccessForUser(client, campaign, input.userId);
+
+    if (campaign.mode !== "single_player") {
+      throw createStatusError(
+        400,
+        "Character revival is available for singleplayer adventures."
+      );
+    }
+
+    const player = await getActivePlayerForUser(client, campaign.id, input.userId);
+
+    if (!player) {
+      throw createStatusError(400, "A solo player profile is required.");
+    }
+
+    const actorKey = actorKeyForPlayer(player.id);
+    const mechanicsState = resolveMechanicsState(campaign, [player]);
+    const actor = mechanicsState.actors[actorKey];
+
+    if (!actor || !isDeadActor(actor)) {
+      throw createStatusError(409, "That character is not dead.");
+    }
+
+    const characterName = actor.characterName || player.character_name;
+
+    await appendNpcDeathBeliefContext({
+      db: client,
+      campaignId: campaign.id,
+      characterName
+    });
+
+    const revivedMechanicsState = reviveDeadPlayerActor({
+      state: mechanicsState,
+      actorKey,
+      updatedAt: nowIso()
+    });
+    const currentMetadata = eventPayload(campaign.metadata);
+    const elapsedDays =
+      Number.isInteger(currentMetadata.elapsedDays) &&
+      Number(currentMetadata.elapsedDays) >= 0
+        ? Number(currentMetadata.elapsedDays)
+        : 0;
+    const nextMetadata = {
+      ...currentMetadata,
+      elapsedDays: elapsedDays + 2,
+      lastRevival: {
+        characterName,
+        revivedAt: nowIso(),
+        skippedDays: 2,
+        restoredHp: revivedMechanicsState.actors[actorKey]?.currentHp ?? actor.maxHp ?? 1
+      },
+      mechanicsState: revivedMechanicsState
+    };
+    const turn = await ensureCollectingTurn(client, campaign.id);
+    const modelMessageId = randomUUID();
+    const content = revivalNarration({
+      characterName,
+      maxHp: revivedMechanicsState.actors[actorKey]?.currentHp ?? actor.maxHp ?? 1,
+      worldName: campaignWorldName(campaign)
+    });
+
+    await client.query(
+      `
+        update campaigns
+        set metadata = $2::jsonb,
+            updated_at = now()
+        where id = $1
+      `,
+      [campaign.id, JSON.stringify(nextMetadata)]
+    );
+    await client.query(
+      `
+        update turns
+        set status = 'resolved',
+            model_message_id = $2,
+            resolved_at = now(),
+            updated_at = now(),
+            error = null
+        where id = $1
+      `,
+      [turn.id, modelMessageId]
+    );
+    await logCampaignEvent(client, campaign.id, "turn_resolved", {
+      turnId: turn.id,
+      modelMessageId,
+      messageId: modelMessageId,
+      role: "dm",
+      content,
+      nextInputNeeded: "player_actions",
+      resolutionMode: "resolved_without_dice",
+      inputTargets: [],
+      inputPolicy: "all_players",
+      pendingRollRequest: null,
+      pendingRollRequests: []
+    });
+    await logCampaignEvent(client, campaign.id, "character_revived", {
+      turnId: turn.id,
+      actorKey,
+      characterName,
+      restoredHp: revivedMechanicsState.actors[actorKey]?.currentHp ?? actor.maxHp ?? 1,
+      skippedDays: 2
+    });
+    await setPendingRollRequests(client, campaign.id, []);
+    await setPendingInputTargets(client, campaign.id, [], "all_players", "player_actions");
+    await ensureCollectingTurn(client, campaign.id);
+
+    return {
+      ...campaign,
+      metadata: nextMetadata,
+      updated_at: new Date()
+    };
+  });
+
+  return buildRoomSnapshot(db, reviveState);
 }
 
 function eventPayloadString(value: unknown) {

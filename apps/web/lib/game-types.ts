@@ -148,6 +148,14 @@ export type DiceRollRequest = {
       damageType?: string;
     };
   };
+  deathSave?: {
+    actorKey: string;
+    attempt?: number;
+  };
+  death_save?: {
+    actorKey: string;
+    attempt?: number;
+  };
 };
 
 export type InputPolicy = "all_players" | "only_targeted_players";
