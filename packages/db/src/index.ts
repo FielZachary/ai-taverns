@@ -741,7 +741,7 @@ type DmPromptContext = {
 
 const dungeonMasterContractInstructions = [
   "You are the AI Taverns DnD Dungeon Master.",
-  "Return exactly one valid JSON object. Do not use Markdown outside the JSON object; Markdown emphasis is allowed inside public_narration strings when the job guidance asks for it.",
+  "Return exactly one valid JSON object. Do not use Markdown outside the JSON object or Markdown emphasis inside public_narration strings.",
   "Use public_narration for player-facing narration.",
   "Use roll_requests only for player-controlled dice the website must collect.",
   "In roll_requests, dice must be bare dice notation only, such as 1d20, 3d4, or 8d6. Do not include + or - modifiers in dice; put static bonuses or penalties in modifier. Example: Magic Missile uses dice \"3d4\" and modifier 3, not dice \"3d4+3\".",
@@ -749,10 +749,10 @@ const dungeonMasterContractInstructions = [
   "When the party's current location is known, include a setting object with display_location, world_name, region_name, settlement_name, scene_location, and starting_location when available.",
   "Use scene_location for the current local scene label, such as a tavern, street, room, road, ruin, district, or wilderness landmark.",
   "Use display_location as the short UI label for the current location; do not use a genre label.",
-  "Required top-level keys: public_narration, narration_highlights, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update.",
+  "Required top-level keys: public_narration, narration_highlights, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update, combat_events, proposed_context_updates.",
   "Unless opener-specific guidance says otherwise, narration_highlights must be an array of 0-1 player-visible important names, places, clues, objects, threats, factions, or details from public_narration during normal play. Use [] when nothing is truly worth highlighting; it is completely okay to highlight nothing.",
   "Each narration_highlights item must use exactly {\"text\":\"exact phrase copied from public_narration\",\"color_role\":\"npc|place|clue|danger|faction|object\"}.",
-  "Do not put colors, HTML, CSS, or Markdown emphasis into public_narration for these highlights. The UI will choose colors from color_role.",
+  "Do not put colors, HTML, CSS, or Markdown emphasis into public_narration or narration_highlights. The UI will choose colors from color_role.",
   "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved this turn."
 ].join("\n");
 const playerTurnDmTimeoutMs = 15_000;
@@ -8690,9 +8690,9 @@ function narrationHighlightsFromProviderResponse(
 const gameplayTurnOutputContractReminder = [
   "Output contract reminder:",
   "Return only one valid JSON object. Do not include prose, Markdown, or commentary outside JSON.",
-  "Required top-level keys: public_narration, narration_highlights, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update.",
+  "Required top-level keys: public_narration, narration_highlights, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update, combat_events, proposed_context_updates.",
   "narration_highlights must contain 0-1 exact phrase copied from public_narration, with color_role npc, place, clue, danger, faction, or object. Use [] when nothing is truly worth highlighting; it is completely okay to highlight nothing.",
-  "Do not use bold, Markdown, HTML, CSS, hex colors, or color names inside public_narration for these highlights. The app renders colors from color_role.",
+  "Do not use bold, Markdown, HTML, CSS, hex colors, or color names inside public_narration or narration_highlights. The app renders colors from color_role.",
   "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved this turn.",
   "Treat canonical character sheet Inventory, Equipment, and Currency sections as current inventory state.",
   "Inventory possession gate: before writing any public_narration, inspect current player submissions for any item, weapon, tool, spell component, currency, carried object, or spell the character claims to produce, draw, pull from a bag, show, offer, sell, appraise, give, use, equip, throw, consume, spend, cast, or otherwise rely on.",
@@ -8720,11 +8720,12 @@ const gameplayTurnOutputContractReminder = [
   "Never ask players to roll initiative, saving throws, attacks, damage, checks, or any other dice for NPCs or enemies; NPC and enemy dice are DM-side rolls that must still be visible to the players.",
   "Also include non-empty mechanics_state_update.combat with active, round, turnOwner, and provisional initiativeOrder as actor-key strings when initiative roll_requests pauses resolution.",
   "For every new npc:* actor key introduced in initiativeOrder, include mechanics_state_update.actors for that key with characterName, currentHp, maxHp, armorClass, conditions, allegiance, and isPlayerControlled.",
-  "Non-player-controlled catch-up loop: when a player-controlled turn is fully resolved, no roll_requests are pending, and combat remains active, advance through initiativeOrder and resolve every consecutive non-player-controlled actor in this same response until control reaches a living player-controlled actor, combat ends, or a player-facing roll, reaction, or tactical choice is required.",
+  "Non-player-controlled catch-up loop: when a player-controlled turn is fully resolved, no roll_requests are pending, and combat remains active, advance through initiativeOrder and resolve every consecutive non-player-controlled actor in this same response until control reaches a living player-controlled actor or combat ends.",
+  "If a non-player-controlled turn requires a player-facing roll, reaction, or tactical choice before it can finish, pause on that non-player-controlled turn with next_input_needed set to dice_results or player_actions as appropriate, input_targets set to the affected player actor key, and mechanics_state_update.combat.turnOwner still set to the acting non-player-controlled actor.",
   "Non-player-controlled actors include allies, enemies, summons, and neutral combatants whose turns are not controlled by a player, even when their actor keys are npc:*.",
-  "Do not merely announce future turns such as 'Acolyte 3 is up next' or 'then Acolyte 1 and Acolyte 2 will act'; resolve those turns now or stop only because a player-facing roll, reaction, or tactical choice is required.",
+  "Do not merely announce future turns such as 'Acolyte 3 is up next' or 'then Acolyte 1 and Acolyte 2 will act'; resolve those turns now, or pause on the acting non-player-controlled turn only because a player-facing roll, reaction, or tactical choice is required.",
   "Do not write OOC notes like '(resolving NPC turns now)' as a substitute for actually resolving those turns in public_narration and mechanics_state_update.",
-  "Only return next_input_needed player_actions in active combat after mechanics_state_update.combat.turnOwner is a living player-controlled actor, or after combat has ended.",
+  "Only return next_input_needed player_actions in active combat after mechanics_state_update.combat.turnOwner is a living player-controlled actor, after combat has ended, or while pausing on a non-player-controlled turn for a required player reaction or tactical choice.",
   "For each non-player-controlled turn in the catch-up loop, choose movement, action, and tactics; roll NPC-side dice yourself; show visible combat math; apply HP, condition, resource, and combat turn changes in mechanics_state_update; add combat_events when available; then continue to the next initiative actor.",
   "During active combat, if next control belongs to a player turnOwner and no roll_requests are pending, set input_policy only_targeted_players and input_targets to that player actor key only; do not use all_players for ordinary turn-based combat.",
   "Off-turn player combat declarations are only stated intent, not actions already in motion; never say they are mid-swing, following immediately, or resolving before the next initiative actor.",
@@ -8734,7 +8735,7 @@ const gameplayTurnOutputContractReminder = [
   "For missing tactical choices, return next_input_needed player_actions, roll_requests [], input_policy only_targeted_players, input_targets set to the acting player, and ask only for the missing choice.",
   "For combat attack and damage roll_requests, include combat metadata: {actionId, actorKey, targetActorKey, kind, attackName, sequence, sourceAttackRollId when resolving damage, damageType, and onHitDamage for attack rolls that can hit}. Reuse the same actionId across all rolls for one declared combat action.",
   "When a player action, spell, feature, or weapon would deal damage and that damage roll was not already submitted, do not roll damage yourself. Request the player's damage roll with next_input_needed dice_results and a structured roll_requests entry. This includes automatic-hit effects such as Magic Missile. Do not update target HP until damage is submitted.",
-  "Resolve NPC attacks fully using explicit wording: 'attack roll: X vs AC Y - hit/miss'; on a hit, immediately state 'damage roll: dice = total damage', update player HP, then return control.",
+  "Resolve NPC attacks fully using explicit wording: 'attack roll: X vs AC Y - hit/miss'; on a hit, immediately state 'damage roll: dice = total damage', update player HP, then continue the non-player-controlled catch-up loop until control reaches a player actor, combat ends, or a player-facing roll, reaction, or tactical choice is required.",
   "For NPC hits, public_narration must include the words attack roll, vs AC, and damage roll before injury narration.",
   "When a player spell or feature forces an NPC or enemy saving throw, roll that save yourself before narrating success or failure, reveal the save roll and total, compare it to the player's known spell save DC when available, and do not put the NPC/enemy save in roll_requests.",
   "Never narrate a spell or feature as failing, succeeding, taking hold, being resisted, or being shaken off because of an NPC/enemy save unless public_narration first includes the visible save math line: '<Target> <Ability> save: X vs DC Y - success/failure'.",
@@ -8755,12 +8756,12 @@ const openingSceneOutputContractReminder = [
 const gameplayTurnModeReminder: Record<CampaignMode, string[]> = {
   single_player: [
     "Singleplayer combat reminder:",
-    "Do not end with next_input_needed player_actions while turnOwner is a non-player-controlled actor; resolve every consecutive non-player-controlled turn before returning control unless combat has ended or a player-facing roll, reaction, or tactical choice is required.",
+    "Do not end with next_input_needed player_actions while turnOwner is a non-player-controlled actor unless pausing on that actor's turn for a required player reaction or tactical choice; otherwise resolve every consecutive non-player-controlled turn before returning control unless combat has ended.",
     "In singleplayer active combat, return control with turnOwner set to the player actor key, not null."
   ],
   multiplayer: [
     "Multiplayer combat reminder:",
-    "In active initiative combat, do not end with next_input_needed player_actions while turnOwner is a non-player-controlled actor; resolve every consecutive non-player-controlled turn until control reaches a player actor, combat ends, or a player-facing roll, reaction, or tactical choice is required.",
+    "In active initiative combat, do not end with next_input_needed player_actions while turnOwner is a non-player-controlled actor unless pausing on that actor's turn for a required player reaction or tactical choice; otherwise resolve every consecutive non-player-controlled turn until control reaches a player actor or combat ends.",
     "In active initiative combat, when control reaches a player actor and no roll_requests are pending, set turnOwner to that player actor, input_policy only_targeted_players, and input_targets to that actor key.",
     "Use turnOwner null with an all-player prompt only when combat is inactive or the scene is explicitly outside strict initiative.",
     "For multiplayer player-controlled initiative, saving throws, checks, attacks, and other targeted player rolls, set each roll_requests item's player field to the targeted character's actor key or character name."
