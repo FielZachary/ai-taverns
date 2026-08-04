@@ -246,7 +246,7 @@ test("provider routes Qwen model selections to Qwen credentials", async () => {
   const response = await askDungeonMasterProvider({
     instructions: "Return a JSON DM response.",
     message: "Begin.",
-    model: "qwen-3-7-flash"
+    model: "qwen-3-5-plus"
   });
 
   assert.equal(requestUrl, "https://qwen.example.test/v1/chat/completions");
@@ -261,7 +261,7 @@ test("provider routes Qwen model selections to Qwen credentials", async () => {
 
 test("provider defaults Qwen chat requests to the QwenCloud compatible endpoint", async () => {
   delete process.env.QWEN_BASE_URL;
-  process.env.QWEN_MODEL = "qwen3.7-flash";
+  process.env.QWEN_MODEL = "qwen3.5-plus";
   let requestUrl = "";
 
   globalThis.fetch = async (url) => {
@@ -269,7 +269,7 @@ test("provider defaults Qwen chat requests to the QwenCloud compatible endpoint"
 
     return jsonResponse({
       id: "qwen-default-chat-1",
-      model: "qwen3.7-flash",
+      model: "qwen3.5-plus",
       choices: [
         {
           finish_reason: "stop",
@@ -285,7 +285,7 @@ test("provider defaults Qwen chat requests to the QwenCloud compatible endpoint"
   await askDungeonMasterProvider({
     instructions: "Return a JSON DM response.",
     message: "Begin.",
-    model: "qwen-3-7-flash"
+    model: "qwen-3-5-plus"
   });
 
   assert.equal(

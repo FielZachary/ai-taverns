@@ -167,7 +167,7 @@ function providerModelForSettings(config: ModelProviderConfig) {
 }
 
 function providerConfigForModel(model: AiModelId = defaultAiModel): ModelProviderConfig {
-  if (model === "qwen-3-7-flash") {
+  if (model === "qwen-3-5-plus") {
     return {
       selectedModel: model,
       providerName: "Qwen",
@@ -175,7 +175,7 @@ function providerConfigForModel(model: AiModelId = defaultAiModel): ModelProvide
       baseUrlEnv: "QWEN_BASE_URL",
       modelEnv: "QWEN_MODEL",
       defaultBaseUrl: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
-      defaultModel: "qwen3.7-flash"
+      defaultModel: "qwen3.5-plus"
     };
   }
 
