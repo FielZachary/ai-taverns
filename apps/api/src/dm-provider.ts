@@ -203,8 +203,11 @@ function resolvedProviderSettings(config: ModelProviderConfig) {
 }
 
 const testOpeningNarration = [
-  "Lanternlight gathers around the Ashford Tollhouse as rain ticks against the shutters.",
-  "A sealed road charter waits on the table while a worried courier points toward the fogbound bridge.",
+  "The sealed road charter is why you came to the Ashford Tollhouse before dawn, carrying a promise that cannot wait until the bridge fog lifts.",
+  "For three wet days you followed the old coach road through sheep fields and flooded ditches, hearing every roadside inn repeat the same warning: no one crosses Ashford Bridge after the bells go silent.",
+  "Lanternlight gathers around the Ashford Tollhouse as rain ticks against the shutters, dripping from iron hooks, pooling under muddy boots, and silvering the charter on the common-room table.",
+  "A worried courier stands beside the hearth with one hand on the latch, watching the fogbound bridge through the warped window while the tollkeeper argues with two soaked drovers near the door.",
+  "The courier can show you the broken seal, the tollkeeper can be pressed for what he saw, or you can step outside and study the fogbound bridge yourself.",
   "What do you do?"
 ].join("\n\n");
 
@@ -416,8 +419,8 @@ function mapHistoryMessage(message: GameMessage): DeepSeekMessage {
     const publicNarration =
       message.kind === "ask_dm_answer"
         ? [
-            "Out-of-turn Ask DM table guidance.",
-            "Use this as clarification only; it is not in-fiction narration, a committed action, or scene advancement.",
+            "Prior Ask DM answer in first-person DM table voice.",
+            "This was clarification only; it was not in-fiction narration, a committed action, or scene advancement.",
             message.content
           ].join("\n")
         : message.content;

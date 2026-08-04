@@ -25,6 +25,11 @@ import {
   customCampaignGenre
 } from "@/lib/campaign-genres";
 import {
+  spellRuleDetailsFor,
+  type SpellLevelLabel,
+  type SpellRuleProfile
+} from "@/lib/spell-rules";
+import {
   createCampaign as createCampaignViaApi,
   generateCharacterPortrait,
   generateCharacterBackstory,
@@ -71,6 +76,8 @@ import halfOrcSpeciesArt from "../../../../assets/races art/half-orc.png";
 import halflingSpeciesArt from "../../../../assets/races art/halfling.png";
 import humanSpeciesArt from "../../../../assets/races art/human.png";
 import tieflingSpeciesArt from "../../../../assets/races art/tiefling.png";
+
+export type { SpellLevelLabel, SpellRuleProfile } from "@/lib/spell-rules";
 
 type CampaignMode = "single_player" | "multiplayer";
 type MultiplayerIntent = "create" | "join";
@@ -153,7 +160,6 @@ function roomSocketUrl(campaign: CampaignSummary) {
 
   return url.toString();
 }
-export type SpellLevelLabel = "Cantrip" | "1st level" | "2nd level" | "3rd level";
 type SpellGroup = {
   level: SpellLevelLabel;
   base: string[];
@@ -176,14 +182,6 @@ type SpellSelectionLimits = {
 };
 type SpellSelectionCounts = Record<SpellLevelLabel, number> & {
   leveledSpells: number;
-};
-type SpellRuleProfile = {
-  description: string;
-  rolls: string;
-  school: string;
-  duration: string;
-  castingTime: string;
-  range: string;
 };
 type ActiveStatRoll = {
   id: string;
@@ -214,6 +212,7 @@ type EquipmentChoiceGroup = {
 type EquipmentChoiceSelection = {
   optionId: string;
   customItem?: string;
+  customItems?: string[];
 };
 type EquipmentSelections = Record<string, EquipmentChoiceSelection>;
 type ActiveEquipmentModal = {
@@ -221,6 +220,7 @@ type ActiveEquipmentModal = {
   optionId: string;
   title: string;
   category: EquipmentCategory;
+  quantity: number;
 } | null;
 type EquipmentRule = {
   choices: EquipmentChoiceGroup[];
@@ -284,6 +284,7 @@ const campaignWorldBannerUrls: Record<string, string> = {
 };
 const newAdventureEntryTransitionMs = 520;
 const optionArtRoot = "/new-adventure/options";
+const classSkillSelectionLimit = 2;
 const weaponCategories: EquipmentCategory[] = [
   "simpleWeapon",
   "simpleMeleeWeapon",
@@ -295,7 +296,10 @@ function optionArtSlug(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
-function optionArtUrl(category: "tools" | "backgrounds" | "skills" | "weapons", value: string) {
+function optionArtUrl(
+  category: "tools" | "backgrounds" | "skills" | "weapons" | "packs",
+  value: string
+) {
   return encodeURI(`${optionArtRoot}/${category}/${optionArtSlug(value)}.jpg`);
 }
 
@@ -309,8 +313,35 @@ function artOptionClassName(isSelected?: boolean) {
   return isSelected ? "art-option-card selected" : "art-option-card";
 }
 
+function defaultSkillsForClass(classData: { defaultSkills: readonly SkillName[] }) {
+  return classData.defaultSkills.slice(0, classSkillSelectionLimit) as SkillName[];
+}
+
 function isWeaponCategory(category: EquipmentCategory) {
   return weaponCategories.includes(category);
+}
+
+function equipmentToolArtValue(item: string) {
+  const normalizedItem = item.toLowerCase();
+  const toolMatch = toolOptions.find(
+    (tool) => tool.toLowerCase() === normalizedItem
+  );
+
+  if (toolMatch) {
+    return toolMatch;
+  }
+
+  if (/\b(lute|flute|drum|horn|lyre|viol|shawm|bagpipes|dulcimer|pan flute)\b/i.test(item)) {
+    return "Lute";
+  }
+
+  if (/\b(alchemist|tinker|smith|thieves|herbalism|disguise)\b/i.test(item)) {
+    return toolOptions.find((tool) =>
+      item.toLowerCase().includes(tool.toLowerCase().replace("'s", ""))
+    );
+  }
+
+  return null;
 }
 
 const abilityDefinitions = [
@@ -1242,6 +1273,12 @@ export function spellRollsFor(spell: string) {
 }
 
 export function spellDetailFor(spell: string, level: SpellLevelLabel | null): SpellRuleProfile {
+  const srdSpellDetail = spellRuleDetailsFor(spell);
+
+  if (srdSpellDetail) {
+    return srdSpellDetail;
+  }
+
   const summary = spellEffectSummaryFor(spell);
   const school = spellSchoolFor(spell);
   const duration = spellDurationFor(spell, level);
@@ -1250,12 +1287,21 @@ export function spellDetailFor(spell: string, level: SpellLevelLabel | null): Sp
   const levelText = level ?? "spell";
 
   return {
-    description: `${spell} is a ${levelText} ${school.toLowerCase()} option. ${summary} Use it when that effect would change the scene clearly: damage an enemy, protect an ally, reveal information, move through danger, or create a tactical opening. The DM may still ask for targets, a point of origin, or visible positioning before resolving it.`,
+    name: spell,
+    levelLabel: level ?? undefined,
+    description: [
+      `${spell} is a ${levelText} ${school.toLowerCase()} option. ${summary} Use it when that effect would change the scene clearly: damage an enemy, protect an ally, reveal information, move through danger, or create a tactical opening.`,
+      "A verbatim SRD rules record is not available for this spell in the bundled open-reference sources, so the DM may still ask for targets, a point of origin, visible positioning, or the official sourcebook text before resolving it."
+    ],
+    higherLevel: [],
     rolls: spellRollsFor(spell),
     school,
     duration,
     castingTime,
-    range
+    range,
+    components: [],
+    ritual: false,
+    concentration: /^Concentration/i.test(duration)
   };
 }
 const spellCatalog = {
@@ -2080,6 +2126,91 @@ const equipmentCategoryOptions: Record<EquipmentCategory, string[]> = {
   ]
 };
 
+const equipmentPackContents: Record<string, string[]> = {
+  "Burglar's pack": [
+    "Backpack",
+    "Bag of 1,000 ball bearings",
+    "10 feet of string",
+    "Bell",
+    "5 candles",
+    "Crowbar",
+    "Hammer",
+    "10 pitons",
+    "Hooded lantern",
+    "2 flasks of oil",
+    "5 days of rations",
+    "Tinderbox",
+    "Waterskin",
+    "50 feet hempen rope"
+  ],
+  "Diplomat's pack": [
+    "Chest",
+    "2 map cases",
+    "Fine clothes",
+    "Bottle of ink",
+    "Ink pen",
+    "Lamp",
+    "2 flasks of oil",
+    "5 sheets of paper",
+    "Vial of perfume",
+    "Sealing wax",
+    "Soap"
+  ],
+  "Dungeoneer's pack": [
+    "Backpack",
+    "Crowbar",
+    "Hammer",
+    "10 pitons",
+    "10 torches",
+    "Tinderbox",
+    "10 days of rations",
+    "Waterskin",
+    "50 feet hempen rope"
+  ],
+  "Entertainer's pack": [
+    "Backpack",
+    "Bedroll",
+    "2 costumes",
+    "5 candles",
+    "5 days of rations",
+    "Waterskin",
+    "Disguise kit"
+  ],
+  "Explorer's pack": [
+    "Backpack",
+    "Bedroll",
+    "Mess kit",
+    "Tinderbox",
+    "10 torches",
+    "10 days of rations",
+    "Waterskin",
+    "50 feet hempen rope"
+  ],
+  "Priest's pack": [
+    "Backpack",
+    "Blanket",
+    "10 candles",
+    "Tinderbox",
+    "Alms box",
+    "2 blocks of incense",
+    "Censer",
+    "Vestments",
+    "2 days of rations",
+    "Waterskin"
+  ],
+  "Scholar's pack": [
+    "Backpack",
+    "Book of lore",
+    "Bottle of ink",
+    "Ink pen",
+    "10 sheets of parchment",
+    "Little bag of sand",
+    "Small knife"
+  ]
+};
+
+const equipmentPackNames = Object.keys(equipmentPackContents);
+
 const newAdventureStartupImageUrls = [
   "/new-adventure/flow-bg.png",
   "/new-adventure/singleplayer-banner.webp",
@@ -2097,6 +2228,9 @@ const newAdventureSkillImageUrls = skillDefinitions.map((skill) =>
 const newAdventureToolImageUrls = toolOptions.map((tool) =>
   optionArtUrl("tools", tool)
 );
+const newAdventurePackImageUrls = equipmentPackNames.map((pack) =>
+  optionArtUrl("packs", pack)
+);
 const newAdventureWeaponImageUrls = Array.from(
   new Set(
     weaponCategories
@@ -2108,6 +2242,7 @@ const newAdventureCustomOptionImageUrls = [
   ...newAdventureBackgroundImageUrls,
   ...newAdventureSkillImageUrls,
   ...newAdventureToolImageUrls,
+  ...newAdventurePackImageUrls,
   ...newAdventureWeaponImageUrls
 ];
 const adventureImagePreloadPromises = new Map<string, Promise<void>>();
@@ -2825,6 +2960,110 @@ function formatList(items: readonly string[]) {
   return items.length > 0 ? items.join(", ") : "None";
 }
 
+function equipmentSelectionItems(selection?: EquipmentChoiceSelection) {
+  if (selection?.customItems) {
+    return selection.customItems;
+  }
+
+  return selection?.customItem ? [selection.customItem] : [];
+}
+
+function equipmentChoiceQuantity(option: EquipmentChoiceOption) {
+  return option.quantity ?? 1;
+}
+
+function packContentsFor(item: string) {
+  return equipmentPackContents[item.trim()];
+}
+
+function expandEquipmentPacks(items: readonly string[]) {
+  return items.flatMap((item) => packContentsFor(item) ?? [item]);
+}
+
+function equipmentChoiceSubtext(
+  option: EquipmentChoiceOption,
+  selection?: EquipmentChoiceSelection
+) {
+  const selectedItems = equipmentSelectionItems(selection);
+
+  if (option.category) {
+    const quantity = equipmentChoiceQuantity(option);
+
+    return selectedItems.length > 0
+      ? formatList(selectedItems)
+      : `Choose ${quantity} from ${formatList(equipmentCategoryOptions[option.category])}`;
+  }
+
+  const expandedItems = expandEquipmentPacks(option.items ?? []);
+
+  return formatList(expandedItems);
+}
+
+function equipmentOptionArtUrl(
+  option: EquipmentChoiceOption,
+  characterClass: CharacterClass
+) {
+  if (option.category && isWeaponCategory(option.category)) {
+    return optionArtUrl("weapons", equipmentCategoryOptions[option.category][0]);
+  }
+
+  const weaponItem = option.items?.find(
+    (item) => normalizeEquipmentName(item) in weaponAttackDetails
+  );
+
+  if (weaponItem) {
+    return optionArtUrl("weapons", normalizeEquipmentName(weaponItem));
+  }
+
+  const toolItem = option.items
+    ?.map(equipmentToolArtValue)
+    .find(Boolean);
+
+  if (toolItem) {
+    return optionArtUrl("tools", toolItem);
+  }
+
+  const packItem = option.items?.find((item) => Boolean(packContentsFor(item)));
+
+  if (packItem) {
+    return optionArtUrl("packs", packItem);
+  }
+
+  if (option.category === "musicalInstrument") {
+    return optionArtUrl("tools", "Lute");
+  }
+
+  return classArtByClass[characterClass];
+}
+
+function equipmentModalItemArtUrl(category: EquipmentCategory, item: string) {
+  if (isWeaponCategory(category)) {
+    return optionArtUrl("weapons", item);
+  }
+
+  const toolItem = equipmentToolArtValue(item);
+
+  return toolItem ? optionArtUrl("tools", toolItem) : null;
+}
+
+function isEquipmentSelectionComplete(
+  choice: EquipmentChoiceGroup,
+  selections: EquipmentSelections
+) {
+  const option = selectedEquipmentOption(choice, selections);
+  const selection = selections[choice.id];
+
+  if (!option || !selection) {
+    return false;
+  }
+
+  if (!option.category) {
+    return true;
+  }
+
+  return equipmentSelectionItems(selection).length === equipmentChoiceQuantity(option);
+}
+
 function selectedEquipmentOption(
   choice: EquipmentChoiceGroup,
   selections: EquipmentSelections
@@ -2837,17 +3076,9 @@ function equipmentItemsForOption(
   option: EquipmentChoiceOption,
   selection?: EquipmentChoiceSelection
 ) {
-  const customItem = option.category
-    ? selection?.customItem ?? equipmentCategoryOptions[option.category][0]
-    : null;
-  const customItems =
-    customItem && option.quantity && option.quantity > 1
-      ? [`${option.quantity} ${customItem}s`]
-      : customItem
-        ? [customItem]
-        : [];
+  const customItems = option.category ? equipmentSelectionItems(selection) : [];
 
-  return [...customItems, ...(option.items ?? [])];
+  return expandEquipmentPacks([...customItems, ...(option.items ?? [])]);
 }
 
 function normalizeEquipmentName(item: string) {
@@ -2891,7 +3122,7 @@ function inventoryCategoryForItem(item: string) {
   }
 
   if (
-    /\b(pack|rope|bedroll|blanket|trap|shovel|pot|crowbar|staff|knife|ink|quill)\b/i.test(item)
+    /\b(backpack|rope|bedroll|blanket|trap|shovel|pot|crowbar|staff|knife|ink|quill|torches?|pitons?|tinderbox|waterskin|lantern|chest|case|paper|parchment|sand|string|bell|candles?|hammer|alms box|censer|soap|wax|perfume)\b/i.test(item)
   ) {
     return "Gear";
   }
@@ -2949,7 +3180,11 @@ function equipmentGearFor(
   const rule = classEquipmentRules[characterClass];
   const chosenClassGear = equipmentChoiceGearFor(characterClass, selections);
 
-  return [...chosenClassGear, ...rule.fixed, ...backgroundEquipment[characterBackground]];
+  return expandEquipmentPacks([
+    ...chosenClassGear,
+    ...rule.fixed,
+    ...backgroundEquipment[characterBackground]
+  ]);
 }
 
 function equipmentChoiceGearFor(
@@ -4431,11 +4666,27 @@ export function NewAdventureForm({
     option: EquipmentChoiceOption
   ) {
     if (option.category) {
+      setEquipmentSelections((currentSelections) => {
+        const currentSelection = currentSelections[choice.id];
+        const currentItems =
+          currentSelection?.optionId === option.id
+            ? equipmentSelectionItems(currentSelection)
+            : [];
+
+        return {
+          ...currentSelections,
+          [choice.id]: {
+            optionId: option.id,
+            customItems: currentItems
+          }
+        };
+      });
       setActiveEquipmentModal({
         groupId: choice.id,
         optionId: option.id,
         title: option.label,
-        category: option.category
+        category: option.category,
+        quantity: equipmentChoiceQuantity(option)
       });
       return;
     }
@@ -4455,11 +4706,38 @@ export function NewAdventureForm({
 
     setEquipmentSelections((currentSelections) => ({
       ...currentSelections,
-      [activeEquipmentModal.groupId]: {
-        optionId: activeEquipmentModal.optionId,
-        customItem: item
-      }
+      [activeEquipmentModal.groupId]: (() => {
+        const currentSelection =
+          currentSelections[activeEquipmentModal.groupId];
+        const selectedItems = equipmentSelectionItems(currentSelection);
+        const isSelected = selectedItems.includes(item);
+
+        if (isSelected) {
+          return {
+            optionId: activeEquipmentModal.optionId,
+            customItems: selectedItems.filter((selectedItem) => selectedItem !== item)
+          };
+        }
+
+        if (selectedItems.length >= activeEquipmentModal.quantity) {
+          return currentSelection ?? {
+            optionId: activeEquipmentModal.optionId,
+            customItems: []
+          };
+        }
+
+        return {
+          optionId: activeEquipmentModal.optionId,
+          customItems:
+            activeEquipmentModal.quantity === 1
+              ? [item]
+              : [...selectedItems, item]
+        };
+      })()
     }));
+  }
+
+  function confirmEquipmentModalSelection() {
     setActiveEquipmentModal(null);
   }
 
@@ -4479,7 +4757,7 @@ export function NewAdventureForm({
     setCharacterClass(nextClass);
     setSubclass(nextClassData.subclassOptions[0]);
     setClassFeatureChoice(nextClassData.featureOptions[0]);
-    setSelectedSkills([...nextClassData.defaultSkills] as SkillName[]);
+    setSelectedSkills(defaultSkillsForClass(nextClassData));
     setEquipmentSelections({});
     setEquipmentChoiceStepIndex(0);
     setActiveEquipmentModal(null);
@@ -4500,7 +4778,7 @@ export function NewAdventureForm({
     setRerolledStatRollIndexes(new Set());
     setSubclass(selectedClass.subclassOptions[0]);
     setClassFeatureChoice(selectedClass.featureOptions[0]);
-    setSelectedSkills([...selectedClass.defaultSkills] as SkillName[]);
+    setSelectedSkills(defaultSkillsForClass(selectedClass));
     setEquipmentSelections({});
     setEquipmentChoiceStepIndex(0);
     setActiveEquipmentModal(null);
@@ -4694,6 +4972,10 @@ export function NewAdventureForm({
         return currentSkills.filter((currentSkill) => currentSkill !== skill);
       }
 
+      if (currentSkills.length >= classSkillSelectionLimit) {
+        return currentSkills;
+      }
+
       return [...currentSkills, skill];
     });
   }
@@ -4758,12 +5040,15 @@ export function NewAdventureForm({
       }
 
       if (currentCharacterStep === "Skills") {
-        return selectedSkills.length > 0;
+        return selectedSkills.length === classSkillSelectionLimit;
       }
 
       if (isEquipmentCharacterStep && !isEquipmentSummaryStep) {
         const activeChoice = equipmentChoices[equipmentChoiceStepIndex];
-        return Boolean(activeChoice && equipmentSelections[activeChoice.id]);
+        return Boolean(
+          activeChoice &&
+            isEquipmentSelectionComplete(activeChoice, equipmentSelections)
+        );
       }
 
       if (currentCharacterStep === "Spells" && hasSpells) {
@@ -5860,21 +6145,29 @@ export function NewAdventureForm({
                   <fieldset className="option-picker skill-picker">
                     <legend>Skills</legend>
                     <div>
-                      {selectedClass.skillChoices.map((option) => (
-                        <button
-                          type="button"
-                          className={artOptionClassName(selectedSkills.includes(option))}
-                          aria-pressed={selectedSkills.includes(option)}
-                          key={option}
-                          onClick={() => toggleSkill(option)}
-                          style={optionArtStyle(optionArtUrl("skills", option))}
-                        >
-                          <strong>{option}</strong>
-                        </button>
-                      ))}
+                      {selectedClass.skillChoices.map((option) => {
+                        const isSelected = selectedSkills.includes(option);
+                        const isSelectionLocked =
+                          !isSelected && selectedSkills.length >= classSkillSelectionLimit;
+
+                        return (
+                          <button
+                            type="button"
+                            className={artOptionClassName(isSelected)}
+                            aria-pressed={isSelected}
+                            disabled={isSelectionLocked}
+                            key={option}
+                            onClick={() => toggleSkill(option)}
+                            style={optionArtStyle(optionArtUrl("skills", option))}
+                          >
+                            <strong>{option}</strong>
+                          </button>
+                        );
+                      })}
                     </div>
                     <p className="character-step-note">
-                      Background adds: {formatList(backgroundSkillList)}
+                      Choose {classSkillSelectionLimit}. Background adds:{" "}
+                      {formatList(backgroundSkillList)}
                     </p>
                   </fieldset>
                 ) : null}
@@ -5931,26 +6224,27 @@ export function NewAdventureForm({
                           {activeEquipmentChoice.options.map((option) => {
                             const selection = equipmentSelections[activeEquipmentChoice.id];
                             const isSelected = selection?.optionId === option.id;
-                            const selectedCustomItem =
-                              option.category && isSelected
-                                ? selection.customItem ??
-                                  equipmentCategoryOptions[option.category][0]
-                                : null;
+                            const optionArt = equipmentOptionArtUrl(
+                              option,
+                              characterClass
+                            );
+                            const subtext = equipmentChoiceSubtext(
+                              option,
+                              isSelected ? selection : undefined
+                            );
 
                             return (
                               <button
                                 type="button"
-                                className={isSelected ? "selected" : ""}
+                                aria-label={option.label}
+                                className={artOptionClassName(isSelected)}
                                 aria-pressed={isSelected}
                                 key={option.id}
                                 onClick={() => chooseEquipmentOption(activeEquipmentChoice, option)}
+                                style={optionArtStyle(optionArt)}
                               >
                                 <strong>{option.label}</strong>
-                                <small>
-                                  {selectedCustomItem
-                                    ? selectedCustomItem
-                                    : formatList(option.items ?? [])}
-                                </small>
+                                <small>{subtext}</small>
                               </button>
                             );
                           })}
@@ -6458,12 +6752,18 @@ export function NewAdventureForm({
             aria-labelledby="spell-detail-modal-title"
             className="spell-detail-modal"
             role="dialog"
+            style={{
+              "--spell-art-url": `url("${spellArtPathFor(activeSpellDetail)}")`
+            } as CSSProperties}
             onClick={(event) => event.stopPropagation()}
           >
             <div className="spell-detail-modal-header">
               <div>
-                <span>{activeSpellLevel ?? "Spell"}</span>
+                <span>{activeSpellRuleProfile.levelLabel ?? activeSpellLevel ?? "Spell"}</span>
                 <h2 id="spell-detail-modal-title">{activeSpellDetail}</h2>
+                {activeSpellRuleProfile.srdName ? (
+                  <small>SRD name: {activeSpellRuleProfile.srdName}</small>
+                ) : null}
               </div>
               <button
                 type="button"
@@ -6474,7 +6774,17 @@ export function NewAdventureForm({
               </button>
             </div>
             <div className="spell-detail-modal-body">
-              <p>{activeSpellRuleProfile.description}</p>
+              {activeSpellRuleProfile.description.map((paragraph) => (
+                <p key={paragraph}>{paragraph}</p>
+              ))}
+              {activeSpellRuleProfile.higherLevel.length > 0 ? (
+                <section>
+                  <h3>Scaling</h3>
+                  {activeSpellRuleProfile.higherLevel.map((paragraph) => (
+                    <p key={paragraph}>{paragraph}</p>
+                  ))}
+                </section>
+              ) : null}
               <section>
                 <h3>Rolls Involved</h3>
                 <p>{activeSpellRuleProfile.rolls}</p>
@@ -6497,6 +6807,40 @@ export function NewAdventureForm({
                 <dt>Range</dt>
                 <dd>{activeSpellRuleProfile.range}</dd>
               </div>
+              <div>
+                <dt>Components</dt>
+                <dd>
+                  {activeSpellRuleProfile.components.length > 0
+                    ? activeSpellRuleProfile.components.join(", ")
+                    : "Not listed"}
+                </dd>
+              </div>
+              {activeSpellRuleProfile.material ? (
+                <div>
+                  <dt>Material</dt>
+                  <dd>{activeSpellRuleProfile.material}</dd>
+                </div>
+              ) : null}
+              <div>
+                <dt>Ritual</dt>
+                <dd>{activeSpellRuleProfile.ritual ? "Yes" : "No"}</dd>
+              </div>
+              {activeSpellRuleProfile.classes?.length ? (
+                <div>
+                  <dt>Classes</dt>
+                  <dd>{activeSpellRuleProfile.classes.join(", ")}</dd>
+                </div>
+              ) : null}
+              {activeSpellRuleProfile.sourceUrl ? (
+                <div>
+                  <dt>Source</dt>
+                  <dd>
+                    <a href={activeSpellRuleProfile.sourceUrl} target="_blank" rel="noreferrer">
+                      SRD
+                    </a>
+                  </dd>
+                </div>
+              ) : null}
             </dl>
           </section>
         </div>
@@ -6519,7 +6863,13 @@ export function NewAdventureForm({
             onClick={(event) => event.stopPropagation()}
           >
             <div className="equipment-modal-header">
-              <h2>{activeEquipmentModal.title}</h2>
+              <div>
+                <h2>{activeEquipmentModal.title}</h2>
+                <small>
+                  Select {activeEquipmentModal.quantity}
+                  {activeEquipmentModal.quantity === 1 ? " item" : " items"}
+                </small>
+              </div>
               <button
                 type="button"
                 aria-label="Close equipment picker"
@@ -6537,25 +6887,59 @@ export function NewAdventureForm({
             >
               {equipmentCategoryOptions[activeEquipmentModal.category].map((item) => {
                 const isWeapon = isWeaponCategory(activeEquipmentModal.category);
+                const itemArt = equipmentModalItemArtUrl(
+                  activeEquipmentModal.category,
+                  item
+                );
+                const isArtItem = Boolean(itemArt);
                 const weaponSubtext = isWeapon ? weaponSubtextForItem(item) : "";
+                const activeSelection =
+                  equipmentSelections[activeEquipmentModal.groupId];
+                const selectedItems = equipmentSelectionItems(activeSelection);
+                const isSelected = selectedItems.includes(item);
+                const isDisabled =
+                  !isSelected &&
+                  selectedItems.length >= activeEquipmentModal.quantity;
 
                 return (
                   <button
                     type="button"
-                    className={isWeapon ? "art-option-card equipment-weapon-option" : ""}
+                    aria-pressed={isSelected}
+                    className={[
+                      isArtItem ? "art-option-card equipment-weapon-option" : "",
+                      isSelected ? "selected" : ""
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    disabled={isDisabled}
                     key={item}
                     onClick={() => chooseEquipmentModalItem(item)}
-                    style={
-                      isWeapon
-                        ? optionArtStyle(optionArtUrl("weapons", item))
-                        : undefined
-                    }
+                    style={itemArt ? optionArtStyle(itemArt) : undefined}
                   >
                     <strong>{item}</strong>
                     {weaponSubtext ? <small>{weaponSubtext}</small> : null}
                   </button>
                 );
               })}
+            </div>
+            <div className="equipment-modal-footer">
+              <span>
+                {equipmentSelectionItems(
+                  equipmentSelections[activeEquipmentModal.groupId]
+                ).length}{" "}
+                of {activeEquipmentModal.quantity} selected
+              </span>
+              <button
+                type="button"
+                disabled={
+                  equipmentSelectionItems(
+                    equipmentSelections[activeEquipmentModal.groupId]
+                  ).length !== activeEquipmentModal.quantity
+                }
+                onClick={confirmEquipmentModalSelection}
+              >
+                Confirm
+              </button>
             </div>
           </section>
         </div>

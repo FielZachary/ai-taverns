@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -83,7 +83,12 @@ async function advanceThroughFighterEquipment() {
   fireEvent.click(
     screen.getByRole("button", { name: /one martial weapon and a shield/i })
   );
-  fireEvent.click(screen.getByRole("button", { name: /battleaxe/i }));
+  fireEvent.click(
+    within(screen.getByRole("dialog")).getByRole("button", {
+      name: /^battleaxe/i
+    })
+  );
+  fireEvent.click(screen.getByRole("button", { name: /confirm/i }));
   await nextCharacterStep();
 
   fireEvent.click(
@@ -465,7 +470,9 @@ describe("NewAdventureForm", () => {
       screen.getByRole("button", { name: /one martial weapon and a shield/i })
     );
 
-    const battleaxe = screen.getByRole("button", { name: /battleaxe/i });
+    const battleaxe = within(screen.getByRole("dialog")).getByRole("button", {
+      name: /^battleaxe/i
+    });
     const weaponGrid = battleaxe.closest(".equipment-modal-options");
     const weaponModal = battleaxe.closest(".equipment-modal");
 
@@ -476,6 +483,144 @@ describe("NewAdventureForm", () => {
     expect(weaponModal).toHaveClass("weapon-equipment-modal");
     expect(weaponGrid).toHaveClass("weapon-equipment-modal-options");
     expect(battleaxe).toHaveTextContent("1d8 slashing");
+    expect(screen.getByRole("button", { name: /confirm/i })).toBeDisabled();
+    fireEvent.click(battleaxe);
+    expect(screen.getByRole("button", { name: /confirm/i })).toBeEnabled();
+  });
+
+  it("keeps equipment modals open for multi-weapon choices until confirmed", async () => {
+    render(<NewAdventureForm />);
+
+    await continueFlow();
+    await continueFlow();
+    await choosePointBuyStats();
+    await nextCharacterStep();
+    await nextCharacterStep();
+    await nextCharacterStep();
+    await nextCharacterStep();
+    await nextCharacterStep();
+    await nextCharacterStep();
+
+    fireEvent.click(screen.getByRole("button", { name: /chain mail/i }));
+    await nextCharacterStep();
+
+    fireEvent.click(screen.getByRole("button", { name: /two martial weapons/i }));
+
+    const confirmButton = screen.getByRole("button", { name: /confirm/i });
+
+    expect(confirmButton).toBeDisabled();
+
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: /^battleaxe/i
+      })
+    );
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(confirmButton).toBeDisabled();
+
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: /^longsword/i
+      })
+    );
+
+    expect(confirmButton).toBeEnabled();
+    expect(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: /^battleaxe/i
+      })
+    ).toHaveClass("selected");
+    expect(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: /^longsword/i
+      })
+    ).toHaveClass("selected");
+
+    fireEvent.click(confirmButton);
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /two martial weapons/i })
+    ).toHaveTextContent("Battleaxe, Longsword");
+  });
+
+  it("limits class skill choices to two selections", async () => {
+    render(<NewAdventureForm />);
+
+    await continueFlow();
+    await continueFlow();
+    await choosePointBuyStats();
+    await nextCharacterStep();
+    await nextCharacterStep();
+    await nextCharacterStep();
+    await nextCharacterStep();
+    await nextCharacterStep();
+
+    expect(
+      screen.getByRole("heading", { name: /choose your skills/i })
+    ).toBeInTheDocument();
+
+    const athletics = screen.getByRole("button", { name: /athletics/i });
+    const perception = screen.getByRole("button", { name: /perception/i });
+    const intimidation = screen.getByRole("button", { name: /intimidation/i });
+    const survival = screen.getByRole("button", { name: /survival/i });
+
+    expect(athletics).toHaveAttribute("aria-pressed", "true");
+    expect(perception).toHaveAttribute("aria-pressed", "true");
+    expect(intimidation).toBeDisabled();
+
+    fireEvent.click(athletics);
+
+    expect(intimidation).not.toBeDisabled();
+
+    fireEvent.click(intimidation);
+
+    expect(intimidation).toHaveAttribute("aria-pressed", "true");
+    expect(survival).toBeDisabled();
+  });
+
+  it("shows pack contents in equipment subtitles", async () => {
+    render(<NewAdventureForm />);
+
+    await continueFlow();
+    await continueFlow();
+    await choosePointBuyStats();
+    await nextCharacterStep();
+    await nextCharacterStep();
+    await nextCharacterStep();
+    await nextCharacterStep();
+    await nextCharacterStep();
+    await nextCharacterStep();
+
+    fireEvent.click(screen.getByRole("button", { name: /chain mail/i }));
+    await nextCharacterStep();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /one martial weapon and a shield/i })
+    );
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: /^battleaxe/i
+      })
+    );
+    fireEvent.click(screen.getByRole("button", { name: /confirm/i }));
+    await nextCharacterStep();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /light crossbow and 20 bolts/i })
+    );
+    await nextCharacterStep();
+
+    const dungeoneersPack = screen.getByRole("button", {
+      name: /dungeoneer's pack/i
+    });
+
+    expect(dungeoneersPack).toHaveTextContent("Crowbar");
+    expect(dungeoneersPack).toHaveTextContent("10 days of rations");
+    expect(
+      dungeoneersPack.style.getPropertyValue("--option-art-url")
+    ).toContain("/new-adventure/options/packs/dungeoneer-s-pack.jpg");
   });
 
   it("validates identity and keeps campaign creation behind Continue", async () => {
@@ -560,7 +705,14 @@ describe("NewAdventureForm", () => {
         )
       })
     );
-    expect(createCampaignMock.mock.calls[0]?.[0].characterSheet).toContain(
+    const createdCharacterSheet =
+      createCampaignMock.mock.calls[0]?.[0].characterSheet ?? "";
+    expect(createdCharacterSheet).toContain(
+      "Gear: Backpack, Crowbar, Hammer, 10 pitons, 10 torches, Tinderbox, Waterskin, 50 feet hempen rope"
+    );
+    expect(createdCharacterSheet).toContain("Consumables: 10 days of rations");
+    expect(createdCharacterSheet).not.toContain("Dungeoneer's pack");
+    expect(createdCharacterSheet).toContain(
       [
         "Ability Scores",
         "Strength: 11 (+0)",
@@ -1017,11 +1169,21 @@ describe("spell metadata helpers", () => {
   it("builds a complete spell detail profile", () => {
     expect(spellDetailFor("Fireball", "3rd level")).toEqual(
       expect.objectContaining({
+        levelLabel: "3rd level",
         school: "Evocation",
         duration: "Instantaneous",
         castingTime: "1 action",
-        range: "120 feet or more"
+        range: "150 feet",
+        components: ["V", "S", "M"],
+        material: "A tiny ball of bat guano and sulfur.",
+        rolls: "8d6 fire damage at spell slot level 3 | DEX saving throw; success: half | 20-foot sphere"
       })
+    );
+    expect(spellDetailFor("Fireball", "3rd level").description.join(" ")).toContain(
+      "A bright streak flashes from your pointing finger"
+    );
+    expect(spellDetailFor("Fireball", "3rd level").higherLevel.join(" ")).toContain(
+      "When you cast this spell using a spell slot of 4th level or higher"
     );
   });
 });
