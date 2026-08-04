@@ -40,6 +40,28 @@ describe("parseDmContract", () => {
     assert.equal(result.resolutionMode, "resolved_without_dice");
   });
 
+  it("normalizes narration highlights from exact public narration phrases", () => {
+    const result = parseDmContract(
+      JSON.stringify({
+        public_narration:
+          "Captain Vael lowers the black key onto the Harbor Watch ledger. What do you do?",
+        narration_highlights: [
+          { text: "Captain Vael", color_role: "npc" },
+          { text: "black key", color_role: "object" },
+          { text: "missing phrase", color_role: "clue" },
+          { text: "Harbor Watch", color_role: "invalid" }
+        ],
+        roll_requests: [],
+        next_input_needed: "player_actions"
+      })
+    );
+
+    assert.deepEqual(result.narrationHighlights, [
+      { text: "Captain Vael", colorRole: "npc" },
+      { text: "black key", colorRole: "object" }
+    ]);
+  });
+
   it("infers and validates resolution_mode", () => {
     const resolved = parseDmContract(
       JSON.stringify({

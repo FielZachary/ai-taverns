@@ -1,6 +1,19 @@
 export type GameMessageRole = "player" | "dm" | "system";
 export type GameMessageKind = "turn" | "ask_dm_question" | "ask_dm_answer";
 
+export type NarrationHighlightRole =
+  | "npc"
+  | "place"
+  | "clue"
+  | "danger"
+  | "faction"
+  | "object";
+
+export type NarrationHighlight = {
+  text: string;
+  colorRole: NarrationHighlightRole;
+};
+
 export type AiDebugMessage = {
   role: "system" | "user" | "assistant";
   content: string;
@@ -100,6 +113,7 @@ export type GameMessage = {
     sceneLocation?: string;
     startingLocation?: string;
   };
+  narrationHighlights?: NarrationHighlight[];
   content: string;
   createdAt: string;
   debug?: AiDebugInfo;

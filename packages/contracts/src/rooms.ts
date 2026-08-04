@@ -63,6 +63,11 @@ export const RoomMessageSettingSchema = z.object({
   startingLocation: z.string().min(1).optional()
 });
 
+export const RoomMessageNarrationHighlightSchema = z.object({
+  text: z.string().min(1),
+  colorRole: z.enum(["npc", "place", "clue", "danger", "faction", "object"])
+});
+
 export const RoomMessageSchema = z
   .object({
     id: z.string().min(1),
@@ -71,6 +76,7 @@ export const RoomMessageSchema = z
     playerName: z.string().optional(),
     characterName: z.string().optional(),
     setting: RoomMessageSettingSchema.optional(),
+    narrationHighlights: z.array(RoomMessageNarrationHighlightSchema).optional(),
     content: z.string(),
     createdAt: z.string().datetime()
   })
