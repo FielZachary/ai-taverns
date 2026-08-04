@@ -3612,7 +3612,7 @@ function classAbilityBonusesFor(
   return bonuses;
 }
 
-function formatAbilityBonusSources(
+function abilityBonusFor(
   species: CharacterSpecies,
   characterClass: CharacterClass,
   classFeatureChoice: string,
@@ -3621,34 +3621,25 @@ function formatAbilityBonusSources(
   const speciesBonus = speciesAbilityBonuses[species][ability] ?? 0;
   const classBonus =
     classAbilityBonusesFor(characterClass, classFeatureChoice)[ability] ?? 0;
-  const bonus = speciesBonus + classBonus;
 
-  if (bonus === 0) {
-    return {
-      bonusText: "+0",
-      sourceText: ""
-    };
-  }
+  return speciesBonus + classBonus;
+}
 
-  const sources: string[] = [];
-
-  if (speciesBonus > 0) {
-    sources.push(species);
-  }
-
-  if (classBonus > 0) {
-    sources.push(characterClass);
-  }
-
-  const sourceText =
-    sources.length === 1
-      ? `${sources[0]} bonus`
-      : `${sources.slice(0, -1).join(", ")} and ${sources[sources.length - 1]} bonus`;
-
-  return {
-    bonusText: formatModifier(bonus),
-    sourceText
-  };
+export function finalAbilityScoresFor(
+  baseScores: CompleteAbilityScores,
+  species: CharacterSpecies,
+  characterClass: CharacterClass,
+  classFeatureChoice: string
+): CompleteAbilityScores {
+  return abilityDefinitions.reduce<CompleteAbilityScores>(
+    (scores, ability) => ({
+      ...scores,
+      [ability.key]:
+        baseScores[ability.key] +
+        abilityBonusFor(species, characterClass, classFeatureChoice, ability.key)
+    }),
+    { ...baseScores }
+  );
 }
 
 function pointBuyScoreFor(scores: AbilityScores, ability: AbilityKey) {
@@ -3972,7 +3963,7 @@ export function NewAdventureForm({
   const isEquipmentCharacterStep = isCharacterStep && currentCharacterStep === "Equipment";
   const isEquipmentSummaryStep = equipmentChoiceStepIndex >= equipmentChoices.length;
   const defaultAbilityScores = defaultAbilityScoresByClass[characterClass];
-  const resolvedAbilityScores = useMemo<CompleteAbilityScores>(
+  const baseAbilityScores = useMemo<CompleteAbilityScores>(
     () => ({
       str: abilityScores.str ?? defaultAbilityScores.str,
       dex: abilityScores.dex ?? defaultAbilityScores.dex,
@@ -3982,6 +3973,16 @@ export function NewAdventureForm({
       cha: abilityScores.cha ?? defaultAbilityScores.cha
     }),
     [abilityScores, defaultAbilityScores]
+  );
+  const resolvedAbilityScores = useMemo(
+    () =>
+      finalAbilityScoresFor(
+        baseAbilityScores,
+        characterSpecies,
+        characterClass,
+        classFeatureChoice
+      ),
+    [baseAbilityScores, characterClass, characterSpecies, classFeatureChoice]
   );
   const areAllStatsRolled = abilityDefinitions.every(
     ({ key }) => abilityScores[key] !== null
@@ -4169,9 +4170,9 @@ export function NewAdventureForm({
   ]);
   const characterSheetPreview = useMemo(() => {
     const abilityLines = abilityDefinitions.map(({ key, label }) => {
-      const score = abilityScores[key];
+      const score = resolvedAbilityScores[key];
 
-      if (score === null) {
+      if (abilityScores[key] === null) {
         return `${label}: Roll`;
       }
 
@@ -6021,12 +6022,6 @@ export function NewAdventureForm({
                           statGenerationMode === "point_buy"
                             ? pointBuyScoreFor(abilityScores, ability.key)
                             : abilityScores[ability.key];
-                        const abilityBonus = formatAbilityBonusSources(
-                          characterSpecies,
-                          characterClass,
-                          classFeatureChoice,
-                          ability.key
-                        );
                         const pointBuyScore = pointBuyScoreFor(
                           abilityScores,
                           ability.key
@@ -6102,14 +6097,6 @@ export function NewAdventureForm({
                                 })}
                               </select>
                             )}
-                            <small>
-                              <span>{abilityBonus.bonusText}</span>
-                              {abilityBonus.sourceText ? (
-                                <span className="stat-roll-bonus-source">
-                                  ({abilityBonus.sourceText})
-                                </span>
-                              ) : null}
-                            </small>
                           </div>
                         );
                       })}

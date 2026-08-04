@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   NewAdventureForm,
+  finalAbilityScoresFor,
   spellArchetypeFor,
   spellArtPathFor,
   spellCastingTimeFor,
@@ -258,6 +259,10 @@ describe("NewAdventureForm", () => {
     fireEvent.click(screen.getByRole("button", { name: "Point Buy" }));
 
     expectPointBuyRemaining(15);
+    expect(screen.queryByText("+1 all stats")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("+2 Strength, +1 Constitution")
+    ).not.toBeInTheDocument();
 
     const strengthCard = statCardFor("Strength");
     const decreaseStrength = screen.getByRole("button", {
@@ -707,6 +712,17 @@ describe("NewAdventureForm", () => {
     );
     expect(createdCharacterSheet).toContain("Consumables: 10 days of rations");
     expect(createdCharacterSheet).not.toContain("Dungeoneer's pack");
+    expect(createdCharacterSheet).toContain(
+      [
+        "Ability Scores",
+        "Strength: 11 (+0)",
+        "Dexterity: 11 (+0)",
+        "Constitution: 11 (+0)",
+        "Intelligence: 11 (+0)",
+        "Wisdom: 11 (+0)",
+        "Charisma: 11 (+0)"
+      ].join("\n")
+    );
     expect(generateCharacterPortraitMock).toHaveBeenCalledWith(
       "11111111-1111-4111-8111-111111111111",
       expect.objectContaining({
@@ -995,6 +1011,33 @@ describe("NewAdventureForm", () => {
       "The portrait easel cracked."
     );
     expect(screen.getByRole("button", { name: /retry portrait/i })).toBeEnabled();
+  });
+});
+
+describe("finalAbilityScoresFor", () => {
+  it("combines species and class bonuses into playable totals", () => {
+    expect(
+      finalAbilityScoresFor(
+        {
+          str: 10,
+          dex: 10,
+          con: 10,
+          int: 10,
+          wis: 10,
+          cha: 10
+        },
+        "Half-Orc",
+        "Barbarian",
+        "+1 Strength and +1 Constitution"
+      )
+    ).toEqual({
+      str: 13,
+      dex: 10,
+      con: 12,
+      int: 10,
+      wis: 10,
+      cha: 10
+    });
   });
 });
 
