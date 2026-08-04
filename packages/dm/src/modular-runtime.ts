@@ -554,8 +554,9 @@ export function jobPrompt(
     "On a resolved hit where damage is known or DM-side, state damage in prose: 'the damage comes to 5 piercing from 1d6 + 2,' or 'you take 5 piercing damage and drop from 16 HP to 11 HP.'",
     "For NPC hits against player characters, public_narration must include the NPC's roll, the target AC, whether it hit, the damage dice and total, the damage type, and the HP change when HP is updated.",
     "For saving throws, make the numbers visible before consequence narration using prose: '<Target> rolled a 9 against DC 14 and fails,' or '<Target> rolled a 16 against your DC of 14 and succeeds.'",
-    "During active combat, put visible combat math into narration_highlights with color_role danger. Highlight exact public_narration phrases that contain roll totals, AC/DC numbers, damage amounts, HP numbers, and dice notation such as 1d20, 1d6 + 2, or 8d6.",
-    "Combat narration_highlights may use up to 3 exact phrases to cover the visible numbers and dice in the response. If there are more than 3 separate math beats, make each highlighted phrase span the full math-bearing sentence or clause so all visible combat numbers and dice are covered by highlighted text.",
+    "During active combat, ignore the normal 0-1 narration_highlights limit. Highlight every visible combat math span in public_narration, using separate exact phrases when one sentence contains both dice/math and damage/HP numbers.",
+    "Use color_role clue for roll totals, attack/save/check math, AC, DC, and dice notation such as 1d20, 1d6 + 2, or 8d6.",
+    "Use color_role danger for damage amount plus damage type, HP changes, and 0 HP or defeat mechanics.",
     "When an area spell or effect affects multiple creatures, list each target's save result separately before applying damage or conditions.",
     "For half-damage effects, state who succeeded, who failed, the full damage, the halved damage, and each affected actor's HP change when HP is updated.",
     "If the relevant save DC is unknown, ask for it or use the known character sheet value; do not silently invent a DC.",
@@ -589,7 +590,7 @@ export function jobPrompt(
     "Do not put a visible mechanics sentence in its own standalone paragraph during resolved combat; attach it to the description or consequence paragraph for that beat.",
     "A resolved combat turn with multiple actor turns usually needs one paragraph per actor/effect plus a final handoff paragraph, not one paragraph per mechanical line.",
     "Do not bold visible mechanics or use Markdown emphasis inside public_narration. Keep combat math as plain text.",
-    "When combat math should receive visual emphasis, copy exact plain-text math-bearing phrases into narration_highlights with color_role danger instead of adding Markdown.",
+    "When combat math should receive visual emphasis, copy exact plain-text math-bearing phrases into narration_highlights instead of adding Markdown.",
     "Put mechanics before flourish when mechanics decide the outcome.",
     "Use vivid physical detail, but do not bury hit/miss, damage, HP, turn owner, or pending rolls inside ornate prose.",
     "End every resolved combat beat with a clear handoff: whose turn or what immediate pressure remains, then 'What do you do?' on its own line when awaiting player action.",
@@ -705,7 +706,23 @@ export function jobPrompt(
           narration_highlights: [
             {
               text: "They rolled an 18 against Komer's AC of 15",
+              color_role: "clue"
+            },
+            {
+              text: "5 piercing",
               color_role: "danger"
+            },
+            {
+              text: "1d6 + 2",
+              color_role: "clue"
+            },
+            {
+              text: "16 HP to 11 HP",
+              color_role: "danger"
+            },
+            {
+              text: "they rolled a 10 against Komer's AC of 15",
+              color_role: "clue"
             }
           ],
           resolution_mode: "resolved_without_dice",
@@ -1142,7 +1159,11 @@ export function jobPrompt(
           narration_highlights: [
             {
               text: "You rolled a 19 against their AC of 16",
-              color_role: "danger"
+              color_role: "clue"
+            },
+            {
+              text: "1d12 + 2",
+              color_role: "clue"
             }
           ],
           resolution_mode: "needs_dice",

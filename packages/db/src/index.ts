@@ -4875,6 +4875,7 @@ const narrationHighlightRoles = new Set([
   "faction",
   "object"
 ]);
+const maxStoredNarrationHighlights = 24;
 
 function eventNarrationHighlights(
   payload: Record<string, unknown>,
@@ -4910,7 +4911,7 @@ function eventNarrationHighlights(
     });
     seen.add(key);
 
-    if (highlights.length >= 3) {
+    if (highlights.length >= maxStoredNarrationHighlights) {
       break;
     }
   }
@@ -8679,7 +8680,7 @@ function narrationHighlightsFromProviderResponse(
     });
     seen.add(key);
 
-    if (highlights.length >= 3) {
+    if (highlights.length >= maxStoredNarrationHighlights) {
       break;
     }
   }
@@ -8737,7 +8738,7 @@ const gameplayTurnOutputContractReminder = [
   "When a player action, spell, feature, or weapon would deal damage and that damage roll was not already submitted, do not roll damage yourself. Request the player's damage roll with next_input_needed dice_results and a structured roll_requests entry. This includes automatic-hit effects such as Magic Missile. Do not update target HP until damage is submitted.",
   "Resolve NPC attacks fully using conversational visible math in prose, such as 'they rolled a 17 against your AC of 14, so the cutlass catches your ribs'; on a hit, state damage in prose, such as 'the damage comes to 6 slashing from 1d6 + 2', update player HP, then continue the non-player-controlled catch-up loop until control reaches a player actor, combat ends, or a player-facing roll, reaction, or tactical choice is required.",
   "For NPC hits, public_narration must include the NPC's roll, the target AC, whether it hit, the damage dice and total, the damage type, and the HP change before injury narration finishes.",
-  "During active combat, narration_highlights may contain up to 3 exact phrases copied from public_narration with color_role danger to cover visible combat math. Highlight phrases that contain roll totals, AC/DC numbers, damage amounts, HP numbers, and dice notation such as 1d20, 1d6 + 2, or 8d6; if there are more than 3 math beats, make each highlighted phrase span the full math-bearing sentence or clause so all visible combat numbers and dice are covered by highlighted text.",
+  "During active combat, ignore the normal 0-1 narration_highlights limit. Highlight every visible combat math span in public_narration, using separate exact phrases when one sentence contains both dice/math and damage/HP numbers. Use color_role clue for roll totals, attack/save/check math, AC, DC, and dice notation such as 1d20, 1d6 + 2, or 8d6. Use color_role danger for damage amount plus damage type, HP changes, and 0 HP or defeat mechanics.",
   "When a player spell or feature forces an NPC or enemy saving throw, roll that save yourself before narrating success or failure, reveal the save roll and total, compare it to the player's known spell save DC when available, and do not put the NPC/enemy save in roll_requests.",
   "Never narrate a spell or feature as failing, succeeding, taking hold, being resisted, or being shaken off because of an NPC/enemy save unless public_narration first includes the visible save math in prose, such as '<Target> rolled an 11 against your spell save DC of 13, so the spell takes hold.'",
   "Do not end an NPC turn with only a wind-up like lunges, swings, aims, starts casting, or bears down unless a player-facing roll or reaction is required first.",
@@ -10153,7 +10154,7 @@ async function finishResolvedTurn(
   const currentPendingRollRequest = pendingRollRequests[0] ?? null;
   const settingPatch = settingMetadata(input.setting);
   const maxNarrationHighlights =
-    input.eventType === "adventure_begun" ? 3 : 1;
+    input.eventType === "adventure_begun" ? 3 : maxStoredNarrationHighlights;
   const narrationHighlightsPatch = narrationHighlightsMetadata(
     input.narrationHighlights,
     maxNarrationHighlights
