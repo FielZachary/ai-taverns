@@ -10,6 +10,7 @@ import {
   normalizeRollRequest,
   normalizeRollRequests,
   parseDmContract,
+  recoverDmContractAfterParseFailure,
   rollRequestDiagnostics,
   titleFromSessionId
 } from "./dm-contract.js";
@@ -330,6 +331,38 @@ describe("parseDmContract", () => {
 
     assert.equal(result.rollRequests[0]?.player, "Por");
     assert.equal(result.inputPolicy, "all_players");
+  });
+
+  it("recovers plain prose provider responses as safe narration", () => {
+    const recovery = recoverDmContractAfterParseFailure(
+      [
+        "Inquisitor Manifold's eyes narrow as your words hang in the air.",
+        "",
+        "He sets the letter down on the desk and asks what you know."
+      ].join("\n")
+    );
+
+    assert.ok(recovery);
+    assert.equal(recovery.report.recoveryKind, "plain_narration");
+    assert.equal(recovery.contract.resolutionMode, "resolved_without_dice");
+    assert.equal(recovery.contract.nextInputNeeded, "player_actions");
+    assert.equal(recovery.contract.inputPolicy, "all_players");
+    assert.deepEqual(recovery.contract.rollRequests, []);
+    assert.deepEqual(recovery.contract.narrationHighlights, []);
+    assert.deepEqual(recovery.contract.inventoryStateUpdate, { patches: [] });
+    assert.match(
+      recovery.contract.publicNarration,
+      /Inquisitor Manifold's eyes narrow/
+    );
+  });
+
+  it("does not recover malformed JSON-looking provider responses as plain prose", () => {
+    assert.equal(
+      recoverDmContractAfterParseFailure(
+        '{"public_narration":"The door opens","next_input_needed":'
+      ),
+      null
+    );
   });
 
   it("keeps roll narration unchanged when dice are already covered", () => {

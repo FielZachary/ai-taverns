@@ -1269,7 +1269,8 @@ h1 {
 
 .tool-picker button,
 .skill-picker button,
-.art-option-card {
+.art-option-card,
+.equipment-choice-options .art-option-card {
   position: relative;
   isolation: isolate;
   align-content: end;
@@ -1289,6 +1290,7 @@ h1 {
 .skill-picker button::before,
 .background-picker button::before,
 .art-option-card::before,
+.equipment-choice-options .art-option-card::before,
 .equipment-modal-options .equipment-weapon-option::before {
   position: absolute;
   inset: 0;
@@ -1309,7 +1311,10 @@ h1 {
 .skill-picker button:focus-visible,
 .art-option-card.selected,
 .art-option-card:hover,
-.art-option-card:focus-visible {
+.art-option-card:focus-visible,
+.equipment-choice-options .art-option-card.selected,
+.equipment-choice-options .art-option-card:hover,
+.equipment-choice-options .art-option-card:focus-visible {
   background:
     linear-gradient(180deg, rgba(8, 6, 4, 0.02), rgba(8, 6, 4, 0.76)),
     linear-gradient(90deg, rgba(173, 71, 43, 0.28), rgba(8, 6, 4, 0.08)),
@@ -1331,6 +1336,9 @@ h1 {
 .art-option-card.selected::before,
 .art-option-card:hover::before,
 .art-option-card:focus-visible::before,
+.equipment-choice-options .art-option-card.selected::before,
+.equipment-choice-options .art-option-card:hover::before,
+.equipment-choice-options .art-option-card:focus-visible::before,
 .equipment-modal-options .equipment-weapon-option:hover::before,
 .equipment-modal-options .equipment-weapon-option:focus-visible::before {
   opacity: 0.62;
@@ -1342,6 +1350,8 @@ h1 {
 .background-picker small,
 .art-option-card strong,
 .art-option-card small,
+.equipment-choice-options .art-option-card strong,
+.equipment-choice-options .art-option-card small,
 .equipment-modal-options .equipment-weapon-option strong,
 .equipment-modal-options .equipment-weapon-option small {
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.92);
@@ -1351,6 +1361,7 @@ h1 {
 .skill-picker strong,
 .background-picker strong,
 .art-option-card strong,
+.equipment-choice-options .art-option-card strong,
 .equipment-modal-options .equipment-weapon-option strong {
   color: #fff7df;
 }
@@ -1750,17 +1761,18 @@ h1 {
 
 .equipment-choice-options button {
   display: grid;
-  align-content: center;
+  align-content: end;
   gap: 4px;
-  min-height: 96px;
+  min-height: 156px;
   padding: 14px;
 }
 
 .equipment-choice-options button small {
-  color: var(--muted);
+  color: rgba(255, 239, 202, 0.84);
   font-size: 0.68rem;
   font-weight: 850;
   line-height: 1.25;
+  text-shadow: 0 2px 7px rgba(0, 0, 0, 0.9);
 }
 
 .equipment-step-progress {
@@ -1860,6 +1872,19 @@ h1 {
   font-size: 1.25rem;
 }
 
+.equipment-modal-header > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.equipment-modal-header small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
 .equipment-modal-header button {
   display: grid;
   place-items: center;
@@ -1929,12 +1954,54 @@ h1 {
   background-size: cover;
 }
 
+.equipment-modal-options .equipment-weapon-option.selected {
+  border-color: rgba(244, 207, 122, 0.78);
+  box-shadow:
+    inset 0 0 0 2px rgba(244, 207, 122, 0.28),
+    0 14px 32px rgba(0, 0, 0, 0.22);
+}
+
+.equipment-modal-options button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
 .equipment-modal-options .equipment-weapon-option small {
   width: 100%;
   color: rgba(255, 239, 202, 0.84);
   font-size: 0.68rem;
   font-weight: 800;
   line-height: 1.25;
+}
+
+.equipment-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px 18px;
+  border-top: 1px solid var(--line);
+}
+
+.equipment-modal-footer span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.equipment-modal-footer button {
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid rgba(244, 207, 122, 0.32);
+  color: var(--gold-bright);
+  background: rgba(17, 13, 10, 0.62);
+  font-weight: 900;
+}
+
+.equipment-modal-footer button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
 }
 
 .spell-detail-modal-backdrop {
@@ -1948,18 +2015,43 @@ h1 {
 }
 
 .spell-detail-modal {
+  position: relative;
+  isolation: isolate;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   width: min(720px, 100%);
   max-height: min(760px, calc(100dvh - 44px));
   border: 1px solid rgba(244, 207, 122, 0.42);
   border-radius: 8px;
-  background:
-    linear-gradient(180deg, rgba(244, 207, 122, 0.08), transparent 34%),
-    linear-gradient(90deg, rgba(173, 71, 43, 0.12), transparent),
-    rgba(22, 16, 12, 0.98);
+  background: rgba(22, 16, 12, 0.98);
   box-shadow: 0 30px 96px rgba(0, 0, 0, 0.64);
   overflow: hidden;
+}
+
+.spell-detail-modal::before,
+.spell-detail-modal::after {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+}
+
+.spell-detail-modal::before {
+  z-index: -2;
+  background-image: var(--spell-art-url);
+  background-position: center;
+  background-size: cover;
+  opacity: 0.24;
+  filter: saturate(1.08) contrast(1.08);
+}
+
+.spell-detail-modal::after {
+  z-index: -1;
+  background:
+    radial-gradient(circle at center, rgba(16, 10, 8, 0.12) 0%, rgba(10, 6, 5, 0.72) 68%, rgba(3, 2, 2, 0.92) 100%),
+    linear-gradient(180deg, rgba(244, 207, 122, 0.12), transparent 34%),
+    linear-gradient(90deg, rgba(173, 71, 43, 0.18), transparent 62%),
+    rgba(22, 16, 12, 0.54);
 }
 
 .spell-detail-modal-header {
@@ -1990,6 +2082,12 @@ h1 {
   color: var(--ink);
   font-size: clamp(1.45rem, 3vw, 2.15rem);
   line-height: 1.05;
+}
+
+.spell-detail-modal-header small {
+  color: var(--ink-muted);
+  font-size: 0.76rem;
+  font-weight: 800;
 }
 
 .spell-detail-modal-header button {
@@ -2025,7 +2123,7 @@ h1 {
   padding: 14px;
   border: 1px solid rgba(244, 207, 122, 0.16);
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.16);
+  background: rgba(0, 0, 0, 0.32);
 }
 
 .spell-detail-modal-body h3 {
@@ -2038,7 +2136,7 @@ h1 {
 
 .spell-detail-meta {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 1px;
   margin: 0;
   border-top: 1px solid rgba(244, 207, 122, 0.18);
@@ -2067,6 +2165,15 @@ h1 {
   font-size: 0.82rem;
   font-weight: 800;
   line-height: 1.25;
+}
+
+.spell-detail-meta a {
+  color: var(--gold-bright);
+  text-decoration: none;
+}
+
+.spell-detail-meta a:hover {
+  text-decoration: underline;
 }
 
 @media (max-width: 640px) {

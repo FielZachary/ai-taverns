@@ -180,8 +180,8 @@ test("DeepSeek provider sends filtered history and returns non-stream debug meta
       role: "assistant",
       content: JSON.stringify({
         public_narration: [
-          "Out-of-turn Ask DM table guidance.",
-          "Use this as clarification only; it is not in-fiction narration, a committed action, or scene advancement.",
+          "Prior Ask DM answer in first-person DM table voice.",
+          "This was clarification only; it was not in-fiction narration, a committed action, or scene advancement.",
           "It is table guidance, not a resolved action."
         ].join("\n"),
         roll_requests: [],

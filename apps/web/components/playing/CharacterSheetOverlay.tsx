@@ -1,11 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { RefreshCw, UserRound, X } from "lucide-react";
 import type { CampaignNpcCard } from "@/lib/campaign-api";
 import {
   spellDetailFor,
   spellEffectSummaryFor,
+  spellRangeFor,
+  spellRollsFor,
+  spellArtPathFor,
   type SpellLevelLabel
 } from "@/app/new-adventure/new-adventure-form";
 import {
@@ -438,12 +441,11 @@ function spellTableRow(
   level: SpellLevelLabel | null,
   spellStats: { attackBonus: string; saveDc: string }
 ): SheetTableRow {
-  const spellDetail = spellDetailFor(name, level);
-  const rollText = spellDetail.rolls;
+  const rollText = spellRollsFor(name);
 
   return {
     name,
-    range: spellDetail.range,
+    range: spellRangeFor(name),
     hitDc: spellHitDcForRolls(rollText, spellStats),
     effect: spellEffectSummaryFor(name)
   };
@@ -1365,12 +1367,22 @@ export function CharacterSheetOverlay({
             aria-labelledby="spell-detail-modal-title"
             className="spell-detail-modal"
             role="dialog"
+            style={{
+              "--spell-art-url": `url("${spellArtPathFor(activeSpellDetail.name)}")`
+            } as CSSProperties}
             onClick={(event) => event.stopPropagation()}
           >
             <div className="spell-detail-modal-header">
               <div>
-                <span>{activeSpellDetail.level ?? "Spell"}</span>
+                <span>
+                  {activeSpellRuleProfile.levelLabel ??
+                    activeSpellDetail.level ??
+                    "Spell"}
+                </span>
                 <h2 id="spell-detail-modal-title">{activeSpellDetail.name}</h2>
+                {activeSpellRuleProfile.srdName ? (
+                  <small>SRD name: {activeSpellRuleProfile.srdName}</small>
+                ) : null}
               </div>
               <button
                 type="button"
@@ -1381,7 +1393,17 @@ export function CharacterSheetOverlay({
               </button>
             </div>
             <div className="spell-detail-modal-body">
-              <p>{activeSpellRuleProfile.description}</p>
+              {activeSpellRuleProfile.description.map((paragraph) => (
+                <p key={paragraph}>{paragraph}</p>
+              ))}
+              {activeSpellRuleProfile.higherLevel.length > 0 ? (
+                <section>
+                  <h3>Scaling</h3>
+                  {activeSpellRuleProfile.higherLevel.map((paragraph) => (
+                    <p key={paragraph}>{paragraph}</p>
+                  ))}
+                </section>
+              ) : null}
               <section>
                 <h3>Rolls Involved</h3>
                 <p>{activeSpellRuleProfile.rolls}</p>
@@ -1404,6 +1426,40 @@ export function CharacterSheetOverlay({
                 <dt>Range</dt>
                 <dd>{activeSpellRuleProfile.range}</dd>
               </div>
+              <div>
+                <dt>Components</dt>
+                <dd>
+                  {activeSpellRuleProfile.components.length > 0
+                    ? activeSpellRuleProfile.components.join(", ")
+                    : "Not listed"}
+                </dd>
+              </div>
+              {activeSpellRuleProfile.material ? (
+                <div>
+                  <dt>Material</dt>
+                  <dd>{activeSpellRuleProfile.material}</dd>
+                </div>
+              ) : null}
+              <div>
+                <dt>Ritual</dt>
+                <dd>{activeSpellRuleProfile.ritual ? "Yes" : "No"}</dd>
+              </div>
+              {activeSpellRuleProfile.classes?.length ? (
+                <div>
+                  <dt>Classes</dt>
+                  <dd>{activeSpellRuleProfile.classes.join(", ")}</dd>
+                </div>
+              ) : null}
+              {activeSpellRuleProfile.sourceUrl ? (
+                <div>
+                  <dt>Source</dt>
+                  <dd>
+                    <a href={activeSpellRuleProfile.sourceUrl} target="_blank" rel="noreferrer">
+                      SRD
+                    </a>
+                  </dd>
+                </div>
+              ) : null}
             </dl>
           </section>
         </div>
