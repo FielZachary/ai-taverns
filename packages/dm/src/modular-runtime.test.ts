@@ -433,9 +433,19 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("combat"), /isPlayerControlled/i);
     assert.match(jobPrompt("combat"), /combat metadata/i);
     assert.match(jobPrompt("combat"), /Reuse the same actionId/i);
+    assert.match(jobPrompt("combat"), /Non-player-controlled catch-up loop/i);
     assert.match(
       jobPrompt("combat"),
-      /When the current player turn is fully resolved/i
+      /resolve every consecutive non-player-controlled actor/i
+    );
+    assert.match(jobPrompt("combat"), /Do not merely announce future turns/i);
+    assert.match(
+      jobPrompt("combat"),
+      /Only return next_input_needed player_actions in active combat after mechanics_state_update\.combat\.turnOwner is a living player-controlled actor/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /player turn resolved, all non-player turns catch up before control returns/i
     );
     assert.match(
       jobPrompt("combat"),

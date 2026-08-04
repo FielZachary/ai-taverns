@@ -8720,8 +8720,12 @@ const gameplayTurnOutputContractReminder = [
   "Never ask players to roll initiative, saving throws, attacks, damage, checks, or any other dice for NPCs or enemies; NPC and enemy dice are DM-side rolls that must still be visible to the players.",
   "Also include non-empty mechanics_state_update.combat with active, round, turnOwner, and provisional initiativeOrder as actor-key strings when initiative roll_requests pauses resolution.",
   "For every new npc:* actor key introduced in initiativeOrder, include mechanics_state_update.actors for that key with characterName, currentHp, maxHp, armorClass, conditions, allegiance, and isPlayerControlled.",
-  "If combat turnOwner is or becomes npc:*, resolve NPC turns before returning control to players.",
-  "When the current player turn is fully resolved, no roll_requests are pending, and combat remains active, set mechanics_state_update.combat.turnOwner to the next active actor in initiativeOrder. If that next actor is npc:*, resolve that NPC turn immediately in the same response before returning control.",
+  "Non-player-controlled catch-up loop: when a player-controlled turn is fully resolved, no roll_requests are pending, and combat remains active, advance through initiativeOrder and resolve every consecutive non-player-controlled actor in this same response until control reaches a living player-controlled actor, combat ends, or a player-facing roll, reaction, or tactical choice is required.",
+  "Non-player-controlled actors include allies, enemies, summons, and neutral combatants whose turns are not controlled by a player, even when their actor keys are npc:*.",
+  "Do not merely announce future turns such as 'Acolyte 3 is up next' or 'then Acolyte 1 and Acolyte 2 will act'; resolve those turns now or stop only because a player-facing roll, reaction, or tactical choice is required.",
+  "Do not write OOC notes like '(resolving NPC turns now)' as a substitute for actually resolving those turns in public_narration and mechanics_state_update.",
+  "Only return next_input_needed player_actions in active combat after mechanics_state_update.combat.turnOwner is a living player-controlled actor, or after combat has ended.",
+  "For each non-player-controlled turn in the catch-up loop, choose movement, action, and tactics; roll NPC-side dice yourself; show visible combat math; apply HP, condition, resource, and combat turn changes in mechanics_state_update; add combat_events when available; then continue to the next initiative actor.",
   "During active combat, if next control belongs to a player turnOwner and no roll_requests are pending, set input_policy only_targeted_players and input_targets to that player actor key only; do not use all_players for ordinary turn-based combat.",
   "Off-turn player combat declarations are only stated intent, not actions already in motion; never say they are mid-swing, following immediately, or resolving before the next initiative actor.",
   "When multiple player submissions arrive in active combat, resolve the current turn owner's valid action first, keep other submissions as pending intent, and if the next actor is an enemy resolve that enemy turn before later player intent.",
@@ -8751,12 +8755,12 @@ const openingSceneOutputContractReminder = [
 const gameplayTurnModeReminder: Record<CampaignMode, string[]> = {
   single_player: [
     "Singleplayer combat reminder:",
-    "Do not end with next_input_needed player_actions while turnOwner is npc:*; set turnOwner to the solo player actor key unless combat has ended.",
+    "Do not end with next_input_needed player_actions while turnOwner is a non-player-controlled actor; resolve every consecutive non-player-controlled turn before returning control unless combat has ended or a player-facing roll, reaction, or tactical choice is required.",
     "In singleplayer active combat, return control with turnOwner set to the player actor key, not null."
   ],
   multiplayer: [
     "Multiplayer combat reminder:",
-    "In active initiative combat, do not end with next_input_needed player_actions while turnOwner is npc:*; resolve NPC turns until control reaches a player actor or combat ends.",
+    "In active initiative combat, do not end with next_input_needed player_actions while turnOwner is a non-player-controlled actor; resolve every consecutive non-player-controlled turn until control reaches a player actor, combat ends, or a player-facing roll, reaction, or tactical choice is required.",
     "In active initiative combat, when control reaches a player actor and no roll_requests are pending, set turnOwner to that player actor, input_policy only_targeted_players, and input_targets to that actor key.",
     "Use turnOwner null with an all-player prompt only when combat is inactive or the scene is explicitly outside strict initiative.",
     "For multiplayer player-controlled initiative, saving throws, checks, attacks, and other targeted player rolls, set each roll_requests item's player field to the targeted character's actor key or character name."

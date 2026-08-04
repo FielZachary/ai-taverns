@@ -497,8 +497,14 @@ export function jobPrompt(
     "If turnOwner is an NPC actor key or NPC name, resolve that NPC turn before resolving submitted player attacks, spells, or combat actions.",
     "Off-turn player combat declarations are intent, not actions already in motion. Do not narrate them as mid-swing, already casting, or resolving before the current initiative actor.",
     "When multiple player submissions arrive, resolve the current turn owner's valid action first and treat other submissions as pending intent.",
-    "Do not end with next_input_needed player_actions while turnOwner is npc:*; resolve NPC turns until control returns to player control.",
-    "When the current player turn is fully resolved, no roll_requests are pending, and combat is still active, set mechanics_state_update.combat.turnOwner to the next active actor in initiativeOrder. If that next actor is npc:*, resolve that NPC turn immediately in the same response before returning control.",
+    "Non-player-controlled catch-up loop:",
+    "When a player-controlled turn is fully resolved, no roll_requests are pending, and combat is still active, advance through initiativeOrder and resolve every consecutive non-player-controlled actor in the same response until control reaches a living player-controlled actor, combat ends, or a player-facing roll, reaction, or tactical choice is required.",
+    "Non-player-controlled actors include allies, enemies, summons, and neutral combatants whose turns are not controlled by a player, even when their actor keys are npc:*.",
+    "Do not stop after resolving only one non-player-controlled actor if more non-player-controlled actors act before the next player-controlled turn.",
+    "Do not merely announce future turns such as 'Acolyte 3 is up next' or 'then Acolyte 1 and Acolyte 2 will act'. Resolve those turns now or stop only because a player-facing roll, reaction, or tactical choice is required.",
+    "Do not write OOC notes like '(resolving NPC turns now)' as a substitute for actually resolving those turns in public_narration and mechanics_state_update.",
+    "Only return next_input_needed player_actions in active combat after mechanics_state_update.combat.turnOwner is a living player-controlled actor, or after combat has ended.",
+    "For each non-player-controlled turn in the catch-up loop, choose movement, action, and tactics; roll NPC-side dice yourself; show visible combat math; apply HP, condition, resource, and combat turn changes in mechanics_state_update; add combat_events when available; then continue to the next initiative actor.",
     "When a player turn begins and that player has not already submitted a concrete action for this turn, do not infer an attack, spell, target, movement, or roll. Return next_input_needed player_actions with roll_requests [], target the turn owner, and ask what they do.",
     "If public_narration says a player is up or asks 'What do you do?', the JSON must stay in player-action mode: resolution_mode resolved_without_dice, next_input_needed player_actions, and roll_requests [].",
     "Never request an attack roll, spell attack roll, damage roll, saving throw, or check for a player merely because initiative has reached that player. First ask for the player's declared action.",
@@ -690,6 +696,70 @@ export function jobPrompt(
               ]
             }
           },
+          inventory_state_update: { patches: [] }
+        },
+        null,
+        2
+      )
+    ].join("\n"),
+    [
+      "Example: player turn resolved, all non-player turns catch up before control returns.",
+      "Player input: Oktai submitted Flurry of Blows damage against Acolyte 3.",
+      "Context: Combat is active. Initiative order is player:oktai, npc:manifold, npc:acolyte-3, npc:acolyte-1, npc:acolyte-2. Current turnOwner is player:oktai. Oktai's damage roll fully resolves his turn. Manifold, Acolyte 3, Acolyte 1, and Acolyte 2 all act before Oktai's next turn.",
+      "Bad response to avoid: saying 'Combat continues. It is now Acolyte 3's turn. Then Acolyte 1 and Acolyte 2 will act. (OOC: Resolving NPC turns now.)' while returning next_input_needed player_actions and turnOwner npc:acolyte-3.",
+      "Good response:",
+      JSON.stringify(
+        {
+          public_narration: [
+            "Your fist hammers Acolyte 3 backward. **Flurry of Blows Damage: 1d4 + 2 = 3 bludgeoning.** Acolyte 3 drops from 7 HP to 4 HP and sprawls prone beside the silver pool.",
+            "Manifold takes his turn immediately, driving Acolyte 1 away from the pool. **Manifold attack roll: 16 vs AC 13 - hit. Damage roll: 1d8 + 3 = 7 slashing damage.** Acolyte 1 staggers, robes torn and bloody.",
+            "Acolyte 3 spends half their movement rising, then lashes silver shards at you. **Acolyte 3 attack roll: 11 vs AC 12 - miss.** The shards hiss past your shoulder and burst against the stone.",
+            "Acolyte 1 answers Manifold with a hooked dagger. **Acolyte 1 attack roll: 14 vs Manifold's AC 15 - miss.** Manifold turns the blade aside.",
+            "Acolyte 2 chants over the Wellspring, but the unstable silver backlashes. **Acolyte 2 Arcana check: 8 vs DC 13 - failure.** The pool spits light, leaving Acolyte 2 rattled and exposed.",
+            "The initiative returns to you, Oktai. What do you do?"
+          ].join("\n\n"),
+          resolution_mode: "resolved_without_dice",
+          roll_requests: [],
+          next_input_needed: "player_actions",
+          input_targets: ["player:oktai"],
+          input_policy: "only_targeted_players",
+          mechanics_state_update: {
+            actors: {
+              "npc:acolyte-3": {
+                currentHp: 4,
+                conditions: []
+              },
+              "npc:acolyte-1": {
+                currentHp: 4
+              },
+              "npc:acolyte-2": {
+                conditions: ["rattled"]
+              }
+            },
+            combat: {
+              active: true,
+              round: 2,
+              turnOwner: "player:oktai",
+              initiativeOrder: [
+                "player:oktai",
+                "npc:manifold",
+                "npc:acolyte-3",
+                "npc:acolyte-1",
+                "npc:acolyte-2"
+              ]
+            }
+          },
+          combat_events: [
+            {
+              event: "turn_catchup",
+              actors: [
+                "npc:manifold",
+                "npc:acolyte-3",
+                "npc:acolyte-1",
+                "npc:acolyte-2"
+              ]
+            }
+          ],
           inventory_state_update: { patches: [] }
         },
         null,
