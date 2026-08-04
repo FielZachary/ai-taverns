@@ -2460,7 +2460,7 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.equal(startingLocation.displayLocation, startingLocation.name);
   assert.equal(metadata.eldermereOpeningPlanVersion, 1);
   assert.equal(openingPlan.campaign_title, "The Quiet Road");
-  assert.equal(openingPayload?.content, "A lantern flickers over the old road as your adventure begins.\n\nA weathered sign points toward a ruined watchtower beyond the trees.\n\nWhat do you do?");
+  assert.equal(openingPayload?.content, "The summons that brought you here has the weight of unfinished business, the kind that does not let a traveler turn back once the old road bends toward trouble.\n\nFor the last few days, the road has been mud, cold meals, and warnings from strangers who would not meet your eyes; in the last hour, the trees thinned enough to show the ruined watchtower beyond the ridge.\n\nA lantern flickers over the old road as your adventure begins, its light catching wet stones, wagon ruts, and a weathered sign pointing toward the tower beyond the trees.\n\nA courier waits beside the sign with their cloak pulled tight, glancing between you and the dark treeline while distant metal knocks once from somewhere inside the ruin.\n\nYou can question the courier, inspect the weathered sign, or follow the road toward the ruined watchtower before the lantern burns out.\n\nWhat do you do?");
   assert.equal(getProviderInputs().length, 2);
   await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -2575,7 +2575,11 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
 
   assert.ok(narratorInput);
   assert.match(narratorInput.message, /Eldermere opening plan:/);
-  assert.match(narratorInput.message, /Narrator boundary:/);
+  assert.match(narratorInput.message, /NARRATOR TASK - WRITE THE FULL PLAYER-FACING OPENER:/);
+  assert.match(narratorInput.message, /complete campaign-opening narration of exactly 6 paragraphs/);
+  assert.match(narratorInput.message, /HIGHEST PRIORITY - narrator_instructions:/);
+  assert.match(narratorInput.message, /scene blueprint/);
+  assert.match(narratorInput.message, /Do not return a teaser, prologue note, or partial first paragraph/);
   assert.match(narratorInput.message, /allowed_player_facing_terms/);
   assert.match(narratorInput.message, /forbidden_opening_terms/);
   assert.match(narratorInput.message, /Second Dominion/);
@@ -2594,7 +2598,18 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(narratorInput.message, /The first sentence must be about/);
   assert.match(narratorInput.message, /You stand at/);
   assert.match(narratorInput.message, /Paragraph 2 must describe what/);
+  assert.match(narratorInput.message, /Paragraph 3 must put the player physically inside/);
+  assert.match(narratorInput.message, /sensory_palette/);
+  assert.match(narratorInput.message, /Paragraph 4 must introduce visible NPC tension/);
+  assert.match(narratorInput.message, /recent_events/);
+  assert.match(narratorInput.message, /visible_signs/);
+  assert.match(narratorInput.message, /rumors_half_true/);
+  assert.match(narratorInput.message, /Paragraph 5 must present the immediate complication/);
+  assert.match(narratorInput.message, /Paragraph 6 must be the final direct handoff prompt/);
+  assert.match(narratorInput.message, /Do not write a seventh paragraph/);
   assert.match(narratorInput.message, /personal urgency beat/);
+  assert.match(narratorInput.message, /2-3 concrete non-dice actions/);
+  assert.match(narratorInput.message, /Invalid opener: any opener with fewer or more than exactly 6 paragraphs/);
   assert.match(narratorInput.message, /grounded, direct fantasy prose/);
   assert.match(narratorInput.message, /do not say they disappeared/);
   assert.match(narratorInput.message, /Do not invent new circumstances/);

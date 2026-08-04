@@ -8501,7 +8501,9 @@ function formatEldermereNarratorOpeningRequest(input: {
     "Eldermere opening plan:",
     JSON.stringify(openingPlanToJson(input.plan), null, 2),
     "",
-    "Narrator boundary:",
+    "NARRATOR TASK - WRITE THE FULL PLAYER-FACING OPENER:",
+    "Your only job is to write the complete opening scene in public_narration. Do not summarize the premise. Do not stop after the character motivation. Do not return a teaser, prologue note, or partial first paragraph.",
+    "public_narration must be a complete campaign-opening narration of exactly 6 paragraphs separated by blank lines. Do not write fewer or more than 6 paragraphs. The sixth and final paragraph must be the direct prompt, such as 'What do you do?'",
     "Write the player-facing opener only from the Eldermere opening plan above, the canonical character sheets, and the website DM instructions.",
     "Keep the first scene anchored in the planned region and starting location; do not relocate the opener to another settlement, region, road, tavern, faction hall, or invented landmark unless the plan explicitly places it inside the starting location.",
     "Make at least one player backstory anchor visible in the first scene through a clue, NPC demand, debt, danger, opportunity, sensory trigger, or emotional pressure. Do not retell the whole backstory.",
@@ -8509,13 +8511,24 @@ function formatEldermereNarratorOpeningRequest(input: {
     "Forbidden opening terms must not appear in public_narration.",
     "Allowed player-facing terms must be explained plainly on first use.",
     "",
-    "Opening structure:",
-    "Treat the opener as an arrival runway into the first live scene, not only a cold open.",
+    "HIGHEST PRIORITY - narrator_instructions:",
+    "The narrator_instructions array inside the Eldermere opening plan is the scene blueprint. Follow every item in it before using any optional campaign_foundation detail.",
+    "If narrator_instructions names a location, NPC, object, pet, keepsake, complication, forbidden name, fee, favor, contact, or final question, it must appear in public_narration unless it would reveal a forbidden term.",
+    "Use narrator_instructions to decide what paragraphs 3-5 show. Do not replace them with generic setting summary, distant lore, or abstract mood.",
+    "",
+    "REQUIRED OPENING STRUCTURE:",
+    "Treat the opener as an arrival runway into the first live scene, not only a cold open. Begin with character-facing fiction, but still complete every required opener part below.",
     "Paragraph 1 must explain why this specific character or party has come here now, using player-facing backstory context. Assume the player has not recently read the backstory. Connect the arrival to at least one unresolved dream, loss, secret, promise, obligation, fear, ambition, or relationship. Do not begin with scenery, weather, crowds, dialogue, combat, or the name of the starting location.",
     "The first sentence must be about the character's reason for coming, not where they are standing. Do not start with phrases like 'You stand at', 'You arrive at', 'The town', 'The road', or any location-first camera direction.",
     "Paragraph 2 must describe what the character or party has been doing over the last few days and then the last few hours to reach this place. Explain how they entered the region or settlement, where exactly they have landed, what kind of area it is, what locals say about it, and what the character plausibly knows before the immediate scene begins. Keep this player-facing and concrete. Do not reveal DM-private secrets.",
-    "Paragraph 3 and after may describe the live scene: the physical location, sensory details, visible NPC tension, immediate complication, and interactable choices.",
+    "Paragraph 3 must put the player physically inside opening_premise.first_scene_location and starting_location. Use narrator_instructions plus sensory_palette from the JSON to describe the room, street, weather, light, sound, smell, crowd, surfaces, exits, and reachable objects. If narrator_instructions names Pip, a locket, a wrapped clue, a tavern, or another physical anchor, place it visibly and tangibly here.",
+    "Paragraph 4 must introduce visible NPC tension and the live contact or pressure named in npc_seed and narrator_instructions. Use campaign_foundation.living_local_context.recent_events to explain what people are tense about, and use campaign_foundation.living_local_context.visible_signs to show that tension through observable details rather than exposition.",
+    "Paragraph 5 must present the immediate complication from opening_premise.immediate_complication and narrator_instructions, then make it actionable. Use campaign_foundation.living_local_context.rumors_half_true only as uncertain tavern talk or a visible rumor hook, use first_interactable_choices for 2-3 concrete things the player can do right now, and include one short personal urgency beat tying the immediate pressure back to the character's backstory.",
+    "Paragraph 6 must be the final direct handoff prompt, such as 'What do you do?'",
+    "Do not write a seventh paragraph.",
     "Before the final question, include one short personal urgency beat that connects the immediate clue, demand, threat, or opportunity back to the character's backstory reason for being here. Do not explain why the player should care abstractly. Show the character noticing, reacting, or connecting it to their unresolved backstory.",
+    "Even when no dice are needed, present 2-3 concrete non-dice actions the player could take right now.",
+    "Invalid opener: any opener with fewer or more than exactly 6 paragraphs, any opener that only explains why the character arrived, or any opener that ignores narrator_instructions instead of establishing the live scene, immediate obstacle, NPC or discovery pressure, and actionable choices.",
     "",
     "Opening style:",
     "Write in grounded, direct fantasy prose. Keep the narration detailed and atmospheric, but avoid ornate, poetic, elevated, or mythic phrasing. Do not solve this by making the narration shorter; keep the same amount of detail and make the details more concrete.",
@@ -8903,13 +8916,16 @@ function askDmInstructions() {
     "You are the AI Taverns DnD Dungeon Master answering an out-of-turn table question.",
     "Return exactly one valid JSON object and no Markdown.",
     "{\"answer\":\"Your player-facing answer.\"}",
+    "Speak in first-person DM table voice, not as a detached assistant, rules notice, or third-party narrator.",
+    "Do not begin with a heading, label, or procedural disclaimer that names the answer as table guidance.",
     "This is not a player action and must not advance game time.",
+    "When the question could be mistaken for taking an action or advancing the scene, briefly remind the player in your answer: \"Remember, you are not advancing your turn here, so take my words as clarification rather than the scene moving forward. Anyway...\"",
     "Do not move the scene forward, resolve consequences, consume resources, request dice, change pending rolls, trigger NPC actions, or introduce new hidden facts as if discovered.",
     "Use only facts explicitly present in the provided campaign context, current scene, canonical character sheets, rules, and visible character knowledge.",
     "Do not reconstruct missing history, infer where an item came from, or fill continuity gaps unless the provided context explicitly states the answer.",
     "Do not invent names, places, relationships, deaths, meetings, prior scenes, loot amounts, inventory contents, or inventory changes.",
     "Do not treat the player's question as confirmation that something happened. If the question contains a false premise, correct only the part contradicted by provided context and clearly say what is unknown.",
-    "If the answer is not clearly established in the provided context, say that you do not see it established in the current campaign context.",
+    "If the answer is not clearly established in the provided context, say so as the DM controlling established fiction. Prefer phrasing like \"That's all that I've established; I can't tell you quite yet...\" instead of sounding like a detached assistant with missing context.",
     "Trust provided campaign context, canonical character sheets, and stored campaign state over prior Ask DM answers when they conflict. Ask DM answers are table guidance, not canon by themselves.",
     "You may explain what the current context says about inventory, equipment, or currency, but you cannot update inventory, promise an update, or declare a corrected total unless the canonical character sheet or provided campaign state already shows it.",
     "If the player is asking to do something in the fiction, tell them to submit it as a turn/action instead of resolving it here.",
@@ -9075,6 +9091,8 @@ const gameplayTurnOutputContractReminder = [
 const openingSceneOutputContractReminder = [
   "Opening output reminder:",
   "Return only one valid JSON object. Do not include prose, Markdown, or commentary outside JSON.",
+  "public_narration must contain the full 6-paragraph opener, not only the character motivation or a short teaser.",
+  "Treat narrator_instructions in the Eldermere opening plan as the highest-priority scene blueprint.",
   "Include narration_highlights with exactly 3 exact phrases copied from public_narration and color_role npc, place, clue, danger, faction, or object when the opener has 3 worthwhile visible terms. Use [] only if there is genuinely nothing worth highlighting; it is completely okay to highlight nothing.",
   "Do not use bold, Markdown, HTML, CSS, hex colors, or color names inside public_narration for these highlights. The app renders colors from color_role.",
   "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved in the opener."
@@ -9658,6 +9676,30 @@ function eldermereOpeningSettingErrors(
   return errors;
 }
 
+function openingParagraphCount(content: string) {
+  return content
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean).length;
+}
+
+function eldermereOpeningNarrationErrors(content: string) {
+  const errors: string[] = [];
+  const paragraphCount = openingParagraphCount(content);
+
+  if (paragraphCount !== 6) {
+    errors.push(
+      `public_narration must contain exactly 6 paragraphs; found ${paragraphCount}`
+    );
+  }
+
+  if (!/what do you do\?\s*$/i.test(content.trim())) {
+    errors.push("public_narration must end with 'What do you do?'");
+  }
+
+  return errors;
+}
+
 async function askEldermereOpeningNarrator(
   db: Queryable,
   runtime: DungeonMasterRuntime,
@@ -9691,8 +9733,13 @@ async function askEldermereOpeningNarrator(
   );
   const forbiddenTerms = findForbiddenOpeningTerms(opening.content, plan);
   const settingErrors = eldermereOpeningSettingErrors(opening.setting, plan);
+  const narrationErrors = eldermereOpeningNarrationErrors(opening.content);
 
-  if (forbiddenTerms.length === 0 && settingErrors.length === 0) {
+  if (
+    forbiddenTerms.length === 0 &&
+    settingErrors.length === 0 &&
+    narrationErrors.length === 0
+  ) {
     return opening;
   }
 
@@ -9709,7 +9756,13 @@ async function askEldermereOpeningNarrator(
     ...(settingErrors.length > 0
       ? [`The previous setting metadata was invalid: ${settingErrors.join("; ")}.`]
       : []),
-    "Return the same opening situation as valid AI Taverns DM JSON, but remove those terms from public_narration.",
+    ...(narrationErrors.length > 0
+      ? [
+          `The previous public_narration structure was invalid: ${narrationErrors.join("; ")}.`
+        ]
+      : []),
+    "Return the same opening situation as valid AI Taverns DM JSON, but fix every issue above.",
+    "public_narration must be exactly 6 paragraphs separated by blank lines, must follow narrator_instructions as the highest-priority scene blueprint, and the sixth paragraph must be the final direct prompt 'What do you do?'",
     "Use only allowed_player_facing_terms and plain descriptions. Preserve setting metadata."
   ].join("\n");
   const repairedOpening = await askDungeonMaster(
@@ -9737,8 +9790,15 @@ async function askEldermereOpeningNarrator(
     repairedOpening.setting,
     plan
   );
+  const remainingNarrationErrors = eldermereOpeningNarrationErrors(
+    repairedOpening.content
+  );
 
-  if (remainingForbiddenTerms.length > 0 || remainingSettingErrors.length > 0) {
+  if (
+    remainingForbiddenTerms.length > 0 ||
+    remainingSettingErrors.length > 0 ||
+    remainingNarrationErrors.length > 0
+  ) {
     return repairEldermereOpeningReply(repairedOpening, plan);
   }
 

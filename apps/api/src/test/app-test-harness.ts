@@ -3673,7 +3673,7 @@ before(async () => {
         }
 
         const publicNarration =
-          "A lantern flickers over the old road as your adventure begins.\n\nA weathered sign points toward a ruined watchtower beyond the trees.\n\nWhat do you do?";
+          "The summons that brought you here has the weight of unfinished business, the kind that does not let a traveler turn back once the old road bends toward trouble.\n\nFor the last few days, the road has been mud, cold meals, and warnings from strangers who would not meet your eyes; in the last hour, the trees thinned enough to show the ruined watchtower beyond the ridge.\n\nA lantern flickers over the old road as your adventure begins, its light catching wet stones, wagon ruts, and a weathered sign pointing toward the tower beyond the trees.\n\nA courier waits beside the sign with their cloak pulled tight, glancing between you and the dark treeline while distant metal knocks once from somewhere inside the ruin.\n\nYou can question the courier, inspect the weathered sign, or follow the road toward the ruined watchtower before the lantern burns out.\n\nWhat do you do?";
         const isEldermereNarrator = input.message.includes(
           'Set setting.world_name to "Eldermere".'
         );

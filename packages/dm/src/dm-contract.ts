@@ -713,6 +713,7 @@ export type DmContractResponse = {
 export type DmContractRecovery = {
   contract: DmContractResponse;
   report: {
+    recoveryKind?: "plain_narration";
     originalNextInputNeeded: string;
     recoveredNextInputNeeded: DmContractResponse["nextInputNeeded"];
     originalResolutionMode: string;
@@ -721,6 +722,41 @@ export type DmContractRecovery = {
   };
 };
 
+function looksLikeJsonContractAttempt(text: string) {
+  return /^[{\[]/.test(text.trim());
+}
+
+function recoverPlainNarrationContract(
+  content: string | undefined
+): DmContractRecovery | null {
+  const publicNarration = content?.trim() ?? "";
+
+  if (!publicNarration || looksLikeJsonContractAttempt(publicNarration)) {
+    return null;
+  }
+
+  return {
+    contract: {
+      publicNarration,
+      narrationHighlights: [],
+      resolutionMode: "resolved_without_dice",
+      rollRequests: [],
+      nextInputNeeded: "player_actions",
+      inputTargets: [],
+      inputPolicy: "all_players",
+      inventoryStateUpdate: { patches: [] }
+    },
+    report: {
+      recoveryKind: "plain_narration",
+      originalNextInputNeeded: "",
+      recoveredNextInputNeeded: "player_actions",
+      originalResolutionMode: "",
+      recoveredResolutionMode: "resolved_without_dice",
+      rollRequestsCount: 0
+    }
+  };
+}
+
 export function parseDmContract(
   content: string | undefined,
   options?: DmContractParseOptions
@@ -728,7 +764,9 @@ export function parseDmContract(
   const parsed = parseJsonObject(content?.trim() ?? "");
 
   if (!parsed) {
-    throw new Error("The DM provider returned invalid JSON for a website turn.");
+    throw new Error(
+      "The DM provider returned invalid JSON for a website turn so try restarting and sending the exact same message and it should work alright."
+    );
   }
 
   let publicNarration = stringValue(parsed.public_narration);
@@ -875,7 +913,7 @@ export function recoverDmContractAfterParseFailure(
   const parsed = parseJsonObject(content?.trim() ?? "");
 
   if (!parsed) {
-    return null;
+    return recoverPlainNarrationContract(content);
   }
 
   const publicNarration = stringValue(parsed.public_narration);
