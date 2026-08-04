@@ -1921,6 +1921,16 @@ function stringListField(record: Record<string, unknown>, key: string) {
     : undefined;
 }
 
+function allegianceField(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  return value === "player" ||
+    value === "ally" ||
+    value === "hostile" ||
+    value === "neutral"
+    ? value
+    : undefined;
+}
+
 function applyMechanicsStateUpdate(
   state: MechanicsState,
   update: Record<string, unknown> | undefined,
@@ -1931,6 +1941,9 @@ function applyMechanicsStateUpdate(
   }
 
   const rawActors = isRecord(update.actors) ? update.actors : update;
+  const rawCombat = isRecord(update.combat) ? update.combat : undefined;
+  const combatWillBeActive =
+    state.combat.active || (rawCombat ? rawCombat.active === true : false);
   const nextActors = { ...state.actors };
   let changed = false;
 
@@ -1940,26 +1953,37 @@ function applyMechanicsStateUpdate(
     }
 
     const existing = nextActors[actorKey];
+    const currentHp = hpNumberField(rawActor, "currentHp");
+    const maxHp = hpNumberField(rawActor, "maxHp");
+    const armorClass = numberField(rawActor, "armorClass");
     const characterName =
       typeof rawActor.characterName === "string" && rawActor.characterName.trim()
         ? rawActor.characterName
         : existing?.characterName;
+    const isNewCombatNpc =
+      !existing &&
+      combatWillBeActive &&
+      actorKey.startsWith("npc:") &&
+      Boolean(characterName) &&
+      currentHp !== undefined &&
+      maxHp !== undefined &&
+      armorClass !== undefined;
 
-    if (!existing && !characterName) {
+    if (!existing && !isNewCombatNpc) {
       continue;
     }
 
     nextActors[actorKey] = {
       ...(existing ?? { characterName: characterName ?? actorKey }),
       ...(characterName ? { characterName } : {}),
-      ...(hpNumberField(rawActor, "currentHp") !== undefined
-        ? { currentHp: hpNumberField(rawActor, "currentHp") }
+      ...(currentHp !== undefined ? { currentHp } : {}),
+      ...(maxHp !== undefined ? { maxHp } : {}),
+      ...(armorClass !== undefined ? { armorClass } : {}),
+      ...(allegianceField(rawActor, "allegiance") !== undefined
+        ? { allegiance: allegianceField(rawActor, "allegiance") }
         : {}),
-      ...(hpNumberField(rawActor, "maxHp") !== undefined
-        ? { maxHp: hpNumberField(rawActor, "maxHp") }
-        : {}),
-      ...(numberField(rawActor, "armorClass") !== undefined
-        ? { armorClass: numberField(rawActor, "armorClass") }
+      ...(typeof rawActor.isPlayerControlled === "boolean"
+        ? { isPlayerControlled: rawActor.isPlayerControlled }
         : {}),
       ...(stringListField(rawActor, "conditions") !== undefined
         ? { conditions: stringListField(rawActor, "conditions") }
@@ -1971,7 +1995,6 @@ function applyMechanicsStateUpdate(
     changed = true;
   }
 
-  const rawCombat = isRecord(update.combat) ? update.combat : undefined;
   const nextCombat = rawCombat
     ? {
         ...state.combat,
@@ -3984,6 +4007,78 @@ function normalizeDiceAndModifier(dice: string, modifier: number | undefined) {
   };
 }
 
+function stringProperty(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function integerProperty(record: Record<string, unknown>, key: string) {
+  const value = Number(record[key]);
+  return Number.isInteger(value) ? value : undefined;
+}
+
+type CombatRollKind = NonNullable<NonNullable<DiceRollRequest["combat"]>["kind"]>;
+
+function combatRollKind(value: string | undefined): CombatRollKind | undefined {
+  return value === "attack_roll" ||
+    value === "damage_roll" ||
+    value === "saving_throw" ||
+    value === "ability_check" ||
+    value === "initiative"
+    ? value
+    : undefined;
+}
+
+function normalizeCombatRollDamage(value: Record<string, unknown>) {
+  const normalized: NonNullable<
+    NonNullable<DiceRollRequest["combat"]>["onHitDamage"]
+  > = {};
+  const dice = stringProperty(value, "dice");
+  const modifier = integerProperty(value, "modifier");
+  const damageType = stringProperty(value, "damageType");
+
+  if (dice) normalized.dice = dice;
+  if (modifier !== undefined) normalized.modifier = modifier;
+  if (damageType) normalized.damageType = damageType;
+
+  return normalized;
+}
+
+function normalizeCombatRollContext(
+  value: unknown
+): NonNullable<DiceRollRequest["combat"]> | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const onHitDamage = isRecord(value.onHitDamage)
+    ? normalizeCombatRollDamage(value.onHitDamage)
+    : undefined;
+  const kind = combatRollKind(stringProperty(value, "kind"));
+  const sequence = integerProperty(value, "sequence");
+  const normalized: NonNullable<DiceRollRequest["combat"]> = {};
+  const actionId = stringProperty(value, "actionId");
+  const actorKey = stringProperty(value, "actorKey");
+  const targetActorKey = stringProperty(value, "targetActorKey");
+  const attackName = stringProperty(value, "attackName");
+  const sourceAttackRollId = stringProperty(value, "sourceAttackRollId");
+  const damageType = stringProperty(value, "damageType");
+
+  if (actionId) normalized.actionId = actionId;
+  if (actorKey) normalized.actorKey = actorKey;
+  if (targetActorKey) normalized.targetActorKey = targetActorKey;
+  if (kind) normalized.kind = kind;
+  if (attackName) normalized.attackName = attackName;
+  if (sequence !== undefined && sequence > 0) normalized.sequence = sequence;
+  if (sourceAttackRollId) normalized.sourceAttackRollId = sourceAttackRollId;
+  if (damageType) normalized.damageType = damageType;
+  if (onHitDamage && Object.keys(onHitDamage).length > 0) {
+    normalized.onHitDamage = onHitDamage;
+  }
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
 function normalizeRollRequest(value: unknown): DiceRollRequest | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -4025,6 +4120,7 @@ function normalizeRollRequest(value: unknown): DiceRollRequest | null {
     typeof candidate.id === "string" && candidate.id.trim()
       ? candidate.id.trim()
       : randomUUID();
+  const combat = normalizeCombatRollContext(candidate.combat);
 
   return {
     id,
@@ -4038,7 +4134,8 @@ function normalizeRollRequest(value: unknown): DiceRollRequest | null {
     reason:
       typeof candidate.reason === "string" ? candidate.reason.trim() : undefined,
     targetDc,
-    advantageState
+    advantageState,
+    ...(combat ? { combat } : {})
   };
 }
 
@@ -4048,6 +4145,120 @@ function normalizeRollRequests(value: unknown): DiceRollRequest[] {
         .map((request) => normalizeRollRequest(request))
         .filter((request): request is DiceRollRequest => Boolean(request))
     : [];
+}
+
+function combatRollContextsFromAction(currentAction: string) {
+  const contexts: NonNullable<DiceRollRequest["combat"]>[] = [];
+  const pattern = /^Combat roll context JSON:\s*(\{.*\})$/gim;
+  const turnInputJson = currentAction.match(
+    /Current turn input JSON:\n([\s\S]+)$/m
+  )?.[1];
+  const actionTexts = [currentAction];
+
+  if (turnInputJson) {
+    try {
+      const turnInput = JSON.parse(turnInputJson) as { submissions?: unknown[] };
+      const submissionTexts = Array.isArray(turnInput.submissions)
+        ? turnInput.submissions.flatMap((submission) =>
+            isRecord(submission) && typeof submission.content === "string"
+              ? [submission.content]
+              : []
+          )
+        : [];
+      actionTexts.push(...submissionTexts);
+    } catch {
+      // Fall back to scanning the raw prompt text below.
+    }
+  }
+
+  for (const actionText of actionTexts) {
+    for (const match of actionText.matchAll(pattern)) {
+      const rawJson = match[1];
+
+      if (!rawJson) {
+        continue;
+      }
+
+      try {
+        const context = normalizeCombatRollContext(JSON.parse(rawJson));
+
+        if (context) {
+          contexts.push(context);
+        }
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  return contexts;
+}
+
+function mechanicsStateUpdateHasHpUpdate(
+  update: Record<string, unknown> | undefined,
+  actorKey: string
+) {
+  if (!update) {
+    return false;
+  }
+
+  const rawActors = isRecord(update.actors) ? update.actors : update;
+  const rawActor = rawActors[actorKey];
+
+  return isRecord(rawActor) && hpNumberField(rawActor, "currentHp") !== undefined;
+}
+
+function narrationMentionsDamage(publicNarration: string) {
+  return /\b(damage|damaged|takes?|deals?|bludgeoning|piercing|slashing|acid|cold|fire|force|lightning|necrotic|poison|psychic|radiant|thunder)\b/i.test(
+    publicNarration
+  );
+}
+
+function combatStateDiagnostics(input: {
+  currentAction: string;
+  publicNarration: string;
+  mechanicsState: MechanicsState;
+  mechanicsStateUpdate: Record<string, unknown> | undefined;
+}) {
+  const diagnostics: Array<{
+    severity: "warning";
+    code: "missing_target_hp_update_after_combat_damage";
+    targetActorKey: string;
+    message: string;
+  }> = [];
+
+  if (!input.mechanicsState.combat.active || !narrationMentionsDamage(input.publicNarration)) {
+    return diagnostics;
+  }
+
+  for (const context of combatRollContextsFromAction(input.currentAction)) {
+    if (context.kind !== "damage_roll" || !context.targetActorKey) {
+      continue;
+    }
+
+    if (!input.mechanicsState.actors[context.targetActorKey]) {
+      continue;
+    }
+
+    if (
+      mechanicsStateUpdateHasHpUpdate(
+        input.mechanicsStateUpdate,
+        context.targetActorKey
+      )
+    ) {
+      continue;
+    }
+
+    diagnostics.push({
+      severity: "warning",
+      code: "missing_target_hp_update_after_combat_damage",
+      targetActorKey: context.targetActorKey,
+      message:
+        "A submitted combat damage roll resolved damage in narration, but mechanics_state_update did not update the target actor's currentHp."
+    });
+  }
+
+  return diagnostics;
 }
 
 function pendingRollRequestsFromCampaign(campaign: CampaignRow) {
@@ -4255,9 +4466,13 @@ function formatRollSubmission(
   const rollText =
     result.rolls.length === 1 ? String(result.rolls[0]) : result.rolls.join(", ");
 
-  return `I rolled ${request.dice}${modifierText(request.modifier)}: ${
+  const base = `I rolled ${request.dice}${modifierText(request.modifier)}: ${
     result.total
   } (${rollText}) for ${request.label}.`;
+
+  return request.combat
+    ? `${base}\nCombat roll context JSON: ${JSON.stringify(request.combat)}`
+    : base;
 }
 
 function rollSubmissionsFromPayload(
@@ -5397,7 +5612,8 @@ function routerStateForCampaign(
       label: request.label,
       dice: request.dice,
       player: request.player,
-      modifier: request.modifier
+      modifier: request.modifier,
+      combat: request.combat
     })),
     active_players: players.map((player) => ({
       actorKey: actorKeyForPlayer(player.id),
@@ -8503,13 +8719,16 @@ const gameplayTurnOutputContractReminder = [
   "Roll NPC and enemy initiative yourself every time, reveal each NPC/enemy initiative roll and total in public_narration, and encode the resulting order in mechanics_state_update or combat_events.",
   "Never ask players to roll initiative, saving throws, attacks, damage, checks, or any other dice for NPCs or enemies; NPC and enemy dice are DM-side rolls that must still be visible to the players.",
   "Also include non-empty mechanics_state_update.combat with active, round, turnOwner, and provisional initiativeOrder as actor-key strings when initiative roll_requests pauses resolution.",
+  "For every new npc:* actor key introduced in initiativeOrder, include mechanics_state_update.actors for that key with characterName, currentHp, maxHp, armorClass, conditions, allegiance, and isPlayerControlled.",
   "If combat turnOwner is or becomes npc:*, resolve NPC turns before returning control to players.",
+  "When the current player turn is fully resolved, no roll_requests are pending, and combat remains active, set mechanics_state_update.combat.turnOwner to the next active actor in initiativeOrder. If that next actor is npc:*, resolve that NPC turn immediately in the same response before returning control.",
   "During active combat, if next control belongs to a player turnOwner and no roll_requests are pending, set input_policy only_targeted_players and input_targets to that player actor key only; do not use all_players for ordinary turn-based combat.",
   "Off-turn player combat declarations are only stated intent, not actions already in motion; never say they are mid-swing, following immediately, or resolving before the next initiative actor.",
   "When multiple player submissions arrive in active combat, resolve the current turn owner's valid action first, keep other submissions as pending intent, and if the next actor is an enemy resolve that enemy turn before later player intent.",
   "If the stored turnOwner is an NPC key or NPC character name, do not let submitted player attacks or spells preempt that NPC turn.",
   "If a declared action needs a concrete tactical choice before dice can be interpreted, such as target, targets, spell area, Magic Missile dart distribution, weapon target, movement destination, or affected creatures, do not request dice yet.",
   "For missing tactical choices, return next_input_needed player_actions, roll_requests [], input_policy only_targeted_players, input_targets set to the acting player, and ask only for the missing choice.",
+  "For combat attack and damage roll_requests, include combat metadata: {actionId, actorKey, targetActorKey, kind, attackName, sequence, sourceAttackRollId when resolving damage, damageType, and onHitDamage for attack rolls that can hit}. Reuse the same actionId across all rolls for one declared combat action.",
   "When a player action, spell, feature, or weapon would deal damage and that damage roll was not already submitted, do not roll damage yourself. Request the player's damage roll with next_input_needed dice_results and a structured roll_requests entry. This includes automatic-hit effects such as Magic Missile. Do not update target HP until damage is submitted.",
   "Resolve NPC attacks fully using explicit wording: 'attack roll: X vs AC Y - hit/miss'; on a hit, immediately state 'damage roll: dice = total damage', update player HP, then return control.",
   "For NPC hits, public_narration must include the words attack roll, vs AC, and damage roll before injury narration.",
@@ -9563,6 +9782,12 @@ async function askDungeonMaster(
       }
     );
     const nextMechanicsState = normalizedInputControl.mechanicsState;
+    const combatStateDiagnosticsReport = combatStateDiagnostics({
+      currentAction: message,
+      publicNarration: contract.publicNarration,
+      mechanicsState,
+      mechanicsStateUpdate: contract.mechanicsStateUpdate
+    });
 
     if (nextMechanicsState !== mechanicsState) {
       await writeMechanicsStateForLockedCampaign(
@@ -9599,6 +9824,13 @@ async function askDungeonMaster(
         combat: nextMechanicsState.combat,
         actors: nextMechanicsState.actors
       },
+      ...(combatStateDiagnosticsReport.length > 0
+        ? {
+            combatAdjudication: {
+              diagnostics: combatStateDiagnosticsReport
+            }
+          }
+        : {}),
       ...(contract.inventoryStateUpdate || inventoryValidation.discarded.length > 0
         ? {
             inventoryState: {
@@ -9630,6 +9862,7 @@ async function askDungeonMaster(
         rollRequestsCount: rollRequests.length,
         rollRequestLabels: rollRequests.map((request) => request.label),
         rollRequestDiagnostics: rollRequestDiagnosticsReport,
+        combatStateDiagnostics: combatStateDiagnosticsReport,
         nextInputNeeded: contract.nextInputNeeded,
         contractParseRecovered: Boolean(contractParseRecovery),
         contractParseRecovery: contractParseRecovery?.report,
@@ -9655,6 +9888,20 @@ async function askDungeonMaster(
       });
     }
 
+    if (combatStateDiagnosticsReport.length > 0) {
+      await logTurnDebugTrace(db, {
+        campaignId: campaign.id,
+        traceId,
+        phase: "combat_state_diagnostics",
+        turnId,
+        elapsedMs: Date.now() - startedAt,
+        payload: {
+          diagnostics: combatStateDiagnosticsReport,
+          mechanicsStateUpdate: contract.mechanicsStateUpdate
+        }
+      });
+    }
+
     await logDmOutputReport(db, {
       campaignId: campaign.id,
       traceId,
@@ -9668,6 +9915,7 @@ async function askDungeonMaster(
         contractParseRecovery: contractParseRecovery?.report,
         rollRequestsCount: rollRequests.length,
         rollRequestDiagnostics: rollRequestDiagnosticsReport,
+        combatStateDiagnostics: combatStateDiagnosticsReport,
         acceptedCombatEventsCount: combatValidation.accepted.length,
         discardedCombatEvents: combatValidation.discarded,
         acceptedImmediateContextUpdatesCount: memoryValidation.accepted.length,

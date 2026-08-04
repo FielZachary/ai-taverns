@@ -209,6 +209,39 @@ describe("parseDmContract", () => {
     });
   });
 
+  it("preserves combat roll metadata from roll requests", () => {
+    const result = parseDmContract(
+      JSON.stringify({
+        public_narration:
+          "Your second flurry strike lands. Roll 1d4 + 2 for Flurry of Blows Damage.",
+        roll_requests: [
+          {
+            id: "oktai-flurry-damage-2",
+            dice: "1d4",
+            label: "Flurry of Blows Damage",
+            modifier: 2,
+            player: "player:oktai",
+            combat: {
+              actionId: "oktai-round1-turn",
+              actorKey: "player:oktai",
+              targetActorKey: "npc:acolyte-1",
+              kind: "damage_roll",
+              sourceAttackRollId: "oktai-flurry-attack-2",
+              damageType: "bludgeoning"
+            }
+          }
+        ],
+        next_input_needed: "dice_results"
+      })
+    );
+
+    assert.equal(
+      result.rollRequests[0]?.combat?.targetActorKey,
+      "npc:acolyte-1"
+    );
+    assert.equal(result.rollRequests[0]?.combat?.kind, "damage_roll");
+  });
+
   it("infers multiplayer initiative roll targets from initiative labels", () => {
     const result = parseDmContract(
       JSON.stringify({

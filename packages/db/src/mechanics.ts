@@ -234,6 +234,13 @@ export function persistedMechanicsState(
     const currentHp = Number(actor.currentHp);
     const maxHp = Number(actor.maxHp);
     const armorClass = Number(actor.armorClass);
+    const allegiance =
+      actor.allegiance === "player" ||
+      actor.allegiance === "ally" ||
+      actor.allegiance === "hostile" ||
+      actor.allegiance === "neutral"
+        ? actor.allegiance
+        : undefined;
     const conditions = Array.isArray(actor.conditions)
       ? actor.conditions.filter((item): item is string => typeof item === "string")
       : [];
@@ -245,6 +252,10 @@ export function persistedMechanicsState(
       ...(Number.isInteger(maxHp) ? { maxHp: Math.max(0, maxHp) } : {}),
       ...(Number.isInteger(armorClass)
         ? { armorClass: Math.max(0, armorClass) }
+        : {}),
+      ...(allegiance ? { allegiance } : {}),
+      ...(typeof actor.isPlayerControlled === "boolean"
+        ? { isPlayerControlled: actor.isPlayerControlled }
         : {}),
       ...(parseSpellSlots(actor.spellSlots)
         ? { spellSlots: parseSpellSlots(actor.spellSlots) }
@@ -424,6 +435,8 @@ function legacyActorFromSheet(player: PlayerLike): MechanicsState["actors"][stri
     characterName: player.character_name,
     ...(currentHp !== undefined ? { currentHp } : {}),
     ...(maxHp !== undefined ? { maxHp } : {}),
+    allegiance: "player",
+    isPlayerControlled: true,
     ...(spellSlots ? { spellSlots } : {}),
     concentration: null,
     conditions: []
