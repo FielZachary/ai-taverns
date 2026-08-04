@@ -1,4 +1,9 @@
-import type { DiceRollRequest, InputPolicy } from "./game-types.js";
+import type {
+  DiceRollRequest,
+  InputPolicy,
+  NarrationHighlight,
+  NarrationHighlightRole
+} from "./game-types.js";
 
 export const internalOpeningRequestPrefix = "AI_DND_INTERNAL_OPENING_REQUEST";
 export const internalPrepRequestPrefix = "AI_DND_INTERNAL_PREP_REQUEST";
@@ -93,12 +98,132 @@ function numberValue(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
+function positiveIntegerValue(value: unknown) {
+  return typeof value === "number" && Number.isInteger(value) && value > 0
+    ? value
+    : undefined;
+}
+
+type CombatRollKind = NonNullable<NonNullable<DiceRollRequest["combat"]>["kind"]>;
+
+function combatRollKind(value: string | undefined): CombatRollKind | undefined {
+  return value === "attack_roll" ||
+    value === "damage_roll" ||
+    value === "saving_throw" ||
+    value === "ability_check" ||
+    value === "initiative"
+    ? value
+    : undefined;
+}
+
+function normalizeCombatRollDamage(value: Record<string, unknown>) {
+  const normalized: NonNullable<
+    NonNullable<DiceRollRequest["combat"]>["onHitDamage"]
+  > = {};
+  const dice = stringValue(value.dice);
+  const modifier = numberValue(value.modifier);
+  const damageType = stringValue(value.damageType);
+
+  if (dice) normalized.dice = dice;
+  if (modifier !== undefined) normalized.modifier = modifier;
+  if (damageType) normalized.damageType = damageType;
+
+  return normalized;
+}
+
+function normalizeCombatRollContext(
+  value: unknown
+): NonNullable<DiceRollRequest["combat"]> | undefined {
+  const context = asObject(value);
+
+  if (!context) {
+    return undefined;
+  }
+
+  const onHitDamage = asObject(context.onHitDamage);
+  const normalizedOnHitDamage = onHitDamage
+    ? normalizeCombatRollDamage(onHitDamage)
+    : undefined;
+  const normalized: NonNullable<DiceRollRequest["combat"]> = {};
+  const kind = combatRollKind(stringValue(context.kind));
+  const actionId = stringValue(context.actionId);
+  const actorKey = stringValue(context.actorKey);
+  const targetActorKey = stringValue(context.targetActorKey);
+  const attackName = stringValue(context.attackName);
+  const sequence = positiveIntegerValue(context.sequence);
+  const sourceAttackRollId = stringValue(context.sourceAttackRollId);
+  const damageType = stringValue(context.damageType);
+
+  if (actionId) normalized.actionId = actionId;
+  if (actorKey) normalized.actorKey = actorKey;
+  if (targetActorKey) normalized.targetActorKey = targetActorKey;
+  if (kind) normalized.kind = kind;
+  if (attackName) normalized.attackName = attackName;
+  if (sequence !== undefined) normalized.sequence = sequence;
+  if (sourceAttackRollId) normalized.sourceAttackRollId = sourceAttackRollId;
+  if (damageType) normalized.damageType = damageType;
+  if (normalizedOnHitDamage && Object.keys(normalizedOnHitDamage).length > 0) {
+    normalized.onHitDamage = normalizedOnHitDamage;
+  }
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
 function stringArray(value: unknown) {
   return Array.isArray(value)
     ? value
         .map((item) => stringValue(item))
         .filter((item): item is string => Boolean(item))
     : [];
+}
+
+const narrationHighlightRoles = new Set([
+  "npc",
+  "place",
+  "clue",
+  "danger",
+  "faction",
+  "object"
+]);
+const maxNarrationHighlights = 24;
+
+function normalizeNarrationHighlights(
+  value: unknown,
+  publicNarration: string
+): NarrationHighlight[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const highlights: NarrationHighlight[] = [];
+
+  for (const item of value) {
+    const data = asObject(item);
+    const text = stringValue(data?.text);
+    const colorRole = stringValue(
+      data?.color_role ?? data?.colorRole
+    ) as NarrationHighlightRole;
+    const key = `${text.toLowerCase()}::${colorRole}`;
+
+    if (
+      !text ||
+      !narrationHighlightRoles.has(colorRole) ||
+      !publicNarration.includes(text) ||
+      seen.has(key)
+    ) {
+      continue;
+    }
+
+    highlights.push({ text, colorRole });
+    seen.add(key);
+
+    if (highlights.length >= maxNarrationHighlights) {
+      break;
+    }
+  }
+
+  return highlights;
 }
 
 function extractJsonObject(text: string) {
@@ -389,7 +514,13 @@ function normalizePublicNarrationParagraphs(publicNarration: string) {
   const paragraphs = publicNarration
     .trim()
     .split(/\n{2,}/)
-    .map((paragraph) => paragraph.replace(/\s+/g, " ").trim())
+    .map((paragraph) =>
+      paragraph
+        .split("\n")
+        .map((line) => line.replace(/[ \t]+/g, " ").trim())
+        .join("\n")
+        .trim()
+    )
     .filter(Boolean);
 
   if (paragraphs.length === 0) {
@@ -404,7 +535,9 @@ function normalizePublicNarrationParagraphs(publicNarration: string) {
     }
 
     const paragraphText =
-      paragraphs.length === 1 ? paragraphizeFlatNarration(withoutPrompt) : withoutPrompt;
+      paragraphs.length === 1 && !withoutPrompt.includes("\n")
+        ? paragraphizeFlatNarration(withoutPrompt)
+        : withoutPrompt;
     const splitParagraphs = paragraphText.split(/\n{2,}/).filter(Boolean);
 
     return /What do you do\?\s*$/i.test(paragraph)
@@ -434,6 +567,14 @@ function narrationWithRollInstructions(
     return normalizedNarration;
   }
 
+  if (
+    options?.dmJob === "investigation" &&
+    mentionsPlayerFacingRoll(normalizedNarration) &&
+    /\bDC\s*\d+\b/i.test(normalizedNarration)
+  ) {
+    return normalizedNarration;
+  }
+
   if (hasRollRequestDiceCoverage(normalizedNarration, requests)) {
     if (options?.dmJob !== "investigation" || /\bDC\s*\d+\b/i.test(normalizedNarration)) {
       return normalizedNarration;
@@ -460,6 +601,8 @@ export function normalizeRollRequest(
   const label =
     stringValue(request.label) ||
     stringValue(request.check) ||
+    stringValue(request.skill) ||
+    stringValue(request.tool) ||
     stringValue(request.reason) ||
     "Required roll";
 
@@ -480,6 +623,7 @@ export function normalizeRollRequest(
     numberValue(request.dc) ??
     numberValue(request.threshold);
   const reason = stringValue(request.reason);
+  const combat = normalizeCombatRollContext(request.combat);
 
   return {
     id,
@@ -489,7 +633,8 @@ export function normalizeRollRequest(
     ...(modifier === undefined ? {} : { modifier }),
     ...(reason ? { reason } : {}),
     ...(targetDc === undefined ? {} : { targetDc }),
-    ...(advantageState ? { advantageState } : {})
+    ...(advantageState ? { advantageState } : {}),
+    ...(combat ? { combat } : {})
   };
 }
 
@@ -547,6 +692,7 @@ export type DmNextInputNeeded =
 
 export type DmContractResponse = {
   publicNarration: string;
+  narrationHighlights: NarrationHighlight[];
   resolutionMode: "needs_dice" | "resolved_without_dice";
   rollRequests: DiceRollRequest[];
   nextInputNeeded: DmNextInputNeeded;
@@ -627,6 +773,11 @@ export function parseDmContract(
     throw new Error("The DM provider response is missing public_narration.");
   }
 
+  const narrationHighlights = normalizeNarrationHighlights(
+    parsed.narration_highlights ?? parsed.narrationHighlights,
+    publicNarration
+  );
+
   const rawRollRequests = Array.isArray(parsed.roll_requests)
     ? parsed.roll_requests
     : [];
@@ -706,6 +857,7 @@ export function parseDmContract(
 
   return {
     publicNarration,
+    narrationHighlights,
     resolutionMode,
     rollRequests,
     nextInputNeeded,
@@ -736,6 +888,10 @@ export function recoverDmContractAfterParseFailure(
     ? parsed.roll_requests
     : [];
   const rollRequests = normalizeRollRequests(rawRollRequests, publicNarration);
+  const narrationHighlights = normalizeNarrationHighlights(
+    parsed.narration_highlights ?? parsed.narrationHighlights,
+    publicNarration
+  );
   const originalNextInputNeeded = stringValue(parsed.next_input_needed);
   const originalResolutionMode = stringValue(
     parsed.resolution_mode ?? parsed.resolutionMode
@@ -806,6 +962,7 @@ export function recoverDmContractAfterParseFailure(
   return {
     contract: {
       publicNarration: narrationWithRollInstructions(publicNarration, rollRequests),
+      narrationHighlights,
       resolutionMode,
       rollRequests,
       nextInputNeeded,

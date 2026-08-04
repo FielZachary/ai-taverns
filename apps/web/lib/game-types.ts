@@ -1,7 +1,20 @@
 export type GameMessageRole = "player" | "dm" | "system";
 export type GameMessageKind = "turn" | "ask_dm_question" | "ask_dm_answer";
-export type AiModelId = "deepseek-v4-flash" | "qwen-3-7-flash";
+export type AiModelId = "deepseek-v4-flash" | "qwen-3-5-plus";
 export type GameMessageResourceAction = "inspect_map" | "view_eldermere_lore";
+
+export type NarrationHighlightRole =
+  | "npc"
+  | "place"
+  | "clue"
+  | "danger"
+  | "faction"
+  | "object";
+
+export type NarrationHighlight = {
+  text: string;
+  colorRole: NarrationHighlightRole;
+};
 
 export type GameMessageResourceCard = {
   type: "eldermere_map";
@@ -103,6 +116,7 @@ export type GameMessage = {
     sceneLocation?: string;
     startingLocation?: string;
   };
+  narrationHighlights?: NarrationHighlight[];
   content: string;
   createdAt: string;
   isSyntheticIntro?: boolean;
@@ -119,6 +133,29 @@ export type DiceRollRequest = {
   reason?: string;
   targetDc?: number;
   advantageState?: string;
+  combat?: {
+    actionId?: string;
+    actorKey?: string;
+    targetActorKey?: string;
+    kind?: string;
+    attackName?: string;
+    sequence?: number;
+    sourceAttackRollId?: string;
+    damageType?: string;
+    onHitDamage?: {
+      dice?: string;
+      modifier?: number;
+      damageType?: string;
+    };
+  };
+  deathSave?: {
+    actorKey: string;
+    attempt?: number;
+  };
+  death_save?: {
+    actorKey: string;
+    attempt?: number;
+  };
 };
 
 export type InputPolicy = "all_players" | "only_targeted_players";

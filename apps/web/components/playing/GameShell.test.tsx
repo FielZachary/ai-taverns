@@ -70,13 +70,17 @@ vi.mock("./MessageLog", () => ({
     isSending,
     regeneratingMessageId,
     regeneratableMessageId,
-    onRegenerateResponse
+    retryMessageId,
+    onRegenerateResponse,
+    onRetryLastTurn
   }: {
     messages: GameMessage[];
     isSending: boolean;
     regeneratingMessageId?: string | null;
     regeneratableMessageId?: string | null;
+    retryMessageId?: string | null;
     onRegenerateResponse?: (messageId: string) => void;
+    onRetryLastTurn?: () => void;
   }) => (
     <section aria-label="Message log" data-sending={String(isSending)}>
       {messages.map((message) => (
@@ -91,6 +95,11 @@ vi.mock("./MessageLog", () => ({
               type="button"
             >
               Regenerate
+            </button>
+          ) : null}
+          {message.id === retryMessageId ? (
+            <button onClick={onRetryLastTurn} type="button">
+              Retry last turn
             </button>
           ) : null}
         </article>
@@ -282,6 +291,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -352,6 +362,124 @@ describe("GameShell", () => {
       "data-sending",
       "false"
     );
+  });
+
+  it("times out a stuck turn request and retries the last submitted message", async () => {
+    let submitAttempts = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url.startsWith("/api/room?")) {
+        return responseJson(roomSnapshot());
+      }
+
+      if (url === "/api/auth/claim-guest-state") {
+        return responseJson({});
+      }
+
+      if (
+        url === `/api/campaigns/${campaign.id}/solo-turn` &&
+        init?.method === "POST"
+      ) {
+        submitAttempts += 1;
+
+        if (submitAttempts === 1) {
+          return await new Promise<Response>((_resolve, reject) => {
+            init.signal?.addEventListener("abort", () => {
+              reject(new DOMException("The operation was aborted.", "AbortError"));
+            });
+          });
+        }
+
+        return responseJson(
+          roomSnapshot({
+            messages: [
+              {
+                id: "player-retry",
+                role: "player",
+                content: "I test the iron handle.",
+                createdAt: "2026-07-12T00:00:00.000Z"
+              },
+              {
+                id: "dm-retry",
+                role: "dm",
+                content: "The handle turns with a reluctant scrape.",
+                createdAt: "2026-07-12T00:00:01.000Z"
+              }
+            ]
+          })
+        );
+      }
+
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<GameShell initialCampaignId={campaign.id} />);
+
+    expect(
+      await screen.findByText("The lantern guttered beside the sealed door.")
+    ).toBeInTheDocument();
+
+    vi.useFakeTimers();
+    fireEvent.change(screen.getByRole("textbox", { name: "Turn draft" }), {
+      target: {
+        value: "I test the iron handle."
+      }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    vi.useRealTimers();
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "The dungeon master wasn't able to respond to that, please press the retry button on the right to re-send your message"
+        )
+      ).toBeInTheDocument();
+    });
+    expect(screen.getByLabelText("Message log")).toHaveAttribute(
+      "data-sending",
+      "false"
+    );
+
+    act(() => {
+      MockWebSocket.instances[0].emitMessage({
+        type: "dm_stream_failed",
+        roomId: campaign.id,
+        turnId: "turn-timeout",
+        message:
+          "The operation was aborted due to timeout Trace ID: 0f27fc6e-5dbc-4b01-90ac-3d5ee2d693e4"
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText(/The operation was aborted due to timeout/))
+        .not.toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry last turn" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("The handle turns with a reluctant scrape."))
+        .toBeInTheDocument();
+    });
+
+    const submitBodies = fetchMock.mock.calls
+      .filter(
+        ([input, init]) =>
+          String(input) === `/api/campaigns/${campaign.id}/solo-turn` &&
+          init?.method === "POST"
+      )
+      .map(([, init]) => JSON.parse(String(init?.body)));
+
+    expect(submitBodies).toHaveLength(2);
+    expect(submitBodies[1]).toMatchObject({
+      message: "I test the iron handle."
+    });
   });
 
   it("surfaces regenerate failures without leaving the table busy", async () => {
@@ -463,7 +591,7 @@ describe("GameShell", () => {
   });
 
   it("disables model selection for non-leader multiplayer players", async () => {
-    localStorage.setItem("ai-dnd.aiModel", "qwen-3-7-flash");
+    localStorage.setItem("ai-dnd.aiModel", "qwen-3-5-plus");
     listCampaignsMock.mockResolvedValue([
       {
         ...multiplayerCampaign,
@@ -656,6 +784,105 @@ describe("GameShell", () => {
     expect(screen.getByText("Portrait status: ready")).toBeInTheDocument();
   });
 
+  it("loads an unlisted initial campaign when debug mode allows pasted IDs", async () => {
+    const debugCampaignId = "99999999-9999-4999-8999-999999999999";
+    listCampaignsMock.mockResolvedValue([]);
+    const longMessage = "The long tale begins. ".repeat(80).trim();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.startsWith("/api/room?")) {
+        const requestUrl = new URL(url, "https://app.example");
+
+        expect(requestUrl.searchParams.get("roomId")).toBe(debugCampaignId);
+        expect(requestUrl.searchParams.get("sessionId")).toBe(debugCampaignId);
+
+        return responseJson(
+          roomSnapshot({
+            roomId: debugCampaignId,
+            sessionId: "provider-debug-session",
+            messages: [
+              {
+                id: "debug-dm-message",
+                role: "dm",
+                content: longMessage,
+                createdAt: "2026-07-12T00:00:00.000Z"
+              }
+            ]
+          })
+        );
+      }
+
+      if (url === "/api/auth/claim-guest-state") {
+        return responseJson({});
+      }
+
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <GameShell
+        allowUnlistedInitialCampaign
+        includeAllMessages
+        initialCampaignId={debugCampaignId}
+        routePath="/debug"
+      />
+    );
+
+    expect(await screen.findByText(longMessage)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Debug 99999999" })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).includes("debugAllMessages=true")
+      )
+    ).toBe(true);
+  });
+
+  it("keeps campaign switching on the debug route when rendered for debug", async () => {
+    listCampaignsMock.mockResolvedValue([campaign, multiplayerCampaign]);
+    const replaceStateSpy = vi.spyOn(window.history, "replaceState");
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url === "/api/auth/claim-guest-state") {
+        return responseJson({});
+      }
+
+      if (url.startsWith("/api/room?")) {
+        const requestUrl = new URL(url, "https://app.example");
+        const roomId = requestUrl.searchParams.get("roomId");
+
+        return responseJson(
+          roomId === multiplayerCampaign.id
+            ? multiplayerRoomSnapshot({ hasBegun: true })
+            : roomSnapshot()
+        );
+      }
+
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<GameShell initialCampaignId={campaign.id} routePath="/debug" />);
+
+    expect(await screen.findByRole("button", { name: campaign.title }))
+      .toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: multiplayerCampaign.title }));
+
+    await waitFor(() => {
+      expect(replaceStateSpy).toHaveBeenCalledWith(
+        null,
+        "",
+        `/debug?campaignId=${encodeURIComponent(multiplayerCampaign.id)}`
+      );
+    });
+  });
+
   it("does not overwrite an old multiplayer adventure with the previous character profile", async () => {
     const pokeCampaign = {
       ...multiplayerCampaign,
@@ -673,7 +900,8 @@ describe("GameShell", () => {
     listCampaignsMock.mockResolvedValue([pokeCampaign, jinCampaign]);
 
     const fetchMock = vi.fn(
-      async (input: RequestInfo | URL, _init?: RequestInit) => {
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        void init;
         const url = String(input);
 
         if (url === "/api/auth/claim-guest-state") {

@@ -10,7 +10,9 @@ import {
 } from "react";
 import {
   Copy,
+  HeartPulse,
   Link,
+  Plus,
   Play,
   Send,
   X
@@ -113,7 +115,10 @@ const defaultAiModel: AiModelId = "deepseek-v4-flash";
 const playerIdStorageKey = "ai-dnd.playerId";
 const backstoryIntroSeenStoragePrefix = "ai-dnd.backstoryIntroSeen";
 const roomRequestTimeoutMs = 8_000;
+const turnSubmissionRequestTimeoutMs = 30_000;
 const fallbackRoomPollMs = 25_000;
+const dungeonMasterTurnTimeoutMessage =
+  "The dungeon master wasn't able to respond to that, please press the retry button on the right to re-send your message";
 const backstoryIntroDelaySeconds = 10;
 const defaultCampaignPreparationMessage = "Preparing your campaign";
 const campaignPreparationMessages = [
@@ -129,7 +134,7 @@ const campaignPreparationMessageIntervalMs = 10_000;
 const campaignPreparationTransitionMs = 650;
 
 function isAiModelId(value: FormDataEntryValue | string | null): value is AiModelId {
-  return value === "deepseek-v4-flash" || value === "qwen-3-7-flash";
+  return value === "deepseek-v4-flash" || value === "qwen-3-5-plus";
 }
 
 function selectedAiModelFromStorage(): AiModelId {
@@ -178,6 +183,12 @@ type ApiErrorResponse = {
   };
 };
 
+type RetryableTurn = {
+  message: string;
+  model: AiModelId;
+  errorMessageId: string;
+};
+
 type RoomRealtimeEvent =
   | { type: "room_updated"; roomId: string; updatedAt: string; eventId?: string }
   | { type: "room_snapshot"; roomId: string; snapshot: RoomSnapshot }
@@ -192,6 +203,9 @@ type GameShellProps = {
   initialCampaignId?: string;
   userEmail?: string;
   userId?: string;
+  routePath?: "/play" | "/debug";
+  allowUnlistedInitialCampaign?: boolean;
+  includeAllMessages?: boolean;
 };
 
 type ActiveDiceReveal = {
@@ -345,6 +359,13 @@ function parseRoomRealtimeEvent(value: string): RoomRealtimeEvent | null {
   }
 }
 
+function isAbortError(error: unknown) {
+  return typeof DOMException !== "undefined" && error instanceof DOMException
+    ? error.name === "AbortError" || error.name === "TimeoutError"
+    : error instanceof Error &&
+        (error.name === "AbortError" || error.name === "TimeoutError");
+}
+
 async function fetchWithTimeout(
   input: RequestInfo | URL,
   init: RequestInit = {},
@@ -366,7 +387,10 @@ async function fetchWithTimeout(
 export function GameShell({
   initialCampaignId,
   userEmail,
-  userId
+  userId,
+  routePath = "/play",
+  allowUnlistedInitialCampaign = false,
+  includeAllMessages = false
 }: GameShellProps) {
   const [messages, setMessages] = useState<GameMessage[]>(openingMessages);
   const [availableCampaigns, setAvailableCampaigns] = useState<CampaignSummary[]>([]);
@@ -388,12 +412,14 @@ export function GameShell({
   const [inputValidationMessage, setInputValidationMessage] = useState("");
   const [inputValidationPulse, setInputValidationPulse] = useState(0);
   const [isInputSubmitted, setIsInputSubmitted] = useState(false);
+  const [retryableTurn, setRetryableTurn] = useState<RetryableTurn | null>(null);
   const [tableAlert, setTableAlert] = useState("");
   const [playerId, setPlayerId] = useState("");
   const [roomPlayers, setRoomPlayers] = useState<RoomPlayer[]>([]);
   const [optimisticSubmittedPlayerId, setOptimisticSubmittedPlayerId] =
     useState<string | null>(null);
   const pendingSubmissionRef = useRef<PendingSubmission | null>(null);
+  const retryableTurnRef = useRef<RetryableTurn | null>(null);
   const [roomMessages, setRoomMessages] = useState<GameMessage[]>([]);
   const [streamingDmMessages, setStreamingDmMessages] = useState<
     StreamingDmMessage[]
@@ -408,6 +434,7 @@ export function GameShell({
   const [inputTargets, setInputTargets] = useState<string[]>([]);
   const [inputPolicy, setInputPolicy] = useState<InputPolicy>("all_players");
   const [roomCombat, setRoomCombat] = useState<RoomSnapshot["combat"]>();
+  const [roomDeath, setRoomDeath] = useState<RoomSnapshot["death"]>();
   const [campaignInvites, setCampaignInvites] = useState<CampaignInvite[]>([]);
   const [inviteStatus, setInviteStatus] = useState("");
   const [inviteError, setInviteError] = useState("");
@@ -434,6 +461,29 @@ export function GameShell({
   const [combatCheatSheetError, setCombatCheatSheetError] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const roomPollInFlightRef = useRef(false);
+  const initialDebugCampaign = useMemo<CampaignSummary | null>(() => {
+    if (!allowUnlistedInitialCampaign || !initialCampaignId) {
+      return null;
+    }
+
+    return {
+      id: initialCampaignId,
+      sessionId: initialCampaignId,
+      mode: "single_player",
+      title: `Debug ${initialCampaignId.slice(0, 8)}`,
+      preview: "Loaded from pasted campaign id"
+    };
+  }, [allowUnlistedInitialCampaign, initialCampaignId]);
+  const roomReadDebugParam = includeAllMessages ? "&debugAllMessages=true" : "";
+
+  const setRetryableTurnState = useCallback((nextRetryableTurn: RetryableTurn | null) => {
+    retryableTurnRef.current = nextRetryableTurn;
+    setRetryableTurn(nextRetryableTurn);
+  }, []);
+
+  const setRoomResolvingState = useCallback((isResolving: boolean) => {
+    setIsRoomResolving(isResolving && !retryableTurnRef.current);
+  }, []);
 
   const activeCampaign = useMemo(
     () =>
@@ -473,6 +523,7 @@ export function GameShell({
     [currentRoomPlayer, isSinglePlayer, pendingRollRequests, playerProfile]
   );
   const currentPendingRollRequest = currentPendingRollRequests[0] ?? null;
+  const isCharacterDead = roomDeath?.state === "dead";
   const hasPendingDiceInput =
     nextInputNeeded === "dice_results" || pendingRollRequests.length > 0;
   const currentRequiredRollDice = useMemo(
@@ -615,6 +666,8 @@ export function GameShell({
       ? currentCombatTurnOwnerName
         ? `Waiting on ${currentCombatTurnOwnerName}'s combat turn`
         : "Waiting on another combat turn"
+    : isCharacterDead
+      ? "Choose what happens after death."
     : !isSinglePlayer && !hasAdventureBegun
       ? "You can only start once the adventure has begun"
     : undefined;
@@ -642,13 +695,14 @@ export function GameShell({
       setStreamingDmMessages((currentMessages) =>
         removePersistedStreamingDmMessages(currentMessages, room.messages)
       );
-      setIsRoomResolving(room.isResolving);
+      setRoomResolvingState(room.isResolving);
       setHasAdventureBegun(room.hasBegun);
       setPendingRollRequests(rollRequestsFromRoom(room));
       setNextInputNeeded(room.nextInputNeeded ?? "player_actions");
       setInputTargets(room.inputTargets ?? []);
       setInputPolicy(room.inputPolicy ?? "all_players");
       setRoomCombat(room.combat);
+      setRoomDeath(room.death);
 
       const currentPlayer = room.players.find(
         (roomPlayer) => roomPlayer.id === playerId
@@ -692,7 +746,7 @@ export function GameShell({
         }
       }
     },
-    [optimisticSubmittedPlayerId, playerId]
+    [optimisticSubmittedPlayerId, playerId, setRoomResolvingState]
   );
 
   const loadCampaignMessages = useCallback(async (campaign: CampaignSummary) => {
@@ -702,11 +756,13 @@ export function GameShell({
       const response = await fetch(
         `/api/room?roomId=${encodeURIComponent(
           campaign.id
-        )}&sessionId=${encodeURIComponent(campaign.sessionId)}`
+        )}&sessionId=${encodeURIComponent(campaign.sessionId)}${roomReadDebugParam}`
       );
 
       if (!response.ok) {
-        throw new Error("Campaign messages could not be loaded.");
+        throw new Error(
+          await getApiErrorMessage(response, "Campaign messages could not be loaded.")
+        );
       }
 
       const room = (await response.json()) as RoomSnapshot;
@@ -734,27 +790,56 @@ export function GameShell({
         campaignId: campaign.id,
         campaignMode: campaign.mode
       });
+      setAvailableCampaigns((currentCampaigns) =>
+        currentCampaigns.map((currentCampaign) =>
+          currentCampaign.id === campaign.id
+            ? {
+                ...currentCampaign,
+                mode: room.mode,
+                sessionId: room.sessionId || currentCampaign.sessionId
+              }
+            : currentCampaign
+        )
+      );
       setMessages(openingMessages);
 
       if (campaign.mode === "single_player") {
         setRoomMessages(room.messages);
         setRoomPlayers(room.players);
-        setIsRoomResolving(room.isResolving);
+        setRoomResolvingState(room.isResolving);
         setHasAdventureBegun(true);
         setPendingRollRequests(rollRequestsFromRoom(room));
         setNextInputNeeded(room.nextInputNeeded ?? "player_actions");
         setInputTargets(room.inputTargets ?? []);
         setInputPolicy(room.inputPolicy ?? "all_players");
         setRoomCombat(room.combat);
+        setRoomDeath(room.death);
       } else {
         applyRoomSnapshot(room);
       }
-    } catch {
-      setMessages(openingMessages);
+    } catch (error) {
+      setMessages([
+        ...openingMessages,
+        {
+          id: createClientId(),
+          role: "system",
+          content:
+            error instanceof Error
+              ? error.message
+              : "Campaign messages could not be loaded.",
+          createdAt: new Date().toISOString()
+        }
+      ]);
     } finally {
       setIsLoadingMessages(false);
     }
-  }, [applyRoomSnapshot, playerId, userId]);
+  }, [
+    applyRoomSnapshot,
+    playerId,
+    roomReadDebugParam,
+    setRoomResolvingState,
+    userId
+  ]);
 
   const fetchCampaigns = useCallback(async () => {
     return listCampaigns();
@@ -917,10 +1002,9 @@ export function GameShell({
           return;
         }
 
-        setAvailableCampaigns(campaigns);
-
         const selectedCampaign =
           campaigns.find((campaign) => campaign.id === initialCampaignId) ??
+          initialDebugCampaign ??
           campaigns[0];
 
         if (!selectedCampaign) {
@@ -928,7 +1012,14 @@ export function GameShell({
           return;
         }
 
+        setAvailableCampaigns(
+          initialDebugCampaign &&
+            !campaigns.some((campaign) => campaign.id === initialDebugCampaign.id)
+            ? [initialDebugCampaign, ...campaigns]
+            : campaigns
+        );
         setActiveCampaignId(selectedCampaign.id);
+        setRetryableTurnState(null);
         await loadCampaignMessages(selectedCampaign);
       } catch {
         if (!shouldIgnore) {
@@ -947,7 +1038,13 @@ export function GameShell({
     return () => {
       shouldIgnore = true;
     };
-  }, [fetchCampaigns, initialCampaignId, loadCampaignMessages]);
+  }, [
+    fetchCampaigns,
+    initialCampaignId,
+    initialDebugCampaign,
+    loadCampaignMessages,
+    setRetryableTurnState
+  ]);
 
   useEffect(() => {
     let shouldIgnore = false;
@@ -992,6 +1089,7 @@ export function GameShell({
       setHasAdventureBegun(false);
       setIsRoomResolving(false);
       setIsInputSubmitted(false);
+      setRetryableTurnState(null);
       pendingSubmissionRef.current = null;
       setOptimisticSubmittedPlayerId(null);
       setPendingRollRequests([]);
@@ -999,6 +1097,7 @@ export function GameShell({
       setInputTargets([]);
       setInputPolicy("all_players");
       setRoomCombat(undefined);
+      setRoomDeath(undefined);
       return;
     }
 
@@ -1018,7 +1117,9 @@ export function GameShell({
         const response = await fetchWithTimeout(
           `/api/room?roomId=${encodeURIComponent(
             activeCampaign.id
-          )}&sessionId=${encodeURIComponent(activeCampaign.sessionId)}`,
+          )}&sessionId=${encodeURIComponent(
+            activeCampaign.sessionId
+          )}${roomReadDebugParam}`,
           { cache: "no-store" }
         );
 
@@ -1035,7 +1136,7 @@ export function GameShell({
             setStreamingDmMessages((currentMessages) =>
               removePersistedStreamingDmMessages(currentMessages, room.messages)
             );
-            setIsRoomResolving(room.isResolving);
+            setRoomResolvingState(room.isResolving);
             setHasAdventureBegun(true);
             setPendingRollRequests(rollRequestsFromRoom(room));
             setNextInputNeeded(room.nextInputNeeded ?? "player_actions");
@@ -1110,7 +1211,7 @@ export function GameShell({
           realtimeEvent.type === "dm_stream_started" &&
           realtimeEvent.roomId === activeCampaign.id
         ) {
-          setIsRoomResolving(true);
+          setRoomResolvingState(true);
           setStreamingDmMessages((currentMessages) =>
             startStreamingDmMessage(
               currentMessages,
@@ -1152,18 +1253,22 @@ export function GameShell({
           realtimeEvent.type === "dm_stream_failed" &&
           realtimeEvent.roomId === activeCampaign.id
         ) {
+          const shouldSuppressMessage = Boolean(retryableTurnRef.current);
+
           setStreamingDmMessages((currentMessages) =>
             removeStreamingDmMessage(currentMessages, realtimeEvent.turnId)
           );
-          setMessages((currentMessages) => [
-            ...currentMessages,
-            {
-              id: createClientId(),
-              role: "system",
-              content: realtimeEvent.message,
-              createdAt: new Date().toISOString()
-            }
-          ]);
+          if (!shouldSuppressMessage) {
+            setMessages((currentMessages) => [
+              ...currentMessages,
+              {
+                id: createClientId(),
+                role: "system",
+                content: realtimeEvent.message,
+                createdAt: new Date().toISOString()
+              }
+            ]);
+          }
           void refreshRoom();
         }
       });
@@ -1187,10 +1292,87 @@ export function GameShell({
       socket?.close();
       window.clearInterval(interval);
     };
-  }, [activeCampaign, applyRoomSnapshot, isSinglePlayer]);
+  }, [
+    activeCampaign,
+    applyRoomSnapshot,
+    isSinglePlayer,
+    roomReadDebugParam,
+    setRetryableTurnState,
+    setRoomResolvingState
+  ]);
 
   function handleStartNewChat() {
+    window.location.assign(routePath === "/debug" ? "/debug" : "/new-adventure");
+  }
+
+  function handleCreateNewCampaignAfterDeath() {
     window.location.assign("/new-adventure");
+  }
+
+  async function handleReviveCharacter() {
+    if (!activeCampaign || isSending || isRoomResolving || isRestartingCampaign) {
+      return;
+    }
+
+    setIsSending(true);
+    setInputValidationMessage("");
+    setTableAlert("");
+
+    try {
+      const response = await fetchWithTimeout(
+        "/api/room/revive",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            roomId: activeCampaign.id,
+            sessionId: activeCampaign.sessionId
+          })
+        },
+        turnSubmissionRequestTimeoutMs
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          await getApiErrorMessage(response, "Your character could not be revived.")
+        );
+      }
+
+      const room = (await response.json()) as RoomSnapshot;
+
+      applyRoomSnapshot(room);
+      setMessages(room.messages.length > 0 ? room.messages : openingMessages);
+      setTableAlert("Your character has returned.");
+      setAvailableCampaigns((currentCampaigns) =>
+        updateCampaignPreview(
+          currentCampaigns,
+          activeCampaign.id,
+          room.messages.at(-1)?.content ?? "Your character has returned."
+        )
+      );
+      trackAnalytics({
+        name: "Character Revived",
+        properties: analyticsBaseProperties()
+      });
+    } catch (error) {
+      setMessages((currentMessages) => [
+        ...currentMessages,
+        {
+          id: createClientId(),
+          role: "system",
+          content:
+            error instanceof Error
+              ? error.message
+              : "Your character could not be revived.",
+          createdAt: new Date().toISOString()
+        }
+      ]);
+    } finally {
+      setIsSending(false);
+      inputRef.current?.focus();
+    }
   }
 
   async function handleSelectChat(campaignId: string) {
@@ -1202,13 +1384,18 @@ export function GameShell({
       return;
     }
 
-    window.history.replaceState(null, "", `/play?campaignId=${campaign.id}`);
+    window.history.replaceState(
+      null,
+      "",
+      `${routePath}?campaignId=${encodeURIComponent(campaign.id)}`
+    );
     trackAnalytics({
       name: "Campaign Switched",
       properties: analyticsBaseProperties(campaign)
     });
     setActiveCampaignId(campaign.id);
     setDraft("");
+    setRetryableTurnState(null);
     setRoomMessages([]);
     setRoomPlayers([]);
     setStreamingDmMessages([]);
@@ -1218,6 +1405,7 @@ export function GameShell({
     setInputTargets([]);
     setInputPolicy("all_players");
     setRoomCombat(undefined);
+    setRoomDeath(undefined);
     setInputValidationMessage("");
     setTableAlert("");
     setIsInputSubmitted(false);
@@ -1250,6 +1438,7 @@ export function GameShell({
     setAvailableCampaigns(nextCampaigns);
     setActiveCampaignId(nextActiveCampaign?.id ?? "");
     setDraft("");
+    setRetryableTurnState(null);
 
     if (campaignId === activeCampaignId) {
       setMessages(openingMessages);
@@ -1519,6 +1708,7 @@ export function GameShell({
       setRestartPreparingCampaignId(restartedCampaign.id);
       setActiveCampaignId(restartedCampaign.id);
       setDraft("");
+      setRetryableTurnState(null);
       setMessages(openingMessages);
       setRoomMessages([]);
       setRoomPlayers([]);
@@ -1528,6 +1718,7 @@ export function GameShell({
       setInputTargets([]);
       setInputPolicy("all_players");
       setRoomCombat(undefined);
+      setRoomDeath(undefined);
       setIsInputSubmitted(false);
       pendingSubmissionRef.current = null;
       setOptimisticSubmittedPlayerId(null);
@@ -1606,6 +1797,7 @@ export function GameShell({
 
     setMessages((currentMessages) => [...currentMessages, playerMessage]);
     setDraft("");
+    setRetryableTurnState(null);
     setIsSending(true);
     setIsInputSubmitted(!isSinglePlayer);
     if (!isSinglePlayer) {
@@ -1637,7 +1829,7 @@ export function GameShell({
         clientMessageId: playerMessage.id,
         model: options.model ?? selectedAiModelFromStorage()
       });
-      const response = await fetch(
+      const response = await fetchWithTimeout(
         request.endpoint,
         {
           method: "POST",
@@ -1645,7 +1837,8 @@ export function GameShell({
             "Content-Type": "application/json"
           },
           body: JSON.stringify(request.body)
-        }
+        },
+        turnSubmissionRequestTimeoutMs
       );
 
       if (!response.ok) {
@@ -1657,6 +1850,7 @@ export function GameShell({
       }
 
       const room = (await response.json()) as RoomSnapshot;
+      setRetryableTurnState(null);
       applyRoomSnapshot(room);
       const latestMessage = room.messages[room.messages.length - 1];
       const counts = analyticsMessageCounts(room);
@@ -1728,23 +1922,45 @@ export function GameShell({
         )
       );
     } catch (error) {
-      setMessages((currentMessages) => [
-        ...currentMessages,
-        {
-          id: createClientId(),
-          role: "system",
-          content:
-            error instanceof Error
-              ? error.message
-              : "The room connection flickered. Your turn may need to be sent again.",
-          createdAt: new Date().toISOString()
-        }
-      ]);
-      if (!isSinglePlayer) {
-        pendingSubmissionRef.current = null;
-        setOptimisticSubmittedPlayerId(null);
-        setIsInputSubmitted(false);
+      const isTurnTimeout = isAbortError(error);
+      const message =
+        isTurnTimeout && !skipTurn
+          ? dungeonMasterTurnTimeoutMessage
+          : error instanceof Error
+            ? error.message
+            : "The room connection flickered. Your turn may need to be sent again.";
+
+      if (isTurnTimeout && !skipTurn) {
+        const errorMessageId = createClientId();
+        setRetryableTurnState({
+          message: content,
+          model: options.model ?? selectedAiModelFromStorage(),
+          errorMessageId
+        });
+        setMessages((currentMessages) => [
+          ...currentMessages,
+          {
+            id: errorMessageId,
+            role: "system",
+            content: message,
+            createdAt: new Date().toISOString()
+          }
+        ]);
+      } else {
+        setMessages((currentMessages) => [
+          ...currentMessages,
+          {
+            id: createClientId(),
+            role: "system",
+            content: message,
+            createdAt: new Date().toISOString()
+          }
+        ]);
       }
+      pendingSubmissionRef.current = null;
+      setOptimisticSubmittedPlayerId(null);
+      setIsInputSubmitted(false);
+      setRoomResolvingState(false);
     } finally {
       setIsSending(false);
       if (isSinglePlayer) {
@@ -1929,6 +2145,14 @@ export function GameShell({
       setIsSending(false);
       inputRef.current?.focus();
     }
+  }
+
+  function handleRetryLastTurn() {
+    if (!retryableTurn) {
+      return;
+    }
+
+    void sendTurn(retryableTurn.message, { model: retryableTurn.model });
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -2308,11 +2532,13 @@ export function GameShell({
               hideSendingIndicator={isShowingStreamingDmMessage}
               regeneratingMessageId={regeneratingMessageId}
               regeneratableMessageId={regeneratableMessageId}
+              retryMessageId={retryableTurn?.errorMessageId}
               waitingPlayers={waitingPlayers}
               onInspectMap={() => setIsMessageMapOpen(true)}
               onRegenerateResponse={(messageId) =>
                 void handleRegenerateResponse(messageId)
               }
+              onRetryLastTurn={retryableTurn ? handleRetryLastTurn : undefined}
               onViewEldermereLore={() => {
                 setPlayerResourcesInitialTab("eldermere_lore");
                 setIsCharacterSheetOpen(true);
@@ -2383,6 +2609,40 @@ export function GameShell({
               </section>
             ) : null}
 
+            {isCharacterDead ? (
+              <section className="death-choice-panel" aria-label="Character death">
+                <div>
+                  <strong>
+                    {roomDeath?.characterName
+                      ? `${roomDeath.characterName} has died.`
+                      : "Your character has died."}
+                  </strong>
+                  <p>
+                    Death is real here. Continue with a new tale, or let
+                    Eldermere return this soul to a changed world.
+                  </p>
+                </div>
+                <div className="death-choice-actions">
+                  <button
+                    type="button"
+                    disabled={isSending || isRoomResolving}
+                    onClick={() => void handleReviveCharacter()}
+                  >
+                    <HeartPulse size={17} />
+                    Revive your character
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-action"
+                    onClick={handleCreateNewCampaignAfterDeath}
+                  >
+                    <Plus size={17} />
+                    Create new Campaign
+                  </button>
+                </div>
+              </section>
+            ) : null}
+
             <PlayerInput
               ref={inputRef}
               draft={draft}
@@ -2406,6 +2666,7 @@ export function GameShell({
               onDraftChange={setDraft}
               onModeChange={setInputMode}
               onRollDice={handleRollDice}
+              onRetryLastTurn={retryableTurn ? handleRetryLastTurn : undefined}
               onSkipTurn={!isSinglePlayer ? handleSkipTurn : undefined}
               onGenerateRestartBackstory={handleGenerateRestartBackstory}
               onRestartCampaign={handleRestartCampaign}

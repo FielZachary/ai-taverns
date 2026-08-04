@@ -17,6 +17,11 @@ export const SpellSlotStateSchema = z.object({
   used: z.number().int().nonnegative()
 });
 
+export const DeathSaveStateSchema = z.object({
+  successes: z.number().int().min(0).max(3),
+  failures: z.number().int().min(0).max(3)
+});
+
 export const MechanicsSeedSchema = z.object({
   characterClass: z.string().min(1),
   level: z.number().int().positive(),
@@ -29,6 +34,9 @@ export const MechanicsActorStateSchema = z.object({
   characterName: z.string(),
   currentHp: z.number().int().nonnegative().optional(),
   maxHp: z.number().int().nonnegative().optional(),
+  armorClass: z.number().int().nonnegative().optional(),
+  allegiance: z.enum(["player", "ally", "hostile", "neutral"]).optional(),
+  isPlayerControlled: z.boolean().optional(),
   spellSlots: z.record(SpellSlotLevelSchema, SpellSlotStateSchema).optional(),
   concentration: z
     .object({
@@ -39,6 +47,7 @@ export const MechanicsActorStateSchema = z.object({
     })
     .nullable()
     .optional(),
+  deathSaves: DeathSaveStateSchema.optional(),
   conditions: z.array(z.string()).optional()
 });
 
@@ -55,6 +64,7 @@ export const MechanicsStateSchema = z.object({
 
 export type SpellSlotLevel = z.infer<typeof SpellSlotLevelSchema>;
 export type SpellSlotState = z.infer<typeof SpellSlotStateSchema>;
+export type DeathSaveState = z.infer<typeof DeathSaveStateSchema>;
 export type MechanicsSeed = z.infer<typeof MechanicsSeedSchema>;
 export type MechanicsActorState = z.infer<typeof MechanicsActorStateSchema>;
 export type MechanicsState = z.infer<typeof MechanicsStateSchema>;

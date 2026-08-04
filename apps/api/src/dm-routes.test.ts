@@ -716,7 +716,10 @@ test("solo combat turn can start initiative through mechanics state update", asy
           turnOwner?: string | null;
           initiativeOrder?: string[];
         };
-        actors?: Record<string, { characterName?: string; currentHp?: number }>;
+        actors?: Record<
+          string,
+          { characterName?: string; currentHp?: number; armorClass?: number }
+        >;
       }
     | undefined;
 
@@ -734,6 +737,7 @@ test("solo combat turn can start initiative through mechanics state update", asy
     "npc:drowned-choir-raider-2"
   ]);
   assert.equal(combatState?.actors?.["npc:mara"]?.characterName, "Mara");
+  assert.equal(combatState?.actors?.["npc:mara"]?.armorClass, 14);
 
   assert.equal(getProviderInputs().length, 1);
 });
@@ -795,6 +799,11 @@ test("surprise opening combat resolves the opening roll before initiative", asyn
   assert.equal(solo.pendingRollRequest?.dice, "8d6");
   assert.equal(solo.pendingRollRequest?.label, "Fireball damage");
   assert.equal(solo.pendingRollRequest?.modifier, 0);
+  assert.equal(
+    solo.pendingRollRequest?.combat?.targetActorKey,
+    "npc:mara"
+  );
+  assert.equal(solo.pendingRollRequest?.combat?.kind, "damage_roll");
   assert.doesNotMatch(latestDmMessage?.content ?? "", /Roll 1d20 \+ 2 for initiative/);
 
   assert.equal(getProviderInputs().length, 1);
@@ -830,6 +839,115 @@ test("surprise opening combat resolves the opening roll before initiative", asyn
   assert.equal(afterDamage.pendingRollRequest?.dice, "1d20");
   assert.equal(afterDamage.pendingRollRequest?.modifier, 2);
   assert.equal(afterDamage.pendingRollRequest?.label, "Initiative");
+});
+
+test("combat damage roll diagnostics warn when target HP is not updated", async () => {
+  const { cookie, campaignId } = await createSinglePlayerCampaign(
+    "dm-runtime-combat-hp-diagnostic"
+  );
+  const playerActorKey = "player:dm-runtime-combat-hp-diagnostic-client";
+  const campaign = database.campaigns.find(
+    (candidate) => candidate.id === campaignId
+  );
+
+  assert.ok(campaign);
+  campaign.metadata = {
+    ...(campaign.metadata as Record<string, unknown>),
+    mechanicsState: {
+      combat: {
+        active: true,
+        round: 1,
+        turnOwner: playerActorKey,
+        initiativeOrder: [playerActorKey, "npc:acolyte-1"]
+      },
+      actors: {
+        [playerActorKey]: {
+          characterName: "Seren",
+          currentHp: 20,
+          maxHp: 20,
+          allegiance: "player",
+          isPlayerControlled: true,
+          conditions: []
+        },
+        "npc:acolyte-1": {
+          characterName: "Unbound Word Acolyte",
+          currentHp: 9,
+          maxHp: 9,
+          armorClass: 13,
+          allegiance: "hostile",
+          isPlayerControlled: false,
+          conditions: []
+        }
+      }
+    },
+    pendingRollRequest: {
+      id: "acolyte-damage-roll",
+      dice: "1d4",
+      modifier: 2,
+      label: "Acolyte Damage",
+      player: "Owner",
+      combat: {
+        actionId: "seren-round1-unarmed",
+        actorKey: playerActorKey,
+        targetActorKey: "npc:acolyte-1",
+        kind: "damage_roll",
+        sourceAttackRollId: "seren-unarmed-attack",
+        damageType: "bludgeoning"
+      }
+    },
+    pendingRollRequests: [
+      {
+        id: "acolyte-damage-roll",
+        dice: "1d4",
+        modifier: 2,
+        label: "Acolyte Damage",
+        player: "Owner",
+        combat: {
+          actionId: "seren-round1-unarmed",
+          actorKey: playerActorKey,
+          targetActorKey: "npc:acolyte-1",
+          kind: "damage_roll",
+          sourceAttackRollId: "seren-unarmed-attack",
+          damageType: "bludgeoning"
+        }
+      }
+    ],
+    inputTargets: [],
+    inputPolicy: "all_players",
+    nextInputNeeded: "dice_results"
+  };
+  resetProviderInputs();
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: { cookie },
+    payload: {
+      rollSubmissions: [
+        {
+          rollRequestId: "acolyte-damage-roll",
+          rollResult: { rolls: [3], total: 5 },
+          clientMessageId: "acolyte-damage-submission"
+        }
+      ]
+    }
+  });
+
+  assert.equal(response.statusCode, 200, response.body);
+  const parsed = CampaignSoloTurnResponseSchema.parse(response.json());
+  const debug = parsed.messages.at(-1)?.debug as DebugFields | undefined;
+  const combatAdjudication = debug?.combatAdjudication as
+    | { diagnostics?: Array<{ code?: string; targetActorKey?: string }> }
+    | undefined;
+
+  assert.equal(
+    combatAdjudication?.diagnostics?.[0]?.code,
+    "missing_target_hp_update_after_combat_damage"
+  );
+  assert.equal(
+    combatAdjudication?.diagnostics?.[0]?.targetActorKey,
+    "npc:acolyte-1"
+  );
 });
 
 test("solo combat catches up NPC turns instead of rejecting the player", async () => {

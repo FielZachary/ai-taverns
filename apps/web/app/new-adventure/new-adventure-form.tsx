@@ -114,6 +114,7 @@ type PreparationLoaderLayoutProps = {
   exitingMessage?: string;
   note?: string;
 };
+type NewAdventureEntryState = "preloading" | "transitioning" | "ready";
 
 type AbilityKey = "str" | "dex" | "con" | "int" | "wis" | "cha";
 type CompleteAbilityScores = Record<AbilityKey, number>;
@@ -281,6 +282,7 @@ const campaignWorldBannerUrls: Record<string, string> = {
   eldermere: "/new-adventure/eldermere-banner.jpg",
   custom: "/new-adventure/custom-world-banner.jpg"
 };
+const newAdventureEntryTransitionMs = 520;
 const optionArtRoot = "/new-adventure/options";
 const weaponCategories: EquipmentCategory[] = [
   "simpleWeapon",
@@ -2078,6 +2080,124 @@ const equipmentCategoryOptions: Record<EquipmentCategory, string[]> = {
   ]
 };
 
+const newAdventureStartupImageUrls = [
+  "/new-adventure/flow-bg.png",
+  "/new-adventure/singleplayer-banner.webp",
+  "/new-adventure/multiplayer-banner.webp",
+  ...Object.values(campaignWorldBannerUrls)
+];
+const newAdventureClassImageUrls = Object.values(classArtByClass);
+const newAdventureSpeciesImageUrls = Object.values(speciesArtBySpecies);
+const newAdventureBackgroundImageUrls = backgroundOptions.map((option) =>
+  optionArtUrl("backgrounds", option)
+);
+const newAdventureSkillImageUrls = skillDefinitions.map((skill) =>
+  optionArtUrl("skills", skill.name)
+);
+const newAdventureToolImageUrls = toolOptions.map((tool) =>
+  optionArtUrl("tools", tool)
+);
+const newAdventureWeaponImageUrls = Array.from(
+  new Set(
+    weaponCategories
+      .flatMap((category) => equipmentCategoryOptions[category])
+      .map((weapon) => optionArtUrl("weapons", weapon))
+  )
+);
+const newAdventureCustomOptionImageUrls = [
+  ...newAdventureBackgroundImageUrls,
+  ...newAdventureSkillImageUrls,
+  ...newAdventureToolImageUrls,
+  ...newAdventureWeaponImageUrls
+];
+const adventureImagePreloadPromises = new Map<string, Promise<void>>();
+
+function uniqueImageUrls(urls: string[]) {
+  return Array.from(new Set(urls.filter(Boolean)));
+}
+
+function preloadAdventureImage(url: string) {
+  if (typeof window === "undefined") {
+    return Promise.resolve();
+  }
+
+  const existingPreload = adventureImagePreloadPromises.get(url);
+
+  if (existingPreload) {
+    return existingPreload;
+  }
+
+  const preload = new Promise<void>((resolve) => {
+    const image = new Image();
+    let settled = false;
+    const timeoutId = window.setTimeout(resolvePreload, 8_000);
+
+    function resolvePreload() {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      window.clearTimeout(timeoutId);
+      resolve();
+    }
+
+    image.decoding = "async";
+    image.onload = resolvePreload;
+    image.onerror = resolvePreload;
+    image.src = url;
+  });
+
+  adventureImagePreloadPromises.set(url, preload);
+  return preload;
+}
+
+async function preloadAdventureImages(urls: string[], concurrency = 4) {
+  const queue = uniqueImageUrls(urls);
+  let nextIndex = 0;
+
+  async function preloadNextImage(): Promise<void> {
+    const url = queue[nextIndex];
+    nextIndex += 1;
+
+    if (!url) {
+      return;
+    }
+
+    await preloadAdventureImage(url);
+    await preloadNextImage();
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, queue.length) }, () =>
+      preloadNextImage()
+    )
+  );
+}
+
+function scheduleAdventureImagePreload(urls: string[], concurrency = 3) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const preload = () => {
+    void preloadAdventureImages(urls, concurrency);
+  };
+  const windowWithIdleCallback = window as Window & {
+    requestIdleCallback?: (
+      callback: () => void,
+      options?: { timeout: number }
+    ) => number;
+  };
+
+  if (windowWithIdleCallback.requestIdleCallback) {
+    windowWithIdleCallback.requestIdleCallback(preload, { timeout: 1_500 });
+    return;
+  }
+
+  window.setTimeout(preload, 120);
+}
+
 const classEquipmentRules: Record<CharacterClass, EquipmentRule> = {
   Artificer: {
     choices: [
@@ -3418,6 +3538,32 @@ function PortraitPreparationLoader() {
   return <PreparationLoaderLayout currentMessage="Generating portrait" />;
 }
 
+function NewAdventureEntryLoadingPanel({
+  isExiting = false
+}: {
+  isExiting?: boolean;
+}) {
+  return (
+    <div
+      className={
+        isExiting
+          ? "new-adventure-entry-loader exiting"
+          : "new-adventure-entry-loader"
+      }
+      aria-live="polite"
+    >
+      <p className="rune-loader">
+        Loading
+        <span className="rune-loader-dots" aria-hidden="true">
+          <span>.</span>
+          <span>.</span>
+          <span>.</span>
+        </span>
+      </p>
+    </div>
+  );
+}
+
 function PreparationLoaderLayout({
   currentMessage,
   exitingMessage = "",
@@ -3462,6 +3608,9 @@ export function NewAdventureForm({
   userEmail,
   userId
 }: NewAdventureFormProps) {
+  const [entryState, setEntryState] = useState<NewAdventureEntryState>(
+    process.env.NODE_ENV === "test" ? "ready" : "preloading"
+  );
   const normalizedInitialInviteToken = initialInviteToken.trim();
   const [stepIndex, setStepIndex] = useState(
     normalizedInitialInviteToken ? 2 : 0
@@ -3664,6 +3813,76 @@ export function NewAdventureForm({
   const activeSpellRuleProfile = activeSpellDetail
     ? spellDetailFor(activeSpellDetail, activeSpellLevel)
     : null;
+  const finishEntryTransition = useCallback(() => {
+    setEntryState((currentState) =>
+      currentState === "ready" ? currentState : "ready"
+    );
+  }, []);
+
+  useEffect(() => {
+    if (entryState !== "transitioning") {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(
+      finishEntryTransition,
+      newAdventureEntryTransitionMs
+    );
+
+    return () => window.clearTimeout(timeoutId);
+  }, [entryState, finishEntryTransition]);
+
+  useEffect(() => {
+    if (entryState !== "preloading") {
+      return;
+    }
+
+    let isCancelled = false;
+    const prefersReducedMotion =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    void preloadAdventureImages(newAdventureStartupImageUrls, 4).then(() => {
+      if (isCancelled) {
+        return;
+      }
+
+      setEntryState(prefersReducedMotion ? "ready" : "transitioning");
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [entryState]);
+
+  useEffect(() => {
+    if (entryState !== "ready") {
+      return;
+    }
+
+    if (stepIndex <= campaignDetailsStepIndex) {
+      scheduleAdventureImagePreload(newAdventureClassImageUrls, 2);
+    }
+
+    if (isCharacterStep && currentCharacterStep === "Class") {
+      scheduleAdventureImagePreload(newAdventureSpeciesImageUrls, 2);
+    }
+
+    if (
+      isCharacterStep &&
+      (currentCharacterStep === "Background" ||
+        currentCharacterStep === "Skills" ||
+        currentCharacterStep === "Equipment")
+    ) {
+      scheduleAdventureImagePreload(newAdventureCustomOptionImageUrls, 3);
+    }
+  }, [
+    campaignDetailsStepIndex,
+    currentCharacterStep,
+    entryState,
+    isCharacterStep,
+    stepIndex
+  ]);
   const mechanicsSeed = useMemo<MechanicsSeed>(() => {
     const spellSlots = deriveSpellSlotsForSheet(selectedClass.id, characterLevel);
 
@@ -5051,6 +5270,8 @@ export function NewAdventureForm({
   }
 
   const activeEquipmentChoice = equipmentChoices[equipmentChoiceStepIndex];
+  const shouldShowEntryLoader = entryState !== "ready";
+  const shouldShowAdventureFlow = entryState !== "preloading";
 
   return (
     <main className="new-adventure-page" aria-label="Create a new adventure">
@@ -5059,8 +5280,27 @@ export function NewAdventureForm({
         <h1>{stepTitle}</h1>
       </div>
 
-      <form className="new-adventure-form" onSubmit={handleSubmit}>
-        <div className={`new-adventure-flow new-adventure-flow-${flowTransition}`}>
+      <form
+        className={
+          entryState === "transitioning"
+            ? "new-adventure-form new-adventure-form-entry-transitioning"
+            : "new-adventure-form"
+        }
+        onSubmit={handleSubmit}
+      >
+        {shouldShowEntryLoader ? (
+          <NewAdventureEntryLoadingPanel
+            isExiting={entryState === "transitioning"}
+          />
+        ) : null}
+        {shouldShowAdventureFlow ? (
+        <div
+          className={`new-adventure-flow new-adventure-flow-${flowTransition}${
+            entryState === "transitioning"
+              ? " new-adventure-flow-entry-revealing"
+              : ""
+          }`}
+        >
           {stepIndex === 0 ? (
             <>
               <div className="mode-picker" role="radiogroup" aria-label="Campaign mode">
@@ -6135,6 +6375,7 @@ export function NewAdventureForm({
             </div>
           ) : null}
         </div>
+        ) : null}
 
           <div className="new-adventure-error-slot">
             {error ? (

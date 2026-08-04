@@ -1,0 +1,55 @@
+{
+  "$meta": {
+    "source": "apps/web/app/globals.css :root",
+    "baseline": "iPhone 16/17, 393x852pt, 1 mockup px = 1 pt",
+    "mode": "dark-only-v1"
+  },
+  "color": {
+    "bg": { "value": "#120F0D", "ios": "Color(hex: 0x120F0D)", "usage": "app background under all screens" },
+    "bgGradientWarm": { "value": "radial rgba(173,71,43,0.26) top-left + radial rgba(95,119,81,0.24) top-right over linear #100D0C -> #211711 -> #0D1210", "usage": "optional ambient background on Play and wizard; render as static image or subtle gradient layer, never behind text without scrim" },
+    "panel": { "value": "rgba(38,29,23,0.86)", "solidEquivalent": "#261D17", "usage": "cards, list rows, sheets" },
+    "panelStrong": { "value": "rgba(56,40,31,0.96)", "solidEquivalent": "#38281F", "usage": "elevated cards, composer, selected rows" },
+    "line": { "value": "rgba(226,176,93,0.24)", "usage": "hairline borders on cards and dividers" },
+    "gold": { "value": "#D9A94A", "usage": "accent: primary buttons, active tab, links, key numbers" },
+    "goldBright": { "value": "#F4CF7A", "usage": "pressed/highlight accent, streaming caret, selected segment text" },
+    "ember": { "value": "#AD472B", "usage": "destructive-adjacent, combat pill, required-roll emphasis" },
+    "moss": { "value": "#5F7751", "usage": "success, submitted state, connected indicator" },
+    "ink": { "value": "#F9EDD6", "usage": "primary text" },
+    "muted": { "value": "#BCA98E", "usage": "secondary text, timestamps, placeholders" },
+    "shadow": { "value": "rgba(0,0,0,0.42)", "usage": "card and sheet shadows" },
+    "scrim": { "value": "rgba(7,5,3,0.62)", "usage": "over background imagery and behind sheets" }
+  },
+  "typography": {
+    "displayHeading": { "font": "Cinzel (bundled) fallback SF Pro semibold", "sizes": { "screenTitle": 22, "campaignTitle": 17 }, "tracking": "0.06em", "usage": "nav titles, campaign names, wizard step titles ONLY" },
+    "dmProse": { "font": "New York (system serif design)", "size": 17, "lineHeight": 26, "usage": "DM narration body; must support Dynamic Type" },
+    "body": { "font": "SF Pro", "size": 17, "usage": "player messages, inputs, list rows" },
+    "secondary": { "font": "SF Pro", "size": 15, "usage": "previews, descriptions" },
+    "caption": { "font": "SF Pro", "size": 13, "usage": "timestamps, badges, meta" },
+    "statNumber": { "font": "SF Pro Rounded semibold", "size": 20, "usage": "ability scores, HP, dice results" }
+  },
+  "spacing": { "xs": 4, "s": 8, "m": 12, "l": 16, "xl": 24, "screenMargin": 16, "cardPadding": 14, "sectionGap": 24 },
+  "radius": { "card": 10, "bubble": 16, "button": 10, "sheet": 16, "pill": 999, "die": 12 },
+  "border": { "hairline": { "width": 1, "color": "line" } },
+  "sizes": {
+    "minTapTarget": 44,
+    "navBarHeight": 52,
+    "tabBarHeight": 49,
+    "composerMinHeight": 44,
+    "composerMaxLines": 5,
+    "avatar": 28,
+    "dieButton": 52,
+    "statusBarInsetTop": 59,
+    "homeIndicatorInsetBottom": 34
+  },
+  "motion": {
+    "sheetPresent": "system default",
+    "streamingText": "append, no per-character animation",
+    "diceRoll": "0.6s shake + settle, haptic .medium on result",
+    "autoScroll": "only when user is within 120pt of bottom"
+  },
+  "haptics": {
+    "diceResult": "impact medium",
+    "turnSubmitted": "notification success",
+    "rollRequired": "notification warning"
+  }
+}
