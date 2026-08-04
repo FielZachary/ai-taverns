@@ -591,7 +591,7 @@ describe("GameShell", () => {
   });
 
   it("disables model selection for non-leader multiplayer players", async () => {
-    localStorage.setItem("ai-dnd.aiModel", "qwen-3-7-flash");
+    localStorage.setItem("ai-dnd.aiModel", "qwen-3-5-plus");
     listCampaignsMock.mockResolvedValue([
       {
         ...multiplayerCampaign,

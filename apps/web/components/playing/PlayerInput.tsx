@@ -46,7 +46,7 @@ const diceFaces: DiceFace[] = ["d4", "d6", "d8", "d10", "d12", "d20"];
 const aiModelStorageKey = "ai-dnd.aiModel";
 const aiModelOptions: { id: AiModelId; label: string }[] = [
   { id: "deepseek-v4-flash", label: "DeepSeek V4 Flash" },
-  { id: "qwen-3-7-flash", label: "Qwen 3.7 Flash" }
+  { id: "qwen-3-5-plus", label: "Qwen 3.5 Plus" }
 ];
 
 function queuedDiceTotal(queuedDice: QueuedDice) {

@@ -64,9 +64,9 @@ describe("PlayerInput", () => {
 
     expect(screen.getByRole("dialog", { name: /ai model/i })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Qwen 3.7 Flash" }));
+    fireEvent.click(screen.getByRole("button", { name: "Qwen 3.5 Plus" }));
 
-    expect(localStorage.getItem("ai-dnd.aiModel")).toBe("qwen-3-7-flash");
+    expect(localStorage.getItem("ai-dnd.aiModel")).toBe("qwen-3-5-plus");
     expect(screen.queryByRole("dialog", { name: /ai model/i })).not.toBeInTheDocument();
   });
 

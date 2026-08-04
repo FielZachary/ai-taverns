@@ -167,15 +167,15 @@ function providerModelForSettings(config: ModelProviderConfig) {
 }
 
 function providerConfigForModel(model: AiModelId = defaultAiModel): ModelProviderConfig {
-  if (model === "qwen-3-7-flash") {
+  if (model === "qwen-3-5-plus") {
     return {
       selectedModel: model,
       providerName: "Qwen",
       apiKeyEnv: "QWEN_API_KEY",
       baseUrlEnv: "QWEN_BASE_URL",
       modelEnv: "QWEN_MODEL",
-      defaultBaseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-      defaultModel: "qwen3.7-flash"
+      defaultBaseUrl: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+      defaultModel: "qwen3.5-plus"
     };
   }
 
@@ -572,8 +572,9 @@ async function requestDeepSeek(
     ...(settings.providerName === "DeepSeek"
       ? { thinking: { type: "disabled" } }
       : {}),
+    ...(settings.providerName === "Qwen" ? { enable_thinking: false } : {}),
     temperature,
-    max_tokens: 4096,
+    max_completion_tokens: 4096,
     ...(onPublicNarrationDelta
       ? { stream: true }
       : { response_format: { type: "json_object" } })

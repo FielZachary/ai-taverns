@@ -1,6 +1,6 @@
 export type GameMessageRole = "player" | "dm" | "system";
 export type GameMessageKind = "turn" | "ask_dm_question" | "ask_dm_answer";
-export type AiModelId = "deepseek-v4-flash" | "qwen-3-7-flash";
+export type AiModelId = "deepseek-v4-flash" | "qwen-3-5-plus";
 export type GameMessageResourceAction = "inspect_map" | "view_eldermere_lore";
 
 export type NarrationHighlightRole =

@@ -132,7 +132,7 @@ const campaignPreparationMessageIntervalMs = 10_000;
 const campaignPreparationTransitionMs = 650;
 
 function isAiModelId(value: FormDataEntryValue | string | null): value is AiModelId {
-  return value === "deepseek-v4-flash" || value === "qwen-3-7-flash";
+  return value === "deepseek-v4-flash" || value === "qwen-3-5-plus";
 }
 
 function selectedAiModelFromStorage(): AiModelId {
