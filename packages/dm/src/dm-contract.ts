@@ -487,6 +487,14 @@ function narrationWithRollInstructions(
     return normalizedNarration;
   }
 
+  if (
+    options?.dmJob === "investigation" &&
+    mentionsPlayerFacingRoll(normalizedNarration) &&
+    /\bDC\s*\d+\b/i.test(normalizedNarration)
+  ) {
+    return normalizedNarration;
+  }
+
   if (hasRollRequestDiceCoverage(normalizedNarration, requests)) {
     if (options?.dmJob !== "investigation" || /\bDC\s*\d+\b/i.test(normalizedNarration)) {
       return normalizedNarration;
@@ -513,6 +521,8 @@ export function normalizeRollRequest(
   const label =
     stringValue(request.label) ||
     stringValue(request.check) ||
+    stringValue(request.skill) ||
+    stringValue(request.tool) ||
     stringValue(request.reason) ||
     "Required roll";
 
