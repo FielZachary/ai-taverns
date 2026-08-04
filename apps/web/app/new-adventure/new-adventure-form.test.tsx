@@ -540,6 +540,41 @@ describe("NewAdventureForm", () => {
     ).toHaveTextContent("Battleaxe, Longsword");
   });
 
+  it("limits class skill choices to two selections", async () => {
+    render(<NewAdventureForm />);
+
+    await continueFlow();
+    await continueFlow();
+    await choosePointBuyStats();
+    await nextCharacterStep();
+    await nextCharacterStep();
+    await nextCharacterStep();
+    await nextCharacterStep();
+    await nextCharacterStep();
+
+    expect(
+      screen.getByRole("heading", { name: /choose your skills/i })
+    ).toBeInTheDocument();
+
+    const athletics = screen.getByRole("button", { name: /athletics/i });
+    const perception = screen.getByRole("button", { name: /perception/i });
+    const intimidation = screen.getByRole("button", { name: /intimidation/i });
+    const survival = screen.getByRole("button", { name: /survival/i });
+
+    expect(athletics).toHaveAttribute("aria-pressed", "true");
+    expect(perception).toHaveAttribute("aria-pressed", "true");
+    expect(intimidation).toBeDisabled();
+
+    fireEvent.click(athletics);
+
+    expect(intimidation).not.toBeDisabled();
+
+    fireEvent.click(intimidation);
+
+    expect(intimidation).toHaveAttribute("aria-pressed", "true");
+    expect(survival).toBeDisabled();
+  });
+
   it("shows pack contents in equipment subtitles", async () => {
     render(<NewAdventureForm />);
 
@@ -580,7 +615,7 @@ describe("NewAdventureForm", () => {
     expect(dungeoneersPack).toHaveTextContent("10 days of rations");
     expect(
       dungeoneersPack.style.getPropertyValue("--option-art-url")
-    ).toContain("/new-adventure/options/backgrounds/outlander.jpg");
+    ).toContain("/new-adventure/options/packs/dungeoneer-s-pack.jpg");
   });
 
   it("validates identity and keeps campaign creation behind Continue", async () => {

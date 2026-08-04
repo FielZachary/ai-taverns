@@ -284,6 +284,7 @@ const campaignWorldBannerUrls: Record<string, string> = {
 };
 const newAdventureEntryTransitionMs = 520;
 const optionArtRoot = "/new-adventure/options";
+const classSkillSelectionLimit = 2;
 const weaponCategories: EquipmentCategory[] = [
   "simpleWeapon",
   "simpleMeleeWeapon",
@@ -295,7 +296,10 @@ function optionArtSlug(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
-function optionArtUrl(category: "tools" | "backgrounds" | "skills" | "weapons", value: string) {
+function optionArtUrl(
+  category: "tools" | "backgrounds" | "skills" | "weapons" | "packs",
+  value: string
+) {
   return encodeURI(`${optionArtRoot}/${category}/${optionArtSlug(value)}.jpg`);
 }
 
@@ -307,6 +311,10 @@ function optionArtStyle(url: string) {
 
 function artOptionClassName(isSelected?: boolean) {
   return isSelected ? "art-option-card selected" : "art-option-card";
+}
+
+function defaultSkillsForClass(classData: { defaultSkills: readonly SkillName[] }) {
+  return classData.defaultSkills.slice(0, classSkillSelectionLimit) as SkillName[];
 }
 
 function isWeaponCategory(category: EquipmentCategory) {
@@ -2201,15 +2209,7 @@ const equipmentPackContents: Record<string, string[]> = {
   ]
 };
 
-const packArtBackgrounds: Record<string, CharacterBackground> = {
-  "Burglar's pack": "Criminal",
-  "Diplomat's pack": "Noble",
-  "Dungeoneer's pack": "Outlander",
-  "Entertainer's pack": "Entertainer",
-  "Explorer's pack": "Outlander",
-  "Priest's pack": "Acolyte",
-  "Scholar's pack": "Sage"
-};
+const equipmentPackNames = Object.keys(equipmentPackContents);
 
 const newAdventureStartupImageUrls = [
   "/new-adventure/flow-bg.png",
@@ -2228,6 +2228,9 @@ const newAdventureSkillImageUrls = skillDefinitions.map((skill) =>
 const newAdventureToolImageUrls = toolOptions.map((tool) =>
   optionArtUrl("tools", tool)
 );
+const newAdventurePackImageUrls = equipmentPackNames.map((pack) =>
+  optionArtUrl("packs", pack)
+);
 const newAdventureWeaponImageUrls = Array.from(
   new Set(
     weaponCategories
@@ -2239,6 +2242,7 @@ const newAdventureCustomOptionImageUrls = [
   ...newAdventureBackgroundImageUrls,
   ...newAdventureSkillImageUrls,
   ...newAdventureToolImageUrls,
+  ...newAdventurePackImageUrls,
   ...newAdventureWeaponImageUrls
 ];
 const adventureImagePreloadPromises = new Map<string, Promise<void>>();
@@ -3019,10 +3023,10 @@ function equipmentOptionArtUrl(
     return optionArtUrl("tools", toolItem);
   }
 
-  const packItem = option.items?.find((item) => packArtBackgrounds[item]);
+  const packItem = option.items?.find((item) => Boolean(packContentsFor(item)));
 
   if (packItem) {
-    return optionArtUrl("backgrounds", packArtBackgrounds[packItem]);
+    return optionArtUrl("packs", packItem);
   }
 
   if (option.category === "musicalInstrument") {
@@ -4752,7 +4756,7 @@ export function NewAdventureForm({
     setCharacterClass(nextClass);
     setSubclass(nextClassData.subclassOptions[0]);
     setClassFeatureChoice(nextClassData.featureOptions[0]);
-    setSelectedSkills([...nextClassData.defaultSkills] as SkillName[]);
+    setSelectedSkills(defaultSkillsForClass(nextClassData));
     setEquipmentSelections({});
     setEquipmentChoiceStepIndex(0);
     setActiveEquipmentModal(null);
@@ -4773,7 +4777,7 @@ export function NewAdventureForm({
     setRerolledStatRollIndexes(new Set());
     setSubclass(selectedClass.subclassOptions[0]);
     setClassFeatureChoice(selectedClass.featureOptions[0]);
-    setSelectedSkills([...selectedClass.defaultSkills] as SkillName[]);
+    setSelectedSkills(defaultSkillsForClass(selectedClass));
     setEquipmentSelections({});
     setEquipmentChoiceStepIndex(0);
     setActiveEquipmentModal(null);
@@ -4967,6 +4971,10 @@ export function NewAdventureForm({
         return currentSkills.filter((currentSkill) => currentSkill !== skill);
       }
 
+      if (currentSkills.length >= classSkillSelectionLimit) {
+        return currentSkills;
+      }
+
       return [...currentSkills, skill];
     });
   }
@@ -5031,7 +5039,7 @@ export function NewAdventureForm({
       }
 
       if (currentCharacterStep === "Skills") {
-        return selectedSkills.length > 0;
+        return selectedSkills.length === classSkillSelectionLimit;
       }
 
       if (isEquipmentCharacterStep && !isEquipmentSummaryStep) {
@@ -6150,21 +6158,29 @@ export function NewAdventureForm({
                   <fieldset className="option-picker skill-picker">
                     <legend>Skills</legend>
                     <div>
-                      {selectedClass.skillChoices.map((option) => (
-                        <button
-                          type="button"
-                          className={artOptionClassName(selectedSkills.includes(option))}
-                          aria-pressed={selectedSkills.includes(option)}
-                          key={option}
-                          onClick={() => toggleSkill(option)}
-                          style={optionArtStyle(optionArtUrl("skills", option))}
-                        >
-                          <strong>{option}</strong>
-                        </button>
-                      ))}
+                      {selectedClass.skillChoices.map((option) => {
+                        const isSelected = selectedSkills.includes(option);
+                        const isSelectionLocked =
+                          !isSelected && selectedSkills.length >= classSkillSelectionLimit;
+
+                        return (
+                          <button
+                            type="button"
+                            className={artOptionClassName(isSelected)}
+                            aria-pressed={isSelected}
+                            disabled={isSelectionLocked}
+                            key={option}
+                            onClick={() => toggleSkill(option)}
+                            style={optionArtStyle(optionArtUrl("skills", option))}
+                          >
+                            <strong>{option}</strong>
+                          </button>
+                        );
+                      })}
                     </div>
                     <p className="character-step-note">
-                      Background adds: {formatList(backgroundSkillList)}
+                      Choose {classSkillSelectionLimit}. Background adds:{" "}
+                      {formatList(backgroundSkillList)}
                     </p>
                   </fieldset>
                 ) : null}
