@@ -430,6 +430,13 @@ describe("modular AI DM runtime contracts", () => {
       /For every NPC or enemy actor key introduced in initiativeOrder/i
     );
     assert.match(jobPrompt("combat"), /armorClass/i);
+    assert.match(jobPrompt("combat"), /isPlayerControlled/i);
+    assert.match(jobPrompt("combat"), /combat metadata/i);
+    assert.match(jobPrompt("combat"), /Reuse the same actionId/i);
+    assert.match(
+      jobPrompt("combat"),
+      /When the current player turn is fully resolved/i
+    );
     assert.match(
       jobPrompt("combat"),
       /Saying an NPC moves first is not a handoff/i

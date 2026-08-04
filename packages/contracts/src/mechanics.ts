@@ -30,6 +30,8 @@ export const MechanicsActorStateSchema = z.object({
   currentHp: z.number().int().nonnegative().optional(),
   maxHp: z.number().int().nonnegative().optional(),
   armorClass: z.number().int().nonnegative().optional(),
+  allegiance: z.enum(["player", "ally", "hostile", "neutral"]).optional(),
+  isPlayerControlled: z.boolean().optional(),
   spellSlots: z.record(SpellSlotLevelSchema, SpellSlotStateSchema).optional(),
   concentration: z
     .object({

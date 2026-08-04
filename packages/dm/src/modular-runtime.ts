@@ -62,6 +62,8 @@ export type CombatActorState = {
   currentHp?: number;
   maxHp?: number;
   armorClass?: number;
+  allegiance?: "player" | "ally" | "hostile" | "neutral";
+  isPlayerControlled?: boolean;
   resources?: Record<string, unknown>;
   conditions?: string[];
 };
@@ -487,7 +489,7 @@ export function jobPrompt(
     "Roll NPC and enemy initiative yourself every time, reveal each NPC/enemy initiative roll and total in public_narration, and encode the resulting order in mechanics_state_update or combat_events.",
     "Never ask players to roll initiative, saving throws, attacks, damage, checks, or any other dice for NPCs or enemies; NPC and enemy dice are DM-side rolls that must still be visible to the players.",
     "When combat begins, include mechanics_state_update.combat with active true, round 1, turnOwner, and provisional initiativeOrder using actor keys from the current scene and character sheets only.",
-    "For every NPC or enemy actor key introduced in initiativeOrder, include a matching mechanics_state_update.actors entry with characterName, currentHp, maxHp, armorClass, and conditions so later HP and turn updates have canonical state to modify.",
+    "For every NPC or enemy actor key introduced in initiativeOrder, include a matching mechanics_state_update.actors entry with characterName, currentHp, maxHp, armorClass, conditions, allegiance, and isPlayerControlled so later HP and turn updates have canonical state to modify.",
     "After all requested player initiative rolls are submitted, initiative is resolved. If the first actor is an NPC, immediately resolve that NPC turn before returning control to players. Saying an NPC moves first is not a handoff; the NPC must act now.",
     "Do not include bystanders, captives, scenery, or passive creatures in initiativeOrder unless they can meaningfully act in the fight.",
     "Turn ownership:",
@@ -496,6 +498,7 @@ export function jobPrompt(
     "Off-turn player combat declarations are intent, not actions already in motion. Do not narrate them as mid-swing, already casting, or resolving before the current initiative actor.",
     "When multiple player submissions arrive, resolve the current turn owner's valid action first and treat other submissions as pending intent.",
     "Do not end with next_input_needed player_actions while turnOwner is npc:*; resolve NPC turns until control returns to player control.",
+    "When the current player turn is fully resolved, no roll_requests are pending, and combat is still active, set mechanics_state_update.combat.turnOwner to the next active actor in initiativeOrder. If that next actor is npc:*, resolve that NPC turn immediately in the same response before returning control.",
     "When a player turn begins and that player has not already submitted a concrete action for this turn, do not infer an attack, spell, target, movement, or roll. Return next_input_needed player_actions with roll_requests [], target the turn owner, and ask what they do.",
     "If public_narration says a player is up or asks 'What do you do?', the JSON must stay in player-action mode: resolution_mode resolved_without_dice, next_input_needed player_actions, and roll_requests [].",
     "Never request an attack roll, spell attack roll, damage roll, saving throw, or check for a player merely because initiative has reached that player. First ask for the player's declared action.",
@@ -507,6 +510,7 @@ export function jobPrompt(
     "When requesting dice, set resolution_mode to needs_dice and next_input_needed to dice_results.",
     "When resolution_mode is needs_dice, public_narration must not resolve the rolled outcome.",
     "Name rolls clearly: attack roll, damage roll, saving throw, initiative, concentration check, death save, or relevant skill/tool check.",
+    "For combat attack and damage roll_requests, include combat metadata: {actionId, actorKey, targetActorKey, kind, attackName, sequence, sourceAttackRollId when resolving damage, damageType, and onHitDamage for attack rolls that can hit}. Reuse the same actionId across all rolls for one declared combat action.",
     "input_policy must be all_players or only_targeted_players; never use acting_player.",
     "Use known modifiers, proficiency, advantage, or disadvantage from the character sheet or combat context when available. If unknown, ask for the base roll clearly without inventing bonuses.",
     "In roll_requests, dice must be bare dice notation only, such as 1d20, 3d4, or 8d6. Do not include + or - modifiers in dice; put static bonuses or penalties in modifier. Example: Magic Missile uses dice \"3d4\" and modifier 3, not dice \"3d4+3\".",
@@ -620,6 +624,8 @@ export function jobPrompt(
                 currentHp: 32,
                 maxHp: 32,
                 armorClass: 15,
+                allegiance: "hostile",
+                isPlayerControlled: false,
                 conditions: []
               },
               "npc:cutthroat-1": {
@@ -627,6 +633,8 @@ export function jobPrompt(
                 currentHp: 11,
                 maxHp: 11,
                 armorClass: 12,
+                allegiance: "hostile",
+                isPlayerControlled: false,
                 conditions: []
               },
               "npc:cutthroat-2": {
@@ -634,6 +642,8 @@ export function jobPrompt(
                 currentHp: 11,
                 maxHp: 11,
                 armorClass: 12,
+                allegiance: "hostile",
+                isPlayerControlled: false,
                 conditions: []
               }
             }
