@@ -116,6 +116,23 @@ function renderHighlightedInlineMarkdown(
   });
 }
 
+function renderInlineContentWithLineBreaks(
+  content: string,
+  highlights: NarrationHighlight[]
+) {
+  return content.split("\n").flatMap((line, index) => {
+    const renderedLine = (
+      <span key={`line-${index}`}>
+        {renderHighlightedInlineMarkdown(line, highlights)}
+      </span>
+    );
+
+    return index === 0
+      ? [renderedLine]
+      : [<br key={`break-${index}`} />, renderedLine];
+  });
+}
+
 function playerFacingMessageContent(message: GameMessage) {
   if (message.kind !== "ask_dm_answer") {
     return message.content;
@@ -181,7 +198,7 @@ function MessageBody({
 
         return (
           <p key={`${index}-${paragraph.slice(0, 16)}`}>
-            {renderHighlightedInlineMarkdown(paragraph, highlights)}
+            {renderInlineContentWithLineBreaks(paragraph, highlights)}
           </p>
         );
       })}

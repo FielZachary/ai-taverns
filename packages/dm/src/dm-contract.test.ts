@@ -719,6 +719,50 @@ describe("DM provider helpers", () => {
     );
   });
 
+  it("preserves structured single-line breaks in public narration", () => {
+    const result = parseDmContract(
+      JSON.stringify({
+        public_narration: [
+          "Combat begins.",
+          "",
+          "**Inquisitor Manifold initiative roll: 14.**",
+          "**Unbound Word Acolyte 1 initiative roll: 10.**",
+          "**Unbound Word Acolyte 2 initiative roll: 8.**",
+          "**Unbound Word Acolyte 3 initiative roll: 12.**",
+          "",
+          "**Initiative Order:**",
+          "1. Oktai Uni (16)",
+          "2. Inquisitor Manifold (14)",
+          "3. Unbound Word Acolyte 3 (12)"
+        ].join("\n"),
+        resolution_mode: "resolved_without_dice",
+        roll_requests: [],
+        next_input_needed: "player_actions",
+        input_targets: ["player:oktai"],
+        input_policy: "only_targeted_players",
+        mechanics_state_update: {},
+        inventory_state_update: { patches: [] }
+      })
+    );
+
+    assert.equal(
+      result.publicNarration,
+      [
+        "Combat begins.",
+        "",
+        "**Inquisitor Manifold initiative roll: 14.**",
+        "**Unbound Word Acolyte 1 initiative roll: 10.**",
+        "**Unbound Word Acolyte 2 initiative roll: 8.**",
+        "**Unbound Word Acolyte 3 initiative roll: 12.**",
+        "",
+        "**Initiative Order:**",
+        "1. Oktai Uni (16)",
+        "2. Inquisitor Manifold (14)",
+        "3. Unbound Word Acolyte 3 (12)"
+      ].join("\n")
+    );
+  });
+
   it("diagnoses unsupported roll request dice without rejecting them", () => {
     assert.deepEqual(
       rollRequestDiagnostics([
