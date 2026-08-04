@@ -385,11 +385,12 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
-      /Attack roll: 19 vs AC 16 - hit/i
+      /You rolled a 19 against their AC of 16/i
     );
     assert.doesNotMatch(jobPrompt("combat"), /\*\*/);
-    assert.match(jobPrompt("combat"), /attack roll: X vs AC Y - hit\/miss/i);
-    assert.match(jobPrompt("combat"), /Dexterity save: X vs DC Y - success\/failure/i);
+    assert.match(jobPrompt("combat"), /use conversational wording with 'you rolled'/i);
+    assert.match(jobPrompt("combat"), /they rolled a 17 against your AC of 14/i);
+    assert.match(jobPrompt("combat"), /rolled a 9 against DC 14 and fails/i);
     assert.match(jobPrompt("combat"), /list each target's save result separately/i);
     assert.match(jobPrompt("combat"), /full damage, the halved damage/i);
     assert.match(jobPrompt("combat"), /turnOwner is an NPC actor key/i);
@@ -499,15 +500,15 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
-      /Warden lift-guard 1 attack roll: 18 vs Komer's AC 15 - hit\. Damage roll: 1d6 \+ 2 = 5 piercing damage\. The spearpoint/i
+      /They rolled an 18 against Komer's AC of 15, so the spearpoint/i
     );
     assert.match(
       jobPrompt("combat"),
-      /"text": "Warden lift-guard 1 attack roll: 18 vs Komer's AC 15 - hit\."/i
+      /"text": "They rolled an 18 against Komer's AC of 15"/i
     );
     assert.doesNotMatch(
       jobPrompt("combat"),
-      /Warden lift-guard 1 attack roll:[^"]*\\n\\nThe spearpoint/i
+      /They rolled an 18 against Komer's AC of 15[^"]*\\n\\nThe spearpoint/i
     );
     assert.match(
       jobPrompt("combat"),
@@ -569,9 +570,9 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
-      /Warden Captain Hesk Wisdom save: 11 vs DC 13 - failure/i
+      /Warden Captain Hesk rolled an 11 against POKE's spell save DC of 13/i
     );
-    assert.match(jobPrompt("combat"), /Robed priest Dexterity save: 16 vs DC 14 - success/i);
+    assert.match(jobPrompt("combat"), /The robed priest rolled a 16 against DC 14 and succeeds/i);
     assert.match(jobPrompt("combat"), /final enemy defeated and combat ends/i);
     assert.match(jobPrompt("combat"), /Never silently modify HP/);
     assert.match(

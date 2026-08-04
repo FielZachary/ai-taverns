@@ -545,13 +545,15 @@ export function jobPrompt(
     "In roll_requests, dice must be bare dice notation only, such as 1d20, 3d4, or 8d6. Do not include + or - modifiers in dice; put static bonuses or penalties in modifier. Example: Magic Missile uses dice \"3d4\" and modifier 3, not dice \"3d4+3\".",
     "When a player action, spell, feature, or weapon would deal damage and that damage roll was not already submitted, do not roll damage yourself. Request the player's damage roll with next_input_needed dice_results and a structured roll_requests entry. This includes automatic-hit effects such as Magic Missile. Do not update target HP until damage is submitted.",
     "When a player spell or feature forces an NPC or enemy saving throw, roll that save yourself before narrating success or failure, reveal the save roll and total, compare it to the player's known spell save DC when available, and do not put the NPC/enemy save in roll_requests.",
-    "Never narrate a spell or feature as failing, succeeding, taking hold, being resisted, or being shaken off because of an NPC/enemy save unless public_narration first includes the visible save math line: '<Target> <Ability> save: X vs DC Y - success/failure'.",
+    "Never narrate a spell or feature as failing, succeeding, taking hold, being resisted, or being shaken off because of an NPC/enemy save unless public_narration first includes the visible save math in prose, such as '<Target> rolled an 11 against your spell save DC of 13, so the spell takes hold.'",
     "Visible combat math:",
     "For resolved attacks, make the numbers visible before injury narration.",
-    "Use explicit wording for attack outcomes: 'attack roll: X vs AC Y - hit/miss'.",
-    "On a resolved hit where damage is known or DM-side, include explicit damage wording: 'damage roll: dice = total damage'.",
-    "For NPC hits against player characters, public_narration must include attack roll, vs AC, damage roll, damage amount, and HP change when HP is updated.",
-    "For saving throws, make the numbers visible before consequence narration: 'Dexterity save: X vs DC Y - success/failure'.",
+    "Weave visible combat math into the action prose; do not format resolved combat results as detached combat-log labels like 'Attack Roll:', 'Damage Roll:', 'Attack 1:', or 'Save:'.",
+    "For player attack rolls, use conversational wording with 'you rolled': 'you rolled a 17 against their AC of 15, so the blade bites through,' or 'you rolled an 11 against their AC of 14, so the arrow skims wide.'",
+    "For NPC attack rolls, use conversational wording from the NPC side: 'they rolled a 17 against your AC of 14, so the cutlass catches your ribs,' or 'the warden rolled a 12 against Komer's AC of 18, not enough to pierce the chain mail.'",
+    "On a resolved hit where damage is known or DM-side, state damage in prose: 'the damage comes to 5 piercing from 1d6 + 2,' or 'you take 5 piercing damage and drop from 16 HP to 11 HP.'",
+    "For NPC hits against player characters, public_narration must include the NPC's roll, the target AC, whether it hit, the damage dice and total, the damage type, and the HP change when HP is updated.",
+    "For saving throws, make the numbers visible before consequence narration using prose: '<Target> rolled a 9 against DC 14 and fails,' or '<Target> rolled a 16 against your DC of 14 and succeeds.'",
     "When an area spell or effect affects multiple creatures, list each target's save result separately before applying damage or conditions.",
     "For half-damage effects, state who succeeded, who failed, the full damage, the halved damage, and each affected actor's HP change when HP is updated.",
     "If the relevant save DC is unknown, ask for it or use the known character sheet value; do not silently invent a DC.",
@@ -693,14 +695,14 @@ export function jobPrompt(
       JSON.stringify(
         completeOutputExample({
           public_narration: [
-            "The first lift warden moves before Komer can bring the greataxe up. Warden lift-guard 1 attack roll: 18 vs Komer's AC 15 - hit. Damage roll: 1d6 + 2 = 5 piercing damage. The spearpoint snaps forward under Komer's guard and punches into his shoulder. Komer drops from 16 HP to 11 HP.",
-            "The second warden follows in the opening. Warden lift-guard 2 attack roll: 10 vs Komer's AC 15 - miss. Komer twists aside, and the second spear skids off the haft of his greataxe with a bright scrape.",
+            "The first lift warden moves before Komer can bring the greataxe up. They rolled an 18 against Komer's AC of 15, so the spearpoint snaps forward under his guard and punches into his shoulder. The damage comes to 5 piercing from 1d6 + 2, dropping Komer from 16 HP to 11 HP.",
+            "The second warden follows in the opening, but they rolled a 10 against Komer's AC of 15. Komer twists aside, and the second spear skids off the haft of his greataxe with a bright scrape.",
             "Komer, both wardens are in reach and your greataxe is already in motion.",
             "What do you do?"
           ].join("\n\n"),
           narration_highlights: [
             {
-              text: "Warden lift-guard 1 attack roll: 18 vs Komer's AC 15 - hit.",
+              text: "They rolled an 18 against Komer's AC of 15",
               color_role: "danger"
             }
           ],
@@ -741,16 +743,16 @@ export function jobPrompt(
       JSON.stringify(
         completeOutputExample({
           public_narration: [
-            "Your fist hammers Acolyte 3 backward. Flurry of Blows Damage: 1d4 + 2 = 3 bludgeoning. Acolyte 3 drops from 7 HP to 4 HP and sprawls prone beside the silver pool.",
-            "Manifold takes his turn immediately, driving Acolyte 1 away from the pool. Manifold attack roll: 16 vs AC 13 - hit. Damage roll: 1d8 + 3 = 7 slashing damage. Acolyte 1 staggers, robes torn and bloody.",
-            "Acolyte 3 spends half their movement rising, then lashes silver shards at you. Acolyte 3 attack roll: 11 vs AC 12 - miss. The shards hiss past your shoulder and burst against the stone.",
-            "Acolyte 1 answers Manifold with a hooked dagger. Acolyte 1 attack roll: 14 vs Manifold's AC 15 - miss. Manifold turns the blade aside.",
-            "Acolyte 2 chants over the Wellspring, but the unstable silver backlashes. Acolyte 2 Arcana check: 8 vs DC 13 - failure. The pool spits light, leaving Acolyte 2 rattled and exposed.",
+            "Your fist hammers Acolyte 3 backward. The damage comes to 3 bludgeoning from 1d4 + 2, dropping Acolyte 3 from 7 HP to 4 HP and sending them sprawling prone beside the silver pool.",
+            "Manifold takes his turn immediately, driving Acolyte 1 away from the pool. He rolled a 16 against their AC of 13, enough to cut through their guard; the damage comes to 7 slashing from 1d8 + 3, leaving Acolyte 1 staggering in torn, bloody robes.",
+            "Acolyte 3 spends half their movement rising, then lashes silver shards at you. They rolled an 11 against your AC of 12, so the shards hiss past your shoulder and burst against the stone.",
+            "Acolyte 1 answers Manifold with a hooked dagger, but they rolled a 14 against Manifold's AC of 15. Manifold turns the blade aside.",
+            "Acolyte 2 chants over the Wellspring, but the unstable silver backlashes. They rolled an 8 against DC 13 on the Arcana check, and the pool spits light, leaving Acolyte 2 rattled and exposed.",
             "The initiative returns to you, Oktai. What do you do?"
           ].join("\n\n"),
           narration_highlights: [
             {
-              text: "Manifold attack roll: 16 vs AC 13 - hit.",
+              text: "He rolled a 16 against their AC of 13",
               color_role: "danger"
             }
           ],
@@ -967,13 +969,13 @@ export function jobPrompt(
         completeOutputExample({
           public_narration: [
             "POKE's voice drops into the honeyed cadence of the charm spell, silver motes warming to gold as the magic reaches for Hesk's thoughts.",
-            "Warden Captain Hesk Wisdom save: 11 vs DC 13 - failure. Her crossbow lowers by a fraction. The hard line of her jaw loosens, and she looks at POKE with sudden, uneasy familiarity rather than open hostility. The four wardens behind her keep their weapons raised, watching their captain for a signal that does not come.",
+            "Warden Captain Hesk rolled an 11 against POKE's spell save DC of 13, so the charm slips past her defenses. Her crossbow lowers by a fraction. The hard line of her jaw loosens, and she looks at POKE with sudden, uneasy familiarity rather than open hostility. The four wardens behind her keep their weapons raised, watching their captain for a signal that does not come.",
             "POKE, Hesk is charmed by you for now, but her squad has not been charmed and Komer's greataxe is still very visible.",
             "What do you do?"
           ].join("\n\n"),
           narration_highlights: [
             {
-              text: "Warden Captain Hesk Wisdom save: 11 vs DC 13 - failure.",
+              text: "Warden Captain Hesk rolled an 11 against POKE's spell save DC of 13",
               color_role: "danger"
             }
           ],
@@ -1015,7 +1017,7 @@ export function jobPrompt(
       JSON.stringify(
         completeOutputExample({
           public_narration: [
-            "The cutlass raider is already moving. His turn resolves first. Cutlass raider attack roll: 17 vs AC 14 - hit. Damage roll: 1d6 + 2 = 6 slashing damage. He slips inside your guard and carves a hard line across your ribs before springing back out of reach. You drop from 24 HP to 18 HP.",
+            "The cutlass raider is already moving. His turn resolves first. They rolled a 17 against your AC of 14, so he slips inside your guard and carves a hard line across your ribs. The damage comes to 6 slashing from 1d6 + 2, dropping you from 24 HP to 18 HP before he springs back out of reach.",
             "The raider's momentum carries him past you, and the opening is finally yours. Your declared Scorching Ray intent is still waiting for your turn, but no attack roll is resolved until you confirm the action now that the board has changed.",
             "What do you do?"
           ].join("\n\n"),
@@ -1056,7 +1058,7 @@ export function jobPrompt(
       JSON.stringify(
         completeOutputExample({
           public_narration: [
-            "The wounded warden uses Komer's hesitation immediately. Warden lift-guard 1 attack roll: 12 vs Komer's AC 18 - miss. His spearpoint snaps for Komer's chest, but it skids off Komer's chain mail with a bright scrape. The failed thrust leaves him overextended.",
+            "The wounded warden uses Komer's hesitation immediately. They rolled a 12 against Komer's AC of 18, so the spearpoint snaps for Komer's chest but skids off his chain mail with a bright scrape. The failed thrust leaves the warden overextended.",
             "POKE, the warden is wounded and exposed while Komer holds the line.",
             "What do you do?"
           ].join("\n\n"),
@@ -1092,7 +1094,7 @@ export function jobPrompt(
       JSON.stringify(
         completeOutputExample({
           public_narration: [
-            "The green-eyed figure moves first. Green-eye figure attack roll: 16 vs Por's AC 16 - hit. Damage roll: 1d6 + 3 = 7 slashing damage. The claw rakes across Por's forearm, tearing through his sleeve and leaving three shallow but bleeding gashes. Por drops from 34 HP to 27 HP and steps back with his sword raised.",
+            "The green-eyed figure moves first. They rolled a 16 against Por's AC of 16, enough for the claw to rake across his forearm and tear through his sleeve. The damage comes to 7 slashing from 1d6 + 3, dropping Por from 34 HP to 27 HP as he steps back with his sword raised.",
             "Tart, the creature is within striking distance and Por is hurt.",
             "What do you do?"
           ].join("\n\n"),
@@ -1128,16 +1130,16 @@ export function jobPrompt(
       "Example: player attack hits, request player damage.",
       'Player input: "I rolled 1d20 + 5: 19 (14) for Greataxe attack roll."',
       "Context: Combat is active. Komer is the current turn owner and attacked Warden lift-guard 1 with a greataxe. Warden lift-guard 1 has AC 16 and 22 HP. Komer has not submitted greataxe damage yet.",
-      "Bad response to avoid: inventing greataxe damage like 'Damage roll: 1d12 + 2 = 14 slashing damage,' updating the warden's HP, or narrating defeat before Komer rolls damage.",
+      "Bad response to avoid: inventing greataxe damage like 'the damage comes to 14 slashing from 1d12 + 2,' updating the warden's HP, or narrating defeat before Komer rolls damage.",
       "Good response:",
       JSON.stringify(
         completeOutputExample({
           public_narration: [
-            "Komer's greataxe crashes through the warden's guard. Attack roll: 19 vs AC 16 - hit. Roll greataxe damage: 1d12 + 2."
+            "Komer's greataxe crashes through the warden's guard. You rolled a 19 against their AC of 16, so the blade bites through. Roll greataxe damage: 1d12 + 2."
           ].join("\n\n"),
           narration_highlights: [
             {
-              text: "Attack roll: 19 vs AC 16 - hit.",
+              text: "You rolled a 19 against their AC of 16",
               color_role: "danger"
             }
           ],
@@ -1181,14 +1183,14 @@ export function jobPrompt(
         completeOutputExample({
           public_narration: [
             "The fireball detonates against the portcullis in a white-orange roar, hot enough to make the rain burst into steam before it reaches the stones.",
-            "Scarred guardswoman Dexterity save: 9 vs DC 14 - failure. Robed priest Dexterity save: 16 vs DC 14 - success. Gate guard Dexterity save: 7 vs DC 14 - failure. Gate guard Dexterity save: 12 vs DC 14 - failure. Damage roll: 8d6 = 33 fire damage. The priest succeeds and takes half damage: 16 fire damage. The guardswoman and both gate guards fail and take 33 fire damage.",
+            "The scarred guardswoman rolled a 9 against DC 14 and fails. The robed priest rolled a 16 against DC 14 and succeeds. The gate guards rolled a 7 and a 12 against DC 14, so both fail. The fireball deals 33 fire damage from 8d6; the priest twists away for half and takes 16, while the guardswoman and both gate guards take the full 33.",
             "The scarred guardswoman is thrown backward, her sword spinning away as she drops from 4 HP to 0 HP. The robed priest slams into the iron bars behind him and slides down through the smoke, dropping from 7 HP to 0 HP despite twisting away from the worst of the blast. The two prone gate guards do not rise; both drop from 5 HP to 0 HP.",
             "The roar collapses into the hiss of rain on scorched stone. No enemies remain standing, and the wicket gate hangs open through the smoke.",
             "What do you do?"
           ].join("\n\n"),
           narration_highlights: [
             {
-              text: "Damage roll: 8d6 = 33 fire damage.",
+              text: "The fireball deals 33 fire damage from 8d6",
               color_role: "danger"
             }
           ],
@@ -1233,7 +1235,7 @@ export function jobPrompt(
       JSON.stringify(
         completeOutputExample({
           public_narration: [
-            "Your strike lands cleanly. Attack roll: 19 vs AC 13 - hit. Damage roll: 11 = 11 bludgeoning damage.",
+            "Your strike lands cleanly. You rolled a 19 against their AC of 13, and the damage lands for 11 bludgeoning.",
             "The mace crashes through the skeleton's raised arm and into its ribcage. Bone splinters across the flagstones, the blue corpse-light in its skull guttering once before going dark. What remains collapses in a dry clatter at your feet.",
             "For a moment, the chamber is all echo and dust. No other enemies move. The fight is over.",
             "What do you do?"
