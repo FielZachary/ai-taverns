@@ -442,7 +442,13 @@ function normalizePublicNarrationParagraphs(publicNarration: string) {
   const paragraphs = publicNarration
     .trim()
     .split(/\n{2,}/)
-    .map((paragraph) => paragraph.replace(/\s+/g, " ").trim())
+    .map((paragraph) =>
+      paragraph
+        .split("\n")
+        .map((line) => line.replace(/[ \t]+/g, " ").trim())
+        .join("\n")
+        .trim()
+    )
     .filter(Boolean);
 
   if (paragraphs.length === 0) {
@@ -457,7 +463,9 @@ function normalizePublicNarrationParagraphs(publicNarration: string) {
     }
 
     const paragraphText =
-      paragraphs.length === 1 ? paragraphizeFlatNarration(withoutPrompt) : withoutPrompt;
+      paragraphs.length === 1 && !withoutPrompt.includes("\n")
+        ? paragraphizeFlatNarration(withoutPrompt)
+        : withoutPrompt;
     const splitParagraphs = paragraphText.split(/\n{2,}/).filter(Boolean);
 
     return /What do you do\?\s*$/i.test(paragraph)
@@ -487,6 +495,14 @@ function narrationWithRollInstructions(
     return normalizedNarration;
   }
 
+  if (
+    options?.dmJob === "investigation" &&
+    mentionsPlayerFacingRoll(normalizedNarration) &&
+    /\bDC\s*\d+\b/i.test(normalizedNarration)
+  ) {
+    return normalizedNarration;
+  }
+
   if (hasRollRequestDiceCoverage(normalizedNarration, requests)) {
     if (options?.dmJob !== "investigation" || /\bDC\s*\d+\b/i.test(normalizedNarration)) {
       return normalizedNarration;
@@ -513,6 +529,8 @@ export function normalizeRollRequest(
   const label =
     stringValue(request.label) ||
     stringValue(request.check) ||
+    stringValue(request.skill) ||
+    stringValue(request.tool) ||
     stringValue(request.reason) ||
     "Required roll";
 

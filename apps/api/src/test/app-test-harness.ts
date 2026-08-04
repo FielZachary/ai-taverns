@@ -3307,18 +3307,21 @@ before(async () => {
                   characterName: "Mara",
                   currentHp: 31,
                   maxHp: 45,
+                  armorClass: 14,
                   conditions: []
                 },
                 "npc:drowned-choir-raider-1": {
                   characterName: "Drowned Choir raider",
                   currentHp: 0,
                   maxHp: 16,
+                  armorClass: 13,
                   conditions: ["down"]
                 },
                 "npc:drowned-choir-raider-2": {
                   characterName: "Drowned Choir raider",
                   currentHp: 0,
                   maxHp: 16,
+                  armorClass: 13,
                   conditions: ["down"]
                 }
               }
@@ -3407,18 +3410,21 @@ before(async () => {
                   characterName: "Mara",
                   currentHp: 45,
                   maxHp: 45,
+                  armorClass: 14,
                   conditions: []
                 },
                 "npc:drowned-choir-raider-1": {
                   characterName: "Drowned Choir raider",
                   currentHp: 16,
                   maxHp: 16,
+                  armorClass: 13,
                   conditions: []
                 },
                 "npc:drowned-choir-raider-2": {
                   characterName: "Drowned Choir raider",
                   currentHp: 16,
                   maxHp: 16,
+                  armorClass: 13,
                   conditions: []
                 }
               }

@@ -1958,6 +1958,9 @@ function applyMechanicsStateUpdate(
       ...(hpNumberField(rawActor, "maxHp") !== undefined
         ? { maxHp: hpNumberField(rawActor, "maxHp") }
         : {}),
+      ...(numberField(rawActor, "armorClass") !== undefined
+        ? { armorClass: numberField(rawActor, "armorClass") }
+        : {}),
       ...(stringListField(rawActor, "conditions") !== undefined
         ? { conditions: stringListField(rawActor, "conditions") }
         : {}),

@@ -26,6 +26,7 @@ import {
   CampaignRestartResponseSchema,
   CampaignSoloTurnRequestSchema,
   CampaignSoloTurnResponseSchema,
+  MechanicsStateSchema,
   MechanicsSeedSchema,
   HealthResponseSchema,
   DmProviderPrepRequestSchema,
@@ -282,6 +283,28 @@ test("mechanics seed contract accepts structured character mechanics", () => {
       }
     })
   );
+});
+
+test("mechanics actor contract accepts canonical combat stats for NPCs", () => {
+  const state = MechanicsStateSchema.parse({
+    combat: {
+      active: true,
+      round: 1,
+      turnOwner: "player:owner",
+      initiativeOrder: ["player:owner", "npc:mara"]
+    },
+    actors: {
+      "npc:mara": {
+        characterName: "Mara",
+        currentHp: 45,
+        maxHp: 45,
+        armorClass: 14,
+        conditions: []
+      }
+    }
+  });
+
+  assert.equal(state.actors["npc:mara"]?.armorClass, 14);
 });
 
 test("room contracts accept snapshots and mutation payloads", () => {

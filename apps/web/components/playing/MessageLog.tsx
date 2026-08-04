@@ -35,13 +35,19 @@ type MessageLogProps = {
 };
 
 function renderInlineMarkdown(content: string) {
-  const segments = content.split(/(\*\*[^*]+?\*\*)/g);
+  const segments = content.split(/(\*\*[^*]+?\*\*|\*[^*]+?\*)/g);
 
   return segments.map((segment, index) => {
     const boldMatch = segment.match(/^\*\*([^*]+?)\*\*$/);
 
     if (boldMatch?.[1]) {
       return <strong key={`${index}-${boldMatch[1].slice(0, 16)}`}>{boldMatch[1]}</strong>;
+    }
+
+    const italicMatch = segment.match(/^\*([^*]+?)\*$/);
+
+    if (italicMatch?.[1]) {
+      return <em key={`${index}-${italicMatch[1].slice(0, 16)}`}>{italicMatch[1]}</em>;
     }
 
     return segment;
@@ -110,6 +116,23 @@ function renderHighlightedInlineMarkdown(
   });
 }
 
+function renderInlineContentWithLineBreaks(
+  content: string,
+  highlights: NarrationHighlight[]
+) {
+  return content.split("\n").flatMap((line, index) => {
+    const renderedLine = (
+      <span key={`line-${index}`}>
+        {renderHighlightedInlineMarkdown(line, highlights)}
+      </span>
+    );
+
+    return index === 0
+      ? [renderedLine]
+      : [<br key={`break-${index}`} />, renderedLine];
+  });
+}
+
 function playerFacingMessageContent(message: GameMessage) {
   if (message.kind !== "ask_dm_answer") {
     return message.content;
@@ -175,7 +198,7 @@ function MessageBody({
 
         return (
           <p key={`${index}-${paragraph.slice(0, 16)}`}>
-            {renderHighlightedInlineMarkdown(paragraph, highlights)}
+            {renderInlineContentWithLineBreaks(paragraph, highlights)}
           </p>
         );
       })}

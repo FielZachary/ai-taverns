@@ -29,6 +29,7 @@ export const MechanicsActorStateSchema = z.object({
   characterName: z.string(),
   currentHp: z.number().int().nonnegative().optional(),
   maxHp: z.number().int().nonnegative().optional(),
+  armorClass: z.number().int().nonnegative().optional(),
   spellSlots: z.record(SpellSlotLevelSchema, SpellSlotStateSchema).optional(),
   concentration: z
     .object({

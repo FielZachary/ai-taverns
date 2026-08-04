@@ -427,6 +427,11 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
+      /For every NPC or enemy actor key introduced in initiativeOrder/i
+    );
+    assert.match(jobPrompt("combat"), /armorClass/i);
+    assert.match(
+      jobPrompt("combat"),
       /Saying an NPC moves first is not a handoff/i
     );
     assert.match(

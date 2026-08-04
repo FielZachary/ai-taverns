@@ -25,9 +25,7 @@ function renderMessageLog(overrides: Partial<ComponentProps<typeof MessageLog>> 
     ...overrides
   } satisfies ComponentProps<typeof MessageLog>;
 
-  render(<MessageLog {...props} />);
-
-  return props;
+  return render(<MessageLog {...props} />);
 }
 
 beforeEach(() => {
@@ -152,6 +150,51 @@ describe("MessageLog", () => {
     expect(
       screen.getByText(/The spearpoint drives into Klave\./)
     ).toBeInTheDocument();
+  });
+
+  it("renders italic markdown emphasis inside message paragraphs", () => {
+    renderMessageLog({
+      messages: [
+        gameMessage({
+          id: "dm-italic-message",
+          role: "dm",
+          content:
+            "DC 18 may reveal that the traps react to *intent* or *fear* rather than just weight."
+        })
+      ]
+    });
+
+    expect(screen.getByText("intent").tagName).toBe("EM");
+    expect(screen.getByText("fear").tagName).toBe("EM");
+    expect(screen.queryByText(/\*intent\*/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/\*fear\*/)).not.toBeInTheDocument();
+  });
+
+  it("renders preserved single newlines as line breaks inside message paragraphs", () => {
+    const { container } = renderMessageLog({
+      messages: [
+        gameMessage({
+          id: "dm-line-break-message",
+          role: "dm",
+          content: [
+            "**Inquisitor Manifold initiative roll: 14.**",
+            "**Unbound Word Acolyte 1 initiative roll: 10.**",
+            "**Unbound Word Acolyte 2 initiative roll: 8.**",
+            "",
+            "**Initiative Order:**",
+            "1. Oktai Uni (16)",
+            "2. Inquisitor Manifold (14)"
+          ].join("\n")
+        })
+      ]
+    });
+
+    expect(screen.getByText("Inquisitor Manifold initiative roll: 14.").tagName).toBe(
+      "STRONG"
+    );
+    expect(screen.getByText("Initiative Order:").tagName).toBe("STRONG");
+    expect(screen.getByText("1. Oktai Uni (16)")).toBeInTheDocument();
+    expect(container.querySelectorAll(".message-body br")).toHaveLength(4);
   });
 
   it("renders narration highlights with color role classes", () => {
