@@ -858,11 +858,6 @@ h1 {
   font-family: var(--body-font);
 }
 
-.new-adventure-form-entry-transitioning > .new-adventure-entry-loader,
-.new-adventure-form-entry-transitioning > .new-adventure-flow {
-  grid-area: 1 / 1;
-}
-
 .new-adventure-flow {
   display: grid;
   gap: 20px;
@@ -2747,8 +2742,9 @@ h1 {
   padding: 28px;
 }
 
-.new-adventure-entry-loader {
+.full-page-rune-loader {
   display: grid;
+  width: min(100%, 760px);
   min-height: 210px;
   place-items: center;
   justify-items: center;
@@ -2756,28 +2752,15 @@ h1 {
   will-change: opacity, transform;
 }
 
-.new-adventure-entry-loader.exiting {
-  animation: new-adventure-entry-loader-exit 520ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+.full-page-rune-loader.exiting {
+  animation: full-page-rune-loader-exit 520ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
-.new-adventure-entry-loader .rune-loader {
+.full-page-rune-loader .rune-loader {
   font-size: clamp(0.9rem, 1.8vw, 1.08rem);
 }
 
-.new-adventure-flow-entry-revealing {
-  animation: new-adventure-entry-flow-reveal 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-.campaign-creation-center {
-  display: grid;
-  justify-items: center;
-  text-align: center;
-}
-
-.campaign-creation-center .rune-loader {
-  font-size: clamp(0.82rem, 1.6vw, 1rem);
-}
-
+.full-page-rune-loader-content,
 .campaign-prep-loader {
   display: grid;
   justify-items: center;
@@ -2785,6 +2768,7 @@ h1 {
   width: 100%;
 }
 
+.rune-loader-window,
 .campaign-prep-loader-window {
   position: relative;
   width: min(100%, 620px);
@@ -2792,6 +2776,7 @@ h1 {
   overflow: hidden;
 }
 
+.rune-loader-message,
 .campaign-prep-loader-message {
   position: absolute;
   inset: 0;
@@ -2803,17 +2788,20 @@ h1 {
   white-space: nowrap;
 }
 
+.rune-loader-message.entering,
 .campaign-prep-loader-message.entering {
   animation:
     rune-loader-pulse 1.6s ease-in-out infinite,
     campaign-prep-message-in 650ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+.rune-loader-message.exiting,
 .campaign-prep-loader-message.exiting {
   animation: campaign-prep-message-out 650ms cubic-bezier(0.22, 1, 0.36, 1)
     forwards;
 }
 
+.rune-loader-note,
 .campaign-prep-loader-note {
   margin: 1.6rem 0 0;
   color: rgba(248, 234, 208, 0.72);
@@ -3168,22 +3156,10 @@ h1 {
   }
 }
 
-@keyframes new-adventure-entry-loader-exit {
+@keyframes full-page-rune-loader-exit {
   to {
     opacity: 0;
     transform: translateY(22px);
-  }
-}
-
-@keyframes new-adventure-entry-flow-reveal {
-  from {
-    opacity: 0;
-    transform: translateY(22px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -5161,11 +5137,14 @@ h1 {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .rune-loader-message.entering,
+  .rune-loader-message.exiting,
   .campaign-prep-loader-message.entering,
   .campaign-prep-loader-message.exiting {
     animation: none;
   }
 
+  .rune-loader-message.exiting,
   .campaign-prep-loader-message.exiting {
     opacity: 0;
   }
