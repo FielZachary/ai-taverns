@@ -52,30 +52,6 @@ import type {
   MechanicsSeed,
   SpellSlotState
 } from "@ai-dnd/contracts";
-import artificerClassArt from "../../../../assets/classes art/artificer.png";
-import barbarianClassArt from "../../../../assets/classes art/barbarian.png";
-import bardClassArt from "../../../../assets/classes art/bard.png";
-import bloodHunterClassArt from "../../../../assets/classes art/blood-hunter.png";
-import clericClassArt from "../../../../assets/classes art/cleric.png";
-import druidClassArt from "../../../../assets/classes art/druid.png";
-import fighterClassArt from "../../../../assets/classes art/fighter.png";
-import monkClassArt from "../../../../assets/classes art/monk.png";
-import paladinClassArt from "../../../../assets/classes art/paladin.png";
-import psionClassArt from "../../../../assets/classes art/psion.png";
-import rangerClassArt from "../../../../assets/classes art/ranger.png";
-import rogueClassArt from "../../../../assets/classes art/rogue.png";
-import sorcererClassArt from "../../../../assets/classes art/sorcerer.png";
-import warlockClassArt from "../../../../assets/classes art/warlock.png";
-import wizardClassArt from "../../../../assets/classes art/wizard.png";
-import dragonbornSpeciesArt from "../../../../assets/races art/dragonborn.png";
-import dwarfSpeciesArt from "../../../../assets/races art/dwarf.png";
-import elfSpeciesArt from "../../../../assets/races art/elf.png";
-import gnomeSpeciesArt from "../../../../assets/races art/gnome.png";
-import halfElfSpeciesArt from "../../../../assets/races art/half-elf.png";
-import halfOrcSpeciesArt from "../../../../assets/races art/half-orc.png";
-import halflingSpeciesArt from "../../../../assets/races art/halfling.png";
-import humanSpeciesArt from "../../../../assets/races art/human.png";
-import tieflingSpeciesArt from "../../../../assets/races art/tiefling.png";
 
 export type { SpellLevelLabel, SpellRuleProfile } from "@/lib/spell-rules";
 
@@ -279,8 +255,8 @@ const campaignWorldOptions = [
   customCampaignGenre
 ];
 const campaignWorldBannerUrls: Record<string, string> = {
-  eldermere: "/new-adventure/eldermere-banner.jpg",
-  custom: "/new-adventure/custom-world-banner.jpg"
+  eldermere: "/new-adventure/eldermere-banner.webp",
+  custom: "/new-adventure/custom-world-banner.webp"
 };
 const newAdventureEntryTransitionMs = 520;
 const optionArtRoot = "/new-adventure/options";
@@ -300,7 +276,7 @@ function optionArtUrl(
   category: "tools" | "backgrounds" | "skills" | "weapons" | "packs",
   value: string
 ) {
-  return encodeURI(`${optionArtRoot}/${category}/${optionArtSlug(value)}.jpg`);
+  return encodeURI(`${optionArtRoot}/${category}/${optionArtSlug(value)}.webp`);
 }
 
 function optionArtStyle(url: string) {
@@ -2009,33 +1985,33 @@ type Alignment = (typeof alignmentOptions)[number];
 type Gender = (typeof genderOptions)[number];
 
 const classArtByClass: Record<CharacterClass, string> = {
-  Artificer: artificerClassArt.src,
-  Barbarian: barbarianClassArt.src,
-  Bard: bardClassArt.src,
-  "Blood Hunter": bloodHunterClassArt.src,
-  Cleric: clericClassArt.src,
-  Druid: druidClassArt.src,
-  Fighter: fighterClassArt.src,
-  Monk: monkClassArt.src,
-  Paladin: paladinClassArt.src,
-  Psion: psionClassArt.src,
-  Ranger: rangerClassArt.src,
-  Rogue: rogueClassArt.src,
-  Sorcerer: sorcererClassArt.src,
-  Warlock: warlockClassArt.src,
-  Wizard: wizardClassArt.src
+  Artificer: "/new-adventure/classes/artificer.webp",
+  Barbarian: "/new-adventure/classes/barbarian.webp",
+  Bard: "/new-adventure/classes/bard.webp",
+  "Blood Hunter": "/new-adventure/classes/blood-hunter.webp",
+  Cleric: "/new-adventure/classes/cleric.webp",
+  Druid: "/new-adventure/classes/druid.webp",
+  Fighter: "/new-adventure/classes/fighter.webp",
+  Monk: "/new-adventure/classes/monk.webp",
+  Paladin: "/new-adventure/classes/paladin.webp",
+  Psion: "/new-adventure/classes/psion.webp",
+  Ranger: "/new-adventure/classes/ranger.webp",
+  Rogue: "/new-adventure/classes/rogue.webp",
+  Sorcerer: "/new-adventure/classes/sorcerer.webp",
+  Warlock: "/new-adventure/classes/warlock.webp",
+  Wizard: "/new-adventure/classes/wizard.webp"
 };
 
 const speciesArtBySpecies: Record<CharacterSpecies, string> = {
-  Human: humanSpeciesArt.src,
-  Elf: elfSpeciesArt.src,
-  Dwarf: dwarfSpeciesArt.src,
-  Halfling: halflingSpeciesArt.src,
-  Gnome: gnomeSpeciesArt.src,
-  "Half-Elf": halfElfSpeciesArt.src,
-  "Half-Orc": halfOrcSpeciesArt.src,
-  Tiefling: tieflingSpeciesArt.src,
-  Dragonborn: dragonbornSpeciesArt.src
+  Human: "/new-adventure/species/human.webp",
+  Elf: "/new-adventure/species/elf.webp",
+  Dwarf: "/new-adventure/species/dwarf.webp",
+  Halfling: "/new-adventure/species/halfling.webp",
+  Gnome: "/new-adventure/species/gnome.webp",
+  "Half-Elf": "/new-adventure/species/half-elf.webp",
+  "Half-Orc": "/new-adventure/species/half-orc.webp",
+  Tiefling: "/new-adventure/species/tiefling.webp",
+  Dragonborn: "/new-adventure/species/dragonborn.webp"
 };
 
 const equipmentCategoryOptions: Record<EquipmentCategory, string[]> = {
@@ -2212,7 +2188,7 @@ const equipmentPackContents: Record<string, string[]> = {
 const equipmentPackNames = Object.keys(equipmentPackContents);
 
 const newAdventureStartupImageUrls = [
-  "/new-adventure/flow-bg.png",
+  "/new-adventure/flow-bg.webp",
   "/new-adventure/singleplayer-banner.webp",
   "/new-adventure/multiplayer-banner.webp",
   ...Object.values(campaignWorldBannerUrls)
@@ -5557,7 +5533,6 @@ export function NewAdventureForm({
 
   const activeEquipmentChoice = equipmentChoices[equipmentChoiceStepIndex];
   const shouldShowEntryLoader = entryState !== "ready";
-  const shouldShowAdventureFlow = entryState !== "preloading";
 
   return (
     <main className="new-adventure-page" aria-label="Create a new adventure">
@@ -5579,7 +5554,6 @@ export function NewAdventureForm({
             isExiting={entryState === "transitioning"}
           />
         ) : null}
-        {shouldShowAdventureFlow ? (
         <div
           className={`new-adventure-flow new-adventure-flow-${flowTransition}${
             entryState === "transitioning"
@@ -6655,8 +6629,6 @@ export function NewAdventureForm({
                 </dl>
             </div>
           ) : null}
-        </div>
-        ) : null}
 
           <div className="new-adventure-error-slot">
             {error ? (
@@ -6739,6 +6711,7 @@ export function NewAdventureForm({
               you wish
             </p>
           ) : null}
+        </div>
       </form>
 
       {activeSpellDetail && activeSpellRuleProfile ? (

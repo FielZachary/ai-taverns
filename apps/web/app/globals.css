@@ -787,7 +787,7 @@ h1 {
   z-index: -2;
   pointer-events: none;
   content: "";
-  background-image: url("/new-adventure/flow-bg.png");
+  background-image: url("/new-adventure/flow-bg.webp");
   background-position: center;
   background-size: cover;
   opacity: 0.1;
