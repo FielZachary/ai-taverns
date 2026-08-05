@@ -43,6 +43,10 @@ import {
 import { defaultCharacterSheet } from "@/components/playing/PlayerPanel";
 import { DiceRollReveal3D } from "@/components/playing/DiceRollReveal3D";
 import {
+  FullPageRuneLoader,
+  RuneLoaderText
+} from "@/components/FullPageRuneLoader";
+import {
   analyticsGuestId,
   identifyAnalyticsUser,
   trackAnalytics
@@ -92,11 +96,6 @@ const campaignPreparationMessages = [
 const campaignPreparationMessageIntervalMs = 10_000;
 const campaignPreparationTransitionMs = 650;
 
-type PreparationLoaderLayoutProps = {
-  currentMessage: string;
-  exitingMessage?: string;
-  note?: string;
-};
 type NewAdventureEntryState = "preloading" | "transitioning" | "ready";
 
 type AbilityKey = "str" | "dex" | "con" | "int" | "wis" | "cha";
@@ -3728,16 +3727,17 @@ function CampaignPreparationLoader() {
   }, []);
 
   return (
-    <PreparationLoaderLayout
-      currentMessage={currentMessage}
+    <FullPageRuneLoader
+      message={currentMessage}
       exitingMessage={exitingMessage}
       note="this'll take about a minute and a half, sit tight ;)"
+      ariaLabel="Preparing campaign"
     />
   );
 }
 
 function PortraitPreparationLoader() {
-  return <PreparationLoaderLayout currentMessage="Generating portrait" />;
+  return <RuneLoaderText>Generating portrait</RuneLoaderText>;
 }
 
 function NewAdventureEntryLoadingPanel({
@@ -3746,62 +3746,11 @@ function NewAdventureEntryLoadingPanel({
   isExiting?: boolean;
 }) {
   return (
-    <div
-      className={
-        isExiting
-          ? "new-adventure-entry-loader exiting"
-          : "new-adventure-entry-loader"
-      }
-      aria-live="polite"
-    >
-      <p className="rune-loader">
-        Loading
-        <span className="rune-loader-dots" aria-hidden="true">
-          <span>.</span>
-          <span>.</span>
-          <span>.</span>
-        </span>
-      </p>
-    </div>
-  );
-}
-
-function PreparationLoaderLayout({
-  currentMessage,
-  exitingMessage = "",
-  note
-}: PreparationLoaderLayoutProps) {
-  return (
-    <div className="campaign-prep-loader">
-      <div className="campaign-prep-loader-window">
-        {exitingMessage ? (
-          <p
-            key={`exiting-${exitingMessage}`}
-            className="rune-loader campaign-prep-loader-message exiting"
-            aria-hidden="true"
-          >
-            {exitingMessage}
-            <span className="rune-loader-dots" aria-hidden="true">
-              <span>.</span>
-              <span>.</span>
-              <span>.</span>
-            </span>
-          </p>
-        ) : null}
-        <p
-          key={currentMessage}
-          className="rune-loader campaign-prep-loader-message entering"
-        >
-          {currentMessage}
-          <span className="rune-loader-dots" aria-hidden="true">
-            <span>.</span>
-            <span>.</span>
-            <span>.</span>
-          </span>
-        </p>
-      </div>
-      {note ? <p className="campaign-prep-loader-note">{note}</p> : null}
-    </div>
+    <FullPageRuneLoader
+      message="Loading"
+      ariaLabel="Loading new adventure"
+      isExiting={isExiting}
+    />
   );
 }
 
@@ -5524,16 +5473,25 @@ export function NewAdventureForm({
   if (isCreating && !isJoinFlow) {
     return (
       <main className="campaign-creation-screen" aria-label="Creating campaign">
-        <section className="campaign-creation-center" aria-live="polite">
-          <CampaignPreparationLoader />
-        </section>
+        <CampaignPreparationLoader />
+      </main>
+    );
+  }
+
+  if (entryState !== "ready") {
+    return (
+      <main
+        className="campaign-creation-screen"
+        aria-label="Create a new adventure"
+      >
+        <NewAdventureEntryLoadingPanel
+          isExiting={entryState === "transitioning"}
+        />
       </main>
     );
   }
 
   const activeEquipmentChoice = equipmentChoices[equipmentChoiceStepIndex];
-  const shouldShowEntryLoader = entryState !== "ready";
-  const shouldShowAdventureFlow = entryState !== "preloading";
 
   return (
     <main className="new-adventure-page" aria-label="Create a new adventure">
@@ -5542,26 +5500,9 @@ export function NewAdventureForm({
         <h1>{stepTitle}</h1>
       </div>
 
-      <form
-        className={
-          entryState === "transitioning"
-            ? "new-adventure-form new-adventure-form-entry-transitioning"
-            : "new-adventure-form"
-        }
-        onSubmit={handleSubmit}
-      >
-        {shouldShowEntryLoader ? (
-          <NewAdventureEntryLoadingPanel
-            isExiting={entryState === "transitioning"}
-          />
-        ) : null}
-        {shouldShowAdventureFlow ? (
+      <form className="new-adventure-form" onSubmit={handleSubmit}>
         <div
-          className={`new-adventure-flow new-adventure-flow-${flowTransition}${
-            entryState === "transitioning"
-              ? " new-adventure-flow-entry-revealing"
-              : ""
-          }`}
+          className={`new-adventure-flow new-adventure-flow-${flowTransition}`}
         >
           {stepIndex === 0 ? (
             <>
@@ -6632,8 +6573,6 @@ export function NewAdventureForm({
             </div>
           ) : null}
         </div>
-        ) : null}
-
           <div className="new-adventure-error-slot">
             {error ? (
               <p className="new-adventure-error" role="alert">
