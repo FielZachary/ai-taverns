@@ -1,9 +1,9 @@
 const criticalNewAdventureImagePreloads = [
-  "/new-adventure/flow-bg.png",
+  "/new-adventure/flow-bg.webp",
   "/new-adventure/singleplayer-banner.webp",
   "/new-adventure/multiplayer-banner.webp",
-  "/new-adventure/eldermere-banner.jpg",
-  "/new-adventure/custom-world-banner.jpg"
+  "/new-adventure/eldermere-banner.webp",
+  "/new-adventure/custom-world-banner.webp"
 ];
 
 export default function Head() {
