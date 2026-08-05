@@ -389,12 +389,12 @@ describe("NewAdventureForm", () => {
       screen
         .getByRole("button", { name: /eldermere/i })
         .style.getPropertyValue("--genre-banner-url")
-    ).toContain("/new-adventure/eldermere-banner.jpg");
+    ).toContain("/new-adventure/eldermere-banner.webp");
     expect(
       screen
         .getByRole("button", { name: /custom world/i })
         .style.getPropertyValue("--genre-banner-url")
-    ).toContain("/new-adventure/custom-world-banner.jpg");
+    ).toContain("/new-adventure/custom-world-banner.webp");
   });
 
   it("shows species stat bonuses as muted subtitles", async () => {
@@ -434,7 +434,7 @@ describe("NewAdventureForm", () => {
 
     expect(diceSet).toHaveClass("art-option-card");
     expect(diceSet.style.getPropertyValue("--option-art-url")).toContain(
-      "/new-adventure/options/tools/dice-set.jpg"
+      "/new-adventure/options/tools/dice-set.webp"
     );
 
     await nextCharacterStep();
@@ -446,7 +446,7 @@ describe("NewAdventureForm", () => {
 
     expect(folkHero).toHaveClass("art-option-card");
     expect(folkHero.style.getPropertyValue("--option-art-url")).toContain(
-      "/new-adventure/options/backgrounds/folk-hero.jpg"
+      "/new-adventure/options/backgrounds/folk-hero.webp"
     );
 
     await nextCharacterStep();
@@ -458,7 +458,7 @@ describe("NewAdventureForm", () => {
 
     expect(athletics).toHaveClass("art-option-card");
     expect(athletics.style.getPropertyValue("--option-art-url")).toContain(
-      "/new-adventure/options/skills/athletics.jpg"
+      "/new-adventure/options/skills/athletics.webp"
     );
 
     await nextCharacterStep();
@@ -477,7 +477,7 @@ describe("NewAdventureForm", () => {
     const weaponModal = battleaxe.closest(".equipment-modal");
 
     expect(battleaxe.style.getPropertyValue("--option-art-url")).toContain(
-      "/new-adventure/options/weapons/battleaxe.jpg"
+      "/new-adventure/options/weapons/battleaxe.webp"
     );
     expect(battleaxe).toHaveClass("art-option-card");
     expect(weaponModal).toHaveClass("weapon-equipment-modal");
@@ -620,7 +620,7 @@ describe("NewAdventureForm", () => {
     expect(dungeoneersPack).toHaveTextContent("10 days of rations");
     expect(
       dungeoneersPack.style.getPropertyValue("--option-art-url")
-    ).toContain("/new-adventure/options/packs/dungeoneer-s-pack.jpg");
+    ).toContain("/new-adventure/options/packs/dungeoneer-s-pack.webp");
   });
 
   it("validates identity and keeps campaign creation behind Continue", async () => {
