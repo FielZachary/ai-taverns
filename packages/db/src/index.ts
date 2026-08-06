@@ -35,7 +35,6 @@ import {
   type DmNextInputNeeded,
   type DmJobName,
   type InputPolicy,
-  type NarrationHighlight,
   type RouterContextKeys,
   type ValidatedRouterOutput
 } from "@ai-dnd/dm";
@@ -698,7 +697,6 @@ type ResolutionMode = "needs_dice" | "resolved_without_dice";
 type DungeonMasterReply = {
   id: string;
   content: string;
-  narrationHighlights: NarrationHighlight[];
   debug: AiDebugInfo;
   rollRequests: DiceRollRequest[];
   inputTargets: string[];
@@ -756,10 +754,8 @@ const dungeonMasterContractInstructions = [
   "When the party's current location is known, include a setting object with display_location, world_name, region_name, settlement_name, scene_location, and starting_location when available.",
   "Use scene_location for the current local scene label, such as a tavern, street, room, road, ruin, district, or wilderness landmark.",
   "Use display_location as the short UI label for the current location; do not use a genre label.",
-  "Required top-level keys: public_narration, narration_highlights, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update, combat_events, proposed_context_updates.",
-  "Unless opener-specific guidance says otherwise, narration_highlights must be an array of 0-1 player-visible important names, places, clues, objects, threats, factions, or details from public_narration during normal play. Use [] when nothing is truly worth highlighting; it is completely okay to highlight nothing.",
-  "Each narration_highlights item must use exactly {\"text\":\"exact phrase copied from public_narration\",\"color_role\":\"npc|place|clue|danger|faction|object\"}.",
-  "Do not put colors, HTML, CSS, or Markdown emphasis into public_narration or narration_highlights. The UI will choose colors from color_role.",
+  "Required top-level keys: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update, combat_events, proposed_context_updates.",
+  "Do not put CSS, HTML, hex colors, or Markdown emphasis into public_narration.",
   "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved this turn."
 ].join("\n");
 const playerTurnDmTimeoutMs = 15_000;
@@ -2844,7 +2840,6 @@ export async function createCampaignForMode(
       nextInputNeeded: opening.nextInputNeeded,
       resolutionMode: opening.resolutionMode,
       setting: opening.setting,
-      narrationHighlights: opening.narrationHighlights,
       aiDebug: opening.debug
     });
 
@@ -5083,58 +5078,6 @@ function eventSetting(payload: Record<string, unknown>, role: "player" | "dm") {
   };
 }
 
-const narrationHighlightRoles = new Set([
-  "npc",
-  "place",
-  "clue",
-  "danger",
-  "faction",
-  "object"
-]);
-const maxStoredNarrationHighlights = 24;
-
-function eventNarrationHighlights(
-  payload: Record<string, unknown>,
-  role: "player" | "dm",
-  content: string
-): NarrationHighlight[] | undefined {
-  if (role !== "dm" || !Array.isArray(payload.narrationHighlights)) {
-    return undefined;
-  }
-
-  const seen = new Set<string>();
-  const highlights: NarrationHighlight[] = [];
-
-  for (const item of payload.narrationHighlights) {
-    const record = eventPayload(item);
-    const text = typeof record.text === "string" ? record.text.trim() : "";
-    const colorRole =
-      typeof record.colorRole === "string" ? record.colorRole.trim() : "";
-    const key = `${text.toLowerCase()}::${colorRole}`;
-
-    if (
-      !text ||
-      !narrationHighlightRoles.has(colorRole) ||
-      !content.includes(text) ||
-      seen.has(key)
-    ) {
-      continue;
-    }
-
-    highlights.push({
-      text,
-      colorRole: colorRole as NarrationHighlight["colorRole"]
-    });
-    seen.add(key);
-
-    if (highlights.length >= maxStoredNarrationHighlights) {
-      break;
-    }
-  }
-
-  return highlights.length > 0 ? highlights : undefined;
-}
-
 async function buildRoomSnapshot(
   db: Queryable,
   campaign: CampaignRow,
@@ -5226,12 +5169,6 @@ async function buildRoomSnapshot(
       const role = payload.role === "player" ? "player" : "dm";
       const debug = eventAiDebug(payload, role);
       const setting = eventSetting(payload, role);
-      const narrationHighlights = eventNarrationHighlights(
-        payload,
-        role,
-        content
-      );
-
       return {
         id: String(payload.messageId || event.id),
         role,
@@ -5245,7 +5182,6 @@ async function buildRoomSnapshot(
           ? { characterName: payload.characterName }
           : {}),
         ...(setting ? { setting } : {}),
-        ...(narrationHighlights ? { narrationHighlights } : {}),
         ...(debug ? { debug } : {})
       };
     })
@@ -9201,57 +9137,11 @@ function answerFromAskDmProviderResponse(content: string) {
   throw new Error("The DM provider returned an empty answer.");
 }
 
-function narrationHighlightsFromProviderResponse(
-  content: string,
-  publicNarration: string
-): NarrationHighlight[] {
-  const parsed = parseJsonRecord(content);
-  const rawHighlights = parsed.narration_highlights ?? parsed.narrationHighlights;
-
-  if (!Array.isArray(rawHighlights)) {
-    return [];
-  }
-
-  const seen = new Set<string>();
-  const highlights: NarrationHighlight[] = [];
-
-  for (const item of rawHighlights) {
-    const record = eventPayload(item);
-    const text = typeof record.text === "string" ? record.text.trim() : "";
-    const rawColorRole = record.color_role ?? record.colorRole;
-    const colorRole =
-      typeof rawColorRole === "string" ? rawColorRole.trim() : "";
-    const key = `${text.toLowerCase()}::${colorRole}`;
-
-    if (
-      !text ||
-      !narrationHighlightRoles.has(colorRole) ||
-      !publicNarration.includes(text) ||
-      seen.has(key)
-    ) {
-      continue;
-    }
-
-    highlights.push({
-      text,
-      colorRole: colorRole as NarrationHighlight["colorRole"]
-    });
-    seen.add(key);
-
-    if (highlights.length >= maxStoredNarrationHighlights) {
-      break;
-    }
-  }
-
-  return highlights;
-}
-
 const gameplayTurnOutputContractReminder = [
   "Output contract reminder:",
   "Return only one valid JSON object. Do not include prose, Markdown, or commentary outside JSON.",
-  "Required top-level keys: public_narration, narration_highlights, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update, combat_events, proposed_context_updates.",
-  "Outside active combat, narration_highlights must contain 0-1 exact phrase copied from public_narration, with color_role npc, place, clue, danger, faction, or object. Use [] when nothing is truly worth highlighting; it is completely okay to highlight nothing.",
-  "Do not use bold, Markdown, HTML, CSS, hex colors, or color names inside public_narration or narration_highlights. The app renders colors from color_role.",
+  "Required top-level keys: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update, combat_events, proposed_context_updates.",
+  "Do not use bold, Markdown, HTML, CSS, hex colors, or color names inside public_narration.",
   "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved this turn.",
   "Treat canonical character sheet Inventory, Equipment, and Currency sections as current inventory state.",
   "Inventory possession gate: before writing any public_narration, inspect current player submissions for any item, weapon, tool, spell component, currency, carried object, or spell the character claims to produce, draw, pull from a bag, show, offer, sell, appraise, give, use, equip, throw, consume, spend, cast, or otherwise rely on.",
@@ -9296,7 +9186,6 @@ const gameplayTurnOutputContractReminder = [
   "When a player action, spell, feature, or weapon would deal damage and that damage roll was not already submitted, do not roll damage yourself. Request the player's damage roll with next_input_needed dice_results and a structured roll_requests entry. This includes automatic-hit effects such as Magic Missile. Do not update target HP until damage is submitted.",
   "Resolve NPC attacks fully using conversational visible math in prose, such as 'they rolled a 17 against your AC of 14, so the cutlass catches your ribs'; on a hit, state damage in prose, such as 'the damage comes to 6 slashing from 1d6 + 2', update player HP, then continue the non-player-controlled catch-up loop until control reaches a player actor, combat ends, or a player-facing roll, reaction, or tactical choice is required.",
   "For NPC hits, public_narration must include the NPC's roll, the target AC, whether it hit, the damage dice and total, the damage type, and the HP change before injury narration finishes.",
-  "During active combat, ignore the normal 0-1 narration_highlights limit. Highlight every visible combat math span in public_narration, using separate exact phrases when one sentence contains both dice/math and damage/HP numbers. Use color_role clue for roll totals, attack/save/check math, AC, DC, and dice notation such as 1d20, 1d6 + 2, or 8d6. Use color_role danger for damage amount plus damage type, HP changes, and 0 HP or defeat mechanics.",
   "When a player spell or feature forces an NPC or enemy saving throw, roll that save yourself before narrating success or failure, reveal the save roll and total, compare it to the player's known spell save DC when available, and do not put the NPC/enemy save in roll_requests.",
   "Never narrate a spell or feature as failing, succeeding, taking hold, being resisted, or being shaken off because of an NPC/enemy save unless public_narration first includes the visible save math in prose, such as '<Target> rolled an 11 against your spell save DC of 13, so the spell takes hold.'",
   "Do not end an NPC turn with only a wind-up like lunges, swings, aims, starts casting, or bears down unless a player-facing roll or reaction is required first.",
@@ -9310,8 +9199,7 @@ const openingSceneOutputContractReminder = [
   "Return only one valid JSON object. Do not include prose, Markdown, or commentary outside JSON.",
   "public_narration must contain the full 6-paragraph opener, not only the character motivation or a short teaser.",
   "Treat narrator_instructions in the Eldermere opening plan as the highest-priority scene blueprint.",
-  "Include narration_highlights with exactly 3 exact phrases copied from public_narration and color_role npc, place, clue, danger, faction, or object when the opener has 3 worthwhile visible terms. Use [] only if there is genuinely nothing worth highlighting; it is completely okay to highlight nothing.",
-  "Do not use bold, Markdown, HTML, CSS, hex colors, or color names inside public_narration for these highlights. The app renders colors from color_role.",
+  "Do not use bold, Markdown, HTML, CSS, hex colors, or color names inside public_narration.",
   "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved in the opener."
 ];
 
@@ -10579,7 +10467,6 @@ async function askDungeonMaster(
     return {
       id: providerData.id ?? randomUUID(),
       content: reply,
-      narrationHighlights: contract.narrationHighlights,
       debug: debugWithCombatState,
       rollRequests: normalizedRollRequests,
       inputTargets: normalizedInputControl.inputTargets,
@@ -10675,24 +10562,6 @@ function settingMetadata(setting: CampaignSettingSummary | undefined) {
   };
 }
 
-function narrationHighlightsMetadata(
-  narrationHighlights: NarrationHighlight[] | undefined,
-  maxHighlights = 3
-) {
-  if (!narrationHighlights?.length) {
-    return {};
-  }
-
-  return {
-    narrationHighlights: narrationHighlights
-      .slice(0, maxHighlights)
-      .map((highlight) => ({
-        text: highlight.text,
-        colorRole: highlight.colorRole
-      }))
-  };
-}
-
 async function persistEldermereOpeningPlan(
   db: Queryable,
   campaignId: string,
@@ -10766,19 +10635,12 @@ async function finishResolvedTurn(
     nextInputNeeded?: DmNextInputNeeded;
     resolutionMode?: "needs_dice" | "resolved_without_dice";
     setting?: CampaignSettingSummary | undefined;
-    narrationHighlights?: NarrationHighlight[] | undefined;
     aiDebug?: AiDebugInfo | undefined;
   }
 ) {
   const pendingRollRequests = input.pendingRollRequests ?? [];
   const currentPendingRollRequest = pendingRollRequests[0] ?? null;
   const settingPatch = settingMetadata(input.setting);
-  const maxNarrationHighlights =
-    input.eventType === "adventure_begun" ? 3 : maxStoredNarrationHighlights;
-  const narrationHighlightsPatch = narrationHighlightsMetadata(
-    input.narrationHighlights,
-    maxNarrationHighlights
-  );
   let dmEventId: string | undefined;
 
   await withTransaction(db, async (client) => {
@@ -10805,7 +10667,6 @@ async function finishResolvedTurn(
       role: "dm",
       content: input.reply,
       ...settingPatch,
-      ...narrationHighlightsPatch,
       pendingRollRequest: currentPendingRollRequest,
       pendingRollRequests,
       nextInputNeeded:
@@ -11374,7 +11235,6 @@ export async function beginRoomForUser(
       nextInputNeeded: opening.nextInputNeeded,
       resolutionMode: opening.resolutionMode,
       setting: opening.setting,
-      narrationHighlights: opening.narrationHighlights,
       aiDebug: opening.debug
     });
 
@@ -11752,7 +11612,6 @@ export async function submitRoomTurnForUser(
         inputPolicy: reply.inputPolicy,
         nextInputNeeded: reply.nextInputNeeded,
         resolutionMode: reply.resolutionMode,
-        narrationHighlights: reply.narrationHighlights,
         aiDebug: reply.debug
       });
 
@@ -11977,10 +11836,6 @@ export async function askDungeonMasterQuestionForUser(
     });
 
     const answer = answerFromAskDmProviderResponse(providerData.content);
-    const answerHighlights = narrationHighlightsFromProviderResponse(
-      providerData.content,
-      answer
-    );
     const questionMessageId = input.clientMessageId?.trim() || randomUUID();
     const answerMessageId = randomUUID();
 
@@ -12012,7 +11867,6 @@ export async function askDungeonMasterQuestionForUser(
         playerId: player.id,
         inReplyToMessageId: questionMessageId,
         content: answer,
-        ...narrationHighlightsMetadata(answerHighlights, 1),
         aiDebug: {
           ...providerData.debug,
           providerResponseId:
@@ -12316,7 +12170,6 @@ export async function submitSoloTurnForUser(
       inputPolicy: reply.inputPolicy,
       nextInputNeeded: reply.nextInputNeeded,
       resolutionMode: reply.resolutionMode,
-      narrationHighlights: reply.narrationHighlights,
       aiDebug: reply.debug
     });
 
@@ -12720,7 +12573,6 @@ export async function regenerateCampaignResponseForUser(
       nextInputNeeded: reply.nextInputNeeded,
       resolutionMode: reply.resolutionMode,
       setting: reply.setting,
-      narrationHighlights: reply.narrationHighlights,
       aiDebug: reply.debug
     });
 
