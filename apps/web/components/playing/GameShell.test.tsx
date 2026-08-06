@@ -784,6 +784,56 @@ describe("GameShell", () => {
     expect(screen.getByText("Portrait status: ready")).toBeInTheDocument();
   });
 
+  it("uses the server resolved player id when local browser identity is stale", async () => {
+    localStorage.setItem("ai-dnd.playerId", "incognito-player");
+    listCampaignsMock.mockResolvedValue([
+      {
+        ...campaign,
+        currentUserPlayerId: "player-1"
+      }
+    ]);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.startsWith("/api/room?")) {
+        return responseJson(
+          roomSnapshot({
+            currentPlayerId: "player-1",
+            players: [
+              {
+                id: "player-1",
+                slot: 0,
+                username: "Mira",
+                characterName: "Mira Vale",
+                characterSheet: "Name: Mira Vale",
+                portraitStatus: "ready",
+                portraitUrl:
+                  "https://ai-taverns-media.sgp1.digitaloceanspaces.com/campaigns/campaign-1/players/player-1/portraits/asset-1/512.webp",
+                status: "waiting"
+              }
+            ]
+          })
+        );
+      }
+
+      if (url === "/api/auth/claim-guest-state") {
+        return responseJson({});
+      }
+
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<GameShell initialCampaignId={campaign.id} />);
+
+    expect(
+      await screen.findByText(
+        "Portrait URL: https://ai-taverns-media.sgp1.digitaloceanspaces.com/campaigns/campaign-1/players/player-1/portraits/asset-1/512.webp"
+      )
+    ).toBeInTheDocument();
+    expect(localStorage.getItem("ai-dnd.playerId")).toBe("player-1");
+  });
+
   it("loads an unlisted initial campaign when debug mode allows pasted IDs", async () => {
     const debugCampaignId = "99999999-9999-4999-8999-999999999999";
     listCampaignsMock.mockResolvedValue([]);

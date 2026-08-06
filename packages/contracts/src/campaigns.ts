@@ -9,6 +9,7 @@ export const CampaignSummarySchema = z.object({
   mode: CampaignModeSchema,
   title: z.string().min(1),
   ownerClientId: z.string().optional(),
+  currentUserPlayerId: z.string().min(1).optional(),
   portraitAssetId: z.string().uuid().optional(),
   portraitUrl: z.string().min(1).optional(),
   preview: z.string().optional(),

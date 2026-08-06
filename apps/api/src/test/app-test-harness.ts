@@ -703,6 +703,20 @@ class FakeDatabase {
             candidate.campaign_id === campaign.id &&
             candidate.status === "active"
         );
+        const currentPlayer = this.players.find(
+          (candidate) =>
+            candidate.campaign_id === campaign.id &&
+            candidate.status === "active" &&
+            candidate.user_id === userId
+        ) ??
+          this.players.find(
+            (candidate) =>
+              campaign.owner_user_id === userId &&
+              campaign.owner_client_id &&
+              candidate.campaign_id === campaign.id &&
+              candidate.status === "active" &&
+              candidate.client_id === campaign.owner_client_id
+          );
         const joinCode = this.joinCodes.find(
           (candidate) =>
             candidate.campaign_id === campaign.id &&
@@ -717,6 +731,7 @@ class FakeDatabase {
               display_character_name:
                 player?.user_id === userId ? player.character_name : null,
               display_username: player?.user_id === userId ? player.username : null,
+              current_user_player_id: currentPlayer?.client_id ?? null,
               join_code: joinCode?.code ?? null
             } as T
           ]
@@ -743,6 +758,20 @@ class FakeDatabase {
               candidate.campaign_id === campaign.id &&
               candidate.status === "active"
           );
+          const currentPlayer = this.players.find(
+            (candidate) =>
+              candidate.campaign_id === campaign.id &&
+              candidate.status === "active" &&
+              candidate.user_id === userId
+          ) ??
+            this.players.find(
+              (candidate) =>
+                campaign.owner_user_id === userId &&
+                campaign.owner_client_id &&
+                candidate.campaign_id === campaign.id &&
+                candidate.status === "active" &&
+                candidate.client_id === campaign.owner_client_id
+            );
           const joinCode = this.joinCodes.find(
             (candidate) =>
               candidate.campaign_id === campaign.id &&
@@ -754,11 +783,38 @@ class FakeDatabase {
             ...campaign,
             display_character_name: player?.character_name ?? null,
             display_username: player?.username ?? null,
+            current_user_player_id: currentPlayer?.client_id ?? null,
             join_code: joinCode?.code ?? null
           };
         });
 
       return { rows: accessible as T[] };
+    }
+
+    if (normalizedSql.startsWith("select players.client_id from players")) {
+      const campaignId = values[0] as string;
+      const userId = values[1] as string;
+      const ownerUserId = values[2] as string | null;
+      const ownerClientId = values[3] as string | null;
+      const player =
+        this.players.find(
+          (candidate) =>
+            candidate.campaign_id === campaignId &&
+            candidate.status === "active" &&
+            candidate.user_id === userId
+        ) ??
+        this.players.find(
+          (candidate) =>
+            ownerUserId === userId &&
+            ownerClientId &&
+            candidate.campaign_id === campaignId &&
+            candidate.status === "active" &&
+            candidate.client_id === ownerClientId
+        );
+
+      return {
+        rows: player ? ([{ client_id: player.client_id }] as T[]) : ([] as T[])
+      };
     }
 
     if (normalizedSql.startsWith("insert into campaigns")) {
