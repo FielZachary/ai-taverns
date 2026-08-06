@@ -1,8 +1,6 @@
 import type {
   DiceRollRequest,
-  InputPolicy,
-  NarrationHighlight,
-  NarrationHighlightRole
+  InputPolicy
 } from "./game-types.js";
 
 export const internalOpeningRequestPrefix = "AI_DND_INTERNAL_OPENING_REQUEST";
@@ -175,55 +173,6 @@ function stringArray(value: unknown) {
         .map((item) => stringValue(item))
         .filter((item): item is string => Boolean(item))
     : [];
-}
-
-const narrationHighlightRoles = new Set([
-  "npc",
-  "place",
-  "clue",
-  "danger",
-  "faction",
-  "object"
-]);
-const maxNarrationHighlights = 24;
-
-function normalizeNarrationHighlights(
-  value: unknown,
-  publicNarration: string
-): NarrationHighlight[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  const seen = new Set<string>();
-  const highlights: NarrationHighlight[] = [];
-
-  for (const item of value) {
-    const data = asObject(item);
-    const text = stringValue(data?.text);
-    const colorRole = stringValue(
-      data?.color_role ?? data?.colorRole
-    ) as NarrationHighlightRole;
-    const key = `${text.toLowerCase()}::${colorRole}`;
-
-    if (
-      !text ||
-      !narrationHighlightRoles.has(colorRole) ||
-      !publicNarration.includes(text) ||
-      seen.has(key)
-    ) {
-      continue;
-    }
-
-    highlights.push({ text, colorRole });
-    seen.add(key);
-
-    if (highlights.length >= maxNarrationHighlights) {
-      break;
-    }
-  }
-
-  return highlights;
 }
 
 function extractJsonObject(text: string) {
@@ -692,7 +641,6 @@ export type DmNextInputNeeded =
 
 export type DmContractResponse = {
   publicNarration: string;
-  narrationHighlights: NarrationHighlight[];
   resolutionMode: "needs_dice" | "resolved_without_dice";
   rollRequests: DiceRollRequest[];
   nextInputNeeded: DmNextInputNeeded;
@@ -738,7 +686,6 @@ function recoverPlainNarrationContract(
   return {
     contract: {
       publicNarration,
-      narrationHighlights: [],
       resolutionMode: "resolved_without_dice",
       rollRequests: [],
       nextInputNeeded: "player_actions",
@@ -810,11 +757,6 @@ export function parseDmContract(
   if (!publicNarration) {
     throw new Error("The DM provider response is missing public_narration.");
   }
-
-  const narrationHighlights = normalizeNarrationHighlights(
-    parsed.narration_highlights ?? parsed.narrationHighlights,
-    publicNarration
-  );
 
   const rawRollRequests = Array.isArray(parsed.roll_requests)
     ? parsed.roll_requests
@@ -895,7 +837,6 @@ export function parseDmContract(
 
   return {
     publicNarration,
-    narrationHighlights,
     resolutionMode,
     rollRequests,
     nextInputNeeded,
@@ -926,10 +867,6 @@ export function recoverDmContractAfterParseFailure(
     ? parsed.roll_requests
     : [];
   const rollRequests = normalizeRollRequests(rawRollRequests, publicNarration);
-  const narrationHighlights = normalizeNarrationHighlights(
-    parsed.narration_highlights ?? parsed.narrationHighlights,
-    publicNarration
-  );
   const originalNextInputNeeded = stringValue(parsed.next_input_needed);
   const originalResolutionMode = stringValue(
     parsed.resolution_mode ?? parsed.resolutionMode
@@ -1000,7 +937,6 @@ export function recoverDmContractAfterParseFailure(
   return {
     contract: {
       publicNarration: narrationWithRollInstructions(publicNarration, rollRequests),
-      narrationHighlights,
       resolutionMode,
       rollRequests,
       nextInputNeeded,

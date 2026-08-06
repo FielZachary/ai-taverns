@@ -373,26 +373,6 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
-      /copy exact plain-text math-bearing phrases into narration_highlights instead of adding Markdown/i
-    );
-    assert.match(
-      jobPrompt("combat"),
-      /ignore the normal 0-1 narration_highlights limit/i
-    );
-    assert.match(
-      jobPrompt("combat"),
-      /Highlight every visible combat math span in public_narration/i
-    );
-    assert.match(
-      jobPrompt("combat"),
-      /Use color_role clue for roll totals, attack\/save\/check math, AC, DC, and dice notation/i
-    );
-    assert.match(
-      jobPrompt("combat"),
-      /Use color_role danger for damage amount plus damage type, HP changes, and 0 HP or defeat mechanics/i
-    );
-    assert.match(
-      jobPrompt("combat"),
       /Do not put a visible mechanics sentence in its own standalone paragraph/i
     );
     assert.match(
@@ -517,18 +497,6 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(
       jobPrompt("combat"),
       /They rolled an 18 against Komer's AC of 15, so the spearpoint/i
-    );
-    assert.match(
-      jobPrompt("combat"),
-      /"text": "They rolled an 18 against Komer's AC of 15",\n\s+"color_role": "clue"/i
-    );
-    assert.match(
-      jobPrompt("combat"),
-      /"text": "5 piercing",\n\s+"color_role": "danger"/i
-    );
-    assert.match(
-      jobPrompt("combat"),
-      /"text": "1d6 \+ 2",\n\s+"color_role": "clue"/i
     );
     assert.doesNotMatch(
       jobPrompt("combat"),

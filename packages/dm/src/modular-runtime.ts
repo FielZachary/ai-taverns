@@ -271,7 +271,6 @@ export function jobPrompt(
   const completeOutputExample = (example: Record<string, unknown>) => {
     const {
       public_narration,
-      narration_highlights,
       combat_events,
       proposed_context_updates,
       ...rest
@@ -279,9 +278,6 @@ export function jobPrompt(
 
     return {
       public_narration,
-      narration_highlights: Array.isArray(narration_highlights)
-        ? narration_highlights
-        : [],
       ...rest,
       combat_events: Array.isArray(combat_events) ? combat_events : [],
       proposed_context_updates: Array.isArray(proposed_context_updates)
@@ -556,9 +552,6 @@ export function jobPrompt(
     "On a resolved hit where damage is known or DM-side, state damage in prose: 'the damage comes to 5 piercing from 1d6 + 2,' or 'you take 5 piercing damage and drop from 16 HP to 11 HP.'",
     "For NPC hits against player characters, public_narration must include the NPC's roll, the target AC, whether it hit, the damage dice and total, the damage type, and the HP change when HP is updated.",
     "For saving throws, make the numbers visible before consequence narration using prose: '<Target> rolled a 9 against DC 14 and fails,' or '<Target> rolled a 16 against your DC of 14 and succeeds.'",
-    "During active combat, ignore the normal 0-1 narration_highlights limit. Highlight every visible combat math span in public_narration, using separate exact phrases when one sentence contains both dice/math and damage/HP numbers.",
-    "Use color_role clue for roll totals, attack/save/check math, AC, DC, and dice notation such as 1d20, 1d6 + 2, or 8d6.",
-    "Use color_role danger for damage amount plus damage type, HP changes, and 0 HP or defeat mechanics.",
     "When an area spell or effect affects multiple creatures, list each target's save result separately before applying damage or conditions.",
     "For half-damage effects, state who succeeded, who failed, the full damage, the halved damage, and each affected actor's HP change when HP is updated.",
     "If the relevant save DC is unknown, ask for it or use the known character sheet value; do not silently invent a DC.",
@@ -592,7 +585,6 @@ export function jobPrompt(
     "Do not put a visible mechanics sentence in its own standalone paragraph during resolved combat; attach it to the description or consequence paragraph for that beat.",
     "A resolved combat turn with multiple actor turns usually needs one paragraph per actor/effect plus a final handoff paragraph, not one paragraph per mechanical line.",
     "Do not bold visible mechanics or use Markdown emphasis inside public_narration. Keep combat math as plain text.",
-    "When combat math should receive visual emphasis, copy exact plain-text math-bearing phrases into narration_highlights instead of adding Markdown.",
     "Put mechanics before flourish when mechanics decide the outcome.",
     "Use vivid physical detail, but do not bury hit/miss, damage, HP, turn owner, or pending rolls inside ornate prose.",
     "End every resolved combat beat with a clear handoff: whose turn or what immediate pressure remains, then 'What do you do?' on its own line when awaiting player action.",
@@ -705,28 +697,6 @@ export function jobPrompt(
             "Komer, both wardens are in reach and your greataxe is already in motion.",
             "What do you do?"
           ].join("\n\n"),
-          narration_highlights: [
-            {
-              text: "They rolled an 18 against Komer's AC of 15",
-              color_role: "clue"
-            },
-            {
-              text: "5 piercing",
-              color_role: "danger"
-            },
-            {
-              text: "1d6 + 2",
-              color_role: "clue"
-            },
-            {
-              text: "16 HP to 11 HP",
-              color_role: "danger"
-            },
-            {
-              text: "they rolled a 10 against Komer's AC of 15",
-              color_role: "clue"
-            }
-          ],
           resolution_mode: "resolved_without_dice",
           roll_requests: [],
           next_input_needed: "player_actions",
@@ -771,12 +741,6 @@ export function jobPrompt(
             "Acolyte 2 chants over the Wellspring, but the unstable silver backlashes. They rolled an 8 against DC 13 on the Arcana check, and the pool spits light, leaving Acolyte 2 rattled and exposed.",
             "The initiative returns to you, Oktai. What do you do?"
           ].join("\n\n"),
-          narration_highlights: [
-            {
-              text: "He rolled a 16 against their AC of 13",
-              color_role: "danger"
-            }
-          ],
           resolution_mode: "resolved_without_dice",
           roll_requests: [],
           next_input_needed: "player_actions",
@@ -994,12 +958,6 @@ export function jobPrompt(
             "POKE, Hesk is charmed by you for now, but her squad has not been charmed and Komer's greataxe is still very visible.",
             "What do you do?"
           ].join("\n\n"),
-          narration_highlights: [
-            {
-              text: "Warden Captain Hesk rolled an 11 against POKE's spell save DC of 13",
-              color_role: "danger"
-            }
-          ],
           resolution_mode: "resolved_without_dice",
           roll_requests: [],
           next_input_needed: "player_actions",
@@ -1158,16 +1116,6 @@ export function jobPrompt(
           public_narration: [
             "Komer's greataxe crashes through the warden's guard. You rolled a 19 against their AC of 16, so the blade bites through. Roll greataxe damage: 1d12 + 2."
           ].join("\n\n"),
-          narration_highlights: [
-            {
-              text: "You rolled a 19 against their AC of 16",
-              color_role: "clue"
-            },
-            {
-              text: "1d12 + 2",
-              color_role: "clue"
-            }
-          ],
           resolution_mode: "needs_dice",
           roll_requests: [
             {
@@ -1213,12 +1161,6 @@ export function jobPrompt(
             "The roar collapses into the hiss of rain on scorched stone. No enemies remain standing, and the wicket gate hangs open through the smoke.",
             "What do you do?"
           ].join("\n\n"),
-          narration_highlights: [
-            {
-              text: "The fireball deals 33 fire damage from 8d6",
-              color_role: "danger"
-            }
-          ],
           resolution_mode: "resolved_without_dice",
           roll_requests: [],
           next_input_needed: "player_actions",
@@ -1329,12 +1271,9 @@ export function jobPrompt(
       "",
       "Output Contract:",
       "- Return strict JSON only.",
-      "- Minimum output fields: public_narration, narration_highlights, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update, combat_events, proposed_context_updates.",
-      "- Outside active combat, narration_highlights must be 0-1 exact phrase copied from public_narration during normal play. Each item must use {text, color_role}, where color_role is npc, place, clue, danger, faction, or object. Use [] when nothing is truly worth highlighting; it is completely okay to highlight nothing.",
-      "- Only public_narration is prose-visible to players; narration_highlights is display metadata rendered by the app.",
+      "- Minimum output fields: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update, combat_events, proposed_context_updates.",
       "- Do not use Markdown outside the JSON object or Markdown emphasis inside public_narration strings.",
-      "- Outside active combat, use narration_highlights for UI emphasis: copy 0-1 exact plain-text phrase from public_narration with color_role npc, place, clue, danger, faction, or object.",
-      "- Do not use Markdown, HTML, CSS, hex colors, or color names inside public_narration or narration_highlights.",
+      "- Do not use Markdown, HTML, CSS, hex colors, or color names inside public_narration.",
       "",
       "Visibility Boundary:",
       "- Do not reveal hidden context, DM-only memory, raw context metadata, internal reasoning, proposed patches, or secrets unless the active job reveals them through player-facing play.",

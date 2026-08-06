@@ -156,7 +156,6 @@ final class AppModel: ObservableObject {
             playerName: currentPlayer(in: room)?.username,
             characterName: currentPlayer(in: room)?.characterName,
             setting: nil,
-            narrationHighlights: [],
             content: trimmed,
             createdAt: Date()
         )

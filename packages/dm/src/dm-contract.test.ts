@@ -41,52 +41,6 @@ describe("parseDmContract", () => {
     assert.equal(result.resolutionMode, "resolved_without_dice");
   });
 
-  it("normalizes narration highlights from exact public narration phrases", () => {
-    const result = parseDmContract(
-      JSON.stringify({
-        public_narration:
-          "Captain Vael lowers the black key onto the Harbor Watch ledger. What do you do?",
-        narration_highlights: [
-          { text: "Captain Vael", color_role: "npc" },
-          { text: "black key", color_role: "object" },
-          { text: "missing phrase", color_role: "clue" },
-          { text: "Harbor Watch", color_role: "invalid" }
-        ],
-        roll_requests: [],
-        next_input_needed: "player_actions"
-      })
-    );
-
-    assert.deepEqual(result.narrationHighlights, [
-      { text: "Captain Vael", colorRole: "npc" },
-      { text: "black key", colorRole: "object" }
-    ]);
-  });
-
-  it("preserves many exact narration highlights for combat math", () => {
-    const phrases = Array.from({ length: 8 }, (_, index) => {
-      const roll = 10 + index;
-      return `rolled a ${roll}`;
-    });
-    const result = parseDmContract(
-      JSON.stringify({
-        public_narration: `${phrases.join(". ")}. What do you do?`,
-        narration_highlights: phrases.map((text) => ({
-          text,
-          color_role: "clue"
-        })),
-        roll_requests: [],
-        next_input_needed: "player_actions"
-      })
-    );
-
-    assert.equal(result.narrationHighlights.length, phrases.length);
-    assert.deepEqual(
-      result.narrationHighlights.map((highlight) => highlight.text),
-      phrases
-    );
-  });
-
   it("infers and validates resolution_mode", () => {
     const resolved = parseDmContract(
       JSON.stringify({
@@ -348,7 +302,6 @@ describe("parseDmContract", () => {
     assert.equal(recovery.contract.nextInputNeeded, "player_actions");
     assert.equal(recovery.contract.inputPolicy, "all_players");
     assert.deepEqual(recovery.contract.rollRequests, []);
-    assert.deepEqual(recovery.contract.narrationHighlights, []);
     assert.deepEqual(recovery.contract.inventoryStateUpdate, { patches: [] });
     assert.match(
       recovery.contract.publicNarration,

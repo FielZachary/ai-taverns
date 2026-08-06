@@ -78,7 +78,6 @@ enum SampleData {
                 playerName: nil,
                 characterName: nil,
                 setting: nil,
-                narrationHighlights: [],
                 content: "Chapter I: The Inn Beneath the Storm",
                 createdAt: Date().addingTimeInterval(-900)
             ),
@@ -89,7 +88,6 @@ enum SampleData {
                 playerName: nil,
                 characterName: nil,
                 setting: RoomMessageSetting(displayLocation: "Graywake Harbor", worldName: "Eldermere", regionName: "The Salt Concordat", settlementName: "Graywake", sceneLocation: "The Lanterned Eel", startingLocation: nil),
-                narrationHighlights: [],
                 content: "Rain needles the tavern windows. The innkeep slides a sealed copper tube across the bar and says the lighthouse bell rang three times after midnight, though the tower has been empty for nine years.",
                 createdAt: Date().addingTimeInterval(-820)
             ),
@@ -100,7 +98,6 @@ enum SampleData {
                 playerName: "Zach",
                 characterName: "Garrick Vale",
                 setting: nil,
-                narrationHighlights: [],
                 content: "I check the tube for traps before opening it.",
                 createdAt: Date().addingTimeInterval(-700)
             ),
@@ -111,7 +108,6 @@ enum SampleData {
                 playerName: nil,
                 characterName: nil,
                 setting: RoomMessageSetting(displayLocation: "Graywake Harbor", worldName: "Eldermere", regionName: "The Salt Concordat", settlementName: nil, sceneLocation: nil, startingLocation: nil),
-                narrationHighlights: [],
                 content: "Aside: this is a careful investigation, so the DM may ask for a Dexterity or Intelligence check if you keep handling it directly.",
                 createdAt: Date().addingTimeInterval(-600)
             )

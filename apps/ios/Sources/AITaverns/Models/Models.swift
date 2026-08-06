@@ -92,7 +92,6 @@ struct RoomMessage: Codable, Identifiable, Equatable {
     var playerName: String?
     var characterName: String?
     var setting: RoomMessageSetting?
-    var narrationHighlights: [NarrationHighlight]?
     var content: String
     var createdAt: Date
 
@@ -104,7 +103,6 @@ struct RoomMessage: Codable, Identifiable, Equatable {
             playerName: nil,
             characterName: nil,
             setting: nil,
-            narrationHighlights: [],
             content: content,
             createdAt: Date()
         )
@@ -131,11 +129,6 @@ struct RoomMessageSetting: Codable, Equatable {
     var settlementName: String?
     var sceneLocation: String?
     var startingLocation: String?
-}
-
-struct NarrationHighlight: Codable, Equatable {
-    var text: String
-    var colorRole: String
 }
 
 struct DiceRollRequest: Codable, Identifiable, Equatable {
