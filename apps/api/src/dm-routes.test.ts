@@ -147,6 +147,7 @@ test("DM runtime routes handle authorized solo, ask-DM, regenerate, and traces",
     body_markdown:
       "# Road Tracks\n\n## Established Facts\n- The road tracks were made by a two-legged creature dragging a hooked pole.",
     archived_at: null,
+    created_at: new Date(),
     updated_at: new Date()
   });
 
@@ -1434,6 +1435,214 @@ test("DM runtime routes reject bad-state solo turns and regenerations", async ()
   );
 });
 
+test("regenerate restores campaign context storage from the target DM debug snapshot", async () => {
+  const { cookie, campaignId } = await createSinglePlayerCampaign(
+    "dm-runtime-regenerate-context-restore"
+  );
+  const soloResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "I wait quietly and keep watch.",
+      clientMessageId: "context-restore-turn"
+    }
+  });
+
+  assert.equal(soloResponse.statusCode, 200, soloResponse.body);
+  const targetMessage = CampaignSoloTurnResponseSchema.parse(soloResponse.json())
+    .messages
+    .filter((message) => message.role === "dm")
+    .at(-1);
+
+  assert.ok(targetMessage);
+
+  const targetEvent = database.campaignEvents.find((event) => {
+    const payload = event.payload as Record<string, unknown>;
+
+    return (
+      event.campaign_id === campaignId &&
+      event.type === "turn_resolved" &&
+      payload.messageId === targetMessage.id
+    );
+  });
+
+  assert.ok(targetEvent);
+
+  const restoredCreatedAt = new Date("2026-08-01T10:00:00.000Z");
+  const restoredUpdatedAt = new Date("2026-08-01T10:05:00.000Z");
+  const restoredArchivedAt = new Date("2026-08-01T10:10:00.000Z");
+  const contextStorageState = {
+    capturedAt: "2026-08-01T10:06:00.000Z",
+    contextChunkCount: 2,
+    contextChunks: [
+      {
+        context_id: "world:restored-marker",
+        category: "relevant_world_context",
+        title: "Restored Marker",
+        visibility: "player_safe",
+        priority: 7,
+        body_markdown: "# Restored Marker\n\n## Location\nNear Pier 6.",
+        archived_at: null,
+        created_at: restoredCreatedAt.toISOString(),
+        updated_at: restoredUpdatedAt.toISOString()
+      },
+      {
+        context_id: "thread:old-lead",
+        category: "quests_open_threads",
+        title: "Old Lead",
+        visibility: "dm_only",
+        priority: 2,
+        body_markdown: "# Old Lead\n\nThis thread was already archived.",
+        archived_at: restoredArchivedAt.toISOString(),
+        created_at: restoredCreatedAt.toISOString(),
+        updated_at: restoredArchivedAt.toISOString()
+      }
+    ]
+  };
+
+  targetEvent.payload = {
+    ...(targetEvent.payload as Record<string, unknown>),
+    aiDebug: {
+      ...(((targetEvent.payload as Record<string, unknown>).aiDebug as
+        | Record<string, unknown>
+        | undefined) ?? {}),
+      contextStorageState
+    }
+  };
+  database.contextChunks = database.contextChunks.filter(
+    (chunk) => chunk.campaign_id !== campaignId
+  );
+  database.contextChunks.push({
+    campaign_id: campaignId,
+    context_key: "world:future-state",
+    category: "relevant_world_context",
+    title: "Future State",
+    visibility: "player_safe",
+    priority: 99,
+    body_markdown: "# Future State\n\nThis should not survive rewind.",
+    archived_at: null,
+    created_at: new Date("2026-08-02T10:00:00.000Z"),
+    updated_at: new Date("2026-08-02T10:00:00.000Z")
+  });
+
+  const regenerateResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/regenerate`,
+    headers: {
+      cookie
+    },
+    payload: {
+      messageId: targetMessage.id
+    }
+  });
+
+  assert.equal(regenerateResponse.statusCode, 200, regenerateResponse.body);
+  CampaignRegenerateResponseSchema.parse(regenerateResponse.json());
+
+  const restoredChunks = database.contextChunks
+    .filter((chunk) => chunk.campaign_id === campaignId)
+    .sort((left, right) => left.context_key.localeCompare(right.context_key));
+
+  assert.deepEqual(
+    restoredChunks.map((chunk) => ({
+      contextKey: chunk.context_key,
+      category: chunk.category,
+      title: chunk.title,
+      visibility: chunk.visibility,
+      priority: chunk.priority,
+      bodyMarkdown: chunk.body_markdown,
+      archivedAt: chunk.archived_at?.toISOString() ?? null,
+      createdAt: chunk.created_at.toISOString(),
+      updatedAt: chunk.updated_at.toISOString()
+    })),
+    [
+      {
+        contextKey: "thread:old-lead",
+        category: "quests_open_threads",
+        title: "Old Lead",
+        visibility: "dm_only",
+        priority: 2,
+        bodyMarkdown: "# Old Lead\n\nThis thread was already archived.",
+        archivedAt: restoredArchivedAt.toISOString(),
+        createdAt: restoredCreatedAt.toISOString(),
+        updatedAt: restoredArchivedAt.toISOString()
+      },
+      {
+        contextKey: "world:restored-marker",
+        category: "relevant_world_context",
+        title: "Restored Marker",
+        visibility: "player_safe",
+        priority: 7,
+        bodyMarkdown: "# Restored Marker\n\n## Location\nNear Pier 6.",
+        archivedAt: null,
+        createdAt: restoredCreatedAt.toISOString(),
+        updatedAt: restoredUpdatedAt.toISOString()
+      }
+    ]
+  );
+});
+
+test("regenerate rejects target DM messages without context storage debug state", async () => {
+  const { cookie, campaignId } = await createSinglePlayerCampaign(
+    "dm-runtime-regenerate-missing-context-debug"
+  );
+  const soloResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "I pause and listen.",
+      clientMessageId: "missing-context-debug-turn"
+    }
+  });
+
+  assert.equal(soloResponse.statusCode, 200, soloResponse.body);
+  const targetMessage = CampaignSoloTurnResponseSchema.parse(soloResponse.json())
+    .messages
+    .filter((message) => message.role === "dm")
+    .at(-1);
+
+  assert.ok(targetMessage);
+
+  const targetEvent = database.campaignEvents.find((event) => {
+    const payload = event.payload as Record<string, unknown>;
+
+    return (
+      event.campaign_id === campaignId &&
+      event.type === "turn_resolved" &&
+      payload.messageId === targetMessage.id
+    );
+  });
+
+  assert.ok(targetEvent);
+  targetEvent.payload = {
+    ...(targetEvent.payload as Record<string, unknown>),
+    aiDebug: {}
+  };
+
+  const regenerateResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/regenerate`,
+    headers: {
+      cookie
+    },
+    payload: {
+      messageId: targetMessage.id
+    }
+  });
+
+  assert.equal(regenerateResponse.statusCode, 409);
+  assert.equal(
+    ApiErrorResponseSchema.parse(regenerateResponse.json()).error.message,
+    "That response is missing context storage debug state."
+  );
+});
+
 test("DM runtime solo turns accept roll submissions without a message", async () => {
   const { cookie, campaignId } = await createSinglePlayerCampaign(
     "dm-runtime-roll-submission"
@@ -1638,6 +1847,7 @@ test("living world engine updates chunks and injects current DM guidance", async
     body_markdown:
       "# Lysa's Trail\n\n## Current Situation\nSeren is looking for Lysa after her trail went quiet.",
     archived_at: null,
+    created_at: new Date(),
     updated_at: new Date()
   });
 
