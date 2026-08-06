@@ -1,5 +1,36 @@
 import Link from "next/link";
 
+const siteJsonLd = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://aitaverns.com/#website",
+      url: "https://aitaverns.com/",
+      name: "AI Taverns",
+      alternateName: ["AI Taverns", "AITaverns"],
+      description:
+        "AI Taverns is an AI dungeon master for solo and multiplayer D&D-style tabletop adventures.",
+      inLanguage: "en-US"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "@id": "https://aitaverns.com/#app",
+      name: "AI Taverns",
+      applicationCategory: "GameApplication",
+      operatingSystem: "Web",
+      url: "https://aitaverns.com/",
+      description:
+        "Play D&D-style tabletop adventures with an AI dungeon master that remembers your campaign, asks for rolls, and tracks consequences.",
+      offers: {
+        "@type": "Offer",
+        price: "0",
+        priceCurrency: "USD"
+      }
+    }
+  ]
+};
+
 const pillars = [
   {
     label: "The Table",
@@ -45,6 +76,10 @@ const scenarios = [
 export default function HomePage() {
   return (
     <main className="landing-page">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(siteJsonLd) }}
+      />
       <section className="landing-hero" aria-labelledby="landing-title">
         <img
           className="landing-background"
