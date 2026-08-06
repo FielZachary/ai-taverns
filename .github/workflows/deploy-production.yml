@@ -139,6 +139,9 @@ jobs:
           cp -a "$release"/. "$DEPLOY_PATH"/
 
           cd "$DEPLOY_PATH"
+          set -a
+          . infra/production.env
+          set +a
           BUILDKIT_PROGRESS=plain docker build \
             --progress=plain \
             --file infra/docker/api.Dockerfile \
@@ -146,6 +149,7 @@ jobs:
             .
           BUILDKIT_PROGRESS=plain docker build \
             --progress=plain \
+            --build-arg NEXT_PUBLIC_MIXPANEL_TOKEN \
             --file infra/docker/web.Dockerfile \
             --tag infra-web \
             .

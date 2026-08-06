@@ -142,8 +142,10 @@ test(
       });
 
       assert.equal(ownerCampaigns.length, 1);
+      assert.equal(ownerCampaigns[0]?.currentUserPlayerId, "owner-client");
       assert.equal(ownerRead.id, campaign.id);
       assert.equal(ownerRead.joinCode, campaign.joinCode);
+      assert.equal(ownerRead.currentUserPlayerId, "owner-client");
 
       const joinPreview = await previewCampaignJoinByCode(
         pool,
@@ -168,6 +170,7 @@ test(
       assert.equal(joinedCampaign.id, campaign.id);
       assert.equal(joinedCampaign.title, "Scout");
       assert.equal(joinedCampaign.joinCode, undefined);
+      assert.equal(joinedCampaign.currentUserPlayerId, "joiner-client");
 
       const room = await getRoomForUser(pool, {
         roomId: campaign.id,
@@ -176,11 +179,20 @@ test(
       });
 
       assert.equal(room.roomId, campaign.id);
+      assert.equal(room.currentPlayerId, "joiner-client");
       assert.equal(room.players.length, 2);
       assert.deepEqual(
         room.players.map((player) => player.characterName),
         ["Guide", "Scout"]
       );
+
+      const ownerRoom = await getRoomForUser(pool, {
+        roomId: campaign.id,
+        sessionId: campaign.id,
+        userId: owner.id
+      });
+
+      assert.equal(ownerRoom.currentPlayerId, "owner-client");
     } finally {
       await pool.end();
     }
