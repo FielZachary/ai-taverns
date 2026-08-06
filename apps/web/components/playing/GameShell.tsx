@@ -690,6 +690,13 @@ export function GameShell({
 
   const applyRoomSnapshot = useCallback(
     (room: RoomSnapshot) => {
+      const resolvedPlayerId = room.currentPlayerId?.trim() || playerId;
+
+      if (room.currentPlayerId && room.currentPlayerId !== playerId) {
+        localStorage.setItem(playerIdStorageKey, room.currentPlayerId);
+        setPlayerId(room.currentPlayerId);
+      }
+
       setRoomPlayers(room.players);
       setRoomMessages(room.messages);
       setStreamingDmMessages((currentMessages) =>
@@ -705,7 +712,7 @@ export function GameShell({
       setRoomDeath(room.death);
 
       const currentPlayer = room.players.find(
-        (roomPlayer) => roomPlayer.id === playerId
+        (roomPlayer) => roomPlayer.id === resolvedPlayerId
       );
 
       if (
@@ -727,7 +734,7 @@ export function GameShell({
         currentPlayer,
         pendingSubmission: pendingSubmissionRef.current,
         optimisticSubmittedPlayerId,
-        playerId
+        playerId: resolvedPlayerId
       });
 
       if (submissionUpdate) {
@@ -803,20 +810,7 @@ export function GameShell({
       );
       setMessages(openingMessages);
 
-      if (campaign.mode === "single_player") {
-        setRoomMessages(room.messages);
-        setRoomPlayers(room.players);
-        setRoomResolvingState(room.isResolving);
-        setHasAdventureBegun(true);
-        setPendingRollRequests(rollRequestsFromRoom(room));
-        setNextInputNeeded(room.nextInputNeeded ?? "player_actions");
-        setInputTargets(room.inputTargets ?? []);
-        setInputPolicy(room.inputPolicy ?? "all_players");
-        setRoomCombat(room.combat);
-        setRoomDeath(room.death);
-      } else {
-        applyRoomSnapshot(room);
-      }
+      applyRoomSnapshot(room);
     } catch (error) {
       setMessages([
         ...openingMessages,
@@ -837,7 +831,6 @@ export function GameShell({
     applyRoomSnapshot,
     playerId,
     roomReadDebugParam,
-    setRoomResolvingState,
     userId
   ]);
 
@@ -857,6 +850,17 @@ export function GameShell({
     localStorage.setItem(playerIdStorageKey, newPlayerId);
     setPlayerId(newPlayerId);
   }, []);
+
+  useEffect(() => {
+    const currentUserPlayerId = activeCampaign?.currentUserPlayerId?.trim();
+
+    if (!currentUserPlayerId || currentUserPlayerId === playerId) {
+      return;
+    }
+
+    localStorage.setItem(playerIdStorageKey, currentUserPlayerId);
+    setPlayerId(currentUserPlayerId);
+  }, [activeCampaign?.currentUserPlayerId, playerId]);
 
   useEffect(() => {
     if (!playerId) {
@@ -1130,22 +1134,7 @@ export function GameShell({
         const room = (await response.json()) as RoomSnapshot;
 
         if (!shouldIgnore) {
-          if (isSinglePlayer) {
-            setRoomPlayers(room.players);
-            setRoomMessages(room.messages);
-            setStreamingDmMessages((currentMessages) =>
-              removePersistedStreamingDmMessages(currentMessages, room.messages)
-            );
-            setRoomResolvingState(room.isResolving);
-            setHasAdventureBegun(true);
-            setPendingRollRequests(rollRequestsFromRoom(room));
-            setNextInputNeeded(room.nextInputNeeded ?? "player_actions");
-            setInputTargets(room.inputTargets ?? []);
-            setInputPolicy(room.inputPolicy ?? "all_players");
-            setRoomCombat(room.combat);
-          } else {
-            applyRoomSnapshot(room);
-          }
+          applyRoomSnapshot(room);
         }
       } catch {
         if (!shouldIgnore) {

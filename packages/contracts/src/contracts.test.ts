@@ -212,6 +212,7 @@ test("campaign contracts accept list, create, and join preview payloads", () => 
         sessionId: "ai-dnd-session",
         mode: "multiplayer",
         title: "Table Owner",
+        currentUserPlayerId: "client-1",
         preview: "Classic Fantasy",
         messageCount: 0,
         joinCode: "ABC234"
@@ -220,6 +221,7 @@ test("campaign contracts accept list, create, and join preview payloads", () => 
   });
 
   assert.equal(listResponse.campaigns[0]?.joinCode, "ABC234");
+  assert.equal(listResponse.campaigns[0]?.currentUserPlayerId, "client-1");
 
   const readParams = CampaignReadParamsSchema.parse({
     campaignId: "00000000-0000-4000-8000-000000000001"
@@ -359,6 +361,7 @@ test("room contracts accept snapshots and mutation payloads", () => {
     roomId: "00000000-0000-4000-8000-000000000001",
     mode: "multiplayer",
     sessionId: "ai-dnd-session",
+    currentPlayerId: "client-1",
     players: [
       {
         id: "client-1",
@@ -409,6 +412,7 @@ test("room contracts accept snapshots and mutation payloads", () => {
   });
 
   assert.equal(snapshot.players[0]?.status, "waiting");
+  assert.equal(snapshot.currentPlayerId, "client-1");
   assert.equal(snapshot.combat.turnOwnerPlayerId, "client-1");
 });
 

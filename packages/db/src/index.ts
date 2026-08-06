@@ -472,6 +472,7 @@ type CampaignSummaryRow = Omit<CampaignRow, "session_id"> & {
   sessionId?: string;
   portrait_asset_id?: string | null;
   portrait_public_url?: string | null;
+  current_user_player_id?: string | null;
 };
 
 type PlayerRow = {
@@ -1658,6 +1659,9 @@ export function mapCampaignSummaryRow(
     mode: campaign.mode,
     title: characterName || playerName || campaign.title,
     ...(campaign.owner_client_id ? { ownerClientId: campaign.owner_client_id } : {}),
+    ...(campaign.current_user_player_id
+      ? { currentUserPlayerId: campaign.current_user_player_id }
+      : {}),
     ...(campaign.portrait_asset_id
       ? { portraitAssetId: campaign.portrait_asset_id }
       : {}),
@@ -2326,8 +2330,28 @@ export async function listCampaignSummariesForUser(
         campaigns.session_id as "sessionId",
         display_player.character_name as display_character_name,
         display_player.username as display_username,
+        current_player.client_id as current_user_player_id,
         join_code.code as join_code
       from campaigns
+      left join lateral (
+        select players.client_id
+        from players
+        where players.campaign_id = campaigns.id
+          and players.status = 'active'
+          and (
+            players.user_id = $1
+            or (
+              campaigns.owner_user_id = $1
+              and campaigns.owner_client_id is not null
+              and players.client_id = campaigns.owner_client_id
+            )
+          )
+        order by
+          (players.user_id = $1) desc,
+          players.slot asc nulls last,
+          players.created_at asc
+        limit 1
+      ) current_player on true
       left join lateral (
         select players.character_name, players.username
         from players
@@ -2382,8 +2406,28 @@ export async function getCampaignSummaryForUser(
         campaigns.session_id as "sessionId",
         display_player.character_name as display_character_name,
         display_player.username as display_username,
+        current_player.client_id as current_user_player_id,
         join_code.code as join_code
       from campaigns
+      left join lateral (
+        select players.client_id
+        from players
+        where players.campaign_id = campaigns.id
+          and players.status = 'active'
+          and (
+            players.user_id = $2
+            or (
+              campaigns.owner_user_id = $2
+              and campaigns.owner_client_id is not null
+              and players.client_id = campaigns.owner_client_id
+            )
+          )
+        order by
+          (players.user_id = $2) desc,
+          players.slot asc nulls last,
+          players.created_at asc
+        limit 1
+      ) current_player on true
       left join lateral (
         select players.character_name, players.username
         from players
@@ -2698,11 +2742,12 @@ export async function createCampaignForMode(
       player: playerRow,
       turn: openingTurn,
       summary: mapCampaignSummaryRow({
-      ...campaign,
-      metadata: { ...genreMetadata, mechanicsState },
-      display_character_name: playerRow.character_name,
-      display_username: playerRow.username,
-      join_code: joinCode ?? null
+        ...campaign,
+        metadata: { ...genreMetadata, mechanicsState },
+        display_character_name: playerRow.character_name,
+        display_username: playerRow.username,
+        current_user_player_id: playerRow.client_id,
+        join_code: joinCode ?? null
       })
     };
   });
@@ -3457,6 +3502,7 @@ export async function joinCampaignByCode(
     ...campaign,
     display_character_name: characterName,
     display_username: username,
+    current_user_player_id: clientId,
     join_code: null
   });
 }
@@ -3958,6 +4004,7 @@ export async function joinCampaignByInvite(
     ...campaign,
     display_character_name: player.character_name,
     display_username: player.username,
+    current_user_player_id: clientId,
     join_code: null
   });
 }
@@ -5091,7 +5138,7 @@ function eventNarrationHighlights(
 async function buildRoomSnapshot(
   db: Queryable,
   campaign: CampaignRow,
-  options: { messageLimit?: number | null } = {}
+  options: { messageLimit?: number | null; currentPlayerId?: string | null } = {}
 ): Promise<RoomSnapshot> {
   const currentTurn = await getCurrentRoomTurn(db, campaign.id);
   const submissions = currentTurn ? await getTurnSubmissions(db, currentTurn.id) : [];
@@ -5211,6 +5258,7 @@ async function buildRoomSnapshot(
     roomId: campaign.id,
     mode: campaign.mode,
     sessionId: campaign.session_id,
+    ...(options.currentPlayerId ? { currentPlayerId: options.currentPlayerId } : {}),
     players: playersResult.rows.map((player) =>
       rowToRoomPlayer(player, submittedPlayerIds, mechanicsState)
     ),
@@ -5226,6 +5274,54 @@ async function buildRoomSnapshot(
     death: roomDeathSnapshot(mechanicsState),
     updatedAt: toIso(campaign.updated_at)
   };
+}
+
+async function currentPlayerIdForUser(
+  db: Queryable,
+  campaign: CampaignRow,
+  userId: string
+) {
+  const result = await db.query<{ client_id: string }>(
+    `
+      select players.client_id
+      from players
+      where players.campaign_id = $1
+        and players.status = 'active'
+        and (
+          players.user_id = $2
+          or (
+            $3::uuid = $2
+            and $4::text is not null
+            and players.client_id = $4
+          )
+        )
+      order by
+        (players.user_id = $2) desc,
+        players.slot asc nulls last,
+        players.created_at asc
+      limit 1
+    `,
+    [
+      campaign.id,
+      userId,
+      campaign.owner_user_id,
+      campaign.owner_client_id
+    ]
+  );
+
+  return result.rows[0]?.client_id ?? null;
+}
+
+async function buildRoomSnapshotForUser(
+  db: Queryable,
+  campaign: CampaignRow,
+  userId: string,
+  options: { messageLimit?: number | null } = {}
+) {
+  return buildRoomSnapshot(db, campaign, {
+    ...options,
+    currentPlayerId: await currentPlayerIdForUser(db, campaign, userId)
+  });
 }
 
 function revivalNarration(input: {
@@ -10671,12 +10767,13 @@ export async function getRoomForUser(
     [campaign.id, input.userId]
   );
 
-  return buildRoomSnapshot(
+  return buildRoomSnapshotForUser(
     db,
     {
       ...campaign,
       updated_at: player.rows[0] ? new Date() : campaign.updated_at
     },
+    input.userId,
     input.messageLimit === undefined ? {} : { messageLimit: input.messageLimit }
   );
 }
@@ -10815,7 +10912,7 @@ export async function registerRoomPlayerForUser(
     return campaignRow;
   });
 
-  return buildRoomSnapshot(db, campaign);
+  return buildRoomSnapshotForUser(db, campaign, input.userId);
 }
 
 export async function getCombatCheatSheetTargetForUser(
@@ -10951,10 +11048,14 @@ export async function saveCombatCheatSheetForUser(
     throw createStatusError(404, "Player not found.");
   }
 
-  return buildRoomSnapshot(db, {
-    ...campaign,
-    updated_at: new Date()
-  });
+  return buildRoomSnapshotForUser(
+    db,
+    {
+      ...campaign,
+      updated_at: new Date()
+    },
+    input.userId
+  );
 }
 
 export async function beginRoomForUser(
@@ -11067,7 +11168,7 @@ export async function beginRoomForUser(
   });
 
   if (!beginState.shouldAskDungeonMaster || !input.runtime || !beginState.turn) {
-    return buildRoomSnapshot(db, beginState.campaign);
+    return buildRoomSnapshotForUser(db, beginState.campaign, input.userId);
   }
 
   const runtime = input.runtime;
@@ -11207,7 +11308,11 @@ export async function beginRoomForUser(
     beginState.campaign.session_id
   );
 
-  return buildRoomSnapshot(db, updatedCampaign ?? beginState.campaign);
+  return buildRoomSnapshotForUser(
+    db,
+    updatedCampaign ?? beginState.campaign,
+    input.userId
+  );
 }
 
 async function allRequiredPlayersSubmitted(
@@ -11561,7 +11666,11 @@ export async function submitRoomTurnForUser(
     submitState.campaign.session_id
   );
 
-  return buildRoomSnapshot(db, updatedCampaign ?? submitState.campaign);
+  return buildRoomSnapshotForUser(
+    db,
+    updatedCampaign ?? submitState.campaign,
+    input.userId
+  );
 }
 
 async function getActivePlayerForUser(
@@ -11841,7 +11950,7 @@ export async function askDungeonMasterQuestionForUser(
     campaign.session_id
   );
 
-  return buildRoomSnapshot(db, updatedCampaign ?? campaign);
+  return buildRoomSnapshotForUser(db, updatedCampaign ?? campaign, input.userId);
 }
 
 export async function submitSoloTurnForUser(
@@ -12047,7 +12156,11 @@ export async function submitSoloTurnForUser(
       soloState.campaign.session_id
     );
 
-    return buildRoomSnapshot(db, updatedCampaign ?? soloState.campaign);
+    return buildRoomSnapshotForUser(
+      db,
+      updatedCampaign ?? soloState.campaign,
+      input.userId
+    );
   }
 
   try {
@@ -12116,7 +12229,11 @@ export async function submitSoloTurnForUser(
     soloState.campaign.session_id
   );
 
-  return buildRoomSnapshot(db, updatedCampaign ?? soloState.campaign);
+  return buildRoomSnapshotForUser(
+    db,
+    updatedCampaign ?? soloState.campaign,
+    input.userId
+  );
 }
 
 export async function reviveSinglePlayerCharacterForUser(
@@ -12256,7 +12373,7 @@ export async function reviveSinglePlayerCharacterForUser(
     };
   });
 
-  return buildRoomSnapshot(db, reviveState);
+  return buildRoomSnapshotForUser(db, reviveState, input.userId);
 }
 
 function eventPayloadString(value: unknown) {
@@ -12507,7 +12624,11 @@ export async function regenerateCampaignResponseForUser(
     regenerationState.campaign.session_id
   );
 
-  return buildRoomSnapshot(db, updatedCampaign ?? regenerationState.campaign);
+  return buildRoomSnapshotForUser(
+    db,
+    updatedCampaign ?? regenerationState.campaign,
+    input.userId
+  );
 }
 
 export async function listCampaignDebugTracesForUser(
