@@ -31,6 +31,7 @@ export type RoomSnapshot = {
   roomId: string;
   mode: CampaignMode;
   sessionId: string;
+  currentPlayerId?: string;
   players: RoomPlayer[];
   messages: GameMessage[];
   isResolving: boolean;

@@ -125,6 +125,7 @@ export const RoomSnapshotSchema = z.object({
   roomId: z.string().uuid(),
   mode: CampaignModeSchema,
   sessionId: z.string().min(1),
+  currentPlayerId: z.string().min(1).optional(),
   players: z.array(RoomPlayerSchema),
   messages: z.array(RoomMessageSchema),
   isResolving: z.boolean(),
