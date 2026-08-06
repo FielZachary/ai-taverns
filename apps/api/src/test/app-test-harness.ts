@@ -264,6 +264,7 @@ type ContextChunkRecord = {
   priority: number;
   body_markdown: string;
   archived_at: Date | null;
+  created_at: Date;
   updated_at: Date;
 };
 
@@ -1372,7 +1373,7 @@ class FakeDatabase {
             priority: chunk.priority,
             body_markdown: chunk.body_markdown,
             archived_at: chunk.archived_at,
-            created_at: chunk.updated_at,
+            created_at: chunk.created_at,
             updated_at: chunk.updated_at
           }) as T)
       };
@@ -1741,7 +1742,37 @@ class FakeDatabase {
       return { rows: [] as T[] };
     }
 
+    if (
+      normalizedSql.startsWith(
+        "delete from campaign_context_chunks where campaign_id = $1"
+      )
+    ) {
+      const campaignId = values[0] as string;
+      this.contextChunks = this.contextChunks.filter(
+        (chunk) => chunk.campaign_id !== campaignId
+      );
+
+      return { rows: [] as T[] };
+    }
+
     if (normalizedSql.startsWith("insert into campaign_context_chunks")) {
+      const now = new Date();
+      const archivedAt = values[7] instanceof Date
+        ? values[7]
+        : values[7]
+          ? new Date(values[7] as string)
+          : null;
+      const createdAt = values[8] instanceof Date
+        ? values[8]
+        : values[8]
+          ? new Date(values[8] as string)
+          : now;
+      const updatedAt = values[9] instanceof Date
+        ? values[9]
+        : values[9]
+          ? new Date(values[9] as string)
+          : now;
+
       this.contextChunks.push({
         campaign_id: values[0] as string,
         context_key: values[1] as string,
@@ -1753,8 +1784,9 @@ class FakeDatabase {
             : "dm_only",
         priority: typeof values[5] === "number" ? values[5] : 0,
         body_markdown: (values[6] ?? values[5]) as string,
-        archived_at: null,
-        updated_at: new Date()
+        archived_at: archivedAt,
+        created_at: createdAt,
+        updated_at: updatedAt
       });
 
       return { rows: [] as T[] };

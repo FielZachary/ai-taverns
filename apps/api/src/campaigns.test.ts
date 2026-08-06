@@ -2688,6 +2688,7 @@ test("GET /api/campaigns/:campaignId/npc-cards lists existing NPC context cards"
       body_markdown:
         "# Marra Vell\n\n## Name\nMarra Vell\n\n## Location\nPier 6.\n\n## Appearance\nUnknown.",
       archived_at: null,
+      created_at: now,
       updated_at: now
     },
     {
@@ -2699,6 +2700,7 @@ test("GET /api/campaigns/:campaignId/npc-cards lists existing NPC context cards"
       priority: 10,
       body_markdown: "# Hidden Informant",
       archived_at: null,
+      created_at: now,
       updated_at: now
     }
   );

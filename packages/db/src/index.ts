@@ -6698,6 +6698,85 @@ type ContextStorageDebugState = {
   contextChunks: Awaited<ReturnType<typeof retrieveCampaignContextStorageState>>;
 };
 
+type ContextStorageSnapshotChunk = ContextStorageDebugState["contextChunks"][number];
+
+function restoreTimestamp(value: unknown) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const timestamp = new Date(value);
+
+  return Number.isNaN(timestamp.getTime()) ? null : timestamp;
+}
+
+function contextStorageSnapshotChunk(value: unknown): ContextStorageSnapshotChunk {
+  const chunk = eventPayload(value);
+  const contextId = String(chunk.context_id ?? "").trim();
+  const category = String(chunk.category ?? "").trim();
+  const title = String(chunk.title ?? "").trim();
+  const bodyMarkdown = String(chunk.body_markdown ?? "");
+  const visibility = chunk.visibility;
+  const priority = chunk.priority;
+
+  if (
+    !contextId ||
+    !contextCategories.includes(category as ContextCategory) ||
+    !title ||
+    (visibility !== "player_safe" && visibility !== "dm_only") ||
+    typeof priority !== "number" ||
+    !Number.isFinite(priority) ||
+    typeof chunk.body_markdown !== "string"
+  ) {
+    throw createStatusError(
+      409,
+      "That response has invalid context storage debug state."
+    );
+  }
+
+  return {
+    context_id: contextId,
+    category,
+    title,
+    visibility,
+    priority,
+    body_markdown: bodyMarkdown,
+    archived_at: restoreTimestamp(chunk.archived_at)?.toISOString() ?? null,
+    created_at: restoreTimestamp(chunk.created_at)?.toISOString() ?? null,
+    updated_at: restoreTimestamp(chunk.updated_at)?.toISOString() ?? null
+  };
+}
+
+function contextStorageStateFromEventPayload(
+  payload: Record<string, unknown>
+): ContextStorageDebugState {
+  const debug = eventPayload(payload.aiDebug);
+  const state = eventPayload(debug.contextStorageState);
+  const contextChunks = state.contextChunks;
+
+  if (!Array.isArray(contextChunks)) {
+    throw createStatusError(
+      409,
+      "That response is missing context storage debug state."
+    );
+  }
+
+  const chunks = contextChunks.map(contextStorageSnapshotChunk);
+
+  return {
+    capturedAt:
+      typeof state.capturedAt === "string" && state.capturedAt.trim()
+        ? state.capturedAt
+        : nowIso(),
+    contextChunkCount: chunks.length,
+    contextChunks: chunks
+  };
+}
+
 function campaignContextStorageDebugState(
   contextStorageState: Awaited<ReturnType<typeof retrieveCampaignContextStorageState>>
 ): ContextStorageDebugState {
@@ -6706,6 +6785,48 @@ function campaignContextStorageDebugState(
     contextChunkCount: contextStorageState.length,
     contextChunks: contextStorageState
   };
+}
+
+async function restoreCampaignContextStorageState(
+  db: Queryable,
+  campaignId: string,
+  contextStorageState: ContextStorageDebugState
+) {
+  await db.query("delete from campaign_context_chunks where campaign_id = $1", [
+    campaignId
+  ]);
+
+  for (const chunk of contextStorageState.contextChunks) {
+    await db.query(
+      `
+        insert into campaign_context_chunks (
+          campaign_id,
+          context_key,
+          category,
+          title,
+          visibility,
+          priority,
+          body_markdown,
+          archived_at,
+          created_at,
+          updated_at
+        )
+        values ($1, $2, $3, $4, $5, $6, $7, $8, coalesce($9, now()), coalesce($10, now()))
+      `,
+      [
+        campaignId,
+        chunk.context_id,
+        chunk.category,
+        chunk.title,
+        chunk.visibility,
+        chunk.priority,
+        chunk.body_markdown,
+        restoreTimestamp(chunk.archived_at),
+        restoreTimestamp(chunk.created_at),
+        restoreTimestamp(chunk.updated_at)
+      ]
+    );
+  }
 }
 
 async function listCampaignNpcContextIndex(
@@ -12438,6 +12559,15 @@ export async function regenerateCampaignResponseForUser(
     if (!turnId) {
       throw createStatusError(409, "That response is missing turn information.");
     }
+
+    const targetContextStorageState =
+      contextStorageStateFromEventPayload(targetPayload);
+
+    await restoreCampaignContextStorageState(
+      client,
+      campaign.id,
+      targetContextStorageState
+    );
 
     await client.query(
       `
