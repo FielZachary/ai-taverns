@@ -521,8 +521,14 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.doesNotMatch(jobPrompt("combat"), /\*\*/);
     assert.match(jobPrompt("combat"), /use conversational wording with 'you rolled'/i);
-    assert.match(jobPrompt("combat"), /they rolled a 17 against your AC of 14/i);
-    assert.match(jobPrompt("combat"), /rolled a 9 against DC 14 and fails/i);
+    assert.match(
+      jobPrompt("combat"),
+      /<clue>they rolled a 17 against your AC of 14<\/clue>/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /rolled a <clue>9 against DC 14<\/clue> and fails/i
+    );
     assert.match(jobPrompt("combat"), /list each target's save result separately/i);
     assert.match(jobPrompt("combat"), /full damage, the halved damage/i);
     assert.match(jobPrompt("combat"), /turnOwner is an NPC actor key/i);
@@ -569,6 +575,20 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(
       jobPrompt("combat"),
       /For every NPC or enemy actor key introduced in initiativeOrder/i
+    );
+    assert.match(jobPrompt("combat"), /NPC combat durability/i);
+    assert.match(jobPrompt("combat"), /Use the highest player character level as partyLevel/i);
+    assert.match(
+      jobPrompt("combat"),
+      /named antagonist, duel-worthy foe, officer, spellcaster, monster leader, or recurring enemy: max\(24, partyLevel \* 10\) to max\(40, partyLevel \* 16\) HP/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /major boss or climactic solo enemy: at least max\(40, partyLevel \* 18\) HP/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Set currentHp equal to maxHp when a fresh combatant enters combat/i
     );
     assert.match(jobPrompt("combat"), /armorClass/i);
     assert.match(jobPrompt("combat"), /isPlayerControlled/i);
@@ -629,7 +649,11 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("combat"), /combat starts, initiative first/i);
     assert.match(
       jobPrompt("combat"),
-      /Bandit captain initiative roll: 15\. Cutthroat initiative rolls: 11 and 8\./i
+      /<clue>Bandit captain initiative roll: 15<\/clue>\. <clue>Cutthroat initiative rolls: 11 and 8<\/clue>\./i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Roll initiative: <clue>1d20 \+ your initiative modifier<\/clue>/i
     );
     assert.match(
       jobPrompt("combat"),
@@ -657,6 +681,7 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(jobPrompt("combat"), /Doran Ironhand moves before the darts/i);
     assert.match(jobPrompt("combat"), /surprise opener resolves before initiative/i);
+    assert.match(jobPrompt("combat"), /Roll Fireball damage: <clue>8d6<\/clue>/i);
     assert.match(jobPrompt("combat"), /Magic Missile needs target distribution before damage/i);
     assert.match(
       jobPrompt("combat"),
@@ -667,6 +692,18 @@ describe("modular AI DM runtime contracts", () => {
       jobPrompt("combat"),
       /NPC turn catches up before an off-turn player intent/i
     );
+    assert.match(
+      jobPrompt("combat"),
+      /<clue>They rolled an 11 against your AC of 12<\/clue>/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /<clue>They rolled an 8 against DC 13 on the Arcana check<\/clue>/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /<clue>They rolled a 17 against your AC of 14<\/clue>.*<danger>6 slashing<\/danger>.*<clue>1d6 \+ 2<\/clue>.*<danger>24 HP to 18 HP<\/danger>/is
+    );
     assert.match(jobPrompt("combat"), /players skip, hostile NPC still creates pressure/i);
     assert.match(
       jobPrompt("combat"),
@@ -674,10 +711,18 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
+      /<clue>They rolled a 12 against Komer's AC of 18<\/clue>/i
+    );
+    assert.match(
+      jobPrompt("combat"),
       /NPC resolves, then a fresh player turn begins/i
     );
     assert.match(jobPrompt("combat"), /Bad response to avoid: requesting Tart's attack roll/i);
     assert.match(jobPrompt("combat"), /"input_targets": \[\s+"player:tart"\s+\]/);
+    assert.match(
+      jobPrompt("combat"),
+      /<clue>They rolled a 16 against Por's AC of 16<\/clue>.*<danger>7 slashing<\/danger>.*<clue>1d6 \+ 3<\/clue>.*<danger>34 HP to 27 HP<\/danger>/is
+    );
     assert.match(jobPrompt("combat"), /player attack hits, request player damage/i);
     assert.match(
       jobPrompt("combat"),
@@ -693,6 +738,10 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(jobPrompt("combat"), /automatic-hit effects such as Magic Missile/i);
     assert.match(jobPrompt("combat"), /Magic Missile target is known, request player damage/i);
+    assert.match(
+      jobPrompt("combat"),
+      /roll Magic Missile damage: <clue>3d4 \+ 3<\/clue>/i
+    );
     assert.match(
       jobPrompt("combat"),
       /Bad response to avoid: rolling Magic Missile damage yourself/i
@@ -714,6 +763,10 @@ describe("modular AI DM runtime contracts", () => {
       /The robed priest rolled a <clue>16 against DC 14<\/clue> and succeeds/i
     );
     assert.match(jobPrompt("combat"), /final enemy defeated and combat ends/i);
+    assert.match(
+      jobPrompt("combat"),
+      /<clue>You rolled a 19 against their AC of 13<\/clue>.*<danger>11 bludgeoning<\/danger>/is
+    );
     assert.match(jobPrompt("combat"), /Never silently modify HP/);
     assert.match(
       jobPrompt("combat"),
