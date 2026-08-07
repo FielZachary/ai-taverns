@@ -3,6 +3,7 @@ export const dmJobNames = [
   "investigation",
   "npc_dialogue",
   "combat",
+  "rest_mechanics",
   "death_saving_throws",
   "clarification"
 ] as const;
@@ -268,6 +269,7 @@ export function buildRouterPrompt() {
     "If no available key fits a category, return an empty array for that category.",
     "If routing state says combat_active is true, default to combat for player input unless the input is clearly noncombat and does not affect combat turn flow.",
     "If pending_roll_requests include a Death Saving Throw, or the active player is at 0 HP and dying, choose death_saving_throws.",
+    "Choose rest_mechanics when the player attempts a short rest, long rest, sleep, camp, recover class resources, spend hit dice, or otherwise complete rest-based recovery.",
     "Choose clarification when the player's intended action is too underspecified to adjudicate safely, especially combat actions like casting a spell, making an attack, using a weapon, or targeting an area effect without a clear target, target area, or necessary tactical detail.",
     "Do not choose clarification merely because an action is risky, opposed, or requires dice; route those to the relevant gameplay job and request rolls there.",
     `Allowed jobs: ${dmJobNames.join(", ")}.`,
@@ -1396,8 +1398,9 @@ export function jobPrompt(
       "",
       "State Mutation Boundary:",
       "- Models may choose, narrate, infer, and propose; the server retrieves, validates, stores, and mutates.",
-      "- Do not silently modify HP, inventory, currency, equipment, spell slots, conditions, combat state, quest state, faction standing, or durable world state in prose only.",
+      "- Do not silently modify HP, inventory, currency, equipment, spell slots, class resources, conditions, combat state, quest state, faction standing, or durable world state in prose only.",
       "- If public_narration says state changed, include the matching structured update when that field exists.",
+      "- When a player uses a tracked class resource from mechanicsState.actors[actorKey].resources, include mechanics_state_update.actors[actorKey].resources with that resource's used value increased by the amount spent, capped at max. If used is already max, the resource is unavailable and the attempted use should not resolve.",
       "",
       "Setting Object:",
       "- When the party's current location is known, include a setting object with display_location, world_name, region_name, settlement_name, scene_location, and starting_location when available.",
@@ -1569,6 +1572,34 @@ export function jobPrompt(
       "Examples below demonstrate combat pacing, visible math, paragraph grouping, turn ownership, roll pauses, and state-safe narration. Do not copy their names, actor keys, enemies, abilities, locations, or exact phrasing. Match their clarity and discipline, not their content.",
       ...combatExamples
     ],
+    rest_mechanics: [
+      [
+        "Rest Mechanics Job:",
+        "",
+        "Purpose:",
+        "- Handle short rests, long rests, sleep, camping, downtime recovery, and rest-based class resource recovery.",
+        "- Decide whether the attempted rest can complete in the current fiction. If danger, interruption, time pressure, watch order, shelter, or travel conditions matter, narrate the obstacle and request clarification or a relevant roll instead of granting recovery.",
+        "",
+        "Mechanics Authority:",
+        "- Treat authoritative mechanicsState as truth for current HP, spellSlots, resources, concentration, and conditions.",
+        "- Use actor.resources for class resources such as Sorcery Points, Ki Points, Channel Divinity, Wild Shape, Second Wind, Action Surge, and Rages. Each resource has label, max, used, recharge, and optional source/notes.",
+        "- On a completed short rest, reset resources whose recharge is short_rest to used 0. Do not reset long_rest, dawn, manual, or ordinary spell slot resources on a short rest unless an explicit class feature in mechanicsState says otherwise.",
+        "- On a completed long rest, reset resources whose recharge is short_rest, long_rest, or dawn to used 0, reset normal spellSlots used values to 0, and restore the actor to max HP when maxHp is known.",
+        "- Preserve resource max, label, recharge, source, and notes exactly unless a level-up or explicit canonical feature change happens.",
+        "",
+        "Output Requirements:",
+        "- If the rest completes, include mechanics_state_update with the affected player actor key and the updated resources object. Include updated spellSlots and currentHp when those recover.",
+        "- If the rest does not complete, leave mechanics_state_update empty or only include consequences that truly happened.",
+        "- Narrate recovery visibly but concisely, naming the resources that return when known, such as Sorcery Points, Ki Points, or Channel Divinity.",
+        "- Set next_input_needed to player_actions after a completed rest unless the scene immediately requires dice or clarification.",
+        "",
+        "State Safety:",
+        "- Do not invent new class resources in mechanics_state_update unless they are directly supported by character sheet, mechanicsState, or accepted level/class context.",
+        "- Do not spend or restore inventory unless the rest consumes or returns a concrete item through inventory_state_update."
+      ].join("\n"),
+      ...rollAdjudicationGuidance,
+      ...narrativeQualityBar
+    ],
     death_saving_throws: [
       [
         "Death Saving Throws Job:",
@@ -1628,6 +1659,7 @@ export function jobPrompt(
       investigation: [],
       npc_dialogue: [],
       combat: soloCombatGuidance,
+      rest_mechanics: [],
       death_saving_throws: [],
       clarification: []
     },
@@ -1636,6 +1668,7 @@ export function jobPrompt(
       investigation: [],
       npc_dialogue: [],
       combat: multiplayerCombatGuidance,
+      rest_mechanics: [],
       death_saving_throws: [],
       clarification: []
     }

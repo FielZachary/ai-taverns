@@ -17,6 +17,23 @@ export const SpellSlotStateSchema = z.object({
   used: z.number().int().nonnegative()
 });
 
+export const MechanicsResourceRechargeSchema = z.enum([
+  "short_rest",
+  "long_rest",
+  "dawn",
+  "encounter",
+  "manual"
+]);
+
+export const MechanicsResourceStateSchema = z.object({
+  label: z.string().min(1),
+  max: z.number().int().nonnegative(),
+  used: z.number().int().nonnegative(),
+  recharge: MechanicsResourceRechargeSchema,
+  source: z.string().min(1).optional(),
+  notes: z.string().min(1).optional()
+});
+
 export const DeathSaveStateSchema = z.object({
   successes: z.number().int().min(0).max(3),
   failures: z.number().int().min(0).max(3)
@@ -40,7 +57,8 @@ export const MechanicsSeedSchema = z.object({
   level: z.number().int().positive(),
   maxHp: z.number().int().positive(),
   currentHp: z.number().int().nonnegative(),
-  spellSlots: z.record(SpellSlotLevelSchema, SpellSlotStateSchema).optional()
+  spellSlots: z.record(SpellSlotLevelSchema, SpellSlotStateSchema).optional(),
+  resources: z.record(z.string(), MechanicsResourceStateSchema).optional()
 });
 
 export const MechanicsActorStateSchema = z.object({
@@ -55,6 +73,7 @@ export const MechanicsActorStateSchema = z.object({
   allegiance: z.enum(["player", "ally", "hostile", "neutral"]).optional(),
   isPlayerControlled: z.boolean().optional(),
   spellSlots: z.record(SpellSlotLevelSchema, SpellSlotStateSchema).optional(),
+  resources: z.record(z.string(), MechanicsResourceStateSchema).optional(),
   concentration: z
     .object({
       spell: z.string().min(1),
@@ -81,6 +100,10 @@ export const MechanicsStateSchema = z.object({
 
 export type SpellSlotLevel = z.infer<typeof SpellSlotLevelSchema>;
 export type SpellSlotState = z.infer<typeof SpellSlotStateSchema>;
+export type MechanicsResourceRecharge = z.infer<
+  typeof MechanicsResourceRechargeSchema
+>;
+export type MechanicsResourceState = z.infer<typeof MechanicsResourceStateSchema>;
 export type DeathSaveState = z.infer<typeof DeathSaveStateSchema>;
 export type AbilityKey = z.infer<typeof AbilityKeySchema>;
 export type MechanicsSeed = z.infer<typeof MechanicsSeedSchema>;

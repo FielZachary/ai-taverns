@@ -367,6 +367,7 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(routerPrompt, /Copy exact key strings only/i);
     assert.match(routerPrompt, /Campaign opening scenes are handled/i);
     assert.match(routerPrompt, /combat_active is true, default to combat/i);
+    assert.match(routerPrompt, /Choose rest_mechanics when the player attempts a short rest/i);
     assert.match(routerPrompt, /Choose clarification when the player's intended action is too underspecified/i);
     assert.match(routerPrompt, /without a clear target, target area, or necessary tactical detail/i);
     assert.match(routerPrompt, /Do not choose clarification merely because an action is risky/i);
@@ -774,6 +775,14 @@ describe("modular AI DM runtime contracts", () => {
       jobPrompt("combat"),
       /attempts to attack with, throw, draw, load, fire, equip, or otherwise use a weapon they do not have/i
     );
+    assert.match(
+      jobPrompt("combat"),
+      /When a player uses a tracked class resource from mechanicsState\.actors\[actorKey\]\.resources/i
+    );
+    assert.match(
+      jobPrompt("scene_director"),
+      /resources with that resource's used value increased by the amount spent/i
+    );
     assert.match(jobPrompt("combat"), /Do not copy their names, actor keys/i);
     assert.match(
       jobPrompt("combat"),
@@ -787,6 +796,14 @@ describe("modular AI DM runtime contracts", () => {
       jobPrompt("combat"),
       /Roll Fireball damage:[^"]*\\n\\nWhat do you do\?/
     );
+    assert.match(jobPrompt("rest_mechanics"), /Rest Mechanics Job/i);
+    assert.match(jobPrompt("rest_mechanics"), /actor.resources for class resources/i);
+    assert.match(jobPrompt("rest_mechanics"), /Sorcery Points, Ki Points, Channel Divinity/i);
+    assert.match(jobPrompt("rest_mechanics"), /On a completed short rest, reset resources whose recharge is short_rest/i);
+    assert.match(jobPrompt("rest_mechanics"), /On a completed long rest, reset resources whose recharge is short_rest, long_rest, or dawn/i);
+    assert.match(jobPrompt("rest_mechanics"), /reset normal spellSlots used values to 0/i);
+    assert.match(jobPrompt("rest_mechanics"), /include mechanics_state_update with the affected player actor key/i);
+    assert.match(jobPrompt("rest_mechanics"), /Do not invent new class resources/i);
     assert.match(jobPrompt("clarification"), /Ask one concise/);
     assert.match(jobPrompt("clarification"), /table-facing guidance rather than in-world NPC dialogue/i);
     assert.match(jobPrompt("clarification"), /next_input_needed to "clarification"/);
@@ -804,6 +821,7 @@ describe("modular AI DM runtime contracts", () => {
       "investigation",
       "npc_dialogue",
       "combat",
+      "rest_mechanics",
       "clarification"
     ] as const) {
       const prompt = jobPrompt(job);

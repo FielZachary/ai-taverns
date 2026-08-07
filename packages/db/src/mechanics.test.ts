@@ -2,10 +2,15 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { MechanicsState } from "@ai-dnd/contracts";
 import {
+  applyRestMechanics,
   applyDeathSavingThrow,
   assertMechanicsActionAllowed,
+  deriveResourcesForClass,
   firstDyingPlayerActorKey,
+  formatResourceLines,
   isDyingPlayerActor,
+  mechanicsSeedFromCharacterInput,
+  projectMechanicsIntoCharacterSheet,
   reviveDeadPlayerActor,
   resolveMechanicsState
 } from "./mechanics.js";
@@ -111,6 +116,184 @@ test("mechanics state infers tracked spell slots from explicit caster prose", ()
       },
       message: "I cast Fireball on Mara."
     })
+  );
+});
+
+test("mechanics seed derives common class resources from class and level", () => {
+  const sorcererSeed = mechanicsSeedFromCharacterInput({
+    characterClass: "Sorcerer",
+    level: 5,
+    maxHp: 32
+  });
+
+  assert.deepEqual(sorcererSeed.resources?.sorcery_points, {
+    label: "Sorcery Points",
+    max: 5,
+    used: 0,
+    recharge: "long_rest",
+    source: "Sorcerer"
+  });
+
+  assert.deepEqual(deriveResourcesForClass("Monk", 5)?.ki_points, {
+    label: "Ki Points",
+    max: 5,
+    used: 0,
+    recharge: "short_rest",
+    source: "Monk"
+  });
+
+  assert.equal(deriveResourcesForClass("Wizard", 5), undefined);
+});
+
+test("mechanics state infers class resources from legacy character sheet", () => {
+  const state = resolveMechanicsState(
+    { metadata: {} },
+    [
+      {
+        id: "tem",
+        character_name: "Tem",
+        character_sheet: "Class: Monk\nLevel: 5\nMax HP: 34"
+      }
+    ]
+  );
+
+  assert.equal(state.actors["player:tem"]?.resources?.ki_points?.max, 5);
+});
+
+test("mechanics state sanitizes persisted class resources", () => {
+  const state = resolveMechanicsState(
+    {
+      metadata: {
+        mechanicsState: {
+          combat: {
+            active: false,
+            round: 0,
+            turnOwner: null,
+            initiativeOrder: []
+          },
+          actors: {
+            "player:seren": {
+              characterName: "Seren",
+              resources: {
+                sorcery_points: {
+                  label: "Sorcery Points",
+                  max: 5,
+                  used: 9,
+                  recharge: "long_rest",
+                  source: "Sorcerer"
+                },
+                broken: {
+                  label: "Broken",
+                  max: 1,
+                  used: 0,
+                  recharge: "whenever"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    []
+  );
+
+  assert.deepEqual(state.actors["player:seren"]?.resources, {
+    sorcery_points: {
+      label: "Sorcery Points",
+      max: 5,
+      used: 5,
+      recharge: "long_rest",
+      source: "Sorcerer"
+    }
+  });
+});
+
+test("projected character sheet includes class resource lines", () => {
+  const projected = projectMechanicsIntoCharacterSheet("Max HP: 32", {
+    characterName: "Seren",
+    resources: {
+      sorcery_points: {
+        label: "Sorcery Points",
+        max: 5,
+        used: 2,
+        recharge: "long_rest"
+      }
+    }
+  });
+
+  assert.match(projected, /Class Resources/);
+  assert.match(projected, /Sorcery Points: 5 total, 2 used, 3 remaining/);
+  assert.deepEqual(formatResourceLines({
+    ki_points: {
+      label: "Ki Points",
+      max: 5,
+      used: 1,
+      recharge: "short_rest"
+    }
+  }), ["Ki Points: 5 total, 1 used, 4 remaining, recovers on short rest"]);
+});
+
+test("rest mechanics restores resources and long-rest spell slots", () => {
+  const baseState: MechanicsState = {
+    combat: {
+      active: false,
+      round: 0,
+      turnOwner: null,
+      initiativeOrder: []
+    },
+    actors: {
+      "player:seren": {
+        characterName: "Seren",
+        currentHp: 10,
+        maxHp: 32,
+        spellSlots: {
+          "1": { max: 4, used: 2 }
+        },
+        resources: {
+          sorcery_points: {
+            label: "Sorcery Points",
+            max: 5,
+            used: 3,
+            recharge: "long_rest"
+          },
+          channel_divinity: {
+            label: "Channel Divinity",
+            max: 1,
+            used: 1,
+            recharge: "short_rest"
+          }
+        }
+      }
+    }
+  };
+
+  const shortRest = applyRestMechanics({
+    state: baseState,
+    actorKey: "player:seren",
+    restType: "short_rest"
+  });
+
+  assert.equal(shortRest.actors["player:seren"]?.spellSlots?.["1"]?.used, 2);
+  assert.equal(
+    shortRest.actors["player:seren"]?.resources?.sorcery_points?.used,
+    3
+  );
+  assert.equal(
+    shortRest.actors["player:seren"]?.resources?.channel_divinity?.used,
+    0
+  );
+
+  const longRest = applyRestMechanics({
+    state: baseState,
+    actorKey: "player:seren",
+    restType: "long_rest"
+  });
+
+  assert.equal(longRest.actors["player:seren"]?.currentHp, 32);
+  assert.equal(longRest.actors["player:seren"]?.spellSlots?.["1"]?.used, 0);
+  assert.equal(
+    longRest.actors["player:seren"]?.resources?.sorcery_points?.used,
+    0
   );
 });
 
