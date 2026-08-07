@@ -271,10 +271,20 @@ test("mechanics seed contract accepts structured character mechanics", () => {
       "1": { max: 4, used: 0 },
       "2": { max: 3, used: 0 },
       "3": { max: 2, used: 0 }
+    },
+    resources: {
+      sorcery_points: {
+        label: "Sorcery Points",
+        max: 5,
+        used: 0,
+        recharge: "long_rest",
+        source: "Sorcerer"
+      }
     }
   });
 
   assert.equal(seed.spellSlots?.["3"]?.max, 2);
+  assert.equal(seed.resources?.sorcery_points?.max, 5);
   assert.throws(() =>
     MechanicsSeedSchema.parse({
       characterClass: "Sorcerer",
@@ -319,6 +329,29 @@ test("mechanics actor contract accepts canonical combat stats for NPCs", () => {
     }
   });
 
+  const resourceState = MechanicsStateSchema.parse({
+    combat: {
+      active: false,
+      round: 0,
+      turnOwner: null,
+      initiativeOrder: []
+    },
+    actors: {
+      "player:monk": {
+        characterName: "Tem",
+        resources: {
+          ki_points: {
+            label: "Ki Points",
+            max: 5,
+            used: 2,
+            recharge: "short_rest",
+            source: "Monk"
+          }
+        }
+      }
+    }
+  });
+
   assert.equal(state.actors["npc:mara"]?.armorClass, 14);
   assert.equal(state.actors["npc:mara"]?.attackBonus, 5);
   assert.equal(state.actors["npc:mara"]?.damageFormula, "1d8 + 3");
@@ -326,6 +359,10 @@ test("mechanics actor contract accepts canonical combat stats for NPCs", () => {
   assert.equal(state.actors["npc:mara"]?.saveBonuses?.wis, -1);
   assert.equal(state.actors["npc:mara"]?.allegiance, "hostile");
   assert.equal(state.actors["npc:mara"]?.isPlayerControlled, false);
+  assert.equal(
+    resourceState.actors["player:monk"]?.resources?.ki_points?.used,
+    2
+  );
 });
 
 test("dice roll contract accepts combat roll metadata", () => {

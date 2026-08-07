@@ -63,6 +63,8 @@ import {
   isDyingPlayerActor,
   isStableActor,
   mechanicsStateWithActor,
+  parseMechanicsResources,
+  parseMechanicsSpellSlots,
   projectMechanicsIntoCharacterSheet,
   reviveDeadPlayerActor,
   resolveMechanicsState
@@ -2023,6 +2025,8 @@ function applyMechanicsStateUpdate(
         : undefined;
     const saveBonuses = abilityBonusMapField(rawActor, "saveBonuses");
     const abilityModifiers = abilityBonusMapField(rawActor, "abilityModifiers");
+    const spellSlots = parseMechanicsSpellSlots(rawActor.spellSlots);
+    const resources = parseMechanicsResources(rawActor.resources);
     const characterName =
       typeof rawActor.characterName === "string" && rawActor.characterName.trim()
         ? rawActor.characterName
@@ -2050,6 +2054,8 @@ function applyMechanicsStateUpdate(
       ...(damageFormula ? { damageFormula } : {}),
       ...(saveBonuses ? { saveBonuses } : {}),
       ...(abilityModifiers ? { abilityModifiers } : {}),
+      ...(spellSlots ? { spellSlots } : {}),
+      ...(resources ? { resources } : {}),
       ...(allegianceField(rawActor, "allegiance") !== undefined
         ? { allegiance: allegianceField(rawActor, "allegiance") }
         : {}),
