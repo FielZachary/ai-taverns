@@ -773,6 +773,23 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("combat"), /Never silently modify HP/);
     assert.match(
       jobPrompt("combat"),
+      /append a compact resources summary at the end of public_narration/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /only when next_input_needed is not dice_results and roll_requests is empty/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /<clue>Just to remind you, you have: <\/clue>\\n<clue>35<\/clue> hit points\\n<clue>3<\/clue> third level spell slots/i
+    );
+    assert.match(jobPrompt("combat"), /<clue>5<\/clue> sorcery points/i);
+    assert.match(
+      jobPrompt("combat"),
+      /summarize only the actor who is receiving the handoff/i
+    );
+    assert.match(
+      jobPrompt("combat"),
       /attempts to attack with, throw, draw, load, fire, equip, or otherwise use a weapon they do not have/i
     );
     assert.match(
