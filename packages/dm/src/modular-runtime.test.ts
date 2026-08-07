@@ -6,6 +6,7 @@ import {
   formatRouterCurrentTurnInput,
   jobPrompt,
   renderContextChunks,
+  sanitizeMemoryPatchMarkdown,
   validateCombatEvents,
   validateMainDmOutput,
   validateMemoryPatches,
@@ -231,6 +232,51 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(
       result.discarded[0]?.reasons.join("\n") ?? "",
       /does not exist/
+    );
+  });
+
+  it("normalizes incidental NPC dialogue quotes in accepted memory patches", () => {
+    const result = validateMemoryPatches(
+      [
+        {
+          operation: "replace_section",
+          context_id: "npc:veria",
+          markdown:
+            "# Veria\n\n## Name\nVeria\n\n## Disposition Towards You\nRelieved and aligned. She shows confidence in Merlini's performance, telling him \"You did well back there. Your father would be proud.\"\n\n## Known History\n- She urged Merlini to move quickly, warning \"The blast will carry for miles.\"\n\n## Last Seen\nLeading Merlini toward the Old Road."
+        }
+      ],
+      new Set(["npc:veria"]),
+      [
+        {
+          id: "npc:veria",
+          category: "npc_context" as const,
+          title: "Veria",
+          bodyMarkdown: "# Veria\n\n## Name\nVeria"
+        }
+      ]
+    );
+
+    assert.equal(result.accepted.length, 1);
+    const markdown = String(result.accepted[0]?.markdown ?? "");
+    assert.doesNotMatch(markdown, /You did well back there/);
+    assert.doesNotMatch(markdown, /The blast will carry for miles/);
+    assert.match(markdown, /without preserving the exact wording/);
+  });
+
+  it("preserves exact wording for written artifacts and durable dialogue cues", () => {
+    assert.match(
+      sanitizeMemoryPatchMarkdown(
+        "# Courier Letter\n\n## Canonical Document Text\n\"Bring the black key at moonrise.\"\n\n## Established Facts\n- The party read the letter.",
+        "relevant_world_context"
+      ),
+      /Bring the black key at moonrise/
+    );
+    assert.match(
+      sanitizeMemoryPatchMarkdown(
+        "# Gatekeeper\n\n## Known History\n- The gatekeeper revealed the password \"Blue harbor opens only for moonlit kin.\"",
+        "npc_context"
+      ),
+      /Blue harbor opens only for moonlit kin/
     );
   });
 
@@ -917,6 +963,8 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(buildMemoryUpdaterPrompt(), /neutral wording until play establishes pronouns/i);
     assert.match(buildMemoryUpdaterPrompt(), /do not silently normalize the conflict/i);
     assert.match(buildMemoryUpdaterPrompt(), /campaign context as a living world bible/i);
+    assert.match(buildMemoryUpdaterPrompt(), /Store the meaning of incidental NPC dialogue/i);
+    assert.match(buildMemoryUpdaterPrompt(), /fresh wording rather than repeating the prior line/i);
     assert.match(buildMemoryUpdaterPrompt(), /Canonical written artifact memory/i);
     assert.match(buildMemoryUpdaterPrompt(), /preserve the revealed text word for word/i);
     assert.match(buildMemoryUpdaterPrompt(), /notes, notebooks, ledgers, journals, letters/i);
@@ -931,6 +979,10 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(buildMemoryUpdaterPrompt(), /Example revealed written artifact response/);
     assert.match(buildMemoryUpdaterPrompt(), /Example proactive world\/story response/);
     assert.match(buildMemoryUpdaterPrompt(), /"visibility": "player_safe"/);
+    assert.match(
+      jobPrompt("npc_dialogue", "single_player"),
+      /Do not repeat prior dialogue phrasing/i
+    );
   });
 
   it("renders mode-specific job guidance without duplicating job prompts", () => {
