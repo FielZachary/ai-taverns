@@ -41,49 +41,16 @@ describe("parseDmContract", () => {
     assert.equal(result.resolutionMode, "resolved_without_dice");
   });
 
-  it("normalizes narration highlights from exact public narration phrases", () => {
+  it("preserves semantic narration markup in public narration", () => {
     const result = parseDmContract(
-      JSON.stringify({
-        public_narration:
-          "Captain Vael lowers the black key onto the Harbor Watch ledger. What do you do?",
-        narration_highlights: [
-          { text: "Captain Vael", color_role: "npc" },
-          { text: "black key", color_role: "object" },
-          { text: "missing phrase", color_role: "clue" },
-          { text: "Harbor Watch", color_role: "invalid" }
-        ],
-        roll_requests: [],
-        next_input_needed: "player_actions"
-      })
+      contract(
+        "<npc>Captain Vael</npc> lowers the <object>black key</object>. What do you do?"
+      )
     );
 
-    assert.deepEqual(result.narrationHighlights, [
-      { text: "Captain Vael", colorRole: "npc" },
-      { text: "black key", colorRole: "object" }
-    ]);
-  });
-
-  it("preserves many exact narration highlights for combat math", () => {
-    const phrases = Array.from({ length: 8 }, (_, index) => {
-      const roll = 10 + index;
-      return `rolled a ${roll}`;
-    });
-    const result = parseDmContract(
-      JSON.stringify({
-        public_narration: `${phrases.join(". ")}. What do you do?`,
-        narration_highlights: phrases.map((text) => ({
-          text,
-          color_role: "clue"
-        })),
-        roll_requests: [],
-        next_input_needed: "player_actions"
-      })
-    );
-
-    assert.equal(result.narrationHighlights.length, phrases.length);
-    assert.deepEqual(
-      result.narrationHighlights.map((highlight) => highlight.text),
-      phrases
+    assert.equal(
+      result.publicNarration,
+      "<npc>Captain Vael</npc> lowers the <object>black key</object>.\n\nWhat do you do?"
     );
   });
 
@@ -190,7 +157,7 @@ describe("parseDmContract", () => {
     assert.match(spellHit.publicNarration, /18 vs AC 15 - hit/);
   });
 
-  it("normalizes settings, input targeting, roll narration, and legacy field names", () => {
+  it("normalizes settings, input targeting, roll requests, and legacy field names", () => {
     const result = parseDmContract(
       JSON.stringify({
         public_narration: "The shadow slips behind the altar.",
@@ -219,11 +186,15 @@ describe("parseDmContract", () => {
 
     assert.equal(
       result.publicNarration,
-      "The shadow slips behind the altar.\n\nRoll 1d20 + 3 at advantage for Perception."
+      "The shadow slips behind the altar."
     );
     assert.equal(result.nextInputNeeded, "dice_results");
     assert.equal(result.inputPolicy, "only_targeted_players");
     assert.deepEqual(result.inputTargets, ["Mira"]);
+    assert.equal(result.rollRequests[0]?.dice, "1d20");
+    assert.equal(result.rollRequests[0]?.label, "Perception");
+    assert.equal(result.rollRequests[0]?.modifier, 3);
+    assert.equal(result.rollRequests[0]?.advantageState, "advantage");
     assert.deepEqual(result.setting, {
       displayLocation: "Saltwatch Chapel",
       worldName: "Brinefall",
@@ -348,7 +319,6 @@ describe("parseDmContract", () => {
     assert.equal(recovery.contract.nextInputNeeded, "player_actions");
     assert.equal(recovery.contract.inputPolicy, "all_players");
     assert.deepEqual(recovery.contract.rollRequests, []);
-    assert.deepEqual(recovery.contract.narrationHighlights, []);
     assert.deepEqual(recovery.contract.inventoryStateUpdate, { patches: [] });
     assert.match(
       recovery.contract.publicNarration,
@@ -696,7 +666,7 @@ describe("DM provider helpers", () => {
     assert.deepEqual(normalizeRollRequests(undefined), []);
   });
 
-  it("adds visible DC guidance for investigation roll requests only", () => {
+  it("preserves narration for roll requests instead of appending roll guidance", () => {
     const investigation = parseDmContract(
       JSON.stringify({
         public_narration: "The symbols resist easy reading.",
@@ -719,9 +689,9 @@ describe("DM provider helpers", () => {
       { dmJob: "investigation" }
     );
 
-    assert.match(
+    assert.equal(
       investigation.publicNarration,
-      /Roll 1d20 \+ 6 for Study the Dominion symbols DC 15 reveals the correct pressure and sequence pattern\./
+      "The symbols resist easy reading."
     );
     assert.equal(investigation.rollRequests[0]?.targetDc, 15);
 
@@ -749,8 +719,9 @@ describe("DM provider helpers", () => {
 
     assert.equal(
       sceneDirector.publicNarration,
-      "The cliff face is slick.\n\nRoll 1d20 + 2 for Athletics."
+      "The cliff face is slick."
     );
+    assert.equal(sceneDirector.rollRequests[0]?.targetDc, 13);
   });
 
   it("does not duplicate investigation check prose that already includes a DC", () => {

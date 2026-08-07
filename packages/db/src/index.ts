@@ -29,13 +29,13 @@ import {
   type AiDebugInfo,
   type ContextCategory,
   type ContextChunk,
+  type ExistingMemoryContext,
   type GameMessage,
   type DmContractResponse,
   type DmContractParseOptions,
   type DmNextInputNeeded,
   type DmJobName,
   type InputPolicy,
-  type NarrationHighlight,
   type RouterContextKeys,
   type ValidatedRouterOutput
 } from "@ai-dnd/dm";
@@ -63,6 +63,8 @@ import {
   isDyingPlayerActor,
   isStableActor,
   mechanicsStateWithActor,
+  parseMechanicsResources,
+  parseMechanicsSpellSlots,
   projectMechanicsIntoCharacterSheet,
   reviveDeadPlayerActor,
   resolveMechanicsState
@@ -641,6 +643,15 @@ type OpeningNpcSeed = {
   visibleBehavior: string;
 };
 
+type StartingLocationAtmosphere = {
+  arrivalImpression: string;
+  dailyLifeAndLiveliness: string;
+  localAttitude: string;
+  dominantVibe: string;
+  sensoryEntryDetails: string[];
+  transitionIntoFirstScene: string;
+};
+
 type EldermereOpeningPlan = {
   campaignTitle: string;
   region: {
@@ -654,6 +665,7 @@ type EldermereOpeningPlan = {
     whyThisLocation: string;
     plainDescription: string;
   };
+  startingLocationAtmosphere: StartingLocationAtmosphere;
   openingPremise: {
     whyThePartyIsHere: string;
     immediateObjective: string;
@@ -698,7 +710,6 @@ type ResolutionMode = "needs_dice" | "resolved_without_dice";
 type DungeonMasterReply = {
   id: string;
   content: string;
-  narrationHighlights: NarrationHighlight[];
   debug: AiDebugInfo;
   rollRequests: DiceRollRequest[];
   inputTargets: string[];
@@ -756,13 +767,13 @@ const dungeonMasterContractInstructions = [
   "When the party's current location is known, include a setting object with display_location, world_name, region_name, settlement_name, scene_location, and starting_location when available.",
   "Use scene_location for the current local scene label, such as a tavern, street, room, road, ruin, district, or wilderness landmark.",
   "Use display_location as the short UI label for the current location; do not use a genre label.",
-  "Required top-level keys: public_narration, narration_highlights, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update, combat_events, proposed_context_updates.",
-  "Unless opener-specific guidance says otherwise, narration_highlights must be an array of 0-1 player-visible important names, places, clues, objects, threats, factions, or details from public_narration during normal play. Use [] when nothing is truly worth highlighting; it is completely okay to highlight nothing.",
-  "Each narration_highlights item must use exactly {\"text\":\"exact phrase copied from public_narration\",\"color_role\":\"npc|place|clue|danger|faction|object\"}.",
-  "Do not put colors, HTML, CSS, or Markdown emphasis into public_narration or narration_highlights. The UI will choose colors from color_role.",
+  "Required top-level keys: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update, combat_events, proposed_context_updates.",
+  "public_narration may use sparse semantic narration markup for inline UI color: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, and <object>...</object>.",
+  "Use semantic narration markup only around exact player-visible words that should be colored. Do not nest tags, add attributes, or use any other HTML/XML tags.",
+  "Do not put CSS, hex colors, color names, or Markdown emphasis into public_narration.",
   "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved this turn."
 ].join("\n");
-const playerTurnDmTimeoutMs = 15_000;
+const playerTurnDmTimeoutMs = 60_000;
 
 export type DungeonMasterRuntime = {
   askProvider(input: {
@@ -1919,6 +1930,11 @@ function numberField(record: Record<string, unknown>, key: string) {
   return Number.isInteger(value) && Number(value) >= 0 ? Number(value) : undefined;
 }
 
+function signedNumberField(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  return Number.isInteger(value) ? Number(value) : undefined;
+}
+
 function hpNumberField(record: Record<string, unknown>, key: string) {
   const value = record[key];
   return Number.isInteger(value) ? Math.max(0, Number(value)) : undefined;
@@ -1956,6 +1972,27 @@ function deathSavesField(record: Record<string, unknown>, key: string) {
   };
 }
 
+const abilityKeys = ["str", "dex", "con", "int", "wis", "cha"] as const;
+
+function abilityBonusMapField(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const bonuses: Partial<Record<(typeof abilityKeys)[number], number>> = {};
+
+  for (const abilityKey of abilityKeys) {
+    const bonus = Number(value[abilityKey]);
+    if (Number.isInteger(bonus)) {
+      bonuses[abilityKey] = bonus;
+    }
+  }
+
+  return Object.keys(bonuses).length > 0 ? bonuses : undefined;
+}
+
 function allegianceField(record: Record<string, unknown>, key: string) {
   const value = record[key];
   return value === "player" ||
@@ -1991,6 +2028,15 @@ function applyMechanicsStateUpdate(
     const currentHp = hpNumberField(rawActor, "currentHp");
     const maxHp = hpNumberField(rawActor, "maxHp");
     const armorClass = numberField(rawActor, "armorClass");
+    const attackBonus = signedNumberField(rawActor, "attackBonus");
+    const damageFormula =
+      typeof rawActor.damageFormula === "string" && rawActor.damageFormula.trim()
+        ? rawActor.damageFormula.trim()
+        : undefined;
+    const saveBonuses = abilityBonusMapField(rawActor, "saveBonuses");
+    const abilityModifiers = abilityBonusMapField(rawActor, "abilityModifiers");
+    const spellSlots = parseMechanicsSpellSlots(rawActor.spellSlots);
+    const resources = parseMechanicsResources(rawActor.resources);
     const characterName =
       typeof rawActor.characterName === "string" && rawActor.characterName.trim()
         ? rawActor.characterName
@@ -2014,6 +2060,12 @@ function applyMechanicsStateUpdate(
       ...(currentHp !== undefined ? { currentHp } : {}),
       ...(maxHp !== undefined ? { maxHp } : {}),
       ...(armorClass !== undefined ? { armorClass } : {}),
+      ...(attackBonus !== undefined ? { attackBonus } : {}),
+      ...(damageFormula ? { damageFormula } : {}),
+      ...(saveBonuses ? { saveBonuses } : {}),
+      ...(abilityModifiers ? { abilityModifiers } : {}),
+      ...(spellSlots ? { spellSlots } : {}),
+      ...(resources ? { resources } : {}),
       ...(allegianceField(rawActor, "allegiance") !== undefined
         ? { allegiance: allegianceField(rawActor, "allegiance") }
         : {}),
@@ -2844,7 +2896,6 @@ export async function createCampaignForMode(
       nextInputNeeded: opening.nextInputNeeded,
       resolutionMode: opening.resolutionMode,
       setting: opening.setting,
-      narrationHighlights: opening.narrationHighlights,
       aiDebug: opening.debug
     });
 
@@ -5083,58 +5134,6 @@ function eventSetting(payload: Record<string, unknown>, role: "player" | "dm") {
   };
 }
 
-const narrationHighlightRoles = new Set([
-  "npc",
-  "place",
-  "clue",
-  "danger",
-  "faction",
-  "object"
-]);
-const maxStoredNarrationHighlights = 24;
-
-function eventNarrationHighlights(
-  payload: Record<string, unknown>,
-  role: "player" | "dm",
-  content: string
-): NarrationHighlight[] | undefined {
-  if (role !== "dm" || !Array.isArray(payload.narrationHighlights)) {
-    return undefined;
-  }
-
-  const seen = new Set<string>();
-  const highlights: NarrationHighlight[] = [];
-
-  for (const item of payload.narrationHighlights) {
-    const record = eventPayload(item);
-    const text = typeof record.text === "string" ? record.text.trim() : "";
-    const colorRole =
-      typeof record.colorRole === "string" ? record.colorRole.trim() : "";
-    const key = `${text.toLowerCase()}::${colorRole}`;
-
-    if (
-      !text ||
-      !narrationHighlightRoles.has(colorRole) ||
-      !content.includes(text) ||
-      seen.has(key)
-    ) {
-      continue;
-    }
-
-    highlights.push({
-      text,
-      colorRole: colorRole as NarrationHighlight["colorRole"]
-    });
-    seen.add(key);
-
-    if (highlights.length >= maxStoredNarrationHighlights) {
-      break;
-    }
-  }
-
-  return highlights.length > 0 ? highlights : undefined;
-}
-
 async function buildRoomSnapshot(
   db: Queryable,
   campaign: CampaignRow,
@@ -5226,12 +5225,6 @@ async function buildRoomSnapshot(
       const role = payload.role === "player" ? "player" : "dm";
       const debug = eventAiDebug(payload, role);
       const setting = eventSetting(payload, role);
-      const narrationHighlights = eventNarrationHighlights(
-        payload,
-        role,
-        content
-      );
-
       return {
         id: String(payload.messageId || event.id),
         role,
@@ -5245,7 +5238,6 @@ async function buildRoomSnapshot(
           ? { characterName: payload.characterName }
           : {}),
         ...(setting ? { setting } : {}),
-        ...(narrationHighlights ? { narrationHighlights } : {}),
         ...(debug ? { debug } : {})
       };
     })
@@ -6014,6 +6006,12 @@ type ContextChunkIndexEntry = {
   visibility: "player_safe" | "dm_only";
   priority: number;
   updatedAt: string;
+  identity?: {
+    name: string;
+    aliases: string[];
+    location: string;
+    summary: string;
+  };
 };
 
 type ContextChunkIndex = Record<ContextCategory, ContextChunkIndexEntry[]>;
@@ -6032,6 +6030,59 @@ function emptyContextKeys(): RouterContextKeys {
   );
 }
 
+function markdownSectionBody(markdown: string, sectionName: string) {
+  const escaped = sectionName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(
+    `^##\\s+${escaped}\\s*$([\\s\\S]*?)(?=^##\\s+|(?![\\s\\S]))`,
+    "im"
+  );
+
+  return markdown.match(pattern)?.[1]?.trim() ?? "";
+}
+
+function markdownSectionLines(markdown: string, sectionName: string) {
+  const body = markdownSectionBody(markdown, sectionName);
+
+  if (!body || /^unknown\.?$/i.test(body)) {
+    return [];
+  }
+
+  return body
+    .split("\n")
+    .map((line) => line.replace(/^[-*]\s*/, "").trim())
+    .filter(Boolean);
+}
+
+function firstMarkdownSectionLine(markdown: string, sectionName: string) {
+  return markdownSectionLines(markdown, sectionName)[0] ?? "";
+}
+
+function summarizeMarkdownSection(markdown: string, sectionName: string) {
+  const body = markdownSectionBody(markdown, sectionName)
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!body || /^unknown\.?$/i.test(body)) {
+    return "";
+  }
+
+  return body.length > 220 ? `${body.slice(0, 217).trimEnd()}...` : body;
+}
+
+function npcIdentityPreview(row: Record<string, unknown>) {
+  const markdown = String(row.body_markdown ?? "");
+  const name =
+    firstMarkdownSectionLine(markdown, "Name") ||
+    String(row.title ?? row.context_key ?? "");
+
+  return {
+    name,
+    aliases: markdownSectionLines(markdown, "Aliases / Former Labels"),
+    location: summarizeMarkdownSection(markdown, "Location"),
+    summary: summarizeMarkdownSection(markdown, "Personality")
+  };
+}
+
 async function listCampaignContextChunkIndex(
   db: Queryable,
   campaignId: string,
@@ -6048,6 +6099,7 @@ async function listCampaignContextChunkIndex(
           title,
           visibility,
           priority,
+          body_markdown,
           updated_at
         from campaign_context_chunks
         where campaign_id = $1
@@ -6073,7 +6125,10 @@ async function listCampaignContextChunkIndex(
             ? row.visibility
             : "dm_only",
         priority: typeof row.priority === "number" ? row.priority : 0,
-        updatedAt: row.updated_at ? toIso(row.updated_at as Date | string) : ""
+        updatedAt: row.updated_at ? toIso(row.updated_at as Date | string) : "",
+        ...(category === "npc_context"
+          ? { identity: npcIdentityPreview(row) }
+          : {})
       });
     }
   } catch (error) {
@@ -6698,6 +6753,85 @@ type ContextStorageDebugState = {
   contextChunks: Awaited<ReturnType<typeof retrieveCampaignContextStorageState>>;
 };
 
+type ContextStorageSnapshotChunk = ContextStorageDebugState["contextChunks"][number];
+
+function restoreTimestamp(value: unknown) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const timestamp = new Date(value);
+
+  return Number.isNaN(timestamp.getTime()) ? null : timestamp;
+}
+
+function contextStorageSnapshotChunk(value: unknown): ContextStorageSnapshotChunk {
+  const chunk = eventPayload(value);
+  const contextId = String(chunk.context_id ?? "").trim();
+  const category = String(chunk.category ?? "").trim();
+  const title = String(chunk.title ?? "").trim();
+  const bodyMarkdown = String(chunk.body_markdown ?? "");
+  const visibility = chunk.visibility;
+  const priority = chunk.priority;
+
+  if (
+    !contextId ||
+    !contextCategories.includes(category as ContextCategory) ||
+    !title ||
+    (visibility !== "player_safe" && visibility !== "dm_only") ||
+    typeof priority !== "number" ||
+    !Number.isFinite(priority) ||
+    typeof chunk.body_markdown !== "string"
+  ) {
+    throw createStatusError(
+      409,
+      "That response has invalid context storage debug state."
+    );
+  }
+
+  return {
+    context_id: contextId,
+    category,
+    title,
+    visibility,
+    priority,
+    body_markdown: bodyMarkdown,
+    archived_at: restoreTimestamp(chunk.archived_at)?.toISOString() ?? null,
+    created_at: restoreTimestamp(chunk.created_at)?.toISOString() ?? null,
+    updated_at: restoreTimestamp(chunk.updated_at)?.toISOString() ?? null
+  };
+}
+
+function contextStorageStateFromEventPayload(
+  payload: Record<string, unknown>
+): ContextStorageDebugState {
+  const debug = eventPayload(payload.aiDebug);
+  const state = eventPayload(debug.contextStorageState);
+  const contextChunks = state.contextChunks;
+
+  if (!Array.isArray(contextChunks)) {
+    throw createStatusError(
+      409,
+      "That response is missing context storage debug state."
+    );
+  }
+
+  const chunks = contextChunks.map(contextStorageSnapshotChunk);
+
+  return {
+    capturedAt:
+      typeof state.capturedAt === "string" && state.capturedAt.trim()
+        ? state.capturedAt
+        : nowIso(),
+    contextChunkCount: chunks.length,
+    contextChunks: chunks
+  };
+}
+
 function campaignContextStorageDebugState(
   contextStorageState: Awaited<ReturnType<typeof retrieveCampaignContextStorageState>>
 ): ContextStorageDebugState {
@@ -6706,6 +6840,48 @@ function campaignContextStorageDebugState(
     contextChunkCount: contextStorageState.length,
     contextChunks: contextStorageState
   };
+}
+
+async function restoreCampaignContextStorageState(
+  db: Queryable,
+  campaignId: string,
+  contextStorageState: ContextStorageDebugState
+) {
+  await db.query("delete from campaign_context_chunks where campaign_id = $1", [
+    campaignId
+  ]);
+
+  for (const chunk of contextStorageState.contextChunks) {
+    await db.query(
+      `
+        insert into campaign_context_chunks (
+          campaign_id,
+          context_key,
+          category,
+          title,
+          visibility,
+          priority,
+          body_markdown,
+          archived_at,
+          created_at,
+          updated_at
+        )
+        values ($1, $2, $3, $4, $5, $6, $7, $8, coalesce($9, now()), coalesce($10, now()))
+      `,
+      [
+        campaignId,
+        chunk.context_id,
+        chunk.category,
+        chunk.title,
+        chunk.visibility,
+        chunk.priority,
+        chunk.body_markdown,
+        restoreTimestamp(chunk.archived_at),
+        restoreTimestamp(chunk.created_at),
+        restoreTimestamp(chunk.updated_at)
+      ]
+    );
+  }
 }
 
 async function listCampaignNpcContextIndex(
@@ -7150,25 +7326,51 @@ function jsonObjectToMarkdown(title: string, content: Record<string, unknown>) {
     .trim();
 }
 
-async function listCampaignContextIds(db: Queryable, campaignId: string) {
+async function listCampaignContextValidationEntries(
+  db: Queryable,
+  campaignId: string
+) {
   try {
-    const result = await db.query<{ context_key: string }>(
+    const result = await db.query<Record<string, unknown>>(
       `
-        select context_key
+        select
+          context_key,
+          category,
+          title,
+          body_markdown
         from campaign_context_chunks
         where campaign_id = $1 and archived_at is null
       `,
       [campaignId]
     );
 
-    return new Set(result.rows.map((row) => row.context_key));
+    return result.rows
+      .map((row): ExistingMemoryContext | null => {
+        const category = String(row.category ?? "") as ContextCategory;
+
+        if (!contextCategories.includes(category)) {
+          return null;
+        }
+
+        return {
+          id: String(row.context_key ?? ""),
+          category,
+          title: String(row.title ?? row.context_key ?? ""),
+          bodyMarkdown: String(row.body_markdown ?? "")
+        };
+      })
+      .filter((entry): entry is ExistingMemoryContext => entry !== null);
   } catch (error) {
     if (!isMissingRuntimeTableError(error)) {
       throw error;
     }
 
-    return new Set<string>();
+    return [];
   }
+}
+
+function existingContextIdSet(contexts: ExistingMemoryContext[]) {
+  return new Set(contexts.map((context) => context.id));
 }
 
 async function applyAcceptedMemoryPatch(
@@ -7178,7 +7380,15 @@ async function applyAcceptedMemoryPatch(
 ) {
   const operation = patch.operation;
   const contextId = String(patch.context_id ?? patch.contextId ?? "");
+  const newContextId = String(patch.new_context_id ?? patch.newContextId ?? "");
+  const sourceContextId = String(
+    patch.source_context_id ?? patch.sourceContextId ?? ""
+  );
+  const targetContextId = String(
+    patch.target_context_id ?? patch.targetContextId ?? ""
+  );
   const markdown = String(patch.markdown ?? "");
+  const title = String(patch.title ?? "");
   const visibility =
     patch.visibility === "player_safe" || patch.visibility === "dm_only"
       ? patch.visibility
@@ -7222,6 +7432,50 @@ async function applyAcceptedMemoryPatch(
         where campaign_id = $1 and context_key = $2
       `,
       [campaignId, contextId]
+    );
+    return;
+  }
+
+  if (operation === "rename_chunk") {
+    await bestEffortRuntimeInsert(
+      db,
+      `
+        update campaign_context_chunks
+        set context_key = $3,
+          title = coalesce(nullif($4, ''), title),
+          body_markdown = case
+            when nullif($5::text, '') is null then body_markdown
+            else $5::text
+          end,
+          updated_at = now()
+        where campaign_id = $1 and context_key = $2
+      `,
+      [campaignId, contextId, newContextId, title, markdown]
+    );
+    return;
+  }
+
+  if (operation === "merge_chunk") {
+    await bestEffortRuntimeInsert(
+      db,
+      `
+        update campaign_context_chunks
+        set title = coalesce(nullif($3, ''), title),
+          body_markdown = $4::text,
+          updated_at = now()
+        where campaign_id = $1 and context_key = $2
+      `,
+      [campaignId, targetContextId, title, markdown]
+    );
+    await bestEffortRuntimeInsert(
+      db,
+      `
+        update campaign_context_chunks
+        set archived_at = now(),
+          updated_at = now()
+        where campaign_id = $1 and context_key = $2
+      `,
+      [campaignId, sourceContextId]
     );
     return;
   }
@@ -7650,10 +7904,14 @@ async function runLivingWorldPressureEngineIfDue(
           typeof chunk === "string" ? chunk : eventPayload(chunk).context_id
       }))
     ];
-    const existingContextIds = await listCampaignContextIds(db, input.campaignId);
+    const existingContexts = await listCampaignContextValidationEntries(
+      db,
+      input.campaignId
+    );
     const validation = validateMemoryPatches(
       proposedPatches,
-      existingContextIds
+      existingContextIdSet(existingContexts),
+      existingContexts
     );
 
     await applyAcceptedMemoryPatches(
@@ -8011,10 +8269,14 @@ export async function runModularPostTurnContextJobs(
           }))
         : [])
     ];
-    const existingContextIds = await listCampaignContextIds(db, input.campaignId);
+    const existingContexts = await listCampaignContextValidationEntries(
+      db,
+      input.campaignId
+    );
     const validation = validateMemoryPatches(
       proposedPatches,
-      existingContextIds
+      existingContextIdSet(existingContexts),
+      existingContexts
     );
 
     await applyAcceptedMemoryPatches(
@@ -8462,6 +8724,18 @@ function eldermereOpeningPlannerInstructions() {
           why_this_location: "why this is the right first location",
           plain_description: "one sentence the player could understand"
         },
+        starting_location_atmosphere: {
+          arrival_impression: "what the city, settlement, camp, or landmark feels like when the character enters or reaches the active district",
+          daily_life_and_liveliness: "how busy, loud, tense, prosperous, frightened, festive, poor, guarded, or worn-down it feels in ordinary motion",
+          local_attitude: "how locals treat strangers, officials, travelers, adventurers, or someone like this character",
+          dominant_vibe: "short phrase for the starting place's emotional texture",
+          sensory_entry_details: [
+            "specific visible settlement detail",
+            "specific sound or crowd behavior",
+            "specific smell, weather, trade, ritual, traffic, or social detail"
+          ],
+          transition_into_first_scene: "how the wider starting-place atmosphere naturally narrows into opening_premise.first_scene_location"
+        },
         opening_premise: {
           why_the_party_is_here: "concrete reason the player or party came here",
           immediate_objective: "what they are trying to do now",
@@ -8606,6 +8880,10 @@ function formatEldermereNarratorOpeningRequest(input: {
     "If a useful idea appears in dm_private_context, imply it only through concrete visible facts or pressure; do not reveal it as confirmed exposition.",
     "Forbidden opening terms must not appear in public_narration.",
     "Allowed player-facing terms must be explained plainly on first use.",
+    "Use sparse semantic narration markup inside public_narration when it helps the player scan important visible nouns or short phrases. Supported tags only: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, and <object>...</object>.",
+    "Wrap only the exact player-visible words that should receive color. Use 2-4 tags when the opener has worthwhile visible names, places, clues, dangers, factions, or objects. Do not wrap full sentences or paragraphs.",
+    "Do not nest semantic tags, add attributes, invent other tags, include CSS, hex colors, color names, Markdown emphasis, or prose instructions inside public_narration.",
+    "Do not return narration_highlights, highlights, sidecar span metadata, post-processing instructions, or any separate highlight records. The inline semantic tags are the only highlight system.",
     "",
     "HIGHEST PRIORITY - narrator_instructions:",
     "The narrator_instructions array inside the Eldermere opening plan is the scene blueprint. Follow every item in it before using any optional campaign_foundation detail.",
@@ -8617,7 +8895,8 @@ function formatEldermereNarratorOpeningRequest(input: {
     "Paragraph 1 must explain why this specific character or party has come here now, using player-facing backstory context. Assume the player has not recently read the backstory. Connect the arrival to at least one unresolved dream, loss, secret, promise, obligation, fear, ambition, or relationship. Do not begin with scenery, weather, crowds, dialogue, combat, or the name of the starting location.",
     "The first sentence must be about the character's reason for coming, not where they are standing. Do not start with phrases like 'You stand at', 'You arrive at', 'The town', 'The road', or any location-first camera direction.",
     "Paragraph 2 must describe what the character or party has been doing over the last few days and then the last few hours to reach this place. Explain how they entered the region or settlement, where exactly they have landed, what kind of area it is, what locals say about it, and what the character plausibly knows before the immediate scene begins. Keep this player-facing and concrete. Do not reveal DM-private secrets.",
-    "Paragraph 3 must put the player physically inside opening_premise.first_scene_location and starting_location. Use narrator_instructions plus sensory_palette from the JSON to describe the room, street, weather, light, sound, smell, crowd, surfaces, exits, and reachable objects. If narrator_instructions names Pip, a locket, a wrapped clue, a tavern, or another physical anchor, place it visibly and tangibly here.",
+    "Paragraph 3 must start with a vivid, player-facing description of starting_location as the character enters or reaches the active district: how lively it is, what the dominant vibe is, what people are doing, how locals regard strangers, and what the air, streets, crowds, trade, weather, or public tension feel like. Use starting_location_atmosphere plus sensory_palette from the JSON.",
+    "In the same Paragraph 3, smoothly narrow that wider city, settlement, camp, or landmark impression into opening_premise.first_scene_location, placing the player physically inside the first live scene with reachable objects, exits, NPC pressure, and immediate sensory detail. If narrator_instructions names Pip, a locket, a wrapped clue, a tavern, or another physical anchor, place it visibly and tangibly here.",
     "Paragraph 4 must introduce visible NPC tension and the live contact or pressure named in npc_seed and narrator_instructions. Use campaign_foundation.living_local_context.recent_events to explain what people are tense about, and use campaign_foundation.living_local_context.visible_signs to show that tension through observable details rather than exposition.",
     "Paragraph 5 must present the immediate complication from opening_premise.immediate_complication and narrator_instructions, then make it actionable. Use campaign_foundation.living_local_context.rumors_half_true only as uncertain tavern talk or a visible rumor hook, use first_interactable_choices for 2-3 concrete things the player can do right now, and include one short personal urgency beat tying the immediate pressure back to the character's backstory.",
     "Paragraph 6 must be the final direct handoff prompt, such as 'What do you do?'",
@@ -8779,6 +9058,32 @@ function parseOpeningNpcSeed(value: Record<string, unknown>, index: number) {
   };
 }
 
+function parseStartingLocationAtmosphere(
+  value: Record<string, unknown>,
+  errors: string[]
+): StartingLocationAtmosphere {
+  return {
+    arrivalImpression: readString(value, "arrival_impression", errors),
+    dailyLifeAndLiveliness: readString(
+      value,
+      "daily_life_and_liveliness",
+      errors
+    ),
+    localAttitude: readString(value, "local_attitude", errors),
+    dominantVibe: readString(value, "dominant_vibe", errors),
+    sensoryEntryDetails: readStringArray(
+      value,
+      "sensory_entry_details",
+      errors
+    ),
+    transitionIntoFirstScene: readString(
+      value,
+      "transition_into_first_scene",
+      errors
+    )
+  };
+}
+
 function parseSensoryPalette(
   value: Record<string, unknown>,
   errors: string[]
@@ -8809,6 +9114,11 @@ function parseEldermereOpeningPlan(content: string) {
   const errors: string[] = [];
   const region = readObject(parsed, "region", errors);
   const startingLocation = readObject(parsed, "starting_location", errors);
+  const startingLocationAtmosphere = readObject(
+    parsed,
+    "starting_location_atmosphere",
+    errors
+  );
   const openingPremise = readObject(parsed, "opening_premise", errors);
   const sensoryPalette = readObject(parsed, "sensory_palette", errors);
   const allowedTermResults = readObjectArray(
@@ -8837,6 +9147,10 @@ function parseEldermereOpeningPlan(content: string) {
         errors
       )
     },
+    startingLocationAtmosphere: parseStartingLocationAtmosphere(
+      startingLocationAtmosphere,
+      errors
+    ),
     openingPremise: {
       whyThePartyIsHere: readString(
         openingPremise,
@@ -8919,6 +9233,18 @@ function openingPlanToJson(plan: EldermereOpeningPlan) {
       type: plan.startingLocation.type,
       why_this_location: plan.startingLocation.whyThisLocation,
       plain_description: plan.startingLocation.plainDescription
+    },
+    starting_location_atmosphere: {
+      arrival_impression:
+        plan.startingLocationAtmosphere.arrivalImpression,
+      daily_life_and_liveliness:
+        plan.startingLocationAtmosphere.dailyLifeAndLiveliness,
+      local_attitude: plan.startingLocationAtmosphere.localAttitude,
+      dominant_vibe: plan.startingLocationAtmosphere.dominantVibe,
+      sensory_entry_details:
+        plan.startingLocationAtmosphere.sensoryEntryDetails,
+      transition_into_first_scene:
+        plan.startingLocationAtmosphere.transitionIntoFirstScene
     },
     opening_premise: {
       why_the_party_is_here: plan.openingPremise.whyThePartyIsHere,
@@ -9022,6 +9348,7 @@ function askDmInstructions() {
     "Do not invent names, places, relationships, deaths, meetings, prior scenes, loot amounts, inventory contents, or inventory changes.",
     "Do not treat the player's question as confirmation that something happened. If the question contains a false premise, correct only the part contradicted by provided context and clearly say what is unknown.",
     "If the answer is not clearly established in the provided context, say so as the DM controlling established fiction. Prefer phrasing like \"That's all that I've established; I can't tell you quite yet...\" instead of sounding like a detached assistant with missing context.",
+    "The answer may use sparse semantic narration markup for inline UI color: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, and <object>...</object>. Do not use attributes, nested tags, any other HTML/XML tags, CSS, hex colors, color names, or Markdown emphasis.",
     "Trust provided campaign context, canonical character sheets, and stored campaign state over prior Ask DM answers when they conflict. Ask DM answers are table guidance, not canon by themselves.",
     "You may explain what the current context says about inventory, equipment, or currency, but you cannot update inventory, promise an update, or declare a corrected total unless the canonical character sheet or provided campaign state already shows it.",
     "If the player is asking to do something in the fiction, tell them to submit it as a turn/action instead of resolving it here.",
@@ -9080,57 +9407,13 @@ function answerFromAskDmProviderResponse(content: string) {
   throw new Error("The DM provider returned an empty answer.");
 }
 
-function narrationHighlightsFromProviderResponse(
-  content: string,
-  publicNarration: string
-): NarrationHighlight[] {
-  const parsed = parseJsonRecord(content);
-  const rawHighlights = parsed.narration_highlights ?? parsed.narrationHighlights;
-
-  if (!Array.isArray(rawHighlights)) {
-    return [];
-  }
-
-  const seen = new Set<string>();
-  const highlights: NarrationHighlight[] = [];
-
-  for (const item of rawHighlights) {
-    const record = eventPayload(item);
-    const text = typeof record.text === "string" ? record.text.trim() : "";
-    const rawColorRole = record.color_role ?? record.colorRole;
-    const colorRole =
-      typeof rawColorRole === "string" ? rawColorRole.trim() : "";
-    const key = `${text.toLowerCase()}::${colorRole}`;
-
-    if (
-      !text ||
-      !narrationHighlightRoles.has(colorRole) ||
-      !publicNarration.includes(text) ||
-      seen.has(key)
-    ) {
-      continue;
-    }
-
-    highlights.push({
-      text,
-      colorRole: colorRole as NarrationHighlight["colorRole"]
-    });
-    seen.add(key);
-
-    if (highlights.length >= maxStoredNarrationHighlights) {
-      break;
-    }
-  }
-
-  return highlights;
-}
-
 const gameplayTurnOutputContractReminder = [
   "Output contract reminder:",
   "Return only one valid JSON object. Do not include prose, Markdown, or commentary outside JSON.",
-  "Required top-level keys: public_narration, narration_highlights, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update, combat_events, proposed_context_updates.",
-  "Outside active combat, narration_highlights must contain 0-1 exact phrase copied from public_narration, with color_role npc, place, clue, danger, faction, or object. Use [] when nothing is truly worth highlighting; it is completely okay to highlight nothing.",
-  "Do not use bold, Markdown, HTML, CSS, hex colors, or color names inside public_narration or narration_highlights. The app renders colors from color_role.",
+  "Required top-level keys: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update, combat_events, proposed_context_updates.",
+  "public_narration may use sparse semantic narration markup for inline UI color: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, and <object>...</object>.",
+  "Use semantic narration markup only around exact player-visible words that should be colored. Do not nest tags, add attributes, or use any other HTML/XML tags.",
+  "Do not use bold, Markdown, CSS, hex colors, or color names inside public_narration.",
   "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved this turn.",
   "Treat canonical character sheet Inventory, Equipment, and Currency sections as current inventory state.",
   "Inventory possession gate: before writing any public_narration, inspect current player submissions for any item, weapon, tool, spell component, currency, carried object, or spell the character claims to produce, draw, pull from a bag, show, offer, sell, appraise, give, use, equip, throw, consume, spend, cast, or otherwise rely on.",
@@ -9151,19 +9434,28 @@ const gameplayTurnOutputContractReminder = [
   "Set resolution_mode to needs_dice whenever roll_requests is non-empty or next_input_needed is dice_results; otherwise set it to resolved_without_dice.",
   "When resolution_mode is needs_dice, public_narration must not resolve the rolled outcome.",
   "In roll_requests, dice must be bare dice notation only, such as 1d20, 3d4, or 8d6. Do not include + or - modifiers in dice; put static bonuses or penalties in modifier. Example: Magic Missile uses dice \"3d4\" and modifier 3, not dice \"3d4+3\".",
+  "Combat priority order: first satisfy combat-start initiative gating; second, if initiative waits on player rolls, request dice_results; third, if initiative is resolved and turnOwner is non-player-controlled, resolve those turns; fourth, if the current player action needs damage, request or resolve damage; only then return player_actions.",
+  "Combat-start initiative gating has priority over damage resolution. If combat is inactive and a player submits an attack, spell, damage roll, or follow-up damage result against an aware or ready hostile creature, do not resolve damage until initiative has been requested and resolved, unless narration has already established the target was surprised or unaware.",
   "If hostilities start while combat is inactive and enemies are ready or aware, ask player-controlled combatants for initiative in public_narration and roll_requests before resolving the attack or damage.",
-  "If the acting player clearly surprises unaware enemies, resolve the opening action's required rolls first, then ask player-controlled combatants for initiative before enemy counteraction.",
+  "If the acting player clearly surprises unaware enemies, resolve the opening action's required rolls first. In the same response that resolves that opening effect, immediately start combat: reveal NPC/enemy initiative rolls, request player initiative in roll_requests, set next_input_needed dice_results, and do not return player_actions.",
   "Only request player-controlled initiative rolls in roll_requests.",
   "Roll NPC and enemy initiative yourself every time, reveal each NPC/enemy initiative roll and total in public_narration, and encode the resulting order in mechanics_state_update or combat_events.",
   "Never ask players to roll initiative, saving throws, attacks, damage, checks, or any other dice for NPCs or enemies; NPC and enemy dice are DM-side rolls that must still be visible to the players.",
   "Also include non-empty mechanics_state_update.combat with active, round, turnOwner, and provisional initiativeOrder as actor-key strings when initiative roll_requests pauses resolution.",
-  "For every new npc:* actor key introduced in initiativeOrder, include mechanics_state_update.actors for that key with characterName, currentHp, maxHp, armorClass, conditions, allegiance, and isPlayerControlled.",
+  "For every new npc:* actor key introduced in initiativeOrder, include mechanics_state_update.actors for that key with characterName, currentHp, maxHp, armorClass, conditions, allegiance, isPlayerControlled, and combat math fields for the rolls you will use: attackBonus, damageFormula, saveBonuses, and/or abilityModifiers.",
+  "NPC combat durability: when creating new combat NPC/enemy actors, choose maxHp deliberately from narrative role, threat level, party level, and expected fight length. Do not default named or story-important enemies to fragile low HP.",
+  "Use the highest player character level as partyLevel. If partyLevel is unknown, infer it from character sheet features, proficiency bonus, spell slots, or current HP; if still unknown, assume partyLevel 3.",
+  "Use these baseline maxHp bands unless established context says otherwise: trivial minion, scout, or bystander forced into combat: max(6, partyLevel * 3) to max(10, partyLevel * 5) HP; ordinary armed guard, bandit, cultist, beast, or rank-and-file combatant: max(10, partyLevel * 5) to max(16, partyLevel * 8) HP; trained soldier, veteran agent, dangerous monster, elite guard, or backup bruiser: max(18, partyLevel * 8) to max(28, partyLevel * 12) HP; named antagonist, duel-worthy foe, officer, spellcaster, monster leader, or recurring enemy: max(24, partyLevel * 10) to max(40, partyLevel * 16) HP; major boss or climactic solo enemy: at least max(40, partyLevel * 18) HP, with legendary-style pressure, reinforcements, terrain, or escape plans when appropriate.",
+  "For a single-player campaign, avoid building encounters where one normal damage spell or one ordinary weapon turn can remove the primary named enemy unless the target is surprised, already wounded, intentionally weak, or the scene is meant to be a quick takedown.",
+  "If a player opens hostilities against an aware named antagonist, assign enough maxHp for that antagonist to survive at least one typical player turn unless the damage is overwhelming by the rules or the fiction strongly supports immediate defeat.",
+  "Set currentHp equal to maxHp when a fresh combatant enters combat, then subtract only damage that has actually been resolved in the current or prior mechanicsState.",
+  "After player initiative is submitted and the full initiative order is known, public_narration must show the turn order before resolving the next turn. Use this exact block format with display names and totals: <clue>Turn order:</clue> then numbered lines like '1. Merlini Talli: 19' and '2. Crimson Dune-Stalker: 12'.",
   "Non-player-controlled catch-up loop: when a player-controlled turn is fully resolved, no roll_requests are pending, and combat remains active, advance through initiativeOrder and resolve every consecutive non-player-controlled actor in this same response until control reaches a living player-controlled actor or combat ends.",
   "If a non-player-controlled turn requires a player-facing roll, reaction, or tactical choice before it can finish, pause on that non-player-controlled turn with next_input_needed set to dice_results or player_actions as appropriate, input_targets set to the affected player actor key, and mechanics_state_update.combat.turnOwner still set to the acting non-player-controlled actor.",
   "Non-player-controlled actors include allies, enemies, summons, and neutral combatants whose turns are not controlled by a player, even when their actor keys are npc:*.",
   "Do not merely announce future turns such as 'Acolyte 3 is up next' or 'then Acolyte 1 and Acolyte 2 will act'; resolve those turns now, or pause on the acting non-player-controlled turn only because a player-facing roll, reaction, or tactical choice is required.",
   "Do not write OOC notes like '(resolving NPC turns now)' as a substitute for actually resolving those turns in public_narration and mechanics_state_update.",
-  "Only return next_input_needed player_actions in active combat after mechanics_state_update.combat.turnOwner is a living player-controlled actor, after combat has ended, or while pausing on a non-player-controlled turn for a required player reaction or tactical choice.",
+  "Only return next_input_needed player_actions in active combat after combat-start initiative requirements are satisfied and mechanics_state_update.combat.turnOwner is a living player-controlled actor, after combat has ended, or while pausing on a non-player-controlled turn for a required player reaction or tactical choice.",
   "For each non-player-controlled turn in the catch-up loop, choose movement, action, and tactics; roll NPC-side dice yourself; show visible combat math; apply HP, condition, resource, and combat turn changes in mechanics_state_update; add combat_events when available; then continue to the next initiative actor.",
   "During active combat, if next control belongs to a player turnOwner and no roll_requests are pending, set input_policy only_targeted_players and input_targets to that player actor key only; do not use all_players for ordinary turn-based combat.",
   "Off-turn player combat declarations are only stated intent, not actions already in motion; never say they are mid-swing, following immediately, or resolving before the next initiative actor.",
@@ -9173,11 +9465,10 @@ const gameplayTurnOutputContractReminder = [
   "For missing tactical choices, return next_input_needed player_actions, roll_requests [], input_policy only_targeted_players, input_targets set to the acting player, and ask only for the missing choice.",
   "For combat attack and damage roll_requests, include combat metadata: {actionId, actorKey, targetActorKey, kind, attackName, sequence, sourceAttackRollId when resolving damage, damageType, and onHitDamage for attack rolls that can hit}. Reuse the same actionId across all rolls for one declared combat action.",
   "When a player action, spell, feature, or weapon would deal damage and that damage roll was not already submitted, do not roll damage yourself. Request the player's damage roll with next_input_needed dice_results and a structured roll_requests entry. This includes automatic-hit effects such as Magic Missile. Do not update target HP until damage is submitted.",
-  "Resolve NPC attacks fully using conversational visible math in prose, such as 'they rolled a 17 against your AC of 14, so the cutlass catches your ribs'; on a hit, state damage in prose, such as 'the damage comes to 6 slashing from 1d6 + 2', update player HP, then continue the non-player-controlled catch-up loop until control reaches a player actor, combat ends, or a player-facing roll, reaction, or tactical choice is required.",
+  "Resolve NPC attacks fully using conversational visible math in prose. If the NPC has an attackBonus or other modifier, show the modified total first and natural die in parentheses, such as '<clue>they rolled a 17 (15) against your AC of 14</clue>, so the cutlass catches your ribs'; on a hit, state damage in prose, such as 'the damage comes to <danger>6 slashing</danger> from <clue>1d6 + 2</clue>', update player HP, then continue the non-player-controlled catch-up loop until control reaches a player actor, combat ends, or a player-facing roll, reaction, or tactical choice is required.",
   "For NPC hits, public_narration must include the NPC's roll, the target AC, whether it hit, the damage dice and total, the damage type, and the HP change before injury narration finishes.",
-  "During active combat, ignore the normal 0-1 narration_highlights limit. Highlight every visible combat math span in public_narration, using separate exact phrases when one sentence contains both dice/math and damage/HP numbers. Use color_role clue for roll totals, attack/save/check math, AC, DC, and dice notation such as 1d20, 1d6 + 2, or 8d6. Use color_role danger for damage amount plus damage type, HP changes, and 0 HP or defeat mechanics.",
-  "When a player spell or feature forces an NPC or enemy saving throw, roll that save yourself before narrating success or failure, reveal the save roll and total, compare it to the player's known spell save DC when available, and do not put the NPC/enemy save in roll_requests.",
-  "Never narrate a spell or feature as failing, succeeding, taking hold, being resisted, or being shaken off because of an NPC/enemy save unless public_narration first includes the visible save math in prose, such as '<Target> rolled an 11 against your spell save DC of 13, so the spell takes hold.'",
+  "When a player spell or feature forces an NPC or enemy saving throw, roll that save yourself before narrating success or failure, add the relevant saveBonus or ability modifier from mechanicsState, reveal the modified total and natural die, compare the total to the player's known spell save DC when available, and do not put the NPC/enemy save in roll_requests.",
+  "Never narrate a spell or feature as failing, succeeding, taking hold, being resisted, or being shaken off because of an NPC/enemy save unless public_narration first includes the visible save math in prose, such as 'the cultist rolled an <clue>11 (9) against your spell save DC of 13</clue>, so the spell takes hold.'",
   "Do not end an NPC turn with only a wind-up like lunges, swings, aims, starts casting, or bears down unless a player-facing roll or reaction is required first.",
   "When the final active enemy is defeated, set combat active false, turnOwner null, and initiativeOrder empty; do not say a specific combatant is up next after combat ends.",
   "Build combat actor names and keys only from the current scene and character sheets; never copy example NPC names into initiativeOrder.",
@@ -9189,8 +9480,8 @@ const openingSceneOutputContractReminder = [
   "Return only one valid JSON object. Do not include prose, Markdown, or commentary outside JSON.",
   "public_narration must contain the full 6-paragraph opener, not only the character motivation or a short teaser.",
   "Treat narrator_instructions in the Eldermere opening plan as the highest-priority scene blueprint.",
-  "Include narration_highlights with exactly 3 exact phrases copied from public_narration and color_role npc, place, clue, danger, faction, or object when the opener has 3 worthwhile visible terms. Use [] only if there is genuinely nothing worth highlighting; it is completely okay to highlight nothing.",
-  "Do not use bold, Markdown, HTML, CSS, hex colors, or color names inside public_narration for these highlights. The app renders colors from color_role.",
+  "Use 2-3 semantic narration markup tags when the opener has worthwhile visible names, places, clues, dangers, factions, or objects. Use only <npc>, <place>, <clue>, <danger>, <faction>, and <object> tags.",
+  "Do not use bold, Markdown, CSS, hex colors, color names, attributes, nested tags, or any other HTML/XML tags inside public_narration.",
   "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved in the opener."
 ];
 
@@ -9396,7 +9687,7 @@ function buildCampaignFoundationCompilerPrompt() {
     "You are not the narrator. Do not write player-facing prose. Do not continue the scene.",
     "Return strict JSON with patches, new_context_chunks, and remove_context_chunks.",
     "Use the same context patch contract as the memory/context updater.",
-    "Allowed operations: append, replace_section, create_chunk, archive_chunk.",
+    "Allowed operations: append, replace_section, create_chunk, archive_chunk, rename_chunk, merge_chunk.",
     "Prefer create_chunk for new campaign foundation material. Prefer append only when updating an existing matching chunk from the provided index.",
     "Create rich aggregate chunks around durable retrieval anchors, usually 8-12 chunks total for a campaign opener. Do not create a separate chunk for every clue, rumor, scene detail, subtask, or minor prop.",
     "Small granular details belong inside the best parent chunk: a major NPC, player character, place, faction, active cross-cutting thread, or campaign-scale secret.",
@@ -9419,7 +9710,8 @@ function buildCampaignFoundationCompilerPrompt() {
     "Do not resolve long-term secrets immediately. Preserve a long runway for discovery, player choice, and the player leaving a mark on Eldermere.",
     "Use stable ids with prefixes: npc:kebab-case-name, world:kebab-case-name, faction:kebab-case-name, thread:kebab-case-name, secret:kebab-case-name, or pc:kebab-case-name.",
     "Do not create secret companion chunks with npc:* or thread:* ids such as npc:name-secrets or thread:name-secrets. If the chunk is mainly hidden truth, private motive, or reveal ladder, its context_id must start with secret: and its context_type must be overarching_big_plot_secrets.",
-    "NPC chunks must use context_type npc_context and the NPC card section structure from the memory updater where possible.",
+    "NPC chunks must use context_type npc_context and the NPC card section structure from the memory updater where possible, including ## Aliases / Former Labels.",
+    "If a named NPC was first known by a description, title, disguise, role, or uncertain label in the opening plan, put that old label under ## Aliases / Former Labels instead of creating a second NPC card.",
     "Every campaign-important named NPC from the planner must receive an npc:* chunk, including missing mentors, off-screen patrons, not-yet-met antagonists, and dead or endangered anchors. Do not replace an important NPC chunk with only a thread, faction, world, or secret chunk.",
     "NPC id slugs must preserve word boundaries with hyphens, especially personal names: use npc:lysa-marvelbridge, not npc:lysamarvelbridge.",
     "For a missing NPC, create a player_safe npc:* chunk with what is known, rumors, relationships, and open questions. Put their true fate, secret location, private discoveries, or reveal ladder in a paired secret:* chunk if needed.",
@@ -9577,13 +9869,14 @@ async function runEldermereCampaignFoundationCompiler(
           }))
         : [])
     ];
-    const existingContextIds = await listCampaignContextIds(
+    const existingContexts = await listCampaignContextValidationEntries(
       db,
       input.campaign.id
     );
     const validation = validateMemoryPatches(
       proposedPatches,
-      existingContextIds
+      existingContextIdSet(existingContexts),
+      existingContexts
     );
 
     await applyAcceptedMemoryPatches(
@@ -10458,7 +10751,6 @@ async function askDungeonMaster(
     return {
       id: providerData.id ?? randomUUID(),
       content: reply,
-      narrationHighlights: contract.narrationHighlights,
       debug: debugWithCombatState,
       rollRequests: normalizedRollRequests,
       inputTargets: normalizedInputControl.inputTargets,
@@ -10554,24 +10846,6 @@ function settingMetadata(setting: CampaignSettingSummary | undefined) {
   };
 }
 
-function narrationHighlightsMetadata(
-  narrationHighlights: NarrationHighlight[] | undefined,
-  maxHighlights = 3
-) {
-  if (!narrationHighlights?.length) {
-    return {};
-  }
-
-  return {
-    narrationHighlights: narrationHighlights
-      .slice(0, maxHighlights)
-      .map((highlight) => ({
-        text: highlight.text,
-        colorRole: highlight.colorRole
-      }))
-  };
-}
-
 async function persistEldermereOpeningPlan(
   db: Queryable,
   campaignId: string,
@@ -10645,19 +10919,12 @@ async function finishResolvedTurn(
     nextInputNeeded?: DmNextInputNeeded;
     resolutionMode?: "needs_dice" | "resolved_without_dice";
     setting?: CampaignSettingSummary | undefined;
-    narrationHighlights?: NarrationHighlight[] | undefined;
     aiDebug?: AiDebugInfo | undefined;
   }
 ) {
   const pendingRollRequests = input.pendingRollRequests ?? [];
   const currentPendingRollRequest = pendingRollRequests[0] ?? null;
   const settingPatch = settingMetadata(input.setting);
-  const maxNarrationHighlights =
-    input.eventType === "adventure_begun" ? 3 : maxStoredNarrationHighlights;
-  const narrationHighlightsPatch = narrationHighlightsMetadata(
-    input.narrationHighlights,
-    maxNarrationHighlights
-  );
   let dmEventId: string | undefined;
 
   await withTransaction(db, async (client) => {
@@ -10684,7 +10951,6 @@ async function finishResolvedTurn(
       role: "dm",
       content: input.reply,
       ...settingPatch,
-      ...narrationHighlightsPatch,
       pendingRollRequest: currentPendingRollRequest,
       pendingRollRequests,
       nextInputNeeded:
@@ -11253,7 +11519,6 @@ export async function beginRoomForUser(
       nextInputNeeded: opening.nextInputNeeded,
       resolutionMode: opening.resolutionMode,
       setting: opening.setting,
-      narrationHighlights: opening.narrationHighlights,
       aiDebug: opening.debug
     });
 
@@ -11631,7 +11896,6 @@ export async function submitRoomTurnForUser(
         inputPolicy: reply.inputPolicy,
         nextInputNeeded: reply.nextInputNeeded,
         resolutionMode: reply.resolutionMode,
-        narrationHighlights: reply.narrationHighlights,
         aiDebug: reply.debug
       });
 
@@ -11856,10 +12120,6 @@ export async function askDungeonMasterQuestionForUser(
     });
 
     const answer = answerFromAskDmProviderResponse(providerData.content);
-    const answerHighlights = narrationHighlightsFromProviderResponse(
-      providerData.content,
-      answer
-    );
     const questionMessageId = input.clientMessageId?.trim() || randomUUID();
     const answerMessageId = randomUUID();
 
@@ -11891,7 +12151,6 @@ export async function askDungeonMasterQuestionForUser(
         playerId: player.id,
         inReplyToMessageId: questionMessageId,
         content: answer,
-        ...narrationHighlightsMetadata(answerHighlights, 1),
         aiDebug: {
           ...providerData.debug,
           providerResponseId:
@@ -12195,7 +12454,6 @@ export async function submitSoloTurnForUser(
       inputPolicy: reply.inputPolicy,
       nextInputNeeded: reply.nextInputNeeded,
       resolutionMode: reply.resolutionMode,
-      narrationHighlights: reply.narrationHighlights,
       aiDebug: reply.debug
     });
 
@@ -12439,6 +12697,15 @@ export async function regenerateCampaignResponseForUser(
       throw createStatusError(409, "That response is missing turn information.");
     }
 
+    const targetContextStorageState =
+      contextStorageStateFromEventPayload(targetPayload);
+
+    await restoreCampaignContextStorageState(
+      client,
+      campaign.id,
+      targetContextStorageState
+    );
+
     await client.query(
       `
         update turns
@@ -12590,7 +12857,6 @@ export async function regenerateCampaignResponseForUser(
       nextInputNeeded: reply.nextInputNeeded,
       resolutionMode: reply.resolutionMode,
       setting: reply.setting,
-      narrationHighlights: reply.narrationHighlights,
       aiDebug: reply.debug
     });
 
@@ -12699,10 +12965,13 @@ export const __dbTestInternals = {
   applyAcceptedInventoryPatches,
   applyAcceptedMemoryPatch,
   campaignContextStorageDebugState,
+  buildCampaignFoundationCompilerPrompt,
   formatDmGuidance,
+  formatContextChunkIndexForRouter,
   formatLivingWorldPressureEngineRequest,
   getLatestLivingWorldCoveredMessageCount,
   inventoryUpdateSentence,
+  listCampaignContextChunkIndex,
   narrationWithInventoryUpdate,
   normalizeNewContextChunkPatch,
   validateInventoryPatches

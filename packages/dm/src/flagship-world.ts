@@ -62,246 +62,414 @@ export const eldermereRegions: EldermereRegion[] = [
   {
     name: "Cael Ambrose",
     summary:
-      "The largest human feudal kingdom, a breadbasket of farms, river towns, guest-right customs, Hearth-Warden hospitality, and still-glowing Old Roads.",
+      "The feudal breadbasket, crossed by glowing Second Dominion roads that are quietly going out.",
     internalConflict:
-      "The Sevrantine schism between the Undying Charter and the Unbound Word.",
-    externalConflict: "Ashfell pressure over grazing land and old oaths.",
+      "The Dimming, the Unbound Word schism, and institutions hiding fractures under performed stability.",
+    externalConflict:
+      "Ashfell border pressure, Salt Concordat grain dependence, and interest in buried Dominion sites.",
     goodFor:
-      "haunted roads, knights in crisis, harvest villages, river towns, and Old Road mysteries",
+      "haunted roads, court politics, border markets, pilgrimage towns, suppressed disasters, and old burial fields",
     settlements: [
       {
         name: "Suncross",
-        type: "capital",
+        type: "capital, ~70,000",
         draw:
-          "Built where five Old Roads physically converge; the seat of the crown and the Undying Charter's mother chapel.",
+          "Five Old Roads converge beneath the crown, Charter, markets, and pilgrim traffic.",
         rememberedDetail:
-          "The crossing stones glow brightly enough to read by, and commoners gather there nightly to trade and gossip on crown ground.",
+          "The Brightcross glows bright enough for night gossip and trade.",
         friction:
-          "The Charter's roster of suspected Unbound Word converts is compiled here, and quiet informing is fraying neighborly trust.",
+          "The northern road is dimming and speaking of it at court is forbidden.",
+      },
+      {
+        name: "Damsgate",
+        type: "river city, ~12,000",
+        draw:
+          "A lock-and-toll city where the Amberflow and Sern nearly touch.",
+        rememberedDetail:
+          "Grain queues, river law, and tollhouse families make every delay political.",
+        friction:
+          "Bridge revenues, tax scrutiny, and river control are turning civic pride into a fight.",
       },
       {
         name: "Thistlebridge",
-        type: "river town",
+        type: "mill city, ~18,000",
         draw:
-          "A Sern bridge town where every barge of grain bound for the coast passes through.",
+          "A grain-mill power city where the millers' guild can move faster than crown law.",
         rememberedDetail:
-          "The miller's guild effectively runs the town and settles disputes faster than the crown's courts do.",
+          "Flour dust, bridge money, and guild courts define daily life.",
         friction:
-          "A bad flood or harvest here ripples all the way to Salt Concordat bread prices.",
+          "Sedge ambition, Ferrow entanglements, and worker sickness are straining the city.",
+      },
+      {
+        name: "Hallowmere",
+        type: "shrine town, ~7,000",
+        draw:
+          "The largest Halwen pilgrimage site, built around absolute guest-right.",
+        rememberedDetail:
+          "Guest-houses, public ovens, and ribboned sheaf-poles line every road in.",
+        friction:
+          "Pilgrims are vanishing as the road dims, tempting leaders toward a false miracle.",
       },
       {
         name: "Greyfold",
-        type: "border town",
+        type: "border town, ~4,000",
         draw:
-          "A garrison-market town on contested grazing land, half Cael Ambrose smallholders and half families with Ashfell in-laws.",
+          "A shared Cael Ambrose and Ashfell market town where both peoples still trade.",
         rememberedDetail:
-          "The town shrine has two altars, one to Sevrantine and one quietly to Baragh, with one priest serving both.",
+          "One altar bears courtly oath-script on one face and clan war-oath script on the other.",
         friction:
-          "It is the likeliest flashpoint if the Ashfell border dispute goes hot, and everyone has a bag half-packed.",
+          "Its peace depends on ambiguity that both regions are increasingly trying to end.",
+      },
+      {
+        name: "Coldharrow",
+        type: "village, ~400",
+        draw:
+          "The village where the first road went dark and sixty people froze.",
+        rememberedDetail:
+          "Sixty graves are tended more faithfully than many palaces.",
+        friction:
+          "The crown needs it quiet, the Unbound Word needs it remembered, and the road remains wrong.",
+      },
+      {
+        name: "Barrowfield",
+        type: "village, ~600",
+        draw: "A farming village built around pre-Graywake burial mounds.",
+        rememberedDetail:
+          "The road keeps the wrong hours and the barrows have begun answering out of sequence.",
+        friction:
+          "Hunger, crown surveyors, tenant pressure, and old taboos are colliding.",
       },
     ],
   },
   {
     name: "Thornwake Vale",
     summary:
-      "An old-growth forest confederation with no capital, governed by rotating grove-speakers and bound to the Verdant Choir.",
-    internalConflict: "Sylla-aligned openness versus Thornmother isolation.",
+      "A forest confederation with no crown, governed through groves and guarded secrets.",
+    internalConflict:
+      "Controlled openness versus isolationist protection of the Vale's hidden resources.",
     externalConflict:
       "Cael Ambrose logging charters and Ferrant Concord prospectors keep testing the border.",
     goodFor:
-      "living forests, Wellglass-sap visions, trade truces, taboo-breaking outsiders, and green twilight magic",
+      "forest politics, hidden industry, trade truces, dangerous groves, and living border towns",
     settlements: [
       {
-        name: "Sallowholt",
-        type: "ancestral first grove",
+        name: "Wickerlight",
+        type: "hidden industrial city, ~9,000",
         draw:
-          "The one grove every Vale-dweller agrees matters, Sylla- and Thornmother-aligned alike.",
+          "The Vale's largest settlement, grown into a colossal elder tree.",
         rememberedDetail:
-          "Its council chamber is a living dome of grown branches supposedly older than the Graywake.",
+          "Sap refinement happens in a city outsiders do not know exists.",
         friction:
-          "Because it is neutral ground, it is where the Sylla/Thornmother argument gets loudest.",
+          "Its importance and secrecy make vanity, recognition, and exposure dangerous.",
+      },
+      {
+        name: "Sallowholt",
+        type: "ancestral first grove, ~5,000",
+        draw:
+          "Council seat and symbolic capital of the Vale.",
+        rememberedDetail:
+          "The council chamber is a living dome of old branches.",
+        friction:
+          "Trade reformers and isolationists argue loudest on this neutral ground.",
       },
       {
         name: "Bramblegate",
-        type: "border trade town",
+        type: "border trade town, ~3,000",
         draw:
-          "The only place the timber trade with Cael Ambrose actually gets negotiated face to face.",
+          "The face the Vale shows Cael Ambrose timber interests.",
         rememberedDetail:
-          "The town gate is a living arch that visibly tightens when the Vale's mood toward outsiders sours.",
+          "The living gate tightens when the forest's mood sours.",
         friction:
-          "Yearly skirmishes over cut timber are becoming normal, and Bramblegate absorbs it first.",
+          "Its job is to trade while making the Vale look poorer than it is.",
+      },
+      {
+        name: "Grayleaf",
+        type: "breakaway grove, ~1,200",
+        draw:
+          "A grove openly trading with Cael Ambrose in defiance of the council.",
+        rememberedDetail:
+          "Its existence is a live test case for the whole Vale.",
+        friction:
+          "If it continues, secrets may break; if it is punished, civil war may follow.",
       },
       {
         name: "Thorn's Hollow",
-        type: "isolationist grove",
-        draw: "Almost nobody goes there on purpose.",
+        type: "isolationist grove, ~800",
+        draw: "A Concord-border grove where prospectors disappear.",
         rememberedDetail:
-          "The trail narrows to nothing as if the forest is actively discouraging the trip.",
+          "The trail seems to narrow away from visitors.",
         friction:
-          "Ferrant Concord prospectors who have gone in have not all come back out.",
+          "The kindly local enforcer and the disappearances are the same problem.",
       },
     ],
   },
   {
     name: "The Ferrant Concord",
     summary:
-      "A dwarf-and-human guild-republic in reclaimed Second Dominion mine tunnels, driven by a 'we will out-build the ancients' ethos.",
+      "A guild-republic carved into the Cinderspine, built around the promise to out-build the ancients.",
     internalConflict:
-      "Foundry politics and black-market Wellglass before the Foundry Moot.",
-    externalConflict: "Ashfell raids and Idle Wardens in the deep tunnels.",
+      "Foundry politics, lawful fuel scarcity, and the Cinderhalt black-market scandal.",
+    externalConflict:
+      "Ashfell raids, Sundered Vale supply pressure, and sealed lower Dominion systems.",
     goodFor:
-      "guild intrigue, construct problems, mine expeditions, and ambitious artificers",
+      "guild intrigue, construct scarcity, airship trade, deep tunnels, border mines, and dangerous machinery",
     settlements: [
       {
         name: "Ironhold",
-        type: "capital",
+        type: "subterranean capital, ~55,000",
         draw:
-          "The seat of the Foundry Moot and the deepest, oldest reclaimed mountain-hall.",
+          "The Foundry Moot capital where brass servitors keep civic life moving.",
         rememberedDetail:
-          "Brass servitors do dull and dangerous work while the Moot election turns the capital into a season-long guild brawl.",
+          "Shift-bells, ventilation flags, brass commons, and failing machines set the rhythm.",
         friction:
-          "The Cinderhalt Foundry's black-market Wellglass scandal is about to blow the Moot wide open.",
+          "Lawful power is running out and no faction agrees what survival permits.",
+      },
+      {
+        name: "Cinderspire",
+        type: "surface trade city, ~30,000",
+        draw: "The Concord's trade face and bound-wind airship city.",
+        rememberedDetail:
+          "Copper roofs, rope bridges, customs teeth, and landing spars cling to the mountain.",
+        friction:
+          "Every shortage and risky Sundered Vale route negotiation reaches its ledgers first.",
+      },
+      {
+        name: "Hollowforge",
+        type: "construct repair town, ~6,000",
+        draw:
+          "The place where constructs are built, repaired, and cannibalized.",
+        rememberedDetail:
+          "Repair floors hold suspended servitor limbs and pressure hearts in glass.",
+        friction:
+          "Nothing new can truly be made; every repair strips another machine.",
       },
       {
         name: "Cragfoot",
-        type: "foothill mining town",
-        draw: "Rich surface veins too shallow to be worth full Concord garrisoning.",
+        type: "foothill mining town, ~4,000",
+        draw: "The Concord's exposed border knuckle.",
         rememberedDetail:
           "Watchfires burn on the ridgeline every night of raiding season.",
         friction:
-          "It is the softest target on the Concord's border, and everyone there knows it.",
+          "Border kinship, Ashfell trade, and failing seams make loyalty messy.",
       },
       {
         name: "Dredgehall",
-        type: "deep-tunnel outpost",
+        type: "deep-tunnel staging post, ~1,500",
         draw:
-          "The last supplied waypoint before sealed lower tunnels where Idle Wardens still hold ground.",
+          "The last supplied waypoint before Warden-held lower levels.",
         rememberedDetail:
-          "Its bounty board pays anyone willing to get a stand-down order acknowledged by a rogue construct.",
-        friction: "Crews go in more often than they come back out whole.",
+          "Names of the missing cover Odger's wall.",
+        friction:
+          "Bounties, rope law, and sealed maps cannot make the lower dark countable enough.",
+      },
+      {
+        name: "The Under-Ledge",
+        type: "restricted outpost, ~200",
+        draw: "A hidden Ott-controlled outpost near the sealed lower truth.",
+        rememberedDetail:
+          "Residents live by silence rules, listening braces, and false stability reports.",
+        friction:
+          "The whole outpost exists to preserve a useful lie from the Moot.",
       },
     ],
   },
   {
     name: "The Salt Concordat",
     summary:
-      "A league of independent port city-states bound by maritime law, tariffs, fleets, and worship of the Deep Currents.",
+      "A league of rival ports bound by maritime law, tariffs, lighthouse obligations, and fear of the drowned city.",
     internalConflict:
-      "Corvane and Selwick rivalry over lighthouses and trade.",
+      "Corvane and Selwick are one bad season from naval war over tariffs and lighthouse power.",
     externalConflict:
-      "The Drowned Choir cult preys from a sunken Second Dominion city.",
+      "The Drowned Choir, Aurelmyre's taboo, refugee labor pressure, and coastal dependency on inland grain.",
     goodFor:
-      "harbor intrigue, shipwreck debts, lighthouse politics, piracy, fog, reefs, and drowned-city dives",
+      "harbor intrigue, shipwright politics, labor conflict, cult towns, reef villages, salvage, and drowned-city pressure",
     settlements: [
       {
         name: "Corvane",
-        type: "major port",
-        draw: "The deepest natural harbor and the dominant merchant fleet.",
+        type: "major port, ~60,000",
+        draw: "The deepest natural harbor and old dominant merchant fleet.",
         rememberedDetail:
-          "The harbor is a forest of masts, and the lighthouse-fleet flagship is paraded on feast days.",
+          "A forest of masts, berth law, chart houses, and a paraded lighthouse flagship.",
         friction:
-          "The tariff war with Selwick is one bad season from open naval conflict.",
+          "Inherited precedence is failing, and officials are tempted by what lies under the water.",
       },
       {
         name: "Selwick",
-        type: "rival port",
-        draw: "A safer harbor and the Concordat's finest shipwrights.",
+        type: "shipwright port, ~35,000",
+        draw: "A safer, shallower harbor with the Concordat's finest shipwrights.",
         rememberedDetail:
-          "Half the town always seems to be building or repairing something, while dockhands quietly vet outsiders.",
+          "Half the town seems to be building or repairing hulls.",
         friction:
-          "Selwick plays the wronged underdog while it quietly outbuilds Corvane's fleet.",
+          "Its underdog self-image has not caught up with its naval power.",
+      },
+      {
+        name: "Gullswatch",
+        type: "labor port, ~20,000",
+        draw:
+          "The port nobody counts, built on mudflat labor and refugee survival.",
+        rememberedDetail:
+          "The Long Table feeds thousands without questions or sermons.",
+        friction:
+          "A preacher's kindness and a dock-boss's debt book are becoming rival governments.",
+      },
+      {
+        name: "Barnacle Reach",
+        type: "fishing town, ~2,500",
+        draw: "The Drowned Choir's public-facing town.",
+        rememberedDetail:
+          "It is tidy, prosperous, watched, and everyone knows why without saying it.",
+        friction:
+          "The old arrangement demands more than it used to, and doubt has reached the wrong person.",
       },
       {
         name: "Skerrywatch",
-        type: "isle-and-reef fishing village",
-        draw: "Rich fishing grounds and safe anchorage among the reefs.",
+        type: "isle-and-reef village, ~900",
+        draw: "A reef village with its own tide-count and rites.",
         rememberedDetail:
-          "The village keeps its own tide-count, worships Kethuun rather than Nyxandra, and treats city politics as distant noise.",
+          "It treats city politics as distant until the bells and reefs say otherwise.",
         friction:
-          "Drowned Choir raiders know these reefs as well as the locals, and the raids are worsening.",
+          "Raid pressure, reef custom, and Bell Night pull it toward larger coastal secrets.",
+      },
+      {
+        name: "Driftwood Landing",
+        type: "wrack settlement, ~300",
+        draw: "A small salvage landing governed by wrack law.",
+        rememberedDetail:
+          "Sorting sheds and buyers turn whatever the sea returns into survival.",
+        friction:
+          "Recovered objects, disputed ownership, and unmade things make every find dangerous.",
       },
     ],
   },
   {
     name: "Ashfell Marches",
     summary:
-      "A proud horse-and-raid clan confederation on windswept high plains, organized around oath-rings and the Iron Judge's Baragh mask.",
+      "A horse-and-raid clan confederation organized around oath-rings, summer moots, and hard memory.",
     internalConflict:
-      "A succession crisis after the Oath-Ring Warden died without a clear heir.",
+      "The succession crisis after the Oath-Ring Warden's death threatens to split the confederation.",
     externalConflict:
-      "Cael Ambrose settlement and Ferrant mining claims squeeze grazing land.",
+      "Cael Ambrose settlement, Ferrant mining claims, and old reprisal wounds squeeze the clans.",
     goodFor:
-      "clan politics, hard hospitality, peace envoys, border raids, and bone-reading prophecy",
+      "clan politics, succession pressure, summer markets, bone-reading, oath-forges, border trade, and hard hospitality",
     settlements: [
       {
-        name: "Wardring",
-        type: "seat-camp",
+        name: "Graymane Camp",
+        type: "seasonal city, ~15,000",
         draw:
-          "The traditional seat-camp of the Oath-Ring Warden, now contested by rival claimants.",
+          "The largest gathering in the Marches for three months of summer.",
+        rememberedDetail:
+          "Markets, courts, marriages, water ledgers, and horses turn grass into a city.",
+        friction:
+          "Its drift toward permanence may save people and betray the herding life.",
+      },
+      {
+        name: "Wardring",
+        type: "traditional seat, ~8,000",
+        draw:
+          "The half-abandoned seat where rival claimant banners face each other.",
         rememberedDetail:
           "Two rival banners are visible from the same ridge, close enough to see each other's watchfires.",
         friction:
-          "Whichever claimant blinks first, or does not, decides whether this becomes a real war.",
+          "Every path into Wardring now carries a peace story and a war story.",
       },
       {
-        name: "Greyfold",
-        type: "border garrison-market town",
+        name: "Windgather",
+        type: "settled camp, ~2,000",
         draw:
-          "The shared Cael Ambrose/Ashfell market town where both peoples still trade honestly.",
+          "A once-mobile camp that rooted after winter killed its herds.",
         rememberedDetail:
-          "Its shrine keeps Sevrantine and Baragh altars side by side.",
+          "Turf walls and seed houses are worn like both shame and proof.",
         friction:
-          "Every family has ties across the border, and every family knows a war would split them.",
+          "It is mocked as rooted just as the whole Marches may need what it learned.",
       },
       {
         name: "Bonehollow",
-        type: "shaman gathering place",
-        draw: "The only place to get prophecy this specific and this eerie.",
+        type: "bone-reader settlement, ~1,100",
+        draw:
+          "The center of Ashfell divination and succession legitimacy.",
         rememberedDetail:
-          "Old construct-bone fragments click faintly in strong wind, like something trying to speak.",
+          "Construct bones click, answer, and are treated as prophecy.",
         friction:
-          "Some shamans now wonder whether they are reading the bones, or the bones are reading them.",
+          "Truth about the bones could prevent war or collapse the only arbitration people still accept.",
+      },
+      {
+        name: "The Ring-Stone",
+        type: "oath-forge, ~80",
+        draw: "The hereditary forge where oath-rings are made.",
+        rememberedDetail:
+          "No clan banners pass the final ascent.",
+        friction:
+          "One smith's refusal can make peace lawful, war lawful, or neither.",
+      },
+      {
+        name: "Greyfold",
+        type: "shared border town",
+        draw:
+          "The Ambrose-Ashfell market town where necessity still beats hatred.",
+        rememberedDetail:
+          "The northern yards, shared wells, and two-faced altar keep trade alive.",
+        friction:
+          "Its unofficial usefulness is exactly what hardliners on both sides want to formalize or break.",
       },
     ],
   },
   {
     name: "The Veiled Reach",
     summary:
-      "A small, magic-poor highland theocracy devoted to the Ashen Scholar, ruled by the Curia of Watchers and defined by Wellglass hoarding.",
+      "An austere highland theocracy built around hoarding, memory, controlled access, and fear of waste.",
     internalConflict:
       "Reformists who want to spend the hoard for defense versus orthodox Watchers who insist hoarding must continue.",
     externalConflict:
-      "Cael Ambrose, the Ferrant Concord, and cult thieves all want the hoard.",
+      "Cael Ambrose, the Ferrant Concord, and thieves all want leverage over what the Reach stores.",
     goodFor:
-      "austere monasteries, forbidden ledgers, negotiations, thefts, and visions from a Second Dominion observatory",
+      "monastery politics, ledger mysteries, controlled passes, famine accountability, observatory visions, and quiet corruption",
     settlements: [
       {
         name: "Veiled Rest",
-        type: "capital observatory-settlement",
+        type: "capital, ~6,000",
         draw:
-          "The Curia's seat, built inside a still-partially-active Second Dominion observatory.",
+          "The capital built inside a still-active Second Dominion observatory.",
         rememberedDetail:
-          "Several Watchers have gone mad or vanished fasting before the observatory, and everyone knows exactly who and when.",
+          "Hooded lanterns, ledgers, silence hours, and fasting chambers define the city.",
         friction:
-          "The reform-versus-orthodox split over whether to spend the hoard is playing out inside these walls.",
+          "Its discipline preserves knowledge while burying scandals and urgent need.",
+      },
+      {
+        name: "Cairnholt",
+        type: "quarry and vault town, ~2,200",
+        draw:
+          "The logistics town where the Reach's deepest stores are actually kept.",
+        rememberedDetail:
+          "Stone houses, mule courts, and sealed cellars make secrecy feel mundane.",
+        friction:
+          "The town's economy depends on not knowing which storehouses matter.",
       },
       {
         name: "Thanewell",
-        type: "dependent farming village",
-        draw: "The village that actually feeds the Reach.",
+        type: "dependent farming village, ~1,800",
+        draw: "The village that feeds the Reach from thin highland terraces.",
         rememberedDetail:
-          "Barley terraces cut into thin, cold soil, and a quiet resentment of feeding a theocracy that will not spend its hoard on defense.",
+          "Barley terraces and famine rooms turn doctrine into hunger.",
         friction:
-          "Thanewell's people know they are necessary and still treated as secondary.",
+          "Its records make reform unavoidable and orthodoxy harder to defend.",
       },
       {
         name: "The Sisters' Gate",
-        type: "garrisoned pass",
-        draw: "The only legal way into the Reach.",
+        type: "garrisoned pass, ~400",
+        draw: "The only controlled way into the Reach.",
         rememberedDetail:
-          "Watcher-sworn guards turn back most travelers without much explanation.",
+          "Every cart is unpacked twice between two cold towers.",
         friction:
-          "The guards do not seem to feel they owe outsiders a reason for refusal.",
+          "Rules built for caution now sort refugees, spies, merchants, and desperate people badly.",
+      },
+      {
+        name: "Coldmere Rise",
+        type: "hermitage, ~150",
+        draw: "A care-house for Watchers who fasted and returned wrong.",
+        rememberedDetail:
+          "Residents remember lives they never lived and are treated with unusual tenderness.",
+        friction:
+          "The Reach needs their testimony, but the institution exists to protect them from being used.",
       },
     ],
   },
@@ -310,40 +478,68 @@ export const eldermereRegions: EldermereRegion[] = [
     summary:
       "A lawless ruin-delving frontier on the worst-scarred ground of the Graywake, co-administered through the fragile Claim-Stake Accord.",
     internalConflict:
-      "Rival Claim Warden companies backed by different powers clash over richer sites.",
+      "Rival Claim Warden companies and sponsor powers clash over rich sites and falsified risk.",
     externalConflict:
-      "Bleed Zones, Graywake-touched monsters, unstable ruins, and time-loop chambers.",
+      "Bleed Zones, unstable ruins, time loops, illegal salvage routes, and the open vault pull everyone inward.",
     goodFor:
-      "claim disputes, boomtowns, dangerous delves, reality scars, and immediate adventure pressure",
+      "claim disputes, boomtowns, smuggling, dangerous delves, evacuation drills, inheritance camps, and reality scars",
     settlements: [
       {
         name: "Stakehold",
-        type: "claim-camp",
+        type: "boomtown capital, ~14,000",
         draw:
-          "Accord headquarters and the only place with real law, banking, and neutral ground between rival Warden companies.",
+          "Accord headquarters and the Vale's only real neutral law.",
         rememberedDetail:
-          "The town is built from salvaged ruin-stone and camp timber under a rotating tri-power flag.",
+          "Plankwalks, ruin-stone offices, and the rotating tri-power flag hold the town together.",
         friction:
-          "The Accord is fraying, and Stakehold's neutral-ground reputation is being tested.",
+          "Its corruption is currently holding back something worse than corruption.",
+      },
+      {
+        name: "Glasspan",
+        type: "fencing town, ~9,000",
+        draw: "The laundering capital for looted Refined Wellspring.",
+        rememberedDetail:
+          "The fused glass flats shine so brightly every shadow looks suspicious.",
+        friction:
+          "Its paperwork feeds distant infrastructure and local violence at the same time.",
       },
       {
         name: "Rimshaft",
-        type: "rush-camp",
-        draw:
-          "A rich Wellglass vein worth working despite sitting on an active Bleed Zone.",
+        type: "rush-camp, ~3,000",
+        draw: "A rich vein camp built on an overdue Bleed Zone.",
         rememberedDetail:
-          "A strict evacuation bell-schedule that everyone treats with total seriousness.",
-        friction: "It is overdue for a real venting, and everyone knows it.",
+          "Bell drills, vent watches, and numbered bunkhouses keep everyone half-ready to run.",
+        friction:
+          "Leaving means abandoning wages, debt, friends, and the only skilled life many people have.",
+      },
+      {
+        name: "Widow's Stake",
+        type: "widow-run claim camp, ~1,200",
+        draw:
+          "A cooperative camp built from widows holding dead husbands' claims.",
+        rememberedDetail:
+          "Supper-table votes and red fences turn inheritance into government.",
+        friction:
+          "The law that saved the camp can also trap those who want to leave.",
       },
       {
         name: "Vail Choir",
         type: "sealed vault claim",
         draw:
-          "The original sealed vault, now the richest and most infamous claim in the Vale.",
+          "The richest and most infamous claim in the Vale.",
         rememberedDetail:
-          "Parts of it are still replaying the day the Wellspring cracked, on a loop.",
+          "The vault mouth sings in damaged tones and parts of the interior replay the Graywake.",
         friction:
-          "Whoever holds Vail Choir holds the Vale's biggest bargaining chip, and no company keeps it for long.",
+          "Everyone needs it, no company keeps it, and every legal ruling risks bloodshed.",
+      },
+      {
+        name: "The Shatterline",
+        type: "waypoint",
+        draw: "The boundary beyond which even Claim Wardens hesitate.",
+        rememberedDetail:
+          "Black stakes, last lanterns, and no-claim customs mark the edge.",
+        friction:
+          "Past the line, salvage law, maps, and ordinary courage stop working cleanly.",
       },
     ],
   },

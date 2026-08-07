@@ -70,6 +70,90 @@ test("accepted memory patch SQL casts markdown text parameters", async () => {
     "thread:storm",
     "# Storm\n\nUpdated."
   ]);
+
+  const renamed = fakeDb(() => ({ rows: [] }));
+  await __dbTestInternals.applyAcceptedMemoryPatch(renamed, "campaign-1", {
+    operation: "rename_chunk",
+    context_id: "npc:cloaked-figure-at-the-tower",
+    new_context_id: "npc:veria",
+    title: "Veria",
+    markdown: "# Veria\n\n## Name\nVeria"
+  });
+
+  assert.match(renamed.queries[0]?.sql ?? "", /set context_key = \$3/);
+  assert.deepEqual(renamed.queries[0]?.values, [
+    "campaign-1",
+    "npc:cloaked-figure-at-the-tower",
+    "npc:veria",
+    "Veria",
+    "# Veria\n\n## Name\nVeria"
+  ]);
+
+  const merged = fakeDb(() => ({ rows: [] }));
+  await __dbTestInternals.applyAcceptedMemoryPatch(merged, "campaign-1", {
+    operation: "merge_chunk",
+    source_context_id: "npc:veria",
+    target_context_id: "npc:cloaked-figure-at-the-tower",
+    title: "Veria",
+    markdown: "# Veria\n\n## Name\nVeria"
+  });
+
+  assert.match(merged.queries[0]?.sql ?? "", /set title = coalesce/);
+  assert.match(merged.queries[1]?.sql ?? "", /set archived_at = now/);
+  assert.deepEqual(merged.queries[0]?.values, [
+    "campaign-1",
+    "npc:cloaked-figure-at-the-tower",
+    "Veria",
+    "# Veria\n\n## Name\nVeria"
+  ]);
+  assert.deepEqual(merged.queries[1]?.values, ["campaign-1", "npc:veria"]);
+});
+
+test("foundation compiler prompt shares alias-aware NPC identity contract", () => {
+  const prompt = __dbTestInternals.buildCampaignFoundationCompilerPrompt();
+
+  assert.match(prompt, /rename_chunk/);
+  assert.match(prompt, /merge_chunk/);
+  assert.match(prompt, /Aliases \/ Former Labels/);
+  assert.match(prompt, /instead of creating a second NPC card/i);
+});
+
+test("router context index includes compact NPC identity preview", async () => {
+  const db = fakeDb(() => ({
+    rows: [
+      {
+        context_key: "npc:veria",
+        category: "npc_context",
+        title: "Veria",
+        visibility: "player_safe",
+        priority: 0,
+        body_markdown:
+          "# Veria\n\n## Name\nVeria\n\n## Aliases / Former Labels\n- Cloaked Figure at the Tower\n\n## Location\nTanners' quarter.\n\n## Personality\nPragmatic, cautious ally guiding Merlini away from Curia pursuit.",
+        updated_at: "2026-08-06T12:43:28.951Z"
+      },
+      {
+        context_key: "npc:verias-guide",
+        category: "npc_context",
+        title: "Veria's Guide",
+        visibility: "player_safe",
+        priority: 0,
+        body_markdown:
+          "# Veria's Guide\n\n## Name\nUnknown.\n\n## Aliases / Former Labels\nUnknown.\n\n## Location\nFled into the night.\n\n## Personality\nHesitant and cautious.",
+        updated_at: "2026-08-06T12:36:08.496Z"
+      }
+    ]
+  }));
+  const index = await __dbTestInternals.listCampaignContextChunkIndex(
+    db,
+    "campaign-1"
+  );
+  const formatted = __dbTestInternals.formatContextChunkIndexForRouter(index);
+
+  assert.match(formatted, /"identity"/);
+  assert.match(formatted, /"aliases": \[\n\s+"Cloaked Figure at the Tower"/);
+  assert.match(formatted, /Pragmatic, cautious ally/);
+  assert.match(formatted, /Veria's Guide/);
+  assert.match(formatted, /Hesitant and cautious/);
 });
 
 test("inventory update narration is formatted as an italic parenthetical", () => {

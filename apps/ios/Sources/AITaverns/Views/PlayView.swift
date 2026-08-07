@@ -154,10 +154,12 @@ struct MessageRow: View {
                         .foregroundStyle(TavernTheme.muted)
                 }
             }
-            Text(message.content)
+            Text(SemanticNarrationText.attributedString(
+                from: message.content,
+                baseColor: message.kind == .askDMAnswer ? TavernTheme.muted : TavernTheme.ink
+            ))
                 .font(.system(size: message.kind == .askDMAnswer ? 15 : 17, design: .serif))
                 .lineSpacing(6)
-                .foregroundStyle(message.kind == .askDMAnswer ? TavernTheme.muted : TavernTheme.ink)
                 .padding(.leading, message.kind == .askDMAnswer ? 10 : 0)
                 .overlay(alignment: .leading) {
                     if message.kind == .askDMAnswer {
@@ -214,7 +216,10 @@ struct DMStreamingRow: View {
                     .foregroundStyle(TavernTheme.muted)
             }
             HStack(alignment: .bottom, spacing: 3) {
-                Text(text.isEmpty ? " " : text)
+                Text(SemanticNarrationText.attributedString(
+                    from: text.isEmpty ? " " : text,
+                    baseColor: TavernTheme.ink
+                ))
                     .font(.system(size: 17, design: .serif))
                     .lineSpacing(6)
                 Rectangle()
@@ -223,6 +228,95 @@ struct DMStreamingRow: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+enum SemanticNarrationText {
+    private enum Role: String, CaseIterable {
+        case npc
+        case place
+        case clue
+        case danger
+        case faction
+        case object
+
+        var color: Color {
+            switch self {
+            case .npc:
+                return Color(hex: 0xE8B86C)
+            case .place:
+                return Color(hex: 0x87C7DC)
+            case .clue:
+                return Color(hex: 0xB8D978)
+            case .danger:
+                return Color(hex: 0xEE8B73)
+            case .faction:
+                return Color(hex: 0xC8A7F0)
+            case .object:
+                return Color(hex: 0xD8C077)
+            }
+        }
+    }
+
+    static func attributedString(from rawText: String, baseColor: Color) -> AttributedString {
+        var output = AttributedString()
+        var cursor = rawText.startIndex
+
+        while cursor < rawText.endIndex {
+            guard let match = nextOpeningTag(in: rawText, from: cursor) else {
+                append(String(rawText[cursor...]), color: baseColor, to: &output)
+                break
+            }
+
+            if match.range.lowerBound > cursor {
+                append(String(rawText[cursor..<match.range.lowerBound]), color: baseColor, to: &output)
+            }
+
+            let contentStart = match.range.upperBound
+            let closingTag = "</\(match.role.rawValue)>"
+
+            if let closingRange = rawText.range(of: closingTag, range: contentStart..<rawText.endIndex) {
+                append(String(rawText[contentStart..<closingRange.lowerBound]), color: match.role.color, to: &output)
+                cursor = closingRange.upperBound
+            } else {
+                append(String(rawText[contentStart...]), color: match.role.color, to: &output)
+                break
+            }
+        }
+
+        return output
+    }
+
+    private static func nextOpeningTag(
+        in text: String,
+        from cursor: String.Index
+    ) -> (role: Role, range: Range<String.Index>)? {
+        Role.allCases
+            .compactMap { role -> (role: Role, range: Range<String.Index>)? in
+                guard let range = text.range(
+                    of: "<\(role.rawValue)>",
+                    range: cursor..<text.endIndex
+                ) else {
+                    return nil
+                }
+
+                return (role, range)
+            }
+            .min { $0.range.lowerBound < $1.range.lowerBound }
+    }
+
+    private static func append(
+        _ text: String,
+        color: Color,
+        to output: inout AttributedString
+    ) {
+        guard !text.isEmpty else {
+            return
+        }
+
+        var segment = AttributedString(text)
+        segment.foregroundColor = color
+        output += segment
     }
 }
 
