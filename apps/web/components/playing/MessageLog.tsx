@@ -11,7 +11,6 @@ import {
   X
 } from "lucide-react";
 import type { AiDebugInfo, GameMessage } from "@/lib/game-types";
-import type { NarrationHighlight } from "@/lib/game-types";
 
 export type ChatPlayerStatus = {
   id: string;
@@ -34,6 +33,66 @@ type MessageLogProps = {
   onViewEldermereLore?: () => void;
 };
 
+const semanticNarrationRoles = [
+  "npc",
+  "place",
+  "clue",
+  "danger",
+  "faction",
+  "object"
+] as const;
+
+type SemanticNarrationRole = (typeof semanticNarrationRoles)[number];
+
+type SemanticNarrationPart =
+  | { text: string; role?: undefined }
+  | { text: string; role: SemanticNarrationRole };
+
+function isSemanticNarrationRole(value: string): value is SemanticNarrationRole {
+  return semanticNarrationRoles.includes(value as SemanticNarrationRole);
+}
+
+function parseSemanticNarrationMarkup(content: string): SemanticNarrationPart[] {
+  const parts: SemanticNarrationPart[] = [];
+  let cursor = 0;
+
+  while (cursor < content.length) {
+    const openingMatch = content.slice(cursor).match(/<(npc|place|clue|danger|faction|object)>/);
+
+    if (!openingMatch?.index && openingMatch?.index !== 0) {
+      parts.push({ text: content.slice(cursor) });
+      break;
+    }
+
+    const openingIndex = cursor + openingMatch.index;
+    const role = openingMatch[1];
+
+    if (!isSemanticNarrationRole(role)) {
+      parts.push({ text: content.slice(cursor, openingIndex + openingMatch[0].length) });
+      cursor = openingIndex + openingMatch[0].length;
+      continue;
+    }
+
+    if (openingIndex > cursor) {
+      parts.push({ text: content.slice(cursor, openingIndex) });
+    }
+
+    const contentStart = openingIndex + openingMatch[0].length;
+    const closingTag = `</${role}>`;
+    const closingIndex = content.indexOf(closingTag, contentStart);
+
+    if (closingIndex === -1) {
+      parts.push({ text: content.slice(contentStart), role });
+      break;
+    }
+
+    parts.push({ text: content.slice(contentStart, closingIndex), role });
+    cursor = closingIndex + closingTag.length;
+  }
+
+  return parts.filter((part) => part.text.length > 0);
+}
+
 function renderInlineMarkdown(content: string) {
   const segments = content.split(/(\*\*[^*]+?\*\*|\*[^*]+?\*)/g);
 
@@ -54,83 +113,36 @@ function renderInlineMarkdown(content: string) {
   });
 }
 
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function renderHighlightedInlineMarkdown(
-  content: string,
-  highlights: NarrationHighlight[]
+function renderSemanticNarrationPart(
+  part: SemanticNarrationPart,
+  partIndex: number
 ) {
-  const usableHighlights = highlights
-    .filter((highlight) => highlight.text && content.includes(highlight.text))
-    .sort((left, right) => right.text.length - left.text.length);
+  const lines = part.text.split("\n");
 
-  if (usableHighlights.length === 0) {
-    return renderInlineMarkdown(content);
-  }
-
-  const pattern = new RegExp(
-    usableHighlights.map((highlight) => escapeRegExp(highlight.text)).join("|"),
-    "g"
-  );
-  const parts: Array<string | { text: string; colorRole: string }> = [];
-  let cursor = 0;
-
-  for (const match of content.matchAll(pattern)) {
-    const matchText = match[0];
-    const index = match.index ?? 0;
-    const highlight = usableHighlights.find((item) => item.text === matchText);
-
-    if (!highlight || index < cursor) {
-      continue;
-    }
-
-    if (index > cursor) {
-      parts.push(content.slice(cursor, index));
-    }
-
-    parts.push({ text: matchText, colorRole: highlight.colorRole });
-    cursor = index + matchText.length;
-  }
-
-  if (cursor < content.length) {
-    parts.push(content.slice(cursor));
-  }
-
-  return parts.map((part, index) => {
-    if (typeof part === "string") {
-      return renderInlineMarkdown(part).map((node, nodeIndex) => (
-        <span key={`plain-${index}-${nodeIndex}`}>{node}</span>
-      ));
-    }
-
-    return (
+  return lines.flatMap((line, lineIndex) => {
+    const renderedLine = part.role ? (
       <span
-        className={`message-narration-highlight message-narration-highlight-${part.colorRole}`}
-        key={`highlight-${index}-${part.text}`}
+        className={`message-semantic-narration message-semantic-narration-${part.role}`}
+        key={`semantic-${partIndex}-${lineIndex}-${line.slice(0, 16)}`}
       >
-        {part.text}
+        {renderInlineMarkdown(line)}
+      </span>
+    ) : (
+      <span key={`plain-${partIndex}-${lineIndex}-${line.slice(0, 16)}`}>
+        {renderInlineMarkdown(line)}
       </span>
     );
+
+    return lineIndex === 0
+      ? [renderedLine]
+      : [<br key={`break-${partIndex}-${lineIndex}`} />, renderedLine];
   });
 }
 
-function renderInlineContentWithLineBreaks(
-  content: string,
-  highlights: NarrationHighlight[]
-) {
-  return content.split("\n").flatMap((line, index) => {
-    const renderedLine = (
-      <span key={`line-${index}`}>
-        {renderHighlightedInlineMarkdown(line, highlights)}
-      </span>
-    );
-
-    return index === 0
-      ? [renderedLine]
-      : [<br key={`break-${index}`} />, renderedLine];
-  });
+function renderInlineContentWithLineBreaks(content: string) {
+  return parseSemanticNarrationMarkup(content).flatMap((part, index) =>
+    renderSemanticNarrationPart(part, index)
+  );
 }
 
 function playerFacingMessageContent(message: GameMessage) {
@@ -162,11 +174,9 @@ function playerFacingMessageContent(message: GameMessage) {
 }
 
 function MessageBody({
-  content,
-  highlights = []
+  content
 }: {
   content: string;
-  highlights?: NarrationHighlight[];
 }) {
   const paragraphs = content
     .trim()
@@ -198,7 +208,7 @@ function MessageBody({
 
         return (
           <p key={`${index}-${paragraph.slice(0, 16)}`}>
-            {renderInlineContentWithLineBreaks(paragraph, highlights)}
+            {renderInlineContentWithLineBreaks(paragraph)}
           </p>
         );
       })}
@@ -637,10 +647,7 @@ export function MessageLog({
               {message.role === "dm" && !messageContent.trim() ? (
                 <RuneLoader label="Reading the runes" />
               ) : (
-                <MessageBody
-                  content={messageContent}
-                  highlights={message.narrationHighlights}
-                />
+                <MessageBody content={messageContent} />
               )}
               <MessageResourceCard
                 message={message}

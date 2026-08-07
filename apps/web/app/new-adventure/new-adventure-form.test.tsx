@@ -672,11 +672,22 @@ describe("NewAdventureForm", () => {
       })
     ).not.toBeInTheDocument();
 
+    generateCharacterBackstoryMock.mockResolvedValueOnce({
+      backstory:
+        "Raised among lighthouse keepers beneath Selwick's tide bells, Mira learned that every warning light carried a debt."
+    });
+
     await nextCharacterStep();
 
     expect(
       screen.getByRole("heading", { name: /create your character art/i })
     ).toBeInTheDocument();
+    expect(generateCharacterBackstoryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: "add_details",
+        currentBackstory: "Raised among lighthouse keepers beneath twin moons."
+      })
+    );
 
     expect(screen.getByLabelText("Image model")).toHaveValue("openai");
     expect(screen.getByLabelText("Art style")).toHaveValue("ink_and_watercolor");
@@ -701,7 +712,7 @@ describe("NewAdventureForm", () => {
         playerName: "Mira Vale",
         characterName: "Mira Vale",
         characterSheet: expect.stringContaining(
-          "Raised among lighthouse keepers beneath twin moons.\nBackstory Expansion: Preserve this backstory as written"
+          "Raised among lighthouse keepers beneath Selwick's tide bells"
         )
       })
     );
@@ -871,6 +882,141 @@ describe("NewAdventureForm", () => {
     ).toBeInTheDocument();
   });
 
+  it("adds details to very short manual Eldermere backstories before continuing", async () => {
+    let resolveBackstory:
+      | ((
+          value:
+            | { backstory: string }
+            | PromiseLike<{ backstory: string }>
+        ) => void)
+      | undefined;
+    generateCharacterBackstoryMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveBackstory = resolve;
+      })
+    );
+
+    render(<NewAdventureForm />);
+
+    await advanceSingleplayerToIdentity();
+
+    fireEvent.change(screen.getByLabelText("Character name"), {
+      target: { value: "Mira Vale" }
+    });
+    fireEvent.change(screen.getByPlaceholderText("Optional: Write Backstory"), {
+      target: { value: "Mira owes a debt." }
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /next/i }));
+
+    expect(screen.getByRole("button", { name: "Adding details..." })).toBeDisabled();
+    expect(generateCharacterBackstoryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: "add_details",
+        currentBackstory: "Mira owes a debt.",
+        campaignGenrePresetId: "eldermere"
+      })
+    );
+
+    await act(async () => {
+      resolveBackstory?.({
+        backstory:
+          "Mira owes a debt in Selwick, where old promises travel faster than ships."
+      });
+    });
+    await finishFlowTransition();
+
+    expect(
+      screen.getByRole("heading", { name: /create your character art/i })
+    ).toBeInTheDocument();
+  });
+
+  it("localizes long manual Eldermere backstories before continuing", async () => {
+    let resolveBackstory:
+      | ((
+          value:
+            | {
+                backstory: string;
+                eldermereStart?: {
+                  regionName: string;
+                  settlementName: string;
+                  reason?: string;
+                };
+              }
+            | PromiseLike<{
+                backstory: string;
+                eldermereStart?: {
+                  regionName: string;
+                  settlementName: string;
+                  reason?: string;
+                };
+              }>
+        ) => void)
+      | undefined;
+    const manualBackstory =
+      "Mira left her harbor home after a dockside creditor tied her family's debt to an old coastal tax, and she still carries the receipt in her boot.";
+    generateCharacterBackstoryMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveBackstory = resolve;
+      })
+    );
+
+    render(<NewAdventureForm />);
+
+    await advanceSingleplayerToIdentity();
+
+    fireEvent.change(screen.getByLabelText("Character name"), {
+      target: { value: "Mira Vale" }
+    });
+    fireEvent.change(screen.getByPlaceholderText("Optional: Write Backstory"), {
+      target: { value: manualBackstory }
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /next/i }));
+
+    expect(
+      screen.getByRole("button", { name: "Localizing backstory..." })
+    ).toBeDisabled();
+    expect(generateCharacterBackstoryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: "localize",
+        currentBackstory: manualBackstory,
+        campaignGenrePresetId: "eldermere",
+        characterSheet: expect.stringContaining(manualBackstory)
+      })
+    );
+
+    await act(async () => {
+      resolveBackstory?.({
+        backstory:
+          "Mira left her harbor home for Selwick after a dockside creditor tied her family's debt to an old Salt Concordat tithe.",
+        eldermereStart: {
+          regionName: "The Salt Concordat",
+          settlementName: "Selwick"
+        }
+      });
+    });
+    await finishFlowTransition();
+
+    expect(
+      screen.getByRole("heading", { name: /create your character art/i })
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /back/i }));
+    await finishFlowTransition();
+
+    expect(
+      screen.getByRole("heading", { name: /choose your identity/i })
+    ).toBeInTheDocument();
+
+    await nextCharacterStep();
+
+    expect(generateCharacterBackstoryMock).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole("heading", { name: /create your character art/i })
+    ).toBeInTheDocument();
+  });
+
   it("passes generated Eldermere start into campaign creation", async () => {
     generateCharacterBackstoryMock.mockResolvedValueOnce({
       backstory: "Mira owes a debt to a Selwick shipwright.",
@@ -897,6 +1043,8 @@ describe("NewAdventureForm", () => {
     );
 
     await nextCharacterStep();
+
+    expect(generateCharacterBackstoryMock).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByRole("button", { name: /create art/i }));
 

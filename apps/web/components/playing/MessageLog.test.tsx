@@ -170,6 +170,67 @@ describe("MessageLog", () => {
     expect(screen.queryByText(/\*fear\*/)).not.toBeInTheDocument();
   });
 
+  it("renders semantic narration markup with role color classes", () => {
+    renderMessageLog({
+      messages: [
+        gameMessage({
+          id: "dm-semantic-message",
+          role: "dm",
+          content:
+            "<npc>Captain Vael</npc> lowers the <object>black key</object> beside <place>Graywake Harbor</place>."
+        })
+      ]
+    });
+
+    expect(screen.getByText("Captain Vael")).toHaveClass(
+      "message-semantic-narration",
+      "message-semantic-narration-npc"
+    );
+    expect(screen.getByText("black key")).toHaveClass(
+      "message-semantic-narration",
+      "message-semantic-narration-object"
+    );
+    expect(screen.getByText("Graywake Harbor")).toHaveClass(
+      "message-semantic-narration",
+      "message-semantic-narration-place"
+    );
+    expect(screen.queryByText(/<npc>/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/<\/object>/)).not.toBeInTheDocument();
+  });
+
+  it("colors unfinished semantic narration markup while a DM message streams", () => {
+    renderMessageLog({
+      messages: [
+        gameMessage({
+          id: "dm-streaming-semantic-message",
+          role: "dm",
+          content: "The cutlass catches your ribs for <danger>5 piercing"
+        })
+      ]
+    });
+
+    expect(screen.getByText("5 piercing")).toHaveClass(
+      "message-semantic-narration",
+      "message-semantic-narration-danger"
+    );
+    expect(screen.queryByText(/<danger>/)).not.toBeInTheDocument();
+  });
+
+  it("leaves unsupported angle tags as escaped text", () => {
+    renderMessageLog({
+      messages: [
+        gameMessage({
+          id: "dm-unknown-semantic-message",
+          role: "dm",
+          content: "<mood>The fog curls low.</mood>"
+        })
+      ]
+    });
+
+    expect(screen.getByText("<mood>The fog curls low.</mood>")).toBeInTheDocument();
+    expect(screen.queryByText("The fog curls low.")).not.toBeInTheDocument();
+  });
+
   it("renders preserved single newlines as line breaks inside message paragraphs", () => {
     const { container } = renderMessageLog({
       messages: [
@@ -195,31 +256,6 @@ describe("MessageLog", () => {
     expect(screen.getByText("Initiative Order:").tagName).toBe("STRONG");
     expect(screen.getByText("1. Oktai Uni (16)")).toBeInTheDocument();
     expect(container.querySelectorAll(".message-body br")).toHaveLength(4);
-  });
-
-  it("renders narration highlights with color role classes", () => {
-    renderMessageLog({
-      messages: [
-        gameMessage({
-          id: "dm-highlight-message",
-          role: "dm",
-          content: "Captain Vael lowers the black key onto the table.",
-          narrationHighlights: [
-            { text: "Captain Vael", colorRole: "npc" },
-            { text: "black key", colorRole: "object" }
-          ]
-        })
-      ]
-    });
-
-    expect(screen.getByText("Captain Vael")).toHaveClass(
-      "message-narration-highlight",
-      "message-narration-highlight-npc"
-    );
-    expect(screen.getByText("black key")).toHaveClass(
-      "message-narration-highlight",
-      "message-narration-highlight-object"
-    );
   });
 
   it("renders a right-side retry action on the timeout system message", () => {

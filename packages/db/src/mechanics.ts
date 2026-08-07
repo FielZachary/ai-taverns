@@ -1,5 +1,7 @@
 import type {
   MechanicsActorState,
+  MechanicsResourceRecharge,
+  MechanicsResourceState,
   MechanicsSeed,
   MechanicsState,
   SpellSlotLevel,
@@ -29,6 +31,7 @@ export const defaultCombatState: MechanicsState["combat"] = {
 };
 
 const spellSlotLevels = ["1", "2", "3", "4", "5", "6", "7", "8", "9"] as const;
+const abilityKeys = ["str", "dex", "con", "int", "wis", "cha"] as const;
 
 const fullCasterSlotsByLevel: Record<number, Record<string, SpellSlotState>> = {
   1: { "1": { max: 2, used: 0 } },
@@ -43,8 +46,6 @@ const fullCasterSlotsByLevel: Record<number, Record<string, SpellSlotState>> = {
 };
 
 const pactMagicSlotsByLevel: Record<number, Record<string, SpellSlotState>> = {
-  // Pact slots normally recover on short rests. AI Taverns has no rest system in
-  // this slice, so these are treated as long-rest resources for now.
   5: {
     "3": { max: 2, used: 0 }
   }
@@ -90,6 +91,26 @@ function cloneSlots(slots: Record<string, SpellSlotState> | undefined) {
         Object.entries(slots).map(([level, slot]) => [
           level,
           { max: slot.max, used: slot.used }
+        ])
+      )
+    : undefined;
+}
+
+function cloneResources(
+  resources: Record<string, MechanicsResourceState> | undefined
+) {
+  return resources
+    ? Object.fromEntries(
+        Object.entries(resources).map(([key, resource]) => [
+          key,
+          {
+            label: resource.label,
+            max: resource.max,
+            used: resource.used,
+            recharge: resource.recharge,
+            ...(resource.source ? { source: resource.source } : {}),
+            ...(resource.notes ? { notes: resource.notes } : {})
+          }
         ])
       )
     : undefined;
@@ -177,6 +198,116 @@ export function deriveSpellSlotsForClass(
   return undefined;
 }
 
+function rageUsesByLevel(level: number) {
+  return level >= 20
+    ? 999
+    : level >= 17
+      ? 6
+      : level >= 12
+        ? 5
+        : level >= 6
+          ? 4
+          : level >= 3
+            ? 3
+            : 2;
+}
+
+function channelDivinityUsesByLevel(level: number) {
+  return level >= 18 ? 3 : level >= 6 ? 2 : 1;
+}
+
+export function deriveResourcesForClass(
+  characterClass: string,
+  level: number
+): Record<string, MechanicsResourceState> | undefined {
+  const normalizedClass = characterClass.trim().toLowerCase();
+  const normalizedLevel = Math.max(1, Math.floor(level));
+  const resources: Record<string, MechanicsResourceState> = {};
+
+  if (normalizedClass === "sorcerer" && normalizedLevel >= 2) {
+    resources.sorcery_points = {
+      label: "Sorcery Points",
+      max: normalizedLevel,
+      used: 0,
+      recharge: "long_rest",
+      source: "Sorcerer"
+    };
+  }
+
+  if (normalizedClass === "monk" && normalizedLevel >= 2) {
+    resources.ki_points = {
+      label: "Ki Points",
+      max: normalizedLevel,
+      used: 0,
+      recharge: "short_rest",
+      source: "Monk"
+    };
+  }
+
+  if (normalizedClass === "fighter" && normalizedLevel >= 1) {
+    resources.second_wind = {
+      label: "Second Wind",
+      max: 1,
+      used: 0,
+      recharge: "short_rest",
+      source: "Fighter"
+    };
+
+    if (normalizedLevel >= 2) {
+      resources.action_surge = {
+        label: "Action Surge",
+        max: normalizedLevel >= 17 ? 2 : 1,
+        used: 0,
+        recharge: "short_rest",
+        source: "Fighter"
+      };
+    }
+  }
+
+  if (normalizedClass === "barbarian" && normalizedLevel >= 1) {
+    resources.rages = {
+      label: "Rages",
+      max: rageUsesByLevel(normalizedLevel),
+      used: 0,
+      recharge: "long_rest",
+      source: "Barbarian",
+      ...(normalizedLevel >= 20 ? { notes: "Unlimited at level 20." } : {})
+    };
+  }
+
+  if (normalizedClass === "druid" && normalizedLevel >= 2) {
+    resources.wild_shape = {
+      label: "Wild Shape",
+      max: 2,
+      used: 0,
+      recharge: "short_rest",
+      source: "Druid"
+    };
+  }
+
+  if (normalizedClass === "cleric" && normalizedLevel >= 2) {
+    resources.channel_divinity = {
+      label: "Channel Divinity",
+      max: channelDivinityUsesByLevel(normalizedLevel),
+      used: 0,
+      recharge: "short_rest",
+      source: "Cleric"
+    };
+  }
+
+  if (normalizedClass === "paladin" && normalizedLevel >= 3) {
+    resources.channel_divinity = {
+      label: "Channel Divinity",
+      max: 1,
+      used: 0,
+      recharge: "short_rest",
+      source: "Paladin"
+    };
+  }
+
+  return Object.keys(resources).length > 0 ? resources : undefined;
+}
+
 export function mechanicsSeedFromCharacterInput(input: {
   characterClass: string;
   level: number;
@@ -184,13 +315,15 @@ export function mechanicsSeedFromCharacterInput(input: {
   currentHp?: number | undefined;
 }): MechanicsSeed {
   const spellSlots = deriveSpellSlotsForClass(input.characterClass, input.level);
+  const resources = deriveResourcesForClass(input.characterClass, input.level);
 
   return {
     characterClass: input.characterClass,
     level: input.level,
     maxHp: input.maxHp,
     currentHp: input.currentHp ?? input.maxHp,
-    ...(spellSlots ? { spellSlots } : {})
+    ...(spellSlots ? { spellSlots } : {}),
+    ...(resources ? { resources } : {})
   };
 }
 
@@ -204,6 +337,7 @@ export function actorFromMechanicsSeed(
       ...fallback,
       characterName,
       spellSlots: cloneSlots(fallback.spellSlots),
+      resources: cloneResources(fallback.resources),
       deathSaves: cloneDeathSaves(fallback.deathSaves),
       concentration: fallback.concentration ?? null,
       conditions: [...(fallback.conditions ?? [])]
@@ -215,6 +349,7 @@ export function actorFromMechanicsSeed(
     currentHp: seed?.currentHp,
     maxHp: seed?.maxHp,
     spellSlots: cloneSlots(seed?.spellSlots),
+    resources: cloneResources(seed?.resources),
     concentration: null,
     conditions: []
   };
@@ -253,7 +388,9 @@ export function mechanicsStateWithActor(input: {
   };
 }
 
-function parseSpellSlots(value: unknown): Record<string, SpellSlotState> | undefined {
+export function parseMechanicsSpellSlots(
+  value: unknown
+): Record<string, SpellSlotState> | undefined {
   if (!isRecord(value)) {
     return undefined;
   }
@@ -276,6 +413,83 @@ function parseSpellSlots(value: unknown): Record<string, SpellSlotState> | undef
   }
 
   return Object.keys(slots).length > 0 ? slots : undefined;
+}
+
+const resourceRecharges = new Set<MechanicsResourceRecharge>([
+  "short_rest",
+  "long_rest",
+  "dawn",
+  "encounter",
+  "manual"
+]);
+
+export function parseMechanicsResources(
+  value: unknown
+): Record<string, MechanicsResourceState> | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const resources: Record<string, MechanicsResourceState> = {};
+
+  for (const [rawKey, rawResource] of Object.entries(value)) {
+    if (!isRecord(rawResource)) {
+      continue;
+    }
+
+    const key = rawKey.trim();
+    const label =
+      typeof rawResource.label === "string" && rawResource.label.trim()
+        ? rawResource.label.trim()
+        : key.replace(/[_-]+/g, " ");
+    const max = Number(rawResource.max);
+    const used = Number(rawResource.used);
+    const recharge = rawResource.recharge;
+
+    if (
+      !key ||
+      !Number.isInteger(max) ||
+      max < 0 ||
+      !Number.isInteger(used) ||
+      used < 0 ||
+      typeof recharge !== "string" ||
+      !resourceRecharges.has(recharge as MechanicsResourceRecharge)
+    ) {
+      continue;
+    }
+
+    resources[key] = {
+      label,
+      max,
+      used: Math.min(used, max),
+      recharge: recharge as MechanicsResourceRecharge,
+      ...(typeof rawResource.source === "string" && rawResource.source.trim()
+        ? { source: rawResource.source.trim() }
+        : {}),
+      ...(typeof rawResource.notes === "string" && rawResource.notes.trim()
+        ? { notes: rawResource.notes.trim() }
+        : {})
+    };
+  }
+
+  return Object.keys(resources).length > 0 ? resources : undefined;
+}
+
+function parseAbilityBonusMap(value: unknown) {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const bonuses: Partial<Record<(typeof abilityKeys)[number], number>> = {};
+
+  for (const key of abilityKeys) {
+    const bonus = Number(value[key]);
+    if (Number.isInteger(bonus)) {
+      bonuses[key] = bonus;
+    }
+  }
+
+  return Object.keys(bonuses).length > 0 ? bonuses : undefined;
 }
 
 export function persistedMechanicsState(
@@ -301,6 +515,9 @@ export function persistedMechanicsState(
     const currentHp = Number(actor.currentHp);
     const maxHp = Number(actor.maxHp);
     const armorClass = Number(actor.armorClass);
+    const attackBonus = Number(actor.attackBonus);
+    const saveBonuses = parseAbilityBonusMap(actor.saveBonuses);
+    const abilityModifiers = parseAbilityBonusMap(actor.abilityModifiers);
     const allegiance =
       actor.allegiance === "player" ||
       actor.allegiance === "ally" ||
@@ -312,6 +529,9 @@ export function persistedMechanicsState(
       ? actor.conditions.filter((item): item is string => typeof item === "string")
       : [];
 
+    const spellSlots = parseMechanicsSpellSlots(actor.spellSlots);
+    const resources = parseMechanicsResources(actor.resources);
+
     actors[actorKey] = {
       characterName:
         typeof actor.characterName === "string" ? actor.characterName : "",
@@ -320,13 +540,18 @@ export function persistedMechanicsState(
       ...(Number.isInteger(armorClass)
         ? { armorClass: Math.max(0, armorClass) }
         : {}),
+      ...(Number.isInteger(attackBonus) ? { attackBonus } : {}),
+      ...(typeof actor.damageFormula === "string" && actor.damageFormula.trim()
+        ? { damageFormula: actor.damageFormula.trim() }
+        : {}),
+      ...(saveBonuses ? { saveBonuses } : {}),
+      ...(abilityModifiers ? { abilityModifiers } : {}),
       ...(allegiance ? { allegiance } : {}),
       ...(typeof actor.isPlayerControlled === "boolean"
         ? { isPlayerControlled: actor.isPlayerControlled }
         : {}),
-      ...(parseSpellSlots(actor.spellSlots)
-        ? { spellSlots: parseSpellSlots(actor.spellSlots) }
-        : {}),
+      ...(spellSlots ? { spellSlots } : {}),
+      ...(resources ? { resources } : {}),
       ...(parseDeathSaves(actor.deathSaves)
         ? { deathSaves: parseDeathSaves(actor.deathSaves) }
         : {}),
@@ -500,6 +725,13 @@ function legacySlotsFromSheet(sheet: string) {
 function legacyActorFromSheet(player: PlayerLike): MechanicsState["actors"][string] {
   const { maxHp, currentHp } = inferredHpFromSheet(player.character_sheet);
   const spellSlots = inferredSlotsFromSheet(player.character_sheet);
+  const inferredIdentity = inferredLevelAndClassFromSheet(player.character_sheet);
+  const resources = inferredIdentity
+    ? deriveResourcesForClass(
+        inferredIdentity.characterClass,
+        inferredIdentity.level
+      )
+    : undefined;
 
   return {
     characterName: player.character_name,
@@ -508,6 +740,7 @@ function legacyActorFromSheet(player: PlayerLike): MechanicsState["actors"][stri
     allegiance: "player",
     isPlayerControlled: true,
     ...(spellSlots ? { spellSlots } : {}),
+    ...(resources ? { resources } : {}),
     concentration: null,
     conditions: []
   };
@@ -529,6 +762,7 @@ function actorWithSheetFallback(
     currentHp: actor.currentHp ?? fallback.currentHp,
     maxHp: actor.maxHp ?? fallback.maxHp,
     spellSlots: actor.spellSlots ?? cloneSlots(fallback.spellSlots),
+    resources: actor.resources ?? cloneResources(fallback.resources),
     deathSaves: cloneDeathSaves(actor.deathSaves ?? fallback.deathSaves),
     concentration: actor.concentration ?? null,
     conditions: actor.conditions ?? []
@@ -588,6 +822,59 @@ export function formatSpellSlotLines(slots: Record<string, SpellSlotState>) {
   });
 }
 
+function formatRecharge(recharge: MechanicsResourceRecharge) {
+  return recharge.replace(/_/g, " ");
+}
+
+export function formatResourceLines(
+  resources: Record<string, MechanicsResourceState>
+) {
+  return Object.entries(resources)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([, resource]) => {
+      const remaining = Math.max(0, resource.max - resource.used);
+      return `${resource.label}: ${resource.max} total, ${resource.used} used, ${remaining} remaining, recovers on ${formatRecharge(resource.recharge)}`;
+    });
+}
+
+function projectSection(input: {
+  sheet: string;
+  heading: string;
+  lines: string[];
+  skipLine: (line: string) => boolean;
+}) {
+  const lines = input.sheet.split(/\r?\n/);
+  const nextLines: string[] = [];
+  let inserted = false;
+  let skippingExistingSection = false;
+
+  for (const line of lines) {
+    if (
+      new RegExp(`^${input.heading}:?$`, "i").test(line.trim())
+    ) {
+      nextLines.push(input.heading);
+      nextLines.push(...input.lines);
+      inserted = true;
+      skippingExistingSection = true;
+      continue;
+    }
+
+    if (skippingExistingSection && input.skipLine(line)) {
+      continue;
+    }
+
+    if (skippingExistingSection && line.trim() === "") {
+      skippingExistingSection = false;
+    }
+
+    nextLines.push(line);
+  }
+
+  return inserted
+    ? nextLines.join("\n")
+    : `${input.sheet.trimEnd()}\n\n${input.heading}\n${input.lines.join("\n")}`;
+}
+
 export function projectMechanicsIntoCharacterSheet(
   sheet: string,
   actor: MechanicsState["actors"][string] | undefined
@@ -609,48 +896,106 @@ export function projectMechanicsIntoCharacterSheet(
 
   if (actor.spellSlots && Object.keys(actor.spellSlots).length > 0) {
     const slotLines = formatSpellSlotLines(actor.spellSlots);
-    const lines = projected.split(/\r?\n/);
-    const nextLines: string[] = [];
-    let inserted = false;
-    let skippingExistingSlots = false;
+    projected = projectSection({
+      sheet: projected,
+      heading: "Spell Slots",
+      lines: slotLines,
+      skipLine: (line) => /^\d(?:st|nd|rd|th)-level slots:/i.test(line)
+    });
+  }
 
-    for (const line of lines) {
-      if (/^Spell Slots:/i.test(line)) {
-        nextLines.push("Spell Slots");
-        nextLines.push(...slotLines);
-        inserted = true;
-        skippingExistingSlots = true;
-        continue;
-      }
-
-      if (/^Spell Slots$/i.test(line)) {
-        nextLines.push(line);
-        nextLines.push(...slotLines);
-        inserted = true;
-        skippingExistingSlots = true;
-        continue;
-      }
-
-      if (
-        skippingExistingSlots &&
-        /^\d(?:st|nd|rd|th)-level slots:/i.test(line)
-      ) {
-        continue;
-      }
-
-      if (skippingExistingSlots && line.trim() === "") {
-        skippingExistingSlots = false;
-      }
-
-      nextLines.push(line);
-    }
-
-    projected = inserted
-      ? nextLines.join("\n")
-      : `${projected.trimEnd()}\n\nSpell Slots\n${slotLines.join("\n")}`;
+  if (actor.resources && Object.keys(actor.resources).length > 0) {
+    projected = projectSection({
+      sheet: projected,
+      heading: "Class Resources",
+      lines: formatResourceLines(actor.resources),
+      skipLine: (line) => /^[A-Za-z][A-Za-z '()-]+:\s*\d+\s+total,/i.test(line)
+    });
   }
 
   return projected;
+}
+
+function restoreSpellSlotsForRest(
+  slots: Record<string, SpellSlotState> | undefined,
+  restType: "short_rest" | "long_rest"
+) {
+  if (!slots || restType !== "long_rest") {
+    return cloneSlots(slots);
+  }
+
+  return Object.fromEntries(
+    Object.entries(slots).map(([level, slot]) => [
+      level,
+      {
+        ...slot,
+        used: 0
+      }
+    ])
+  );
+}
+
+function resourceRecoversOnRest(
+  resource: MechanicsResourceState,
+  restType: "short_rest" | "long_rest"
+) {
+  if (restType === "short_rest") {
+    return resource.recharge === "short_rest";
+  }
+
+  return (
+    resource.recharge === "short_rest" ||
+    resource.recharge === "long_rest" ||
+    resource.recharge === "dawn"
+  );
+}
+
+function restoreResourcesForRest(
+  resources: Record<string, MechanicsResourceState> | undefined,
+  restType: "short_rest" | "long_rest"
+) {
+  if (!resources) {
+    return undefined;
+  }
+
+  return Object.fromEntries(
+    Object.entries(resources).map(([key, resource]) => [
+      key,
+      {
+        ...resource,
+        used: resourceRecoversOnRest(resource, restType) ? 0 : resource.used
+      }
+    ])
+  );
+}
+
+export function applyRestMechanics(input: {
+  state: MechanicsState;
+  actorKey: string;
+  restType: "short_rest" | "long_rest";
+  updatedAt?: string | undefined;
+}) {
+  const actor = input.state.actors[input.actorKey];
+
+  if (!actor) {
+    return input.state;
+  }
+
+  return {
+    ...input.state,
+    updatedAt: input.updatedAt,
+    actors: {
+      ...input.state.actors,
+      [input.actorKey]: {
+        ...actor,
+        spellSlots: restoreSpellSlotsForRest(actor.spellSlots, input.restType),
+        resources: restoreResourcesForRest(actor.resources, input.restType),
+        ...(input.restType === "long_rest" && actor.maxHp !== undefined
+          ? { currentHp: actor.maxHp }
+          : {})
+      }
+    }
+  };
 }
 
 export function isDeadActor(

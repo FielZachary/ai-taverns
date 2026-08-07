@@ -1,8 +1,6 @@
 import type {
   DiceRollRequest,
-  InputPolicy,
-  NarrationHighlight,
-  NarrationHighlightRole
+  InputPolicy
 } from "./game-types.js";
 
 export const internalOpeningRequestPrefix = "AI_DND_INTERNAL_OPENING_REQUEST";
@@ -177,55 +175,6 @@ function stringArray(value: unknown) {
     : [];
 }
 
-const narrationHighlightRoles = new Set([
-  "npc",
-  "place",
-  "clue",
-  "danger",
-  "faction",
-  "object"
-]);
-const maxNarrationHighlights = 24;
-
-function normalizeNarrationHighlights(
-  value: unknown,
-  publicNarration: string
-): NarrationHighlight[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  const seen = new Set<string>();
-  const highlights: NarrationHighlight[] = [];
-
-  for (const item of value) {
-    const data = asObject(item);
-    const text = stringValue(data?.text);
-    const colorRole = stringValue(
-      data?.color_role ?? data?.colorRole
-    ) as NarrationHighlightRole;
-    const key = `${text.toLowerCase()}::${colorRole}`;
-
-    if (
-      !text ||
-      !narrationHighlightRoles.has(colorRole) ||
-      !publicNarration.includes(text) ||
-      seen.has(key)
-    ) {
-      continue;
-    }
-
-    highlights.push({ text, colorRole });
-    seen.add(key);
-
-    if (highlights.length >= maxNarrationHighlights) {
-      break;
-    }
-  }
-
-  return highlights;
-}
-
 function extractJsonObject(text: string) {
   const trimmed = text.trim();
 
@@ -338,49 +287,6 @@ function findAttackRollAcContradiction(text: string) {
   return null;
 }
 
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function countDiceMentions(text: string, dice: string) {
-  const dicePattern = escapeRegExp(dice.trim()).replace(/\\ /g, "\\s*");
-  return Array.from(text.matchAll(new RegExp(`\\b${dicePattern}\\b`, "gi"))).length;
-}
-
-function hasRollRequestDiceCoverage(text: string, requests: DiceRollRequest[]) {
-  const requiredCounts = requests.reduce<Record<string, number>>((counts, request) => {
-    const dice = request.dice.trim().toLowerCase();
-    counts[dice] = (counts[dice] ?? 0) + 1;
-    return counts;
-  }, {});
-
-  return Object.entries(requiredCounts).every(
-    ([dice, count]) => countDiceMentions(text, dice) >= count
-  );
-}
-
-function modifierText(modifier: number | undefined) {
-  if (!modifier) {
-    return "";
-  }
-
-  return modifier > 0 ? ` + ${modifier}` : ` - ${Math.abs(modifier)}`;
-}
-
-function advantageText(advantageState: string | undefined) {
-  const normalized = advantageState?.trim().toLowerCase();
-
-  if (normalized === "advantage") {
-    return " at advantage";
-  }
-
-  if (normalized === "disadvantage") {
-    return " at disadvantage";
-  }
-
-  return "";
-}
-
 function normalizeAdvantageState(value: string) {
   const normalized = value.trim().toLowerCase();
 
@@ -445,48 +351,6 @@ function inferredRollRequestPlayer(
   return rollIdTarget ? titleCaseIdentifier(rollIdTarget) : "";
 }
 
-function visibleDcText(request: DiceRollRequest, includeDc: boolean) {
-  if (!includeDc) {
-    return "";
-  }
-
-  if (request.targetDc === undefined) {
-    return "";
-  }
-
-  const reason = request.reason?.trim();
-  return reason
-    ? ` DC ${request.targetDc} reveals ${reason}`
-    : ` DC ${request.targetDc} reveals useful information`;
-}
-
-function formatRollInstruction(
-  request: DiceRollRequest,
-  index: number,
-  options?: { includeDc?: boolean }
-) {
-  const verb = index === 0 ? "Roll" : "then roll";
-  return `${verb} ${request.dice}${modifierText(request.modifier)}${advantageText(
-    request.advantageState
-  )} for ${request.label}${visibleDcText(request, options?.includeDc === true)}`;
-}
-
-function rollInstructionsFromRequests(
-  requests: DiceRollRequest[],
-  options?: { includeDc?: boolean }
-) {
-  const instructions = requests.map((request, index) =>
-    formatRollInstruction(request, index, options)
-  );
-
-  if (instructions.length === 1) {
-    return `${instructions[0]}.`;
-  }
-
-  const lastInstruction = instructions[instructions.length - 1];
-  return `${instructions.slice(0, -1).join(", ")}, and ${lastInstruction}.`;
-}
-
 function sentencesFromParagraph(paragraph: string) {
   const matches = paragraph.match(/[^.!?]+[.!?]+(?:['")\]]+)?|[^.!?]+$/g);
   return (matches ?? [paragraph]).map((sentence) => sentence.trim()).filter(Boolean);
@@ -548,42 +412,12 @@ function normalizePublicNarrationParagraphs(publicNarration: string) {
   return normalizedParagraphs.join("\n\n");
 }
 
-function narrationWithRollInstructions(
+function normalizedPublicNarration(
   publicNarration: string,
-  rollRequests: DiceRollRequest[],
-  options?: DmContractParseOptions
+  _rollRequests: DiceRollRequest[],
+  _options?: DmContractParseOptions
 ) {
-  const normalizedNarration = normalizePublicNarrationParagraphs(publicNarration);
-  const requests =
-    options?.dmJob === "investigation"
-      ? rollRequests.map((request) => ({
-          ...request,
-          targetDc: request.targetDc ?? 15,
-          reason: request.reason || "the information your investigation can uncover"
-        }))
-      : rollRequests;
-
-  if (requests.length === 0) {
-    return normalizedNarration;
-  }
-
-  if (
-    options?.dmJob === "investigation" &&
-    mentionsPlayerFacingRoll(normalizedNarration) &&
-    /\bDC\s*\d+\b/i.test(normalizedNarration)
-  ) {
-    return normalizedNarration;
-  }
-
-  if (hasRollRequestDiceCoverage(normalizedNarration, requests)) {
-    if (options?.dmJob !== "investigation" || /\bDC\s*\d+\b/i.test(normalizedNarration)) {
-      return normalizedNarration;
-    }
-  }
-
-  return `${normalizedNarration}\n\n${rollInstructionsFromRequests(requests, {
-    includeDc: options?.dmJob === "investigation"
-  })}`;
+  return normalizePublicNarrationParagraphs(publicNarration);
 }
 
 export function normalizeRollRequest(
@@ -692,7 +526,6 @@ export type DmNextInputNeeded =
 
 export type DmContractResponse = {
   publicNarration: string;
-  narrationHighlights: NarrationHighlight[];
   resolutionMode: "needs_dice" | "resolved_without_dice";
   rollRequests: DiceRollRequest[];
   nextInputNeeded: DmNextInputNeeded;
@@ -738,7 +571,6 @@ function recoverPlainNarrationContract(
   return {
     contract: {
       publicNarration,
-      narrationHighlights: [],
       resolutionMode: "resolved_without_dice",
       rollRequests: [],
       nextInputNeeded: "player_actions",
@@ -811,11 +643,6 @@ export function parseDmContract(
     throw new Error("The DM provider response is missing public_narration.");
   }
 
-  const narrationHighlights = normalizeNarrationHighlights(
-    parsed.narration_highlights ?? parsed.narrationHighlights,
-    publicNarration
-  );
-
   const rawRollRequests = Array.isArray(parsed.roll_requests)
     ? parsed.roll_requests
     : [];
@@ -864,7 +691,7 @@ export function parseDmContract(
     );
   }
 
-  publicNarration = narrationWithRollInstructions(
+  publicNarration = normalizedPublicNarration(
     publicNarration,
     rollRequests,
     options
@@ -895,7 +722,6 @@ export function parseDmContract(
 
   return {
     publicNarration,
-    narrationHighlights,
     resolutionMode,
     rollRequests,
     nextInputNeeded,
@@ -926,10 +752,6 @@ export function recoverDmContractAfterParseFailure(
     ? parsed.roll_requests
     : [];
   const rollRequests = normalizeRollRequests(rawRollRequests, publicNarration);
-  const narrationHighlights = normalizeNarrationHighlights(
-    parsed.narration_highlights ?? parsed.narrationHighlights,
-    publicNarration
-  );
   const originalNextInputNeeded = stringValue(parsed.next_input_needed);
   const originalResolutionMode = stringValue(
     parsed.resolution_mode ?? parsed.resolutionMode
@@ -999,8 +821,7 @@ export function recoverDmContractAfterParseFailure(
 
   return {
     contract: {
-      publicNarration: narrationWithRollInstructions(publicNarration, rollRequests),
-      narrationHighlights,
+      publicNarration: normalizedPublicNarration(publicNarration, rollRequests),
       resolutionMode,
       rollRequests,
       nextInputNeeded,

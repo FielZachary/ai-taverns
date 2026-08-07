@@ -264,6 +264,7 @@ type ContextChunkRecord = {
   priority: number;
   body_markdown: string;
   archived_at: Date | null;
+  created_at: Date;
   updated_at: Date;
 };
 
@@ -1292,42 +1293,25 @@ class FakeDatabase {
 
     if (
       normalizedSql.startsWith(
-        "select context_key, category, title, visibility, priority, updated_at from campaign_context_chunks"
-      )
+        "select context_key, category, title, visibility, priority, body_markdown, updated_at from campaign_context_chunks"
+      ) &&
+      normalizedSql.includes("context_key = any")
     ) {
       const campaignId = values[0] as string;
-      const limit = values[1] as number;
+      const requestedKeys = new Set(values[1] as string[]);
+      const requestedCategories = new Set(values[2] as string[]);
 
       return {
         rows: this.contextChunks
           .filter(
             (chunk) =>
-              chunk.campaign_id === campaignId && chunk.archived_at === null
+              chunk.campaign_id === campaignId &&
+              requestedKeys.has(chunk.context_key) &&
+              requestedCategories.has(chunk.category) &&
+              chunk.archived_at === null
           )
-          .sort((left, right) => {
-            const categoryDelta = left.category.localeCompare(right.category);
-
-            if (categoryDelta !== 0) {
-              return categoryDelta;
-            }
-
-            const priorityDelta = right.priority - left.priority;
-
-            if (priorityDelta !== 0) {
-              return priorityDelta;
-            }
-
-            return right.updated_at.getTime() - left.updated_at.getTime();
-          })
-          .slice(0, limit)
-          .map((chunk) => ({
-            context_key: chunk.context_key,
-            category: chunk.category,
-            title: chunk.title,
-            visibility: chunk.visibility,
-            priority: chunk.priority,
-            updated_at: chunk.updated_at
-          }) as T)
+          .sort((left, right) => right.priority - left.priority)
+          .map((chunk) => ({ ...chunk }) as T)
       };
     }
 
@@ -1372,7 +1356,7 @@ class FakeDatabase {
             priority: chunk.priority,
             body_markdown: chunk.body_markdown,
             archived_at: chunk.archived_at,
-            created_at: chunk.updated_at,
+            created_at: chunk.created_at,
             updated_at: chunk.updated_at
           }) as T)
       };
@@ -1408,24 +1392,65 @@ class FakeDatabase {
 
     if (
       normalizedSql.startsWith(
-        "select context_key, category, title, visibility, priority, body_markdown, updated_at from campaign_context_chunks"
+        "select context_key, category, title, body_markdown from campaign_context_chunks"
       )
     ) {
       const campaignId = values[0] as string;
-      const requestedKeys = new Set(values[1] as string[]);
-      const requestedCategories = new Set(values[2] as string[]);
 
       return {
         rows: this.contextChunks
           .filter(
             (chunk) =>
-              chunk.campaign_id === campaignId &&
-              requestedKeys.has(chunk.context_key) &&
-              requestedCategories.has(chunk.category) &&
-              chunk.archived_at === null
+              chunk.campaign_id === campaignId && chunk.archived_at === null
           )
-          .sort((left, right) => right.priority - left.priority)
-          .map((chunk) => ({ ...chunk }) as T)
+          .map((chunk) => ({
+            context_key: chunk.context_key,
+            category: chunk.category,
+            title: chunk.title,
+            body_markdown: chunk.body_markdown
+          }) as T)
+      };
+    }
+
+    if (
+      normalizedSql.startsWith(
+        "select context_key, category, title, visibility, priority, body_markdown, updated_at from campaign_context_chunks"
+      )
+    ) {
+      const campaignId = values[0] as string;
+      const limit = values[1] as number;
+
+      return {
+        rows: this.contextChunks
+          .filter(
+            (chunk) =>
+              chunk.campaign_id === campaignId && chunk.archived_at === null
+          )
+          .sort((left, right) => {
+            const categoryDelta = left.category.localeCompare(right.category);
+
+            if (categoryDelta !== 0) {
+              return categoryDelta;
+            }
+
+            const priorityDelta = right.priority - left.priority;
+
+            if (priorityDelta !== 0) {
+              return priorityDelta;
+            }
+
+            return right.updated_at.getTime() - left.updated_at.getTime();
+          })
+          .slice(0, limit)
+          .map((chunk) => ({
+            context_key: chunk.context_key,
+            category: chunk.category,
+            title: chunk.title,
+            visibility: chunk.visibility,
+            priority: chunk.priority,
+            body_markdown: chunk.body_markdown,
+            updated_at: chunk.updated_at
+          }) as T)
       };
     }
 
@@ -1705,6 +1730,33 @@ class FakeDatabase {
 
     if (
       normalizedSql.startsWith(
+        "update campaign_context_chunks set title = coalesce"
+      )
+    ) {
+      const campaignId = values[0] as string;
+      const contextKey = values[1] as string;
+      const title = values[2] as string;
+      const markdown = values[3] as string;
+      const chunk = this.contextChunks.find(
+        (candidate) =>
+          candidate.campaign_id === campaignId &&
+          candidate.context_key === contextKey &&
+          candidate.archived_at === null
+      );
+
+      if (chunk) {
+        if (title) {
+          chunk.title = title;
+        }
+        chunk.body_markdown = markdown;
+        chunk.updated_at = new Date();
+      }
+
+      return { rows: [] as T[] };
+    }
+
+    if (
+      normalizedSql.startsWith(
         "update campaign_context_chunks set visibility = 'player_safe'"
       )
     ) {
@@ -1715,6 +1767,37 @@ class FakeDatabase {
           chunk.visibility = "player_safe";
           chunk.updated_at = new Date();
         }
+      }
+
+      return { rows: [] as T[] };
+    }
+
+    if (
+      normalizedSql.startsWith(
+        "update campaign_context_chunks set context_key = $3"
+      )
+    ) {
+      const campaignId = values[0] as string;
+      const contextKey = values[1] as string;
+      const newContextKey = values[2] as string;
+      const title = values[3] as string;
+      const markdown = values[4] as string;
+      const chunk = this.contextChunks.find(
+        (candidate) =>
+          candidate.campaign_id === campaignId &&
+          candidate.context_key === contextKey &&
+          candidate.archived_at === null
+      );
+
+      if (chunk) {
+        chunk.context_key = newContextKey;
+        if (title) {
+          chunk.title = title;
+        }
+        if (markdown) {
+          chunk.body_markdown = markdown;
+        }
+        chunk.updated_at = new Date();
       }
 
       return { rows: [] as T[] };
@@ -1741,7 +1824,37 @@ class FakeDatabase {
       return { rows: [] as T[] };
     }
 
+    if (
+      normalizedSql.startsWith(
+        "delete from campaign_context_chunks where campaign_id = $1"
+      )
+    ) {
+      const campaignId = values[0] as string;
+      this.contextChunks = this.contextChunks.filter(
+        (chunk) => chunk.campaign_id !== campaignId
+      );
+
+      return { rows: [] as T[] };
+    }
+
     if (normalizedSql.startsWith("insert into campaign_context_chunks")) {
+      const now = new Date();
+      const archivedAt = values[7] instanceof Date
+        ? values[7]
+        : values[7]
+          ? new Date(values[7] as string)
+          : null;
+      const createdAt = values[8] instanceof Date
+        ? values[8]
+        : values[8]
+          ? new Date(values[8] as string)
+          : now;
+      const updatedAt = values[9] instanceof Date
+        ? values[9]
+        : values[9]
+          ? new Date(values[9] as string)
+          : now;
+
       this.contextChunks.push({
         campaign_id: values[0] as string,
         context_key: values[1] as string,
@@ -1753,8 +1866,9 @@ class FakeDatabase {
             : "dm_only",
         priority: typeof values[5] === "number" ? values[5] : 0,
         body_markdown: (values[6] ?? values[5]) as string,
-        archived_at: null,
-        updated_at: new Date()
+        archived_at: archivedAt,
+        created_at: createdAt,
+        updated_at: updatedAt
       });
 
       return { rows: [] as T[] };
@@ -3586,6 +3700,18 @@ before(async () => {
                 type: "settlement",
                 why_this_location: "It is the selected campaign start.",
                 plain_description: "A specific place where the first problem is already visible."
+              },
+              starting_location_atmosphere: {
+                arrival_impression: `${startingLocation} feels busy, guarded, and already shaped by the trouble that brought the party here.`,
+                daily_life_and_liveliness: "Locals keep working, trading, arguing, and watching the streets even while tension sits plainly over the settlement.",
+                local_attitude: "People treat strangers with cautious courtesy and look twice at anyone capable of helping.",
+                dominant_vibe: "watchful daily life under public strain",
+                sensory_entry_details: [
+                  "lanterns lit earlier than the hour requires",
+                  "low voices stopping when armed strangers pass",
+                  "cold rain and smoke hanging in narrow streets"
+                ],
+                transition_into_first_scene: "The wider settlement pressure narrows toward the marked doorway where Mara Vell waits."
               },
               opening_premise: {
                 why_the_party_is_here: "The party has come to answer a local summons.",

@@ -3,6 +3,7 @@ export const dmJobNames = [
   "investigation",
   "npc_dialogue",
   "combat",
+  "rest_mechanics",
   "death_saving_throws",
   "clarification"
 ] as const;
@@ -82,13 +83,37 @@ export type ValidationResult<T> = {
 };
 
 export type MemoryPatch = {
-  operation: "append" | "replace_section" | "create_chunk" | "archive_chunk";
+  operation:
+    | "append"
+    | "replace_section"
+    | "create_chunk"
+    | "archive_chunk"
+    | "rename_chunk"
+    | "merge_chunk";
   contextId?: string;
+  newContextId?: string;
+  sourceContextId?: string;
+  targetContextId?: string;
   contextType?: ContextCategory;
   title?: string;
   visibility?: "player_safe" | "dm_only";
   markdown?: string;
 };
+
+export type ExistingMemoryContext = {
+  id: string;
+  category: ContextCategory;
+  title: string;
+  bodyMarkdown: string;
+};
+
+const canonicalDocumentTextHeadingPattern =
+  /^##\s+Canonical Document Text\b/im;
+const incidentalDialogueVerbPattern =
+  /\b(?:add(?:ed|s)?|answer(?:ed|s)?|ask(?:ed|s)?|call(?:ed|s)?(?:\s+out)?|remark(?:ed|s)?|repl(?:ied|ies)|sa(?:id|ys)|shout(?:ed|s)?|tell(?:ing|s)?|told|urg(?:ed|es)?|warn(?:ed|s)?|whisper(?:ed|s)?)\b/i;
+const durableExactWordingContextPattern =
+  /\b(?:called\s+(?:her|him|them|it|this)|canonical|clue|code\s*(?:phrase|word)|contract|document|inscription|journal|letter|map|name|note|oath|pass\s*phrase|password|prophe(?:cy|tic)|riddle|scroll|sign|signature|title|true\s+name|vow|writ)\b/i;
+const quotedDialoguePattern = /"[^"\n]{20,240}"/g;
 
 export type LivingWorldGuidance = {
   currentDirection: string;
@@ -252,8 +277,17 @@ export function buildRouterPrompt() {
     "If no available key fits a category, return an empty array for that category.",
     "If routing state says combat_active is true, default to combat for player input unless the input is clearly noncombat and does not affect combat turn flow.",
     "If pending_roll_requests include a Death Saving Throw, or the active player is at 0 HP and dying, choose death_saving_throws.",
+    "Choose rest_mechanics when the player attempts a short rest, long rest, sleep, camp, recover class resources, spend hit dice, or otherwise complete rest-based recovery.",
     "Choose clarification when the player's intended action is too underspecified to adjudicate safely, especially combat actions like casting a spell, making an attack, using a weapon, or targeting an area effect without a clear target, target area, or necessary tactical detail.",
     "Do not choose clarification merely because an action is risky, opposed, or requires dice; route those to the relevant gameplay job and request rolls there.",
+    "Job selection guide:",
+    "- scene_director: Choose for ordinary noncombat scene movement, exploration, travel, environmental description, simple consequences, scene transitions, visible hazards, or player actions that are not primarily conversation, clue discovery, combat, rest, death saves, or clarification.",
+    "- investigation: Choose when the player is searching, inspecting, tracking, studying, piecing together clues, testing suspicions, reading hidden meaning, identifying magic or lore, examining evidence, or trying to uncover information the character does not automatically know.",
+    "- npc_dialogue: Choose when the player directly speaks with, questions, persuades, deceives, intimidates, negotiates with, bargains with, interrogates, comforts, threatens, or otherwise socially engages an NPC.",
+    "- combat: Choose when combat is active and the input affects turn flow, positioning, attacks, spells, saves, damage, enemy actions, initiative, tactical movement, combat resources, or battlefield state. Also choose when the player starts a hostile action that should enter combat.",
+    "- rest_mechanics: Choose when the player attempts a short rest, long rest, sleep, camp, recover HP, spend hit dice, restore class resources, reset spell slots, or otherwise complete rest-based recovery.",
+    "- death_saving_throws: Choose when a player character is at 0 HP and dying, a Death Saving Throw is pending, the player submits a death save result, or the turn must resolve stabilization, death save successes or failures, revival from a natural 20, or death.",
+    "- clarification: Choose only when the intended action cannot be adjudicated safely because required details are missing, such as target, spell, weapon, destination, object, direction, or tactical area. Do not choose clarification just because the action is risky or requires a roll.",
     `Allowed jobs: ${dmJobNames.join(", ")}.`,
     `Context categories: ${contextCategories.join(", ")}.`,
     "You are not the narrator. Never return public_narration, roll_requests, next_input_needed, input_targets, input_policy, or any main DM response fields.",
@@ -271,7 +305,6 @@ export function jobPrompt(
   const completeOutputExample = (example: Record<string, unknown>) => {
     const {
       public_narration,
-      narration_highlights,
       combat_events,
       proposed_context_updates,
       ...rest
@@ -279,9 +312,6 @@ export function jobPrompt(
 
     return {
       public_narration,
-      narration_highlights: Array.isArray(narration_highlights)
-        ? narration_highlights
-        : [],
       ...rest,
       combat_events: Array.isArray(combat_events) ? combat_events : [],
       proposed_context_updates: Array.isArray(proposed_context_updates)
@@ -319,6 +349,23 @@ export function jobPrompt(
     "- Do not invent corroborating details that make the claim true, such as reputation, titles, catchphrases, past orders, institutional records, shared memories, or prior relationships.",
     "- Do not create new canon from a lie by having an NPC supply confirming lore. Keep invented names as quoted claims, rumors, possible aliases, or unresolved leads until play validates them.",
     "- For memory safety, unsupported player claims should be stored only as claims, suspicions, unresolved lies, or player beliefs inside an existing NPC/thread/world chunk. Do not create a new NPC, faction, location, item, or secret chunk solely because the player named it in an unresolved claim."
+  ];
+
+  const physicalCommunicationGuidance = [
+    "Physical Communication Boundary:",
+    "- Before narrating an NPC speaking, whispering, warning, reacting verbally, or giving instructions to a player character, check the current staging: relative location, distance, barriers, noise, visibility, and who can plausibly hear.",
+    "- A whisper only reaches someone adjacent or explicitly close enough in the established scene.",
+    "- If an NPC is in another room, a loft, upstairs, outside, hidden, behind a door, across a crowd, or separated by noise, do not use private dialogue unless earshot, line of sight, or magic has already been established.",
+    "- If speech would risk being overheard, make that risk visible.",
+    "- If communication is not plausible, use visible movement, silence, raised-voice risk, gestures the player can actually see, or require the player to move closer."
+  ];
+
+  const playerRollResultOpeningGuidance = [
+    "Submitted Player Roll Result Opening:",
+    "- If the current turn input contains a player-submitted roll result for this job to resolve, public_narration must start with this exact sentence pattern before describing consequences: \"With a [quality adjective] roll of <clue>[total]</clue>, here's what happens:\"",
+    "- Use the submitted final total inside <clue>...</clue>, not the die expression or modifier breakdown.",
+    "- Choose a quality adjective that fits the total and stakes, such as measly for very low rolls, shaky for low rolls, decent for middling rolls, strong for high rolls, or staggering for exceptional rolls.",
+    "- After that opening sentence, resolve the roll in normal player-facing prose."
   ];
 
   const sceneDirectorExamples = [
@@ -504,16 +551,26 @@ export function jobPrompt(
   ];
 
   const combatGuidance = [
-    "Run tactical combat encounters with strict turn ownership, visible rolls, explicit state changes, and vivid but concise action narration.",
+    "Run tactical combat encounters with strict turn ownership, visible rolls, explicit state changes, and vivid action narration.",
     "Combat narration must never get ahead of combat state: if a roll, turn owner, initiative order, HP change, condition, resource use, or enemy defeat is unresolved, pause or encode it structurally instead of implying it only in prose.",
     "Initiative and combat start:",
+    "Combat priority order: first satisfy combat-start initiative gating; second, if initiative waits on player rolls, request dice_results; third, if initiative is resolved and turnOwner is non-player-controlled, resolve those turns; fourth, if the current player action needs damage, request or resolve damage; only then return player_actions.",
+    "Combat-start initiative gating has priority over damage resolution. If combat is inactive and a player submits an attack, spell, damage roll, or follow-up damage result against an aware or ready hostile creature, do not resolve damage until initiative has been requested and resolved, unless narration has already established the target was surprised or unaware.",
     "If hostilities start while enemies are aware or ready, ask player-controlled combatants for initiative before resolving their attack, spell, or damage.",
-    "If the acting player clearly surprises unaware enemies, resolve the opening roll or effect first, then ask player-controlled combatants for initiative before enemy counteraction.",
+    "If the acting player clearly surprises unaware enemies, resolve the opening roll or effect first. In the same response that resolves that opening effect, immediately start combat: reveal NPC/enemy initiative rolls, request player initiative in roll_requests, set next_input_needed dice_results, and do not return player_actions.",
     "Only request player-controlled initiative rolls in roll_requests.",
     "Roll NPC and enemy initiative yourself every time, reveal each NPC/enemy initiative roll and total in public_narration, and encode the resulting order in mechanics_state_update or combat_events.",
     "Never ask players to roll initiative, saving throws, attacks, damage, checks, or any other dice for NPCs or enemies; NPC and enemy dice are DM-side rolls that must still be visible to the players.",
     "When combat begins, include mechanics_state_update.combat with active true, round 1, turnOwner, and provisional initiativeOrder using actor keys from the current scene and character sheets only.",
-    "For every NPC or enemy actor key introduced in initiativeOrder, include a matching mechanics_state_update.actors entry with characterName, currentHp, maxHp, armorClass, conditions, allegiance, and isPlayerControlled so later HP and turn updates have canonical state to modify.",
+    "For every NPC or enemy actor key introduced in initiativeOrder, include a matching mechanics_state_update.actors entry with characterName, currentHp, maxHp, armorClass, conditions, allegiance, isPlayerControlled, and combat math fields for the rolls you will use: attackBonus, damageFormula, saveBonuses, and/or abilityModifiers.",
+    "NPC combat durability:",
+    "When creating new combat NPC/enemy actors, choose maxHp deliberately from narrative role, threat level, party level, and expected fight length. Do not default named or story-important enemies to fragile low HP.",
+    "Use the highest player character level as partyLevel. If partyLevel is unknown, infer it from character sheet features, proficiency bonus, spell slots, or current HP; if still unknown, assume partyLevel 3.",
+    "Use these baseline maxHp bands unless established context says otherwise: trivial minion, scout, or bystander forced into combat: max(6, partyLevel * 3) to max(10, partyLevel * 5) HP; ordinary armed guard, bandit, cultist, beast, or rank-and-file combatant: max(10, partyLevel * 5) to max(16, partyLevel * 8) HP; trained soldier, veteran agent, dangerous monster, elite guard, or backup bruiser: max(18, partyLevel * 8) to max(28, partyLevel * 12) HP; named antagonist, duel-worthy foe, officer, spellcaster, monster leader, or recurring enemy: max(24, partyLevel * 10) to max(40, partyLevel * 16) HP; major boss or climactic solo enemy: at least max(40, partyLevel * 18) HP, with legendary-style pressure, reinforcements, terrain, or escape plans when appropriate.",
+    "For a single-player campaign, avoid building encounters where one normal damage spell or one ordinary weapon turn can remove the primary named enemy unless the target is surprised, already wounded, intentionally weak, or the scene is meant to be a quick takedown.",
+    "If a player opens hostilities against an aware named antagonist, assign enough maxHp for that antagonist to survive at least one typical player turn unless the damage is overwhelming by the rules or the fiction strongly supports immediate defeat.",
+    "Set currentHp equal to maxHp when a fresh combatant enters combat, then subtract only damage that has actually been resolved in the current or prior mechanicsState.",
+    "After player initiative is submitted and the full initiative order is known, public_narration must show the turn order before resolving the next turn. Use this exact block format with display names and totals: <clue>Turn order:</clue> then numbered lines like '1. Merlini Talli: 19' and '2. Crimson Dune-Stalker: 12'.",
     "After all requested player initiative rolls are submitted, initiative is resolved. If the first actor is an NPC, immediately resolve that NPC turn before returning control to players. Saying an NPC moves first is not a handoff; the NPC must act now.",
     "Do not include bystanders, captives, scenery, or passive creatures in initiativeOrder unless they can meaningfully act in the fight.",
     "Turn ownership:",
@@ -528,7 +585,7 @@ export function jobPrompt(
     "Do not stop after resolving only one non-player-controlled actor if more non-player-controlled actors act before the next player-controlled turn.",
     "Do not merely announce future turns such as 'Acolyte 3 is up next' or 'then Acolyte 1 and Acolyte 2 will act'. Resolve those turns now, or pause on the acting non-player-controlled turn only because a player-facing roll, reaction, or tactical choice is required.",
     "Do not write OOC notes like '(resolving NPC turns now)' as a substitute for actually resolving those turns in public_narration and mechanics_state_update.",
-    "Only return next_input_needed player_actions in active combat after mechanics_state_update.combat.turnOwner is a living player-controlled actor, after combat has ended, or while pausing on a non-player-controlled turn for a required player reaction or tactical choice.",
+    "Only return next_input_needed player_actions in active combat after combat-start initiative requirements are satisfied and mechanics_state_update.combat.turnOwner is a living player-controlled actor, after combat has ended, or while pausing on a non-player-controlled turn for a required player reaction or tactical choice.",
     "For each non-player-controlled turn in the catch-up loop, choose movement, action, and tactics; roll NPC-side dice yourself; show visible combat math; apply HP, condition, resource, and combat turn changes in mechanics_state_update; add combat_events when available; then continue to the next initiative actor.",
     "When a player turn begins and that player has not already submitted a concrete action for this turn, do not infer an attack, spell, target, movement, or roll. Return next_input_needed player_actions with roll_requests [], target the turn owner, and ask what they do.",
     "If public_narration says a player is up or asks 'What do you do?', the JSON must stay in player-action mode: resolution_mode resolved_without_dice, next_input_needed player_actions, and roll_requests [].",
@@ -546,19 +603,16 @@ export function jobPrompt(
     "Use known modifiers, proficiency, advantage, or disadvantage from the character sheet or combat context when available. If unknown, ask for the base roll clearly without inventing bonuses.",
     "In roll_requests, dice must be bare dice notation only, such as 1d20, 3d4, or 8d6. Do not include + or - modifiers in dice; put static bonuses or penalties in modifier. Example: Magic Missile uses dice \"3d4\" and modifier 3, not dice \"3d4+3\".",
     "When a player action, spell, feature, or weapon would deal damage and that damage roll was not already submitted, do not roll damage yourself. Request the player's damage roll with next_input_needed dice_results and a structured roll_requests entry. This includes automatic-hit effects such as Magic Missile. Do not update target HP until damage is submitted.",
-    "When a player spell or feature forces an NPC or enemy saving throw, roll that save yourself before narrating success or failure, reveal the save roll and total, compare it to the player's known spell save DC when available, and do not put the NPC/enemy save in roll_requests.",
-    "Never narrate a spell or feature as failing, succeeding, taking hold, being resisted, or being shaken off because of an NPC/enemy save unless public_narration first includes the visible save math in prose, such as '<Target> rolled an 11 against your spell save DC of 13, so the spell takes hold.'",
+    "When a player spell or feature forces an NPC or enemy saving throw, roll that save yourself before narrating success or failure, add the relevant saveBonus or ability modifier from mechanicsState, reveal the modified total and natural die, compare the total to the player's known spell save DC when available, and do not put the NPC/enemy save in roll_requests.",
+    "Never narrate a spell or feature as failing, succeeding, taking hold, being resisted, or being shaken off because of an NPC/enemy save unless public_narration first includes the visible save math in prose, such as 'the cultist rolled an <clue>11 (9) against your spell save DC of 13</clue>, so the spell takes hold.'",
     "Visible combat math:",
     "For resolved attacks, make the numbers visible before injury narration.",
     "Weave visible combat math into the action prose; do not format resolved combat results as detached combat-log labels like 'Attack Roll:', 'Damage Roll:', 'Attack 1:', or 'Save:'.",
-    "For player attack rolls, use conversational wording with 'you rolled': 'you rolled a 17 against their AC of 15, so the blade bites through,' or 'you rolled an 11 against their AC of 14, so the arrow skims wide.'",
-    "For NPC attack rolls, use conversational wording from the NPC side: 'they rolled a 17 against your AC of 14, so the cutlass catches your ribs,' or 'the warden rolled a 12 against Komer's AC of 18, not enough to pierce the chain mail.'",
-    "On a resolved hit where damage is known or DM-side, state damage in prose: 'the damage comes to 5 piercing from 1d6 + 2,' or 'you take 5 piercing damage and drop from 16 HP to 11 HP.'",
+    "For player attack rolls, use conversational wording with 'you rolled': '<clue>you rolled a 17 against their AC of 15</clue>, so the blade bites through,' or '<clue>you rolled an 11 against their AC of 14</clue>, so the arrow skims wide.'",
+    "For NPC attack rolls, use conversational wording from the NPC side. If the NPC has an attackBonus or other modifier, show the modified total first and natural die in parentheses: '<clue>they rolled a 17 (15) against your AC of 14</clue>, so the cutlass catches your ribs,' or '<clue>the warden rolled a 12 (10) against Komer's AC of 18</clue>, not enough to pierce the chain mail.' If the modifier is 0 or unknown, omit the parenthetical.",
+    "On a resolved hit where damage is known or DM-side, state damage in prose: 'the damage comes to <danger>5 piercing</danger> from <clue>1d6 + 2</clue>,' or 'you take <danger>5 piercing damage</danger> and drop from <danger>16 HP to 11 HP</danger>.'",
     "For NPC hits against player characters, public_narration must include the NPC's roll, the target AC, whether it hit, the damage dice and total, the damage type, and the HP change when HP is updated.",
-    "For saving throws, make the numbers visible before consequence narration using prose: '<Target> rolled a 9 against DC 14 and fails,' or '<Target> rolled a 16 against your DC of 14 and succeeds.'",
-    "During active combat, ignore the normal 0-1 narration_highlights limit. Highlight every visible combat math span in public_narration, using separate exact phrases when one sentence contains both dice/math and damage/HP numbers.",
-    "Use color_role clue for roll totals, attack/save/check math, AC, DC, and dice notation such as 1d20, 1d6 + 2, or 8d6.",
-    "Use color_role danger for damage amount plus damage type, HP changes, and 0 HP or defeat mechanics.",
+    "For saving throws, make the numbers visible before consequence narration using prose. If the save has a nonzero modifier, show total and natural die: 'the cultist rolled a <clue>12 (9) against DC 14</clue> and fails,' or 'the warden rolled a <clue>16 (13) against your DC of 14</clue> and succeeds.' If the modifier is 0 or unknown, omit the parenthetical.",
     "When an area spell or effect affects multiple creatures, list each target's save result separately before applying damage or conditions.",
     "For half-damage effects, state who succeeded, who failed, the full damage, the halved damage, and each affected actor's HP change when HP is updated.",
     "If the relevant save DC is unknown, ask for it or use the known character sheet value; do not silently invent a DC.",
@@ -566,6 +620,10 @@ export function jobPrompt(
     "Mechanics and state:",
     "Never silently modify HP, resources, conditions, initiative, spell slots, inventory, death saves, concentration, or combat status only in prose.",
     "Use mechanics_state_update for canonical mechanics changes and combat_events for traceable combat events.",
+    "When a combat response is not asking the player to roll anything, append a compact resources summary at the end of public_narration after the action handoff. Do this only when next_input_needed is not dice_results and roll_requests is empty.",
+    "Build the combat resources summary from authoritative mechanicsState after applying this turn's mechanics_state_update. Include current hit points, remaining spell slots by level when known, and remaining tracked class resources from actor.resources.",
+    "Use this exact summary style, with one line per value and balanced clue tags: '<clue>Just to remind you, you have: </clue>\\n<clue>35</clue> hit points\\n<clue>3</clue> third level spell slots\\n<clue>5</clue> second level spell slots\\n<clue>2</clue> first level spell slots\\n<clue>5</clue> sorcery points'.",
+    "If a resource is unknown or untracked, omit that line rather than inventing it. If multiple player-controlled actors are in combat, summarize only the actor who is receiving the handoff or whose turn just began.",
     "Track combat inventory changes only for items that are actually used, consumed, dropped, picked up, broken, equipped, unequipped, transferred, or awarded during the resolved combat turn. Ordinary weapon attacks do not change inventory unless a limited consumable, thrown or lost item, or tracked ammunition is explicitly involved.",
     "If a player attempts to attack with, throw, draw, load, fire, equip, or otherwise use a weapon they do not have in their canonical Equipment or Inventory sections, reject the attempt in public_narration and clearly state that they do not have that weapon.",
     "HP cannot go below 0.",
@@ -586,13 +644,12 @@ export function jobPrompt(
     "Translate creative combat ideas into the closest fair roll, save, attack, contested check, or environmental consequence.",
     "Misses and failures should still keep momentum: changed position, exposed risk, spent resources, enemy reaction, lost opportunity, or revealed information.",
     "Combat prose style:",
-    "Keep combat narration punchy and legible. Use shorter paragraphs than scene narration.",
+    "Keep combat narration punchy and legible.",
     "Group combat narration by action/result beat instead of putting every roll, save, HP change, or sentence on its own line.",
     "In resolved combat beats, combine description, visible mechanics, and consequence into compact paragraphs when they belong to the same actor, target group, or turn.",
     "Do not put a visible mechanics sentence in its own standalone paragraph during resolved combat; attach it to the description or consequence paragraph for that beat.",
     "A resolved combat turn with multiple actor turns usually needs one paragraph per actor/effect plus a final handoff paragraph, not one paragraph per mechanical line.",
-    "Do not bold visible mechanics or use Markdown emphasis inside public_narration. Keep combat math as plain text.",
-    "When combat math should receive visual emphasis, copy exact plain-text math-bearing phrases into narration_highlights instead of adding Markdown.",
+    "Do not bold visible mechanics or use Markdown emphasis inside public_narration. When a combat math phrase should receive visual emphasis, wrap only the short player-visible phrase with semantic narration markup: <clue>...</clue> for roll totals, AC, DC, dice notation, attack/save/check math; <danger>...</danger> for damage amounts, HP changes, 0 HP, defeat, and urgent threats.",
     "Put mechanics before flourish when mechanics decide the outcome.",
     "Use vivid physical detail, but do not bury hit/miss, damage, HP, turn owner, or pending rolls inside ornate prose.",
     "End every resolved combat beat with a clear handoff: whose turn or what immediate pressure remains, then 'What do you do?' on its own line when awaiting player action.",
@@ -628,8 +685,8 @@ export function jobPrompt(
           public_narration: [
             "Your sword clears the scabbard with a bright scrape, and the bandit captain's lazy grin disappears. She was waiting for this. Her boots shift in the mud, blade coming up as the two cutthroats beside her spread out to either side of the road.",
             "You have the will to strike, but they are not surprised. The fight begins before anyone's steel lands.",
-            "Bandit captain initiative roll: 15. Cutthroat initiative rolls: 11 and 8.",
-            "Roll initiative: 1d20 + your initiative modifier."
+            "<clue>Bandit captain initiative roll: 15</clue>. <clue>Cutthroat initiative rolls: 11 and 8</clue>.",
+            "Roll initiative: <clue>1d20 + your initiative modifier</clue>."
           ].join("\n\n"),
           resolution_mode: "needs_dice",
           roll_requests: [
@@ -661,6 +718,9 @@ export function jobPrompt(
                 currentHp: 32,
                 maxHp: 32,
                 armorClass: 15,
+                attackBonus: 4,
+                damageFormula: "1d8 + 2",
+                saveBonuses: { dex: 2, wis: 1 },
                 allegiance: "hostile",
                 isPlayerControlled: false,
                 conditions: []
@@ -670,6 +730,9 @@ export function jobPrompt(
                 currentHp: 11,
                 maxHp: 11,
                 armorClass: 12,
+                attackBonus: 3,
+                damageFormula: "1d6 + 1",
+                saveBonuses: { dex: 2, wis: 0 },
                 allegiance: "hostile",
                 isPlayerControlled: false,
                 conditions: []
@@ -679,6 +742,9 @@ export function jobPrompt(
                 currentHp: 11,
                 maxHp: 11,
                 armorClass: 12,
+                attackBonus: 3,
+                damageFormula: "1d6 + 1",
+                saveBonuses: { dex: 2, wis: 0 },
                 allegiance: "hostile",
                 isPlayerControlled: false,
                 conditions: []
@@ -700,33 +766,12 @@ export function jobPrompt(
       JSON.stringify(
         completeOutputExample({
           public_narration: [
-            "The first lift warden moves before Komer can bring the greataxe up. They rolled an 18 against Komer's AC of 15, so the spearpoint snaps forward under his guard and punches into his shoulder. The damage comes to 5 piercing from 1d6 + 2, dropping Komer from 16 HP to 11 HP.",
-            "The second warden follows in the opening, but they rolled a 10 against Komer's AC of 15. Komer twists aside, and the second spear skids off the haft of his greataxe with a bright scrape.",
+            "<clue>Turn order:</clue>\n1. Lift Warden 1: 18\n2. Lift Warden 2: 13\n3. Komer: 6",
+            "The first lift warden moves before Komer can bring the greataxe up. <clue>They rolled an 18 (16) against Komer's AC of 15</clue>, so the spearpoint snaps forward under his guard and punches into his shoulder. The damage comes to <danger>5 piercing</danger> from <clue>1d6 + 2</clue>, dropping Komer from <danger>16 HP to 11 HP</danger>.",
+            "The second warden follows in the opening, but <clue>they rolled a 10 (8) against Komer's AC of 15</clue>. Komer twists aside, and the second spear skids off the haft of his greataxe with a bright scrape.",
             "Komer, both wardens are in reach and your greataxe is already in motion.",
             "What do you do?"
           ].join("\n\n"),
-          narration_highlights: [
-            {
-              text: "They rolled an 18 against Komer's AC of 15",
-              color_role: "clue"
-            },
-            {
-              text: "5 piercing",
-              color_role: "danger"
-            },
-            {
-              text: "1d6 + 2",
-              color_role: "clue"
-            },
-            {
-              text: "16 HP to 11 HP",
-              color_role: "danger"
-            },
-            {
-              text: "they rolled a 10 against Komer's AC of 15",
-              color_role: "clue"
-            }
-          ],
           resolution_mode: "resolved_without_dice",
           roll_requests: [],
           next_input_needed: "player_actions",
@@ -764,19 +809,13 @@ export function jobPrompt(
       JSON.stringify(
         completeOutputExample({
           public_narration: [
-            "Your fist hammers Acolyte 3 backward. The damage comes to 3 bludgeoning from 1d4 + 2, dropping Acolyte 3 from 7 HP to 4 HP and sending them sprawling prone beside the silver pool.",
-            "Manifold takes his turn immediately, driving Acolyte 1 away from the pool. He rolled a 16 against their AC of 13, enough to cut through their guard; the damage comes to 7 slashing from 1d8 + 3, leaving Acolyte 1 staggering in torn, bloody robes.",
-            "Acolyte 3 spends half their movement rising, then lashes silver shards at you. They rolled an 11 against your AC of 12, so the shards hiss past your shoulder and burst against the stone.",
-            "Acolyte 1 answers Manifold with a hooked dagger, but they rolled a 14 against Manifold's AC of 15. Manifold turns the blade aside.",
-            "Acolyte 2 chants over the Wellspring, but the unstable silver backlashes. They rolled an 8 against DC 13 on the Arcana check, and the pool spits light, leaving Acolyte 2 rattled and exposed.",
+            "Your fist hammers <npc>Acolyte 3</npc> backward. The damage comes to <danger>3 bludgeoning</danger> from <clue>1d4 + 2</clue>, dropping Acolyte 3 from <danger>7 HP to 4 HP</danger> and sending them sprawling prone beside the silver pool.",
+            "<npc>Manifold</npc> takes his turn immediately, driving Acolyte 1 away from the pool. <clue>He rolled a 16 (13) against their AC of 13</clue>, enough to cut through their guard; the damage comes to <danger>7 slashing</danger> from <clue>1d8 + 3</clue>, leaving Acolyte 1 staggering in torn, bloody robes.",
+            "Acolyte 3 spends half their movement rising, then lashes silver shards at you. <clue>They rolled an 11 (9) against your AC of 12</clue>, so the shards hiss past your shoulder and burst against the stone.",
+            "Acolyte 1 answers Manifold with a hooked dagger, but <clue>they rolled a 14 (12) against Manifold's AC of 15</clue>. Manifold turns the blade aside.",
+            "Acolyte 2 chants over the Wellspring, but the unstable silver backlashes. <clue>They rolled an 8 (7) against DC 13 on the Arcana check</clue>, and the pool spits light, leaving Acolyte 2 rattled and exposed.",
             "The initiative returns to you, Oktai. What do you do?"
           ].join("\n\n"),
-          narration_highlights: [
-            {
-              text: "He rolled a 16 against their AC of 13",
-              color_role: "danger"
-            }
-          ],
           resolution_mode: "resolved_without_dice",
           roll_requests: [],
           next_input_needed: "player_actions",
@@ -834,6 +873,7 @@ export function jobPrompt(
       JSON.stringify(
         completeOutputExample({
           public_narration: [
+            "<clue>Turn order:</clue>\n1. Doran Ironhand: 18\n2. POKE: 4\n3. Komer: 2",
             "Doran Ironhand moves before the darts can finish their line.",
             "He snaps his right hand down and twists behind the iron-rimmed table, using it as hard cover while his left hand slams a brass alarm token against the stone.",
             "The token rings like a struck bell. Two gallery guards turn toward the sound and start running.",
@@ -879,7 +919,7 @@ export function jobPrompt(
           public_narration: [
             "You hold the spell until the raiders bunch beneath the broken archway, their voices low, their attention fixed on the road below. None of them look up.",
             "The bead of fire leaves your hand like a falling star. For one breath, it is only a spark in the rain-dark air. Then it blossoms among them.",
-            "They are caught unaware, so resolve the opening blast before initiative. Roll Fireball damage: 8d6."
+            "They are caught unaware, so resolve the opening blast before initiative. Roll Fireball damage: <clue>8d6</clue>."
           ].join("\n\n"),
           resolution_mode: "needs_dice",
           roll_requests: [
@@ -901,9 +941,79 @@ export function jobPrompt(
       )
     ].join("\n"),
     [
-      "Example: Magic Missile needs target distribution before damage.",
+      "Example: alert enemy Magic Missile starts with initiative, not damage.",
+      'Player input: "I cast Magic Missile on Veran."',
+      "Context: Combat is inactive. Veran is hostile, armed, aware of POKE, and watching for a hostile move.",
+      "Bad response to avoid: saying Magic Missile automatically hits, requesting Magic Missile damage, resolving force damage, or reducing Veran's HP before initiative is requested and resolved.",
+      "Good response:",
+      JSON.stringify(
+        completeOutputExample({
+          public_narration: [
+            "Silver darts begin to gather at POKE's fingertips, and Veran's thin smile vanishes. He is already watching for the betrayal; his hand drops to his sword as the guide stumbles back from the tower arch.",
+            "<clue>Veran initiative roll: 14</clue>. <clue>Guide initiative roll: 9</clue>.",
+            "POKE, roll initiative: <clue>1d20 + your initiative modifier</clue>."
+          ].join("\n\n"),
+          resolution_mode: "needs_dice",
+          roll_requests: [
+            {
+              id: "initiative-veran-tower",
+              dice: "1d20",
+              label: "Initiative",
+              modifier: 2,
+              player: "player:poke"
+            }
+          ],
+          next_input_needed: "dice_results",
+          input_targets: ["player:poke"],
+          input_policy: "only_targeted_players",
+          mechanics_state_update: {
+            combat: {
+              active: true,
+              round: 1,
+              turnOwner: "player:poke",
+              initiativeOrder: [
+                "player:poke",
+                "npc:veran",
+                "npc:verans-guide"
+              ]
+            },
+            actors: {
+              "npc:veran": {
+                characterName: "Veran",
+                currentHp: 30,
+                maxHp: 30,
+                armorClass: 15,
+                attackBonus: 4,
+                damageFormula: "1d8 + 2",
+                saveBonuses: { dex: 3, wis: 1 },
+                allegiance: "hostile",
+                isPlayerControlled: false,
+                conditions: []
+              },
+              "npc:verans-guide": {
+                characterName: "Veran's Guide",
+                currentHp: 10,
+                maxHp: 10,
+                armorClass: 12,
+                attackBonus: 2,
+                damageFormula: "1d4 + 1",
+                saveBonuses: { dex: 1, wis: 0 },
+                allegiance: "hostile",
+                isPlayerControlled: false,
+                conditions: []
+              }
+            }
+          },
+          inventory_state_update: { patches: [] }
+        }),
+        null,
+        2
+      )
+    ].join("\n"),
+    [
+      "Example: active-combat Magic Missile needs target distribution before damage.",
       'Player input: "I cast Magic Missile at the wardens."',
-      "Context: POKE is the current turn owner. Four hostile wardens are valid targets and POKE has not said how to distribute the three darts.",
+      "Context: Combat is already active, initiative is resolved, and POKE is the current turn owner. Four hostile wardens are valid targets and POKE has not said how to distribute the three darts.",
       "Bad response to avoid: requesting Magic Missile damage before POKE chooses which warden or wardens the darts hit.",
       "Good response:",
       JSON.stringify(
@@ -938,16 +1048,16 @@ export function jobPrompt(
       )
     ].join("\n"),
     [
-      "Example: Magic Missile target is known, request player damage.",
+      "Example: active-combat Magic Missile target is known, request player damage.",
       'Player input: "I cast Magic Missile on Doran."',
-      "Context: POKE is the current turn owner. Doran Ironhand is the only target selected by the spell, and POKE has not rolled damage.",
+      "Context: Combat is already active, initiative is resolved, and POKE is the current turn owner. Doran Ironhand is the only target selected by the spell, and POKE has not rolled damage.",
       "Bad response to avoid: rolling Magic Missile damage yourself, narrating 3d4 + 3 = 12 force damage, or reducing Doran's HP before POKE submits the damage roll.",
       "Good response:",
       JSON.stringify(
         completeOutputExample({
           public_narration: [
             "Three silver darts gather at POKE's fingertips, thread through the thinning smoke, and lock onto Doran Ironhand.",
-            "Magic Missile automatically hits Doran. POKE, roll Magic Missile damage: 3d4 + 3."
+            "Magic Missile automatically hits Doran. POKE, roll Magic Missile damage: <clue>3d4 + 3</clue>."
           ].join("\n\n"),
           resolution_mode: "needs_dice",
           roll_requests: [
@@ -990,16 +1100,10 @@ export function jobPrompt(
         completeOutputExample({
           public_narration: [
             "POKE's voice drops into the honeyed cadence of the charm spell, silver motes warming to gold as the magic reaches for Hesk's thoughts.",
-            "Warden Captain Hesk rolled an 11 against POKE's spell save DC of 13, so the charm slips past her defenses. Her crossbow lowers by a fraction. The hard line of her jaw loosens, and she looks at POKE with sudden, uneasy familiarity rather than open hostility. The four wardens behind her keep their weapons raised, watching their captain for a signal that does not come.",
+            "<npc>Warden Captain Hesk</npc> rolled an <clue>11 (8) against POKE's spell save DC of 13</clue>, so the charm slips past her defenses. Her crossbow lowers by a fraction. The hard line of her jaw loosens, and she looks at POKE with sudden, uneasy familiarity rather than open hostility. The four wardens behind her keep their weapons raised, watching their captain for a signal that does not come.",
             "POKE, Hesk is charmed by you for now, but her squad has not been charmed and Komer's greataxe is still very visible.",
             "What do you do?"
           ].join("\n\n"),
-          narration_highlights: [
-            {
-              text: "Warden Captain Hesk rolled an 11 against POKE's spell save DC of 13",
-              color_role: "danger"
-            }
-          ],
           resolution_mode: "resolved_without_dice",
           roll_requests: [],
           next_input_needed: "player_actions",
@@ -1038,7 +1142,7 @@ export function jobPrompt(
       JSON.stringify(
         completeOutputExample({
           public_narration: [
-            "The cutlass raider is already moving. His turn resolves first. They rolled a 17 against your AC of 14, so he slips inside your guard and carves a hard line across your ribs. The damage comes to 6 slashing from 1d6 + 2, dropping you from 24 HP to 18 HP before he springs back out of reach.",
+            "The cutlass raider is already moving. His turn resolves first. <clue>They rolled a 17 (15) against your AC of 14</clue>, so he slips inside your guard and carves a hard line across your ribs. The damage comes to <danger>6 slashing</danger> from <clue>1d6 + 2</clue>, dropping you from <danger>24 HP to 18 HP</danger> before he springs back out of reach.",
             "The raider's momentum carries him past you, and the opening is finally yours. Your declared Scorching Ray intent is still waiting for your turn, but no attack roll is resolved until you confirm the action now that the board has changed.",
             "What do you do?"
           ].join("\n\n"),
@@ -1079,7 +1183,7 @@ export function jobPrompt(
       JSON.stringify(
         completeOutputExample({
           public_narration: [
-            "The wounded warden uses Komer's hesitation immediately. They rolled a 12 against Komer's AC of 18, so the spearpoint snaps for Komer's chest but skids off his chain mail with a bright scrape. The failed thrust leaves the warden overextended.",
+            "The wounded warden uses Komer's hesitation immediately. <clue>They rolled a 12 (10) against Komer's AC of 18</clue>, so the spearpoint snaps for Komer's chest but skids off his chain mail with a bright scrape. The failed thrust leaves the warden overextended.",
             "POKE, the warden is wounded and exposed while Komer holds the line.",
             "What do you do?"
           ].join("\n\n"),
@@ -1115,7 +1219,7 @@ export function jobPrompt(
       JSON.stringify(
         completeOutputExample({
           public_narration: [
-            "The green-eyed figure moves first. They rolled a 16 against Por's AC of 16, enough for the claw to rake across his forearm and tear through his sleeve. The damage comes to 7 slashing from 1d6 + 3, dropping Por from 34 HP to 27 HP as he steps back with his sword raised.",
+            "The green-eyed figure moves first. <clue>They rolled a 16 (13) against Por's AC of 16</clue>, enough for the claw to rake across his forearm and tear through his sleeve. The damage comes to <danger>7 slashing</danger> from <clue>1d6 + 3</clue>, dropping Por from <danger>34 HP to 27 HP</danger> as he steps back with his sword raised.",
             "Tart, the creature is within striking distance and Por is hurt.",
             "What do you do?"
           ].join("\n\n"),
@@ -1156,18 +1260,8 @@ export function jobPrompt(
       JSON.stringify(
         completeOutputExample({
           public_narration: [
-            "Komer's greataxe crashes through the warden's guard. You rolled a 19 against their AC of 16, so the blade bites through. Roll greataxe damage: 1d12 + 2."
+            "Komer's greataxe crashes through the warden's guard. <clue>You rolled a 19 against their AC of 16</clue>, so the blade bites through. Roll greataxe damage: <clue>1d12 + 2</clue>."
           ].join("\n\n"),
-          narration_highlights: [
-            {
-              text: "You rolled a 19 against their AC of 16",
-              color_role: "clue"
-            },
-            {
-              text: "1d12 + 2",
-              color_role: "clue"
-            }
-          ],
           resolution_mode: "needs_dice",
           roll_requests: [
             {
@@ -1208,17 +1302,11 @@ export function jobPrompt(
         completeOutputExample({
           public_narration: [
             "The fireball detonates against the portcullis in a white-orange roar, hot enough to make the rain burst into steam before it reaches the stones.",
-            "The scarred guardswoman rolled a 9 against DC 14 and fails. The robed priest rolled a 16 against DC 14 and succeeds. The gate guards rolled a 7 and a 12 against DC 14, so both fail. The fireball deals 33 fire damage from 8d6; the priest twists away for half and takes 16, while the guardswoman and both gate guards take the full 33.",
-            "The scarred guardswoman is thrown backward, her sword spinning away as she drops from 4 HP to 0 HP. The robed priest slams into the iron bars behind him and slides down through the smoke, dropping from 7 HP to 0 HP despite twisting away from the worst of the blast. The two prone gate guards do not rise; both drop from 5 HP to 0 HP.",
+            "The scarred guardswoman rolled a <clue>9 (7) against DC 14</clue> and fails. The robed priest rolled a <clue>16 (13) against DC 14</clue> and succeeds. The gate guards rolled a <clue>7 (6) and 12 (11) against DC 14</clue>, so both fail. The fireball deals <danger>33 fire damage</danger> from <clue>8d6</clue>; the priest twists away for half and takes <danger>16</danger>, while the guardswoman and both gate guards take the full <danger>33</danger>.",
+            "The scarred guardswoman is thrown backward, her sword spinning away as she drops from <danger>4 HP to 0 HP</danger>. The robed priest slams into the iron bars behind him and slides down through the smoke, dropping from <danger>7 HP to 0 HP</danger> despite twisting away from the worst of the blast. The two prone gate guards do not rise; both drop from <danger>5 HP to 0 HP</danger>.",
             "The roar collapses into the hiss of rain on scorched stone. No enemies remain standing, and the wicket gate hangs open through the smoke.",
             "What do you do?"
           ].join("\n\n"),
-          narration_highlights: [
-            {
-              text: "The fireball deals 33 fire damage from 8d6",
-              color_role: "danger"
-            }
-          ],
           resolution_mode: "resolved_without_dice",
           roll_requests: [],
           next_input_needed: "player_actions",
@@ -1260,7 +1348,7 @@ export function jobPrompt(
       JSON.stringify(
         completeOutputExample({
           public_narration: [
-            "Your strike lands cleanly. You rolled a 19 against their AC of 13, and the damage lands for 11 bludgeoning.",
+            "Your strike lands cleanly. <clue>You rolled a 19 against their AC of 13</clue>, and the damage lands for <danger>11 bludgeoning</danger>.",
             "The mace crashes through the skeleton's raised arm and into its ribcage. Bone splinters across the flagstones, the blue corpse-light in its skull guttering once before going dark. What remains collapses in a dry clatter at your feet.",
             "For a moment, the chamber is all echo and dust. No other enemies move. The fight is over.",
             "What do you do?"
@@ -1329,12 +1417,12 @@ export function jobPrompt(
       "",
       "Output Contract:",
       "- Return strict JSON only.",
-      "- Minimum output fields: public_narration, narration_highlights, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update, combat_events, proposed_context_updates.",
-      "- Outside active combat, narration_highlights must be 0-1 exact phrase copied from public_narration during normal play. Each item must use {text, color_role}, where color_role is npc, place, clue, danger, faction, or object. Use [] when nothing is truly worth highlighting; it is completely okay to highlight nothing.",
-      "- Only public_narration is prose-visible to players; narration_highlights is display metadata rendered by the app.",
+      "- Minimum output fields: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update, combat_events, proposed_context_updates.",
       "- Do not use Markdown outside the JSON object or Markdown emphasis inside public_narration strings.",
-      "- Outside active combat, use narration_highlights for UI emphasis: copy 0-1 exact plain-text phrase from public_narration with color_role npc, place, clue, danger, faction, or object.",
-      "- Do not use Markdown, HTML, CSS, hex colors, or color names inside public_narration or narration_highlights.",
+      "- public_narration may use sparse semantic narration markup for inline UI color: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, and <object>...</object>.",
+      "- Use semantic narration markup only around exact player-visible words that should be colored. Do not nest tags, add attributes, or use any other HTML/XML tags.",
+      "- Use no more than 0-1 semantic tags in ordinary noncombat turns unless the scene opening or major reveal genuinely benefits from 2-3 visible anchors.",
+      "- Do not use Markdown, CSS, hex colors, or color names inside public_narration.",
       "",
       "Visibility Boundary:",
       "- Do not reveal hidden context, DM-only memory, raw context metadata, internal reasoning, proposed patches, or secrets unless the active job reveals them through player-facing play.",
@@ -1344,11 +1432,13 @@ export function jobPrompt(
       "- Treat campaign state, character sheets, selected context chunks, recent transcript, and validated state patches as canon.",
       "- Player wording is not automatically authoritative for possession, relationships, backstory, world facts, NPC history, prior events, items, secrets, or ownership.",
       "- If player wording conflicts with canon or would materially create new canon, preserve existing canon and resolve uncertainty through narration, checks, or clarification according to the active job.",
+      "- If context says an NPC previously expressed an emotional beat, relationship state, approval, suspicion, fear, respect, or grief, portray the changed state in fresh wording or behavior. Do not repeat prior dialogue phrasing unless the exact words are canonically important or the player explicitly asks about them.",
       "",
       "State Mutation Boundary:",
       "- Models may choose, narrate, infer, and propose; the server retrieves, validates, stores, and mutates.",
-      "- Do not silently modify HP, inventory, currency, equipment, spell slots, conditions, combat state, quest state, faction standing, or durable world state in prose only.",
+      "- Do not silently modify HP, inventory, currency, equipment, spell slots, class resources, conditions, combat state, quest state, faction standing, or durable world state in prose only.",
       "- If public_narration says state changed, include the matching structured update when that field exists.",
+      "- When a player uses a tracked class resource from mechanicsState.actors[actorKey].resources, include mechanics_state_update.actors[actorKey].resources with that resource's used value increased by the amount spent, capped at max. If used is already max, the resource is unavailable and the attempted use should not resolve.",
       "",
       "Setting Object:",
       "- When the party's current location is known, include a setting object with display_location, world_name, region_name, settlement_name, scene_location, and starting_location when available.",
@@ -1387,6 +1477,9 @@ export function jobPrompt(
         "- Make scenes feel inhabited. Include people or creatures pursuing their own business, environmental motion, and at least one specific interactable detail when the scene is not already focused on a player action.",
         "- Use a grounded fantasy-adventure style: vivid, clear, and specific; not purple prose, not generic boxed text, not a summary of lore.",
         "",
+        "NPC Speech and Cues:",
+        "- Only include NPC speech, whispers, gestures, warnings, or reactions that are physically available from the current staging. If an NPC is elsewhere, narrate what the player can perceive from that location, not convenient dialogue.",
+        "",
         "Hooks and Pressure:",
         "- When introducing a hook, reveal it through observable behavior, overheard fragments, physical evidence, pressure, or an NPC need. Do not announce it as a quest.",
         "- Do not force a single path. Present an immediate situation with multiple plausible approaches: speak, inspect, follow, ignore, prepare, rest, travel, ask around, or act creatively.",
@@ -1406,6 +1499,8 @@ export function jobPrompt(
         "- Default narration length: 2-5 paragraphs for ordinary turns. Use 4-7 richer paragraphs for major scene openings, location reveals, travel arrivals, or campaign-significant transitions.",
         "- End with a clear present-tense handoff that invites action, usually by naming what is immediately available or pressing, without listing menu options unless clarity requires it."
       ].join("\n"),
+      ...physicalCommunicationGuidance,
+      ...playerRollResultOpeningGuidance,
       ...rollAdjudicationGuidance,
       ...playerCanonClaimGuidance,
       ...narrativeQualityBar,
@@ -1428,7 +1523,8 @@ export function jobPrompt(
         "",
         "Inventory Boundary:",
         "- Distinguish discovering, seeing, identifying, or learning about an item from taking possession of it. Only add inventory when the character actually takes, receives, pockets, collects, or is handed the item."
-      ].join("\n")
+      ].join("\n"),
+      ...playerRollResultOpeningGuidance
     ],
     npc_dialogue: [
       [
@@ -1445,6 +1541,9 @@ export function jobPrompt(
         "1. Decide what the NPC knows, believes, suspects, wants from the player, and is trying not to reveal.",
         "2. Before the NPC states or implies any fact, decide the concrete path by which they know it: witnessed it, were told by a named source, read a record, inferred from visible evidence, heard a rumor, or do not know.",
         "3. If the NPC is making an inference, keep it uncertain and bounded. They may suspect from visible clues, but they must not jump from a clue to a precise hidden relationship, private motive, secret name, or recent player action.",
+        "",
+        "NPC Communication Rules:",
+        "- NPC communication is local, not omnipresent.",
         "",
         "NPC Knowledge Rules:",
         "- NPC knowledge is local, not omniscient.",
@@ -1500,6 +1599,8 @@ export function jobPrompt(
         "Handoff:",
         "- End with the NPC's new stance, demand, offer, refusal, question, or opening, then hand control back to the player."
       ].join("\n"),
+      ...physicalCommunicationGuidance,
+      ...playerRollResultOpeningGuidance,
       ...rollAdjudicationGuidance,
       ...playerCanonClaimGuidance,
       ...socialRollGuidance,
@@ -1516,9 +1617,38 @@ export function jobPrompt(
         "",
         "Detailed Combat Procedure:"
       ].join("\n"),
+      ...physicalCommunicationGuidance,
       ...combatGuidance,
       "Examples below demonstrate combat pacing, visible math, paragraph grouping, turn ownership, roll pauses, and state-safe narration. Do not copy their names, actor keys, enemies, abilities, locations, or exact phrasing. Match their clarity and discipline, not their content.",
       ...combatExamples
+    ],
+    rest_mechanics: [
+      [
+        "Rest Mechanics Job:",
+        "",
+        "Purpose:",
+        "- Handle short rests, long rests, sleep, camping, downtime recovery, and rest-based class resource recovery.",
+        "- Decide whether the attempted rest can complete in the current fiction. If danger, interruption, time pressure, watch order, shelter, or travel conditions matter, narrate the obstacle and request clarification or a relevant roll instead of granting recovery.",
+        "",
+        "Mechanics Authority:",
+        "- Treat authoritative mechanicsState as truth for current HP, spellSlots, resources, concentration, and conditions.",
+        "- Use actor.resources for class resources such as Sorcery Points, Ki Points, Channel Divinity, Wild Shape, Second Wind, Action Surge, and Rages. Each resource has label, max, used, recharge, and optional source/notes.",
+        "- On a completed short rest, reset resources whose recharge is short_rest to used 0. Do not reset long_rest, dawn, manual, or ordinary spell slot resources on a short rest unless an explicit class feature in mechanicsState says otherwise.",
+        "- On a completed long rest, reset resources whose recharge is short_rest, long_rest, or dawn to used 0, reset normal spellSlots used values to 0, and restore the actor to max HP when maxHp is known.",
+        "- Preserve resource max, label, recharge, source, and notes exactly unless a level-up or explicit canonical feature change happens.",
+        "",
+        "Output Requirements:",
+        "- If the rest completes, include mechanics_state_update with the affected player actor key and the updated resources object. Include updated spellSlots and currentHp when those recover.",
+        "- If the rest does not complete, leave mechanics_state_update empty or only include consequences that truly happened.",
+        "- Narrate recovery visibly but concisely, naming the resources that return when known, such as Sorcery Points, Ki Points, or Channel Divinity.",
+        "- Set next_input_needed to player_actions after a completed rest unless the scene immediately requires dice or clarification.",
+        "",
+        "State Safety:",
+        "- Do not invent new class resources in mechanics_state_update unless they are directly supported by character sheet, mechanicsState, or accepted level/class context.",
+        "- Do not spend or restore inventory unless the rest consumes or returns a concrete item through inventory_state_update."
+      ].join("\n"),
+      ...rollAdjudicationGuidance,
+      ...narrativeQualityBar
     ],
     death_saving_throws: [
       [
@@ -1535,7 +1665,7 @@ export function jobPrompt(
         "- If the submitted roll means three successes, the character is stable at 0 HP and unconscious. Say that clearly and do not imply they can act normally.",
         "",
         "Roll Handling:",
-        "- When current input includes a Death Saving Throw result, narrate that exact roll visibly before the consequence, using wording like 'you rolled a 14 against DC 10 and succeed' or 'you rolled a 3 against DC 10 and fail.'",
+        "- When current input includes a Death Saving Throw result, narrate that exact roll visibly before the consequence, using wording like 'you rolled a <clue>14 against DC 10</clue> and succeed' or 'you rolled a <clue>3 against DC 10</clue> and fail.'",
         "- If the character remains dying after the result, do not return ordinary player action control. Ask for the next Death Saving Throw with roll_requests containing dice \"1d20\", modifier 0, label \"Death Saving Throw\", next_input_needed dice_results, and input_targets set to the dying actor key.",
         "- Do not ask what the unconscious character does while they are still dying.",
         "",
@@ -1579,6 +1709,7 @@ export function jobPrompt(
       investigation: [],
       npc_dialogue: [],
       combat: soloCombatGuidance,
+      rest_mechanics: [],
       death_saving_throws: [],
       clarification: []
     },
@@ -1587,6 +1718,7 @@ export function jobPrompt(
       investigation: [],
       npc_dialogue: [],
       combat: multiplayerCombatGuidance,
+      rest_mechanics: [],
       death_saving_throws: [],
       clarification: []
     }
@@ -1605,11 +1737,13 @@ export function buildMemoryUpdaterPrompt() {
     "You are the AI Taverns memory/context updater.",
     "Propose sparse patches after the player-facing turn has resolved.",
     "Return strict JSON with patches, new_context_chunks, and remove_context_chunks.",
-    "Allowed operations: append, replace_section, create_chunk, archive_chunk.",
+    "Allowed operations: append, replace_section, create_chunk, archive_chunk, rename_chunk, merge_chunk.",
     "Do not rewrite whole campaign memory or treat minor narration as durable memory.",
     "Treat campaign context as a living world bible for the AI DM. Your job is not only to record facts; it is also to maintain compelling, reusable story material that helps the DM make the world feel coherent and alive.",
     "Be proactive when the turn reveals or strongly implies durable worldbuilding, mysteries, factions, locations, artifacts, open player-facing problems, or long-running secrets.",
     "Do not contradict established play. Separate confirmed facts from creative inference so future DMs can use your ideas without mistaking every seed for settled truth.",
+    "Store the meaning of incidental NPC dialogue, not reusable prose. Do not preserve exact dialogue lines as durable NPC catchphrases unless the wording is itself canonically important, such as a vow, password, prophecy, clue, name, title, command phrase, or revealed written artifact text.",
+    "When an NPC says an emotional or relational line, convert it into relationship state, motive, trust, fear, suspicion, debt, or changed behavior. Future DM turns should express that state in fresh wording rather than repeating the prior line.",
     "Prefer updating an existing matching chunk over creating a duplicate when the same place, artifact, faction, quest, mystery, or secret is clearly referenced by name, alias, role, or scene context.",
     "",
     "Canonical written artifact memory:",
@@ -1658,7 +1792,10 @@ export function buildMemoryUpdaterPrompt() {
     "Do not create NPC cards for unnamed, generic, or throwaway background people unless they become recurring or campaign-relevant.",
     "Update an existing NPC card when the turn changes what is known about that NPC, including where they are, what they want, how they behave, how they feel about the party, what secrets they carry, or what unresolved story threads involve them.",
     "Prefer updating an existing NPC card over creating a duplicate when the same NPC is clearly referenced by name, title, alias, role, or scene context.",
+    "If an NPC previously known by description, title, disguise, role, or uncertainty is later named, do not create a second NPC card. Update the original card, change ## Name, preserve the old label under ## Aliases / Former Labels, and keep the same context_id unless using rename_chunk.",
     "Use stable NPC ids in the form npc:kebab-case-name, for example npc:captain-vael.",
+    "Use rename_chunk when a previously descriptive NPC id should become a stable named NPC id, such as npc:cloaked-figure-at-the-tower becoming npc:veria after the NPC reveals her name.",
+    "Use merge_chunk only when two existing chunks are explicitly the same NPC. Provide the complete merged markdown yourself; the server will not blend prose automatically.",
     "",
     "What belongs in an NPC card:",
     "Make each NPC feel like a compelling character, not a label. Preserve details that help the DM portray them consistently in future scenes.",
@@ -1676,6 +1813,7 @@ export function buildMemoryUpdaterPrompt() {
     "Every NPC card must use this markdown section structure:",
     "# <NPC Name>",
     "## Name",
+    "## Aliases / Former Labels",
     "## Location",
     "## Appearance",
     "## Personality",
@@ -1746,7 +1884,7 @@ export function buildMemoryUpdaterPrompt() {
             title: "Marra Vell",
             visibility: "player_safe",
             markdown:
-              "# Marra Vell\n\n## Name\nMarra Vell\n\n## Location\nLast seen fleeing through the fog near Pier 6.\n\n## Appearance\nUnknown.\n\n## Personality\nQuick-eyed, guarded, and restless. She speaks in short answers when frightened, but notices exits, weapons, and lies faster than most people in the room.\n\n## Motivations\nStay alive, keep the black key out of the smugglers' hands, and decide whether the party is safer than running alone.\n\n## Disposition Towards You\nWary but interested. She does not trust the party yet, but their intervention made them useful enough that she may risk another conversation.\n\n## Known History\n- First encountered near Pier 6 while being pursued.\n- Recognized the black key but avoided explaining how.\n\n## Secrets\nKnows more about the black key's origin than she admitted. She may have worked with the smugglers before betraying them.\n\n## Open Threads\n- Could reveal who sent the pursuers if convinced the party can protect her.\n- May seek the party out again once she has nowhere else to run.\n\n## Last Seen\nRunning into the fog beyond Pier 6 after the confrontation."
+              "# Marra Vell\n\n## Name\nMarra Vell\n\n## Aliases / Former Labels\nUnknown.\n\n## Location\nLast seen fleeing through the fog near Pier 6.\n\n## Appearance\nUnknown.\n\n## Personality\nQuick-eyed, guarded, and restless. She speaks in short answers when frightened, but notices exits, weapons, and lies faster than most people in the room.\n\n## Motivations\nStay alive, keep the black key out of the smugglers' hands, and decide whether the party is safer than running alone.\n\n## Disposition Towards You\nWary but interested. She does not trust the party yet, but their intervention made them useful enough that she may risk another conversation.\n\n## Known History\n- First encountered near Pier 6 while being pursued.\n- Recognized the black key but avoided explaining how.\n\n## Secrets\nKnows more about the black key's origin than she admitted. She may have worked with the smugglers before betraying them.\n\n## Open Threads\n- Could reveal who sent the pursuers if convinced the party can protect her.\n- May seek the party out again once she has nowhere else to run.\n\n## Last Seen\nRunning into the fog beyond Pier 6 after the confrontation."
           }
         ],
         remove_context_chunks: []
@@ -1763,7 +1901,7 @@ export function buildMemoryUpdaterPrompt() {
             operation: "replace_section",
             context_id: "npc:captain-vael",
             markdown:
-              "# Captain Vael\n\n## Name\nCaptain Vael\n\n## Location\nHarbor Watch station near Pier 6.\n\n## Appearance\nUnknown.\n\n## Personality\nTerse, disciplined, and visibly exhausted. Vael values proof over charm and gets colder when people waste time, but he is not cruel.\n\n## Motivations\nKeep the harbor calm, identify the compromised watch officer, and prevent the black key investigation from becoming public panic.\n\n## Disposition Towards You\nCautiously cooperative. He respects that the party brought him evidence, but he is still testing whether they are reckless liabilities or useful allies.\n\n## Known History\n- Met the party during the Pier 6 investigation.\n- Confirmed that the black key points toward old smuggling routes.\n- Agreed to check harbor records after the party shared Marra's warning.\n\n## Secrets\nSuspects someone inside the Harbor Watch is feeding information to the smugglers, but he has not revealed this openly.\n\n## Open Threads\n- May grant access to sealed harbor records if trust improves.\n- Could become an ally if the party protects the investigation from public exposure.\n- Could turn against the party if they endanger civilians or expose his suspicion too early.\n\n## Last Seen\nAt the Harbor Watch station, locking Marra's warning in his private case."
+              "# Captain Vael\n\n## Name\nCaptain Vael\n\n## Aliases / Former Labels\nUnknown.\n\n## Location\nHarbor Watch station near Pier 6.\n\n## Appearance\nUnknown.\n\n## Personality\nTerse, disciplined, and visibly exhausted. Vael values proof over charm and gets colder when people waste time, but he is not cruel.\n\n## Motivations\nKeep the harbor calm, identify the compromised watch officer, and prevent the black key investigation from becoming public panic.\n\n## Disposition Towards You\nCautiously cooperative. He respects that the party brought him evidence, but he is still testing whether they are reckless liabilities or useful allies.\n\n## Known History\n- Met the party during the Pier 6 investigation.\n- Confirmed that the black key points toward old smuggling routes.\n- Agreed to check harbor records after the party shared Marra's warning.\n\n## Secrets\nSuspects someone inside the Harbor Watch is feeding information to the smugglers, but he has not revealed this openly.\n\n## Open Threads\n- May grant access to sealed harbor records if trust improves.\n- Could become an ally if the party protects the investigation from public exposure.\n- Could turn against the party if they endanger civilians or expose his suspicion too early.\n\n## Last Seen\nAt the Harbor Watch station, locking Marra's warning in his private case."
           }
         ],
         new_context_chunks: [],
@@ -1782,6 +1920,26 @@ export function buildMemoryUpdaterPrompt() {
       },
       null,
       2
+    ),
+    "",
+    "Example revealed-name NPC rename response:",
+    JSON.stringify(
+      {
+        patches: [
+          {
+            operation: "rename_chunk",
+            context_id: "npc:cloaked-figure-at-the-tower",
+            new_context_id: "npc:veria",
+            title: "Veria",
+            markdown:
+              "# Veria\n\n## Name\nVeria\n\n## Aliases / Former Labels\n- Cloaked Figure at the Tower\n- Woman from the market\n\n## Location\nInside the old tower near the brass mechanism.\n\n## Appearance\nTall cloaked woman with sharp eyes and dark hair, now with her hood pushed back.\n\n## Personality\nCollected, deliberate, and quietly reverent around the mechanism. Her calm becomes warmer and more vulnerable when she speaks of the player's father.\n\n## Motivations\nProtect the spiral disc, learn whether the player can read the mechanism, and decide whether to trust them with her mission.\n\n## Disposition Towards You\nCautiously hopeful. She is still testing the player's judgment, but the revealed name and offered disc make this a real opening for alliance.\n\n## Known History\n- First appeared as the cloaked figure approaching the tower.\n- Revealed her name: Veria.\n- Said she knew the player's father and carried the spiral disc for safekeeping.\n\n## Secrets\nMay know more about the father's disappearance than she has revealed.\n\n## Open Threads\n- Can explain why she came to the tower if trust improves.\n- The spiral disc remains central to the mechanism.\n\n## Last Seen\nStanding beside the brass mechanism after revealing her name."
+          }
+        ],
+        new_context_chunks: [],
+        remove_context_chunks: []
+      },
+      null,
+      2
     )
   ].join("\n");
 }
@@ -1795,7 +1953,7 @@ export function buildLivingWorldPressureEnginePrompt() {
     "You are not the router. Do not choose DM jobs. Do not answer the player's latest action.",
     "You are not the normal turn memory updater. Do not merely summarize the last turn; look for offscreen NPC, faction, villain, ally, rumor, clock, and location movement that follows from current campaign pressure.",
     "Return exactly one JSON object with world_clock_updates, patches, new_context_chunks, remove_context_chunks, dm_guidance, possible_intrusions, and contradiction_warnings.",
-    "Use the same context patch contract as the memory/context updater. Allowed operations: append, replace_section, create_chunk, archive_chunk.",
+    "Use the same context patch contract as the memory/context updater. Allowed operations: append, replace_section, create_chunk, archive_chunk, rename_chunk, merge_chunk.",
     "Treat canonical Eldermere docs as source-grounded world truth. Treat campaign-local planner secrets, clocks, motives, and factions as established only inside this campaign until play establishes wider truth.",
     "Models may choose, infer, and propose; the server validates, stores, and mutates.",
     "",
@@ -2080,9 +2238,188 @@ export function validateCombatEvents(
   );
 }
 
+function contextPrefix(contextId: string) {
+  return contextId.includes(":") ? contextId.split(":")[0] ?? "" : "";
+}
+
+function normalizedIdentityName(value: string) {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function sectionBody(markdown: string, sectionName: string) {
+  const sectionPattern = new RegExp(
+    `^##\\s+${escapeRegExp(sectionName)}\\s*$([\\s\\S]*?)(?=^##\\s+|(?![\\s\\S]))`,
+    "im"
+  );
+  const match = markdown.match(sectionPattern);
+  return match?.[1]?.trim() ?? "";
+}
+
+function lineNamesFromSection(markdown: string, sectionName: string) {
+  const body = sectionBody(markdown, sectionName);
+
+  if (!body || /^unknown\.?$/i.test(body.trim())) {
+    return [];
+  }
+
+  return body
+    .split("\n")
+    .map((line) => line.replace(/^[-*]\s*/, "").trim())
+    .filter(Boolean);
+}
+
+function npcIdentityRevealMatches(markdown: string, name: string) {
+  const normalizedName = normalizedIdentityName(name);
+
+  if (!normalizedName) {
+    return false;
+  }
+
+  const aliases = lineNamesFromSection(markdown, "Aliases / Former Labels");
+
+  if (
+    aliases.some(
+      (alias) => normalizedIdentityName(alias) === normalizedName
+    )
+  ) {
+    return true;
+  }
+
+  const escapedName = escapeRegExp(name.trim());
+  const revealPattern = new RegExp(
+    [
+      `revealed\\s+(?:her|his|their)\\s+name\\s*:\\s*${escapedName}`,
+      `introduced\\s+(?:herself|himself|themself|themselves)\\s+as\\s+${escapedName}`,
+      `called\\s+(?:herself|himself|themself|themselves)\\s+${escapedName}`,
+      `(?:her|his|their)\\s+name\\s+is\\s+${escapedName}`
+    ].join("|"),
+    "i"
+  );
+
+  return revealPattern.test(markdown);
+}
+
+function existingContextById(
+  existingContexts: ExistingMemoryContext[] | undefined,
+  contextId: string
+) {
+  return existingContexts?.find((context) => context.id === contextId);
+}
+
+function duplicateNpcIdentityContext(
+  patch: Record<string, unknown>,
+  existingContexts: ExistingMemoryContext[] | undefined
+) {
+  const contextType = patch.context_type ?? patch.contextType;
+
+  if (contextType !== "npc_context") {
+    return undefined;
+  }
+
+  const title = typeof patch.title === "string" ? patch.title.trim() : "";
+  const markdown = typeof patch.markdown === "string" ? patch.markdown : "";
+  const name =
+    lineNamesFromSection(markdown, "Name")[0]?.trim() ||
+    title ||
+    String(patch.context_id ?? patch.contextId ?? "")
+      .replace(/^npc:/, "")
+      .replace(/-/g, " ");
+
+  if (!name.trim()) {
+    return undefined;
+  }
+
+  return existingContexts?.find(
+    (context) =>
+      context.category === "npc_context" &&
+      npcIdentityRevealMatches(context.bodyMarkdown, name)
+  );
+}
+
+function memoryPatchContextCategory(
+  patch: Record<string, unknown>,
+  existingContexts: ExistingMemoryContext[] | undefined
+) {
+  const contextType = patch.context_type ?? patch.contextType;
+
+  if (contextCategories.includes(contextType as ContextCategory)) {
+    return contextType as ContextCategory;
+  }
+
+  const contextId =
+    typeof patch.context_id === "string"
+      ? patch.context_id
+      : typeof patch.contextId === "string"
+        ? patch.contextId
+        : typeof patch.target_context_id === "string"
+          ? patch.target_context_id
+          : typeof patch.targetContextId === "string"
+            ? patch.targetContextId
+            : "";
+
+  return existingContextById(existingContexts, contextId)?.category;
+}
+
+function sanitizeIncidentalDialogueLine(line: string) {
+  if (
+    !line.includes("\"") ||
+    !incidentalDialogueVerbPattern.test(line) ||
+    durableExactWordingContextPattern.test(line)
+  ) {
+    return line;
+  }
+
+  return line.replace(
+    quotedDialoguePattern,
+    "the sentiment, without preserving the exact wording"
+  );
+}
+
+export function sanitizeMemoryPatchMarkdown(
+  markdown: string,
+  category: ContextCategory | undefined
+) {
+  if (
+    category !== "npc_context" ||
+    canonicalDocumentTextHeadingPattern.test(markdown)
+  ) {
+    return markdown;
+  }
+
+  return markdown
+    .split("\n")
+    .map((line) => sanitizeIncidentalDialogueLine(line))
+    .join("\n");
+}
+
+function sanitizeAcceptedMemoryPatch(
+  patch: Record<string, unknown>,
+  existingContexts: ExistingMemoryContext[] | undefined
+) {
+  if (typeof patch.markdown !== "string") {
+    return patch;
+  }
+
+  const category = memoryPatchContextCategory(patch, existingContexts);
+  const markdown = sanitizeMemoryPatchMarkdown(patch.markdown, category);
+
+  return markdown === patch.markdown ? patch : { ...patch, markdown };
+}
+
 function memoryPatchReasons(
   patch: unknown,
-  existingContextIds: Set<string>
+  existingContextIds: Set<string>,
+  existingContexts?: ExistingMemoryContext[]
 ) {
   const reasons: string[] = [];
 
@@ -2096,13 +2433,30 @@ function memoryPatchReasons(
     : typeof patch.contextId === "string"
       ? patch.contextId
       : "";
+  const newContextId = typeof patch.new_context_id === "string"
+    ? patch.new_context_id
+    : typeof patch.newContextId === "string"
+      ? patch.newContextId
+      : "";
+  const sourceContextId = typeof patch.source_context_id === "string"
+    ? patch.source_context_id
+    : typeof patch.sourceContextId === "string"
+      ? patch.sourceContextId
+      : "";
+  const targetContextId = typeof patch.target_context_id === "string"
+    ? patch.target_context_id
+    : typeof patch.targetContextId === "string"
+      ? patch.targetContextId
+      : "";
   const markdown = typeof patch.markdown === "string" ? patch.markdown : "";
 
   if (
     operation !== "append" &&
     operation !== "replace_section" &&
     operation !== "create_chunk" &&
-    operation !== "archive_chunk"
+    operation !== "archive_chunk" &&
+    operation !== "rename_chunk" &&
+    operation !== "merge_chunk"
   ) {
     reasons.push("operation is not allowed");
   }
@@ -2127,9 +2481,14 @@ function memoryPatchReasons(
   if (operation === "create_chunk") {
     const contextType = patch.context_type ?? patch.contextType;
     const visibility = patch.visibility;
+    const duplicate = duplicateNpcIdentityContext(patch, existingContexts);
 
     if (!contextId || existingContextIds.has(contextId)) {
       reasons.push("new context_id must be unique");
+    }
+
+    if (duplicate) {
+      reasons.push(`npc identity already exists as ${duplicate.id}`);
     }
 
     if (!contextCategories.includes(contextType as ContextCategory)) {
@@ -2145,21 +2504,80 @@ function memoryPatchReasons(
     }
   }
 
+  if (operation === "rename_chunk") {
+    const existing = existingContextById(existingContexts, contextId);
+
+    if (!contextId || !existingContextIds.has(contextId)) {
+      reasons.push("target context_id does not exist");
+    }
+
+    if (!newContextId || existingContextIds.has(newContextId)) {
+      reasons.push("new_context_id must be unique");
+    }
+
+    if (
+      contextId &&
+      newContextId &&
+      contextPrefix(contextId) !== contextPrefix(newContextId)
+    ) {
+      reasons.push("new_context_id must keep the same context prefix");
+    }
+
+    if (
+      existing &&
+      contextPrefix(existing.id) &&
+      contextPrefix(newContextId) &&
+      contextPrefix(existing.id) !== contextPrefix(newContextId)
+    ) {
+      reasons.push("new_context_id must stay in the same context category");
+    }
+  }
+
+  if (operation === "merge_chunk") {
+    const source = existingContextById(existingContexts, sourceContextId);
+    const target = existingContextById(existingContexts, targetContextId);
+
+    if (!sourceContextId || !existingContextIds.has(sourceContextId)) {
+      reasons.push("source_context_id does not exist");
+    }
+
+    if (!targetContextId || !existingContextIds.has(targetContextId)) {
+      reasons.push("target_context_id does not exist");
+    }
+
+    if (source && target && source.category !== target.category) {
+      reasons.push("source and target context chunks must share a category");
+    }
+
+    if (sourceContextId && targetContextId && sourceContextId === targetContextId) {
+      reasons.push("source_context_id and target_context_id must differ");
+    }
+
+    if (!markdown.trim()) {
+      reasons.push("markdown is required");
+    }
+  }
+
   return reasons;
 }
 
 export function validateMemoryPatches(
   patches: unknown[],
-  existingContextIds: Set<string>
+  existingContextIds: Set<string>,
+  existingContexts?: ExistingMemoryContext[]
 ): ValidationResult<Record<string, unknown>> {
   return patches.reduce<ValidationResult<Record<string, unknown>>>(
     (result, patch) => {
-      const reasons = memoryPatchReasons(patch, existingContextIds);
+      const reasons = memoryPatchReasons(
+        patch,
+        existingContextIds,
+        existingContexts
+      );
 
       if (reasons.length > 0 || !isRecord(patch)) {
         result.discarded.push({ item: patch, reasons });
       } else {
-        result.accepted.push(patch);
+        result.accepted.push(sanitizeAcceptedMemoryPatch(patch, existingContexts));
       }
 
       return result;

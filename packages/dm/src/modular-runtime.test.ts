@@ -6,6 +6,7 @@ import {
   formatRouterCurrentTurnInput,
   jobPrompt,
   renderContextChunks,
+  sanitizeMemoryPatchMarkdown,
   validateCombatEvents,
   validateMainDmOutput,
   validateMemoryPatches,
@@ -234,6 +235,174 @@ describe("modular AI DM runtime contracts", () => {
     );
   });
 
+  it("normalizes incidental NPC dialogue quotes in accepted memory patches", () => {
+    const result = validateMemoryPatches(
+      [
+        {
+          operation: "replace_section",
+          context_id: "npc:veria",
+          markdown:
+            "# Veria\n\n## Name\nVeria\n\n## Disposition Towards You\nRelieved and aligned. She shows confidence in Merlini's performance, telling him \"You did well back there. Your father would be proud.\"\n\n## Known History\n- She urged Merlini to move quickly, warning \"The blast will carry for miles.\"\n\n## Last Seen\nLeading Merlini toward the Old Road."
+        }
+      ],
+      new Set(["npc:veria"]),
+      [
+        {
+          id: "npc:veria",
+          category: "npc_context" as const,
+          title: "Veria",
+          bodyMarkdown: "# Veria\n\n## Name\nVeria"
+        }
+      ]
+    );
+
+    assert.equal(result.accepted.length, 1);
+    const markdown = String(result.accepted[0]?.markdown ?? "");
+    assert.doesNotMatch(markdown, /You did well back there/);
+    assert.doesNotMatch(markdown, /The blast will carry for miles/);
+    assert.match(markdown, /without preserving the exact wording/);
+  });
+
+  it("preserves exact wording for written artifacts and durable dialogue cues", () => {
+    assert.match(
+      sanitizeMemoryPatchMarkdown(
+        "# Courier Letter\n\n## Canonical Document Text\n\"Bring the black key at moonrise.\"\n\n## Established Facts\n- The party read the letter.",
+        "relevant_world_context"
+      ),
+      /Bring the black key at moonrise/
+    );
+    assert.match(
+      sanitizeMemoryPatchMarkdown(
+        "# Gatekeeper\n\n## Known History\n- The gatekeeper revealed the password \"Blue harbor opens only for moonlit kin.\"",
+        "npc_context"
+      ),
+      /Blue harbor opens only for moonlit kin/
+    );
+  });
+
+  it("supports rename and merge memory patches", () => {
+    const existingContexts = [
+      {
+        id: "npc:cloaked-figure-at-the-tower",
+        category: "npc_context" as const,
+        title: "Cloaked Figure at the Tower",
+        bodyMarkdown:
+          "# Cloaked Figure at the Tower\n\n## Name\nUnknown.\n\n## Aliases / Former Labels\nUnknown."
+      },
+      {
+        id: "npc:veria",
+        category: "npc_context" as const,
+        title: "Veria",
+        bodyMarkdown:
+          "# Veria\n\n## Name\nVeria\n\n## Aliases / Former Labels\n- Cloaked Figure at the Tower"
+      }
+    ];
+    const result = validateMemoryPatches(
+      [
+        {
+          operation: "rename_chunk",
+          context_id: "npc:cloaked-figure-at-the-tower",
+          new_context_id: "npc:veria-renamed",
+          title: "Veria",
+          markdown: "# Veria\n\n## Name\nVeria"
+        },
+        {
+          operation: "merge_chunk",
+          source_context_id: "npc:veria",
+          target_context_id: "npc:cloaked-figure-at-the-tower",
+          title: "Veria",
+          markdown: "# Veria\n\n## Name\nVeria"
+        }
+      ],
+      new Set(["npc:cloaked-figure-at-the-tower", "npc:veria"]),
+      existingContexts
+    );
+
+    assert.equal(result.accepted.length, 2);
+    assert.equal(result.discarded.length, 0);
+  });
+
+  it("blocks explicit duplicate NPC creates from revealed names and aliases", () => {
+    const existingContexts = [
+      {
+        id: "npc:cloaked-figure-at-the-tower",
+        category: "npc_context" as const,
+        title: "Cloaked Figure at the Tower",
+        bodyMarkdown:
+          "# Cloaked Figure at the Tower\n\n## Name\nUnknown.\n\n## Aliases / Former Labels\nUnknown.\n\n## Known History\n- Revealed her name: Veria."
+      },
+      {
+        id: "npc:old-scout",
+        category: "npc_context" as const,
+        title: "Old Scout",
+        bodyMarkdown:
+          "# Old Scout\n\n## Name\nUnknown.\n\n## Aliases / Former Labels\n- Veran"
+      }
+    ];
+    const result = validateMemoryPatches(
+      [
+        {
+          operation: "create_chunk",
+          context_id: "npc:veria",
+          context_type: "npc_context",
+          title: "Veria",
+          visibility: "player_safe",
+          markdown: "# Veria\n\n## Name\nVeria"
+        },
+        {
+          operation: "create_chunk",
+          context_id: "npc:veran",
+          context_type: "npc_context",
+          title: "Veran",
+          visibility: "player_safe",
+          markdown: "# Veran\n\n## Name\nVeran"
+        }
+      ],
+      new Set(["npc:cloaked-figure-at-the-tower", "npc:old-scout"]),
+      existingContexts
+    );
+
+    assert.equal(result.accepted.length, 0);
+    assert.equal(result.discarded.length, 2);
+    assert.match(
+      result.discarded[0]?.reasons.join("\n") ?? "",
+      /npc identity already exists as npc:cloaked-figure-at-the-tower/
+    );
+    assert.match(
+      result.discarded[1]?.reasons.join("\n") ?? "",
+      /npc identity already exists as npc:old-scout/
+    );
+  });
+
+  it("does not block NPC creates from similar location or personality alone", () => {
+    const result = validateMemoryPatches(
+      [
+        {
+          operation: "create_chunk",
+          context_id: "npc:second-cloaked-woman",
+          context_type: "npc_context",
+          title: "Second Cloaked Woman",
+          visibility: "player_safe",
+          markdown:
+            "# Second Cloaked Woman\n\n## Name\nSecond Cloaked Woman\n\n## Location\nInside the old tower.\n\n## Personality\nCollected and deliberate."
+        }
+      ],
+      new Set(["npc:cloaked-figure-at-the-tower"]),
+      [
+        {
+          id: "npc:cloaked-figure-at-the-tower",
+          category: "npc_context" as const,
+          title: "Cloaked Figure at the Tower",
+          bodyMarkdown:
+            "# Cloaked Figure at the Tower\n\n## Name\nUnknown.\n\n## Location\nInside the old tower.\n\n## Personality\nCollected and deliberate."
+        }
+      ]
+    );
+
+    assert.equal(result.accepted.length, 1);
+    assert.equal(result.discarded.length, 0);
+  });
+
   it("keeps prompts modular and explicit", () => {
     const routerPrompt = buildRouterPrompt();
     const removedOpeningJob = ["campaign", "starter"].join("_");
@@ -244,9 +413,20 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(routerPrompt, /Copy exact key strings only/i);
     assert.match(routerPrompt, /Campaign opening scenes are handled/i);
     assert.match(routerPrompt, /combat_active is true, default to combat/i);
+    assert.match(routerPrompt, /Choose rest_mechanics when the player attempts a short rest/i);
     assert.match(routerPrompt, /Choose clarification when the player's intended action is too underspecified/i);
     assert.match(routerPrompt, /without a clear target, target area, or necessary tactical detail/i);
     assert.match(routerPrompt, /Do not choose clarification merely because an action is risky/i);
+    assert.match(routerPrompt, /Job selection guide:/);
+    assert.match(routerPrompt, /scene_director: Choose for ordinary noncombat scene movement/i);
+    assert.match(routerPrompt, /not primarily conversation, clue discovery, combat, rest, death saves, or clarification/i);
+    assert.match(routerPrompt, /investigation: Choose when the player is searching, inspecting, tracking/i);
+    assert.match(routerPrompt, /trying to uncover information the character does not automatically know/i);
+    assert.match(routerPrompt, /npc_dialogue: Choose when the player directly speaks with/i);
+    assert.match(routerPrompt, /combat: Choose when combat is active and the input affects turn flow/i);
+    assert.match(routerPrompt, /rest_mechanics: Choose when the player attempts a short rest/i);
+    assert.match(routerPrompt, /death_saving_throws: Choose when a player character is at 0 HP and dying/i);
+    assert.match(routerPrompt, /clarification: Choose only when the intended action cannot be adjudicated safely/i);
     assert.doesNotMatch(routerPrompt, new RegExp(removedOpeningJob));
     assert.match(jobPrompt("scene_director"), /concrete sensory detail/i);
     assert.match(jobPrompt("scene_director"), /observable behavior/i);
@@ -373,24 +553,17 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
-      /copy exact plain-text math-bearing phrases into narration_highlights instead of adding Markdown/i
+      /semantic narration markup for inline UI color/i
     );
     assert.match(
       jobPrompt("combat"),
-      /ignore the normal 0-1 narration_highlights limit/i
+      /<npc>\.\.\.<\/npc>.*<place>\.\.\.<\/place>.*<clue>\.\.\.<\/clue>.*<danger>\.\.\.<\/danger>.*<faction>\.\.\.<\/faction>.*<object>\.\.\.<\/object>/is
     );
     assert.match(
       jobPrompt("combat"),
-      /Highlight every visible combat math span in public_narration/i
+      /<clue>They rolled an 18 \(16\) against Komer's AC of 15<\/clue>/i
     );
-    assert.match(
-      jobPrompt("combat"),
-      /Use color_role clue for roll totals, attack\/save\/check math, AC, DC, and dice notation/i
-    );
-    assert.match(
-      jobPrompt("combat"),
-      /Use color_role danger for damage amount plus damage type, HP changes, and 0 HP or defeat mechanics/i
-    );
+    assert.match(jobPrompt("combat"), /<danger>5 piercing<\/danger>/i);
     assert.match(
       jobPrompt("combat"),
       /Do not put a visible mechanics sentence in its own standalone paragraph/i
@@ -405,8 +578,16 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.doesNotMatch(jobPrompt("combat"), /\*\*/);
     assert.match(jobPrompt("combat"), /use conversational wording with 'you rolled'/i);
-    assert.match(jobPrompt("combat"), /they rolled a 17 against your AC of 14/i);
-    assert.match(jobPrompt("combat"), /rolled a 9 against DC 14 and fails/i);
+    assert.match(
+      jobPrompt("combat"),
+      /<clue>they rolled a 17 \(15\) against your AC of 14<\/clue>/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /rolled a <clue>12 \(9\) against DC 14<\/clue> and fails/i
+    );
+    assert.match(jobPrompt("combat"), /attackBonus, damageFormula, saveBonuses/i);
+    assert.match(jobPrompt("combat"), /modified total first and natural die in parentheses/i);
     assert.match(jobPrompt("combat"), /list each target's save result separately/i);
     assert.match(jobPrompt("combat"), /full damage, the halved damage/i);
     assert.match(jobPrompt("combat"), /turnOwner is an NPC actor key/i);
@@ -454,6 +635,20 @@ describe("modular AI DM runtime contracts", () => {
       jobPrompt("combat"),
       /For every NPC or enemy actor key introduced in initiativeOrder/i
     );
+    assert.match(jobPrompt("combat"), /NPC combat durability/i);
+    assert.match(jobPrompt("combat"), /Use the highest player character level as partyLevel/i);
+    assert.match(
+      jobPrompt("combat"),
+      /named antagonist, duel-worthy foe, officer, spellcaster, monster leader, or recurring enemy: max\(24, partyLevel \* 10\) to max\(40, partyLevel \* 16\) HP/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /major boss or climactic solo enemy: at least max\(40, partyLevel \* 18\) HP/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Set currentHp equal to maxHp when a fresh combatant enters combat/i
+    );
     assert.match(jobPrompt("combat"), /armorClass/i);
     assert.match(jobPrompt("combat"), /isPlayerControlled/i);
     assert.match(jobPrompt("combat"), /combat metadata/i);
@@ -466,7 +661,16 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("combat"), /Do not merely announce future turns/i);
     assert.match(
       jobPrompt("combat"),
-      /Only return next_input_needed player_actions in active combat after mechanics_state_update\.combat\.turnOwner is a living player-controlled actor/i
+      /Only return next_input_needed player_actions in active combat after combat-start initiative requirements are satisfied/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Combat-start initiative gating has priority over damage resolution/i
+    );
+    assert.match(jobPrompt("combat"), /<clue>Turn order:<\/clue>/i);
+    assert.match(
+      jobPrompt("combat"),
+      /alert enemy Magic Missile starts with initiative, not damage/i
     );
     assert.match(
       jobPrompt("combat"),
@@ -504,7 +708,11 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("combat"), /combat starts, initiative first/i);
     assert.match(
       jobPrompt("combat"),
-      /Bandit captain initiative roll: 15\. Cutthroat initiative rolls: 11 and 8\./i
+      /<clue>Bandit captain initiative roll: 15<\/clue>\. <clue>Cutthroat initiative rolls: 11 and 8<\/clue>\./i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Roll initiative: <clue>1d20 \+ your initiative modifier<\/clue>/i
     );
     assert.match(
       jobPrompt("combat"),
@@ -516,23 +724,11 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
-      /They rolled an 18 against Komer's AC of 15, so the spearpoint/i
-    );
-    assert.match(
-      jobPrompt("combat"),
-      /"text": "They rolled an 18 against Komer's AC of 15",\n\s+"color_role": "clue"/i
-    );
-    assert.match(
-      jobPrompt("combat"),
-      /"text": "5 piercing",\n\s+"color_role": "danger"/i
-    );
-    assert.match(
-      jobPrompt("combat"),
-      /"text": "1d6 \+ 2",\n\s+"color_role": "clue"/i
+      /<clue>They rolled an 18 \(16\) against Komer's AC of 15<\/clue>, so the spearpoint/i
     );
     assert.doesNotMatch(
       jobPrompt("combat"),
-      /They rolled an 18 against Komer's AC of 15[^"]*\\n\\nThe spearpoint/i
+      /They rolled an 18 \(16\) against Komer's AC of 15[^"]*\\n\\nThe spearpoint/i
     );
     assert.match(
       jobPrompt("combat"),
@@ -544,6 +740,7 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(jobPrompt("combat"), /Doran Ironhand moves before the darts/i);
     assert.match(jobPrompt("combat"), /surprise opener resolves before initiative/i);
+    assert.match(jobPrompt("combat"), /Roll Fireball damage: <clue>8d6<\/clue>/i);
     assert.match(jobPrompt("combat"), /Magic Missile needs target distribution before damage/i);
     assert.match(
       jobPrompt("combat"),
@@ -554,6 +751,18 @@ describe("modular AI DM runtime contracts", () => {
       jobPrompt("combat"),
       /NPC turn catches up before an off-turn player intent/i
     );
+    assert.match(
+      jobPrompt("combat"),
+      /<clue>They rolled an 11 \(9\) against your AC of 12<\/clue>/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /<clue>They rolled an 8 \(7\) against DC 13 on the Arcana check<\/clue>/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /<clue>They rolled a 17 \(15\) against your AC of 14<\/clue>.*<danger>6 slashing<\/danger>.*<clue>1d6 \+ 2<\/clue>.*<danger>24 HP to 18 HP<\/danger>/is
+    );
     assert.match(jobPrompt("combat"), /players skip, hostile NPC still creates pressure/i);
     assert.match(
       jobPrompt("combat"),
@@ -561,10 +770,18 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
+      /<clue>They rolled a 12 \(10\) against Komer's AC of 18<\/clue>/i
+    );
+    assert.match(
+      jobPrompt("combat"),
       /NPC resolves, then a fresh player turn begins/i
     );
     assert.match(jobPrompt("combat"), /Bad response to avoid: requesting Tart's attack roll/i);
     assert.match(jobPrompt("combat"), /"input_targets": \[\s+"player:tart"\s+\]/);
+    assert.match(
+      jobPrompt("combat"),
+      /<clue>They rolled a 16 \(13\) against Por's AC of 16<\/clue>.*<danger>7 slashing<\/danger>.*<clue>1d6 \+ 3<\/clue>.*<danger>34 HP to 27 HP<\/danger>/is
+    );
     assert.match(jobPrompt("combat"), /player attack hits, request player damage/i);
     assert.match(
       jobPrompt("combat"),
@@ -582,6 +799,10 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("combat"), /Magic Missile target is known, request player damage/i);
     assert.match(
       jobPrompt("combat"),
+      /roll Magic Missile damage: <clue>3d4 \+ 3<\/clue>/i
+    );
+    assert.match(
+      jobPrompt("combat"),
       /Bad response to avoid: rolling Magic Missile damage yourself/i
     );
     assert.match(jobPrompt("combat"), /"dice": "3d4"/i);
@@ -594,14 +815,46 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
-      /Warden Captain Hesk rolled an 11 against POKE's spell save DC of 13/i
+      /<npc>Warden Captain Hesk<\/npc> rolled an <clue>11 \(8\) against POKE's spell save DC of 13<\/clue>/i
     );
-    assert.match(jobPrompt("combat"), /The robed priest rolled a 16 against DC 14 and succeeds/i);
+    assert.match(
+      jobPrompt("combat"),
+      /The robed priest rolled a <clue>16 \(13\) against DC 14<\/clue> and succeeds/i
+    );
     assert.match(jobPrompt("combat"), /final enemy defeated and combat ends/i);
+    assert.match(
+      jobPrompt("combat"),
+      /<clue>You rolled a 19 against their AC of 13<\/clue>.*<danger>11 bludgeoning<\/danger>/is
+    );
     assert.match(jobPrompt("combat"), /Never silently modify HP/);
     assert.match(
       jobPrompt("combat"),
+      /append a compact resources summary at the end of public_narration/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /only when next_input_needed is not dice_results and roll_requests is empty/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /<clue>Just to remind you, you have: <\/clue>\\n<clue>35<\/clue> hit points\\n<clue>3<\/clue> third level spell slots/i
+    );
+    assert.match(jobPrompt("combat"), /<clue>5<\/clue> sorcery points/i);
+    assert.match(
+      jobPrompt("combat"),
+      /summarize only the actor who is receiving the handoff/i
+    );
+    assert.match(
+      jobPrompt("combat"),
       /attempts to attack with, throw, draw, load, fire, equip, or otherwise use a weapon they do not have/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /When a player uses a tracked class resource from mechanicsState\.actors\[actorKey\]\.resources/i
+    );
+    assert.match(
+      jobPrompt("scene_director"),
+      /resources with that resource's used value increased by the amount spent/i
     );
     assert.match(jobPrompt("combat"), /Do not copy their names, actor keys/i);
     assert.match(
@@ -616,6 +869,90 @@ describe("modular AI DM runtime contracts", () => {
       jobPrompt("combat"),
       /Roll Fireball damage:[^"]*\\n\\nWhat do you do\?/
     );
+    for (const job of ["scene_director", "npc_dialogue", "combat"] as const) {
+      const prompt = jobPrompt(job);
+      assert.match(prompt, /Physical Communication Boundary:/);
+      assert.match(
+        prompt,
+        /relative location, distance, barriers, noise, visibility, and who can plausibly hear/i
+      );
+      assert.match(
+        prompt,
+        /A whisper only reaches someone adjacent or explicitly close enough/i
+      );
+      assert.match(
+        prompt,
+        /another room, a loft, upstairs, outside, hidden, behind a door, across a crowd, or separated by noise/i
+      );
+      assert.match(
+        prompt,
+        /private dialogue unless earshot, line of sight, or magic has already been established/i
+      );
+      assert.match(
+        prompt,
+        /visible movement, silence, raised-voice risk, gestures the player can actually see, or require the player to move closer/i
+      );
+    }
+    for (const job of ["scene_director", "investigation", "npc_dialogue"] as const) {
+      const prompt = jobPrompt(job);
+      assert.match(prompt, /Submitted Player Roll Result Opening:/);
+      assert.match(
+        prompt,
+        /public_narration must start with this exact sentence pattern/i
+      );
+      assert.match(
+        prompt,
+        /With a \[quality adjective\] roll of <clue>\[total\]<\/clue>, here's what happens:/i
+      );
+      assert.match(
+        prompt,
+        /Use the submitted final total inside <clue>\.\.\.<\/clue>/i
+      );
+      assert.match(
+        prompt,
+        /measly for very low rolls, shaky for low rolls, decent for middling rolls, strong for high rolls, or staggering for exceptional rolls/i
+      );
+    }
+    for (const job of [
+      "combat",
+      "rest_mechanics",
+      "death_saving_throws",
+      "clarification"
+    ] as const) {
+      assert.doesNotMatch(jobPrompt(job), /Submitted Player Roll Result Opening:/);
+      assert.doesNotMatch(
+        jobPrompt(job),
+        /With a \[quality adjective\] roll of <clue>\[total\]<\/clue>, here's what happens:/i
+      );
+    }
+    assert.match(
+      jobPrompt("scene_director"),
+      /Only include NPC speech, whispers, gestures, warnings, or reactions that are physically available from the current staging/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /NPC communication is local, not omnipresent/i
+    );
+    for (const job of [
+      "investigation",
+      "rest_mechanics",
+      "death_saving_throws",
+      "clarification"
+    ] as const) {
+      assert.doesNotMatch(jobPrompt(job), /Physical Communication Boundary:/);
+      assert.doesNotMatch(
+        jobPrompt(job),
+        /private dialogue unless earshot, line of sight, or magic has already been established/i
+      );
+    }
+    assert.match(jobPrompt("rest_mechanics"), /Rest Mechanics Job/i);
+    assert.match(jobPrompt("rest_mechanics"), /actor.resources for class resources/i);
+    assert.match(jobPrompt("rest_mechanics"), /Sorcery Points, Ki Points, Channel Divinity/i);
+    assert.match(jobPrompt("rest_mechanics"), /On a completed short rest, reset resources whose recharge is short_rest/i);
+    assert.match(jobPrompt("rest_mechanics"), /On a completed long rest, reset resources whose recharge is short_rest, long_rest, or dawn/i);
+    assert.match(jobPrompt("rest_mechanics"), /reset normal spellSlots used values to 0/i);
+    assert.match(jobPrompt("rest_mechanics"), /include mechanics_state_update with the affected player actor key/i);
+    assert.match(jobPrompt("rest_mechanics"), /Do not invent new class resources/i);
     assert.match(jobPrompt("clarification"), /Ask one concise/);
     assert.match(jobPrompt("clarification"), /table-facing guidance rather than in-world NPC dialogue/i);
     assert.match(jobPrompt("clarification"), /next_input_needed to "clarification"/);
@@ -633,6 +970,7 @@ describe("modular AI DM runtime contracts", () => {
       "investigation",
       "npc_dialogue",
       "combat",
+      "rest_mechanics",
       "clarification"
     ] as const) {
       const prompt = jobPrompt(job);
@@ -699,13 +1037,20 @@ describe("modular AI DM runtime contracts", () => {
       assert.match(prompt, /new page, hidden annotation, translation, cipher result/i);
     }
     assert.match(buildMemoryUpdaterPrompt(), /Allowed operations/);
+    assert.match(buildMemoryUpdaterPrompt(), /rename_chunk/);
+    assert.match(buildMemoryUpdaterPrompt(), /merge_chunk/);
     assert.match(buildMemoryUpdaterPrompt(), /Create a new NPC card/i);
+    assert.match(buildMemoryUpdaterPrompt(), /Aliases \/ Former Labels/);
+    assert.match(buildMemoryUpdaterPrompt(), /do not create a second NPC card/i);
+    assert.match(buildMemoryUpdaterPrompt(), /previously known by description, title, disguise, role, or uncertainty/i);
     assert.match(buildMemoryUpdaterPrompt(), /Make each NPC feel like a compelling character/i);
     assert.match(buildMemoryUpdaterPrompt(), /## Disposition Towards You/);
     assert.match(buildMemoryUpdaterPrompt(), /Never infer gender or pronouns/i);
     assert.match(buildMemoryUpdaterPrompt(), /neutral wording until play establishes pronouns/i);
     assert.match(buildMemoryUpdaterPrompt(), /do not silently normalize the conflict/i);
     assert.match(buildMemoryUpdaterPrompt(), /campaign context as a living world bible/i);
+    assert.match(buildMemoryUpdaterPrompt(), /Store the meaning of incidental NPC dialogue/i);
+    assert.match(buildMemoryUpdaterPrompt(), /fresh wording rather than repeating the prior line/i);
     assert.match(buildMemoryUpdaterPrompt(), /Canonical written artifact memory/i);
     assert.match(buildMemoryUpdaterPrompt(), /preserve the revealed text word for word/i);
     assert.match(buildMemoryUpdaterPrompt(), /notes, notebooks, ledgers, journals, letters/i);
@@ -720,6 +1065,10 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(buildMemoryUpdaterPrompt(), /Example revealed written artifact response/);
     assert.match(buildMemoryUpdaterPrompt(), /Example proactive world\/story response/);
     assert.match(buildMemoryUpdaterPrompt(), /"visibility": "player_safe"/);
+    assert.match(
+      jobPrompt("npc_dialogue", "single_player"),
+      /Do not repeat prior dialogue phrasing/i
+    );
   });
 
   it("renders mode-specific job guidance without duplicating job prompts", () => {
