@@ -1,3 +1,6 @@
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const { gameShellMock, getOptionalUserMock, redirectMock } = vi.hoisted(() => ({
@@ -20,6 +23,7 @@ vi.mock("next/navigation", () => ({
   redirect: redirectMock
 }));
 
+import { resolveDropletCommandCwd } from "./droplet-command-cwd";
 import DebugPage from "./page";
 
 describe("debug page", () => {
@@ -72,5 +76,34 @@ describe("debug page", () => {
       }
     });
     expect(redirectMock).not.toHaveBeenCalled();
+  });
+
+  it("runs droplet commands from the root workspace", () => {
+    const root = mkdtempSync(join(tmpdir(), "ai-taverns-debug-page-"));
+    const web = join(root, "apps", "web");
+
+    try {
+      mkdirSync(web, { recursive: true });
+      writeFileSync(
+        join(root, "package.json"),
+        JSON.stringify({
+          scripts: {
+            "droplet:one-time-access": "bash scripts/droplet-one-time-access.sh"
+          }
+        })
+      );
+      writeFileSync(
+        join(web, "package.json"),
+        JSON.stringify({
+          scripts: {
+            test: "vitest run"
+          }
+        })
+      );
+
+      expect(resolveDropletCommandCwd(web)).toBe(root);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
   });
 });

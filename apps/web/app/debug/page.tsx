@@ -5,6 +5,7 @@ import pg from "pg";
 import { redirect } from "next/navigation";
 import { GameShell } from "@/components/playing/GameShell";
 import { getOptionalUser } from "@/lib/auth";
+import { resolveDropletCommandCwd } from "./droplet-command-cwd";
 
 type DebugPageProps = {
   searchParams: Promise<{
@@ -14,7 +15,6 @@ type DebugPageProps = {
 };
 
 const defaultDatabaseUrl = "postgres://postgres:postgres@localhost:5432/ai_taverns";
-const repoRoot = process.env.DEBUG_REPO_ROOT ?? process.cwd();
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const execFileAsync = promisify(execFile);
@@ -193,7 +193,7 @@ select json_build_object(
       "--",
       remoteCommand
     ], {
-      cwd: repoRoot,
+      cwd: resolveDropletCommandCwd(),
       maxBuffer: 100 * 1024 * 1024
     }));
   } catch (error) {
