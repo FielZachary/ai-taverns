@@ -3701,6 +3701,18 @@ before(async () => {
                 why_this_location: "It is the selected campaign start.",
                 plain_description: "A specific place where the first problem is already visible."
               },
+              starting_location_atmosphere: {
+                arrival_impression: `${startingLocation} feels busy, guarded, and already shaped by the trouble that brought the party here.`,
+                daily_life_and_liveliness: "Locals keep working, trading, arguing, and watching the streets even while tension sits plainly over the settlement.",
+                local_attitude: "People treat strangers with cautious courtesy and look twice at anyone capable of helping.",
+                dominant_vibe: "watchful daily life under public strain",
+                sensory_entry_details: [
+                  "lanterns lit earlier than the hour requires",
+                  "low voices stopping when armed strangers pass",
+                  "cold rain and smoke hanging in narrow streets"
+                ],
+                transition_into_first_scene: "The wider settlement pressure narrows toward the marked doorway where Mara Vell waits."
+              },
               opening_premise: {
                 why_the_party_is_here: "The party has come to answer a local summons.",
                 immediate_objective: "Find the person who sent for them.",

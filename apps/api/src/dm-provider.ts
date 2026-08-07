@@ -262,6 +262,18 @@ function testOpeningPlanContent() {
       why_this_location: "It puts the party at the first obstacle immediately.",
       plain_description: "A stone tollhouse beside a fogbound bridge."
     },
+    starting_location_atmosphere: {
+      arrival_impression: "The tollhouse feels like the last lit place before the road gives up.",
+      daily_life_and_liveliness: "Teamsters crowd the wet yard while clerks, guards, and stranded travelers argue over delayed passage.",
+      local_attitude: "Locals are wary of anyone asking direct questions, but they watch capable travelers with desperate interest.",
+      dominant_vibe: "busy, rain-soaked, and afraid to admit why",
+      sensory_entry_details: [
+        "lanterns swinging over muddy wagon ruts",
+        "drivers shouting over rain and restless horses",
+        "wet wool, river fog, and smoke from a crowded hearth"
+      ],
+      transition_into_first_scene: "The rain-choked yard funnels everyone into the common room where Marra waits by the shutters."
+    },
     opening_premise: {
       why_the_party_is_here: "They were hired to escort a sealed road charter.",
       immediate_objective: "Find out why the bridge watch has gone silent.",
