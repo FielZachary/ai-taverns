@@ -519,8 +519,10 @@ export function jobPrompt(
     "Run tactical combat encounters with strict turn ownership, visible rolls, explicit state changes, and vivid but concise action narration.",
     "Combat narration must never get ahead of combat state: if a roll, turn owner, initiative order, HP change, condition, resource use, or enemy defeat is unresolved, pause or encode it structurally instead of implying it only in prose.",
     "Initiative and combat start:",
+    "Combat priority order: first satisfy combat-start initiative gating; second, if initiative waits on player rolls, request dice_results; third, if initiative is resolved and turnOwner is non-player-controlled, resolve those turns; fourth, if the current player action needs damage, request or resolve damage; only then return player_actions.",
+    "Combat-start initiative gating has priority over damage resolution. If combat is inactive and a player submits an attack, spell, damage roll, or follow-up damage result against an aware or ready hostile creature, do not resolve damage until initiative has been requested and resolved, unless narration has already established the target was surprised or unaware.",
     "If hostilities start while enemies are aware or ready, ask player-controlled combatants for initiative before resolving their attack, spell, or damage.",
-    "If the acting player clearly surprises unaware enemies, resolve the opening roll or effect first, then ask player-controlled combatants for initiative before enemy counteraction.",
+    "If the acting player clearly surprises unaware enemies, resolve the opening roll or effect first. In the same response that resolves that opening effect, immediately start combat: reveal NPC/enemy initiative rolls, request player initiative in roll_requests, set next_input_needed dice_results, and do not return player_actions.",
     "Only request player-controlled initiative rolls in roll_requests.",
     "Roll NPC and enemy initiative yourself every time, reveal each NPC/enemy initiative roll and total in public_narration, and encode the resulting order in mechanics_state_update or combat_events.",
     "Never ask players to roll initiative, saving throws, attacks, damage, checks, or any other dice for NPCs or enemies; NPC and enemy dice are DM-side rolls that must still be visible to the players.",
@@ -540,7 +542,7 @@ export function jobPrompt(
     "Do not stop after resolving only one non-player-controlled actor if more non-player-controlled actors act before the next player-controlled turn.",
     "Do not merely announce future turns such as 'Acolyte 3 is up next' or 'then Acolyte 1 and Acolyte 2 will act'. Resolve those turns now, or pause on the acting non-player-controlled turn only because a player-facing roll, reaction, or tactical choice is required.",
     "Do not write OOC notes like '(resolving NPC turns now)' as a substitute for actually resolving those turns in public_narration and mechanics_state_update.",
-    "Only return next_input_needed player_actions in active combat after mechanics_state_update.combat.turnOwner is a living player-controlled actor, after combat has ended, or while pausing on a non-player-controlled turn for a required player reaction or tactical choice.",
+    "Only return next_input_needed player_actions in active combat after combat-start initiative requirements are satisfied and mechanics_state_update.combat.turnOwner is a living player-controlled actor, after combat has ended, or while pausing on a non-player-controlled turn for a required player reaction or tactical choice.",
     "For each non-player-controlled turn in the catch-up loop, choose movement, action, and tactics; roll NPC-side dice yourself; show visible combat math; apply HP, condition, resource, and combat turn changes in mechanics_state_update; add combat_events when available; then continue to the next initiative actor.",
     "When a player turn begins and that player has not already submitted a concrete action for this turn, do not infer an attack, spell, target, movement, or roll. Return next_input_needed player_actions with roll_requests [], target the turn owner, and ask what they do.",
     "If public_narration says a player is up or asks 'What do you do?', the JSON must stay in player-action mode: resolution_mode resolved_without_dice, next_input_needed player_actions, and roll_requests [].",
@@ -881,9 +883,73 @@ export function jobPrompt(
       )
     ].join("\n"),
     [
-      "Example: Magic Missile needs target distribution before damage.",
+      "Example: alert enemy Magic Missile starts with initiative, not damage.",
+      'Player input: "I cast Magic Missile on Veran."',
+      "Context: Combat is inactive. Veran is hostile, armed, aware of POKE, and watching for a hostile move.",
+      "Bad response to avoid: saying Magic Missile automatically hits, requesting Magic Missile damage, resolving force damage, or reducing Veran's HP before initiative is requested and resolved.",
+      "Good response:",
+      JSON.stringify(
+        completeOutputExample({
+          public_narration: [
+            "Silver darts begin to gather at POKE's fingertips, and Veran's thin smile vanishes. He is already watching for the betrayal; his hand drops to his sword as the guide stumbles back from the tower arch.",
+            "Veran initiative roll: 14. Guide initiative roll: 9.",
+            "POKE, roll initiative: 1d20 + your initiative modifier."
+          ].join("\n\n"),
+          resolution_mode: "needs_dice",
+          roll_requests: [
+            {
+              id: "initiative-veran-tower",
+              dice: "1d20",
+              label: "Initiative",
+              modifier: 2,
+              player: "player:poke"
+            }
+          ],
+          next_input_needed: "dice_results",
+          input_targets: ["player:poke"],
+          input_policy: "only_targeted_players",
+          mechanics_state_update: {
+            combat: {
+              active: true,
+              round: 1,
+              turnOwner: "player:poke",
+              initiativeOrder: [
+                "player:poke",
+                "npc:veran",
+                "npc:verans-guide"
+              ]
+            },
+            actors: {
+              "npc:veran": {
+                characterName: "Veran",
+                currentHp: 30,
+                maxHp: 30,
+                armorClass: 15,
+                allegiance: "hostile",
+                isPlayerControlled: false,
+                conditions: []
+              },
+              "npc:verans-guide": {
+                characterName: "Veran's Guide",
+                currentHp: 10,
+                maxHp: 10,
+                armorClass: 12,
+                allegiance: "hostile",
+                isPlayerControlled: false,
+                conditions: []
+              }
+            }
+          },
+          inventory_state_update: { patches: [] }
+        }),
+        null,
+        2
+      )
+    ].join("\n"),
+    [
+      "Example: active-combat Magic Missile needs target distribution before damage.",
       'Player input: "I cast Magic Missile at the wardens."',
-      "Context: POKE is the current turn owner. Four hostile wardens are valid targets and POKE has not said how to distribute the three darts.",
+      "Context: Combat is already active, initiative is resolved, and POKE is the current turn owner. Four hostile wardens are valid targets and POKE has not said how to distribute the three darts.",
       "Bad response to avoid: requesting Magic Missile damage before POKE chooses which warden or wardens the darts hit.",
       "Good response:",
       JSON.stringify(
@@ -918,9 +984,9 @@ export function jobPrompt(
       )
     ].join("\n"),
     [
-      "Example: Magic Missile target is known, request player damage.",
+      "Example: active-combat Magic Missile target is known, request player damage.",
       'Player input: "I cast Magic Missile on Doran."',
-      "Context: POKE is the current turn owner. Doran Ironhand is the only target selected by the spell, and POKE has not rolled damage.",
+      "Context: Combat is already active, initiative is resolved, and POKE is the current turn owner. Doran Ironhand is the only target selected by the spell, and POKE has not rolled damage.",
       "Bad response to avoid: rolling Magic Missile damage yourself, narrating 3d4 + 3 = 12 force damage, or reducing Doran's HP before POKE submits the damage roll.",
       "Good response:",
       JSON.stringify(

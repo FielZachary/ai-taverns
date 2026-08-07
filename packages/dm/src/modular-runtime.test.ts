@@ -582,7 +582,15 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("combat"), /Do not merely announce future turns/i);
     assert.match(
       jobPrompt("combat"),
-      /Only return next_input_needed player_actions in active combat after mechanics_state_update\.combat\.turnOwner is a living player-controlled actor/i
+      /Only return next_input_needed player_actions in active combat after combat-start initiative requirements are satisfied/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Combat-start initiative gating has priority over damage resolution/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /alert enemy Magic Missile starts with initiative, not damage/i
     );
     assert.match(
       jobPrompt("combat"),
