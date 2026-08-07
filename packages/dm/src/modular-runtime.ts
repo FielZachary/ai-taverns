@@ -562,15 +562,15 @@ export function jobPrompt(
     "In roll_requests, dice must be bare dice notation only, such as 1d20, 3d4, or 8d6. Do not include + or - modifiers in dice; put static bonuses or penalties in modifier. Example: Magic Missile uses dice \"3d4\" and modifier 3, not dice \"3d4+3\".",
     "When a player action, spell, feature, or weapon would deal damage and that damage roll was not already submitted, do not roll damage yourself. Request the player's damage roll with next_input_needed dice_results and a structured roll_requests entry. This includes automatic-hit effects such as Magic Missile. Do not update target HP until damage is submitted.",
     "When a player spell or feature forces an NPC or enemy saving throw, roll that save yourself before narrating success or failure, reveal the save roll and total, compare it to the player's known spell save DC when available, and do not put the NPC/enemy save in roll_requests.",
-    "Never narrate a spell or feature as failing, succeeding, taking hold, being resisted, or being shaken off because of an NPC/enemy save unless public_narration first includes the visible save math in prose, such as 'the cultist rolled an 11 against your spell save DC of 13, so the spell takes hold.'",
+    "Never narrate a spell or feature as failing, succeeding, taking hold, being resisted, or being shaken off because of an NPC/enemy save unless public_narration first includes the visible save math in prose, such as 'the cultist rolled an <clue>11 against your spell save DC of 13</clue>, so the spell takes hold.'",
     "Visible combat math:",
     "For resolved attacks, make the numbers visible before injury narration.",
     "Weave visible combat math into the action prose; do not format resolved combat results as detached combat-log labels like 'Attack Roll:', 'Damage Roll:', 'Attack 1:', or 'Save:'.",
-    "For player attack rolls, use conversational wording with 'you rolled': 'you rolled a 17 against their AC of 15, so the blade bites through,' or 'you rolled an 11 against their AC of 14, so the arrow skims wide.'",
-    "For NPC attack rolls, use conversational wording from the NPC side: 'they rolled a 17 against your AC of 14, so the cutlass catches your ribs,' or 'the warden rolled a 12 against Komer's AC of 18, not enough to pierce the chain mail.'",
-    "On a resolved hit where damage is known or DM-side, state damage in prose: 'the damage comes to 5 piercing from 1d6 + 2,' or 'you take 5 piercing damage and drop from 16 HP to 11 HP.'",
+    "For player attack rolls, use conversational wording with 'you rolled': '<clue>you rolled a 17 against their AC of 15</clue>, so the blade bites through,' or '<clue>you rolled an 11 against their AC of 14</clue>, so the arrow skims wide.'",
+    "For NPC attack rolls, use conversational wording from the NPC side: '<clue>they rolled a 17 against your AC of 14</clue>, so the cutlass catches your ribs,' or '<clue>the warden rolled a 12 against Komer's AC of 18</clue>, not enough to pierce the chain mail.'",
+    "On a resolved hit where damage is known or DM-side, state damage in prose: 'the damage comes to <danger>5 piercing</danger> from <clue>1d6 + 2</clue>,' or 'you take <danger>5 piercing damage</danger> and drop from <danger>16 HP to 11 HP</danger>.'",
     "For NPC hits against player characters, public_narration must include the NPC's roll, the target AC, whether it hit, the damage dice and total, the damage type, and the HP change when HP is updated.",
-    "For saving throws, make the numbers visible before consequence narration using prose: 'the cultist rolled a 9 against DC 14 and fails,' or 'the warden rolled a 16 against your DC of 14 and succeeds.'",
+    "For saving throws, make the numbers visible before consequence narration using prose: 'the cultist rolled a <clue>9 against DC 14</clue> and fails,' or 'the warden rolled a <clue>16 against your DC of 14</clue> and succeeds.'",
     "When an area spell or effect affects multiple creatures, list each target's save result separately before applying damage or conditions.",
     "For half-damage effects, state who succeeded, who failed, the full damage, the halved damage, and each affected actor's HP change when HP is updated.",
     "If the relevant save DC is unknown, ask for it or use the known character sheet value; do not silently invent a DC.",
@@ -639,8 +639,8 @@ export function jobPrompt(
           public_narration: [
             "Your sword clears the scabbard with a bright scrape, and the bandit captain's lazy grin disappears. She was waiting for this. Her boots shift in the mud, blade coming up as the two cutthroats beside her spread out to either side of the road.",
             "You have the will to strike, but they are not surprised. The fight begins before anyone's steel lands.",
-            "Bandit captain initiative roll: 15. Cutthroat initiative rolls: 11 and 8.",
-            "Roll initiative: 1d20 + your initiative modifier."
+            "<clue>Bandit captain initiative roll: 15</clue>. <clue>Cutthroat initiative rolls: 11 and 8</clue>.",
+            "Roll initiative: <clue>1d20 + your initiative modifier</clue>."
           ].join("\n\n"),
           resolution_mode: "needs_dice",
           roll_requests: [
@@ -756,9 +756,9 @@ export function jobPrompt(
           public_narration: [
             "Your fist hammers <npc>Acolyte 3</npc> backward. The damage comes to <danger>3 bludgeoning</danger> from <clue>1d4 + 2</clue>, dropping Acolyte 3 from <danger>7 HP to 4 HP</danger> and sending them sprawling prone beside the silver pool.",
             "<npc>Manifold</npc> takes his turn immediately, driving Acolyte 1 away from the pool. <clue>He rolled a 16 against their AC of 13</clue>, enough to cut through their guard; the damage comes to <danger>7 slashing</danger> from <clue>1d8 + 3</clue>, leaving Acolyte 1 staggering in torn, bloody robes.",
-            "Acolyte 3 spends half their movement rising, then lashes silver shards at you. They rolled an 11 against your AC of 12, so the shards hiss past your shoulder and burst against the stone.",
-            "Acolyte 1 answers Manifold with a hooked dagger, but they rolled a 14 against Manifold's AC of 15. Manifold turns the blade aside.",
-            "Acolyte 2 chants over the Wellspring, but the unstable silver backlashes. They rolled an 8 against DC 13 on the Arcana check, and the pool spits light, leaving Acolyte 2 rattled and exposed.",
+            "Acolyte 3 spends half their movement rising, then lashes silver shards at you. <clue>They rolled an 11 against your AC of 12</clue>, so the shards hiss past your shoulder and burst against the stone.",
+            "Acolyte 1 answers Manifold with a hooked dagger, but <clue>they rolled a 14 against Manifold's AC of 15</clue>. Manifold turns the blade aside.",
+            "Acolyte 2 chants over the Wellspring, but the unstable silver backlashes. <clue>They rolled an 8 against DC 13 on the Arcana check</clue>, and the pool spits light, leaving Acolyte 2 rattled and exposed.",
             "The initiative returns to you, Oktai. What do you do?"
           ].join("\n\n"),
           resolution_mode: "resolved_without_dice",
@@ -864,7 +864,7 @@ export function jobPrompt(
           public_narration: [
             "You hold the spell until the raiders bunch beneath the broken archway, their voices low, their attention fixed on the road below. None of them look up.",
             "The bead of fire leaves your hand like a falling star. For one breath, it is only a spark in the rain-dark air. Then it blossoms among them.",
-            "They are caught unaware, so resolve the opening blast before initiative. Roll Fireball damage: 8d6."
+            "They are caught unaware, so resolve the opening blast before initiative. Roll Fireball damage: <clue>8d6</clue>."
           ].join("\n\n"),
           resolution_mode: "needs_dice",
           roll_requests: [
@@ -895,8 +895,8 @@ export function jobPrompt(
         completeOutputExample({
           public_narration: [
             "Silver darts begin to gather at POKE's fingertips, and Veran's thin smile vanishes. He is already watching for the betrayal; his hand drops to his sword as the guide stumbles back from the tower arch.",
-            "Veran initiative roll: 14. Guide initiative roll: 9.",
-            "POKE, roll initiative: 1d20 + your initiative modifier."
+            "<clue>Veran initiative roll: 14</clue>. <clue>Guide initiative roll: 9</clue>.",
+            "POKE, roll initiative: <clue>1d20 + your initiative modifier</clue>."
           ].join("\n\n"),
           resolution_mode: "needs_dice",
           roll_requests: [
@@ -996,7 +996,7 @@ export function jobPrompt(
         completeOutputExample({
           public_narration: [
             "Three silver darts gather at POKE's fingertips, thread through the thinning smoke, and lock onto Doran Ironhand.",
-            "Magic Missile automatically hits Doran. POKE, roll Magic Missile damage: 3d4 + 3."
+            "Magic Missile automatically hits Doran. POKE, roll Magic Missile damage: <clue>3d4 + 3</clue>."
           ].join("\n\n"),
           resolution_mode: "needs_dice",
           roll_requests: [
@@ -1081,7 +1081,7 @@ export function jobPrompt(
       JSON.stringify(
         completeOutputExample({
           public_narration: [
-            "The cutlass raider is already moving. His turn resolves first. They rolled a 17 against your AC of 14, so he slips inside your guard and carves a hard line across your ribs. The damage comes to 6 slashing from 1d6 + 2, dropping you from 24 HP to 18 HP before he springs back out of reach.",
+            "The cutlass raider is already moving. His turn resolves first. <clue>They rolled a 17 against your AC of 14</clue>, so he slips inside your guard and carves a hard line across your ribs. The damage comes to <danger>6 slashing</danger> from <clue>1d6 + 2</clue>, dropping you from <danger>24 HP to 18 HP</danger> before he springs back out of reach.",
             "The raider's momentum carries him past you, and the opening is finally yours. Your declared Scorching Ray intent is still waiting for your turn, but no attack roll is resolved until you confirm the action now that the board has changed.",
             "What do you do?"
           ].join("\n\n"),
@@ -1122,7 +1122,7 @@ export function jobPrompt(
       JSON.stringify(
         completeOutputExample({
           public_narration: [
-            "The wounded warden uses Komer's hesitation immediately. They rolled a 12 against Komer's AC of 18, so the spearpoint snaps for Komer's chest but skids off his chain mail with a bright scrape. The failed thrust leaves the warden overextended.",
+            "The wounded warden uses Komer's hesitation immediately. <clue>They rolled a 12 against Komer's AC of 18</clue>, so the spearpoint snaps for Komer's chest but skids off his chain mail with a bright scrape. The failed thrust leaves the warden overextended.",
             "POKE, the warden is wounded and exposed while Komer holds the line.",
             "What do you do?"
           ].join("\n\n"),
@@ -1158,7 +1158,7 @@ export function jobPrompt(
       JSON.stringify(
         completeOutputExample({
           public_narration: [
-            "The green-eyed figure moves first. They rolled a 16 against Por's AC of 16, enough for the claw to rake across his forearm and tear through his sleeve. The damage comes to 7 slashing from 1d6 + 3, dropping Por from 34 HP to 27 HP as he steps back with his sword raised.",
+            "The green-eyed figure moves first. <clue>They rolled a 16 against Por's AC of 16</clue>, enough for the claw to rake across his forearm and tear through his sleeve. The damage comes to <danger>7 slashing</danger> from <clue>1d6 + 3</clue>, dropping Por from <danger>34 HP to 27 HP</danger> as he steps back with his sword raised.",
             "Tart, the creature is within striking distance and Por is hurt.",
             "What do you do?"
           ].join("\n\n"),
@@ -1287,7 +1287,7 @@ export function jobPrompt(
       JSON.stringify(
         completeOutputExample({
           public_narration: [
-            "Your strike lands cleanly. You rolled a 19 against their AC of 13, and the damage lands for 11 bludgeoning.",
+            "Your strike lands cleanly. <clue>You rolled a 19 against their AC of 13</clue>, and the damage lands for <danger>11 bludgeoning</danger>.",
             "The mace crashes through the skeleton's raised arm and into its ribcage. Bone splinters across the flagstones, the blue corpse-light in its skull guttering once before going dark. What remains collapses in a dry clatter at your feet.",
             "For a moment, the chamber is all echo and dust. No other enemies move. The fight is over.",
             "What do you do?"
@@ -1562,7 +1562,7 @@ export function jobPrompt(
         "- If the submitted roll means three successes, the character is stable at 0 HP and unconscious. Say that clearly and do not imply they can act normally.",
         "",
         "Roll Handling:",
-        "- When current input includes a Death Saving Throw result, narrate that exact roll visibly before the consequence, using wording like 'you rolled a 14 against DC 10 and succeed' or 'you rolled a 3 against DC 10 and fail.'",
+        "- When current input includes a Death Saving Throw result, narrate that exact roll visibly before the consequence, using wording like 'you rolled a <clue>14 against DC 10</clue> and succeed' or 'you rolled a <clue>3 against DC 10</clue> and fail.'",
         "- If the character remains dying after the result, do not return ordinary player action control. Ask for the next Death Saving Throw with roll_requests containing dice \"1d20\", modifier 0, label \"Death Saving Throw\", next_input_needed dice_results, and input_targets set to the dying actor key.",
         "- Do not ask what the unconscious character does while they are still dying.",
         "",
