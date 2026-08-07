@@ -399,7 +399,10 @@ test("POST /api/campaigns/backstory generates a world-grounded character backsto
   assert.match(providerInput?.message ?? "", /World: Eldermere/);
   assert.match(providerInput?.message ?? "", /Canonical Eldermere start options:/);
   assert.match(providerInput?.message ?? "", /Region: The Salt Concordat/);
-  assert.match(providerInput?.message ?? "", /Settlements: Corvane, Selwick, Skerrywatch/);
+  assert.match(
+    providerInput?.message ?? "",
+    /Settlements: Corvane, Selwick, Gullswatch, Barnacle Reach, Skerrywatch, Driftwood Landing/
+  );
   assert.match(providerInput?.message ?? "", /eldermereStart\.regionName/);
   assert.match(providerInput?.message ?? "", /Use generated names only for people/i);
   assert.match(providerInput?.message ?? "", /only newly invented proper nouns allowed are people names/i);
