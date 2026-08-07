@@ -107,6 +107,14 @@ export type ExistingMemoryContext = {
   bodyMarkdown: string;
 };
 
+const canonicalDocumentTextHeadingPattern =
+  /^##\s+Canonical Document Text\b/im;
+const incidentalDialogueVerbPattern =
+  /\b(?:add(?:ed|s)?|answer(?:ed|s)?|ask(?:ed|s)?|call(?:ed|s)?(?:\s+out)?|remark(?:ed|s)?|repl(?:ied|ies)|sa(?:id|ys)|shout(?:ed|s)?|tell(?:ing|s)?|told|urg(?:ed|es)?|warn(?:ed|s)?|whisper(?:ed|s)?)\b/i;
+const durableExactWordingContextPattern =
+  /\b(?:called\s+(?:her|him|them|it|this)|canonical|clue|code\s*(?:phrase|word)|contract|document|inscription|journal|letter|map|name|note|oath|pass\s*phrase|password|prophe(?:cy|tic)|riddle|scroll|sign|signature|title|true\s+name|vow|writ)\b/i;
+const quotedDialoguePattern = /"[^"\n]{20,240}"/g;
+
 export type LivingWorldGuidance = {
   currentDirection: string;
   pressureToSurface: string[];
@@ -1399,6 +1407,7 @@ export function jobPrompt(
       "- Treat campaign state, character sheets, selected context chunks, recent transcript, and validated state patches as canon.",
       "- Player wording is not automatically authoritative for possession, relationships, backstory, world facts, NPC history, prior events, items, secrets, or ownership.",
       "- If player wording conflicts with canon or would materially create new canon, preserve existing canon and resolve uncertainty through narration, checks, or clarification according to the active job.",
+      "- If context says an NPC previously expressed an emotional beat, relationship state, approval, suspicion, fear, respect, or grief, portray the changed state in fresh wording or behavior. Do not repeat prior dialogue phrasing unless the exact words are canonically important or the player explicitly asks about them.",
       "",
       "State Mutation Boundary:",
       "- Models may choose, narrate, infer, and propose; the server retrieves, validates, stores, and mutates.",
@@ -1696,6 +1705,8 @@ export function buildMemoryUpdaterPrompt() {
     "Treat campaign context as a living world bible for the AI DM. Your job is not only to record facts; it is also to maintain compelling, reusable story material that helps the DM make the world feel coherent and alive.",
     "Be proactive when the turn reveals or strongly implies durable worldbuilding, mysteries, factions, locations, artifacts, open player-facing problems, or long-running secrets.",
     "Do not contradict established play. Separate confirmed facts from creative inference so future DMs can use your ideas without mistaking every seed for settled truth.",
+    "Store the meaning of incidental NPC dialogue, not reusable prose. Do not preserve exact dialogue lines as durable NPC catchphrases unless the wording is itself canonically important, such as a vow, password, prophecy, clue, name, title, command phrase, or revealed written artifact text.",
+    "When an NPC says an emotional or relational line, convert it into relationship state, motive, trust, fear, suspicion, debt, or changed behavior. Future DM turns should express that state in fresh wording rather than repeating the prior line.",
     "Prefer updating an existing matching chunk over creating a duplicate when the same place, artifact, faction, quest, mystery, or secret is clearly referenced by name, alias, role, or scene context.",
     "",
     "Canonical written artifact memory:",
@@ -2298,6 +2309,76 @@ function duplicateNpcIdentityContext(
   );
 }
 
+function memoryPatchContextCategory(
+  patch: Record<string, unknown>,
+  existingContexts: ExistingMemoryContext[] | undefined
+) {
+  const contextType = patch.context_type ?? patch.contextType;
+
+  if (contextCategories.includes(contextType as ContextCategory)) {
+    return contextType as ContextCategory;
+  }
+
+  const contextId =
+    typeof patch.context_id === "string"
+      ? patch.context_id
+      : typeof patch.contextId === "string"
+        ? patch.contextId
+        : typeof patch.target_context_id === "string"
+          ? patch.target_context_id
+          : typeof patch.targetContextId === "string"
+            ? patch.targetContextId
+            : "";
+
+  return existingContextById(existingContexts, contextId)?.category;
+}
+
+function sanitizeIncidentalDialogueLine(line: string) {
+  if (
+    !line.includes("\"") ||
+    !incidentalDialogueVerbPattern.test(line) ||
+    durableExactWordingContextPattern.test(line)
+  ) {
+    return line;
+  }
+
+  return line.replace(
+    quotedDialoguePattern,
+    "the sentiment, without preserving the exact wording"
+  );
+}
+
+export function sanitizeMemoryPatchMarkdown(
+  markdown: string,
+  category: ContextCategory | undefined
+) {
+  if (
+    category !== "npc_context" ||
+    canonicalDocumentTextHeadingPattern.test(markdown)
+  ) {
+    return markdown;
+  }
+
+  return markdown
+    .split("\n")
+    .map((line) => sanitizeIncidentalDialogueLine(line))
+    .join("\n");
+}
+
+function sanitizeAcceptedMemoryPatch(
+  patch: Record<string, unknown>,
+  existingContexts: ExistingMemoryContext[] | undefined
+) {
+  if (typeof patch.markdown !== "string") {
+    return patch;
+  }
+
+  const category = memoryPatchContextCategory(patch, existingContexts);
+  const markdown = sanitizeMemoryPatchMarkdown(patch.markdown, category);
+
+  return markdown === patch.markdown ? patch : { ...patch, markdown };
+}
+
 function memoryPatchReasons(
   patch: unknown,
   existingContextIds: Set<string>,
@@ -2459,7 +2540,7 @@ export function validateMemoryPatches(
       if (reasons.length > 0 || !isRecord(patch)) {
         result.discarded.push({ item: patch, reasons });
       } else {
-        result.accepted.push(patch);
+        result.accepted.push(sanitizeAcceptedMemoryPatch(patch, existingContexts));
       }
 
       return result;
