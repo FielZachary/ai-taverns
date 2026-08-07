@@ -496,6 +496,127 @@ test("POST /api/campaigns/backstory adds details and falls back to plain prose",
   resetProviderInputs();
 });
 
+test("POST /api/campaigns/backstory add details localizes Eldermere details", async () => {
+  resetProviderInputs();
+  setProviderOverride(async () => {
+    const content = JSON.stringify({
+      backstory:
+        "Mira carried her lighthouse debt into Selwick, where the Salt Concordat measures every promise against the tide.",
+      eldermereStart: {
+        regionName: "The Salt Concordat",
+        settlementName: "Selwick",
+        reason: "The enriched backstory turns Mira's debt into port trouble."
+      }
+    });
+
+    return {
+      id: "provider-backstory-eldermere-details",
+      content,
+      debug: {
+        requestMessages: [],
+        rawResponse: content,
+        model: "test-model",
+        temperature: 0.8,
+        providerTimings: []
+      }
+    };
+  });
+  const cookie = await signIn("backstory-eldermere-details@example.com");
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/campaigns/backstory",
+    headers: {
+      cookie
+    },
+    payload: {
+      mode: "add_details",
+      characterSheet: "Character Name: Mira Vale\nClass: Fighter",
+      currentBackstory: "Mira owes money to people at a port.",
+      campaignGenre: "Eldermere",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "eldermere"
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+
+  const providerInput = getProviderInputs().at(-1);
+
+  assert.match(providerInput?.message ?? "", /Expand, enrich, and localize/i);
+  assert.match(
+    providerInput?.message ?? "",
+    /convert generic world details into terms and places native/i
+  );
+  assert.match(providerInput?.message ?? "", /When the world is Eldermere/i);
+  assert.match(providerInput?.message ?? "", /Canonical Eldermere start options:/);
+  resetProviderInputs();
+});
+
+test("POST /api/campaigns/backstory localizes Eldermere backstory with minimal changes", async () => {
+  resetProviderInputs();
+  setProviderOverride(async () => {
+    const content = JSON.stringify({
+      backstory:
+        "Mira left her harbor home for Selwick after a dockside creditor tied her family's debt to an old Salt Concordat tithe.",
+      eldermereStart: {
+        regionName: "The Salt Concordat",
+        settlementName: "Selwick",
+        reason: "The localized backstory points toward Selwick debt trouble."
+      }
+    });
+
+    return {
+      id: "provider-backstory-localize",
+      content,
+      debug: {
+        requestMessages: [],
+        rawResponse: content,
+        model: "test-model",
+        temperature: 0.8,
+        providerTimings: []
+      }
+    };
+  });
+  const cookie = await signIn("backstory-localize@example.com");
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/campaigns/backstory",
+    headers: {
+      cookie
+    },
+    payload: {
+      mode: "localize",
+      characterSheet: "Character Name: Mira Vale\nClass: Fighter",
+      currentBackstory:
+        "Mira left her harbor home after a dockside creditor tied her family's debt to an old coastal tax.",
+      campaignGenre: "Eldermere",
+      campaignGenreKind: "preset",
+      campaignGenrePresetId: "eldermere"
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(CharacterBackstoryGenerateResponseSchema.parse(response.json()), {
+    backstory:
+      "Mira left her harbor home for Selwick after a dockside creditor tied her family's debt to an old Salt Concordat tithe.",
+    eldermereStart: {
+      regionName: "The Salt Concordat",
+      settlementName: "Selwick",
+      reason: "The localized backstory points toward Selwick debt trouble."
+    }
+  });
+
+  const providerInput = getProviderInputs().at(-1);
+
+  assert.match(providerInput?.message ?? "", /Localize the player-written backstory/i);
+  assert.match(providerInput?.message ?? "", /changing as little as possible/i);
+  assert.match(providerInput?.message ?? "", /Do not expand the backstory into a new story/i);
+  assert.match(providerInput?.message ?? "", /Player-written backstory:/);
+  assert.match(providerInput?.message ?? "", /old coastal tax/);
+  assert.match(providerInput?.message ?? "", /Canonical Eldermere start options:/);
+  resetProviderInputs();
+});
+
 test("POST /api/campaigns/backstory accepts Eldermere starts without reasons", async () => {
   resetProviderInputs();
   setProviderOverride(async () => {
