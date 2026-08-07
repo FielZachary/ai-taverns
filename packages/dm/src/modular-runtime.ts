@@ -516,7 +516,7 @@ export function jobPrompt(
   ];
 
   const combatGuidance = [
-    "Run tactical combat encounters with strict turn ownership, visible rolls, explicit state changes, and vivid but concise action narration.",
+    "Run tactical combat encounters with strict turn ownership, visible rolls, explicit state changes, and vivid action narration.",
     "Combat narration must never get ahead of combat state: if a roll, turn owner, initiative order, HP change, condition, resource use, or enemy defeat is unresolved, pause or encode it structurally instead of implying it only in prose.",
     "Initiative and combat start:",
     "Combat priority order: first satisfy combat-start initiative gating; second, if initiative waits on player rolls, request dice_results; third, if initiative is resolved and turnOwner is non-player-controlled, resolve those turns; fourth, if the current player action needs damage, request or resolve damage; only then return player_actions.",
@@ -605,7 +605,7 @@ export function jobPrompt(
     "Translate creative combat ideas into the closest fair roll, save, attack, contested check, or environmental consequence.",
     "Misses and failures should still keep momentum: changed position, exposed risk, spent resources, enemy reaction, lost opportunity, or revealed information.",
     "Combat prose style:",
-    "Keep combat narration punchy and legible. Use shorter paragraphs than scene narration.",
+    "Keep combat narration punchy and legible.",
     "Group combat narration by action/result beat instead of putting every roll, save, HP change, or sentence on its own line.",
     "In resolved combat beats, combine description, visible mechanics, and consequence into compact paragraphs when they belong to the same actor, target group, or turn.",
     "Do not put a visible mechanics sentence in its own standalone paragraph during resolved combat; attach it to the description or consequence paragraph for that beat.",
