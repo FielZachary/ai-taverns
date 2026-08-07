@@ -101,7 +101,11 @@ export const CharacterPortraitPreviewResponseSchema = z.object({
   contentType: z.string().min(1)
 });
 
-export const CharacterBackstoryModeSchema = z.enum(["generate", "add_details"]);
+export const CharacterBackstoryModeSchema = z.enum([
+  "generate",
+  "add_details",
+  "localize"
+]);
 
 export const CampaignRestartBackstoryParamsSchema = z.object({
   campaignId: z.string().uuid()

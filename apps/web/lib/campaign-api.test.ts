@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createCampaign,
+  generateCharacterBackstory,
   generateCharacterPortrait,
   generateCampaignRestartBackstory,
   joinCampaign,
@@ -71,6 +72,40 @@ describe("campaign API client", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/campaigns/campaign%2Fwith%20spaces"
     );
+  });
+
+  it("passes localize mode when generating character backstories", async () => {
+    const fetchMock = mockFetchJson({
+      backstory: "Mira brings her old debt to Selwick."
+    });
+
+    await expect(
+      generateCharacterBackstory({
+        mode: "localize",
+        characterSheet: "Character Name: Mira",
+        currentBackstory: "Mira brings her old debt to a harbor.",
+        campaignGenre: "Eldermere",
+        campaignGenreKind: "preset",
+        campaignGenrePresetId: "eldermere"
+      })
+    ).resolves.toEqual({
+      backstory: "Mira brings her old debt to Selwick."
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/campaigns/backstory", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        mode: "localize",
+        characterSheet: "Character Name: Mira",
+        currentBackstory: "Mira brings her old debt to a harbor.",
+        campaignGenre: "Eldermere",
+        campaignGenreKind: "preset",
+        campaignGenrePresetId: "eldermere"
+      })
+    });
   });
 
   it("generates restart backstories and restarts campaigns", async () => {

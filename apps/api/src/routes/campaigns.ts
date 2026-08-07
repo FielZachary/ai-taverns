@@ -449,12 +449,14 @@ function buildGenerateBackstoryPrompt(input: BackstoryPromptInput) {
 
 function buildAddBackstoryDetailsPrompt(input: BackstoryPromptInput) {
   return [
-    "Expand and enrich the player-written backstory below. Preserve the player's core ideas, events, relationships, tone, and intent. Your job is to add vivid, useful detail that makes the backstory feel specific to the provided world context and gives the AI DM excellent material to bring into the story later.",
+    "Expand, enrich, and localize the player-written backstory below. Preserve the player's core ideas, events, relationships, tone, and intent. Your job is to add vivid, useful detail, convert generic world details into terms and places native to the provided world context where they naturally fit, and give the AI DM excellent material to bring into the story later.",
     "",
     "Rules:",
     "- Treat the existing backstory as authoritative. Do not remove, contradict, rename, or overwrite any player-authored details.",
     "- Use the character sheet as authoritative. Do not change class, species, background, alignment, gender, level, stats, proficiencies, equipment, or spells.",
     "- Use the full world context as canon. Add concrete world details, factions, places, conflicts, beliefs, customs, threats, or tensions where they naturally fit.",
+    "- When the world is Eldermere, convert generic or non-canonical places, factions, institutions, threats, magic, customs, and historical references into Eldermere-native equivalents from the world context when doing so preserves the player's meaning.",
+    "- Do not merely append Eldermere terms. Weave them into the existing story so the current details feel as though they were always native to Eldermere.",
     "- Use generated names only for people. Do not use generated names for settlements, landmarks, taverns, factions, families, artifacts, ships, roads, objects, or organizations.",
     "- The only newly invented proper nouns allowed are people names. Do not invent new proper nouns for any non-person entity.",
     "- Do not give names to ships, taverns, guilds, companies, ruins, roads, artifacts, books, ledgers, weapons, or family lines unless the player already named them. Refer to those as plain descriptions, such as 'her mother's fishing boat' or 'a ruined observatory'.",
@@ -499,6 +501,68 @@ function buildAddBackstoryDetailsPrompt(input: BackstoryPromptInput) {
     "World context:",
     input.worldContext
   ].join("\n");
+}
+
+function buildLocalizeBackstoryPrompt(input: BackstoryPromptInput) {
+  return [
+    "Localize the player-written backstory below into the provided world context while changing as little as possible. Preserve the player's wording, structure, events, relationships, tone, character intent, and emotional emphasis wherever you can.",
+    "",
+    "Rules:",
+    "- Treat the existing backstory as authoritative. Do not remove, contradict, rename, or overwrite any player-authored details unless a small change is needed to make a generic or non-canonical world reference native to the provided world.",
+    "- Use the character sheet as authoritative. Do not change class, species, background, alignment, gender, level, stats, proficiencies, equipment, or spells.",
+    "- Use the full world context as canon. Replace generic or non-canonical places, factions, institutions, threats, magic, customs, and historical references with native world terms only where the replacement is natural and preserves the player's meaning.",
+    "- When the world is Eldermere, convert the current details into Eldermere-native terms and places from the world context while changing as little as possible.",
+    "- Do not expand the backstory into a new story. Add only the smallest connective phrases needed to make introduced world terms readable.",
+    "- Do not add new plot events, new tragedies, new secrets, new prophecies, new quests, or new relationships.",
+    "- Do not rename the player character or any player-authored people.",
+    "- Use generated names only for people, and only if the original backstory describes an unnamed important person who needs a name to remain readable. Prefer not to invent names during localization.",
+    "- Do not invent named non-person entities. Use places, factions, faiths, threats, historical events, and magic terms only when they come from the world context, the player-written backstory, or the character sheet.",
+    "- Backstory override for Eldermere opener context: do not invent named starting places or named local anchors. Use only region, city-state, faction, threat, history, or magic names already present in the world context.",
+    "- Keep the setting texture focused: choose one primary region or local anchor from the world context, include at most two other canonical setting proper nouns, and explain lore through personal stakes rather than listing canon.",
+    "- When introducing a setting term, faction, region, title, settlement, custom, historical event, or magic concept a new player may not know, briefly define it in the same sentence or a nearby clause through natural prose. Do not add a separate glossary or labeled explanation section.",
+    "- Keep paragraph breaks close to the player's original structure. If the original is one short paragraph, return one short paragraph.",
+    "- Before returning JSON, silently remove any invented non-person proper noun and replace it with a plain description.",
+    "- Do not reveal secret DM-only information unless the world context explicitly says it is player-safe.",
+    ...(input.includeEldermereStart
+      ? [
+          "- Also choose the best Eldermere campaign starting region and settlement for this character. Return them in eldermereStart.regionName and eldermereStart.settlementName using exact names from the canonical start options below.",
+          "- Choose the starting settlement that best turns the localized backstory's unresolved trouble into the opening scene. The backstory itself may mention a broader region or city-state without starting there."
+        ]
+      : []),
+    "- Do not write in second person.",
+    "",
+    "Length: Stay close to the player's original length. Do not exceed the original by more than 25% unless a brief world-term explanation is necessary.",
+    "Tone: preserve the player's tone.",
+    "",
+    "Character sheet:",
+    input.characterSheet,
+    "",
+    "Player-written backstory:",
+    input.currentBackstory ?? "",
+    "",
+    input.nameBank,
+    "",
+    ...(input.includeEldermereStart
+      ? [formatEldermereStartOptions(), ""]
+      : []),
+    "World context:",
+    input.worldContext
+  ].join("\n");
+}
+
+function buildBackstoryPrompt(
+  mode: "generate" | "add_details" | "localize",
+  input: BackstoryPromptInput
+) {
+  if (mode === "generate") {
+    return buildGenerateBackstoryPrompt(input);
+  }
+
+  if (mode === "localize") {
+    return buildLocalizeBackstoryPrompt(input);
+  }
+
+  return buildAddBackstoryDetailsPrompt(input);
 }
 
 function parseBackstoryProviderResponse(content: string) {
@@ -588,7 +652,7 @@ export async function registerCampaignRoutes(
       request.cookies[config.authCookieName]
     );
 
-    if (body.mode === "add_details" && !currentBackstory) {
+    if (body.mode !== "generate" && !currentBackstory) {
       throw createHttpError(400, "Write a backstory before adding details.");
     }
 
@@ -610,21 +674,13 @@ export async function registerCampaignRoutes(
     const includeEldermereStart = isEldermereBackstoryRequest({
       campaignGenrePresetId: body.campaignGenrePresetId
     });
-    const message =
-      body.mode === "generate"
-        ? buildGenerateBackstoryPrompt({
-            characterSheet,
-            includeEldermereStart,
-            nameBank,
-            worldContext
-          })
-        : buildAddBackstoryDetailsPrompt({
-            characterSheet,
-            currentBackstory,
-            includeEldermereStart,
-            nameBank,
-            worldContext
-          });
+    const message = buildBackstoryPrompt(body.mode, {
+      characterSheet,
+      currentBackstory,
+      includeEldermereStart,
+      nameBank,
+      worldContext
+    });
     const providerResponse = await runtime.askProvider({
       instructions: backstoryJsonInstructions,
       message
@@ -661,7 +717,7 @@ export async function registerCampaignRoutes(
       request.cookies[config.authCookieName]
     );
 
-    if (body.mode === "add_details" && !currentBackstory) {
+    if (body.mode !== "generate" && !currentBackstory) {
       throw createHttpError(400, "Write a backstory before adding details.");
     }
 
@@ -734,21 +790,13 @@ export async function registerCampaignRoutes(
     const includeEldermereStart = isEldermereBackstoryRequest({
       campaignGenrePresetId
     });
-    const message =
-      body.mode === "generate"
-        ? buildGenerateBackstoryPrompt({
-            characterSheet,
-            includeEldermereStart,
-            nameBank,
-            worldContext
-          })
-        : buildAddBackstoryDetailsPrompt({
-            characterSheet,
-            currentBackstory,
-            includeEldermereStart,
-            nameBank,
-            worldContext
-          });
+    const message = buildBackstoryPrompt(body.mode, {
+      characterSheet,
+      currentBackstory,
+      includeEldermereStart,
+      nameBank,
+      worldContext
+    });
     const providerResponse = await runtime.askProvider({
       instructions: backstoryJsonInstructions,
       message

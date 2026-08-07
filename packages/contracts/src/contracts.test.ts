@@ -233,7 +233,7 @@ test("campaign contracts accept list, create, and join preview payloads", () => 
   assert.equal(readParams.campaignId, readResponse.campaign.id);
 
   const restartBackstoryRequest = CampaignRestartBackstoryRequestSchema.parse({
-    mode: "add_details",
+    mode: "localize",
     currentBackstory: "Mira keeps a salt-stained promise."
   });
   const restartRequest = CampaignRestartRequestSchema.parse({
@@ -247,7 +247,7 @@ test("campaign contracts accept list, create, and join preview payloads", () => 
     }
   });
 
-  assert.equal(restartBackstoryRequest.mode, "add_details");
+  assert.equal(restartBackstoryRequest.mode, "localize");
   assert.match(restartRequest.backstory, /sharper/);
   assert.equal(restartResponse.campaign.mode, "single_player");
 

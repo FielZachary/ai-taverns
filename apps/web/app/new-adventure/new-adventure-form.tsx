@@ -53,6 +53,7 @@ import {
   trackAnalytics
 } from "@/lib/analytics";
 import type {
+  CharacterBackstoryGenerateRequest,
   EldermereCampaignStart,
   MechanicsSeed,
   SpellSlotState
@@ -105,6 +106,7 @@ type AbilityScores = Record<AbilityKey, number | null>;
 type SpeciesAbilityBonuses = Partial<Record<AbilityKey, number>>;
 type SkillName = (typeof skillDefinitions)[number]["name"];
 type CharacterBuildMode = "quick" | "custom";
+type BackstoryWriteMode = CharacterBackstoryGenerateRequest["mode"];
 type StatGenerationMode = "roll" | "point_buy";
 type CharacterArtStyle =
   | "painterly_fantasy"
@@ -227,6 +229,7 @@ const multiplayerCustomCreateSteps = [
 ];
 const joinSteps = ["Mode", "Multiplayer", "Game Code", "Character", "Review"];
 const joinCodePattern = /[A-HJ-NP-Z2-9]{6}/;
+const eldermereBackstoryLocalizationThreshold = 100;
 const customCharacterCreationSteps = [
   "Build",
   "Class",
@@ -3828,6 +3831,9 @@ export function NewAdventureForm({
   const [isGeneratingBackstory, setIsGeneratingBackstory] = useState(false);
   const [isContinuingWithBackstory, setIsContinuingWithBackstory] =
     useState(false);
+  const [continuingBackstoryMode, setContinuingBackstoryMode] =
+    useState<BackstoryWriteMode | null>(null);
+  const [hasUsedBackstoryAction, setHasUsedBackstoryAction] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [isCreatingArt, setIsCreatingArt] = useState(false);
   const [createdCampaign, setCreatedCampaign] =
@@ -5087,17 +5093,10 @@ export function NewAdventureForm({
       return;
     }
 
-    if (
-      isCharacterStep &&
-      currentCharacterStep === "Identity" &&
-      !isJoinFlow &&
-      !backstory.trim()
-    ) {
-      setIsContinuingWithBackstory(true);
-      const wroteBackstory = await writeBackstory("generate");
-      setIsContinuingWithBackstory(false);
+    if (isCharacterStep && currentCharacterStep === "Identity" && !isJoinFlow) {
+      const preparedBackstory = await prepareBackstoryForContinue();
 
-      if (!wroteBackstory) {
+      if (!preparedBackstory) {
         return;
       }
     }
@@ -5280,14 +5279,14 @@ export function NewAdventureForm({
     }
   }
 
-  async function writeBackstory(mode: "generate" | "add_details") {
+  async function writeBackstory(mode: BackstoryWriteMode) {
     if (isGeneratingBackstory) {
       return false;
     }
 
     const currentBackstory = backstory.trim();
 
-    if (mode === "add_details" && !currentBackstory) {
+    if (mode !== "generate" && !currentBackstory) {
       setError("Write a backstory before adding details.");
       return false;
     }
@@ -5299,7 +5298,7 @@ export function NewAdventureForm({
       const generatedBackstory = await generateCharacterBackstory({
         mode,
         characterSheet: characterSheetPreview,
-        ...(mode === "add_details" ? { currentBackstory } : {}),
+        ...(mode !== "generate" ? { currentBackstory } : {}),
         campaignGenre: selectedGenre.label,
         campaignGenreKind: isCustomGenre ? "custom" : "preset",
         campaignGenrePresetId: isCustomGenre ? undefined : selectedGenre.id,
@@ -5321,6 +5320,35 @@ export function NewAdventureForm({
       return false;
     } finally {
       setIsGeneratingBackstory(false);
+    }
+  }
+
+  async function prepareBackstoryForContinue() {
+    const currentBackstory = backstory.trim();
+    const shouldLocalizeForEldermere =
+      !hasUsedBackstoryAction &&
+      !isCustomGenre &&
+      selectedGenre.id === "eldermere";
+    const mode: BackstoryWriteMode | null = !currentBackstory
+      ? "generate"
+      : shouldLocalizeForEldermere
+        ? currentBackstory.length < eldermereBackstoryLocalizationThreshold
+          ? "add_details"
+          : "localize"
+        : null;
+
+    if (!mode) {
+      return true;
+    }
+
+    setIsContinuingWithBackstory(true);
+    setContinuingBackstoryMode(mode);
+
+    try {
+      return await writeBackstory(mode);
+    } finally {
+      setIsContinuingWithBackstory(false);
+      setContinuingBackstoryMode(null);
     }
   }
 
@@ -6398,14 +6426,20 @@ export function NewAdventureForm({
                     <div className="backstory-actions" aria-label="Backstory actions">
                       <button
                         type="button"
-                        onClick={() => void writeBackstory("generate")}
+                        onClick={() => {
+                          setHasUsedBackstoryAction(true);
+                          void writeBackstory("generate");
+                        }}
                         disabled={isGeneratingBackstory}
                       >
                         Generate story
                       </button>
                       <button
                         type="button"
-                        onClick={() => void writeBackstory("add_details")}
+                        onClick={() => {
+                          setHasUsedBackstoryAction(true);
+                          void writeBackstory("add_details");
+                        }}
                         disabled={isGeneratingBackstory || !backstory.trim()}
                       >
                         Add details
@@ -6623,7 +6657,13 @@ export function NewAdventureForm({
               {isCreating ? (
                 isJoinFlow ? "Joining..." : "Creating..."
               ) : isContinuingWithBackstory ? (
-                "Generating backstory..."
+                continuingBackstoryMode === "add_details" ? (
+                  "Adding details..."
+                ) : continuingBackstoryMode === "localize" ? (
+                  "Localizing backstory..."
+                ) : (
+                  "Generating backstory..."
+                )
               ) : isCreatingArt && !createdCampaign ? (
                 <>
                   Continue
