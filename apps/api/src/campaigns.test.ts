@@ -399,7 +399,10 @@ test("POST /api/campaigns/backstory generates a world-grounded character backsto
   assert.match(providerInput?.message ?? "", /World: Eldermere/);
   assert.match(providerInput?.message ?? "", /Canonical Eldermere start options:/);
   assert.match(providerInput?.message ?? "", /Region: The Salt Concordat/);
-  assert.match(providerInput?.message ?? "", /Settlements: Corvane, Selwick, Skerrywatch/);
+  assert.match(
+    providerInput?.message ?? "",
+    /Settlements: Corvane, Selwick, Gullswatch, Barnacle Reach, Skerrywatch, Driftwood Landing/
+  );
   assert.match(providerInput?.message ?? "", /eldermereStart\.regionName/);
   assert.match(providerInput?.message ?? "", /Use generated names only for people/i);
   assert.match(providerInput?.message ?? "", /only newly invented proper nouns allowed are people names/i);
@@ -2460,6 +2463,11 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.equal(startingLocation.displayLocation, startingLocation.name);
   assert.equal(metadata.eldermereOpeningPlanVersion, 1);
   assert.equal(openingPlan.campaign_title, "The Quiet Road");
+  assert.ok(openingPlan.starting_location_atmosphere);
+  assert.match(
+    JSON.stringify(openingPlan.starting_location_atmosphere),
+    /watchful daily life|busy|guarded|settlement pressure/i
+  );
   assert.equal(openingPayload?.content, "The summons that brought you here has the weight of unfinished business, the kind that does not let a traveler turn back once the old road bends toward trouble.\n\nFor the last few days, the road has been mud, cold meals, and warnings from strangers who would not meet your eyes; in the last hour, the trees thinned enough to show the ruined watchtower beyond the ridge.\n\nA lantern flickers over the old road as your adventure begins, its light catching wet stones, wagon ruts, and a weathered sign pointing toward the tower beyond the trees.\n\nA courier waits beside the sign with their cloak pulled tight, glancing between you and the dark treeline while distant metal knocks once from somewhere inside the ruin.\n\nYou can question the courier, inspect the weathered sign, or follow the road toward the ruined watchtower before the lantern burns out.\n\nWhat do you do?");
   assert.equal(getProviderInputs().length, 2);
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -2552,6 +2560,11 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
     plannerInput.instructions,
     /Use the player backstory anchors from the opening request/
   );
+  assert.match(plannerInput.instructions, /starting_location_atmosphere/);
+  assert.match(plannerInput.instructions, /arrival_impression/);
+  assert.match(plannerInput.instructions, /daily_life_and_liveliness/);
+  assert.match(plannerInput.instructions, /local_attitude/);
+  assert.match(plannerInput.instructions, /transition_into_first_scene/);
   assert.match(
     plannerInput.message,
     /use no more than 2-3 new Eldermere-specific proper nouns/
@@ -2582,6 +2595,16 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(narratorInput.message, /Do not return a teaser, prologue note, or partial first paragraph/);
   assert.match(narratorInput.message, /allowed_player_facing_terms/);
   assert.match(narratorInput.message, /forbidden_opening_terms/);
+  assert.match(narratorInput.message, /semantic narration markup/);
+  assert.match(narratorInput.message, /<npc>\.\.\.<\/npc>/);
+  assert.match(narratorInput.message, /<place>\.\.\.<\/place>/);
+  assert.match(narratorInput.message, /<clue>\.\.\.<\/clue>/);
+  assert.match(narratorInput.message, /<danger>\.\.\.<\/danger>/);
+  assert.match(narratorInput.message, /<faction>\.\.\.<\/faction>/);
+  assert.match(narratorInput.message, /<object>\.\.\.<\/object>/);
+  assert.match(narratorInput.message, /Do not return narration_highlights/);
+  assert.match(narratorInput.message, /sidecar span metadata/);
+  assert.match(narratorInput.message, /inline semantic tags are the only highlight system/);
   assert.match(narratorInput.message, /Second Dominion/);
   assert.match(narratorInput.message, /Player backstory anchors for the opening scene:/);
   assert.match(narratorInput.message, /Captain Saela/);
@@ -2598,7 +2621,11 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(narratorInput.message, /The first sentence must be about/);
   assert.match(narratorInput.message, /You stand at/);
   assert.match(narratorInput.message, /Paragraph 2 must describe what/);
-  assert.match(narratorInput.message, /Paragraph 3 must put the player physically inside/);
+  assert.match(narratorInput.message, /Paragraph 3 must start with a vivid/);
+  assert.match(narratorInput.message, /starting_location_atmosphere/);
+  assert.match(narratorInput.message, /how lively it is/);
+  assert.match(narratorInput.message, /locals regard strangers/);
+  assert.match(narratorInput.message, /smoothly narrow/);
   assert.match(narratorInput.message, /sensory_palette/);
   assert.match(narratorInput.message, /Paragraph 4 must introduce visible NPC tension/);
   assert.match(narratorInput.message, /recent_events/);
@@ -2773,6 +2800,18 @@ test("POST /api/campaigns scrubs forbidden Eldermere opening terms after narrato
             type: "settlement",
             why_this_location: "It is the selected campaign start.",
             plain_description: "A specific place where the first problem is already visible."
+          },
+          starting_location_atmosphere: {
+            arrival_impression: "Suncross feels crowded, bright, and watched from the moment the road enters the city.",
+            daily_life_and_liveliness: "Pilgrims, market carts, guards, and street vendors keep moving even though every conversation drops when strangers pass.",
+            local_attitude: "People are polite to travelers, but they measure every question before answering.",
+            dominant_vibe: "busy civic pride under visible strain",
+            sensory_entry_details: [
+              "road-glow on wet paving stones",
+              "cart wheels clattering through narrow market lanes",
+              "warm bread smoke mixed with cold rain"
+            ],
+            transition_into_first_scene: "The city noise thins toward the marked doorway where Mara Vell keeps watching the street."
           },
           opening_premise: {
             why_the_party_is_here: "The party has come to answer a local summons.",
