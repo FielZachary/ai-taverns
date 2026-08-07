@@ -343,6 +343,15 @@ export function jobPrompt(
     "- For memory safety, unsupported player claims should be stored only as claims, suspicions, unresolved lies, or player beliefs inside an existing NPC/thread/world chunk. Do not create a new NPC, faction, location, item, or secret chunk solely because the player named it in an unresolved claim."
   ];
 
+  const physicalCommunicationGuidance = [
+    "Physical Communication Boundary:",
+    "- Before narrating an NPC speaking, whispering, warning, reacting verbally, or giving instructions to a player character, check the current staging: relative location, distance, barriers, noise, visibility, and who can plausibly hear.",
+    "- A whisper only reaches someone adjacent or explicitly close enough in the established scene.",
+    "- If an NPC is in another room, a loft, upstairs, outside, hidden, behind a door, across a crowd, or separated by noise, do not use private dialogue unless earshot, line of sight, or magic has already been established.",
+    "- If speech would risk being overheard, make that risk visible.",
+    "- If communication is not plausible, use visible movement, silence, raised-voice risk, gestures the player can actually see, or require the player to move closer."
+  ];
+
   const sceneDirectorExamples = [
     [
       "Example: rich scene hook, no roll.",
@@ -1452,6 +1461,9 @@ export function jobPrompt(
         "- Make scenes feel inhabited. Include people or creatures pursuing their own business, environmental motion, and at least one specific interactable detail when the scene is not already focused on a player action.",
         "- Use a grounded fantasy-adventure style: vivid, clear, and specific; not purple prose, not generic boxed text, not a summary of lore.",
         "",
+        "NPC Speech and Cues:",
+        "- Only include NPC speech, whispers, gestures, warnings, or reactions that are physically available from the current staging. If an NPC is elsewhere, narrate what the player can perceive from that location, not convenient dialogue.",
+        "",
         "Hooks and Pressure:",
         "- When introducing a hook, reveal it through observable behavior, overheard fragments, physical evidence, pressure, or an NPC need. Do not announce it as a quest.",
         "- Do not force a single path. Present an immediate situation with multiple plausible approaches: speak, inspect, follow, ignore, prepare, rest, travel, ask around, or act creatively.",
@@ -1471,6 +1483,7 @@ export function jobPrompt(
         "- Default narration length: 2-5 paragraphs for ordinary turns. Use 4-7 richer paragraphs for major scene openings, location reveals, travel arrivals, or campaign-significant transitions.",
         "- End with a clear present-tense handoff that invites action, usually by naming what is immediately available or pressing, without listing menu options unless clarity requires it."
       ].join("\n"),
+      ...physicalCommunicationGuidance,
       ...rollAdjudicationGuidance,
       ...playerCanonClaimGuidance,
       ...narrativeQualityBar,
@@ -1510,6 +1523,9 @@ export function jobPrompt(
         "1. Decide what the NPC knows, believes, suspects, wants from the player, and is trying not to reveal.",
         "2. Before the NPC states or implies any fact, decide the concrete path by which they know it: witnessed it, were told by a named source, read a record, inferred from visible evidence, heard a rumor, or do not know.",
         "3. If the NPC is making an inference, keep it uncertain and bounded. They may suspect from visible clues, but they must not jump from a clue to a precise hidden relationship, private motive, secret name, or recent player action.",
+        "",
+        "NPC Communication Rules:",
+        "- NPC communication is local, not omnipresent.",
         "",
         "NPC Knowledge Rules:",
         "- NPC knowledge is local, not omniscient.",
@@ -1565,6 +1581,7 @@ export function jobPrompt(
         "Handoff:",
         "- End with the NPC's new stance, demand, offer, refusal, question, or opening, then hand control back to the player."
       ].join("\n"),
+      ...physicalCommunicationGuidance,
       ...rollAdjudicationGuidance,
       ...playerCanonClaimGuidance,
       ...socialRollGuidance,
@@ -1581,6 +1598,7 @@ export function jobPrompt(
         "",
         "Detailed Combat Procedure:"
       ].join("\n"),
+      ...physicalCommunicationGuidance,
       ...combatGuidance,
       "Examples below demonstrate combat pacing, visible math, paragraph grouping, turn ownership, roll pauses, and state-safe narration. Do not copy their names, actor keys, enemies, abilities, locations, or exact phrasing. Match their clarity and discipline, not their content.",
       ...combatExamples
