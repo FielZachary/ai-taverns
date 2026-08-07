@@ -302,6 +302,16 @@ test("mechanics actor contract accepts canonical combat stats for NPCs", () => {
         currentHp: 45,
         maxHp: 45,
         armorClass: 14,
+        attackBonus: 5,
+        damageFormula: "1d8 + 3",
+        saveBonuses: {
+          dex: 3,
+          wis: -1
+        },
+        abilityModifiers: {
+          str: 2,
+          dex: 3
+        },
         allegiance: "hostile",
         isPlayerControlled: false,
         conditions: []
@@ -310,6 +320,10 @@ test("mechanics actor contract accepts canonical combat stats for NPCs", () => {
   });
 
   assert.equal(state.actors["npc:mara"]?.armorClass, 14);
+  assert.equal(state.actors["npc:mara"]?.attackBonus, 5);
+  assert.equal(state.actors["npc:mara"]?.damageFormula, "1d8 + 3");
+  assert.equal(state.actors["npc:mara"]?.saveBonuses?.dex, 3);
+  assert.equal(state.actors["npc:mara"]?.saveBonuses?.wis, -1);
   assert.equal(state.actors["npc:mara"]?.allegiance, "hostile");
   assert.equal(state.actors["npc:mara"]?.isPlayerControlled, false);
 });

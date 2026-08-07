@@ -29,6 +29,7 @@ export const defaultCombatState: MechanicsState["combat"] = {
 };
 
 const spellSlotLevels = ["1", "2", "3", "4", "5", "6", "7", "8", "9"] as const;
+const abilityKeys = ["str", "dex", "con", "int", "wis", "cha"] as const;
 
 const fullCasterSlotsByLevel: Record<number, Record<string, SpellSlotState>> = {
   1: { "1": { max: 2, used: 0 } },
@@ -278,6 +279,23 @@ function parseSpellSlots(value: unknown): Record<string, SpellSlotState> | undef
   return Object.keys(slots).length > 0 ? slots : undefined;
 }
 
+function parseAbilityBonusMap(value: unknown) {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const bonuses: Partial<Record<(typeof abilityKeys)[number], number>> = {};
+
+  for (const key of abilityKeys) {
+    const bonus = Number(value[key]);
+    if (Number.isInteger(bonus)) {
+      bonuses[key] = bonus;
+    }
+  }
+
+  return Object.keys(bonuses).length > 0 ? bonuses : undefined;
+}
+
 export function persistedMechanicsState(
   campaign: CampaignLike
 ): MechanicsState | undefined {
@@ -301,6 +319,9 @@ export function persistedMechanicsState(
     const currentHp = Number(actor.currentHp);
     const maxHp = Number(actor.maxHp);
     const armorClass = Number(actor.armorClass);
+    const attackBonus = Number(actor.attackBonus);
+    const saveBonuses = parseAbilityBonusMap(actor.saveBonuses);
+    const abilityModifiers = parseAbilityBonusMap(actor.abilityModifiers);
     const allegiance =
       actor.allegiance === "player" ||
       actor.allegiance === "ally" ||
@@ -320,6 +341,12 @@ export function persistedMechanicsState(
       ...(Number.isInteger(armorClass)
         ? { armorClass: Math.max(0, armorClass) }
         : {}),
+      ...(Number.isInteger(attackBonus) ? { attackBonus } : {}),
+      ...(typeof actor.damageFormula === "string" && actor.damageFormula.trim()
+        ? { damageFormula: actor.damageFormula.trim() }
+        : {}),
+      ...(saveBonuses ? { saveBonuses } : {}),
+      ...(abilityModifiers ? { abilityModifiers } : {}),
       ...(allegiance ? { allegiance } : {}),
       ...(typeof actor.isPlayerControlled === "boolean"
         ? { isPlayerControlled: actor.isPlayerControlled }
