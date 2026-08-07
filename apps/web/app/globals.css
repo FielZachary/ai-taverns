@@ -42,6 +42,11 @@ body:has(.new-adventure-page) {
   scrollbar-width: none;
 }
 
+html:has(.new-adventure-page) {
+  scrollbar-width: none;
+}
+
+html:has(.new-adventure-page)::-webkit-scrollbar,
 body:has(.new-adventure-page)::-webkit-scrollbar {
   width: 0;
   height: 0;
@@ -796,7 +801,7 @@ h1 {
   background-image: url("/new-adventure/flow-bg.webp");
   background-position: center;
   background-size: cover;
-  opacity: 0.1;
+  opacity: 0.32;
 }
 
 .new-adventure-page::after {
@@ -1474,9 +1479,6 @@ h1 {
 .spell-level-list {
   display: grid;
   gap: 16px;
-  max-height: min(54vh, 560px);
-  overflow: auto;
-  padding-right: 4px;
 }
 
 .spell-level-group {
