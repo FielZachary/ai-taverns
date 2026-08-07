@@ -643,6 +643,15 @@ type OpeningNpcSeed = {
   visibleBehavior: string;
 };
 
+type StartingLocationAtmosphere = {
+  arrivalImpression: string;
+  dailyLifeAndLiveliness: string;
+  localAttitude: string;
+  dominantVibe: string;
+  sensoryEntryDetails: string[];
+  transitionIntoFirstScene: string;
+};
+
 type EldermereOpeningPlan = {
   campaignTitle: string;
   region: {
@@ -656,6 +665,7 @@ type EldermereOpeningPlan = {
     whyThisLocation: string;
     plainDescription: string;
   };
+  startingLocationAtmosphere: StartingLocationAtmosphere;
   openingPremise: {
     whyThePartyIsHere: string;
     immediateObjective: string;
@@ -8714,6 +8724,18 @@ function eldermereOpeningPlannerInstructions() {
           why_this_location: "why this is the right first location",
           plain_description: "one sentence the player could understand"
         },
+        starting_location_atmosphere: {
+          arrival_impression: "what the city, settlement, camp, or landmark feels like when the character enters or reaches the active district",
+          daily_life_and_liveliness: "how busy, loud, tense, prosperous, frightened, festive, poor, guarded, or worn-down it feels in ordinary motion",
+          local_attitude: "how locals treat strangers, officials, travelers, adventurers, or someone like this character",
+          dominant_vibe: "short phrase for the starting place's emotional texture",
+          sensory_entry_details: [
+            "specific visible settlement detail",
+            "specific sound or crowd behavior",
+            "specific smell, weather, trade, ritual, traffic, or social detail"
+          ],
+          transition_into_first_scene: "how the wider starting-place atmosphere naturally narrows into opening_premise.first_scene_location"
+        },
         opening_premise: {
           why_the_party_is_here: "concrete reason the player or party came here",
           immediate_objective: "what they are trying to do now",
@@ -8858,6 +8880,10 @@ function formatEldermereNarratorOpeningRequest(input: {
     "If a useful idea appears in dm_private_context, imply it only through concrete visible facts or pressure; do not reveal it as confirmed exposition.",
     "Forbidden opening terms must not appear in public_narration.",
     "Allowed player-facing terms must be explained plainly on first use.",
+    "Use sparse semantic narration markup inside public_narration when it helps the player scan important visible nouns or short phrases. Supported tags only: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, and <object>...</object>.",
+    "Wrap only the exact player-visible words that should receive color. Use 2-4 tags when the opener has worthwhile visible names, places, clues, dangers, factions, or objects. Do not wrap full sentences or paragraphs.",
+    "Do not nest semantic tags, add attributes, invent other tags, include CSS, hex colors, color names, Markdown emphasis, or prose instructions inside public_narration.",
+    "Do not return narration_highlights, highlights, sidecar span metadata, post-processing instructions, or any separate highlight records. The inline semantic tags are the only highlight system.",
     "",
     "HIGHEST PRIORITY - narrator_instructions:",
     "The narrator_instructions array inside the Eldermere opening plan is the scene blueprint. Follow every item in it before using any optional campaign_foundation detail.",
@@ -8869,7 +8895,8 @@ function formatEldermereNarratorOpeningRequest(input: {
     "Paragraph 1 must explain why this specific character or party has come here now, using player-facing backstory context. Assume the player has not recently read the backstory. Connect the arrival to at least one unresolved dream, loss, secret, promise, obligation, fear, ambition, or relationship. Do not begin with scenery, weather, crowds, dialogue, combat, or the name of the starting location.",
     "The first sentence must be about the character's reason for coming, not where they are standing. Do not start with phrases like 'You stand at', 'You arrive at', 'The town', 'The road', or any location-first camera direction.",
     "Paragraph 2 must describe what the character or party has been doing over the last few days and then the last few hours to reach this place. Explain how they entered the region or settlement, where exactly they have landed, what kind of area it is, what locals say about it, and what the character plausibly knows before the immediate scene begins. Keep this player-facing and concrete. Do not reveal DM-private secrets.",
-    "Paragraph 3 must put the player physically inside opening_premise.first_scene_location and starting_location. Use narrator_instructions plus sensory_palette from the JSON to describe the room, street, weather, light, sound, smell, crowd, surfaces, exits, and reachable objects. If narrator_instructions names Pip, a locket, a wrapped clue, a tavern, or another physical anchor, place it visibly and tangibly here.",
+    "Paragraph 3 must start with a vivid, player-facing description of starting_location as the character enters or reaches the active district: how lively it is, what the dominant vibe is, what people are doing, how locals regard strangers, and what the air, streets, crowds, trade, weather, or public tension feel like. Use starting_location_atmosphere plus sensory_palette from the JSON.",
+    "In the same Paragraph 3, smoothly narrow that wider city, settlement, camp, or landmark impression into opening_premise.first_scene_location, placing the player physically inside the first live scene with reachable objects, exits, NPC pressure, and immediate sensory detail. If narrator_instructions names Pip, a locket, a wrapped clue, a tavern, or another physical anchor, place it visibly and tangibly here.",
     "Paragraph 4 must introduce visible NPC tension and the live contact or pressure named in npc_seed and narrator_instructions. Use campaign_foundation.living_local_context.recent_events to explain what people are tense about, and use campaign_foundation.living_local_context.visible_signs to show that tension through observable details rather than exposition.",
     "Paragraph 5 must present the immediate complication from opening_premise.immediate_complication and narrator_instructions, then make it actionable. Use campaign_foundation.living_local_context.rumors_half_true only as uncertain tavern talk or a visible rumor hook, use first_interactable_choices for 2-3 concrete things the player can do right now, and include one short personal urgency beat tying the immediate pressure back to the character's backstory.",
     "Paragraph 6 must be the final direct handoff prompt, such as 'What do you do?'",
@@ -9031,6 +9058,32 @@ function parseOpeningNpcSeed(value: Record<string, unknown>, index: number) {
   };
 }
 
+function parseStartingLocationAtmosphere(
+  value: Record<string, unknown>,
+  errors: string[]
+): StartingLocationAtmosphere {
+  return {
+    arrivalImpression: readString(value, "arrival_impression", errors),
+    dailyLifeAndLiveliness: readString(
+      value,
+      "daily_life_and_liveliness",
+      errors
+    ),
+    localAttitude: readString(value, "local_attitude", errors),
+    dominantVibe: readString(value, "dominant_vibe", errors),
+    sensoryEntryDetails: readStringArray(
+      value,
+      "sensory_entry_details",
+      errors
+    ),
+    transitionIntoFirstScene: readString(
+      value,
+      "transition_into_first_scene",
+      errors
+    )
+  };
+}
+
 function parseSensoryPalette(
   value: Record<string, unknown>,
   errors: string[]
@@ -9061,6 +9114,11 @@ function parseEldermereOpeningPlan(content: string) {
   const errors: string[] = [];
   const region = readObject(parsed, "region", errors);
   const startingLocation = readObject(parsed, "starting_location", errors);
+  const startingLocationAtmosphere = readObject(
+    parsed,
+    "starting_location_atmosphere",
+    errors
+  );
   const openingPremise = readObject(parsed, "opening_premise", errors);
   const sensoryPalette = readObject(parsed, "sensory_palette", errors);
   const allowedTermResults = readObjectArray(
@@ -9089,6 +9147,10 @@ function parseEldermereOpeningPlan(content: string) {
         errors
       )
     },
+    startingLocationAtmosphere: parseStartingLocationAtmosphere(
+      startingLocationAtmosphere,
+      errors
+    ),
     openingPremise: {
       whyThePartyIsHere: readString(
         openingPremise,
@@ -9171,6 +9233,18 @@ function openingPlanToJson(plan: EldermereOpeningPlan) {
       type: plan.startingLocation.type,
       why_this_location: plan.startingLocation.whyThisLocation,
       plain_description: plan.startingLocation.plainDescription
+    },
+    starting_location_atmosphere: {
+      arrival_impression:
+        plan.startingLocationAtmosphere.arrivalImpression,
+      daily_life_and_liveliness:
+        plan.startingLocationAtmosphere.dailyLifeAndLiveliness,
+      local_attitude: plan.startingLocationAtmosphere.localAttitude,
+      dominant_vibe: plan.startingLocationAtmosphere.dominantVibe,
+      sensory_entry_details:
+        plan.startingLocationAtmosphere.sensoryEntryDetails,
+      transition_into_first_scene:
+        plan.startingLocationAtmosphere.transitionIntoFirstScene
     },
     opening_premise: {
       why_the_party_is_here: plan.openingPremise.whyThePartyIsHere,
