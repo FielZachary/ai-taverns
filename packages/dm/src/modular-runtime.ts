@@ -82,12 +82,28 @@ export type ValidationResult<T> = {
 };
 
 export type MemoryPatch = {
-  operation: "append" | "replace_section" | "create_chunk" | "archive_chunk";
+  operation:
+    | "append"
+    | "replace_section"
+    | "create_chunk"
+    | "archive_chunk"
+    | "rename_chunk"
+    | "merge_chunk";
   contextId?: string;
+  newContextId?: string;
+  sourceContextId?: string;
+  targetContextId?: string;
   contextType?: ContextCategory;
   title?: string;
   visibility?: "player_safe" | "dm_only";
   markdown?: string;
+};
+
+export type ExistingMemoryContext = {
+  id: string;
+  category: ContextCategory;
+  title: string;
+  bodyMarkdown: string;
 };
 
 export type LivingWorldGuidance = {
@@ -1547,7 +1563,7 @@ export function buildMemoryUpdaterPrompt() {
     "You are the AI Taverns memory/context updater.",
     "Propose sparse patches after the player-facing turn has resolved.",
     "Return strict JSON with patches, new_context_chunks, and remove_context_chunks.",
-    "Allowed operations: append, replace_section, create_chunk, archive_chunk.",
+    "Allowed operations: append, replace_section, create_chunk, archive_chunk, rename_chunk, merge_chunk.",
     "Do not rewrite whole campaign memory or treat minor narration as durable memory.",
     "Treat campaign context as a living world bible for the AI DM. Your job is not only to record facts; it is also to maintain compelling, reusable story material that helps the DM make the world feel coherent and alive.",
     "Be proactive when the turn reveals or strongly implies durable worldbuilding, mysteries, factions, locations, artifacts, open player-facing problems, or long-running secrets.",
@@ -1600,7 +1616,10 @@ export function buildMemoryUpdaterPrompt() {
     "Do not create NPC cards for unnamed, generic, or throwaway background people unless they become recurring or campaign-relevant.",
     "Update an existing NPC card when the turn changes what is known about that NPC, including where they are, what they want, how they behave, how they feel about the party, what secrets they carry, or what unresolved story threads involve them.",
     "Prefer updating an existing NPC card over creating a duplicate when the same NPC is clearly referenced by name, title, alias, role, or scene context.",
+    "If an NPC previously known by description, title, disguise, role, or uncertainty is later named, do not create a second NPC card. Update the original card, change ## Name, preserve the old label under ## Aliases / Former Labels, and keep the same context_id unless using rename_chunk.",
     "Use stable NPC ids in the form npc:kebab-case-name, for example npc:captain-vael.",
+    "Use rename_chunk when a previously descriptive NPC id should become a stable named NPC id, such as npc:cloaked-figure-at-the-tower becoming npc:veria after the NPC reveals her name.",
+    "Use merge_chunk only when two existing chunks are explicitly the same NPC. Provide the complete merged markdown yourself; the server will not blend prose automatically.",
     "",
     "What belongs in an NPC card:",
     "Make each NPC feel like a compelling character, not a label. Preserve details that help the DM portray them consistently in future scenes.",
@@ -1618,6 +1637,7 @@ export function buildMemoryUpdaterPrompt() {
     "Every NPC card must use this markdown section structure:",
     "# <NPC Name>",
     "## Name",
+    "## Aliases / Former Labels",
     "## Location",
     "## Appearance",
     "## Personality",
@@ -1688,7 +1708,7 @@ export function buildMemoryUpdaterPrompt() {
             title: "Marra Vell",
             visibility: "player_safe",
             markdown:
-              "# Marra Vell\n\n## Name\nMarra Vell\n\n## Location\nLast seen fleeing through the fog near Pier 6.\n\n## Appearance\nUnknown.\n\n## Personality\nQuick-eyed, guarded, and restless. She speaks in short answers when frightened, but notices exits, weapons, and lies faster than most people in the room.\n\n## Motivations\nStay alive, keep the black key out of the smugglers' hands, and decide whether the party is safer than running alone.\n\n## Disposition Towards You\nWary but interested. She does not trust the party yet, but their intervention made them useful enough that she may risk another conversation.\n\n## Known History\n- First encountered near Pier 6 while being pursued.\n- Recognized the black key but avoided explaining how.\n\n## Secrets\nKnows more about the black key's origin than she admitted. She may have worked with the smugglers before betraying them.\n\n## Open Threads\n- Could reveal who sent the pursuers if convinced the party can protect her.\n- May seek the party out again once she has nowhere else to run.\n\n## Last Seen\nRunning into the fog beyond Pier 6 after the confrontation."
+              "# Marra Vell\n\n## Name\nMarra Vell\n\n## Aliases / Former Labels\nUnknown.\n\n## Location\nLast seen fleeing through the fog near Pier 6.\n\n## Appearance\nUnknown.\n\n## Personality\nQuick-eyed, guarded, and restless. She speaks in short answers when frightened, but notices exits, weapons, and lies faster than most people in the room.\n\n## Motivations\nStay alive, keep the black key out of the smugglers' hands, and decide whether the party is safer than running alone.\n\n## Disposition Towards You\nWary but interested. She does not trust the party yet, but their intervention made them useful enough that she may risk another conversation.\n\n## Known History\n- First encountered near Pier 6 while being pursued.\n- Recognized the black key but avoided explaining how.\n\n## Secrets\nKnows more about the black key's origin than she admitted. She may have worked with the smugglers before betraying them.\n\n## Open Threads\n- Could reveal who sent the pursuers if convinced the party can protect her.\n- May seek the party out again once she has nowhere else to run.\n\n## Last Seen\nRunning into the fog beyond Pier 6 after the confrontation."
           }
         ],
         remove_context_chunks: []
@@ -1705,7 +1725,7 @@ export function buildMemoryUpdaterPrompt() {
             operation: "replace_section",
             context_id: "npc:captain-vael",
             markdown:
-              "# Captain Vael\n\n## Name\nCaptain Vael\n\n## Location\nHarbor Watch station near Pier 6.\n\n## Appearance\nUnknown.\n\n## Personality\nTerse, disciplined, and visibly exhausted. Vael values proof over charm and gets colder when people waste time, but he is not cruel.\n\n## Motivations\nKeep the harbor calm, identify the compromised watch officer, and prevent the black key investigation from becoming public panic.\n\n## Disposition Towards You\nCautiously cooperative. He respects that the party brought him evidence, but he is still testing whether they are reckless liabilities or useful allies.\n\n## Known History\n- Met the party during the Pier 6 investigation.\n- Confirmed that the black key points toward old smuggling routes.\n- Agreed to check harbor records after the party shared Marra's warning.\n\n## Secrets\nSuspects someone inside the Harbor Watch is feeding information to the smugglers, but he has not revealed this openly.\n\n## Open Threads\n- May grant access to sealed harbor records if trust improves.\n- Could become an ally if the party protects the investigation from public exposure.\n- Could turn against the party if they endanger civilians or expose his suspicion too early.\n\n## Last Seen\nAt the Harbor Watch station, locking Marra's warning in his private case."
+              "# Captain Vael\n\n## Name\nCaptain Vael\n\n## Aliases / Former Labels\nUnknown.\n\n## Location\nHarbor Watch station near Pier 6.\n\n## Appearance\nUnknown.\n\n## Personality\nTerse, disciplined, and visibly exhausted. Vael values proof over charm and gets colder when people waste time, but he is not cruel.\n\n## Motivations\nKeep the harbor calm, identify the compromised watch officer, and prevent the black key investigation from becoming public panic.\n\n## Disposition Towards You\nCautiously cooperative. He respects that the party brought him evidence, but he is still testing whether they are reckless liabilities or useful allies.\n\n## Known History\n- Met the party during the Pier 6 investigation.\n- Confirmed that the black key points toward old smuggling routes.\n- Agreed to check harbor records after the party shared Marra's warning.\n\n## Secrets\nSuspects someone inside the Harbor Watch is feeding information to the smugglers, but he has not revealed this openly.\n\n## Open Threads\n- May grant access to sealed harbor records if trust improves.\n- Could become an ally if the party protects the investigation from public exposure.\n- Could turn against the party if they endanger civilians or expose his suspicion too early.\n\n## Last Seen\nAt the Harbor Watch station, locking Marra's warning in his private case."
           }
         ],
         new_context_chunks: [],
@@ -1724,6 +1744,26 @@ export function buildMemoryUpdaterPrompt() {
       },
       null,
       2
+    ),
+    "",
+    "Example revealed-name NPC rename response:",
+    JSON.stringify(
+      {
+        patches: [
+          {
+            operation: "rename_chunk",
+            context_id: "npc:cloaked-figure-at-the-tower",
+            new_context_id: "npc:veria",
+            title: "Veria",
+            markdown:
+              "# Veria\n\n## Name\nVeria\n\n## Aliases / Former Labels\n- Cloaked Figure at the Tower\n- Woman from the market\n\n## Location\nInside the old tower near the brass mechanism.\n\n## Appearance\nTall cloaked woman with sharp eyes and dark hair, now with her hood pushed back.\n\n## Personality\nCollected, deliberate, and quietly reverent around the mechanism. Her calm becomes warmer and more vulnerable when she speaks of the player's father.\n\n## Motivations\nProtect the spiral disc, learn whether the player can read the mechanism, and decide whether to trust them with her mission.\n\n## Disposition Towards You\nCautiously hopeful. She is still testing the player's judgment, but the revealed name and offered disc make this a real opening for alliance.\n\n## Known History\n- First appeared as the cloaked figure approaching the tower.\n- Revealed her name: Veria.\n- Said she knew the player's father and carried the spiral disc for safekeeping.\n\n## Secrets\nMay know more about the father's disappearance than she has revealed.\n\n## Open Threads\n- Can explain why she came to the tower if trust improves.\n- The spiral disc remains central to the mechanism.\n\n## Last Seen\nStanding beside the brass mechanism after revealing her name."
+          }
+        ],
+        new_context_chunks: [],
+        remove_context_chunks: []
+      },
+      null,
+      2
     )
   ].join("\n");
 }
@@ -1737,7 +1777,7 @@ export function buildLivingWorldPressureEnginePrompt() {
     "You are not the router. Do not choose DM jobs. Do not answer the player's latest action.",
     "You are not the normal turn memory updater. Do not merely summarize the last turn; look for offscreen NPC, faction, villain, ally, rumor, clock, and location movement that follows from current campaign pressure.",
     "Return exactly one JSON object with world_clock_updates, patches, new_context_chunks, remove_context_chunks, dm_guidance, possible_intrusions, and contradiction_warnings.",
-    "Use the same context patch contract as the memory/context updater. Allowed operations: append, replace_section, create_chunk, archive_chunk.",
+    "Use the same context patch contract as the memory/context updater. Allowed operations: append, replace_section, create_chunk, archive_chunk, rename_chunk, merge_chunk.",
     "Treat canonical Eldermere docs as source-grounded world truth. Treat campaign-local planner secrets, clocks, motives, and factions as established only inside this campaign until play establishes wider truth.",
     "Models may choose, infer, and propose; the server validates, stores, and mutates.",
     "",
@@ -2022,9 +2062,118 @@ export function validateCombatEvents(
   );
 }
 
+function contextPrefix(contextId: string) {
+  return contextId.includes(":") ? contextId.split(":")[0] ?? "" : "";
+}
+
+function normalizedIdentityName(value: string) {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function sectionBody(markdown: string, sectionName: string) {
+  const sectionPattern = new RegExp(
+    `^##\\s+${escapeRegExp(sectionName)}\\s*$([\\s\\S]*?)(?=^##\\s+|(?![\\s\\S]))`,
+    "im"
+  );
+  const match = markdown.match(sectionPattern);
+  return match?.[1]?.trim() ?? "";
+}
+
+function lineNamesFromSection(markdown: string, sectionName: string) {
+  const body = sectionBody(markdown, sectionName);
+
+  if (!body || /^unknown\.?$/i.test(body.trim())) {
+    return [];
+  }
+
+  return body
+    .split("\n")
+    .map((line) => line.replace(/^[-*]\s*/, "").trim())
+    .filter(Boolean);
+}
+
+function npcIdentityRevealMatches(markdown: string, name: string) {
+  const normalizedName = normalizedIdentityName(name);
+
+  if (!normalizedName) {
+    return false;
+  }
+
+  const aliases = lineNamesFromSection(markdown, "Aliases / Former Labels");
+
+  if (
+    aliases.some(
+      (alias) => normalizedIdentityName(alias) === normalizedName
+    )
+  ) {
+    return true;
+  }
+
+  const escapedName = escapeRegExp(name.trim());
+  const revealPattern = new RegExp(
+    [
+      `revealed\\s+(?:her|his|their)\\s+name\\s*:\\s*${escapedName}`,
+      `introduced\\s+(?:herself|himself|themself|themselves)\\s+as\\s+${escapedName}`,
+      `called\\s+(?:herself|himself|themself|themselves)\\s+${escapedName}`,
+      `(?:her|his|their)\\s+name\\s+is\\s+${escapedName}`
+    ].join("|"),
+    "i"
+  );
+
+  return revealPattern.test(markdown);
+}
+
+function existingContextById(
+  existingContexts: ExistingMemoryContext[] | undefined,
+  contextId: string
+) {
+  return existingContexts?.find((context) => context.id === contextId);
+}
+
+function duplicateNpcIdentityContext(
+  patch: Record<string, unknown>,
+  existingContexts: ExistingMemoryContext[] | undefined
+) {
+  const contextType = patch.context_type ?? patch.contextType;
+
+  if (contextType !== "npc_context") {
+    return undefined;
+  }
+
+  const title = typeof patch.title === "string" ? patch.title.trim() : "";
+  const markdown = typeof patch.markdown === "string" ? patch.markdown : "";
+  const name =
+    lineNamesFromSection(markdown, "Name")[0]?.trim() ||
+    title ||
+    String(patch.context_id ?? patch.contextId ?? "")
+      .replace(/^npc:/, "")
+      .replace(/-/g, " ");
+
+  if (!name.trim()) {
+    return undefined;
+  }
+
+  return existingContexts?.find(
+    (context) =>
+      context.category === "npc_context" &&
+      npcIdentityRevealMatches(context.bodyMarkdown, name)
+  );
+}
+
 function memoryPatchReasons(
   patch: unknown,
-  existingContextIds: Set<string>
+  existingContextIds: Set<string>,
+  existingContexts?: ExistingMemoryContext[]
 ) {
   const reasons: string[] = [];
 
@@ -2038,13 +2187,30 @@ function memoryPatchReasons(
     : typeof patch.contextId === "string"
       ? patch.contextId
       : "";
+  const newContextId = typeof patch.new_context_id === "string"
+    ? patch.new_context_id
+    : typeof patch.newContextId === "string"
+      ? patch.newContextId
+      : "";
+  const sourceContextId = typeof patch.source_context_id === "string"
+    ? patch.source_context_id
+    : typeof patch.sourceContextId === "string"
+      ? patch.sourceContextId
+      : "";
+  const targetContextId = typeof patch.target_context_id === "string"
+    ? patch.target_context_id
+    : typeof patch.targetContextId === "string"
+      ? patch.targetContextId
+      : "";
   const markdown = typeof patch.markdown === "string" ? patch.markdown : "";
 
   if (
     operation !== "append" &&
     operation !== "replace_section" &&
     operation !== "create_chunk" &&
-    operation !== "archive_chunk"
+    operation !== "archive_chunk" &&
+    operation !== "rename_chunk" &&
+    operation !== "merge_chunk"
   ) {
     reasons.push("operation is not allowed");
   }
@@ -2069,9 +2235,14 @@ function memoryPatchReasons(
   if (operation === "create_chunk") {
     const contextType = patch.context_type ?? patch.contextType;
     const visibility = patch.visibility;
+    const duplicate = duplicateNpcIdentityContext(patch, existingContexts);
 
     if (!contextId || existingContextIds.has(contextId)) {
       reasons.push("new context_id must be unique");
+    }
+
+    if (duplicate) {
+      reasons.push(`npc identity already exists as ${duplicate.id}`);
     }
 
     if (!contextCategories.includes(contextType as ContextCategory)) {
@@ -2087,16 +2258,75 @@ function memoryPatchReasons(
     }
   }
 
+  if (operation === "rename_chunk") {
+    const existing = existingContextById(existingContexts, contextId);
+
+    if (!contextId || !existingContextIds.has(contextId)) {
+      reasons.push("target context_id does not exist");
+    }
+
+    if (!newContextId || existingContextIds.has(newContextId)) {
+      reasons.push("new_context_id must be unique");
+    }
+
+    if (
+      contextId &&
+      newContextId &&
+      contextPrefix(contextId) !== contextPrefix(newContextId)
+    ) {
+      reasons.push("new_context_id must keep the same context prefix");
+    }
+
+    if (
+      existing &&
+      contextPrefix(existing.id) &&
+      contextPrefix(newContextId) &&
+      contextPrefix(existing.id) !== contextPrefix(newContextId)
+    ) {
+      reasons.push("new_context_id must stay in the same context category");
+    }
+  }
+
+  if (operation === "merge_chunk") {
+    const source = existingContextById(existingContexts, sourceContextId);
+    const target = existingContextById(existingContexts, targetContextId);
+
+    if (!sourceContextId || !existingContextIds.has(sourceContextId)) {
+      reasons.push("source_context_id does not exist");
+    }
+
+    if (!targetContextId || !existingContextIds.has(targetContextId)) {
+      reasons.push("target_context_id does not exist");
+    }
+
+    if (source && target && source.category !== target.category) {
+      reasons.push("source and target context chunks must share a category");
+    }
+
+    if (sourceContextId && targetContextId && sourceContextId === targetContextId) {
+      reasons.push("source_context_id and target_context_id must differ");
+    }
+
+    if (!markdown.trim()) {
+      reasons.push("markdown is required");
+    }
+  }
+
   return reasons;
 }
 
 export function validateMemoryPatches(
   patches: unknown[],
-  existingContextIds: Set<string>
+  existingContextIds: Set<string>,
+  existingContexts?: ExistingMemoryContext[]
 ): ValidationResult<Record<string, unknown>> {
   return patches.reduce<ValidationResult<Record<string, unknown>>>(
     (result, patch) => {
-      const reasons = memoryPatchReasons(patch, existingContextIds);
+      const reasons = memoryPatchReasons(
+        patch,
+        existingContextIds,
+        existingContexts
+      );
 
       if (reasons.length > 0 || !isRecord(patch)) {
         result.discarded.push({ item: patch, reasons });

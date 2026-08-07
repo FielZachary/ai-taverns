@@ -234,6 +234,129 @@ describe("modular AI DM runtime contracts", () => {
     );
   });
 
+  it("supports rename and merge memory patches", () => {
+    const existingContexts = [
+      {
+        id: "npc:cloaked-figure-at-the-tower",
+        category: "npc_context" as const,
+        title: "Cloaked Figure at the Tower",
+        bodyMarkdown:
+          "# Cloaked Figure at the Tower\n\n## Name\nUnknown.\n\n## Aliases / Former Labels\nUnknown."
+      },
+      {
+        id: "npc:veria",
+        category: "npc_context" as const,
+        title: "Veria",
+        bodyMarkdown:
+          "# Veria\n\n## Name\nVeria\n\n## Aliases / Former Labels\n- Cloaked Figure at the Tower"
+      }
+    ];
+    const result = validateMemoryPatches(
+      [
+        {
+          operation: "rename_chunk",
+          context_id: "npc:cloaked-figure-at-the-tower",
+          new_context_id: "npc:veria-renamed",
+          title: "Veria",
+          markdown: "# Veria\n\n## Name\nVeria"
+        },
+        {
+          operation: "merge_chunk",
+          source_context_id: "npc:veria",
+          target_context_id: "npc:cloaked-figure-at-the-tower",
+          title: "Veria",
+          markdown: "# Veria\n\n## Name\nVeria"
+        }
+      ],
+      new Set(["npc:cloaked-figure-at-the-tower", "npc:veria"]),
+      existingContexts
+    );
+
+    assert.equal(result.accepted.length, 2);
+    assert.equal(result.discarded.length, 0);
+  });
+
+  it("blocks explicit duplicate NPC creates from revealed names and aliases", () => {
+    const existingContexts = [
+      {
+        id: "npc:cloaked-figure-at-the-tower",
+        category: "npc_context" as const,
+        title: "Cloaked Figure at the Tower",
+        bodyMarkdown:
+          "# Cloaked Figure at the Tower\n\n## Name\nUnknown.\n\n## Aliases / Former Labels\nUnknown.\n\n## Known History\n- Revealed her name: Veria."
+      },
+      {
+        id: "npc:old-scout",
+        category: "npc_context" as const,
+        title: "Old Scout",
+        bodyMarkdown:
+          "# Old Scout\n\n## Name\nUnknown.\n\n## Aliases / Former Labels\n- Veran"
+      }
+    ];
+    const result = validateMemoryPatches(
+      [
+        {
+          operation: "create_chunk",
+          context_id: "npc:veria",
+          context_type: "npc_context",
+          title: "Veria",
+          visibility: "player_safe",
+          markdown: "# Veria\n\n## Name\nVeria"
+        },
+        {
+          operation: "create_chunk",
+          context_id: "npc:veran",
+          context_type: "npc_context",
+          title: "Veran",
+          visibility: "player_safe",
+          markdown: "# Veran\n\n## Name\nVeran"
+        }
+      ],
+      new Set(["npc:cloaked-figure-at-the-tower", "npc:old-scout"]),
+      existingContexts
+    );
+
+    assert.equal(result.accepted.length, 0);
+    assert.equal(result.discarded.length, 2);
+    assert.match(
+      result.discarded[0]?.reasons.join("\n") ?? "",
+      /npc identity already exists as npc:cloaked-figure-at-the-tower/
+    );
+    assert.match(
+      result.discarded[1]?.reasons.join("\n") ?? "",
+      /npc identity already exists as npc:old-scout/
+    );
+  });
+
+  it("does not block NPC creates from similar location or personality alone", () => {
+    const result = validateMemoryPatches(
+      [
+        {
+          operation: "create_chunk",
+          context_id: "npc:second-cloaked-woman",
+          context_type: "npc_context",
+          title: "Second Cloaked Woman",
+          visibility: "player_safe",
+          markdown:
+            "# Second Cloaked Woman\n\n## Name\nSecond Cloaked Woman\n\n## Location\nInside the old tower.\n\n## Personality\nCollected and deliberate."
+        }
+      ],
+      new Set(["npc:cloaked-figure-at-the-tower"]),
+      [
+        {
+          id: "npc:cloaked-figure-at-the-tower",
+          category: "npc_context" as const,
+          title: "Cloaked Figure at the Tower",
+          bodyMarkdown:
+            "# Cloaked Figure at the Tower\n\n## Name\nUnknown.\n\n## Location\nInside the old tower.\n\n## Personality\nCollected and deliberate."
+        }
+      ]
+    );
+
+    assert.equal(result.accepted.length, 1);
+    assert.equal(result.discarded.length, 0);
+  });
+
   it("keeps prompts modular and explicit", () => {
     const routerPrompt = buildRouterPrompt();
     const removedOpeningJob = ["campaign", "starter"].join("_");
@@ -683,7 +806,12 @@ describe("modular AI DM runtime contracts", () => {
       assert.match(prompt, /new page, hidden annotation, translation, cipher result/i);
     }
     assert.match(buildMemoryUpdaterPrompt(), /Allowed operations/);
+    assert.match(buildMemoryUpdaterPrompt(), /rename_chunk/);
+    assert.match(buildMemoryUpdaterPrompt(), /merge_chunk/);
     assert.match(buildMemoryUpdaterPrompt(), /Create a new NPC card/i);
+    assert.match(buildMemoryUpdaterPrompt(), /Aliases \/ Former Labels/);
+    assert.match(buildMemoryUpdaterPrompt(), /do not create a second NPC card/i);
+    assert.match(buildMemoryUpdaterPrompt(), /previously known by description, title, disguise, role, or uncertainty/i);
     assert.match(buildMemoryUpdaterPrompt(), /Make each NPC feel like a compelling character/i);
     assert.match(buildMemoryUpdaterPrompt(), /## Disposition Towards You/);
     assert.match(buildMemoryUpdaterPrompt(), /Never infer gender or pronouns/i);

@@ -1293,42 +1293,25 @@ class FakeDatabase {
 
     if (
       normalizedSql.startsWith(
-        "select context_key, category, title, visibility, priority, updated_at from campaign_context_chunks"
-      )
+        "select context_key, category, title, visibility, priority, body_markdown, updated_at from campaign_context_chunks"
+      ) &&
+      normalizedSql.includes("context_key = any")
     ) {
       const campaignId = values[0] as string;
-      const limit = values[1] as number;
+      const requestedKeys = new Set(values[1] as string[]);
+      const requestedCategories = new Set(values[2] as string[]);
 
       return {
         rows: this.contextChunks
           .filter(
             (chunk) =>
-              chunk.campaign_id === campaignId && chunk.archived_at === null
+              chunk.campaign_id === campaignId &&
+              requestedKeys.has(chunk.context_key) &&
+              requestedCategories.has(chunk.category) &&
+              chunk.archived_at === null
           )
-          .sort((left, right) => {
-            const categoryDelta = left.category.localeCompare(right.category);
-
-            if (categoryDelta !== 0) {
-              return categoryDelta;
-            }
-
-            const priorityDelta = right.priority - left.priority;
-
-            if (priorityDelta !== 0) {
-              return priorityDelta;
-            }
-
-            return right.updated_at.getTime() - left.updated_at.getTime();
-          })
-          .slice(0, limit)
-          .map((chunk) => ({
-            context_key: chunk.context_key,
-            category: chunk.category,
-            title: chunk.title,
-            visibility: chunk.visibility,
-            priority: chunk.priority,
-            updated_at: chunk.updated_at
-          }) as T)
+          .sort((left, right) => right.priority - left.priority)
+          .map((chunk) => ({ ...chunk }) as T)
       };
     }
 
@@ -1409,24 +1392,65 @@ class FakeDatabase {
 
     if (
       normalizedSql.startsWith(
-        "select context_key, category, title, visibility, priority, body_markdown, updated_at from campaign_context_chunks"
+        "select context_key, category, title, body_markdown from campaign_context_chunks"
       )
     ) {
       const campaignId = values[0] as string;
-      const requestedKeys = new Set(values[1] as string[]);
-      const requestedCategories = new Set(values[2] as string[]);
 
       return {
         rows: this.contextChunks
           .filter(
             (chunk) =>
-              chunk.campaign_id === campaignId &&
-              requestedKeys.has(chunk.context_key) &&
-              requestedCategories.has(chunk.category) &&
-              chunk.archived_at === null
+              chunk.campaign_id === campaignId && chunk.archived_at === null
           )
-          .sort((left, right) => right.priority - left.priority)
-          .map((chunk) => ({ ...chunk }) as T)
+          .map((chunk) => ({
+            context_key: chunk.context_key,
+            category: chunk.category,
+            title: chunk.title,
+            body_markdown: chunk.body_markdown
+          }) as T)
+      };
+    }
+
+    if (
+      normalizedSql.startsWith(
+        "select context_key, category, title, visibility, priority, body_markdown, updated_at from campaign_context_chunks"
+      )
+    ) {
+      const campaignId = values[0] as string;
+      const limit = values[1] as number;
+
+      return {
+        rows: this.contextChunks
+          .filter(
+            (chunk) =>
+              chunk.campaign_id === campaignId && chunk.archived_at === null
+          )
+          .sort((left, right) => {
+            const categoryDelta = left.category.localeCompare(right.category);
+
+            if (categoryDelta !== 0) {
+              return categoryDelta;
+            }
+
+            const priorityDelta = right.priority - left.priority;
+
+            if (priorityDelta !== 0) {
+              return priorityDelta;
+            }
+
+            return right.updated_at.getTime() - left.updated_at.getTime();
+          })
+          .slice(0, limit)
+          .map((chunk) => ({
+            context_key: chunk.context_key,
+            category: chunk.category,
+            title: chunk.title,
+            visibility: chunk.visibility,
+            priority: chunk.priority,
+            body_markdown: chunk.body_markdown,
+            updated_at: chunk.updated_at
+          }) as T)
       };
     }
 
@@ -1706,6 +1730,33 @@ class FakeDatabase {
 
     if (
       normalizedSql.startsWith(
+        "update campaign_context_chunks set title = coalesce"
+      )
+    ) {
+      const campaignId = values[0] as string;
+      const contextKey = values[1] as string;
+      const title = values[2] as string;
+      const markdown = values[3] as string;
+      const chunk = this.contextChunks.find(
+        (candidate) =>
+          candidate.campaign_id === campaignId &&
+          candidate.context_key === contextKey &&
+          candidate.archived_at === null
+      );
+
+      if (chunk) {
+        if (title) {
+          chunk.title = title;
+        }
+        chunk.body_markdown = markdown;
+        chunk.updated_at = new Date();
+      }
+
+      return { rows: [] as T[] };
+    }
+
+    if (
+      normalizedSql.startsWith(
         "update campaign_context_chunks set visibility = 'player_safe'"
       )
     ) {
@@ -1716,6 +1767,37 @@ class FakeDatabase {
           chunk.visibility = "player_safe";
           chunk.updated_at = new Date();
         }
+      }
+
+      return { rows: [] as T[] };
+    }
+
+    if (
+      normalizedSql.startsWith(
+        "update campaign_context_chunks set context_key = $3"
+      )
+    ) {
+      const campaignId = values[0] as string;
+      const contextKey = values[1] as string;
+      const newContextKey = values[2] as string;
+      const title = values[3] as string;
+      const markdown = values[4] as string;
+      const chunk = this.contextChunks.find(
+        (candidate) =>
+          candidate.campaign_id === campaignId &&
+          candidate.context_key === contextKey &&
+          candidate.archived_at === null
+      );
+
+      if (chunk) {
+        chunk.context_key = newContextKey;
+        if (title) {
+          chunk.title = title;
+        }
+        if (markdown) {
+          chunk.body_markdown = markdown;
+        }
+        chunk.updated_at = new Date();
       }
 
       return { rows: [] as T[] };

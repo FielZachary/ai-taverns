@@ -29,6 +29,7 @@ import {
   type AiDebugInfo,
   type ContextCategory,
   type ContextChunk,
+  type ExistingMemoryContext,
   type GameMessage,
   type DmContractResponse,
   type DmContractParseOptions,
@@ -5952,6 +5953,12 @@ type ContextChunkIndexEntry = {
   visibility: "player_safe" | "dm_only";
   priority: number;
   updatedAt: string;
+  identity?: {
+    name: string;
+    aliases: string[];
+    location: string;
+    summary: string;
+  };
 };
 
 type ContextChunkIndex = Record<ContextCategory, ContextChunkIndexEntry[]>;
@@ -5970,6 +5977,59 @@ function emptyContextKeys(): RouterContextKeys {
   );
 }
 
+function markdownSectionBody(markdown: string, sectionName: string) {
+  const escaped = sectionName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(
+    `^##\\s+${escaped}\\s*$([\\s\\S]*?)(?=^##\\s+|(?![\\s\\S]))`,
+    "im"
+  );
+
+  return markdown.match(pattern)?.[1]?.trim() ?? "";
+}
+
+function markdownSectionLines(markdown: string, sectionName: string) {
+  const body = markdownSectionBody(markdown, sectionName);
+
+  if (!body || /^unknown\.?$/i.test(body)) {
+    return [];
+  }
+
+  return body
+    .split("\n")
+    .map((line) => line.replace(/^[-*]\s*/, "").trim())
+    .filter(Boolean);
+}
+
+function firstMarkdownSectionLine(markdown: string, sectionName: string) {
+  return markdownSectionLines(markdown, sectionName)[0] ?? "";
+}
+
+function summarizeMarkdownSection(markdown: string, sectionName: string) {
+  const body = markdownSectionBody(markdown, sectionName)
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!body || /^unknown\.?$/i.test(body)) {
+    return "";
+  }
+
+  return body.length > 220 ? `${body.slice(0, 217).trimEnd()}...` : body;
+}
+
+function npcIdentityPreview(row: Record<string, unknown>) {
+  const markdown = String(row.body_markdown ?? "");
+  const name =
+    firstMarkdownSectionLine(markdown, "Name") ||
+    String(row.title ?? row.context_key ?? "");
+
+  return {
+    name,
+    aliases: markdownSectionLines(markdown, "Aliases / Former Labels"),
+    location: summarizeMarkdownSection(markdown, "Location"),
+    summary: summarizeMarkdownSection(markdown, "Personality")
+  };
+}
+
 async function listCampaignContextChunkIndex(
   db: Queryable,
   campaignId: string,
@@ -5986,6 +6046,7 @@ async function listCampaignContextChunkIndex(
           title,
           visibility,
           priority,
+          body_markdown,
           updated_at
         from campaign_context_chunks
         where campaign_id = $1
@@ -6011,7 +6072,10 @@ async function listCampaignContextChunkIndex(
             ? row.visibility
             : "dm_only",
         priority: typeof row.priority === "number" ? row.priority : 0,
-        updatedAt: row.updated_at ? toIso(row.updated_at as Date | string) : ""
+        updatedAt: row.updated_at ? toIso(row.updated_at as Date | string) : "",
+        ...(category === "npc_context"
+          ? { identity: npcIdentityPreview(row) }
+          : {})
       });
     }
   } catch (error) {
@@ -7209,25 +7273,51 @@ function jsonObjectToMarkdown(title: string, content: Record<string, unknown>) {
     .trim();
 }
 
-async function listCampaignContextIds(db: Queryable, campaignId: string) {
+async function listCampaignContextValidationEntries(
+  db: Queryable,
+  campaignId: string
+) {
   try {
-    const result = await db.query<{ context_key: string }>(
+    const result = await db.query<Record<string, unknown>>(
       `
-        select context_key
+        select
+          context_key,
+          category,
+          title,
+          body_markdown
         from campaign_context_chunks
         where campaign_id = $1 and archived_at is null
       `,
       [campaignId]
     );
 
-    return new Set(result.rows.map((row) => row.context_key));
+    return result.rows
+      .map((row): ExistingMemoryContext | null => {
+        const category = String(row.category ?? "") as ContextCategory;
+
+        if (!contextCategories.includes(category)) {
+          return null;
+        }
+
+        return {
+          id: String(row.context_key ?? ""),
+          category,
+          title: String(row.title ?? row.context_key ?? ""),
+          bodyMarkdown: String(row.body_markdown ?? "")
+        };
+      })
+      .filter((entry): entry is ExistingMemoryContext => entry !== null);
   } catch (error) {
     if (!isMissingRuntimeTableError(error)) {
       throw error;
     }
 
-    return new Set<string>();
+    return [];
   }
+}
+
+function existingContextIdSet(contexts: ExistingMemoryContext[]) {
+  return new Set(contexts.map((context) => context.id));
 }
 
 async function applyAcceptedMemoryPatch(
@@ -7237,7 +7327,15 @@ async function applyAcceptedMemoryPatch(
 ) {
   const operation = patch.operation;
   const contextId = String(patch.context_id ?? patch.contextId ?? "");
+  const newContextId = String(patch.new_context_id ?? patch.newContextId ?? "");
+  const sourceContextId = String(
+    patch.source_context_id ?? patch.sourceContextId ?? ""
+  );
+  const targetContextId = String(
+    patch.target_context_id ?? patch.targetContextId ?? ""
+  );
   const markdown = String(patch.markdown ?? "");
+  const title = String(patch.title ?? "");
   const visibility =
     patch.visibility === "player_safe" || patch.visibility === "dm_only"
       ? patch.visibility
@@ -7281,6 +7379,50 @@ async function applyAcceptedMemoryPatch(
         where campaign_id = $1 and context_key = $2
       `,
       [campaignId, contextId]
+    );
+    return;
+  }
+
+  if (operation === "rename_chunk") {
+    await bestEffortRuntimeInsert(
+      db,
+      `
+        update campaign_context_chunks
+        set context_key = $3,
+          title = coalesce(nullif($4, ''), title),
+          body_markdown = case
+            when nullif($5::text, '') is null then body_markdown
+            else $5::text
+          end,
+          updated_at = now()
+        where campaign_id = $1 and context_key = $2
+      `,
+      [campaignId, contextId, newContextId, title, markdown]
+    );
+    return;
+  }
+
+  if (operation === "merge_chunk") {
+    await bestEffortRuntimeInsert(
+      db,
+      `
+        update campaign_context_chunks
+        set title = coalesce(nullif($3, ''), title),
+          body_markdown = $4::text,
+          updated_at = now()
+        where campaign_id = $1 and context_key = $2
+      `,
+      [campaignId, targetContextId, title, markdown]
+    );
+    await bestEffortRuntimeInsert(
+      db,
+      `
+        update campaign_context_chunks
+        set archived_at = now(),
+          updated_at = now()
+        where campaign_id = $1 and context_key = $2
+      `,
+      [campaignId, sourceContextId]
     );
     return;
   }
@@ -7709,10 +7851,14 @@ async function runLivingWorldPressureEngineIfDue(
           typeof chunk === "string" ? chunk : eventPayload(chunk).context_id
       }))
     ];
-    const existingContextIds = await listCampaignContextIds(db, input.campaignId);
+    const existingContexts = await listCampaignContextValidationEntries(
+      db,
+      input.campaignId
+    );
     const validation = validateMemoryPatches(
       proposedPatches,
-      existingContextIds
+      existingContextIdSet(existingContexts),
+      existingContexts
     );
 
     await applyAcceptedMemoryPatches(
@@ -8070,10 +8216,14 @@ export async function runModularPostTurnContextJobs(
           }))
         : [])
     ];
-    const existingContextIds = await listCampaignContextIds(db, input.campaignId);
+    const existingContexts = await listCampaignContextValidationEntries(
+      db,
+      input.campaignId
+    );
     const validation = validateMemoryPatches(
       proposedPatches,
-      existingContextIds
+      existingContextIdSet(existingContexts),
+      existingContexts
     );
 
     await applyAcceptedMemoryPatches(
@@ -9411,7 +9561,7 @@ function buildCampaignFoundationCompilerPrompt() {
     "You are not the narrator. Do not write player-facing prose. Do not continue the scene.",
     "Return strict JSON with patches, new_context_chunks, and remove_context_chunks.",
     "Use the same context patch contract as the memory/context updater.",
-    "Allowed operations: append, replace_section, create_chunk, archive_chunk.",
+    "Allowed operations: append, replace_section, create_chunk, archive_chunk, rename_chunk, merge_chunk.",
     "Prefer create_chunk for new campaign foundation material. Prefer append only when updating an existing matching chunk from the provided index.",
     "Create rich aggregate chunks around durable retrieval anchors, usually 8-12 chunks total for a campaign opener. Do not create a separate chunk for every clue, rumor, scene detail, subtask, or minor prop.",
     "Small granular details belong inside the best parent chunk: a major NPC, player character, place, faction, active cross-cutting thread, or campaign-scale secret.",
@@ -9434,7 +9584,8 @@ function buildCampaignFoundationCompilerPrompt() {
     "Do not resolve long-term secrets immediately. Preserve a long runway for discovery, player choice, and the player leaving a mark on Eldermere.",
     "Use stable ids with prefixes: npc:kebab-case-name, world:kebab-case-name, faction:kebab-case-name, thread:kebab-case-name, secret:kebab-case-name, or pc:kebab-case-name.",
     "Do not create secret companion chunks with npc:* or thread:* ids such as npc:name-secrets or thread:name-secrets. If the chunk is mainly hidden truth, private motive, or reveal ladder, its context_id must start with secret: and its context_type must be overarching_big_plot_secrets.",
-    "NPC chunks must use context_type npc_context and the NPC card section structure from the memory updater where possible.",
+    "NPC chunks must use context_type npc_context and the NPC card section structure from the memory updater where possible, including ## Aliases / Former Labels.",
+    "If a named NPC was first known by a description, title, disguise, role, or uncertain label in the opening plan, put that old label under ## Aliases / Former Labels instead of creating a second NPC card.",
     "Every campaign-important named NPC from the planner must receive an npc:* chunk, including missing mentors, off-screen patrons, not-yet-met antagonists, and dead or endangered anchors. Do not replace an important NPC chunk with only a thread, faction, world, or secret chunk.",
     "NPC id slugs must preserve word boundaries with hyphens, especially personal names: use npc:lysa-marvelbridge, not npc:lysamarvelbridge.",
     "For a missing NPC, create a player_safe npc:* chunk with what is known, rumors, relationships, and open questions. Put their true fate, secret location, private discoveries, or reveal ladder in a paired secret:* chunk if needed.",
@@ -9592,13 +9743,14 @@ async function runEldermereCampaignFoundationCompiler(
           }))
         : [])
     ];
-    const existingContextIds = await listCampaignContextIds(
+    const existingContexts = await listCampaignContextValidationEntries(
       db,
       input.campaign.id
     );
     const validation = validateMemoryPatches(
       proposedPatches,
-      existingContextIds
+      existingContextIdSet(existingContexts),
+      existingContexts
     );
 
     await applyAcceptedMemoryPatches(
@@ -12687,10 +12839,13 @@ export const __dbTestInternals = {
   applyAcceptedInventoryPatches,
   applyAcceptedMemoryPatch,
   campaignContextStorageDebugState,
+  buildCampaignFoundationCompilerPrompt,
   formatDmGuidance,
+  formatContextChunkIndexForRouter,
   formatLivingWorldPressureEngineRequest,
   getLatestLivingWorldCoveredMessageCount,
   inventoryUpdateSentence,
+  listCampaignContextChunkIndex,
   narrationWithInventoryUpdate,
   normalizeNewContextChunkPatch,
   validateInventoryPatches
