@@ -1918,6 +1918,11 @@ function numberField(record: Record<string, unknown>, key: string) {
   return Number.isInteger(value) && Number(value) >= 0 ? Number(value) : undefined;
 }
 
+function signedNumberField(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  return Number.isInteger(value) ? Number(value) : undefined;
+}
+
 function hpNumberField(record: Record<string, unknown>, key: string) {
   const value = record[key];
   return Number.isInteger(value) ? Math.max(0, Number(value)) : undefined;
@@ -1955,6 +1960,27 @@ function deathSavesField(record: Record<string, unknown>, key: string) {
   };
 }
 
+const abilityKeys = ["str", "dex", "con", "int", "wis", "cha"] as const;
+
+function abilityBonusMapField(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const bonuses: Partial<Record<(typeof abilityKeys)[number], number>> = {};
+
+  for (const abilityKey of abilityKeys) {
+    const bonus = Number(value[abilityKey]);
+    if (Number.isInteger(bonus)) {
+      bonuses[abilityKey] = bonus;
+    }
+  }
+
+  return Object.keys(bonuses).length > 0 ? bonuses : undefined;
+}
+
 function allegianceField(record: Record<string, unknown>, key: string) {
   const value = record[key];
   return value === "player" ||
@@ -1990,6 +2016,13 @@ function applyMechanicsStateUpdate(
     const currentHp = hpNumberField(rawActor, "currentHp");
     const maxHp = hpNumberField(rawActor, "maxHp");
     const armorClass = numberField(rawActor, "armorClass");
+    const attackBonus = signedNumberField(rawActor, "attackBonus");
+    const damageFormula =
+      typeof rawActor.damageFormula === "string" && rawActor.damageFormula.trim()
+        ? rawActor.damageFormula.trim()
+        : undefined;
+    const saveBonuses = abilityBonusMapField(rawActor, "saveBonuses");
+    const abilityModifiers = abilityBonusMapField(rawActor, "abilityModifiers");
     const characterName =
       typeof rawActor.characterName === "string" && rawActor.characterName.trim()
         ? rawActor.characterName
@@ -2013,6 +2046,10 @@ function applyMechanicsStateUpdate(
       ...(currentHp !== undefined ? { currentHp } : {}),
       ...(maxHp !== undefined ? { maxHp } : {}),
       ...(armorClass !== undefined ? { armorClass } : {}),
+      ...(attackBonus !== undefined ? { attackBonus } : {}),
+      ...(damageFormula ? { damageFormula } : {}),
+      ...(saveBonuses ? { saveBonuses } : {}),
+      ...(abilityModifiers ? { abilityModifiers } : {}),
       ...(allegianceField(rawActor, "allegiance") !== undefined
         ? { allegiance: allegianceField(rawActor, "allegiance") }
         : {}),
@@ -9325,7 +9362,7 @@ const gameplayTurnOutputContractReminder = [
   "Roll NPC and enemy initiative yourself every time, reveal each NPC/enemy initiative roll and total in public_narration, and encode the resulting order in mechanics_state_update or combat_events.",
   "Never ask players to roll initiative, saving throws, attacks, damage, checks, or any other dice for NPCs or enemies; NPC and enemy dice are DM-side rolls that must still be visible to the players.",
   "Also include non-empty mechanics_state_update.combat with active, round, turnOwner, and provisional initiativeOrder as actor-key strings when initiative roll_requests pauses resolution.",
-  "For every new npc:* actor key introduced in initiativeOrder, include mechanics_state_update.actors for that key with characterName, currentHp, maxHp, armorClass, conditions, allegiance, and isPlayerControlled.",
+  "For every new npc:* actor key introduced in initiativeOrder, include mechanics_state_update.actors for that key with characterName, currentHp, maxHp, armorClass, conditions, allegiance, isPlayerControlled, and combat math fields for the rolls you will use: attackBonus, damageFormula, saveBonuses, and/or abilityModifiers.",
   "NPC combat durability: when creating new combat NPC/enemy actors, choose maxHp deliberately from narrative role, threat level, party level, and expected fight length. Do not default named or story-important enemies to fragile low HP.",
   "Use the highest player character level as partyLevel. If partyLevel is unknown, infer it from character sheet features, proficiency bonus, spell slots, or current HP; if still unknown, assume partyLevel 3.",
   "Use these baseline maxHp bands unless established context says otherwise: trivial minion, scout, or bystander forced into combat: max(6, partyLevel * 3) to max(10, partyLevel * 5) HP; ordinary armed guard, bandit, cultist, beast, or rank-and-file combatant: max(10, partyLevel * 5) to max(16, partyLevel * 8) HP; trained soldier, veteran agent, dangerous monster, elite guard, or backup bruiser: max(18, partyLevel * 8) to max(28, partyLevel * 12) HP; named antagonist, duel-worthy foe, officer, spellcaster, monster leader, or recurring enemy: max(24, partyLevel * 10) to max(40, partyLevel * 16) HP; major boss or climactic solo enemy: at least max(40, partyLevel * 18) HP, with legendary-style pressure, reinforcements, terrain, or escape plans when appropriate.",
@@ -9348,10 +9385,10 @@ const gameplayTurnOutputContractReminder = [
   "For missing tactical choices, return next_input_needed player_actions, roll_requests [], input_policy only_targeted_players, input_targets set to the acting player, and ask only for the missing choice.",
   "For combat attack and damage roll_requests, include combat metadata: {actionId, actorKey, targetActorKey, kind, attackName, sequence, sourceAttackRollId when resolving damage, damageType, and onHitDamage for attack rolls that can hit}. Reuse the same actionId across all rolls for one declared combat action.",
   "When a player action, spell, feature, or weapon would deal damage and that damage roll was not already submitted, do not roll damage yourself. Request the player's damage roll with next_input_needed dice_results and a structured roll_requests entry. This includes automatic-hit effects such as Magic Missile. Do not update target HP until damage is submitted.",
-  "Resolve NPC attacks fully using conversational visible math in prose, such as '<clue>they rolled a 17 against your AC of 14</clue>, so the cutlass catches your ribs'; on a hit, state damage in prose, such as 'the damage comes to <danger>6 slashing</danger> from <clue>1d6 + 2</clue>', update player HP, then continue the non-player-controlled catch-up loop until control reaches a player actor, combat ends, or a player-facing roll, reaction, or tactical choice is required.",
+  "Resolve NPC attacks fully using conversational visible math in prose. If the NPC has an attackBonus or other modifier, show the modified total first and natural die in parentheses, such as '<clue>they rolled a 17 (15) against your AC of 14</clue>, so the cutlass catches your ribs'; on a hit, state damage in prose, such as 'the damage comes to <danger>6 slashing</danger> from <clue>1d6 + 2</clue>', update player HP, then continue the non-player-controlled catch-up loop until control reaches a player actor, combat ends, or a player-facing roll, reaction, or tactical choice is required.",
   "For NPC hits, public_narration must include the NPC's roll, the target AC, whether it hit, the damage dice and total, the damage type, and the HP change before injury narration finishes.",
-  "When a player spell or feature forces an NPC or enemy saving throw, roll that save yourself before narrating success or failure, reveal the save roll and total, compare it to the player's known spell save DC when available, and do not put the NPC/enemy save in roll_requests.",
-  "Never narrate a spell or feature as failing, succeeding, taking hold, being resisted, or being shaken off because of an NPC/enemy save unless public_narration first includes the visible save math in prose, such as 'the cultist rolled an <clue>11 against your spell save DC of 13</clue>, so the spell takes hold.'",
+  "When a player spell or feature forces an NPC or enemy saving throw, roll that save yourself before narrating success or failure, add the relevant saveBonus or ability modifier from mechanicsState, reveal the modified total and natural die, compare the total to the player's known spell save DC when available, and do not put the NPC/enemy save in roll_requests.",
+  "Never narrate a spell or feature as failing, succeeding, taking hold, being resisted, or being shaken off because of an NPC/enemy save unless public_narration first includes the visible save math in prose, such as 'the cultist rolled an <clue>11 (9) against your spell save DC of 13</clue>, so the spell takes hold.'",
   "Do not end an NPC turn with only a wind-up like lunges, swings, aims, starts casting, or bears down unless a player-facing roll or reaction is required first.",
   "When the final active enemy is defeated, set combat active false, turnOwner null, and initiativeOrder empty; do not say a specific combatant is up next after combat ends.",
   "Build combat actor names and keys only from the current scene and character sheets; never copy example NPC names into initiativeOrder.",
