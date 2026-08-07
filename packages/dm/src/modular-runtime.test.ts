@@ -417,6 +417,16 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(routerPrompt, /Choose clarification when the player's intended action is too underspecified/i);
     assert.match(routerPrompt, /without a clear target, target area, or necessary tactical detail/i);
     assert.match(routerPrompt, /Do not choose clarification merely because an action is risky/i);
+    assert.match(routerPrompt, /Job selection guide:/);
+    assert.match(routerPrompt, /scene_director: Choose for ordinary noncombat scene movement/i);
+    assert.match(routerPrompt, /not primarily conversation, clue discovery, combat, rest, death saves, or clarification/i);
+    assert.match(routerPrompt, /investigation: Choose when the player is searching, inspecting, tracking/i);
+    assert.match(routerPrompt, /trying to uncover information the character does not automatically know/i);
+    assert.match(routerPrompt, /npc_dialogue: Choose when the player directly speaks with/i);
+    assert.match(routerPrompt, /combat: Choose when combat is active and the input affects turn flow/i);
+    assert.match(routerPrompt, /rest_mechanics: Choose when the player attempts a short rest/i);
+    assert.match(routerPrompt, /death_saving_throws: Choose when a player character is at 0 HP and dying/i);
+    assert.match(routerPrompt, /clarification: Choose only when the intended action cannot be adjudicated safely/i);
     assert.doesNotMatch(routerPrompt, new RegExp(removedOpeningJob));
     assert.match(jobPrompt("scene_director"), /concrete sensory detail/i);
     assert.match(jobPrompt("scene_director"), /observable behavior/i);
