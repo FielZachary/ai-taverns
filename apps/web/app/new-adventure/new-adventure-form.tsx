@@ -46,6 +46,7 @@ import {
   FullPageRuneLoader,
   RuneLoaderText
 } from "@/components/FullPageRuneLoader";
+import { ScrollProgressSlider } from "@/components/ScrollProgressSlider";
 import {
   analyticsGuestId,
   identifyAnalyticsUser,
@@ -5494,7 +5495,15 @@ export function NewAdventureForm({
   const activeEquipmentChoice = equipmentChoices[equipmentChoiceStepIndex];
 
   return (
-    <main className="new-adventure-page" aria-label="Create a new adventure">
+    <main
+      className="new-adventure-page"
+      id="new-adventure-scroll-root"
+      aria-label="Create a new adventure"
+    >
+      <ScrollProgressSlider
+        className="new-adventure-scroll-slider"
+        controls="new-adventure-scroll-root"
+      />
       <div className="new-adventure-heading">
         <p className="eyebrow">New Adventure</p>
         <h1>{stepTitle}</h1>
