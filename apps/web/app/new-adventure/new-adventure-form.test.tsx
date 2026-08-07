@@ -1001,6 +1001,20 @@ describe("NewAdventureForm", () => {
     expect(
       screen.getByRole("heading", { name: /create your character art/i })
     ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /back/i }));
+    await finishFlowTransition();
+
+    expect(
+      screen.getByRole("heading", { name: /choose your identity/i })
+    ).toBeInTheDocument();
+
+    await nextCharacterStep();
+
+    expect(generateCharacterBackstoryMock).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole("heading", { name: /create your character art/i })
+    ).toBeInTheDocument();
   });
 
   it("passes generated Eldermere start into campaign creation", async () => {

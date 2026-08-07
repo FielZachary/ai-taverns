@@ -5345,7 +5345,13 @@ export function NewAdventureForm({
     setContinuingBackstoryMode(mode);
 
     try {
-      return await writeBackstory(mode);
+      const wroteBackstory = await writeBackstory(mode);
+
+      if (wroteBackstory) {
+        setHasUsedBackstoryAction(true);
+      }
+
+      return wroteBackstory;
     } finally {
       setIsContinuingWithBackstory(false);
       setContinuingBackstoryMode(null);
