@@ -543,7 +543,7 @@ export function jobPrompt(
     "In roll_requests, dice must be bare dice notation only, such as 1d20, 3d4, or 8d6. Do not include + or - modifiers in dice; put static bonuses or penalties in modifier. Example: Magic Missile uses dice \"3d4\" and modifier 3, not dice \"3d4+3\".",
     "When a player action, spell, feature, or weapon would deal damage and that damage roll was not already submitted, do not roll damage yourself. Request the player's damage roll with next_input_needed dice_results and a structured roll_requests entry. This includes automatic-hit effects such as Magic Missile. Do not update target HP until damage is submitted.",
     "When a player spell or feature forces an NPC or enemy saving throw, roll that save yourself before narrating success or failure, reveal the save roll and total, compare it to the player's known spell save DC when available, and do not put the NPC/enemy save in roll_requests.",
-    "Never narrate a spell or feature as failing, succeeding, taking hold, being resisted, or being shaken off because of an NPC/enemy save unless public_narration first includes the visible save math in prose, such as '<Target> rolled an 11 against your spell save DC of 13, so the spell takes hold.'",
+    "Never narrate a spell or feature as failing, succeeding, taking hold, being resisted, or being shaken off because of an NPC/enemy save unless public_narration first includes the visible save math in prose, such as 'the cultist rolled an 11 against your spell save DC of 13, so the spell takes hold.'",
     "Visible combat math:",
     "For resolved attacks, make the numbers visible before injury narration.",
     "Weave visible combat math into the action prose; do not format resolved combat results as detached combat-log labels like 'Attack Roll:', 'Damage Roll:', 'Attack 1:', or 'Save:'.",
@@ -551,7 +551,7 @@ export function jobPrompt(
     "For NPC attack rolls, use conversational wording from the NPC side: 'they rolled a 17 against your AC of 14, so the cutlass catches your ribs,' or 'the warden rolled a 12 against Komer's AC of 18, not enough to pierce the chain mail.'",
     "On a resolved hit where damage is known or DM-side, state damage in prose: 'the damage comes to 5 piercing from 1d6 + 2,' or 'you take 5 piercing damage and drop from 16 HP to 11 HP.'",
     "For NPC hits against player characters, public_narration must include the NPC's roll, the target AC, whether it hit, the damage dice and total, the damage type, and the HP change when HP is updated.",
-    "For saving throws, make the numbers visible before consequence narration using prose: '<Target> rolled a 9 against DC 14 and fails,' or '<Target> rolled a 16 against your DC of 14 and succeeds.'",
+    "For saving throws, make the numbers visible before consequence narration using prose: 'the cultist rolled a 9 against DC 14 and fails,' or 'the warden rolled a 16 against your DC of 14 and succeeds.'",
     "When an area spell or effect affects multiple creatures, list each target's save result separately before applying damage or conditions.",
     "For half-damage effects, state who succeeded, who failed, the full damage, the halved damage, and each affected actor's HP change when HP is updated.",
     "If the relevant save DC is unknown, ask for it or use the known character sheet value; do not silently invent a DC.",
@@ -584,7 +584,7 @@ export function jobPrompt(
     "In resolved combat beats, combine description, visible mechanics, and consequence into compact paragraphs when they belong to the same actor, target group, or turn.",
     "Do not put a visible mechanics sentence in its own standalone paragraph during resolved combat; attach it to the description or consequence paragraph for that beat.",
     "A resolved combat turn with multiple actor turns usually needs one paragraph per actor/effect plus a final handoff paragraph, not one paragraph per mechanical line.",
-    "Do not bold visible mechanics or use Markdown emphasis inside public_narration. Keep combat math as plain text.",
+    "Do not bold visible mechanics or use Markdown emphasis inside public_narration. When a combat math phrase should receive visual emphasis, wrap only the short player-visible phrase with semantic narration markup: <clue>...</clue> for roll totals, AC, DC, dice notation, attack/save/check math; <danger>...</danger> for damage amounts, HP changes, 0 HP, defeat, and urgent threats.",
     "Put mechanics before flourish when mechanics decide the outcome.",
     "Use vivid physical detail, but do not bury hit/miss, damage, HP, turn owner, or pending rolls inside ornate prose.",
     "End every resolved combat beat with a clear handoff: whose turn or what immediate pressure remains, then 'What do you do?' on its own line when awaiting player action.",
@@ -692,8 +692,8 @@ export function jobPrompt(
       JSON.stringify(
         completeOutputExample({
           public_narration: [
-            "The first lift warden moves before Komer can bring the greataxe up. They rolled an 18 against Komer's AC of 15, so the spearpoint snaps forward under his guard and punches into his shoulder. The damage comes to 5 piercing from 1d6 + 2, dropping Komer from 16 HP to 11 HP.",
-            "The second warden follows in the opening, but they rolled a 10 against Komer's AC of 15. Komer twists aside, and the second spear skids off the haft of his greataxe with a bright scrape.",
+            "The first lift warden moves before Komer can bring the greataxe up. <clue>They rolled an 18 against Komer's AC of 15</clue>, so the spearpoint snaps forward under his guard and punches into his shoulder. The damage comes to <danger>5 piercing</danger> from <clue>1d6 + 2</clue>, dropping Komer from <danger>16 HP to 11 HP</danger>.",
+            "The second warden follows in the opening, but <clue>they rolled a 10 against Komer's AC of 15</clue>. Komer twists aside, and the second spear skids off the haft of his greataxe with a bright scrape.",
             "Komer, both wardens are in reach and your greataxe is already in motion.",
             "What do you do?"
           ].join("\n\n"),
@@ -734,8 +734,8 @@ export function jobPrompt(
       JSON.stringify(
         completeOutputExample({
           public_narration: [
-            "Your fist hammers Acolyte 3 backward. The damage comes to 3 bludgeoning from 1d4 + 2, dropping Acolyte 3 from 7 HP to 4 HP and sending them sprawling prone beside the silver pool.",
-            "Manifold takes his turn immediately, driving Acolyte 1 away from the pool. He rolled a 16 against their AC of 13, enough to cut through their guard; the damage comes to 7 slashing from 1d8 + 3, leaving Acolyte 1 staggering in torn, bloody robes.",
+            "Your fist hammers <npc>Acolyte 3</npc> backward. The damage comes to <danger>3 bludgeoning</danger> from <clue>1d4 + 2</clue>, dropping Acolyte 3 from <danger>7 HP to 4 HP</danger> and sending them sprawling prone beside the silver pool.",
+            "<npc>Manifold</npc> takes his turn immediately, driving Acolyte 1 away from the pool. <clue>He rolled a 16 against their AC of 13</clue>, enough to cut through their guard; the damage comes to <danger>7 slashing</danger> from <clue>1d8 + 3</clue>, leaving Acolyte 1 staggering in torn, bloody robes.",
             "Acolyte 3 spends half their movement rising, then lashes silver shards at you. They rolled an 11 against your AC of 12, so the shards hiss past your shoulder and burst against the stone.",
             "Acolyte 1 answers Manifold with a hooked dagger, but they rolled a 14 against Manifold's AC of 15. Manifold turns the blade aside.",
             "Acolyte 2 chants over the Wellspring, but the unstable silver backlashes. They rolled an 8 against DC 13 on the Arcana check, and the pool spits light, leaving Acolyte 2 rattled and exposed.",
@@ -954,7 +954,7 @@ export function jobPrompt(
         completeOutputExample({
           public_narration: [
             "POKE's voice drops into the honeyed cadence of the charm spell, silver motes warming to gold as the magic reaches for Hesk's thoughts.",
-            "Warden Captain Hesk rolled an 11 against POKE's spell save DC of 13, so the charm slips past her defenses. Her crossbow lowers by a fraction. The hard line of her jaw loosens, and she looks at POKE with sudden, uneasy familiarity rather than open hostility. The four wardens behind her keep their weapons raised, watching their captain for a signal that does not come.",
+            "<npc>Warden Captain Hesk</npc> rolled an <clue>11 against POKE's spell save DC of 13</clue>, so the charm slips past her defenses. Her crossbow lowers by a fraction. The hard line of her jaw loosens, and she looks at POKE with sudden, uneasy familiarity rather than open hostility. The four wardens behind her keep their weapons raised, watching their captain for a signal that does not come.",
             "POKE, Hesk is charmed by you for now, but her squad has not been charmed and Komer's greataxe is still very visible.",
             "What do you do?"
           ].join("\n\n"),
@@ -1114,7 +1114,7 @@ export function jobPrompt(
       JSON.stringify(
         completeOutputExample({
           public_narration: [
-            "Komer's greataxe crashes through the warden's guard. You rolled a 19 against their AC of 16, so the blade bites through. Roll greataxe damage: 1d12 + 2."
+            "Komer's greataxe crashes through the warden's guard. <clue>You rolled a 19 against their AC of 16</clue>, so the blade bites through. Roll greataxe damage: <clue>1d12 + 2</clue>."
           ].join("\n\n"),
           resolution_mode: "needs_dice",
           roll_requests: [
@@ -1156,8 +1156,8 @@ export function jobPrompt(
         completeOutputExample({
           public_narration: [
             "The fireball detonates against the portcullis in a white-orange roar, hot enough to make the rain burst into steam before it reaches the stones.",
-            "The scarred guardswoman rolled a 9 against DC 14 and fails. The robed priest rolled a 16 against DC 14 and succeeds. The gate guards rolled a 7 and a 12 against DC 14, so both fail. The fireball deals 33 fire damage from 8d6; the priest twists away for half and takes 16, while the guardswoman and both gate guards take the full 33.",
-            "The scarred guardswoman is thrown backward, her sword spinning away as she drops from 4 HP to 0 HP. The robed priest slams into the iron bars behind him and slides down through the smoke, dropping from 7 HP to 0 HP despite twisting away from the worst of the blast. The two prone gate guards do not rise; both drop from 5 HP to 0 HP.",
+            "The scarred guardswoman rolled a <clue>9 against DC 14</clue> and fails. The robed priest rolled a <clue>16 against DC 14</clue> and succeeds. The gate guards rolled a <clue>7 and a 12 against DC 14</clue>, so both fail. The fireball deals <danger>33 fire damage</danger> from <clue>8d6</clue>; the priest twists away for half and takes <danger>16</danger>, while the guardswoman and both gate guards take the full <danger>33</danger>.",
+            "The scarred guardswoman is thrown backward, her sword spinning away as she drops from <danger>4 HP to 0 HP</danger>. The robed priest slams into the iron bars behind him and slides down through the smoke, dropping from <danger>7 HP to 0 HP</danger> despite twisting away from the worst of the blast. The two prone gate guards do not rise; both drop from <danger>5 HP to 0 HP</danger>.",
             "The roar collapses into the hiss of rain on scorched stone. No enemies remain standing, and the wicket gate hangs open through the smoke.",
             "What do you do?"
           ].join("\n\n"),
@@ -1273,7 +1273,10 @@ export function jobPrompt(
       "- Return strict JSON only.",
       "- Minimum output fields: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update, combat_events, proposed_context_updates.",
       "- Do not use Markdown outside the JSON object or Markdown emphasis inside public_narration strings.",
-      "- Do not use Markdown, HTML, CSS, hex colors, or color names inside public_narration.",
+      "- public_narration may use sparse semantic narration markup for inline UI color: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, and <object>...</object>.",
+      "- Use semantic narration markup only around exact player-visible words that should be colored. Do not nest tags, add attributes, or use any other HTML/XML tags.",
+      "- Use no more than 0-1 semantic tags in ordinary noncombat turns unless the scene opening or major reveal genuinely benefits from 2-3 visible anchors.",
+      "- Do not use Markdown, CSS, hex colors, or color names inside public_narration.",
       "",
       "Visibility Boundary:",
       "- Do not reveal hidden context, DM-only memory, raw context metadata, internal reasoning, proposed patches, or secrets unless the active job reveals them through player-facing play.",

@@ -41,6 +41,19 @@ describe("parseDmContract", () => {
     assert.equal(result.resolutionMode, "resolved_without_dice");
   });
 
+  it("preserves semantic narration markup in public narration", () => {
+    const result = parseDmContract(
+      contract(
+        "<npc>Captain Vael</npc> lowers the <object>black key</object>. What do you do?"
+      )
+    );
+
+    assert.equal(
+      result.publicNarration,
+      "<npc>Captain Vael</npc> lowers the <object>black key</object>.\n\nWhat do you do?"
+    );
+  });
+
   it("infers and validates resolution_mode", () => {
     const resolved = parseDmContract(
       JSON.stringify({
