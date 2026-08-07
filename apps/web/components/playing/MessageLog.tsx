@@ -33,6 +33,66 @@ type MessageLogProps = {
   onViewEldermereLore?: () => void;
 };
 
+const semanticNarrationRoles = [
+  "npc",
+  "place",
+  "clue",
+  "danger",
+  "faction",
+  "object"
+] as const;
+
+type SemanticNarrationRole = (typeof semanticNarrationRoles)[number];
+
+type SemanticNarrationPart =
+  | { text: string; role?: undefined }
+  | { text: string; role: SemanticNarrationRole };
+
+function isSemanticNarrationRole(value: string): value is SemanticNarrationRole {
+  return semanticNarrationRoles.includes(value as SemanticNarrationRole);
+}
+
+function parseSemanticNarrationMarkup(content: string): SemanticNarrationPart[] {
+  const parts: SemanticNarrationPart[] = [];
+  let cursor = 0;
+
+  while (cursor < content.length) {
+    const openingMatch = content.slice(cursor).match(/<(npc|place|clue|danger|faction|object)>/);
+
+    if (!openingMatch?.index && openingMatch?.index !== 0) {
+      parts.push({ text: content.slice(cursor) });
+      break;
+    }
+
+    const openingIndex = cursor + openingMatch.index;
+    const role = openingMatch[1];
+
+    if (!isSemanticNarrationRole(role)) {
+      parts.push({ text: content.slice(cursor, openingIndex + openingMatch[0].length) });
+      cursor = openingIndex + openingMatch[0].length;
+      continue;
+    }
+
+    if (openingIndex > cursor) {
+      parts.push({ text: content.slice(cursor, openingIndex) });
+    }
+
+    const contentStart = openingIndex + openingMatch[0].length;
+    const closingTag = `</${role}>`;
+    const closingIndex = content.indexOf(closingTag, contentStart);
+
+    if (closingIndex === -1) {
+      parts.push({ text: content.slice(contentStart), role });
+      break;
+    }
+
+    parts.push({ text: content.slice(contentStart, closingIndex), role });
+    cursor = closingIndex + closingTag.length;
+  }
+
+  return parts.filter((part) => part.text.length > 0);
+}
+
 function renderInlineMarkdown(content: string) {
   const segments = content.split(/(\*\*[^*]+?\*\*|\*[^*]+?\*)/g);
 
@@ -53,18 +113,36 @@ function renderInlineMarkdown(content: string) {
   });
 }
 
-function renderInlineContentWithLineBreaks(content: string) {
-  return content.split("\n").flatMap((line, index) => {
-    const renderedLine = (
-      <span key={`line-${index}`}>
+function renderSemanticNarrationPart(
+  part: SemanticNarrationPart,
+  partIndex: number
+) {
+  const lines = part.text.split("\n");
+
+  return lines.flatMap((line, lineIndex) => {
+    const renderedLine = part.role ? (
+      <span
+        className={`message-semantic-narration message-semantic-narration-${part.role}`}
+        key={`semantic-${partIndex}-${lineIndex}-${line.slice(0, 16)}`}
+      >
+        {renderInlineMarkdown(line)}
+      </span>
+    ) : (
+      <span key={`plain-${partIndex}-${lineIndex}-${line.slice(0, 16)}`}>
         {renderInlineMarkdown(line)}
       </span>
     );
 
-    return index === 0
+    return lineIndex === 0
       ? [renderedLine]
-      : [<br key={`break-${index}`} />, renderedLine];
+      : [<br key={`break-${partIndex}-${lineIndex}`} />, renderedLine];
   });
+}
+
+function renderInlineContentWithLineBreaks(content: string) {
+  return parseSemanticNarrationMarkup(content).flatMap((part, index) =>
+    renderSemanticNarrationPart(part, index)
+  );
 }
 
 function playerFacingMessageContent(message: GameMessage) {

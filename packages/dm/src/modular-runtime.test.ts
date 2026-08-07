@@ -373,6 +373,19 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
+      /semantic narration markup for inline UI color/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /<npc>\.\.\.<\/npc>.*<place>\.\.\.<\/place>.*<clue>\.\.\.<\/clue>.*<danger>\.\.\.<\/danger>.*<faction>\.\.\.<\/faction>.*<object>\.\.\.<\/object>/is
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /<clue>They rolled an 18 against Komer's AC of 15<\/clue>/i
+    );
+    assert.match(jobPrompt("combat"), /<danger>5 piercing<\/danger>/i);
+    assert.match(
+      jobPrompt("combat"),
       /Do not put a visible mechanics sentence in its own standalone paragraph/i
     );
     assert.match(
@@ -496,7 +509,7 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
-      /They rolled an 18 against Komer's AC of 15, so the spearpoint/i
+      /<clue>They rolled an 18 against Komer's AC of 15<\/clue>, so the spearpoint/i
     );
     assert.doesNotMatch(
       jobPrompt("combat"),
@@ -562,9 +575,12 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
-      /Warden Captain Hesk rolled an 11 against POKE's spell save DC of 13/i
+      /<npc>Warden Captain Hesk<\/npc> rolled an <clue>11 against POKE's spell save DC of 13<\/clue>/i
     );
-    assert.match(jobPrompt("combat"), /The robed priest rolled a 16 against DC 14 and succeeds/i);
+    assert.match(
+      jobPrompt("combat"),
+      /The robed priest rolled a <clue>16 against DC 14<\/clue> and succeeds/i
+    );
     assert.match(jobPrompt("combat"), /final enemy defeated and combat ends/i);
     assert.match(jobPrompt("combat"), /Never silently modify HP/);
     assert.match(

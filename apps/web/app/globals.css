@@ -4729,6 +4729,34 @@ h1 {
   font-style: italic;
 }
 
+.message-semantic-narration {
+  color: var(--semantic-narration-color, var(--gold-bright));
+}
+
+.message-semantic-narration-npc {
+  --semantic-narration-color: #e8b86c;
+}
+
+.message-semantic-narration-place {
+  --semantic-narration-color: #87c7dc;
+}
+
+.message-semantic-narration-clue {
+  --semantic-narration-color: #b8d978;
+}
+
+.message-semantic-narration-danger {
+  --semantic-narration-color: #ee8b73;
+}
+
+.message-semantic-narration-faction {
+  --semantic-narration-color: #c8a7f0;
+}
+
+.message-semantic-narration-object {
+  --semantic-narration-color: #d8c077;
+}
+
 .message-waiting {
   color: var(--muted);
 }

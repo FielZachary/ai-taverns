@@ -755,7 +755,9 @@ const dungeonMasterContractInstructions = [
   "Use scene_location for the current local scene label, such as a tavern, street, room, road, ruin, district, or wilderness landmark.",
   "Use display_location as the short UI label for the current location; do not use a genre label.",
   "Required top-level keys: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update, combat_events, proposed_context_updates.",
-  "Do not put CSS, HTML, hex colors, or Markdown emphasis into public_narration.",
+  "public_narration may use sparse semantic narration markup for inline UI color: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, and <object>...</object>.",
+  "Use semantic narration markup only around exact player-visible words that should be colored. Do not nest tags, add attributes, or use any other HTML/XML tags.",
+  "Do not put CSS, hex colors, color names, or Markdown emphasis into public_narration.",
   "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved this turn."
 ].join("\n");
 const playerTurnDmTimeoutMs = 15_000;
@@ -9079,6 +9081,7 @@ function askDmInstructions() {
     "Do not invent names, places, relationships, deaths, meetings, prior scenes, loot amounts, inventory contents, or inventory changes.",
     "Do not treat the player's question as confirmation that something happened. If the question contains a false premise, correct only the part contradicted by provided context and clearly say what is unknown.",
     "If the answer is not clearly established in the provided context, say so as the DM controlling established fiction. Prefer phrasing like \"That's all that I've established; I can't tell you quite yet...\" instead of sounding like a detached assistant with missing context.",
+    "The answer may use sparse semantic narration markup for inline UI color: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, and <object>...</object>. Do not use attributes, nested tags, any other HTML/XML tags, CSS, hex colors, color names, or Markdown emphasis.",
     "Trust provided campaign context, canonical character sheets, and stored campaign state over prior Ask DM answers when they conflict. Ask DM answers are table guidance, not canon by themselves.",
     "You may explain what the current context says about inventory, equipment, or currency, but you cannot update inventory, promise an update, or declare a corrected total unless the canonical character sheet or provided campaign state already shows it.",
     "If the player is asking to do something in the fiction, tell them to submit it as a turn/action instead of resolving it here.",
@@ -9141,7 +9144,9 @@ const gameplayTurnOutputContractReminder = [
   "Output contract reminder:",
   "Return only one valid JSON object. Do not include prose, Markdown, or commentary outside JSON.",
   "Required top-level keys: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update, combat_events, proposed_context_updates.",
-  "Do not use bold, Markdown, HTML, CSS, hex colors, or color names inside public_narration.",
+  "public_narration may use sparse semantic narration markup for inline UI color: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, and <object>...</object>.",
+  "Use semantic narration markup only around exact player-visible words that should be colored. Do not nest tags, add attributes, or use any other HTML/XML tags.",
+  "Do not use bold, Markdown, CSS, hex colors, or color names inside public_narration.",
   "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved this turn.",
   "Treat canonical character sheet Inventory, Equipment, and Currency sections as current inventory state.",
   "Inventory possession gate: before writing any public_narration, inspect current player submissions for any item, weapon, tool, spell component, currency, carried object, or spell the character claims to produce, draw, pull from a bag, show, offer, sell, appraise, give, use, equip, throw, consume, spend, cast, or otherwise rely on.",
@@ -9187,7 +9192,7 @@ const gameplayTurnOutputContractReminder = [
   "Resolve NPC attacks fully using conversational visible math in prose, such as 'they rolled a 17 against your AC of 14, so the cutlass catches your ribs'; on a hit, state damage in prose, such as 'the damage comes to 6 slashing from 1d6 + 2', update player HP, then continue the non-player-controlled catch-up loop until control reaches a player actor, combat ends, or a player-facing roll, reaction, or tactical choice is required.",
   "For NPC hits, public_narration must include the NPC's roll, the target AC, whether it hit, the damage dice and total, the damage type, and the HP change before injury narration finishes.",
   "When a player spell or feature forces an NPC or enemy saving throw, roll that save yourself before narrating success or failure, reveal the save roll and total, compare it to the player's known spell save DC when available, and do not put the NPC/enemy save in roll_requests.",
-  "Never narrate a spell or feature as failing, succeeding, taking hold, being resisted, or being shaken off because of an NPC/enemy save unless public_narration first includes the visible save math in prose, such as '<Target> rolled an 11 against your spell save DC of 13, so the spell takes hold.'",
+  "Never narrate a spell or feature as failing, succeeding, taking hold, being resisted, or being shaken off because of an NPC/enemy save unless public_narration first includes the visible save math in prose, such as 'the cultist rolled an 11 against your spell save DC of 13, so the spell takes hold.'",
   "Do not end an NPC turn with only a wind-up like lunges, swings, aims, starts casting, or bears down unless a player-facing roll or reaction is required first.",
   "When the final active enemy is defeated, set combat active false, turnOwner null, and initiativeOrder empty; do not say a specific combatant is up next after combat ends.",
   "Build combat actor names and keys only from the current scene and character sheets; never copy example NPC names into initiativeOrder.",
@@ -9199,7 +9204,8 @@ const openingSceneOutputContractReminder = [
   "Return only one valid JSON object. Do not include prose, Markdown, or commentary outside JSON.",
   "public_narration must contain the full 6-paragraph opener, not only the character motivation or a short teaser.",
   "Treat narrator_instructions in the Eldermere opening plan as the highest-priority scene blueprint.",
-  "Do not use bold, Markdown, HTML, CSS, hex colors, or color names inside public_narration.",
+  "Use 2-3 semantic narration markup tags when the opener has worthwhile visible names, places, clues, dangers, factions, or objects. Use only <npc>, <place>, <clue>, <danger>, <faction>, and <object> tags.",
+  "Do not use bold, Markdown, CSS, hex colors, color names, attributes, nested tags, or any other HTML/XML tags inside public_narration.",
   "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved in the opener."
 ];
 
