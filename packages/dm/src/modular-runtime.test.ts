@@ -576,6 +576,20 @@ describe("modular AI DM runtime contracts", () => {
       jobPrompt("combat"),
       /For every NPC or enemy actor key introduced in initiativeOrder/i
     );
+    assert.match(jobPrompt("combat"), /NPC combat durability/i);
+    assert.match(jobPrompt("combat"), /Use the highest player character level as partyLevel/i);
+    assert.match(
+      jobPrompt("combat"),
+      /named antagonist, duel-worthy foe, officer, spellcaster, monster leader, or recurring enemy: max\(24, partyLevel \* 10\) to max\(40, partyLevel \* 16\) HP/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /major boss or climactic solo enemy: at least max\(40, partyLevel \* 18\) HP/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Set currentHp equal to maxHp when a fresh combatant enters combat/i
+    );
     assert.match(jobPrompt("combat"), /armorClass/i);
     assert.match(jobPrompt("combat"), /isPlayerControlled/i);
     assert.match(jobPrompt("combat"), /combat metadata/i);
