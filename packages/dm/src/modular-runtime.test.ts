@@ -588,6 +588,7 @@ describe("modular AI DM runtime contracts", () => {
       jobPrompt("combat"),
       /Combat-start initiative gating has priority over damage resolution/i
     );
+    assert.match(jobPrompt("combat"), /<clue>Turn order:<\/clue>/i);
     assert.match(
       jobPrompt("combat"),
       /alert enemy Magic Missile starts with initiative, not damage/i

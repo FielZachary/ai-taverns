@@ -528,6 +528,7 @@ export function jobPrompt(
     "Never ask players to roll initiative, saving throws, attacks, damage, checks, or any other dice for NPCs or enemies; NPC and enemy dice are DM-side rolls that must still be visible to the players.",
     "When combat begins, include mechanics_state_update.combat with active true, round 1, turnOwner, and provisional initiativeOrder using actor keys from the current scene and character sheets only.",
     "For every NPC or enemy actor key introduced in initiativeOrder, include a matching mechanics_state_update.actors entry with characterName, currentHp, maxHp, armorClass, conditions, allegiance, and isPlayerControlled so later HP and turn updates have canonical state to modify.",
+    "After player initiative is submitted and the full initiative order is known, public_narration must show the turn order before resolving the next turn. Use this exact block format with display names and totals: <clue>Turn order:</clue> then numbered lines like '1. Merlini Talli: 19' and '2. Crimson Dune-Stalker: 12'.",
     "After all requested player initiative rolls are submitted, initiative is resolved. If the first actor is an NPC, immediately resolve that NPC turn before returning control to players. Saying an NPC moves first is not a handoff; the NPC must act now.",
     "Do not include bystanders, captives, scenery, or passive creatures in initiativeOrder unless they can meaningfully act in the fight.",
     "Turn ownership:",
@@ -710,6 +711,7 @@ export function jobPrompt(
       JSON.stringify(
         completeOutputExample({
           public_narration: [
+            "<clue>Turn order:</clue>\n1. Lift Warden 1: 18\n2. Lift Warden 2: 13\n3. Komer: 6",
             "The first lift warden moves before Komer can bring the greataxe up. <clue>They rolled an 18 against Komer's AC of 15</clue>, so the spearpoint snaps forward under his guard and punches into his shoulder. The damage comes to <danger>5 piercing</danger> from <clue>1d6 + 2</clue>, dropping Komer from <danger>16 HP to 11 HP</danger>.",
             "The second warden follows in the opening, but <clue>they rolled a 10 against Komer's AC of 15</clue>. Komer twists aside, and the second spear skids off the haft of his greataxe with a bright scrape.",
             "Komer, both wardens are in reach and your greataxe is already in motion.",
@@ -816,6 +818,7 @@ export function jobPrompt(
       JSON.stringify(
         completeOutputExample({
           public_narration: [
+            "<clue>Turn order:</clue>\n1. Doran Ironhand: 18\n2. POKE: 4\n3. Komer: 2",
             "Doran Ironhand moves before the darts can finish their line.",
             "He snaps his right hand down and twists behind the iron-rimmed table, using it as hard cover while his left hand slams a brass alarm token against the stone.",
             "The token rings like a struck bell. Two gallery guards turn toward the sound and start running.",
