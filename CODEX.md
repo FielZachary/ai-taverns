@@ -54,6 +54,7 @@ exits.
 
 Required bootstrap access:
 
+- `DROPLET_SSH_USER` should be `root` for the AI Taverns droplet.
 - `DROPLET_BOOTSTRAP_SSH_KEY` may point to the durable bootstrap private key.
 - If unset, the script falls back to `DROPLET_SSH_KEY`.
 
