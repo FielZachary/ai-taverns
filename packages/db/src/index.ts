@@ -773,7 +773,7 @@ const dungeonMasterContractInstructions = [
   "Do not put CSS, hex colors, color names, or Markdown emphasis into public_narration.",
   "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved this turn."
 ].join("\n");
-const playerTurnDmTimeoutMs = 15_000;
+const playerTurnDmTimeoutMs = 60_000;
 
 export type DungeonMasterRuntime = {
   askProvider(input: {
