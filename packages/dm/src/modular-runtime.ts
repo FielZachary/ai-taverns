@@ -352,6 +352,14 @@ export function jobPrompt(
     "- If communication is not plausible, use visible movement, silence, raised-voice risk, gestures the player can actually see, or require the player to move closer."
   ];
 
+  const playerRollResultOpeningGuidance = [
+    "Submitted Player Roll Result Opening:",
+    "- If the current turn input contains a player-submitted roll result for this job to resolve, public_narration must start with this exact sentence pattern before describing consequences: \"With a [quality adjective] roll of <clue>[total]</clue>, here's what happens:\"",
+    "- Use the submitted final total inside <clue>...</clue>, not the die expression or modifier breakdown.",
+    "- Choose a quality adjective that fits the total and stakes, such as measly for very low rolls, shaky for low rolls, decent for middling rolls, strong for high rolls, or staggering for exceptional rolls.",
+    "- After that opening sentence, resolve the roll in normal player-facing prose."
+  ];
+
   const sceneDirectorExamples = [
     [
       "Example: rich scene hook, no roll.",
@@ -1484,6 +1492,7 @@ export function jobPrompt(
         "- End with a clear present-tense handoff that invites action, usually by naming what is immediately available or pressing, without listing menu options unless clarity requires it."
       ].join("\n"),
       ...physicalCommunicationGuidance,
+      ...playerRollResultOpeningGuidance,
       ...rollAdjudicationGuidance,
       ...playerCanonClaimGuidance,
       ...narrativeQualityBar,
@@ -1506,7 +1515,8 @@ export function jobPrompt(
         "",
         "Inventory Boundary:",
         "- Distinguish discovering, seeing, identifying, or learning about an item from taking possession of it. Only add inventory when the character actually takes, receives, pockets, collects, or is handed the item."
-      ].join("\n")
+      ].join("\n"),
+      ...playerRollResultOpeningGuidance
     ],
     npc_dialogue: [
       [
@@ -1582,6 +1592,7 @@ export function jobPrompt(
         "- End with the NPC's new stance, demand, offer, refusal, question, or opening, then hand control back to the player."
       ].join("\n"),
       ...physicalCommunicationGuidance,
+      ...playerRollResultOpeningGuidance,
       ...rollAdjudicationGuidance,
       ...playerCanonClaimGuidance,
       ...socialRollGuidance,

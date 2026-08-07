@@ -883,6 +883,38 @@ describe("modular AI DM runtime contracts", () => {
         /visible movement, silence, raised-voice risk, gestures the player can actually see, or require the player to move closer/i
       );
     }
+    for (const job of ["scene_director", "investigation", "npc_dialogue"] as const) {
+      const prompt = jobPrompt(job);
+      assert.match(prompt, /Submitted Player Roll Result Opening:/);
+      assert.match(
+        prompt,
+        /public_narration must start with this exact sentence pattern/i
+      );
+      assert.match(
+        prompt,
+        /With a \[quality adjective\] roll of <clue>\[total\]<\/clue>, here's what happens:/i
+      );
+      assert.match(
+        prompt,
+        /Use the submitted final total inside <clue>\.\.\.<\/clue>/i
+      );
+      assert.match(
+        prompt,
+        /measly for very low rolls, shaky for low rolls, decent for middling rolls, strong for high rolls, or staggering for exceptional rolls/i
+      );
+    }
+    for (const job of [
+      "combat",
+      "rest_mechanics",
+      "death_saving_throws",
+      "clarification"
+    ] as const) {
+      assert.doesNotMatch(jobPrompt(job), /Submitted Player Roll Result Opening:/);
+      assert.doesNotMatch(
+        jobPrompt(job),
+        /With a \[quality adjective\] roll of <clue>\[total\]<\/clue>, here's what happens:/i
+      );
+    }
     assert.match(
       jobPrompt("scene_director"),
       /Only include NPC speech, whispers, gestures, warnings, or reactions that are physically available from the current staging/i
