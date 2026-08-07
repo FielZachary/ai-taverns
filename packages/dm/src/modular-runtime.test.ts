@@ -859,6 +859,82 @@ describe("modular AI DM runtime contracts", () => {
       jobPrompt("combat"),
       /Roll Fireball damage:[^"]*\\n\\nWhat do you do\?/
     );
+    for (const job of ["scene_director", "npc_dialogue", "combat"] as const) {
+      const prompt = jobPrompt(job);
+      assert.match(prompt, /Physical Communication Boundary:/);
+      assert.match(
+        prompt,
+        /relative location, distance, barriers, noise, visibility, and who can plausibly hear/i
+      );
+      assert.match(
+        prompt,
+        /A whisper only reaches someone adjacent or explicitly close enough/i
+      );
+      assert.match(
+        prompt,
+        /another room, a loft, upstairs, outside, hidden, behind a door, across a crowd, or separated by noise/i
+      );
+      assert.match(
+        prompt,
+        /private dialogue unless earshot, line of sight, or magic has already been established/i
+      );
+      assert.match(
+        prompt,
+        /visible movement, silence, raised-voice risk, gestures the player can actually see, or require the player to move closer/i
+      );
+    }
+    for (const job of ["scene_director", "investigation", "npc_dialogue"] as const) {
+      const prompt = jobPrompt(job);
+      assert.match(prompt, /Submitted Player Roll Result Opening:/);
+      assert.match(
+        prompt,
+        /public_narration must start with this exact sentence pattern/i
+      );
+      assert.match(
+        prompt,
+        /With a \[quality adjective\] roll of <clue>\[total\]<\/clue>, here's what happens:/i
+      );
+      assert.match(
+        prompt,
+        /Use the submitted final total inside <clue>\.\.\.<\/clue>/i
+      );
+      assert.match(
+        prompt,
+        /measly for very low rolls, shaky for low rolls, decent for middling rolls, strong for high rolls, or staggering for exceptional rolls/i
+      );
+    }
+    for (const job of [
+      "combat",
+      "rest_mechanics",
+      "death_saving_throws",
+      "clarification"
+    ] as const) {
+      assert.doesNotMatch(jobPrompt(job), /Submitted Player Roll Result Opening:/);
+      assert.doesNotMatch(
+        jobPrompt(job),
+        /With a \[quality adjective\] roll of <clue>\[total\]<\/clue>, here's what happens:/i
+      );
+    }
+    assert.match(
+      jobPrompt("scene_director"),
+      /Only include NPC speech, whispers, gestures, warnings, or reactions that are physically available from the current staging/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /NPC communication is local, not omnipresent/i
+    );
+    for (const job of [
+      "investigation",
+      "rest_mechanics",
+      "death_saving_throws",
+      "clarification"
+    ] as const) {
+      assert.doesNotMatch(jobPrompt(job), /Physical Communication Boundary:/);
+      assert.doesNotMatch(
+        jobPrompt(job),
+        /private dialogue unless earshot, line of sight, or magic has already been established/i
+      );
+    }
     assert.match(jobPrompt("rest_mechanics"), /Rest Mechanics Job/i);
     assert.match(jobPrompt("rest_mechanics"), /actor.resources for class resources/i);
     assert.match(jobPrompt("rest_mechanics"), /Sorcery Points, Ki Points, Channel Divinity/i);
