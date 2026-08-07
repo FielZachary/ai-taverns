@@ -157,7 +157,7 @@ describe("parseDmContract", () => {
     assert.match(spellHit.publicNarration, /18 vs AC 15 - hit/);
   });
 
-  it("normalizes settings, input targeting, roll narration, and legacy field names", () => {
+  it("normalizes settings, input targeting, roll requests, and legacy field names", () => {
     const result = parseDmContract(
       JSON.stringify({
         public_narration: "The shadow slips behind the altar.",
@@ -186,11 +186,15 @@ describe("parseDmContract", () => {
 
     assert.equal(
       result.publicNarration,
-      "The shadow slips behind the altar.\n\nRoll 1d20 + 3 at advantage for Perception."
+      "The shadow slips behind the altar."
     );
     assert.equal(result.nextInputNeeded, "dice_results");
     assert.equal(result.inputPolicy, "only_targeted_players");
     assert.deepEqual(result.inputTargets, ["Mira"]);
+    assert.equal(result.rollRequests[0]?.dice, "1d20");
+    assert.equal(result.rollRequests[0]?.label, "Perception");
+    assert.equal(result.rollRequests[0]?.modifier, 3);
+    assert.equal(result.rollRequests[0]?.advantageState, "advantage");
     assert.deepEqual(result.setting, {
       displayLocation: "Saltwatch Chapel",
       worldName: "Brinefall",
@@ -662,7 +666,7 @@ describe("DM provider helpers", () => {
     assert.deepEqual(normalizeRollRequests(undefined), []);
   });
 
-  it("adds visible DC guidance for investigation roll requests only", () => {
+  it("preserves narration for roll requests instead of appending roll guidance", () => {
     const investigation = parseDmContract(
       JSON.stringify({
         public_narration: "The symbols resist easy reading.",
@@ -685,9 +689,9 @@ describe("DM provider helpers", () => {
       { dmJob: "investigation" }
     );
 
-    assert.match(
+    assert.equal(
       investigation.publicNarration,
-      /Roll 1d20 \+ 6 for Study the Dominion symbols DC 15 reveals the correct pressure and sequence pattern\./
+      "The symbols resist easy reading."
     );
     assert.equal(investigation.rollRequests[0]?.targetDc, 15);
 
@@ -715,8 +719,9 @@ describe("DM provider helpers", () => {
 
     assert.equal(
       sceneDirector.publicNarration,
-      "The cliff face is slick.\n\nRoll 1d20 + 2 for Athletics."
+      "The cliff face is slick."
     );
+    assert.equal(sceneDirector.rollRequests[0]?.targetDc, 13);
   });
 
   it("does not duplicate investigation check prose that already includes a DC", () => {
