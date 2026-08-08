@@ -658,6 +658,15 @@ describe("modular AI DM runtime contracts", () => {
       jobPrompt("combat"),
       /resolve every consecutive non-player-controlled actor/i
     );
+    assert.match(jobPrompt("combat"), /Allied NPC turns are first-class combat turns/i);
+    assert.match(
+      jobPrompt("combat"),
+      /Do not compress an allied NPC's initiative turn into flavor/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /resolve their movement, action, visible roll math, damage or effect, mechanics_state_update, and turn advancement/i
+    );
     assert.match(jobPrompt("combat"), /Do not merely announce future turns/i);
     assert.match(
       jobPrompt("combat"),
@@ -675,6 +684,18 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(
       jobPrompt("combat"),
       /player turn resolved, all non-player turns catch up before control returns/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /player turn resolved, enemy and allied NPC turns both catch up before control returns/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Bad response to avoid: resolving Shard Trail Agent 2's attack, then describing Brynn only shouting or parrying in the background/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /<npc>Brynn Stakehold<\/npc> takes her turn immediately/i
     );
     assert.match(
       jobPrompt("combat"),
@@ -783,6 +804,38 @@ describe("modular AI DM runtime contracts", () => {
       /<clue>They rolled a 16 \(13\) against Por's AC of 16<\/clue>.*<danger>7 slashing<\/danger>.*<clue>1d6 \+ 3<\/clue>.*<danger>34 HP to 27 HP<\/danger>/is
     );
     assert.match(jobPrompt("combat"), /player attack hits, request player damage/i);
+    assert.match(
+      jobPrompt("combat"),
+      /If a player declares an attack-roll action but has not submitted the attack roll, request the attack roll first/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /For Eldritch Blast, Scorching Ray, Extra Attack, or any action with multiple attack rolls/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Only request damage after a submitted attack roll hits/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /For player attack rolls, use conversational wording with 'you rolled' only when the current turn input contains that submitted player attack roll result/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Eldritch Blast requires player attack rolls before damage/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Bad response to avoid: saying 'You rolled a 19 against Agent 3's AC of 13/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Eldritch Blast attack roll \(beam 1\)/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /"kind": "attack_roll"/i
+    );
     assert.match(
       jobPrompt("combat"),
       /Bad response to avoid: inventing greataxe damage/i

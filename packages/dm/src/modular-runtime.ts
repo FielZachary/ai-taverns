@@ -582,6 +582,9 @@ export function jobPrompt(
     "When a player-controlled turn is fully resolved, no roll_requests are pending, and combat is still active, advance through initiativeOrder and resolve every consecutive non-player-controlled actor in the same response until control reaches a living player-controlled actor or combat ends.",
     "If a non-player-controlled turn requires a player-facing roll, reaction, or tactical choice before it can finish, pause on that non-player-controlled turn with next_input_needed set to dice_results or player_actions as appropriate, input_targets set to the affected player actor key, and mechanics_state_update.combat.turnOwner still set to the acting non-player-controlled actor.",
     "Non-player-controlled actors include allies, enemies, summons, and neutral combatants whose turns are not controlled by a player, even when their actor keys are npc:*.",
+    "Allied NPC turns are first-class combat turns.",
+    "Do not compress an allied NPC's initiative turn into flavor such as shouting encouragement, parrying in the background, or reacting emotionally unless that is paired with a concrete resolved combat action and state update.",
+    "When initiative reaches an allied non-player-controlled actor, resolve their movement, action, visible roll math, damage or effect, mechanics_state_update, and turn advancement before returning control to the player.",
     "Do not stop after resolving only one non-player-controlled actor if more non-player-controlled actors act before the next player-controlled turn.",
     "Do not merely announce future turns such as 'Acolyte 3 is up next' or 'then Acolyte 1 and Acolyte 2 will act'. Resolve those turns now, or pause on the acting non-player-controlled turn only because a player-facing roll, reaction, or tactical choice is required.",
     "Do not write OOC notes like '(resolving NPC turns now)' as a substitute for actually resolving those turns in public_narration and mechanics_state_update.",
@@ -602,13 +605,16 @@ export function jobPrompt(
     "input_policy must be all_players or only_targeted_players; never use acting_player.",
     "Use known modifiers, proficiency, advantage, or disadvantage from the character sheet or combat context when available. If unknown, ask for the base roll clearly without inventing bonuses.",
     "In roll_requests, dice must be bare dice notation only, such as 1d20, 3d4, or 8d6. Do not include + or - modifiers in dice; put static bonuses or penalties in modifier. Example: Magic Missile uses dice \"3d4\" and modifier 3, not dice \"3d4+3\".",
-    "When a player action, spell, feature, or weapon would deal damage and that damage roll was not already submitted, do not roll damage yourself. Request the player's damage roll with next_input_needed dice_results and a structured roll_requests entry. This includes automatic-hit effects such as Magic Missile. Do not update target HP until damage is submitted.",
+    "If a player declares an attack-roll action but has not submitted the attack roll, request the attack roll first; do not invent the d20 result.",
+    "For Eldritch Blast, Scorching Ray, Extra Attack, or any action with multiple attack rolls, request each attack roll separately before narrating which attacks hit.",
+    "Only request damage after a submitted attack roll hits, and only for the attacks that hit.",
+    "When a player action, spell, feature, or weapon would deal damage and that damage roll was not already submitted, do not roll damage yourself. Request the player's damage roll with next_input_needed dice_results and a structured roll_requests entry. This includes automatic-hit effects such as Magic Missile and attack effects whose submitted attack roll has already hit. Do not update target HP until damage is submitted.",
     "When a player spell or feature forces an NPC or enemy saving throw, roll that save yourself before narrating success or failure, add the relevant saveBonus or ability modifier from mechanicsState, reveal the modified total and natural die, compare the total to the player's known spell save DC when available, and do not put the NPC/enemy save in roll_requests.",
     "Never narrate a spell or feature as failing, succeeding, taking hold, being resisted, or being shaken off because of an NPC/enemy save unless public_narration first includes the visible save math in prose, such as 'the cultist rolled an <clue>11 (9) against your spell save DC of 13</clue>, so the spell takes hold.'",
     "Visible combat math:",
     "For resolved attacks, make the numbers visible before injury narration.",
     "Weave visible combat math into the action prose; do not format resolved combat results as detached combat-log labels like 'Attack Roll:', 'Damage Roll:', 'Attack 1:', or 'Save:'.",
-    "For player attack rolls, use conversational wording with 'you rolled': '<clue>you rolled a 17 against their AC of 15</clue>, so the blade bites through,' or '<clue>you rolled an 11 against their AC of 14</clue>, so the arrow skims wide.'",
+    "For player attack rolls, use conversational wording with 'you rolled' only when the current turn input contains that submitted player attack roll result: '<clue>you rolled a 17 against their AC of 15</clue>, so the blade bites through,' or '<clue>you rolled an 11 against their AC of 14</clue>, so the arrow skims wide.'",
     "For NPC attack rolls, use conversational wording from the NPC side. If the NPC has an attackBonus or other modifier, show the modified total first and natural die in parentheses: '<clue>they rolled a 17 (15) against your AC of 14</clue>, so the cutlass catches your ribs,' or '<clue>the warden rolled a 12 (10) against Komer's AC of 18</clue>, not enough to pierce the chain mail.' If the modifier is 0 or unknown, omit the parenthetical.",
     "On a resolved hit where damage is known or DM-side, state damage in prose: 'the damage comes to <danger>5 piercing</danger> from <clue>1d6 + 2</clue>,' or 'you take <danger>5 piercing damage</danger> and drop from <danger>16 HP to 11 HP</danger>.'",
     "For NPC hits against player characters, public_narration must include the NPC's roll, the target AC, whether it hit, the damage dice and total, the damage type, and the HP change when HP is updated.",
@@ -858,6 +864,55 @@ export function jobPrompt(
               ]
             }
           ],
+          inventory_state_update: { patches: [] }
+        }),
+        null,
+        2
+      )
+    ].join("\n"),
+    [
+      "Example: player turn resolved, enemy and allied NPC turns both catch up before control returns.",
+      "Player input: Jacki submitted Eldritch Blast damage against Shard Trail Agent 1.",
+      "Context: Combat is active. Initiative order is player:jacki, npc:shard-agent-2, npc:brynn-stakehold, player:jacki. Current turnOwner is player:jacki. Jacki's submitted damage fully resolves his turn. Shard Trail Agent 2 and Brynn Stakehold are both conscious, non-player-controlled actors before Jacki's next turn.",
+      "Bad response to avoid: resolving Shard Trail Agent 2's attack, then describing Brynn only shouting or parrying in the background before returning next_input_needed player_actions to Jacki.",
+      "Good response:",
+      JSON.stringify(
+        completeOutputExample({
+          public_narration: [
+            "Your eldritch force tears through <npc>Shard Trail Agent 1</npc>. The damage drops him to <danger>0 HP</danger>, and he collapses against the splintered crate.",
+            "<npc>Shard Trail Agent 2</npc> fires at you before you can recover. <clue>They rolled a 15 (11) against your AC of 11</clue>, so the bolt catches your side. The damage comes to <danger>6 piercing</danger> from <clue>1d8 + 2</clue>, dropping you from <danger>15 HP to 9 HP</danger>.",
+            "<npc>Brynn Stakehold</npc> takes her turn immediately, driving her short sword at Agent 2 to pull pressure off you. <clue>She rolled a 17 (12) against Agent 2's AC of 13</clue>, enough to break through his guard. The damage comes to <danger>8 piercing</danger> from <clue>1d8 + 3</clue>, dropping Agent 2 from <danger>22 HP to 14 HP</danger>.",
+            "Jacki, smoke curls from your hand and Brynn has forced Agent 2 back a step. It is your turn.",
+            "What do you do?"
+          ].join("\n\n"),
+          resolution_mode: "resolved_without_dice",
+          roll_requests: [],
+          next_input_needed: "player_actions",
+          input_targets: ["player:jacki"],
+          input_policy: "only_targeted_players",
+          mechanics_state_update: {
+            actors: {
+              "npc:shard-agent-1": {
+                currentHp: 0
+              },
+              "player:jacki": {
+                currentHp: 9
+              },
+              "npc:shard-agent-2": {
+                currentHp: 14
+              }
+            },
+            combat: {
+              active: true,
+              round: 2,
+              turnOwner: "player:jacki",
+              initiativeOrder: [
+                "player:jacki",
+                "npc:shard-agent-2",
+                "npc:brynn-stakehold"
+              ]
+            }
+          },
           inventory_state_update: { patches: [] }
         }),
         null,
@@ -1245,6 +1300,72 @@ export function jobPrompt(
               ]
             }
           },
+          inventory_state_update: { patches: [] }
+        }),
+        null,
+        2
+      )
+    ].join("\n"),
+    [
+      "Example: Eldritch Blast requires player attack rolls before damage.",
+      'Player input: "I cast Eldritch Blast at Shard Trail Agent 3."',
+      "Context: Combat is active. It is Jacki's turn. Jacki is level 5, so Eldritch Blast makes two spell attack rolls. No attack rolls have been submitted yet.",
+      "Bad response to avoid: saying 'You rolled a 19 against Agent 3's AC of 13, so the first beam hits. You rolled a 17, so the second beam hits. Roll damage.'",
+      "Good response:",
+      JSON.stringify(
+        completeOutputExample({
+          public_narration: [
+            "You lift your hand toward <npc>Shard Trail Agent 3</npc>, and two lances of dark force gather at your fingertips. The beams are ready to snap across the room, but we need to see whether each one lands.",
+            "Roll Eldritch Blast attack roll for beam 1: <clue>1d20 + your spell attack modifier</clue>.",
+            "Roll Eldritch Blast attack roll for beam 2: <clue>1d20 + your spell attack modifier</clue>."
+          ].join("\n\n"),
+          resolution_mode: "needs_dice",
+          roll_requests: [
+            {
+              id: "jacki-eldritch-blast-attack-1",
+              dice: "1d20",
+              label: "Eldritch Blast attack roll (beam 1)",
+              modifier: 6,
+              player: "player:jacki",
+              combat: {
+                actionId: "jacki-eldritch-blast-agent-3",
+                actorKey: "player:jacki",
+                targetActorKey: "npc:shard-agent-3",
+                kind: "attack_roll",
+                attackName: "Eldritch Blast",
+                sequence: 1,
+                onHitDamage: {
+                  dice: "1d10",
+                  modifier: 3,
+                  damageType: "force"
+                }
+              }
+            },
+            {
+              id: "jacki-eldritch-blast-attack-2",
+              dice: "1d20",
+              label: "Eldritch Blast attack roll (beam 2)",
+              modifier: 6,
+              player: "player:jacki",
+              combat: {
+                actionId: "jacki-eldritch-blast-agent-3",
+                actorKey: "player:jacki",
+                targetActorKey: "npc:shard-agent-3",
+                kind: "attack_roll",
+                attackName: "Eldritch Blast",
+                sequence: 2,
+                onHitDamage: {
+                  dice: "1d10",
+                  modifier: 3,
+                  damageType: "force"
+                }
+              }
+            }
+          ],
+          next_input_needed: "dice_results",
+          input_targets: ["player:jacki"],
+          input_policy: "only_targeted_players",
+          mechanics_state_update: {},
           inventory_state_update: { patches: [] }
         }),
         null,
