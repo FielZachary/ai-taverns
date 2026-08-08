@@ -2589,7 +2589,7 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
     JSON.stringify(openingPlan.starting_location_atmosphere),
     /watchful daily life|busy|guarded|settlement pressure/i
   );
-  assert.equal(openingPayload?.content, "The <clue>summons</clue> that brought you here has the weight of unfinished business, the kind that does not let a traveler turn back once the <place>old road</place> bends toward trouble.\n\nFor the last few days, the <place>road</place> has been mud, cold meals, and warnings from strangers who would not meet your eyes; in the last hour, the trees thinned enough to show the <place>ruined watchtower</place> beyond the ridge.\n\nA <object>lantern</object> flickers over the old road as your adventure begins, its light catching wet stones, wagon ruts, and a <clue>weathered sign</clue> pointing toward the tower beyond the trees.\n\nA <npc>courier</npc> waits beside the sign with their cloak pulled tight, glancing between you and the dark treeline while <danger>distant metal</danger> knocks once from somewhere inside the ruin.\n\nYou can question the courier, inspect the weathered sign, or follow the road toward the ruined watchtower before the lantern burns out.\n\nWhat do you do?");
+  assert.equal(openingPayload?.content, "The summons that brought you here has the weight of unfinished business, the kind that does not let a traveler turn back once the <place>old road</place> bends toward trouble.\n\nFor the last few days, the road has been mud, cold meals, and warnings from strangers who would not meet your eyes; in the last hour, the trees thinned enough to show the ruined watchtower beyond the ridge.\n\nA <object>lantern</object> flickers over the old road as your adventure begins, its light catching wet stones, wagon ruts, and a weathered sign pointing toward the tower beyond the trees.\n\nA courier waits beside the sign with their cloak pulled tight, glancing between you and the dark treeline while distant metal knocks once from somewhere inside the ruin.\n\nYou can question the courier, inspect the weathered sign, or follow the road toward the ruined watchtower before the lantern burns out.\n\nWhat do you do?");
   assert.equal(getProviderInputs().length, 2);
   await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -2721,7 +2721,7 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(narratorInput.message, /allowed_player_facing_terms/);
   assert.match(narratorInput.message, /forbidden_opening_terms/);
   assert.match(narratorInput.message, /semantic narration markup/);
-  assert.match(narratorInput.message, /must include 7-8 tags/i);
+  assert.match(narratorInput.message, /must include 2-3 tags/i);
   assert.match(narratorInput.message, /<npc>\.\.\.<\/npc>/);
   assert.match(narratorInput.message, /<place>\.\.\.<\/place>/);
   assert.match(narratorInput.message, /<clue>\.\.\.<\/clue>/);
@@ -2998,10 +2998,10 @@ test("POST /api/campaigns scrubs forbidden Eldermere opening terms after narrato
     }
 
     const repairedNarration = [
-      "The <clue>summons</clue> that brought you to Suncross has the weight of unfinished business, the kind that makes an old promise feel heavier than your <object>pack</object>.",
-      "For the last three days, cold rain and stranger warnings followed the <place>road</place>, and the last hour brought you through crowded streets where locals lowered their voices at your questions.",
-      "<place>Suncross</place> crouches beneath the <danger>old stones</danger> of the Second Dominion, where the Hush still seems to press against every shutter.",
-      "<npc>Mara Vell</npc> waits by a <clue>marked doorway</clue>, rain silvering her cloak while <faction>guards</faction> argue nearby and market carts slow to stare.",
+      "The summons that brought you to Suncross has the weight of unfinished business, the kind that makes an old promise feel heavier than your pack.",
+      "For the last three days, cold rain and stranger warnings followed the road, and the last hour brought you through crowded streets where locals lowered their voices at your questions.",
+      "Suncross crouches beneath the old stones of the Second Dominion, where the Hush still seems to press against every shutter.",
+      "Mara Vell waits by a marked doorway, rain silvering her cloak while guards argue nearby and market carts slow to stare.",
       "You can question Mara Vell, inspect the marked doorway, or ask nearby locals what frightened them before the street closes around you.",
       "What do you do?"
     ].join("\n\n");
@@ -3104,7 +3104,7 @@ test("POST /api/campaigns scrubs forbidden Eldermere opening terms after narrato
   assert.equal(providerInputs.length, 3);
   assert.match(
     repairInput?.message ?? "",
-    /public_narration must contain 7-8 semantic narration markup tags; found 0/
+    /public_narration must contain 2-3 semantic narration markup tags; found 0/
   );
 });
 
@@ -3204,10 +3204,10 @@ test("POST /api/campaigns uses a low-temperature final retry for short Eldermere
 
     if (input.message.includes("Final low-temperature rewrite required:")) {
       const finalNarration = [
-        "The <clue>summons</clue> that brought you to Suncross has the weight of unfinished business, the kind that makes an old promise feel heavier than your <object>pack</object>.",
-        "For the last three days, cold rain and stranger warnings followed the <place>road</place>, and the last hour brought you through crowded streets where locals lowered their voices at your questions.",
-        "<place>Suncross</place> rises around you in wet stone and early lanternlight, busy enough to hide a <danger>secret</danger> and tense enough to make every passerby look away.",
-        "<npc>Mara Vell</npc> waits by a <clue>marked doorway</clue>, rain silvering her cloak while <faction>guards</faction> argue nearby and market carts slow to stare.",
+        "The summons that brought you to Suncross has the weight of unfinished business, the kind that makes an old promise feel heavier than your pack.",
+        "For the last three days, cold rain and stranger warnings followed the road, and the last hour brought you through crowded streets where locals lowered their voices at your questions.",
+        "<place>Suncross</place> rises around you in wet stone and early lanternlight, busy enough to hide a secret and tense enough to make every passerby look away.",
+        "<npc>Mara Vell</npc> waits by a marked doorway, rain silvering her cloak while guards argue nearby and market carts slow to stare.",
         "You can question Mara Vell, inspect the marked doorway, or ask nearby locals what frightened them before the street closes around you.",
         "What do you do?"
       ].join("\n\n");
