@@ -772,8 +772,8 @@ const dungeonMasterContractInstructions = [
   "Use scene_location for the current local scene label, such as a tavern, street, room, road, ruin, district, or wilderness landmark.",
   "Use display_location as the short UI label for the current location; do not use a genre label.",
   "Required top-level keys: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update, combat_events, proposed_context_updates.",
-  "public_narration may use sparse semantic narration markup for inline UI color: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, and <object>...</object>.",
-  "Use semantic narration markup only around exact player-visible words that should be colored. Do not nest tags, add attributes, or use any other HTML/XML tags.",
+  "public_narration may use sparse semantic narration markup for inline UI color or emphasis: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, <object>...</object>, and <em>...</em>.",
+  "Use semantic narration markup only around exact player-visible words that should be colored or italicized. Do not nest tags, add attributes, or use any other HTML/XML tags.",
   "Do not put CSS, hex colors, color names, or Markdown emphasis into public_narration.",
   "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved this turn."
 ].join("\n");
@@ -2165,149 +2165,6 @@ function sanitizePlayerResourcesUpdate(input: {
   }
 
   return hasAcceptedResource ? acceptedResources : undefined;
-}
-
-function isWarlockActor(actor: MechanicsState["actors"][string]) {
-  return actor.characterClass?.trim().toLowerCase() === "warlock";
-}
-
-function spellSlotSummaryLabel(level: string) {
-  return level === "1"
-    ? "first level spell slots"
-    : level === "2"
-      ? "second level spell slots"
-      : level === "3"
-        ? "third level spell slots"
-        : `${level}th level spell slots`;
-}
-
-function formatCombatResourceSummary(
-  actor: MechanicsState["actors"][string] | undefined
-) {
-  if (!actor) {
-    return "";
-  }
-
-  const lines: string[] = [];
-
-  if (actor.currentHp !== undefined) {
-    lines.push(`<clue>${actor.currentHp}</clue> hit points`);
-  }
-
-  if (actor.spellSlots && Object.keys(actor.spellSlots).length > 0) {
-    if (isWarlockActor(actor)) {
-      const totals = Object.values(actor.spellSlots).reduce(
-        (sum, slot) => ({
-          max: sum.max + slot.max,
-          used: sum.used + slot.used
-        }),
-        { max: 0, used: 0 }
-      );
-      lines.push(
-        `<clue>${Math.max(0, totals.max - totals.used)}</clue> pact magic slots`
-      );
-    } else {
-      for (const [level, slot] of Object.entries(actor.spellSlots).sort(
-        ([left], [right]) => Number(right) - Number(left)
-      )) {
-        lines.push(
-          `<clue>${Math.max(0, slot.max - slot.used)}</clue> ${spellSlotSummaryLabel(level)}`
-        );
-      }
-    }
-  }
-
-  if (actor.resources && Object.keys(actor.resources).length > 0) {
-    for (const [, resource] of Object.entries(actor.resources).sort(([left], [right]) =>
-      left.localeCompare(right)
-    )) {
-      lines.push(
-        `<clue>${Math.max(0, resource.max - resource.used)}</clue> ${resource.label.toLowerCase()}`
-      );
-    }
-  }
-
-  return lines.length > 0
-    ? `<clue>Just to remind you, you have: </clue>\n${lines.join("\n")}`
-    : "";
-}
-
-function removeExistingCombatResourceSummary(narration: string) {
-  const lines = narration.split(/\r?\n/);
-  const nextLines: string[] = [];
-  let skippingSummary = false;
-
-  for (const line of lines) {
-    if (
-      !skippingSummary &&
-      /<clue>\s*Just to remind you, you have:\s*<\/clue>/i.test(line)
-    ) {
-      skippingSummary = true;
-      continue;
-    }
-
-    if (skippingSummary) {
-      if (line.trim() === "") {
-        skippingSummary = false;
-        continue;
-      }
-
-      if (/^What do you do\?\s*$/i.test(line.trim())) {
-        skippingSummary = false;
-        nextLines.push(line);
-        continue;
-      }
-
-      if (/<clue>.*<\/clue>/i.test(line)) {
-        continue;
-      }
-
-      skippingSummary = false;
-    }
-
-    nextLines.push(line);
-  }
-
-  return nextLines.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd();
-}
-
-function narrationWithCombatResourceSummary(input: {
-  narration: string;
-  summary: string;
-}) {
-  const cleanedNarration = removeExistingCombatResourceSummary(input.narration);
-  const trimmedNarration = cleanedNarration.trimEnd();
-  const handoffMatch = trimmedNarration.match(/(\n*)(What do you do\?\s*)$/i);
-
-  if (!handoffMatch) {
-    return `${trimmedNarration}\n\n${input.summary}`;
-  }
-
-  return `${trimmedNarration.slice(0, handoffMatch.index).trimEnd()}\n\n${input.summary}\n\n${handoffMatch[2]?.trimEnd() ?? "What do you do?"}`;
-}
-
-function combatResourceSummaryForHandoff(input: {
-  dmJob?: DmJobName | undefined;
-  nextInputNeeded: DmNextInputNeeded;
-  rollRequests: DiceRollRequest[];
-  mechanicsState: MechanicsState;
-}) {
-  if (
-    input.dmJob !== "combat" ||
-    input.nextInputNeeded !== "player_actions" ||
-    input.rollRequests.length > 0 ||
-    !input.mechanicsState.combat.active
-  ) {
-    return "";
-  }
-
-  const turnOwner = input.mechanicsState.combat.turnOwner;
-
-  if (!turnOwner?.startsWith("player:")) {
-    return "";
-  }
-
-  return formatCombatResourceSummary(input.mechanicsState.actors[turnOwner]);
 }
 
 function applyMechanicsStateUpdate(
@@ -9208,8 +9065,8 @@ function formatEldermereNarratorOpeningRequest(input: {
     "If a useful idea appears in dm_private_context, imply it only through concrete visible facts or pressure; do not reveal it as confirmed exposition.",
     "Forbidden opening terms must not appear in public_narration.",
     "Allowed player-facing terms must be explained plainly on first use.",
-    "Use 2-3 sparse semantic narration markup tags inside public_narration so players can scan important visible nouns or short phrases. Supported tags only: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, and <object>...</object>.",
-    "Wrap only the exact player-visible words that should receive color. The opener must include 2-3 tags around worthwhile visible names, places, clues, dangers, factions, or objects. Do not wrap full sentences or paragraphs.",
+    "Use 2-3 sparse semantic narration markup tags inside public_narration so players can scan important visible nouns or short phrases. Supported tags: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, <object>...</object>, and <em>...</em>. The 2-3 required tags should be color tags, not <em>.",
+    "Wrap only the exact player-visible words that should receive color or italic emphasis. The opener must include 2-3 color tags around worthwhile visible names, places, clues, dangers, factions, or objects. Do not wrap full sentences or paragraphs.",
     "Do not nest semantic tags, add attributes, invent other tags, include CSS, hex colors, color names, Markdown emphasis, or prose instructions inside public_narration.",
     "Do not return narration_highlights, highlights, sidecar span metadata, post-processing instructions, or any separate highlight records. The inline semantic tags are the only highlight system.",
     "",
@@ -9676,7 +9533,7 @@ function askDmInstructions() {
     "Do not invent names, places, relationships, deaths, meetings, prior scenes, loot amounts, inventory contents, or inventory changes.",
     "Do not treat the player's question as confirmation that something happened. If the question contains a false premise, correct only the part contradicted by provided context and clearly say what is unknown.",
     "If the answer is not clearly established in the provided context, say so as the DM controlling established fiction. Prefer phrasing like \"That's all that I've established; I can't tell you quite yet...\" instead of sounding like a detached assistant with missing context.",
-    "The answer may use sparse semantic narration markup for inline UI color: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, and <object>...</object>. Do not use attributes, nested tags, any other HTML/XML tags, CSS, hex colors, color names, or Markdown emphasis.",
+    "The answer may use sparse semantic narration markup for inline UI color or emphasis: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, <object>...</object>, and <em>...</em>. Do not use attributes, nested tags, any other HTML/XML tags, CSS, hex colors, color names, or Markdown emphasis.",
     "Trust provided campaign context, canonical character sheets, and stored campaign state over prior Ask DM answers when they conflict. Ask DM answers are table guidance, not canon by themselves.",
     "You may explain what the current context says about inventory, equipment, or currency, but you cannot update inventory, promise an update, or declare a corrected total unless the canonical character sheet or provided campaign state already shows it.",
     "If the player is asking to do something in the fiction, tell them to submit it as a turn/action instead of resolving it here.",
@@ -9739,8 +9596,8 @@ const gameplayTurnOutputContractReminder = [
   "Output contract reminder:",
   "Return only one valid JSON object. Do not include prose, Markdown, or commentary outside JSON.",
   "Required top-level keys: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update, combat_events, proposed_context_updates.",
-  "public_narration may use sparse semantic narration markup for inline UI color: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, and <object>...</object>.",
-  "Use semantic narration markup only around exact player-visible words that should be colored. Do not nest tags, add attributes, or use any other HTML/XML tags.",
+  "public_narration may use sparse semantic narration markup for inline UI color or emphasis: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, <object>...</object>, and <em>...</em>.",
+  "Use semantic narration markup only around exact player-visible words that should be colored or italicized. Do not nest tags, add attributes, or use any other HTML/XML tags.",
   "Do not use bold, Markdown, CSS, hex colors, or color names inside public_narration.",
   "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved this turn.",
   "Treat canonical character sheet Inventory, Equipment, and Currency sections as current inventory state.",
@@ -9814,7 +9671,7 @@ const openingSceneOutputContractReminder = [
   "Return only one valid JSON object. Do not include prose, Markdown, or commentary outside JSON.",
   "public_narration must contain the full 6-paragraph opener, not only the character motivation or a short teaser.",
   "Treat narrator_instructions in the Eldermere opening plan as the highest-priority scene blueprint.",
-  "Use 2-3 semantic narration markup tags when the opener has worthwhile visible names, places, clues, dangers, factions, or objects. Use only <npc>, <place>, <clue>, <danger>, <faction>, and <object> tags.",
+  "Use 2-3 semantic narration markup color tags when the opener has worthwhile visible names, places, clues, dangers, factions, or objects. Use <em> only for brief italicized speech or emphasis; it does not count toward the 2-3 required color tags.",
   "Do not use bold, Markdown, CSS, hex colors, color names, attributes, nested tags, or any other HTML/XML tags inside public_narration.",
   "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved in the opener."
 ];
@@ -10597,7 +10454,7 @@ async function askEldermereOpeningNarrator(
       : []),
     "Return the same opening situation as valid AI Taverns DM JSON, but fix every issue above.",
     "public_narration must be exactly 6 paragraphs separated by blank lines, must follow narrator_instructions as the highest-priority scene blueprint, and the sixth paragraph must be the final direct prompt 'What do you do?'",
-    `public_narration must include ${semanticOpeningTagMinimum}-${semanticOpeningTagMaximum} semantic narration markup tags using only <npc>, <place>, <clue>, <danger>, <faction>, and <object>.`,
+    `public_narration must include ${semanticOpeningTagMinimum}-${semanticOpeningTagMaximum} semantic narration color tags using <npc>, <place>, <clue>, <danger>, <faction>, or <object>. You may also use <em> for brief italicized emphasis, but <em> does not count toward the required color tags.`,
     "Use only allowed_player_facing_terms and plain descriptions. Preserve setting metadata."
   ].join("\n");
   const repairedOpening = await askDungeonMaster(
@@ -10679,7 +10536,7 @@ async function askEldermereOpeningNarrator(
     "Paragraph 4: visible NPC tension and immediate pressure.",
     "Paragraph 5: the actionable complication and 2-3 concrete non-dice actions available right now.",
     "Paragraph 6: exactly 'What do you do?' and nothing else.",
-    `public_narration must include ${semanticOpeningTagMinimum}-${semanticOpeningTagMaximum} semantic narration markup tags using only <npc>, <place>, <clue>, <danger>, <faction>, and <object>.`,
+    `public_narration must include ${semanticOpeningTagMinimum}-${semanticOpeningTagMaximum} semantic narration color tags using <npc>, <place>, <clue>, <danger>, <faction>, or <object>. You may also use <em> for brief italicized emphasis, but <em> does not count toward the required color tags.`,
     "Do not include Markdown outside JSON, a teaser, a summary, a prologue note, or fewer than 6 paragraphs."
   ].join("\n");
   const finalOpening = await askDungeonMaster(
@@ -11162,20 +11019,8 @@ async function askDungeonMaster(
             inventoryValidation.accepted
           )
         : [];
-    const combatResourceSummary = combatResourceSummaryForHandoff({
-      dmJob: promptContext?.jobNeeded,
-      nextInputNeeded: normalizedNextInputNeeded,
-      rollRequests: normalizedRollRequests,
-      mechanicsState: nextMechanicsState
-    });
-    const publicNarration = combatResourceSummary
-      ? narrationWithCombatResourceSummary({
-          narration: contract.publicNarration,
-          summary: combatResourceSummary
-        })
-      : contract.publicNarration;
     const reply = narrationWithInventoryUpdate(
-      publicNarration,
+      contract.publicNarration,
       appliedInventoryPatches
     );
     const routerDebug = routerDebugFromPromptContext(promptContext);

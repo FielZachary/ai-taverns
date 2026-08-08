@@ -5,6 +5,7 @@ import {
   applyRestMechanics,
   applyDeathSavingThrow,
   assertMechanicsActionAllowed,
+  actorFromMechanicsSeed,
   deriveResourcesForClass,
   firstDyingPlayerActorKey,
   formatResourceLines,
@@ -238,6 +239,22 @@ test("mechanics seed derives common class resources from class and level", () =>
     recharge: "long_rest",
     source: "Barbarian"
   });
+
+  assert.deepEqual(
+    actorFromMechanicsSeed("Rakir", {
+      characterClass: "Barbarian",
+      level: 5,
+      maxHp: 50,
+      currentHp: 50
+    }).resources?.rages,
+    {
+      label: "Rages",
+      max: 3,
+      used: 0,
+      recharge: "long_rest",
+      source: "Barbarian"
+    }
+  );
 
   assert.deepEqual(deriveResourcesForClass("Fighter", 2), {
     second_wind: {

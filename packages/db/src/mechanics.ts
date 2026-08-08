@@ -412,6 +412,11 @@ export function actorFromMechanicsSeed(
     };
   }
 
+  const derivedResources =
+    seed?.characterClass && seed.level
+      ? deriveResourcesForClass(seed.characterClass, seed.level)
+      : undefined;
+
   return {
     characterName,
     ...(seed?.characterClass ? { characterClass: seed.characterClass } : {}),
@@ -419,7 +424,9 @@ export function actorFromMechanicsSeed(
     currentHp: seed?.currentHp,
     maxHp: seed?.maxHp,
     spellSlots: cloneSlots(seed?.spellSlots),
-    resources: cloneResources(seed?.resources),
+    resources: cloneResources(
+      mergeResourceSets(derivedResources, seed?.resources)
+    ),
     concentration: null,
     conditions: []
   };
