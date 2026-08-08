@@ -3813,6 +3813,8 @@ test("mechanics state initializes Warlock pact slots", async () => {
     (actors[`player:${player.id}`]?.spellSlots as Record<string, unknown>)?.["3"],
     { max: 2, used: 0 }
   );
+  assert.equal(actors[`player:${player.id}`]?.characterClass, "Warlock");
+  assert.equal(actors[`player:${player.id}`]?.level, 5);
 });
 
 test("campaign creation validates preset, custom world, and single-player requirements", async () => {

@@ -2061,6 +2061,149 @@ function sanitizePlayerSpellSlotsUpdate(input: {
   return hasAcceptedSlot ? acceptedSlots : undefined;
 }
 
+function isWarlockActor(actor: MechanicsState["actors"][string]) {
+  return actor.characterClass?.trim().toLowerCase() === "warlock";
+}
+
+function spellSlotSummaryLabel(level: string) {
+  return level === "1"
+    ? "first level spell slots"
+    : level === "2"
+      ? "second level spell slots"
+      : level === "3"
+        ? "third level spell slots"
+        : `${level}th level spell slots`;
+}
+
+function formatCombatResourceSummary(
+  actor: MechanicsState["actors"][string] | undefined
+) {
+  if (!actor) {
+    return "";
+  }
+
+  const lines: string[] = [];
+
+  if (actor.currentHp !== undefined) {
+    lines.push(`<clue>${actor.currentHp}</clue> hit points`);
+  }
+
+  if (actor.spellSlots && Object.keys(actor.spellSlots).length > 0) {
+    if (isWarlockActor(actor)) {
+      const totals = Object.values(actor.spellSlots).reduce(
+        (sum, slot) => ({
+          max: sum.max + slot.max,
+          used: sum.used + slot.used
+        }),
+        { max: 0, used: 0 }
+      );
+      lines.push(
+        `<clue>${Math.max(0, totals.max - totals.used)}</clue> pact magic slots`
+      );
+    } else {
+      for (const [level, slot] of Object.entries(actor.spellSlots).sort(
+        ([left], [right]) => Number(right) - Number(left)
+      )) {
+        lines.push(
+          `<clue>${Math.max(0, slot.max - slot.used)}</clue> ${spellSlotSummaryLabel(level)}`
+        );
+      }
+    }
+  }
+
+  if (actor.resources && Object.keys(actor.resources).length > 0) {
+    for (const [, resource] of Object.entries(actor.resources).sort(([left], [right]) =>
+      left.localeCompare(right)
+    )) {
+      lines.push(
+        `<clue>${Math.max(0, resource.max - resource.used)}</clue> ${resource.label.toLowerCase()}`
+      );
+    }
+  }
+
+  return lines.length > 0
+    ? `<clue>Just to remind you, you have: </clue>\n${lines.join("\n")}`
+    : "";
+}
+
+function removeExistingCombatResourceSummary(narration: string) {
+  const lines = narration.split(/\r?\n/);
+  const nextLines: string[] = [];
+  let skippingSummary = false;
+
+  for (const line of lines) {
+    if (
+      !skippingSummary &&
+      /<clue>\s*Just to remind you, you have:\s*<\/clue>/i.test(line)
+    ) {
+      skippingSummary = true;
+      continue;
+    }
+
+    if (skippingSummary) {
+      if (line.trim() === "") {
+        skippingSummary = false;
+        continue;
+      }
+
+      if (/^What do you do\?\s*$/i.test(line.trim())) {
+        skippingSummary = false;
+        nextLines.push(line);
+        continue;
+      }
+
+      if (/<clue>.*<\/clue>/i.test(line)) {
+        continue;
+      }
+
+      skippingSummary = false;
+    }
+
+    nextLines.push(line);
+  }
+
+  return nextLines.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd();
+}
+
+function narrationWithCombatResourceSummary(input: {
+  narration: string;
+  summary: string;
+}) {
+  const cleanedNarration = removeExistingCombatResourceSummary(input.narration);
+  const trimmedNarration = cleanedNarration.trimEnd();
+  const handoffMatch = trimmedNarration.match(/(\n*)(What do you do\?\s*)$/i);
+
+  if (!handoffMatch) {
+    return `${trimmedNarration}\n\n${input.summary}`;
+  }
+
+  return `${trimmedNarration.slice(0, handoffMatch.index).trimEnd()}\n\n${input.summary}\n\n${handoffMatch[2]?.trimEnd() ?? "What do you do?"}`;
+}
+
+function combatResourceSummaryForHandoff(input: {
+  dmJob?: DmJobName | undefined;
+  nextInputNeeded: DmNextInputNeeded;
+  rollRequests: DiceRollRequest[];
+  mechanicsState: MechanicsState;
+}) {
+  if (
+    input.dmJob !== "combat" ||
+    input.nextInputNeeded !== "player_actions" ||
+    input.rollRequests.length > 0 ||
+    !input.mechanicsState.combat.active
+  ) {
+    return "";
+  }
+
+  const turnOwner = input.mechanicsState.combat.turnOwner;
+
+  if (!turnOwner?.startsWith("player:")) {
+    return "";
+  }
+
+  return formatCombatResourceSummary(input.mechanicsState.actors[turnOwner]);
+}
+
 function applyMechanicsStateUpdate(
   state: MechanicsState,
   update: Record<string, unknown> | undefined,
@@ -10618,14 +10761,20 @@ async function askDungeonMaster(
           )
         )
       : { accepted: [], discarded: [] };
-    const inventoryPlayers = contract.inventoryStateUpdate?.patches.length
+    const shouldLoadActivePlayers =
+      Boolean(contract.inventoryStateUpdate?.patches.length) ||
+      promptContext?.jobNeeded === "combat";
+    const activePlayers = shouldLoadActivePlayers
       ? await getActiveCampaignPlayers(db, campaign.id)
+      : [];
+    const inventoryPlayers = contract.inventoryStateUpdate?.patches.length
+      ? activePlayers
       : [];
     const inventoryValidation = validateInventoryPatches(
       contract.inventoryStateUpdate?.patches ?? [],
       inventoryPlayers
     );
-    const mechanicsState = resolveMechanicsState(campaign, []);
+    const mechanicsState = resolveMechanicsState(campaign, activePlayers);
     const combatInputControl = normalizeCombatInputControl(
       applyMechanicsStateUpdate(
         mechanicsState,
@@ -10691,8 +10840,20 @@ async function askDungeonMaster(
             inventoryValidation.accepted
           )
         : [];
+    const combatResourceSummary = combatResourceSummaryForHandoff({
+      dmJob: promptContext?.jobNeeded,
+      nextInputNeeded: normalizedNextInputNeeded,
+      rollRequests: normalizedRollRequests,
+      mechanicsState: nextMechanicsState
+    });
+    const publicNarration = combatResourceSummary
+      ? narrationWithCombatResourceSummary({
+          narration: contract.publicNarration,
+          summary: combatResourceSummary
+        })
+      : contract.publicNarration;
     const reply = narrationWithInventoryUpdate(
-      contract.publicNarration,
+      publicNarration,
       appliedInventoryPatches
     );
     const routerDebug = routerDebugFromPromptContext(promptContext);

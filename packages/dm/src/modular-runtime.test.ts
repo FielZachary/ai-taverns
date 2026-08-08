@@ -894,7 +894,7 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("combat"), /Never silently modify HP/);
     assert.match(
       jobPrompt("combat"),
-      /append a compact resources summary at the end of public_narration/i
+      /include a compact resources summary immediately before the final action handoff/i
     );
     assert.match(
       jobPrompt("combat"),
@@ -902,7 +902,19 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
-      /<clue>Just to remind you, you have: <\/clue>\\n<clue>35<\/clue> hit points\\n<clue>3<\/clue> third level spell slots/i
+      /never list a spell slot level absent from actor\.spellSlots/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /summarize the pact slot pool as pact magic slots/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /<clue>Just to remind you, you have: <\/clue>\\n<clue>9<\/clue> hit points\\n<clue>0<\/clue> pact magic slots/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /<clue>35<\/clue> hit points\\n<clue>3<\/clue> third level spell slots\\n<clue>5<\/clue> sorcery points/i
     );
     assert.match(jobPrompt("combat"), /<clue>5<\/clue> sorcery points/i);
     assert.match(

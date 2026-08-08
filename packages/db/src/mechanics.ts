@@ -346,6 +346,8 @@ export function actorFromMechanicsSeed(
 
   return {
     characterName,
+    ...(seed?.characterClass ? { characterClass: seed.characterClass } : {}),
+    ...(seed?.level ? { level: seed.level } : {}),
     currentHp: seed?.currentHp,
     maxHp: seed?.maxHp,
     spellSlots: cloneSlots(seed?.spellSlots),
@@ -516,6 +518,11 @@ export function persistedMechanicsState(
     const maxHp = Number(actor.maxHp);
     const armorClass = Number(actor.armorClass);
     const attackBonus = Number(actor.attackBonus);
+    const characterClass =
+      typeof actor.characterClass === "string" && actor.characterClass.trim()
+        ? actor.characterClass.trim()
+        : undefined;
+    const level = Number(actor.level);
     const saveBonuses = parseAbilityBonusMap(actor.saveBonuses);
     const abilityModifiers = parseAbilityBonusMap(actor.abilityModifiers);
     const allegiance =
@@ -535,6 +542,8 @@ export function persistedMechanicsState(
     actors[actorKey] = {
       characterName:
         typeof actor.characterName === "string" ? actor.characterName : "",
+      ...(characterClass ? { characterClass } : {}),
+      ...(Number.isInteger(level) && level > 0 ? { level } : {}),
       ...(Number.isInteger(currentHp) ? { currentHp: Math.max(0, currentHp) } : {}),
       ...(Number.isInteger(maxHp) ? { maxHp: Math.max(0, maxHp) } : {}),
       ...(Number.isInteger(armorClass)
@@ -735,6 +744,12 @@ function legacyActorFromSheet(player: PlayerLike): MechanicsState["actors"][stri
 
   return {
     characterName: player.character_name,
+    ...(inferredIdentity
+      ? {
+          characterClass: inferredIdentity.characterClass,
+          level: inferredIdentity.level
+        }
+      : {}),
     ...(currentHp !== undefined ? { currentHp } : {}),
     ...(maxHp !== undefined ? { maxHp } : {}),
     allegiance: "player",
@@ -759,6 +774,12 @@ function actorWithSheetFallback(
   return {
     ...actor,
     characterName: actor.characterName || player.character_name,
+    ...(actor.characterClass ?? fallback.characterClass
+      ? { characterClass: actor.characterClass ?? fallback.characterClass }
+      : {}),
+    ...(actor.level ?? fallback.level
+      ? { level: actor.level ?? fallback.level }
+      : {}),
     currentHp: actor.currentHp ?? fallback.currentHp,
     maxHp: actor.maxHp ?? fallback.maxHp,
     spellSlots: actor.spellSlots ?? cloneSlots(fallback.spellSlots),
@@ -807,7 +828,33 @@ function ordinal(level: string) {
         : `${level}th`;
 }
 
-export function formatSpellSlotLines(slots: Record<string, SpellSlotState>) {
+function isWarlockClass(characterClass: string | undefined) {
+  return characterClass?.trim().toLowerCase() === "warlock";
+}
+
+export function formatSpellSlotLines(
+  slots: Record<string, SpellSlotState>,
+  options: { characterClass?: string | undefined } = {}
+) {
+  if (isWarlockClass(options.characterClass)) {
+    const slotEntries = spellSlotLevels.flatMap((level) => {
+      const slot = slots[level];
+      return slot ? [[level, slot] as const] : [];
+    });
+
+    if (slotEntries.length > 0) {
+      const totalMax = slotEntries.reduce((sum, [, slot]) => sum + slot.max, 0);
+      const totalUsed = slotEntries.reduce((sum, [, slot]) => sum + slot.used, 0);
+      const remaining = Math.max(0, totalMax - totalUsed);
+      const highestSlotLevel = slotEntries[slotEntries.length - 1]?.[0] ?? "1";
+
+      return [
+        `Pact Magic slots: ${totalMax} total, ${totalUsed} used, ${remaining} remaining`,
+        `Pact slot level: ${ordinal(highestSlotLevel)}`
+      ];
+    }
+  }
+
   return spellSlotLevels.flatMap((level) => {
     const slot = slots[level];
 
@@ -895,12 +942,17 @@ export function projectMechanicsIntoCharacterSheet(
   }
 
   if (actor.spellSlots && Object.keys(actor.spellSlots).length > 0) {
-    const slotLines = formatSpellSlotLines(actor.spellSlots);
+    const slotLines = formatSpellSlotLines(actor.spellSlots, {
+      characterClass: actor.characterClass
+    });
     projected = projectSection({
       sheet: projected,
       heading: "Spell Slots",
       lines: slotLines,
-      skipLine: (line) => /^\d(?:st|nd|rd|th)-level slots:/i.test(line)
+      skipLine: (line) =>
+        /^\d(?:st|nd|rd|th)-level slots:/i.test(line) ||
+        /^Pact Magic slots:/i.test(line) ||
+        /^Pact slot level:/i.test(line)
     });
   }
 

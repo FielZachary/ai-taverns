@@ -1089,6 +1089,135 @@ test("solo turns ignore unjustified player spell slot updates from DM output", a
   }
 });
 
+test("solo combat inserts warlock pact resource summaries from mechanics state", async () => {
+  const { cookie, campaignId } = await createSinglePlayerCampaign(
+    "dm-runtime-warlock-summary"
+  );
+  const campaign = database.campaigns.find(
+    (candidate) => candidate.id === campaignId
+  );
+  const player = database.players.find(
+    (candidate) => candidate.campaign_id === campaignId
+  );
+
+  assert.ok(campaign);
+  assert.ok(player);
+  const playerActorKey = `player:${player.id}`;
+  player.character_sheet = [
+    "Character Name: Jacki",
+    "Level: 5",
+    "Class: Warlock",
+    "Max HP: 28",
+    "Current HP: 28"
+  ].join("\n");
+  campaign.metadata = {
+    ...(campaign.metadata as Record<string, unknown>),
+    mechanicsState: {
+      combat: {
+        active: true,
+        round: 2,
+        turnOwner: playerActorKey,
+        initiativeOrder: [playerActorKey, "npc:ember-knight"]
+      },
+      actors: {
+        [playerActorKey]: {
+          characterName: "Jacki",
+          currentHp: 28,
+          maxHp: 28,
+          spellSlots: {
+            "3": {
+              max: 2,
+              used: 2
+            }
+          },
+          concentration: null,
+          conditions: []
+        },
+        "npc:ember-knight": {
+          characterName: "Ember Knight",
+          currentHp: 12,
+          maxHp: 30,
+          armorClass: 14,
+          allegiance: "hostile",
+          conditions: []
+        }
+      }
+    }
+  };
+  resetProviderInputs();
+  setProviderOverride(async () => ({
+    id: "provider-warlock-resource-summary",
+    content: JSON.stringify({
+      public_narration: [
+        "The Ember Knight staggers, armor hissing in the rain.",
+        "",
+        "What do you do?",
+        "",
+        "<clue>Just to remind you, you have: </clue>",
+        "<clue>28</clue> hit points",
+        "<clue>0</clue> third level spell slots",
+        "<clue>0</clue> second level spell slots",
+        "<clue>0</clue> first level spell slots"
+      ].join("\n"),
+      resolution_mode: "resolved_without_dice",
+      roll_requests: [],
+      next_input_needed: "player_actions",
+      input_targets: [playerActorKey],
+      input_policy: "specific_players",
+      mechanics_state_update: {
+        combat: {
+          active: true,
+          round: 2,
+          turnOwner: playerActorKey,
+          initiativeOrder: [playerActorKey, "npc:ember-knight"]
+        }
+      },
+      inventory_state_update: {
+        patches: []
+      },
+      combat_events: [],
+      proposed_context_updates: []
+    }),
+    debug: {
+      requestMessages: [],
+      rawResponse: "{}",
+      model: "test-model",
+      temperature: 0.8,
+      providerTimings: []
+    }
+  }));
+
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/campaigns/${campaignId}/solo-turn`,
+      headers: {
+        cookie
+      },
+      payload: {
+        message: "I attack the Ember Knight with a feint.",
+        clientMessageId: "warlock-summary-handoff"
+      }
+    });
+
+    assert.equal(response.statusCode, 200, response.body);
+    const solo = CampaignSoloTurnResponseSchema.parse(response.json());
+    const content = solo.messages.at(-1)?.content ?? "";
+
+    assert.match(content, /<clue>28<\/clue> hit points/);
+    assert.match(content, /<clue>0<\/clue> pact magic slots/);
+    assert.doesNotMatch(content, /first level spell slots/i);
+    assert.doesNotMatch(content, /second level spell slots/i);
+    assert.doesNotMatch(content, /third level spell slots/i);
+    assert.match(
+      content,
+      /<clue>0<\/clue> pact magic slots\s*\n\s*What do you do\?\s*$/i
+    );
+  } finally {
+    setProviderOverride(undefined);
+  }
+});
+
 test("solo combat catches up NPC turns instead of rejecting the player", async () => {
   const { cookie, campaignId } = await createSinglePlayerCampaign(
     "dm-runtime-npc-catchup"

@@ -8,6 +8,7 @@ import {
   deriveResourcesForClass,
   firstDyingPlayerActorKey,
   formatResourceLines,
+  formatSpellSlotLines,
   isDyingPlayerActor,
   mechanicsSeedFromCharacterInput,
   projectMechanicsIntoCharacterSheet,
@@ -104,6 +105,8 @@ test("mechanics state infers tracked spell slots from explicit caster prose", ()
   });
   assert.equal(state.actors["player:seren"]?.maxHp, 20);
   assert.equal(state.actors["player:seren"]?.currentHp, 20);
+  assert.equal(state.actors["player:seren"]?.characterClass, "wizard");
+  assert.equal(state.actors["player:seren"]?.level, 5);
 
   assert.doesNotThrow(() =>
     assertMechanicsActionAllowed({
@@ -117,6 +120,92 @@ test("mechanics state infers tracked spell slots from explicit caster prose", ()
       message: "I cast Fireball on Mara."
     })
   );
+});
+
+test("mechanics state backfills class and level from sheet for old actors", () => {
+  const state = resolveMechanicsState(
+    {
+      metadata: {
+        mechanicsState: {
+          combat: {
+            active: false,
+            round: 0,
+            turnOwner: null,
+            initiativeOrder: []
+          },
+          actors: {
+            "player:jacki": {
+              characterName: "Jacki",
+              currentHp: 28,
+              maxHp: 28,
+              spellSlots: {
+                "3": { max: 2, used: 1 }
+              },
+              concentration: null,
+              conditions: []
+            }
+          }
+        }
+      }
+    },
+    [
+      {
+        id: "jacki",
+        character_name: "Jacki",
+        character_sheet: "Character Name: Jacki\nLevel: 5\nClass: Warlock\nMax HP: 28"
+      }
+    ]
+  );
+
+  assert.equal(state.actors["player:jacki"]?.characterClass, "Warlock");
+  assert.equal(state.actors["player:jacki"]?.level, 5);
+  assert.deepEqual(state.actors["player:jacki"]?.spellSlots, {
+    "3": { max: 2, used: 1 }
+  });
+});
+
+test("warlock spell slot projection uses pact magic labels", () => {
+  assert.deepEqual(
+    formatSpellSlotLines(
+      {
+        "3": { max: 2, used: 2 }
+      },
+      { characterClass: "Warlock" }
+    ),
+    [
+      "Pact Magic slots: 2 total, 2 used, 0 remaining",
+      "Pact slot level: 3rd"
+    ]
+  );
+
+  const projected = projectMechanicsIntoCharacterSheet(
+    [
+      "Character Name: Jacki",
+      "Level: 5",
+      "Class: Warlock",
+      "",
+      "Spell Slots",
+      "1st-level slots: 4 total, 0 used, 4 remaining",
+      "2nd-level slots: 3 total, 0 used, 3 remaining",
+      "3rd-level slots: 2 total, 2 used, 0 remaining"
+    ].join("\n"),
+    {
+      characterName: "Jacki",
+      characterClass: "Warlock",
+      level: 5,
+      spellSlots: {
+        "3": { max: 2, used: 2 }
+      },
+      concentration: null,
+      conditions: []
+    }
+  );
+
+  assert.match(projected, /Pact Magic slots: 2 total, 2 used, 0 remaining/);
+  assert.match(projected, /Pact slot level: 3rd/);
+  assert.doesNotMatch(projected, /1st-level slots/);
+  assert.doesNotMatch(projected, /2nd-level slots/);
+  assert.doesNotMatch(projected, /3rd-level slots/);
 });
 
 test("mechanics seed derives common class resources from class and level", () => {
