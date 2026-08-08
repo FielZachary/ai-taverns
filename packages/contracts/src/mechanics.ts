@@ -63,6 +63,8 @@ export const MechanicsSeedSchema = z.object({
 
 export const MechanicsActorStateSchema = z.object({
   characterName: z.string(),
+  characterClass: z.string().min(1).optional(),
+  level: z.number().int().positive().optional(),
   currentHp: z.number().int().nonnegative().optional(),
   maxHp: z.number().int().nonnegative().optional(),
   armorClass: z.number().int().nonnegative().optional(),

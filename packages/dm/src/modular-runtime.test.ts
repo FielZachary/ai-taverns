@@ -444,6 +444,18 @@ describe("modular AI DM runtime contracts", () => {
       jobPrompt("scene_director"),
       /exploration, travel, downtime, and ordinary scene resolution/i
     );
+    assert.match(
+      jobPrompt("scene_director"),
+      /Do not spend player spell slots for magical flavor, intimidation, visible aura, patron manifestation, threatening gestures, or roleplay descriptions/i
+    );
+    assert.match(
+      jobPrompt("scene_director"),
+      /If a player describes ambiguous magic without naming a spell, treat it as narration, a cantrip-like display, or ask clarification/i
+    );
+    assert.match(
+      jobPrompt("scene_director"),
+      /Only include spellSlots changes in mechanics_state_update when the current player submission explicitly casts a known leveled spell/i
+    );
     assert.doesNotMatch(
       jobPrompt("scene_director"),
       /Roll Sleight of Hand:[^"]*\\n\\nWhat do you do\?/
@@ -882,7 +894,7 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("combat"), /Never silently modify HP/);
     assert.match(
       jobPrompt("combat"),
-      /append a compact resources summary at the end of public_narration/i
+      /include a compact resources summary immediately before the final action handoff/i
     );
     assert.match(
       jobPrompt("combat"),
@@ -890,7 +902,27 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
-      /<clue>Just to remind you, you have: <\/clue>\\n<clue>35<\/clue> hit points\\n<clue>3<\/clue> third level spell slots/i
+      /Do not shape the summary around spellcasters/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Second Wind, Action Surge, Lay on Hands, Divine Sense/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /summarize the pact slot pool as pact magic slots/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /<clue>Just to remind you, you have: <\/clue>\\n<clue>9<\/clue> hit points\\n<clue>0<\/clue> pact magic slots/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /<clue>28<\/clue> hit points\\n<clue>1<\/clue> second wind\\n<clue>1<\/clue> action surge/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /<clue>35<\/clue> hit points\\n<clue>3<\/clue> third level spell slots\\n<clue>5<\/clue> sorcery points/i
     );
     assert.match(jobPrompt("combat"), /<clue>5<\/clue> sorcery points/i);
     assert.match(
@@ -903,11 +935,15 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
-      /When a player uses a tracked class resource from mechanicsState\.actors\[actorKey\]\.resources/i
+      /Do not spend tracked class resources for flavor, posture, intimidation, effort, style, or descriptive combat narration/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Only include resources changes in mechanics_state_update when the current player submission explicitly uses a tracked resource/i
     );
     assert.match(
       jobPrompt("scene_director"),
-      /resources with that resource's used value increased by the amount spent/i
+      /When a tracked class resource is spent, include mechanics_state_update\.actors\[actorKey\]\.resources/i
     );
     assert.match(jobPrompt("combat"), /Do not copy their names, actor keys/i);
     assert.match(
