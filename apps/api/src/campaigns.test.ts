@@ -2722,6 +2722,8 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(narratorInput.message, /forbidden_opening_terms/);
   assert.match(narratorInput.message, /semantic narration markup/);
   assert.match(narratorInput.message, /must include 7-8 tags/i);
+  assert.match(narratorInput.message, /not limited to proper nouns/i);
+  assert.match(narratorInput.message, /paragraph 1, 1 in paragraph 2, 2 tags in paragraph 3/i);
   assert.match(narratorInput.message, /<npc>\.\.\.<\/npc>/);
   assert.match(narratorInput.message, /<place>\.\.\.<\/place>/);
   assert.match(narratorInput.message, /<clue>\.\.\.<\/clue>/);
@@ -3204,10 +3206,10 @@ test("POST /api/campaigns uses a low-temperature final retry for short Eldermere
 
     if (input.message.includes("Final low-temperature rewrite required:")) {
       const finalNarration = [
-        "The <clue>summons</clue> that brought you to Suncross has the weight of unfinished business, the kind that makes an old promise feel heavier than your <object>pack</object>.",
-        "For the last three days, cold rain and stranger warnings followed the <place>road</place>, and the last hour brought you through crowded streets where locals lowered their voices at your questions.",
-        "<place>Suncross</place> rises around you in wet stone and early lanternlight, busy enough to hide a <danger>secret</danger> and tense enough to make every passerby look away.",
-        "<npc>Mara Vell</npc> waits by a <clue>marked doorway</clue>, rain silvering her cloak while <faction>guards</faction> argue nearby and market carts slow to stare.",
+        "The <clue>summons</clue> that brought you to Suncross has the weight of unfinished business, the kind that makes an old promise feel heavier than your pack.",
+        "For the last three days through Cael Ambrose, cold rain and stranger warnings followed the road, and the last hour brought you through crowded streets where locals lowered their voices at your questions.",
+        "Suncross rises around you in wet stone and early lanternlight, carrying busy civic pride under visible strain while road-glow on wet paving stones catches beneath lanterns lit early.",
+        "<npc>Mara Vell</npc>, a worried local messenger, waits by a <clue>marked doorway</clue> and keeps watching the street behind her while market carts slow to stare.",
         "You can question Mara Vell, inspect the marked doorway, or ask nearby locals what frightened them before the street closes around you.",
         "What do you do?"
       ].join("\n\n");
@@ -3320,8 +3322,17 @@ test("POST /api/campaigns uses a low-temperature final retry for short Eldermere
   assert.match(content, /What do you do\?$/);
   assert.match(content, /<place>Suncross<\/place>/);
   assert.match(content, /<npc>Mara Vell<\/npc>/);
+  const semanticTagCount = Array.from(
+    content.matchAll(/<(npc|place|clue|danger|faction|object)>[^<>]+<\/\1>/giu)
+  ).length;
+  assert.ok(
+    semanticTagCount >= 7 && semanticTagCount <= 8,
+    `expected 7-8 semantic tags, found ${semanticTagCount}: ${content}`
+  );
   assert.ok(finalRetryInput);
   assert.equal(finalRetryInput.temperature, 0.2);
+  assert.match(finalRetryInput.message, /not limited to proper nouns/i);
+  assert.match(finalRetryInput.message, /paragraph 1 has 1 tag/i);
 });
 
 
