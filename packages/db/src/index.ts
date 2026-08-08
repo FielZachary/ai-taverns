@@ -9202,8 +9202,8 @@ function formatEldermereNarratorOpeningRequest(input: {
     "If a useful idea appears in dm_private_context, imply it only through concrete visible facts or pressure; do not reveal it as confirmed exposition.",
     "Forbidden opening terms must not appear in public_narration.",
     "Allowed player-facing terms must be explained plainly on first use.",
-    "Use sparse semantic narration markup inside public_narration when it helps the player scan important visible nouns or short phrases. Supported tags only: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, and <object>...</object>.",
-    "Wrap only the exact player-visible words that should receive color. Use 2-4 tags when the opener has worthwhile visible names, places, clues, dangers, factions, or objects. Do not wrap full sentences or paragraphs.",
+    "Use 2-3 sparse semantic narration markup tags inside public_narration so players can scan important visible nouns or short phrases. Supported tags only: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, and <object>...</object>.",
+    "Wrap only the exact player-visible words that should receive color. The opener must include 2-3 tags around worthwhile visible names, places, clues, dangers, factions, or objects. Do not wrap full sentences or paragraphs.",
     "Do not nest semantic tags, add attributes, invent other tags, include CSS, hex colors, color names, Markdown emphasis, or prose instructions inside public_narration.",
     "Do not return narration_highlights, highlights, sidecar span metadata, post-processing instructions, or any separate highlight records. The inline semantic tags are the only highlight system.",
     "",
@@ -10308,6 +10308,81 @@ function openingNarrationContainsTerm(narration: string, term: string) {
   return openingNarrationTermPattern(term).test(narration);
 }
 
+const semanticOpeningTagPattern =
+  /<(npc|place|clue|danger|faction|object)>([^<>]+)<\/\1>/giu;
+const semanticOpeningTagMinimum = 2;
+const semanticOpeningTagMaximum = 3;
+
+function semanticOpeningTagCount(narration: string) {
+  return Array.from(narration.matchAll(semanticOpeningTagPattern)).length;
+}
+
+function semanticOpeningTagContainsTerm(narration: string, term: string) {
+  const normalizedTerm = term.trim().toLowerCase();
+
+  if (!normalizedTerm) {
+    return false;
+  }
+
+  return Array.from(narration.matchAll(semanticOpeningTagPattern)).some(
+    (match) => match[2]?.toLowerCase().includes(normalizedTerm)
+  );
+}
+
+function stripExtraSemanticOpeningTags(narration: string) {
+  let tagCount = 0;
+
+  return narration.replace(
+    semanticOpeningTagPattern,
+    (match: string, _role: string, text: string) => {
+      tagCount += 1;
+
+      return tagCount > semanticOpeningTagMaximum ? text : match;
+    }
+  );
+}
+
+function addSemanticOpeningTag(
+  narration: string,
+  term: string | undefined,
+  role: "npc" | "place" | "clue" | "danger" | "faction" | "object"
+) {
+  const trimmedTerm = term?.trim();
+
+  if (
+    !trimmedTerm ||
+    semanticOpeningTagCount(narration) >= semanticOpeningTagMinimum ||
+    semanticOpeningTagContainsTerm(narration, trimmedTerm)
+  ) {
+    return narration;
+  }
+
+  return narration.replace(
+    openingNarrationTermPattern(trimmedTerm),
+    (_match, prefix: string) => `${prefix}<${role}>${trimmedTerm}</${role}>`
+  );
+}
+
+function normalizeEldermereOpeningSemanticTags(
+  narration: string,
+  plan: EldermereOpeningPlan
+) {
+  const strippedNarration = stripExtraSemanticOpeningTags(narration);
+  const firstNpc = plan.npcSeed[0]?.name;
+  const firstChoice = plan.firstInteractableChoices[0];
+
+  return [
+    { term: plan.startingLocation.name, role: "place" as const },
+    { term: firstNpc, role: "npc" as const },
+    { term: plan.region.name, role: "place" as const },
+    { term: firstChoice, role: "clue" as const }
+  ].reduce(
+    (current, candidate) =>
+      addSemanticOpeningTag(current, candidate.term, candidate.role),
+    strippedNarration
+  );
+}
+
 function plainReplacementForForbiddenOpeningTerm(term: string) {
   switch (term.toLowerCase()) {
     case "second dominion":
@@ -10350,9 +10425,11 @@ function repairEldermereOpeningReply(
   reply: DungeonMasterReply,
   plan: EldermereOpeningPlan
 ): DungeonMasterReply {
+  const scrubbedContent = scrubForbiddenOpeningTerms(reply.content, plan);
+
   return {
     ...reply,
-    content: scrubForbiddenOpeningTerms(reply.content, plan),
+    content: normalizeEldermereOpeningSemanticTags(scrubbedContent, plan),
     setting: {
       ...reply.setting,
       worldName: "Eldermere",
@@ -10413,6 +10490,17 @@ function eldermereOpeningNarrationErrors(content: string) {
 
   if (!/what do you do\?\s*$/i.test(content.trim())) {
     errors.push("public_narration must end with 'What do you do?'");
+  }
+
+  const semanticTagCount = semanticOpeningTagCount(content);
+
+  if (
+    semanticTagCount < semanticOpeningTagMinimum ||
+    semanticTagCount > semanticOpeningTagMaximum
+  ) {
+    errors.push(
+      `public_narration must contain ${semanticOpeningTagMinimum}-${semanticOpeningTagMaximum} semantic narration markup tags; found ${semanticTagCount}`
+    );
   }
 
   return errors;
@@ -10481,6 +10569,7 @@ async function askEldermereOpeningNarrator(
       : []),
     "Return the same opening situation as valid AI Taverns DM JSON, but fix every issue above.",
     "public_narration must be exactly 6 paragraphs separated by blank lines, must follow narrator_instructions as the highest-priority scene blueprint, and the sixth paragraph must be the final direct prompt 'What do you do?'",
+    `public_narration must include ${semanticOpeningTagMinimum}-${semanticOpeningTagMaximum} semantic narration markup tags using only <npc>, <place>, <clue>, <danger>, <faction>, and <object>.`,
     "Use only allowed_player_facing_terms and plain descriptions. Preserve setting metadata."
   ].join("\n");
   const repairedOpening = await askDungeonMaster(
