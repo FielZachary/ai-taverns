@@ -11,7 +11,9 @@ const siteJsonLd = {
       alternateName: ["AI Taverns", "AITaverns"],
       description:
         "AI Taverns is an AI dungeon master for solo and multiplayer D&D-style tabletop adventures.",
-      inLanguage: "en-US"
+      inLanguage: "en-US",
+      keywords:
+        "AI Taverns, AI dungeon master, AI DM, D&D AI, solo D&D, tabletop RPG AI"
     },
     {
       "@type": "SoftwareApplication",
@@ -22,6 +24,10 @@ const siteJsonLd = {
       url: "https://aitaverns.com/",
       description:
         "Play D&D-style tabletop adventures with an AI dungeon master that remembers your campaign, asks for rolls, and tracks consequences.",
+      genre: "Tabletop role-playing game",
+      isAccessibleForFree: true,
+      keywords:
+        "AI Taverns, AI dungeon master, AI DM, D&D-style adventures, solo tabletop RPG, multiplayer tabletop RPG",
       offers: {
         "@type": "Offer",
         price: "0",
@@ -102,7 +108,7 @@ export default function HomePage() {
         <div className="landing-hero-copy">
           <p className="landing-kicker">Text-based tabletop adventures</p>
           <h1 id="landing-title">
-            A dungeon master that <span>actually</span> remembers.
+            AI Taverns is a dungeon master that <span>actually</span> remembers.
           </h1>
           <p className="landing-lede">
             Sit down, play, and let AI Taverns direct a masterfully orchestrated
