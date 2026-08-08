@@ -894,11 +894,11 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("combat"), /Never silently modify HP/);
     assert.match(
       jobPrompt("combat"),
-      /include a compact resources summary immediately before the final action handoff/i
+      /must include a compact current-resource reminder immediately before the final action handoff/i
     );
     assert.match(
       jobPrompt("combat"),
-      /only when next_input_needed is not dice_results and roll_requests is empty/i
+      /next_input_needed is player_actions, roll_requests is empty/i
     );
     assert.match(
       jobPrompt("combat"),
@@ -914,15 +914,19 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
-      /<clue>Just to remind you, you have: <\/clue>\\n<clue>9<\/clue> hit points\\n<clue>0<\/clue> pact magic slots/i
+      /Example no-dice combat handoff: 'It is your turn.*<clue>50<\/clue> hit points\\n<clue>3<\/clue> rages\\n\\nWhat do you do\?'/is
     );
     assert.match(
       jobPrompt("combat"),
-      /<clue>28<\/clue> hit points\\n<clue>1<\/clue> second wind\\n<clue>1<\/clue> action surge/i
+      /Example pact summary line: '<clue>0<\/clue> pact magic slots'/i
     );
     assert.match(
       jobPrompt("combat"),
-      /<clue>35<\/clue> hit points\\n<clue>3<\/clue> third level spell slots\\n<clue>5<\/clue> sorcery points/i
+      /Example martial resource lines: '<clue>1<\/clue> second wind\\n<clue>1<\/clue> action surge'/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Example caster resource lines with only present spell slot levels: '<clue>3<\/clue> third level spell slots\\n<clue>5<\/clue> sorcery points'/i
     );
     assert.match(jobPrompt("combat"), /<clue>5<\/clue> sorcery points/i);
     assert.match(
