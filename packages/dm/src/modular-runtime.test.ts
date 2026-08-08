@@ -497,6 +497,18 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("npc_dialogue"),
+      /has not chosen the leverage that determines the skill, do not request a generic social roll/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /But first, I'll need you to tell me which approach you take before I ask you to roll/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /"roll_requests": \[\][\s\S]*"next_input_needed": "player_actions"/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
       /Do not let the NPC become wavering, convinced, compliant, or newly informative before the requested roll is submitted/i
     );
     assert.match(
@@ -510,6 +522,10 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(
       jobPrompt("npc_dialogue"),
       /On the second consistent answer, choose one decisive path/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /When uncertainty matters and the player's leverage is clear/i
     );
     assert.match(
       jobPrompt("npc_dialogue"),
@@ -565,11 +581,11 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
-      /semantic narration markup for inline UI color/i
+      /semantic narration markup for inline UI color or emphasis/i
     );
     assert.match(
       jobPrompt("combat"),
-      /<npc>\.\.\.<\/npc>.*<place>\.\.\.<\/place>.*<clue>\.\.\.<\/clue>.*<danger>\.\.\.<\/danger>.*<faction>\.\.\.<\/faction>.*<object>\.\.\.<\/object>/is
+      /<npc>\.\.\.<\/npc>.*<place>\.\.\.<\/place>.*<clue>\.\.\.<\/clue>.*<danger>\.\.\.<\/danger>.*<faction>\.\.\.<\/faction>.*<object>\.\.\.<\/object>.*<em>\.\.\.<\/em>/is
     );
     assert.match(
       jobPrompt("combat"),
@@ -894,11 +910,11 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("combat"), /Never silently modify HP/);
     assert.match(
       jobPrompt("combat"),
-      /include a compact resources summary immediately before the final action handoff/i
+      /must include a compact current-resource reminder immediately before the final action handoff/i
     );
     assert.match(
       jobPrompt("combat"),
-      /only when next_input_needed is not dice_results and roll_requests is empty/i
+      /next_input_needed is player_actions, roll_requests is empty/i
     );
     assert.match(
       jobPrompt("combat"),
@@ -914,15 +930,19 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
-      /<clue>Just to remind you, you have: <\/clue>\\n<clue>9<\/clue> hit points\\n<clue>0<\/clue> pact magic slots/i
+      /Example no-dice combat handoff: 'It is your turn.*<clue>50<\/clue> hit points\\n<clue>3<\/clue> rages\\n\\nWhat do you do\?'/is
     );
     assert.match(
       jobPrompt("combat"),
-      /<clue>28<\/clue> hit points\\n<clue>1<\/clue> second wind\\n<clue>1<\/clue> action surge/i
+      /Example pact summary line: '<clue>0<\/clue> pact magic slots'/i
     );
     assert.match(
       jobPrompt("combat"),
-      /<clue>35<\/clue> hit points\\n<clue>3<\/clue> third level spell slots\\n<clue>5<\/clue> sorcery points/i
+      /Example martial resource lines: '<clue>1<\/clue> second wind\\n<clue>1<\/clue> action surge'/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Example caster resource lines with only present spell slot levels: '<clue>3<\/clue> third level spell slots\\n<clue>5<\/clue> sorcery points'/i
     );
     assert.match(jobPrompt("combat"), /<clue>5<\/clue> sorcery points/i);
     assert.match(

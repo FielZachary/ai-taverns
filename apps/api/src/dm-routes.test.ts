@@ -1089,7 +1089,7 @@ test("solo turns ignore unjustified player spell slot updates from DM output", a
   }
 });
 
-test("solo combat inserts warlock pact resource summaries from mechanics state", async () => {
+test("solo combat preserves model-authored warlock pact resource summaries", async () => {
   const { cookie, campaignId } = await createSinglePlayerCampaign(
     "dm-runtime-warlock-summary"
   );
@@ -1151,13 +1151,11 @@ test("solo combat inserts warlock pact resource summaries from mechanics state",
       public_narration: [
         "The Ember Knight staggers, armor hissing in the rain.",
         "",
-        "What do you do?",
-        "",
         "<clue>Just to remind you, you have: </clue>",
         "<clue>28</clue> hit points",
-        "<clue>0</clue> third level spell slots",
-        "<clue>0</clue> second level spell slots",
-        "<clue>0</clue> first level spell slots"
+        "<clue>0</clue> pact magic slots",
+        "",
+        "What do you do?"
       ].join("\n"),
       resolution_mode: "resolved_without_dice",
       roll_requests: [],
@@ -1290,7 +1288,16 @@ test("solo combat guards tracked class resources and summarizes martial resource
   setProviderOverride(async () => ({
     id: "provider-ambiguous-action-surge",
     content: JSON.stringify({
-      public_narration: "You press the raider hard, forcing them backward.\n\nWhat do you do?",
+      public_narration: [
+        "You press the raider hard, forcing them backward.",
+        "",
+        "<clue>Just to remind you, you have: </clue>",
+        "<clue>28</clue> hit points",
+        "<clue>1</clue> action surge",
+        "<clue>1</clue> second wind",
+        "",
+        "What do you do?"
+      ].join("\n"),
       resolution_mode: "resolved_without_dice",
       roll_requests: [],
       next_input_needed: "player_actions",
@@ -1382,8 +1389,16 @@ test("solo combat guards tracked class resources and summarizes martial resource
     setProviderOverride(async () => ({
       id: "provider-explicit-action-surge",
       content: JSON.stringify({
-        public_narration:
-          "You use Action Surge and chain another strike into the raider's guard.\n\nWhat do you do?",
+        public_narration: [
+          "You use Action Surge and chain another strike into the raider's guard.",
+          "",
+          "<clue>Just to remind you, you have: </clue>",
+          "<clue>28</clue> hit points",
+          "<clue>0</clue> action surge",
+          "<clue>1</clue> second wind",
+          "",
+          "What do you do?"
+        ].join("\n"),
         resolution_mode: "resolved_without_dice",
         roll_requests: [],
         next_input_needed: "player_actions",
@@ -1469,6 +1484,118 @@ test("solo combat guards tracked class resources and summarizes martial resource
       1
     );
     assert.match(explicitContent, /<clue>0<\/clue> action surge/i);
+  } finally {
+    setProviderOverride(undefined);
+  }
+});
+
+test("solo combat does not append resource reminders after model output", async () => {
+  const { cookie, campaignId } = await createSinglePlayerCampaign(
+    "dm-runtime-no-resource-append"
+  );
+  const campaign = database.campaigns.find(
+    (candidate) => candidate.id === campaignId
+  );
+  const player = database.players.find(
+    (candidate) => candidate.campaign_id === campaignId
+  );
+
+  assert.ok(campaign);
+  assert.ok(player);
+  const playerActorKey = `player:${player.id}`;
+  campaign.metadata = {
+    ...(campaign.metadata as Record<string, unknown>),
+    mechanicsState: {
+      combat: {
+        active: true,
+        round: 1,
+        turnOwner: playerActorKey,
+        initiativeOrder: [playerActorKey, "npc:raider"]
+      },
+      actors: {
+        [playerActorKey]: {
+          characterName: "Rakir",
+          characterClass: "Barbarian",
+          level: 5,
+          currentHp: 50,
+          maxHp: 50,
+          resources: {
+            rages: {
+              label: "Rages",
+              max: 3,
+              used: 0,
+              recharge: "long_rest",
+              source: "Barbarian"
+            }
+          },
+          concentration: null,
+          conditions: []
+        },
+        "npc:raider": {
+          characterName: "Raider",
+          currentHp: 9,
+          maxHp: 16,
+          armorClass: 13,
+          allegiance: "hostile",
+          conditions: []
+        }
+      }
+    }
+  };
+
+  resetProviderInputs();
+  setProviderOverride(async () => ({
+    id: "provider-no-resource-summary",
+    content: JSON.stringify({
+      public_narration: "The raider circles warily.\n\nWhat do you do?",
+      resolution_mode: "resolved_without_dice",
+      roll_requests: [],
+      next_input_needed: "player_actions",
+      input_targets: [playerActorKey],
+      input_policy: "specific_players",
+      mechanics_state_update: {
+        combat: {
+          active: true,
+          round: 1,
+          turnOwner: playerActorKey,
+          initiativeOrder: [playerActorKey, "npc:raider"]
+        }
+      },
+      inventory_state_update: {
+        patches: []
+      },
+      combat_events: [],
+      proposed_context_updates: []
+    }),
+    debug: {
+      requestMessages: [],
+      rawResponse: "{}",
+      model: "test-model",
+      temperature: 0.8,
+      providerTimings: []
+    }
+  }));
+
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/campaigns/${campaignId}/solo-turn`,
+      headers: {
+        cookie
+      },
+      payload: {
+        message: "I wait for an opening.",
+        clientMessageId: "no-resource-append"
+      }
+    });
+
+    assert.equal(response.statusCode, 200, response.body);
+    const solo = CampaignSoloTurnResponseSchema.parse(response.json());
+    const content = solo.messages.at(-1)?.content ?? "";
+
+    assert.equal(content, "The raider circles warily.\n\nWhat do you do?");
+    assert.doesNotMatch(content, /Just to remind you/i);
+    assert.doesNotMatch(content, /<clue>3<\/clue> rages/i);
   } finally {
     setProviderOverride(undefined);
   }
