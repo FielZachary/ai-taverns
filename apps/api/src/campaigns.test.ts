@@ -2681,6 +2681,8 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
     plannerInput.instructions,
     /Use the player backstory anchors from the opening request/
   );
+  assert.match(plannerInput.instructions, /Keep the opening to exactly 6 paragraphs/);
+  assert.match(plannerInput.instructions, /Do not use flexible paragraph ranges/);
   assert.match(plannerInput.instructions, /starting_location_atmosphere/);
   assert.match(plannerInput.instructions, /arrival_impression/);
   assert.match(plannerInput.instructions, /daily_life_and_liveliness/);
@@ -2698,6 +2700,8 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
     plannerInput.message,
     /the strict temple faction/
   );
+  assert.match(plannerInput.message, /Write exactly 6 rich paragraphs/);
+  assert.doesNotMatch(plannerInput.message, /Write 4-7 rich paragraphs/);
   assert.match(
     plannerInput.message,
     new RegExp(`Region: ${selectedRegion.name as string}\\.`)
@@ -2993,6 +2997,40 @@ test("POST /api/campaigns scrubs forbidden Eldermere opening terms after narrato
       };
     }
 
+    const repairedNarration = [
+      "The summons that brought you to Suncross has the weight of unfinished business, the kind that makes an old promise feel heavier than your pack.",
+      "For the last three days, cold rain and stranger warnings followed the road, and the last hour brought you through crowded streets where locals lowered their voices at your questions.",
+      "Suncross crouches beneath the old stones of the Second Dominion, where the Hush still seems to press against every shutter.",
+      "Mara Vell waits by a marked doorway, rain silvering her cloak while guards argue nearby and market carts slow to stare.",
+      "You can question Mara Vell, inspect the marked doorway, or ask nearby locals what frightened them before the street closes around you.",
+      "What do you do?"
+    ].join("\n\n");
+
+    if (input.message.includes("Rewrite required:")) {
+      return {
+        id: "provider-narrator-forbidden-terms-repair",
+        content: JSON.stringify({
+          public_narration: repairedNarration,
+          roll_requests: [],
+          next_input_needed: "player_actions",
+          input_targets: [],
+          input_policy: "all_players",
+          setting: {
+            display_location: "",
+            world_name: "Wrong Realm",
+            starting_location: "Wrong Road"
+          }
+        }),
+        debug: {
+          requestMessages: [],
+          rawResponse: "{}",
+          model: "test-model",
+          temperature: 0.8,
+          providerTimings: []
+        }
+      };
+    }
+
     return {
       id: "provider-narrator-forbidden-terms",
       content: JSON.stringify({
@@ -3068,6 +3106,222 @@ test("POST /api/campaigns scrubs forbidden Eldermere opening terms after narrato
     repairInput?.message ?? "",
     /public_narration must contain 2-3 semantic narration markup tags; found 0/
   );
+});
+
+test("POST /api/campaigns uses a low-temperature final retry for short Eldermere openers", async () => {
+  const cookie = await signIn("eldermere-final-retry@example.com");
+  resetProviderInputs();
+
+  setProviderOverride(async (input) => {
+    if (input.instructions.includes("campaign-opening planner")) {
+      return {
+        id: "provider-planner-final-retry",
+        content: JSON.stringify({
+          campaign_title: "The Quiet Road",
+          region: {
+            name: "Cael Ambrose",
+            why_this_region: "It gives the opener a concrete local conflict.",
+            plain_description: "A troubled region with pressure close enough to touch."
+          },
+          starting_location: {
+            name: "Suncross",
+            type: "settlement",
+            why_this_location: "It is the selected campaign start.",
+            plain_description: "A specific place where the first problem is already visible."
+          },
+          starting_location_atmosphere: {
+            arrival_impression: "Suncross feels crowded, bright, and watched from the moment the road enters the city.",
+            daily_life_and_liveliness: "Pilgrims, market carts, guards, and street vendors keep moving even though every conversation drops when strangers pass.",
+            local_attitude: "People are polite to travelers, but they measure every question before answering.",
+            dominant_vibe: "busy civic pride under visible strain",
+            sensory_entry_details: [
+              "road-glow on wet paving stones",
+              "cart wheels clattering through narrow market lanes",
+              "warm bread smoke mixed with cold rain"
+            ],
+            transition_into_first_scene: "The city noise thins toward the marked doorway where Mara Vell keeps watching the street."
+          },
+          opening_premise: {
+            why_the_party_is_here: "The party has come to answer a local summons.",
+            immediate_objective: "Find the person who sent for them.",
+            immediate_complication: "The locals are afraid to explain what happened.",
+            first_scene_location: "At the edge of Suncross.",
+            opening_mood: "watchful and tense",
+            campaign_promise: "A grounded mystery with old power underneath it."
+          },
+          player_facing_facts: [
+            "The party has a reason to be here now.",
+            "Someone local needs help and is afraid."
+          ],
+          allowed_player_facing_terms: [
+            {
+              term: "Cael Ambrose",
+              plain_meaning: "the larger region where the campaign begins"
+            },
+            {
+              term: "Suncross",
+              plain_meaning: "the settlement where the first scene begins"
+            }
+          ],
+          npc_seed: [
+            {
+              name: "Mara Vell",
+              role: "a worried local messenger",
+              wants: "help without drawing official attention",
+              visible_behavior: "keeps watching the street behind her"
+            }
+          ],
+          first_interactable_choices: [
+            "question Mara Vell",
+            "inspect the marked doorway",
+            "ask nearby locals what frightened them"
+          ],
+          sensory_palette: {
+            sights: ["a marked doorway", "lanterns lit early"],
+            sounds: ["low voices", "boots on stone"],
+            smells: ["cold rain"],
+            textures_or_weather: ["damp air"]
+          },
+          dm_private_context: [
+            "Old world lore may matter later, but should not be named in the opening."
+          ],
+          forbidden_opening_terms: ["Second Dominion", "Hush"],
+          narrator_instructions: [
+            "Begin at the edge of Suncross.",
+            "Introduce Mara Vell as a visible NPC.",
+            "Keep the opening to exactly 6 paragraphs of vivid sensory detail, with the sixth paragraph only the final direct prompt: What do you do?"
+          ]
+        }),
+        debug: {
+          requestMessages: [],
+          rawResponse: "{}",
+          model: "test-model",
+          temperature: 0.8,
+          providerTimings: []
+        }
+      };
+    }
+
+    if (input.message.includes("Final low-temperature rewrite required:")) {
+      const finalNarration = [
+        "The summons that brought you to Suncross has the weight of unfinished business, the kind that makes an old promise feel heavier than your pack.",
+        "For the last three days, cold rain and stranger warnings followed the road, and the last hour brought you through crowded streets where locals lowered their voices at your questions.",
+        "<place>Suncross</place> rises around you in wet stone and early lanternlight, busy enough to hide a secret and tense enough to make every passerby look away.",
+        "<npc>Mara Vell</npc> waits by a marked doorway, rain silvering her cloak while guards argue nearby and market carts slow to stare.",
+        "You can question Mara Vell, inspect the marked doorway, or ask nearby locals what frightened them before the street closes around you.",
+        "What do you do?"
+      ].join("\n\n");
+
+      return {
+        id: "provider-narrator-final-retry",
+        content: JSON.stringify({
+          public_narration: finalNarration,
+          resolution_mode: "resolved_without_dice",
+          roll_requests: [],
+          next_input_needed: "player_actions",
+          input_targets: [],
+          input_policy: "all_players",
+          mechanics_state_update: {},
+          inventory_state_update: { patches: [] },
+          combat_events: [],
+          proposed_context_updates: [],
+          setting: {
+            display_location: "Suncross",
+            world_name: "Eldermere",
+            region_name: "Cael Ambrose",
+            settlement_name: "Suncross",
+            scene_location: "Suncross",
+            starting_location: "Suncross"
+          }
+        }),
+        debug: {
+          requestMessages: [],
+          rawResponse: "{}",
+          model: "test-model",
+          temperature: input.temperature ?? 0.8,
+          providerTimings: []
+        }
+      };
+    }
+
+    return {
+      id: "provider-narrator-short-opener",
+      content: JSON.stringify({
+        public_narration:
+          "The summons that brought you to Suncross has the weight of unfinished business, and Mara Vell waits somewhere ahead.",
+        resolution_mode: "resolved_without_dice",
+        roll_requests: [],
+        next_input_needed: "player_actions",
+        input_targets: [],
+        input_policy: "all_players",
+        mechanics_state_update: {},
+        inventory_state_update: { patches: [] },
+        combat_events: [],
+        proposed_context_updates: [],
+        setting: {
+          display_location: "Suncross",
+          world_name: "Eldermere",
+          region_name: "Cael Ambrose",
+          settlement_name: "Suncross",
+          scene_location: "Suncross",
+          starting_location: "Suncross"
+        }
+      }),
+      debug: {
+        requestMessages: [],
+        rawResponse: "{}",
+        model: "test-model",
+        temperature: input.temperature ?? 0.8,
+        providerTimings: []
+      }
+    };
+  });
+
+  const createResponse = await (async () => {
+    try {
+      return await app.inject({
+        method: "POST",
+        url: "/api/campaigns",
+        headers: {
+          cookie
+        },
+        payload: {
+          mode: "single_player",
+          campaignGenreKind: "preset",
+          campaignGenrePresetId: "eldermere",
+          ownerClientId: "eldermere-final-retry-client",
+          playerName: "Eldermere Player",
+          characterName: "Mira",
+          characterSheet: "A ruin-delver who follows old glowing roads."
+        }
+      });
+    } finally {
+      setProviderOverride(undefined);
+    }
+  })();
+
+  assert.equal(createResponse.statusCode, 201, createResponse.body);
+
+  const created = CampaignCreateResponseSchema.parse(createResponse.json());
+  const openingEvent = database.campaignEvents.find(
+    (event) =>
+      event.campaign_id === created.campaign.id &&
+      event.type === "adventure_begun"
+  );
+  const payload = openingEvent?.payload as Record<string, unknown> | undefined;
+  const content = String(payload?.content ?? "");
+  const providerInputs = getProviderInputs();
+  const finalRetryInput = providerInputs.find((input) =>
+    input.message.includes("Final low-temperature rewrite required:")
+  );
+
+  assert.ok(payload);
+  assert.equal(content.split(/\n\s*\n/).filter(Boolean).length, 6);
+  assert.match(content, /What do you do\?$/);
+  assert.match(content, /<place>Suncross<\/place>/);
+  assert.match(content, /<npc>Mara Vell<\/npc>/);
+  assert.ok(finalRetryInput);
+  assert.equal(finalRetryInput.temperature, 0.2);
 });
 
 

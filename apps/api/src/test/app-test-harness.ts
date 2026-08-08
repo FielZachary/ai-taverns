@@ -14,6 +14,9 @@ let providerInputs: {
   message: string;
   instructions: string;
   currentPlayerAction?: string;
+  dmJob?: string;
+  model?: string;
+  temperature?: number;
   history: { role: string; content: string }[];
 }[] = [];
 type AskProvider = DungeonMasterRuntime["askProvider"];
@@ -3216,6 +3219,11 @@ before(async () => {
           instructions: input.instructions,
           ...(input.currentPlayerAction
             ? { currentPlayerAction: input.currentPlayerAction }
+            : {}),
+          ...(input.dmJob ? { dmJob: input.dmJob } : {}),
+          ...(input.model ? { model: input.model } : {}),
+          ...(typeof input.temperature === "number"
+            ? { temperature: input.temperature }
             : {}),
           history: (input.history ?? []).map((message) => ({
             role: message.role,
