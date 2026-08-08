@@ -1134,9 +1134,25 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(soloCombatPrompt, /solo player actor key/i);
     assert.doesNotMatch(soloCombatPrompt, /This is multiplayer combat/i);
     assert.doesNotMatch(soloCombatPrompt, /multiplayer all-player prompt/i);
+    assert.doesNotMatch(
+      soloCombatPrompt,
+      /When multiple player submissions arrive/i
+    );
+    assert.doesNotMatch(
+      soloCombatPrompt,
+      /If multiple player-controlled actors are in combat/i
+    );
 
     assert.match(multiplayerCombatPrompt, /This is multiplayer combat/i);
     assert.match(multiplayerCombatPrompt, /all-player prompt/i);
+    assert.match(
+      multiplayerCombatPrompt,
+      /When multiple player submissions arrive, resolve the current turn owner's valid action first/i
+    );
+    assert.match(
+      multiplayerCombatPrompt,
+      /If multiple player-controlled actors are in combat, summarize only the actor who is receiving the handoff/i
+    );
     assert.doesNotMatch(multiplayerCombatPrompt, /This is singleplayer combat/i);
     assert.doesNotMatch(multiplayerCombatPrompt, /solo player actor key/i);
 

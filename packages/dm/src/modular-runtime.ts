@@ -577,7 +577,6 @@ export function jobPrompt(
     "Always respect the current combat turnOwner.",
     "If turnOwner is an NPC actor key or NPC name, resolve that NPC turn before resolving submitted player attacks, spells, or combat actions.",
     "Off-turn player combat declarations are intent, not actions already in motion. Do not narrate them as mid-swing, already casting, or resolving before the current initiative actor.",
-    "When multiple player submissions arrive, resolve the current turn owner's valid action first and treat other submissions as pending intent.",
     "Non-player-controlled catch-up loop:",
     "When a player-controlled turn is fully resolved, no roll_requests are pending, and combat is still active, advance through initiativeOrder and resolve every consecutive non-player-controlled actor in the same response until control reaches a living player-controlled actor or combat ends.",
     "If a non-player-controlled turn requires a player-facing roll, reaction, or tactical choice before it can finish, pause on that non-player-controlled turn with next_input_needed set to dice_results or player_actions as appropriate, input_targets set to the affected player actor key, and mechanics_state_update.combat.turnOwner still set to the acting non-player-controlled actor.",
@@ -629,7 +628,7 @@ export function jobPrompt(
     "When a combat response is not asking the player to roll anything, append a compact resources summary at the end of public_narration after the action handoff. Do this only when next_input_needed is not dice_results and roll_requests is empty.",
     "Build the combat resources summary from authoritative mechanicsState after applying this turn's mechanics_state_update. Include current hit points, remaining spell slots by level when known, and remaining tracked class resources from actor.resources.",
     "Use this exact summary style, with one line per value and balanced clue tags: '<clue>Just to remind you, you have: </clue>\\n<clue>35</clue> hit points\\n<clue>3</clue> third level spell slots\\n<clue>5</clue> second level spell slots\\n<clue>2</clue> first level spell slots\\n<clue>5</clue> sorcery points'.",
-    "If a resource is unknown or untracked, omit that line rather than inventing it. If multiple player-controlled actors are in combat, summarize only the actor who is receiving the handoff or whose turn just began.",
+    "If a resource is unknown or untracked, omit that line rather than inventing it.",
     "Track combat inventory changes only for items that are actually used, consumed, dropped, picked up, broken, equipped, unequipped, transferred, or awarded during the resolved combat turn. Ordinary weapon attacks do not change inventory unless a limited consumable, thrown or lost item, or tracked ammunition is explicitly involved.",
     "If a player attempts to attack with, throw, draw, load, fire, equip, or otherwise use a weapon they do not have in their canonical Equipment or Inventory sections, reject the attempt in public_narration and clearly state that they do not have that weapon.",
     "HP cannot go below 0.",
@@ -674,7 +673,8 @@ export function jobPrompt(
   const multiplayerCombatGuidance = [
     "This is multiplayer combat with multiple player-controlled characters.",
     "When control returns to the party outside a specific actor turn, mechanics_state_update.combat.turnOwner may be null for an all-player prompt.",
-    "Respect simultaneous submissions: resolve the current turn owner's valid action first and treat other submissions as pending intent.",
+    "When multiple player submissions arrive, resolve the current turn owner's valid action first and treat other submissions as pending intent.",
+    "If multiple player-controlled actors are in combat, summarize only the actor who is receiving the handoff or whose turn just began.",
     "For multiplayer player-controlled initiative, saving throws, checks, attacks, and other targeted player rolls, set each roll_requests item's player field to the targeted character's actor key or character name.",
     "Do not ask one player to roll for another player's targeted save, attack, or check.",
     "Maintain fair spotlight across submitted players without inventing actions for absent players."
