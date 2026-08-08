@@ -951,6 +951,144 @@ test("combat damage roll diagnostics warn when target HP is not updated", async 
   );
 });
 
+test("solo turns ignore unjustified player spell slot updates from DM output", async () => {
+  const { cookie, campaignId } = await createSinglePlayerCampaign(
+    "dm-runtime-spell-slot-guard"
+  );
+  const playerActorKey = "player:dm-runtime-spell-slot-guard-client";
+  const campaign = database.campaigns.find(
+    (candidate) => candidate.id === campaignId
+  );
+
+  assert.ok(campaign);
+  campaign.metadata = {
+    ...(campaign.metadata as Record<string, unknown>),
+    mechanicsState: {
+      combat: {
+        active: false,
+        round: 0,
+        turnOwner: null,
+        initiativeOrder: []
+      },
+      actors: {
+        [playerActorKey]: {
+          characterName: "Seren",
+          currentHp: 28,
+          maxHp: 28,
+          spellSlots: {
+            "3": {
+              max: 2,
+              used: 0
+            }
+          },
+          concentration: null,
+          conditions: []
+        }
+      }
+    }
+  };
+  resetProviderInputs();
+  setProviderOverride(async () => ({
+    id: "provider-unjustified-slot-update",
+    content: JSON.stringify({
+      public_narration:
+        "Violet fire gathers in your palm as a threat, and the witness answers.",
+      resolution_mode: "resolved_without_dice",
+      roll_requests: [],
+      next_input_needed: "player_actions",
+      input_targets: [],
+      input_policy: "all_players",
+      mechanics_state_update: {
+        actors: {
+          [playerActorKey]: {
+            characterName: "Seren",
+            currentHp: 28,
+            maxHp: 28,
+            spellSlots: {
+              "3": {
+                max: 2,
+                used: 1
+              }
+            },
+            concentration: null,
+            conditions: []
+          }
+        }
+      },
+      inventory_state_update: {
+        patches: []
+      },
+      combat_events: [],
+      proposed_context_updates: []
+    }),
+    debug: {
+      requestMessages: [],
+      rawResponse: "{}",
+      model: "test-model",
+      temperature: 0.8,
+      providerTimings: []
+    }
+  }));
+
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/campaigns/${campaignId}/solo-turn`,
+      headers: {
+        cookie
+      },
+      payload: {
+        message:
+          "I intimidate him by conjuring fire magic in my hand and making it swirl.",
+        clientMessageId: "ambiguous-fire-roleplay"
+      }
+    });
+
+    assert.equal(response.statusCode, 200, response.body);
+    const solo = CampaignSoloTurnResponseSchema.parse(response.json());
+    const debug = solo.messages.at(-1)?.debug as
+      | {
+          combatState?: {
+            actors?: Record<
+              string,
+              {
+                spellSlots?: Record<string, { max: number; used: number }>;
+              }
+            >;
+          };
+        }
+      | undefined;
+
+    assert.match(solo.messages.at(-1)?.content ?? "", /Violet fire gathers/i);
+    assert.equal(
+      debug?.combatState?.actors?.[playerActorKey]?.spellSlots?.["3"]?.used,
+      0
+    );
+
+    const updatedCampaign = database.campaigns.find(
+      (candidate) => candidate.id === campaignId
+    );
+    const mechanicsState = (updatedCampaign?.metadata as Record<string, unknown>)
+      .mechanicsState as
+      | {
+          actors?: Record<
+            string,
+            {
+              spellSlots?: Record<string, { max: number; used: number }>;
+            }
+          >;
+        }
+      | undefined;
+
+    assert.equal(
+      mechanicsState?.actors?.[playerActorKey]?.spellSlots?.["3"]?.used,
+      0
+    );
+  } finally {
+    setProviderOverride(undefined);
+  }
+});
+
 test("solo combat catches up NPC turns instead of rejecting the player", async () => {
   const { cookie, campaignId } = await createSinglePlayerCampaign(
     "dm-runtime-npc-catchup"

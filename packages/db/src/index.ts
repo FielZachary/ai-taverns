@@ -50,6 +50,8 @@ import type {
   DiceRollSubmission,
   MechanicsSeed,
   MechanicsState,
+  SpellSlotLevel,
+  SpellSlotState,
   RoomSocketEvent,
   RoomSnapshot
 } from "@ai-dnd/contracts";
@@ -58,6 +60,7 @@ import {
   applyDeathSavingThrow,
   applyAcceptedCast,
   assertMechanicsActionAllowed,
+  detectTrackedCastIntent,
   firstDyingPlayerActorKey,
   isDeadActor,
   isDyingPlayerActor,
@@ -2003,10 +2006,69 @@ function allegianceField(record: Record<string, unknown>, key: string) {
     : undefined;
 }
 
+function sanitizePlayerSpellSlotsUpdate(input: {
+  actorKey: string;
+  existing: MechanicsState["actors"][string] | undefined;
+  proposed: ReturnType<typeof parseMechanicsSpellSlots>;
+  currentAction?: string | undefined;
+  dmJob?: DmJobName | undefined;
+}) {
+  const { actorKey, existing, proposed, currentAction, dmJob } = input;
+
+  if (!proposed || !actorKey.startsWith("player:")) {
+    return proposed;
+  }
+
+  const existingSlots = existing?.spellSlots;
+
+  if (!existingSlots) {
+    return dmJob === "rest_mechanics" ? proposed : undefined;
+  }
+
+  const explicitTrackedCast = currentAction
+    ? Boolean(detectTrackedCastIntent(currentAction))
+    : false;
+  const restCanRestoreSlots = dmJob === "rest_mechanics";
+  const acceptedSlots: Partial<Record<SpellSlotLevel, SpellSlotState>> = {
+    ...existingSlots
+  };
+  let hasAcceptedSlot = false;
+
+  for (const [level, proposedSlot] of Object.entries(proposed) as Array<
+    [SpellSlotLevel, SpellSlotState]
+  >) {
+    const existingSlot = existingSlots[level];
+
+    if (!existingSlot) {
+      continue;
+    }
+
+    const maxIsUnchanged = proposedSlot.max === existingSlot.max;
+    const usedIsUnchanged = proposedSlot.used === existingSlot.used;
+    const spendsSlot = proposedSlot.used > existingSlot.used;
+    const restoresSlot = proposedSlot.used < existingSlot.used;
+
+    if (
+      (maxIsUnchanged && usedIsUnchanged) ||
+      (maxIsUnchanged && spendsSlot && explicitTrackedCast) ||
+      (maxIsUnchanged && restoresSlot && restCanRestoreSlots)
+    ) {
+      acceptedSlots[level] = proposedSlot;
+      hasAcceptedSlot = true;
+    }
+  }
+
+  return hasAcceptedSlot ? acceptedSlots : undefined;
+}
+
 function applyMechanicsStateUpdate(
   state: MechanicsState,
   update: Record<string, unknown> | undefined,
-  updatedAt?: string
+  updatedAt?: string,
+  options: {
+    currentAction?: string | undefined;
+    dmJob?: DmJobName | undefined;
+  } = {}
 ): MechanicsState {
   if (!update || Object.keys(update).length === 0) {
     return state;
@@ -2035,7 +2097,13 @@ function applyMechanicsStateUpdate(
         : undefined;
     const saveBonuses = abilityBonusMapField(rawActor, "saveBonuses");
     const abilityModifiers = abilityBonusMapField(rawActor, "abilityModifiers");
-    const spellSlots = parseMechanicsSpellSlots(rawActor.spellSlots);
+    const spellSlots = sanitizePlayerSpellSlotsUpdate({
+      actorKey,
+      existing,
+      proposed: parseMechanicsSpellSlots(rawActor.spellSlots),
+      currentAction: options.currentAction,
+      dmJob: options.dmJob
+    });
     const resources = parseMechanicsResources(rawActor.resources);
     const characterName =
       typeof rawActor.characterName === "string" && rawActor.characterName.trim()
@@ -10559,7 +10627,15 @@ async function askDungeonMaster(
     );
     const mechanicsState = resolveMechanicsState(campaign, []);
     const combatInputControl = normalizeCombatInputControl(
-      applyMechanicsStateUpdate(mechanicsState, contract.mechanicsStateUpdate, nowIso()),
+      applyMechanicsStateUpdate(
+        mechanicsState,
+        contract.mechanicsStateUpdate,
+        nowIso(),
+        {
+          currentAction: message,
+          dmJob: promptContext?.jobNeeded
+        }
+      ),
       {
         mode: campaign.mode,
         nextInputNeeded: contract.nextInputNeeded,

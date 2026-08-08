@@ -444,6 +444,18 @@ describe("modular AI DM runtime contracts", () => {
       jobPrompt("scene_director"),
       /exploration, travel, downtime, and ordinary scene resolution/i
     );
+    assert.match(
+      jobPrompt("scene_director"),
+      /Do not spend player spell slots for magical flavor, intimidation, visible aura, patron manifestation, threatening gestures, or roleplay descriptions/i
+    );
+    assert.match(
+      jobPrompt("scene_director"),
+      /If a player describes ambiguous magic without naming a spell, treat it as narration, a cantrip-like display, or ask clarification/i
+    );
+    assert.match(
+      jobPrompt("scene_director"),
+      /Only include spellSlots changes in mechanics_state_update when the current player submission explicitly casts a known leveled spell/i
+    );
     assert.doesNotMatch(
       jobPrompt("scene_director"),
       /Roll Sleight of Hand:[^"]*\\n\\nWhat do you do\?/
