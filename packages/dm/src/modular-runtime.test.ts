@@ -497,6 +497,18 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("npc_dialogue"),
+      /has not chosen the leverage that determines the skill, do not request a generic social roll/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /But first, I'll need you to tell me which approach you take before I ask you to roll/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /"roll_requests": \[\][\s\S]*"next_input_needed": "player_actions"/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
       /Do not let the NPC become wavering, convinced, compliant, or newly informative before the requested roll is submitted/i
     );
     assert.match(
@@ -510,6 +522,10 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(
       jobPrompt("npc_dialogue"),
       /On the second consistent answer, choose one decisive path/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /When uncertainty matters and the player's leverage is clear/i
     );
     assert.match(
       jobPrompt("npc_dialogue"),

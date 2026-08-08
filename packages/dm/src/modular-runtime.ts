@@ -336,6 +336,7 @@ export function jobPrompt(
     "When character sheet data provides the modifier or proficiency, state the relevant modifier plainly. If proficiency is not listed, say so without scolding.",
     "Make the stakes legible before the roll: what success could achieve, what failure could cost, and why the situation is risky.",
     "Do not reveal hidden DCs unless the game state or table style explicitly calls for it. You may describe difficulty narratively instead.",
+    "If the needed roll type depends on an undeclared player choice, do not request dice yet. Ask for the missing choice with roll_requests [], next_input_needed player_actions, and input_policy only_targeted_players.",
     "When requesting dice, set next_input_needed to dice_results and include a matching structured roll_requests entry.",
     "When dice are needed, public_narration must not resolve success, failure, damage, discovery, theft, persuasion, stealth, or other rolled outcomes yet."
   ];
@@ -460,12 +461,38 @@ export function jobPrompt(
     "If a lie contradicts known facts, use the roll to decide whether the NPC finds a plausible explanation, doubts their own read, accepts a partial truth, or demands proof. Do not erase the contradiction unless magic or context supports it.",
     "When a player uses false identity, false authority, forged credentials, name-dropping, claimed orders, or an invented relationship to bypass resistance, request Deception by default before the NPC yields, lowers guard, gives access, hands over information, or changes official behavior.",
     "Use Persuasion when the character is honestly appealing, negotiating, pleading, or building trust. Use Intimidation when they threaten, coerce, imply force, or weaponize fear. If the player mixes tactics, choose the skill that decides the uncertain leverage.",
+    "If the player has created social pressure but has not chosen the leverage that determines the skill, do not request a generic social roll. Present the fitting approaches, ask which one they take, set roll_requests to [], and set next_input_needed to player_actions.",
     "For opposed or high-stakes social pressure, pause with next_input_needed dice_results and a structured roll_requests entry. Do not let the NPC become wavering, convinced, compliant, or newly informative before the requested roll is submitted.",
     "If the player rolls extremely high, reward it with a vivid concession, useful information, improved positioning, reduced suspicion, or an unexpected opening.",
     "If the player rolls extremely low, make the consequence clear but leave at least one playable response unless the fiction already made disaster unavoidable."
   ];
 
   const npcDialogueExamples = [
+    [
+      "Example: social pressure needs an approach before dice.",
+      'Player input: "Invalid, you say. And who is to decide that? You alone? The people deserve answers, and we deserve to have a say in what happens here!"',
+      "Context: The player is challenging a magistrate in public, but has not said whether they are bluffing authority, appealing to justice, or making a threat.",
+      "Good response:",
+      JSON.stringify(
+        completeOutputExample({
+          public_narration: [
+            "The magistrate lowers the parchment slowly. The crowd's murmur thins into a tense, listening hush, and the guards on the steps shift their halberds without quite crossing them.",
+            '"If you have standing, state it now with proof," she says. "If you are merely shouting, you will be removed for disrupting a legal proceeding."',
+            "Which approach do you take? If you are trying to convince them with a false claim of authority or standing, make a Deception check. If you are appealing to their sense of justice or public opinion, make a Persuasion check. If you are threatening consequences to make them stop, make an Intimidation check. Your modifier for these checks is +0.",
+            "But first, I'll need you to tell me which approach you take before I ask you to roll."
+          ].join("\n\n"),
+          resolution_mode: "resolved_without_dice",
+          roll_requests: [],
+          next_input_needed: "player_actions",
+          input_targets: ["player:oktai"],
+          input_policy: "only_targeted_players",
+          mechanics_state_update: {},
+          inventory_state_update: { patches: [] }
+        }),
+        null,
+        2
+      )
+    ].join("\n"),
     [
       "Example: very high Deception against a known contradiction.",
       'Player input: "I rolled a 30 for Deception."',
@@ -1713,7 +1740,8 @@ export function jobPrompt(
         "Social Check Procedure:",
         "- Do not make social checks into mind control. Persuasion cannot force self-destruction, Deception cannot change hard evidence by itself, and Intimidation can create fear without creating loyalty.",
         "- When no roll is needed, let the NPC respond naturally and move the conversation forward.",
-        "- When uncertainty matters, request Deception, Persuasion, Intimidation, Insight, Performance, or another fitting check, then pause for dice.",
+        "- When uncertainty matters and the player's leverage is clear, request Deception, Persuasion, Intimidation, Insight, Performance, or another fitting check, then pause for dice.",
+        "- If the player has created social pressure but has not chosen the leverage that determines the skill, do not request a generic social roll. Present the fitting approaches, ask which one they take, set roll_requests to [], and set next_input_needed to player_actions.",
         "- False identity, false authority, name-dropping, claimed orders, claimed employment, and impersonation almost always matter when an NPC is guarding, enforcing law, protecting secrets, bargaining for leverage, or deciding whether to let the character pass. Ask for Deception unless the claim is already canon or the NPC has no reason to care.",
         "- When resolving dice results, narrate the NPC's reaction as a visible emotional and tactical shift, not just success or failure.",
         "",
