@@ -9208,8 +9208,8 @@ function formatEldermereNarratorOpeningRequest(input: {
     "If a useful idea appears in dm_private_context, imply it only through concrete visible facts or pressure; do not reveal it as confirmed exposition.",
     "Forbidden opening terms must not appear in public_narration.",
     "Allowed player-facing terms must be explained plainly on first use.",
-    "Use 2-3 sparse semantic narration markup tags inside public_narration so players can scan important visible nouns or short phrases. Supported tags only: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, and <object>...</object>.",
-    "Wrap only the exact player-visible words that should receive color. The opener must include 2-3 tags around worthwhile visible names, places, clues, dangers, factions, or objects. Do not wrap full sentences or paragraphs.",
+    "Use 7-8 sparse semantic narration markup tags inside public_narration so players can scan important visible nouns or short phrases. Supported tags only: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, and <object>...</object>.",
+    "Wrap only the exact player-visible words that should receive color. The opener must include 7-8 tags around worthwhile visible names, places, clues, dangers, factions, or objects. Do not wrap full sentences or paragraphs.",
     "Do not nest semantic tags, add attributes, invent other tags, include CSS, hex colors, color names, Markdown emphasis, or prose instructions inside public_narration.",
     "Do not return narration_highlights, highlights, sidecar span metadata, post-processing instructions, or any separate highlight records. The inline semantic tags are the only highlight system.",
     "",
@@ -9814,7 +9814,7 @@ const openingSceneOutputContractReminder = [
   "Return only one valid JSON object. Do not include prose, Markdown, or commentary outside JSON.",
   "public_narration must contain the full 6-paragraph opener, not only the character motivation or a short teaser.",
   "Treat narrator_instructions in the Eldermere opening plan as the highest-priority scene blueprint.",
-  "Use 2-3 semantic narration markup tags when the opener has worthwhile visible names, places, clues, dangers, factions, or objects. Use only <npc>, <place>, <clue>, <danger>, <faction>, and <object> tags.",
+  "Use 7-8 semantic narration markup tags when the opener has worthwhile visible names, places, clues, dangers, factions, or objects. Use only <npc>, <place>, <clue>, <danger>, <faction>, and <object> tags.",
   "Do not use bold, Markdown, CSS, hex colors, color names, attributes, nested tags, or any other HTML/XML tags inside public_narration.",
   "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved in the opener."
 ];
@@ -10316,8 +10316,8 @@ function openingNarrationContainsTerm(narration: string, term: string) {
 
 const semanticOpeningTagPattern =
   /<(npc|place|clue|danger|faction|object)>([^<>]+)<\/\1>/giu;
-const semanticOpeningTagMinimum = 2;
-const semanticOpeningTagMaximum = 3;
+const semanticOpeningTagMinimum = 7;
+const semanticOpeningTagMaximum = 8;
 const finalEldermereOpeningRetryTemperature = 0.2;
 
 function semanticOpeningTagCount(narration: string) {
