@@ -9208,9 +9208,8 @@ function formatEldermereNarratorOpeningRequest(input: {
     "If a useful idea appears in dm_private_context, imply it only through concrete visible facts or pressure; do not reveal it as confirmed exposition.",
     "Forbidden opening terms must not appear in public_narration.",
     "Allowed player-facing terms must be explained plainly on first use.",
-    "Use 7-8 short inline semantic narration markup tags inside public_narration so players can scan important visible nouns or short phrases. Supported tags only: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, and <object>...</object>.",
-    "Wrap only the exact player-visible words that should receive color. The opener must include 7-8 tags around worthwhile visible names, places, clues, dangers, factions, objects, roles, sensory anchors, or actionable scene elements. These tags are not limited to proper nouns; most should mark ordinary visible words or short phrases. Do not wrap full sentences or paragraphs.",
-    "Distribute tags across the opener: use 1 tag in paragraph 1, 1 in paragraph 2, 2 tags in paragraph 3, 2 tags in paragraph 4, and 1-2 tags in paragraph 5. Do not place semantic tags in paragraph 6.",
+    "Use 7-8 sparse semantic narration markup tags inside public_narration so players can scan important visible nouns or short phrases. Supported tags only: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, and <object>...</object>.",
+    "Wrap only the exact player-visible words that should receive color. The opener must include 7-8 tags around worthwhile visible names, places, clues, dangers, factions, or objects. Do not wrap full sentences or paragraphs.",
     "Do not nest semantic tags, add attributes, invent other tags, include CSS, hex colors, color names, Markdown emphasis, or prose instructions inside public_narration.",
     "Do not return narration_highlights, highlights, sidecar span metadata, post-processing instructions, or any separate highlight records. The inline semantic tags are the only highlight system.",
     "",
@@ -9815,7 +9814,7 @@ const openingSceneOutputContractReminder = [
   "Return only one valid JSON object. Do not include prose, Markdown, or commentary outside JSON.",
   "public_narration must contain the full 6-paragraph opener, not only the character motivation or a short teaser.",
   "Treat narrator_instructions in the Eldermere opening plan as the highest-priority scene blueprint.",
-  "public_narration must contain exactly 7 or 8 semantic narration markup tags. Tags may mark visible names, places, clues, dangers, factions, objects, roles, sensory anchors, or actionable scene elements, and are not limited to proper nouns. Use only <npc>, <place>, <clue>, <danger>, <faction>, and <object> tags.",
+  "Use 7-8 semantic narration markup tags when the opener has worthwhile visible names, places, clues, dangers, factions, or objects. Use only <npc>, <place>, <clue>, <danger>, <faction>, and <object> tags.",
   "Do not use bold, Markdown, CSS, hex colors, color names, attributes, nested tags, or any other HTML/XML tags inside public_narration.",
   "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved in the opener."
 ];
@@ -10320,17 +10319,6 @@ const semanticOpeningTagPattern =
 const semanticOpeningTagMinimum = 7;
 const semanticOpeningTagMaximum = 8;
 const finalEldermereOpeningRetryTemperature = 0.2;
-type SemanticOpeningTagRole =
-  | "npc"
-  | "place"
-  | "clue"
-  | "danger"
-  | "faction"
-  | "object";
-type SemanticOpeningTagCandidate = {
-  term: string | undefined;
-  role: SemanticOpeningTagRole;
-};
 
 function semanticOpeningTagCount(narration: string) {
   return Array.from(narration.matchAll(semanticOpeningTagPattern)).length;
@@ -10364,7 +10352,7 @@ function stripExtraSemanticOpeningTags(narration: string) {
 function addSemanticOpeningTag(
   narration: string,
   term: string | undefined,
-  role: SemanticOpeningTagRole
+  role: "npc" | "place" | "clue" | "danger" | "faction" | "object"
 ) {
   const trimmedTerm = term?.trim();
 
@@ -10382,90 +10370,20 @@ function addSemanticOpeningTag(
   );
 }
 
-function semanticOpeningCandidateTerm(term: string | undefined) {
-  const trimmedTerm = term?.trim();
-
-  if (!trimmedTerm) {
-    return undefined;
-  }
-
-  const wordCount = trimmedTerm.split(/\s+/).length;
-
-  if (trimmedTerm.length > 80 || wordCount > 8) {
-    return undefined;
-  }
-
-  return trimmedTerm;
-}
-
-function semanticOpeningTagCandidates(
-  plan: EldermereOpeningPlan
-): SemanticOpeningTagCandidate[] {
-  const candidates: SemanticOpeningTagCandidate[] = [];
-  const seenTerms = new Set<string>();
-  const pushCandidate = (
-    term: string | undefined,
-    role: SemanticOpeningTagRole
-  ) => {
-    const candidateTerm = semanticOpeningCandidateTerm(term);
-    const normalizedTerm = candidateTerm?.toLowerCase();
-
-    if (!candidateTerm || !normalizedTerm || seenTerms.has(normalizedTerm)) {
-      return;
-    }
-
-    seenTerms.add(normalizedTerm);
-    candidates.push({ term: candidateTerm, role });
-  };
-
-  pushCandidate(plan.startingLocation.name, "place");
-  pushCandidate(plan.openingPremise.firstSceneLocation, "place");
-  pushCandidate(plan.region.name, "place");
-
-  for (const term of plan.allowedPlayerFacingTerms) {
-    pushCandidate(term.term, "clue");
-  }
-
-  for (const npc of plan.npcSeed) {
-    pushCandidate(npc.name, "npc");
-    pushCandidate(npc.role, "npc");
-    pushCandidate(npc.visibleBehavior, "clue");
-  }
-
-  pushCandidate(plan.openingPremise.immediateObjective, "clue");
-  pushCandidate(plan.openingPremise.immediateComplication, "danger");
-  pushCandidate(plan.openingPremise.openingMood, "danger");
-  pushCandidate(plan.startingLocationAtmosphere.dominantVibe, "danger");
-
-  for (const detail of plan.startingLocationAtmosphere.sensoryEntryDetails) {
-    pushCandidate(detail, "object");
-  }
-
-  for (const [paletteKey, details] of Object.entries(plan.sensoryPalette)) {
-    const role: SemanticOpeningTagRole =
-      paletteKey === "textures_or_weather" || paletteKey === "smells"
-        ? "danger"
-        : "object";
-
-    for (const detail of details) {
-      pushCandidate(detail, role);
-    }
-  }
-
-  for (const choice of plan.firstInteractableChoices) {
-    pushCandidate(choice, "clue");
-  }
-
-  return candidates;
-}
-
 function normalizeEldermereOpeningSemanticTags(
   narration: string,
   plan: EldermereOpeningPlan
 ) {
   const strippedNarration = stripExtraSemanticOpeningTags(narration);
+  const firstNpc = plan.npcSeed[0]?.name;
+  const firstChoice = plan.firstInteractableChoices[0];
 
-  return semanticOpeningTagCandidates(plan).reduce(
+  return [
+    { term: plan.startingLocation.name, role: "place" as const },
+    { term: firstNpc, role: "npc" as const },
+    { term: plan.region.name, role: "place" as const },
+    { term: firstChoice, role: "clue" as const }
+  ].reduce(
     (current, candidate) =>
       addSemanticOpeningTag(current, candidate.term, candidate.role),
     strippedNarration
@@ -10680,7 +10598,6 @@ async function askEldermereOpeningNarrator(
     "Return the same opening situation as valid AI Taverns DM JSON, but fix every issue above.",
     "public_narration must be exactly 6 paragraphs separated by blank lines, must follow narrator_instructions as the highest-priority scene blueprint, and the sixth paragraph must be the final direct prompt 'What do you do?'",
     `public_narration must include ${semanticOpeningTagMinimum}-${semanticOpeningTagMaximum} semantic narration markup tags using only <npc>, <place>, <clue>, <danger>, <faction>, and <object>.`,
-    "Semantic narration markup tags are not limited to proper nouns; use ordinary visible objects, clues, dangers, roles, sensory anchors, and actionable scene elements as needed.",
     "Use only allowed_player_facing_terms and plain descriptions. Preserve setting metadata."
   ].join("\n");
   const repairedOpening = await askDungeonMaster(
@@ -10763,8 +10680,6 @@ async function askEldermereOpeningNarrator(
     "Paragraph 5: the actionable complication and 2-3 concrete non-dice actions available right now.",
     "Paragraph 6: exactly 'What do you do?' and nothing else.",
     `public_narration must include ${semanticOpeningTagMinimum}-${semanticOpeningTagMaximum} semantic narration markup tags using only <npc>, <place>, <clue>, <danger>, <faction>, and <object>.`,
-    "The 7-8 tags are not limited to proper nouns; use ordinary visible objects, clues, dangers, roles, sensory anchors, and actionable scene elements as needed.",
-    "Use this distribution: paragraph 1 has 1 tag, paragraph 2 has 1 tag, paragraph 3 has 2 tags, paragraph 4 has 2 tags, paragraph 5 has 1-2 tags, and paragraph 6 has 0 tags.",
     "Do not include Markdown outside JSON, a teaser, a summary, a prologue note, or fewer than 6 paragraphs."
   ].join("\n");
   const finalOpening = await askDungeonMaster(
