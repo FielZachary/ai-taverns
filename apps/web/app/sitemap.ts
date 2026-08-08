@@ -12,18 +12,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
       lastModified: new Date(),
       changeFrequency: "weekly",
       priority: 1
-    },
-    {
-      url: `${siteUrl}/play`,
-      lastModified: new Date(),
-      changeFrequency: "weekly",
-      priority: 0.8
-    },
-    {
-      url: `${siteUrl}/new-adventure`,
-      lastModified: new Date(),
-      changeFrequency: "monthly",
-      priority: 0.7
     }
   ];
 }
