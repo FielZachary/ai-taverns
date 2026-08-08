@@ -1218,6 +1218,262 @@ test("solo combat inserts warlock pact resource summaries from mechanics state",
   }
 });
 
+test("solo combat guards tracked class resources and summarizes martial resources", async () => {
+  const { cookie, campaignId } = await createSinglePlayerCampaign(
+    "dm-runtime-fighter-resources"
+  );
+  const campaign = database.campaigns.find(
+    (candidate) => candidate.id === campaignId
+  );
+  const player = database.players.find(
+    (candidate) => candidate.campaign_id === campaignId
+  );
+
+  assert.ok(campaign);
+  assert.ok(player);
+  const playerActorKey = `player:${player.id}`;
+  player.character_sheet = [
+    "Character Name: Brann",
+    "Level: 2",
+    "Class: Fighter",
+    "Max HP: 28",
+    "Current HP: 28"
+  ].join("\n");
+  campaign.metadata = {
+    ...(campaign.metadata as Record<string, unknown>),
+    mechanicsState: {
+      combat: {
+        active: true,
+        round: 2,
+        turnOwner: playerActorKey,
+        initiativeOrder: [playerActorKey, "npc:raider"]
+      },
+      actors: {
+        [playerActorKey]: {
+          characterName: "Brann",
+          characterClass: "Fighter",
+          level: 2,
+          currentHp: 28,
+          maxHp: 28,
+          resources: {
+            second_wind: {
+              label: "Second Wind",
+              max: 1,
+              used: 0,
+              recharge: "short_rest",
+              source: "Fighter"
+            },
+            action_surge: {
+              label: "Action Surge",
+              max: 1,
+              used: 0,
+              recharge: "short_rest",
+              source: "Fighter"
+            }
+          },
+          concentration: null,
+          conditions: []
+        },
+        "npc:raider": {
+          characterName: "Raider",
+          currentHp: 9,
+          maxHp: 16,
+          armorClass: 13,
+          allegiance: "hostile",
+          conditions: []
+        }
+      }
+    }
+  };
+
+  resetProviderInputs();
+  setProviderOverride(async () => ({
+    id: "provider-ambiguous-action-surge",
+    content: JSON.stringify({
+      public_narration: "You press the raider hard, forcing them backward.\n\nWhat do you do?",
+      resolution_mode: "resolved_without_dice",
+      roll_requests: [],
+      next_input_needed: "player_actions",
+      input_targets: [playerActorKey],
+      input_policy: "specific_players",
+      mechanics_state_update: {
+        actors: {
+          [playerActorKey]: {
+            characterName: "Brann",
+            resources: {
+              second_wind: {
+                label: "Second Wind",
+                max: 1,
+                used: 0,
+                recharge: "short_rest",
+                source: "Fighter"
+              },
+              action_surge: {
+                label: "Action Surge",
+                max: 1,
+                used: 1,
+                recharge: "short_rest",
+                source: "Fighter"
+              }
+            }
+          }
+        },
+        combat: {
+          active: true,
+          round: 2,
+          turnOwner: playerActorKey,
+          initiativeOrder: [playerActorKey, "npc:raider"]
+        }
+      },
+      inventory_state_update: {
+        patches: []
+      },
+      combat_events: [],
+      proposed_context_updates: []
+    }),
+    debug: {
+      requestMessages: [],
+      rawResponse: "{}",
+      model: "test-model",
+      temperature: 0.8,
+      providerTimings: []
+    }
+  }));
+
+  try {
+    const ambiguousResponse = await app.inject({
+      method: "POST",
+      url: `/api/campaigns/${campaignId}/solo-turn`,
+      headers: {
+        cookie
+      },
+      payload: {
+        message: "I press the attack with a sudden burst of speed.",
+        clientMessageId: "ambiguous-fighter-resource"
+      }
+    });
+
+    assert.equal(ambiguousResponse.statusCode, 200, ambiguousResponse.body);
+    const ambiguous = CampaignSoloTurnResponseSchema.parse(
+      ambiguousResponse.json()
+    );
+    const ambiguousDebug = ambiguous.messages.at(-1)?.debug as
+      | {
+          combatState?: {
+            actors?: Record<
+              string,
+              {
+                resources?: Record<string, { max: number; used: number }>;
+              }
+            >;
+          };
+        }
+      | undefined;
+    const ambiguousContent = ambiguous.messages.at(-1)?.content ?? "";
+
+    assert.equal(
+      ambiguousDebug?.combatState?.actors?.[playerActorKey]?.resources
+        ?.action_surge?.used,
+      0
+    );
+    assert.match(ambiguousContent, /<clue>1<\/clue> action surge/i);
+    assert.match(ambiguousContent, /<clue>1<\/clue> second wind/i);
+
+    setProviderOverride(async () => ({
+      id: "provider-explicit-action-surge",
+      content: JSON.stringify({
+        public_narration:
+          "You use Action Surge and chain another strike into the raider's guard.\n\nWhat do you do?",
+        resolution_mode: "resolved_without_dice",
+        roll_requests: [],
+        next_input_needed: "player_actions",
+        input_targets: [playerActorKey],
+        input_policy: "specific_players",
+        mechanics_state_update: {
+          actors: {
+            [playerActorKey]: {
+              characterName: "Brann",
+              resources: {
+                second_wind: {
+                  label: "Second Wind",
+                  max: 1,
+                  used: 0,
+                  recharge: "short_rest",
+                  source: "Fighter"
+                },
+                action_surge: {
+                  label: "Action Surge",
+                  max: 1,
+                  used: 1,
+                  recharge: "short_rest",
+                  source: "Fighter"
+                }
+              }
+            }
+          },
+          combat: {
+            active: true,
+            round: 2,
+            turnOwner: playerActorKey,
+            initiativeOrder: [playerActorKey, "npc:raider"]
+          }
+        },
+        inventory_state_update: {
+          patches: []
+        },
+        combat_events: [],
+        proposed_context_updates: []
+      }),
+      debug: {
+        requestMessages: [],
+        rawResponse: "{}",
+        model: "test-model",
+        temperature: 0.8,
+        providerTimings: []
+      }
+    }));
+
+    const explicitResponse = await app.inject({
+      method: "POST",
+      url: `/api/campaigns/${campaignId}/solo-turn`,
+      headers: {
+        cookie
+      },
+      payload: {
+        message: "I use Action Surge to press the attack again.",
+        clientMessageId: "explicit-fighter-resource"
+      }
+    });
+
+    assert.equal(explicitResponse.statusCode, 200, explicitResponse.body);
+    const explicit = CampaignSoloTurnResponseSchema.parse(
+      explicitResponse.json()
+    );
+    const explicitDebug = explicit.messages.at(-1)?.debug as
+      | {
+          combatState?: {
+            actors?: Record<
+              string,
+              {
+                resources?: Record<string, { max: number; used: number }>;
+              }
+            >;
+          };
+        }
+      | undefined;
+    const explicitContent = explicit.messages.at(-1)?.content ?? "";
+
+    assert.equal(
+      explicitDebug?.combatState?.actors?.[playerActorKey]?.resources
+        ?.action_surge?.used,
+      1
+    );
+    assert.match(explicitContent, /<clue>0<\/clue> action surge/i);
+  } finally {
+    setProviderOverride(undefined);
+  }
+});
+
 test("solo combat catches up NPC turns instead of rejecting the player", async () => {
   const { cookie, campaignId } = await createSinglePlayerCampaign(
     "dm-runtime-npc-catchup"

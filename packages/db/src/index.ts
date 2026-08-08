@@ -48,6 +48,7 @@ import type {
   DiceRollRequest,
   DiceRollResult,
   DiceRollSubmission,
+  MechanicsResourceState,
   MechanicsSeed,
   MechanicsState,
   SpellSlotLevel,
@@ -2061,6 +2062,110 @@ function sanitizePlayerSpellSlotsUpdate(input: {
   return hasAcceptedSlot ? acceptedSlots : undefined;
 }
 
+function resourceReferenceVariants(
+  key: string,
+  resource: MechanicsResourceState
+) {
+  const candidates = [
+    key,
+    key.replace(/[_-]+/g, " "),
+    resource.label,
+    resource.label.replace(/s$/i, "")
+  ];
+
+  return Array.from(
+    new Set(
+      candidates
+        .map((candidate) => candidate.trim().toLowerCase())
+        .filter((candidate) => candidate.length > 0)
+    )
+  );
+}
+
+function escapeRegexLiteral(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function actionExplicitlyReferencesResource(input: {
+  currentAction?: string | undefined;
+  key: string;
+  resource: MechanicsResourceState;
+}) {
+  if (!input.currentAction) {
+    return false;
+  }
+
+  return resourceReferenceVariants(input.key, input.resource).some((variant) =>
+    new RegExp(`\\b${escapeRegexLiteral(variant)}\\b`, "i").test(
+      input.currentAction ?? ""
+    )
+  );
+}
+
+function sanitizePlayerResourcesUpdate(input: {
+  actorKey: string;
+  existing: MechanicsState["actors"][string] | undefined;
+  proposed: ReturnType<typeof parseMechanicsResources>;
+  currentAction?: string | undefined;
+  dmJob?: DmJobName | undefined;
+}) {
+  const { actorKey, existing, proposed, currentAction, dmJob } = input;
+
+  if (!proposed || !actorKey.startsWith("player:")) {
+    return proposed;
+  }
+
+  const existingResources = existing?.resources;
+
+  if (!existingResources) {
+    return undefined;
+  }
+
+  const restCanRestoreResources = dmJob === "rest_mechanics";
+  const acceptedResources: Record<string, MechanicsResourceState> = {
+    ...existingResources
+  };
+  let hasAcceptedResource = false;
+
+  for (const [key, proposedResource] of Object.entries(proposed)) {
+    const existingResource = existingResources[key];
+
+    if (!existingResource) {
+      continue;
+    }
+
+    const maxIsUnchanged = proposedResource.max === existingResource.max;
+    const rechargeIsUnchanged =
+      proposedResource.recharge === existingResource.recharge;
+    const labelIsUnchanged = proposedResource.label === existingResource.label;
+    const usedIsUnchanged = proposedResource.used === existingResource.used;
+    const spendsResource = proposedResource.used > existingResource.used;
+    const restoresResource = proposedResource.used < existingResource.used;
+    const explicitlyReferenced = actionExplicitlyReferencesResource({
+      currentAction,
+      key,
+      resource: existingResource
+    });
+
+    if (
+      maxIsUnchanged &&
+      rechargeIsUnchanged &&
+      labelIsUnchanged &&
+      (usedIsUnchanged ||
+        (spendsResource && explicitlyReferenced) ||
+        (restoresResource && restCanRestoreResources))
+    ) {
+      acceptedResources[key] = {
+        ...existingResource,
+        used: proposedResource.used
+      };
+      hasAcceptedResource = true;
+    }
+  }
+
+  return hasAcceptedResource ? acceptedResources : undefined;
+}
+
 function isWarlockActor(actor: MechanicsState["actors"][string]) {
   return actor.characterClass?.trim().toLowerCase() === "warlock";
 }
@@ -2247,7 +2352,13 @@ function applyMechanicsStateUpdate(
       currentAction: options.currentAction,
       dmJob: options.dmJob
     });
-    const resources = parseMechanicsResources(rawActor.resources);
+    const resources = sanitizePlayerResourcesUpdate({
+      actorKey,
+      existing,
+      proposed: parseMechanicsResources(rawActor.resources),
+      currentAction: options.currentAction,
+      dmJob: options.dmJob
+    });
     const characterName =
       typeof rawActor.characterName === "string" && rawActor.characterName.trim()
         ? rawActor.characterName
@@ -10781,7 +10892,7 @@ async function askDungeonMaster(
         contract.mechanicsStateUpdate,
         nowIso(),
         {
-          currentAction: message,
+          currentAction: currentPlayerAction ?? message,
           dmJob: promptContext?.jobNeeded
         }
       ),

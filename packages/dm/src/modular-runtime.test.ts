@@ -902,7 +902,11 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
-      /never list a spell slot level absent from actor\.spellSlots/i
+      /Do not shape the summary around spellcasters/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Second Wind, Action Surge, Lay on Hands, Divine Sense/i
     );
     assert.match(
       jobPrompt("combat"),
@@ -911,6 +915,10 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(
       jobPrompt("combat"),
       /<clue>Just to remind you, you have: <\/clue>\\n<clue>9<\/clue> hit points\\n<clue>0<\/clue> pact magic slots/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /<clue>28<\/clue> hit points\\n<clue>1<\/clue> second wind\\n<clue>1<\/clue> action surge/i
     );
     assert.match(
       jobPrompt("combat"),
@@ -927,11 +935,15 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
-      /When a player uses a tracked class resource from mechanicsState\.actors\[actorKey\]\.resources/i
+      /Do not spend tracked class resources for flavor, posture, intimidation, effort, style, or descriptive combat narration/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Only include resources changes in mechanics_state_update when the current player submission explicitly uses a tracked resource/i
     );
     assert.match(
       jobPrompt("scene_director"),
-      /resources with that resource's used value increased by the amount spent/i
+      /When a tracked class resource is spent, include mechanics_state_update\.actors\[actorKey\]\.resources/i
     );
     assert.match(jobPrompt("combat"), /Do not copy their names, actor keys/i);
     assert.match(

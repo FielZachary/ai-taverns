@@ -53,6 +53,16 @@ const pactMagicSlotsByLevel: Record<number, Record<string, SpellSlotState>> = {
 
 const fullCasterClasses = new Set(["bard", "cleric", "druid", "sorcerer", "wizard"]);
 
+type ClassResourceDefinition = {
+  key: string;
+  label: string;
+  minLevel: number;
+  max: number | ((level: number) => number);
+  recharge: MechanicsResourceRecharge;
+  source: string;
+  notes?: string | ((level: number) => string | undefined);
+};
+
 const trackedSpellLevels = new Map(
   Object.entries({
     Fireball: "3",
@@ -216,6 +226,136 @@ function channelDivinityUsesByLevel(level: number) {
   return level >= 18 ? 3 : level >= 6 ? 2 : 1;
 }
 
+function superiorityDiceByLevel(level: number) {
+  return level >= 15 ? 6 : level >= 7 ? 5 : 4;
+}
+
+const classResourceDefinitions: Record<string, ClassResourceDefinition[]> = {
+  barbarian: [
+    {
+      key: "rages",
+      label: "Rages",
+      minLevel: 1,
+      max: rageUsesByLevel,
+      recharge: "long_rest",
+      source: "Barbarian",
+      notes: (level) => (level >= 20 ? "Unlimited at level 20." : undefined)
+    }
+  ],
+  bard: [],
+  cleric: [
+    {
+      key: "channel_divinity",
+      label: "Channel Divinity",
+      minLevel: 2,
+      max: channelDivinityUsesByLevel,
+      recharge: "short_rest",
+      source: "Cleric"
+    }
+  ],
+  druid: [
+    {
+      key: "wild_shape",
+      label: "Wild Shape",
+      minLevel: 2,
+      max: 2,
+      recharge: "short_rest",
+      source: "Druid"
+    }
+  ],
+  fighter: [
+    {
+      key: "second_wind",
+      label: "Second Wind",
+      minLevel: 1,
+      max: 1,
+      recharge: "short_rest",
+      source: "Fighter"
+    },
+    {
+      key: "action_surge",
+      label: "Action Surge",
+      minLevel: 2,
+      max: (level) => (level >= 17 ? 2 : 1),
+      recharge: "short_rest",
+      source: "Fighter"
+    }
+  ],
+  monk: [
+    {
+      key: "ki_points",
+      label: "Ki Points",
+      minLevel: 2,
+      max: (level) => level,
+      recharge: "short_rest",
+      source: "Monk"
+    }
+  ],
+  paladin: [
+    {
+      key: "lay_on_hands",
+      label: "Lay on Hands",
+      minLevel: 1,
+      max: (level) => level * 5,
+      recharge: "long_rest",
+      source: "Paladin"
+    },
+    {
+      key: "channel_divinity",
+      label: "Channel Divinity",
+      minLevel: 3,
+      max: 1,
+      recharge: "short_rest",
+      source: "Paladin"
+    }
+  ],
+  ranger: [],
+  rogue: [],
+  sorcerer: [
+    {
+      key: "sorcery_points",
+      label: "Sorcery Points",
+      minLevel: 2,
+      max: (level) => level,
+      recharge: "long_rest",
+      source: "Sorcerer"
+    }
+  ],
+  warlock: [],
+  wizard: [
+    {
+      key: "arcane_recovery",
+      label: "Arcane Recovery",
+      minLevel: 1,
+      max: 1,
+      recharge: "long_rest",
+      source: "Wizard"
+    }
+  ]
+};
+
+function materializeResource(
+  definition: ClassResourceDefinition,
+  level: number
+): MechanicsResourceState {
+  const notes =
+    typeof definition.notes === "function"
+      ? definition.notes(level)
+      : definition.notes;
+
+  return {
+    label: definition.label,
+    max:
+      typeof definition.max === "function"
+        ? definition.max(level)
+        : definition.max,
+    used: 0,
+    recharge: definition.recharge,
+    source: definition.source,
+    ...(notes ? { notes } : {})
+  };
+}
+
 export function deriveResourcesForClass(
   characterClass: string,
   level: number
@@ -224,85 +364,13 @@ export function deriveResourcesForClass(
   const normalizedLevel = Math.max(1, Math.floor(level));
   const resources: Record<string, MechanicsResourceState> = {};
 
-  if (normalizedClass === "sorcerer" && normalizedLevel >= 2) {
-    resources.sorcery_points = {
-      label: "Sorcery Points",
-      max: normalizedLevel,
-      used: 0,
-      recharge: "long_rest",
-      source: "Sorcerer"
-    };
-  }
-
-  if (normalizedClass === "monk" && normalizedLevel >= 2) {
-    resources.ki_points = {
-      label: "Ki Points",
-      max: normalizedLevel,
-      used: 0,
-      recharge: "short_rest",
-      source: "Monk"
-    };
-  }
-
-  if (normalizedClass === "fighter" && normalizedLevel >= 1) {
-    resources.second_wind = {
-      label: "Second Wind",
-      max: 1,
-      used: 0,
-      recharge: "short_rest",
-      source: "Fighter"
-    };
-
-    if (normalizedLevel >= 2) {
-      resources.action_surge = {
-        label: "Action Surge",
-        max: normalizedLevel >= 17 ? 2 : 1,
-        used: 0,
-        recharge: "short_rest",
-        source: "Fighter"
-      };
+  for (const definition of classResourceDefinitions[normalizedClass] ?? []) {
+    if (normalizedLevel >= definition.minLevel) {
+      resources[definition.key] = materializeResource(
+        definition,
+        normalizedLevel
+      );
     }
-  }
-
-  if (normalizedClass === "barbarian" && normalizedLevel >= 1) {
-    resources.rages = {
-      label: "Rages",
-      max: rageUsesByLevel(normalizedLevel),
-      used: 0,
-      recharge: "long_rest",
-      source: "Barbarian",
-      ...(normalizedLevel >= 20 ? { notes: "Unlimited at level 20." } : {})
-    };
-  }
-
-  if (normalizedClass === "druid" && normalizedLevel >= 2) {
-    resources.wild_shape = {
-      label: "Wild Shape",
-      max: 2,
-      used: 0,
-      recharge: "short_rest",
-      source: "Druid"
-    };
-  }
-
-  if (normalizedClass === "cleric" && normalizedLevel >= 2) {
-    resources.channel_divinity = {
-      label: "Channel Divinity",
-      max: channelDivinityUsesByLevel(normalizedLevel),
-      used: 0,
-      recharge: "short_rest",
-      source: "Cleric"
-    };
-  }
-
-  if (normalizedClass === "paladin" && normalizedLevel >= 3) {
-    resources.channel_divinity = {
-      label: "Channel Divinity",
-      max: 1,
-      used: 0,
-      recharge: "short_rest",
-      source: "Paladin"
-    };
   }
 
   return Object.keys(resources).length > 0 ? resources : undefined;
@@ -696,6 +764,106 @@ function inferredSlotsFromSheet(sheet: string) {
   );
 }
 
+function resourceCountFromSheet(sheet: string, label: string) {
+  const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = sheet.match(
+    new RegExp(`\\b${escapedLabel}\\b\\s*:?\\s*(\\d+)\\s+total`, "i")
+  );
+
+  return match?.[1] ? Number(match[1]) : undefined;
+}
+
+function mergeResourceSets(
+  ...sets: Array<Record<string, MechanicsResourceState> | undefined>
+) {
+  const merged: Record<string, MechanicsResourceState> = {};
+
+  for (const set of sets) {
+    if (!set) {
+      continue;
+    }
+
+    for (const [key, resource] of Object.entries(set)) {
+      merged[key] = resource;
+    }
+  }
+
+  return Object.keys(merged).length > 0 ? merged : undefined;
+}
+
+function inferredSheetResources(input: {
+  sheet: string;
+  characterClass: string;
+  level: number;
+}) {
+  const normalizedClass = input.characterClass.trim().toLowerCase();
+  const normalizedLevel = Math.max(1, Math.floor(input.level));
+  const resources: Record<string, MechanicsResourceState> = {};
+  const addCountedResource = (input: {
+    key: string;
+    label: string;
+    max: number | undefined;
+    recharge: MechanicsResourceRecharge;
+    source: string;
+  }) => {
+    if (input.max === undefined || input.max < 0) {
+      return;
+    }
+
+    resources[input.key] = {
+      label: input.label,
+      max: input.max,
+      used: 0,
+      recharge: input.recharge,
+      source: input.source
+    };
+  };
+
+  if (normalizedClass === "bard" && normalizedLevel >= 1) {
+    addCountedResource({
+      key: "bardic_inspiration",
+      label: "Bardic Inspiration",
+      max: resourceCountFromSheet(input.sheet, "Bardic Inspiration"),
+      recharge: normalizedLevel >= 5 ? "short_rest" : "long_rest",
+      source: "Bard"
+    });
+  }
+
+  if (normalizedClass === "fighter" && normalizedLevel >= 3) {
+    if (/\b(?:battle master|superiority dice|combat superiority)\b/i.test(input.sheet)) {
+      resources.superiority_dice = {
+        label: "Superiority Dice",
+        max: superiorityDiceByLevel(normalizedLevel),
+        used: 0,
+        recharge: "short_rest",
+        source: "Fighter"
+      };
+    }
+  }
+
+  if (normalizedClass === "paladin" && normalizedLevel >= 1) {
+    addCountedResource({
+      key: "divine_sense",
+      label: "Divine Sense",
+      max: resourceCountFromSheet(input.sheet, "Divine Sense"),
+      recharge: "long_rest",
+      source: "Paladin"
+    });
+  }
+
+  if (normalizedClass === "ranger" && normalizedLevel >= 1) {
+    addCountedResource({
+      key: "favored_foe",
+      label: "Favored Foe",
+      max: resourceCountFromSheet(input.sheet, "Favored Foe"),
+      recharge: "long_rest",
+      source: "Ranger"
+    });
+  }
+
+  return Object.keys(resources).length > 0 ? resources : undefined;
+}
+
 function legacySlotsFromSheet(sheet: string) {
   const slots: Record<string, SpellSlotState> = {};
   const slotLine =
@@ -736,9 +904,16 @@ function legacyActorFromSheet(player: PlayerLike): MechanicsState["actors"][stri
   const spellSlots = inferredSlotsFromSheet(player.character_sheet);
   const inferredIdentity = inferredLevelAndClassFromSheet(player.character_sheet);
   const resources = inferredIdentity
-    ? deriveResourcesForClass(
-        inferredIdentity.characterClass,
-        inferredIdentity.level
+    ? mergeResourceSets(
+        deriveResourcesForClass(
+          inferredIdentity.characterClass,
+          inferredIdentity.level
+        ),
+        inferredSheetResources({
+          sheet: player.character_sheet,
+          characterClass: inferredIdentity.characterClass,
+          level: inferredIdentity.level
+        })
       )
     : undefined;
 
