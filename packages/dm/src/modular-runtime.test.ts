@@ -581,11 +581,11 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
-      /semantic narration markup for inline UI color/i
+      /semantic narration markup for inline UI color or emphasis/i
     );
     assert.match(
       jobPrompt("combat"),
-      /<npc>\.\.\.<\/npc>.*<place>\.\.\.<\/place>.*<clue>\.\.\.<\/clue>.*<danger>\.\.\.<\/danger>.*<faction>\.\.\.<\/faction>.*<object>\.\.\.<\/object>/is
+      /<npc>\.\.\.<\/npc>.*<place>\.\.\.<\/place>.*<clue>\.\.\.<\/clue>.*<danger>\.\.\.<\/danger>.*<faction>\.\.\.<\/faction>.*<object>\.\.\.<\/object>.*<em>\.\.\.<\/em>/is
     );
     assert.match(
       jobPrompt("combat"),

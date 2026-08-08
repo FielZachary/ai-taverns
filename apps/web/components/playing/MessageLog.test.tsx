@@ -198,6 +198,25 @@ describe("MessageLog", () => {
     expect(screen.queryByText(/<\/object>/)).not.toBeInTheDocument();
   });
 
+  it("renders semantic emphasis markup as italic text", () => {
+    renderMessageLog({
+      messages: [
+        gameMessage({
+          id: "dm-semantic-emphasis-message",
+          role: "dm",
+          content:
+            'The magistrate says, <em>"If you have standing, state it now."</em>'
+        })
+      ]
+    });
+
+    expect(
+      screen.getByText('"If you have standing, state it now."').tagName
+    ).toBe("EM");
+    expect(screen.queryByText(/<em>/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/<\/em>/)).not.toBeInTheDocument();
+  });
+
   it("colors unfinished semantic narration markup while a DM message streams", () => {
     renderMessageLog({
       messages: [
@@ -214,6 +233,21 @@ describe("MessageLog", () => {
       "message-semantic-narration-danger"
     );
     expect(screen.queryByText(/<danger>/)).not.toBeInTheDocument();
+  });
+
+  it("italicizes unfinished semantic emphasis markup while a DM message streams", () => {
+    renderMessageLog({
+      messages: [
+        gameMessage({
+          id: "dm-streaming-semantic-emphasis-message",
+          role: "dm",
+          content: "The magistrate says, <em>state your proof"
+        })
+      ]
+    });
+
+    expect(screen.getByText("state your proof").tagName).toBe("EM");
+    expect(screen.queryByText(/<em>/)).not.toBeInTheDocument();
   });
 
   it("leaves unsupported angle tags as escaped text", () => {

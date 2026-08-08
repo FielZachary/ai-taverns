@@ -2721,13 +2721,15 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(narratorInput.message, /allowed_player_facing_terms/);
   assert.match(narratorInput.message, /forbidden_opening_terms/);
   assert.match(narratorInput.message, /semantic narration markup/);
-  assert.match(narratorInput.message, /must include 2-3 tags/i);
+  assert.match(narratorInput.message, /2-3 required tags should be color tags/i);
   assert.match(narratorInput.message, /<npc>\.\.\.<\/npc>/);
   assert.match(narratorInput.message, /<place>\.\.\.<\/place>/);
   assert.match(narratorInput.message, /<clue>\.\.\.<\/clue>/);
   assert.match(narratorInput.message, /<danger>\.\.\.<\/danger>/);
   assert.match(narratorInput.message, /<faction>\.\.\.<\/faction>/);
   assert.match(narratorInput.message, /<object>\.\.\.<\/object>/);
+  assert.match(narratorInput.message, /<em>\.\.\.<\/em>/);
+  assert.match(narratorInput.message, /color tags, not <em>/);
   assert.match(narratorInput.message, /Do not return narration_highlights/);
   assert.match(narratorInput.message, /sidecar span metadata/);
   assert.match(narratorInput.message, /inline semantic tags are the only highlight system/);
