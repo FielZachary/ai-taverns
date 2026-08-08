@@ -48,8 +48,11 @@ import type {
   DiceRollRequest,
   DiceRollResult,
   DiceRollSubmission,
+  MechanicsResourceState,
   MechanicsSeed,
   MechanicsState,
+  SpellSlotLevel,
+  SpellSlotState,
   RoomSocketEvent,
   RoomSnapshot
 } from "@ai-dnd/contracts";
@@ -58,6 +61,7 @@ import {
   applyDeathSavingThrow,
   applyAcceptedCast,
   assertMechanicsActionAllowed,
+  detectTrackedCastIntent,
   firstDyingPlayerActorKey,
   isDeadActor,
   isDyingPlayerActor,
@@ -2003,10 +2007,316 @@ function allegianceField(record: Record<string, unknown>, key: string) {
     : undefined;
 }
 
+function sanitizePlayerSpellSlotsUpdate(input: {
+  actorKey: string;
+  existing: MechanicsState["actors"][string] | undefined;
+  proposed: ReturnType<typeof parseMechanicsSpellSlots>;
+  currentAction?: string | undefined;
+  dmJob?: DmJobName | undefined;
+}) {
+  const { actorKey, existing, proposed, currentAction, dmJob } = input;
+
+  if (!proposed || !actorKey.startsWith("player:")) {
+    return proposed;
+  }
+
+  const existingSlots = existing?.spellSlots;
+
+  if (!existingSlots) {
+    return dmJob === "rest_mechanics" ? proposed : undefined;
+  }
+
+  const explicitTrackedCast = currentAction
+    ? Boolean(detectTrackedCastIntent(currentAction))
+    : false;
+  const restCanRestoreSlots = dmJob === "rest_mechanics";
+  const acceptedSlots: Partial<Record<SpellSlotLevel, SpellSlotState>> = {
+    ...existingSlots
+  };
+  let hasAcceptedSlot = false;
+
+  for (const [level, proposedSlot] of Object.entries(proposed) as Array<
+    [SpellSlotLevel, SpellSlotState]
+  >) {
+    const existingSlot = existingSlots[level];
+
+    if (!existingSlot) {
+      continue;
+    }
+
+    const maxIsUnchanged = proposedSlot.max === existingSlot.max;
+    const usedIsUnchanged = proposedSlot.used === existingSlot.used;
+    const spendsSlot = proposedSlot.used > existingSlot.used;
+    const restoresSlot = proposedSlot.used < existingSlot.used;
+
+    if (
+      (maxIsUnchanged && usedIsUnchanged) ||
+      (maxIsUnchanged && spendsSlot && explicitTrackedCast) ||
+      (maxIsUnchanged && restoresSlot && restCanRestoreSlots)
+    ) {
+      acceptedSlots[level] = proposedSlot;
+      hasAcceptedSlot = true;
+    }
+  }
+
+  return hasAcceptedSlot ? acceptedSlots : undefined;
+}
+
+function resourceReferenceVariants(
+  key: string,
+  resource: MechanicsResourceState
+) {
+  const candidates = [
+    key,
+    key.replace(/[_-]+/g, " "),
+    resource.label,
+    resource.label.replace(/s$/i, "")
+  ];
+
+  return Array.from(
+    new Set(
+      candidates
+        .map((candidate) => candidate.trim().toLowerCase())
+        .filter((candidate) => candidate.length > 0)
+    )
+  );
+}
+
+function escapeRegexLiteral(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function actionExplicitlyReferencesResource(input: {
+  currentAction?: string | undefined;
+  key: string;
+  resource: MechanicsResourceState;
+}) {
+  if (!input.currentAction) {
+    return false;
+  }
+
+  return resourceReferenceVariants(input.key, input.resource).some((variant) =>
+    new RegExp(`\\b${escapeRegexLiteral(variant)}\\b`, "i").test(
+      input.currentAction ?? ""
+    )
+  );
+}
+
+function sanitizePlayerResourcesUpdate(input: {
+  actorKey: string;
+  existing: MechanicsState["actors"][string] | undefined;
+  proposed: ReturnType<typeof parseMechanicsResources>;
+  currentAction?: string | undefined;
+  dmJob?: DmJobName | undefined;
+}) {
+  const { actorKey, existing, proposed, currentAction, dmJob } = input;
+
+  if (!proposed || !actorKey.startsWith("player:")) {
+    return proposed;
+  }
+
+  const existingResources = existing?.resources;
+
+  if (!existingResources) {
+    return undefined;
+  }
+
+  const restCanRestoreResources = dmJob === "rest_mechanics";
+  const acceptedResources: Record<string, MechanicsResourceState> = {
+    ...existingResources
+  };
+  let hasAcceptedResource = false;
+
+  for (const [key, proposedResource] of Object.entries(proposed)) {
+    const existingResource = existingResources[key];
+
+    if (!existingResource) {
+      continue;
+    }
+
+    const maxIsUnchanged = proposedResource.max === existingResource.max;
+    const rechargeIsUnchanged =
+      proposedResource.recharge === existingResource.recharge;
+    const labelIsUnchanged = proposedResource.label === existingResource.label;
+    const usedIsUnchanged = proposedResource.used === existingResource.used;
+    const spendsResource = proposedResource.used > existingResource.used;
+    const restoresResource = proposedResource.used < existingResource.used;
+    const explicitlyReferenced = actionExplicitlyReferencesResource({
+      currentAction,
+      key,
+      resource: existingResource
+    });
+
+    if (
+      maxIsUnchanged &&
+      rechargeIsUnchanged &&
+      labelIsUnchanged &&
+      (usedIsUnchanged ||
+        (spendsResource && explicitlyReferenced) ||
+        (restoresResource && restCanRestoreResources))
+    ) {
+      acceptedResources[key] = {
+        ...existingResource,
+        used: proposedResource.used
+      };
+      hasAcceptedResource = true;
+    }
+  }
+
+  return hasAcceptedResource ? acceptedResources : undefined;
+}
+
+function isWarlockActor(actor: MechanicsState["actors"][string]) {
+  return actor.characterClass?.trim().toLowerCase() === "warlock";
+}
+
+function spellSlotSummaryLabel(level: string) {
+  return level === "1"
+    ? "first level spell slots"
+    : level === "2"
+      ? "second level spell slots"
+      : level === "3"
+        ? "third level spell slots"
+        : `${level}th level spell slots`;
+}
+
+function formatCombatResourceSummary(
+  actor: MechanicsState["actors"][string] | undefined
+) {
+  if (!actor) {
+    return "";
+  }
+
+  const lines: string[] = [];
+
+  if (actor.currentHp !== undefined) {
+    lines.push(`<clue>${actor.currentHp}</clue> hit points`);
+  }
+
+  if (actor.spellSlots && Object.keys(actor.spellSlots).length > 0) {
+    if (isWarlockActor(actor)) {
+      const totals = Object.values(actor.spellSlots).reduce(
+        (sum, slot) => ({
+          max: sum.max + slot.max,
+          used: sum.used + slot.used
+        }),
+        { max: 0, used: 0 }
+      );
+      lines.push(
+        `<clue>${Math.max(0, totals.max - totals.used)}</clue> pact magic slots`
+      );
+    } else {
+      for (const [level, slot] of Object.entries(actor.spellSlots).sort(
+        ([left], [right]) => Number(right) - Number(left)
+      )) {
+        lines.push(
+          `<clue>${Math.max(0, slot.max - slot.used)}</clue> ${spellSlotSummaryLabel(level)}`
+        );
+      }
+    }
+  }
+
+  if (actor.resources && Object.keys(actor.resources).length > 0) {
+    for (const [, resource] of Object.entries(actor.resources).sort(([left], [right]) =>
+      left.localeCompare(right)
+    )) {
+      lines.push(
+        `<clue>${Math.max(0, resource.max - resource.used)}</clue> ${resource.label.toLowerCase()}`
+      );
+    }
+  }
+
+  return lines.length > 0
+    ? `<clue>Just to remind you, you have: </clue>\n${lines.join("\n")}`
+    : "";
+}
+
+function removeExistingCombatResourceSummary(narration: string) {
+  const lines = narration.split(/\r?\n/);
+  const nextLines: string[] = [];
+  let skippingSummary = false;
+
+  for (const line of lines) {
+    if (
+      !skippingSummary &&
+      /<clue>\s*Just to remind you, you have:\s*<\/clue>/i.test(line)
+    ) {
+      skippingSummary = true;
+      continue;
+    }
+
+    if (skippingSummary) {
+      if (line.trim() === "") {
+        skippingSummary = false;
+        continue;
+      }
+
+      if (/^What do you do\?\s*$/i.test(line.trim())) {
+        skippingSummary = false;
+        nextLines.push(line);
+        continue;
+      }
+
+      if (/<clue>.*<\/clue>/i.test(line)) {
+        continue;
+      }
+
+      skippingSummary = false;
+    }
+
+    nextLines.push(line);
+  }
+
+  return nextLines.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd();
+}
+
+function narrationWithCombatResourceSummary(input: {
+  narration: string;
+  summary: string;
+}) {
+  const cleanedNarration = removeExistingCombatResourceSummary(input.narration);
+  const trimmedNarration = cleanedNarration.trimEnd();
+  const handoffMatch = trimmedNarration.match(/(\n*)(What do you do\?\s*)$/i);
+
+  if (!handoffMatch) {
+    return `${trimmedNarration}\n\n${input.summary}`;
+  }
+
+  return `${trimmedNarration.slice(0, handoffMatch.index).trimEnd()}\n\n${input.summary}\n\n${handoffMatch[2]?.trimEnd() ?? "What do you do?"}`;
+}
+
+function combatResourceSummaryForHandoff(input: {
+  dmJob?: DmJobName | undefined;
+  nextInputNeeded: DmNextInputNeeded;
+  rollRequests: DiceRollRequest[];
+  mechanicsState: MechanicsState;
+}) {
+  if (
+    input.dmJob !== "combat" ||
+    input.nextInputNeeded !== "player_actions" ||
+    input.rollRequests.length > 0 ||
+    !input.mechanicsState.combat.active
+  ) {
+    return "";
+  }
+
+  const turnOwner = input.mechanicsState.combat.turnOwner;
+
+  if (!turnOwner?.startsWith("player:")) {
+    return "";
+  }
+
+  return formatCombatResourceSummary(input.mechanicsState.actors[turnOwner]);
+}
+
 function applyMechanicsStateUpdate(
   state: MechanicsState,
   update: Record<string, unknown> | undefined,
-  updatedAt?: string
+  updatedAt?: string,
+  options: {
+    currentAction?: string | undefined;
+    dmJob?: DmJobName | undefined;
+  } = {}
 ): MechanicsState {
   if (!update || Object.keys(update).length === 0) {
     return state;
@@ -2035,8 +2345,20 @@ function applyMechanicsStateUpdate(
         : undefined;
     const saveBonuses = abilityBonusMapField(rawActor, "saveBonuses");
     const abilityModifiers = abilityBonusMapField(rawActor, "abilityModifiers");
-    const spellSlots = parseMechanicsSpellSlots(rawActor.spellSlots);
-    const resources = parseMechanicsResources(rawActor.resources);
+    const spellSlots = sanitizePlayerSpellSlotsUpdate({
+      actorKey,
+      existing,
+      proposed: parseMechanicsSpellSlots(rawActor.spellSlots),
+      currentAction: options.currentAction,
+      dmJob: options.dmJob
+    });
+    const resources = sanitizePlayerResourcesUpdate({
+      actorKey,
+      existing,
+      proposed: parseMechanicsResources(rawActor.resources),
+      currentAction: options.currentAction,
+      dmJob: options.dmJob
+    });
     const characterName =
       typeof rawActor.characterName === "string" && rawActor.characterName.trim()
         ? rawActor.characterName
@@ -8880,8 +9202,8 @@ function formatEldermereNarratorOpeningRequest(input: {
     "If a useful idea appears in dm_private_context, imply it only through concrete visible facts or pressure; do not reveal it as confirmed exposition.",
     "Forbidden opening terms must not appear in public_narration.",
     "Allowed player-facing terms must be explained plainly on first use.",
-    "Use sparse semantic narration markup inside public_narration when it helps the player scan important visible nouns or short phrases. Supported tags only: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, and <object>...</object>.",
-    "Wrap only the exact player-visible words that should receive color. Use 2-4 tags when the opener has worthwhile visible names, places, clues, dangers, factions, or objects. Do not wrap full sentences or paragraphs.",
+    "Use 2-3 sparse semantic narration markup tags inside public_narration so players can scan important visible nouns or short phrases. Supported tags only: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, and <object>...</object>.",
+    "Wrap only the exact player-visible words that should receive color. The opener must include 2-3 tags around worthwhile visible names, places, clues, dangers, factions, or objects. Do not wrap full sentences or paragraphs.",
     "Do not nest semantic tags, add attributes, invent other tags, include CSS, hex colors, color names, Markdown emphasis, or prose instructions inside public_narration.",
     "Do not return narration_highlights, highlights, sidecar span metadata, post-processing instructions, or any separate highlight records. The inline semantic tags are the only highlight system.",
     "",
@@ -9986,6 +10308,81 @@ function openingNarrationContainsTerm(narration: string, term: string) {
   return openingNarrationTermPattern(term).test(narration);
 }
 
+const semanticOpeningTagPattern =
+  /<(npc|place|clue|danger|faction|object)>([^<>]+)<\/\1>/giu;
+const semanticOpeningTagMinimum = 2;
+const semanticOpeningTagMaximum = 3;
+
+function semanticOpeningTagCount(narration: string) {
+  return Array.from(narration.matchAll(semanticOpeningTagPattern)).length;
+}
+
+function semanticOpeningTagContainsTerm(narration: string, term: string) {
+  const normalizedTerm = term.trim().toLowerCase();
+
+  if (!normalizedTerm) {
+    return false;
+  }
+
+  return Array.from(narration.matchAll(semanticOpeningTagPattern)).some(
+    (match) => match[2]?.toLowerCase().includes(normalizedTerm)
+  );
+}
+
+function stripExtraSemanticOpeningTags(narration: string) {
+  let tagCount = 0;
+
+  return narration.replace(
+    semanticOpeningTagPattern,
+    (match: string, _role: string, text: string) => {
+      tagCount += 1;
+
+      return tagCount > semanticOpeningTagMaximum ? text : match;
+    }
+  );
+}
+
+function addSemanticOpeningTag(
+  narration: string,
+  term: string | undefined,
+  role: "npc" | "place" | "clue" | "danger" | "faction" | "object"
+) {
+  const trimmedTerm = term?.trim();
+
+  if (
+    !trimmedTerm ||
+    semanticOpeningTagCount(narration) >= semanticOpeningTagMinimum ||
+    semanticOpeningTagContainsTerm(narration, trimmedTerm)
+  ) {
+    return narration;
+  }
+
+  return narration.replace(
+    openingNarrationTermPattern(trimmedTerm),
+    (_match, prefix: string) => `${prefix}<${role}>${trimmedTerm}</${role}>`
+  );
+}
+
+function normalizeEldermereOpeningSemanticTags(
+  narration: string,
+  plan: EldermereOpeningPlan
+) {
+  const strippedNarration = stripExtraSemanticOpeningTags(narration);
+  const firstNpc = plan.npcSeed[0]?.name;
+  const firstChoice = plan.firstInteractableChoices[0];
+
+  return [
+    { term: plan.startingLocation.name, role: "place" as const },
+    { term: firstNpc, role: "npc" as const },
+    { term: plan.region.name, role: "place" as const },
+    { term: firstChoice, role: "clue" as const }
+  ].reduce(
+    (current, candidate) =>
+      addSemanticOpeningTag(current, candidate.term, candidate.role),
+    strippedNarration
+  );
+}
+
 function plainReplacementForForbiddenOpeningTerm(term: string) {
   switch (term.toLowerCase()) {
     case "second dominion":
@@ -10028,9 +10425,11 @@ function repairEldermereOpeningReply(
   reply: DungeonMasterReply,
   plan: EldermereOpeningPlan
 ): DungeonMasterReply {
+  const scrubbedContent = scrubForbiddenOpeningTerms(reply.content, plan);
+
   return {
     ...reply,
-    content: scrubForbiddenOpeningTerms(reply.content, plan),
+    content: normalizeEldermereOpeningSemanticTags(scrubbedContent, plan),
     setting: {
       ...reply.setting,
       worldName: "Eldermere",
@@ -10091,6 +10490,17 @@ function eldermereOpeningNarrationErrors(content: string) {
 
   if (!/what do you do\?\s*$/i.test(content.trim())) {
     errors.push("public_narration must end with 'What do you do?'");
+  }
+
+  const semanticTagCount = semanticOpeningTagCount(content);
+
+  if (
+    semanticTagCount < semanticOpeningTagMinimum ||
+    semanticTagCount > semanticOpeningTagMaximum
+  ) {
+    errors.push(
+      `public_narration must contain ${semanticOpeningTagMinimum}-${semanticOpeningTagMaximum} semantic narration markup tags; found ${semanticTagCount}`
+    );
   }
 
   return errors;
@@ -10159,6 +10569,7 @@ async function askEldermereOpeningNarrator(
       : []),
     "Return the same opening situation as valid AI Taverns DM JSON, but fix every issue above.",
     "public_narration must be exactly 6 paragraphs separated by blank lines, must follow narrator_instructions as the highest-priority scene blueprint, and the sixth paragraph must be the final direct prompt 'What do you do?'",
+    `public_narration must include ${semanticOpeningTagMinimum}-${semanticOpeningTagMaximum} semantic narration markup tags using only <npc>, <place>, <clue>, <danger>, <faction>, and <object>.`,
     "Use only allowed_player_facing_terms and plain descriptions. Preserve setting metadata."
   ].join("\n");
   const repairedOpening = await askDungeonMaster(
@@ -10550,16 +10961,30 @@ async function askDungeonMaster(
           )
         )
       : { accepted: [], discarded: [] };
-    const inventoryPlayers = contract.inventoryStateUpdate?.patches.length
+    const shouldLoadActivePlayers =
+      Boolean(contract.inventoryStateUpdate?.patches.length) ||
+      promptContext?.jobNeeded === "combat";
+    const activePlayers = shouldLoadActivePlayers
       ? await getActiveCampaignPlayers(db, campaign.id)
+      : [];
+    const inventoryPlayers = contract.inventoryStateUpdate?.patches.length
+      ? activePlayers
       : [];
     const inventoryValidation = validateInventoryPatches(
       contract.inventoryStateUpdate?.patches ?? [],
       inventoryPlayers
     );
-    const mechanicsState = resolveMechanicsState(campaign, []);
+    const mechanicsState = resolveMechanicsState(campaign, activePlayers);
     const combatInputControl = normalizeCombatInputControl(
-      applyMechanicsStateUpdate(mechanicsState, contract.mechanicsStateUpdate, nowIso()),
+      applyMechanicsStateUpdate(
+        mechanicsState,
+        contract.mechanicsStateUpdate,
+        nowIso(),
+        {
+          currentAction: currentPlayerAction ?? message,
+          dmJob: promptContext?.jobNeeded
+        }
+      ),
       {
         mode: campaign.mode,
         nextInputNeeded: contract.nextInputNeeded,
@@ -10615,8 +11040,20 @@ async function askDungeonMaster(
             inventoryValidation.accepted
           )
         : [];
+    const combatResourceSummary = combatResourceSummaryForHandoff({
+      dmJob: promptContext?.jobNeeded,
+      nextInputNeeded: normalizedNextInputNeeded,
+      rollRequests: normalizedRollRequests,
+      mechanicsState: nextMechanicsState
+    });
+    const publicNarration = combatResourceSummary
+      ? narrationWithCombatResourceSummary({
+          narration: contract.publicNarration,
+          summary: combatResourceSummary
+        })
+      : contract.publicNarration;
     const reply = narrationWithInventoryUpdate(
-      contract.publicNarration,
+      publicNarration,
       appliedInventoryPatches
     );
     const routerDebug = routerDebugFromPromptContext(promptContext);
