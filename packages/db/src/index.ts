@@ -787,6 +787,7 @@ export type DungeonMasterRuntime = {
     currentPlayerAction?: string;
     dmJob?: DmJobName;
     model?: AiModelId;
+    temperature?: number;
     signal?: AbortSignal;
     onPublicNarrationDelta?: (text: string) => void;
   }): Promise<DungeonMasterProviderResponse>;
@@ -8963,6 +8964,9 @@ function formatOpeningSceneRequest(input: {
     players: input.players,
     style: input.style
   });
+  const openingParagraphGuidance = input.omitGenericSettingRequest
+    ? "Write exactly 6 rich paragraphs with concrete sensory detail, spatial clarity, premise, purpose, an immediate tension, and clear interactable choices. The sixth paragraph must be only the final direct prompt, such as 'What do you do?'"
+    : "Write 4-7 rich paragraphs with concrete sensory detail, spatial clarity, premise, purpose, an immediate tension, and clear interactable choices.";
   const currentPlayerAction = input.omitGenericSettingRequest
     ? openingSceneRequest
         .replace(
@@ -9006,7 +9010,7 @@ function formatOpeningSceneRequest(input: {
     "Use character sheet details to personalize hooks, warnings, sensory cues, relationships, or stakes without rewriting character backstories.",
     "",
     "Opening scene quality bar:",
-    "Write 4-7 rich paragraphs with concrete sensory detail, spatial clarity, premise, purpose, an immediate tension, and clear interactable choices.",
+    openingParagraphGuidance,
     "Begin in the fiction immediately; do not ask what kind of world the player wants.",
     "Return no player-facing roll requests unless danger or uncertainty already requires dice before the player can act.",
     "End with a direct player-facing prompt such as 'What do you do?'",
@@ -9030,6 +9034,8 @@ function eldermereOpeningPlannerInstructions() {
     "The player-facing opening should use at most 3 Eldermere-specific setting proper nouns total, not counting ordinary NPC names. The chosen region and starting location count toward this limit.",
     "Prefer plain descriptions over official names: use concrete meaning before setting terminology.",
     "Treat canonical Eldermere facts as source-grounded world truth. Treat any new links, NPC motives, faction plans, or secret ladders you invent as campaign-local premises until established through play.",
+    "Every narrator_instructions array must include this exact structure instruction: 'Keep the opening to exactly 6 paragraphs of vivid sensory detail, with the sixth paragraph only the final direct prompt: What do you do?'",
+    "Do not use flexible paragraph ranges such as 4-7, 3-5, short, brief, concise, or a few paragraphs in narrator_instructions.",
     "Return exactly one valid JSON object and no Markdown.",
     "Use this exact JSON shape:",
     JSON.stringify(
@@ -10312,6 +10318,7 @@ const semanticOpeningTagPattern =
   /<(npc|place|clue|danger|faction|object)>([^<>]+)<\/\1>/giu;
 const semanticOpeningTagMinimum = 2;
 const semanticOpeningTagMaximum = 3;
+const finalEldermereOpeningRetryTemperature = 0.2;
 
 function semanticOpeningTagCount(narration: string) {
   return Array.from(narration.matchAll(semanticOpeningTagPattern)).length;
@@ -10480,17 +10487,7 @@ function openingParagraphCount(content: string) {
 
 function eldermereOpeningNarrationErrors(content: string) {
   const errors: string[] = [];
-  const paragraphCount = openingParagraphCount(content);
-
-  if (paragraphCount !== 6) {
-    errors.push(
-      `public_narration must contain exactly 6 paragraphs; found ${paragraphCount}`
-    );
-  }
-
-  if (!/what do you do\?\s*$/i.test(content.trim())) {
-    errors.push("public_narration must end with 'What do you do?'");
-  }
+  errors.push(...eldermereOpeningStructuralErrors(content));
 
   const semanticTagCount = semanticOpeningTagCount(content);
 
@@ -10504,6 +10501,37 @@ function eldermereOpeningNarrationErrors(content: string) {
   }
 
   return errors;
+}
+
+function eldermereOpeningStructuralErrors(content: string) {
+  const errors: string[] = [];
+  const paragraphCount = openingParagraphCount(content);
+
+  if (paragraphCount !== 6) {
+    errors.push(
+      `public_narration must contain exactly 6 paragraphs; found ${paragraphCount}`
+    );
+  }
+
+  if (!/what do you do\?\s*$/i.test(content.trim())) {
+    errors.push("public_narration must end with 'What do you do?'");
+  }
+
+  return errors;
+}
+
+function eldermereOpeningValidationErrorMessage(input: {
+  forbiddenTerms: string[];
+  settingErrors: string[];
+  narrationErrors: string[];
+}) {
+  return [
+    ...input.forbiddenTerms.map(
+      (term) => `public_narration contains forbidden opening term "${term}"`
+    ),
+    ...input.settingErrors,
+    ...input.narrationErrors
+  ].join("; ");
 }
 
 async function askEldermereOpeningNarrator(
@@ -10602,14 +10630,104 @@ async function askEldermereOpeningNarrator(
   );
 
   if (
-    remainingForbiddenTerms.length > 0 ||
-    remainingSettingErrors.length > 0 ||
-    remainingNarrationErrors.length > 0
+    remainingForbiddenTerms.length === 0 &&
+    remainingSettingErrors.length === 0 &&
+    remainingNarrationErrors.length === 0
   ) {
-    return repairEldermereOpeningReply(repairedOpening, plan);
+    return repairedOpening;
   }
 
-  return repairedOpening;
+  const normalizedRepairedOpening = repairEldermereOpeningReply(
+    repairedOpening,
+    plan
+  );
+  const normalizedForbiddenTerms = findForbiddenOpeningTerms(
+    normalizedRepairedOpening.content,
+    plan
+  );
+  const normalizedSettingErrors = eldermereOpeningSettingErrors(
+    normalizedRepairedOpening.setting,
+    plan
+  );
+  const normalizedNarrationErrors = eldermereOpeningNarrationErrors(
+    normalizedRepairedOpening.content
+  );
+
+  if (
+    normalizedForbiddenTerms.length === 0 &&
+    normalizedSettingErrors.length === 0 &&
+    normalizedNarrationErrors.length === 0
+  ) {
+    return normalizedRepairedOpening;
+  }
+
+  const finalRetryMessage = [
+    narratorMessage,
+    "",
+    "Final low-temperature rewrite required:",
+    "The previous repair still failed validation after safe normalization.",
+    `Remaining validation errors: ${eldermereOpeningValidationErrorMessage({
+      forbiddenTerms: normalizedForbiddenTerms,
+      settingErrors: normalizedSettingErrors,
+      narrationErrors: normalizedNarrationErrors
+    })}`,
+    "Rewrite the same opening situation as one valid AI Taverns DM JSON object.",
+    "public_narration must contain exactly 6 paragraphs separated by blank lines.",
+    "Paragraph 1: why this character or party came here now.",
+    "Paragraph 2: the recent travel, arrival context, and what the character knows before the live scene.",
+    "Paragraph 3: the starting location atmosphere narrowing into the first live scene.",
+    "Paragraph 4: visible NPC tension and immediate pressure.",
+    "Paragraph 5: the actionable complication and 2-3 concrete non-dice actions available right now.",
+    "Paragraph 6: exactly 'What do you do?' and nothing else.",
+    `public_narration must include ${semanticOpeningTagMinimum}-${semanticOpeningTagMaximum} semantic narration markup tags using only <npc>, <place>, <clue>, <danger>, <faction>, and <object>.`,
+    "Do not include Markdown outside JSON, a teaser, a summary, a prologue note, or fewer than 6 paragraphs."
+  ].join("\n");
+  const finalOpening = await askDungeonMaster(
+    db,
+    runtime,
+    campaign,
+    finalRetryMessage,
+    instructions,
+    false,
+    turnId,
+    undefined,
+    contractOptions,
+    {
+      buildPromptContext: false,
+      contractKind: "opening",
+      includeEldermereTurnContext: false,
+      suppressStreaming: true,
+      temperature: finalEldermereOpeningRetryTemperature
+    }
+  );
+  const normalizedFinalOpening = repairEldermereOpeningReply(finalOpening, plan);
+  const finalForbiddenTerms = findForbiddenOpeningTerms(
+    normalizedFinalOpening.content,
+    plan
+  );
+  const finalSettingErrors = eldermereOpeningSettingErrors(
+    normalizedFinalOpening.setting,
+    plan
+  );
+  const finalNarrationErrors = eldermereOpeningNarrationErrors(
+    normalizedFinalOpening.content
+  );
+
+  if (
+    finalForbiddenTerms.length > 0 ||
+    finalSettingErrors.length > 0 ||
+    finalNarrationErrors.length > 0
+  ) {
+    throw new Error(
+      `Eldermere opening narrator returned invalid public_narration after final retry: ${eldermereOpeningValidationErrorMessage({
+        forbiddenTerms: finalForbiddenTerms,
+        settingErrors: finalSettingErrors,
+        narrationErrors: finalNarrationErrors
+      })}`
+    );
+  }
+
+  return normalizedFinalOpening;
 }
 
 async function getActivePlayers(db: Queryable, campaignId: string) {
@@ -10764,6 +10882,7 @@ async function askDungeonMaster(
     includeEldermereTurnContext?: boolean;
     model?: AiModelId;
     suppressStreaming?: boolean;
+    temperature?: number;
     timeoutMs?: number;
   }
 ): Promise<DungeonMasterReply> {
@@ -10839,6 +10958,9 @@ async function askDungeonMaster(
       ...(currentPlayerAction ? { currentPlayerAction } : {}),
       ...(promptContext?.jobNeeded ? { dmJob: promptContext.jobNeeded } : {}),
       ...(options?.model ? { model: options.model } : {}),
+      ...(typeof options?.temperature === "number"
+        ? { temperature: options.temperature }
+        : {}),
       ...(timeoutSignal ? { signal: timeoutSignal } : {}),
       ...(streamEmitter && streamTurnId
         ? {
