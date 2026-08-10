@@ -4459,6 +4459,177 @@ function normalizeRollRequests(value: unknown): DiceRollRequest[] {
     : [];
 }
 
+function canonicalPlayerActorReference(
+  value: string | undefined,
+  players: PlayerRow[]
+) {
+  const normalizedValue = normalizeRollTarget(value);
+
+  if (!value || !normalizedValue) {
+    return value;
+  }
+
+  for (const player of players) {
+    const canonical = actorKeyForPlayer(player.id);
+    const aliases = [
+      canonical,
+      `player:${player.client_id}`,
+      player.client_id,
+      `player:${player.username}`,
+      player.username,
+      `player:${player.character_name}`,
+      player.character_name
+    ]
+      .map(normalizeRollTarget)
+      .filter((alias): alias is string => Boolean(alias));
+
+    if (aliases.some((alias) => alias === normalizedValue)) {
+      return canonical;
+    }
+  }
+
+  return value;
+}
+
+function canonicalizeCombatRollContext(
+  combat: DiceRollRequest["combat"] | undefined,
+  players: PlayerRow[]
+) {
+  if (!combat) {
+    return combat;
+  }
+
+  const actorKey = canonicalPlayerActorReference(combat.actorKey, players);
+  const targetActorKey = canonicalPlayerActorReference(
+    combat.targetActorKey,
+    players
+  );
+
+  return {
+    ...combat,
+    ...(actorKey ? { actorKey } : {}),
+    ...(targetActorKey ? { targetActorKey } : {})
+  };
+}
+
+function canonicalizeRollRequests(
+  requests: DiceRollRequest[],
+  players: PlayerRow[]
+) {
+  if (players.length === 0) {
+    return requests;
+  }
+
+  return requests.map((request) => {
+    const player = canonicalPlayerActorReference(request.player, players);
+    const combat = canonicalizeCombatRollContext(request.combat, players);
+
+    return {
+      ...request,
+      ...(player ? { player } : {}),
+      ...(combat ? { combat } : {})
+    };
+  });
+}
+
+function canonicalizeInputTargets(targets: string[], players: PlayerRow[]) {
+  if (players.length === 0) {
+    return targets;
+  }
+
+  return targets.map((target) => canonicalPlayerActorReference(target, players) ?? target);
+}
+
+function canonicalizeMechanicsStateUpdate(
+  update: Record<string, unknown> | undefined,
+  players: PlayerRow[]
+): Record<string, unknown> | undefined {
+  if (!update || players.length === 0) {
+    return update;
+  }
+
+  const nextUpdate = { ...update };
+  const rawActors = isRecord(update.actors) ? update.actors : undefined;
+
+  if (rawActors) {
+    const actors: Record<string, unknown> = {};
+
+    for (const [actorKey, rawActor] of Object.entries(rawActors)) {
+      const canonicalActorKey =
+        canonicalPlayerActorReference(actorKey, players) ?? actorKey;
+      actors[canonicalActorKey] =
+        isRecord(actors[canonicalActorKey]) && isRecord(rawActor)
+          ? { ...actors[canonicalActorKey], ...rawActor }
+          : rawActor;
+    }
+
+    nextUpdate.actors = actors;
+  }
+
+  if (isRecord(update.combat)) {
+    const combat = { ...update.combat };
+    const turnOwner =
+      typeof combat.turnOwner === "string"
+        ? canonicalPlayerActorReference(combat.turnOwner, players)
+        : combat.turnOwner;
+
+    nextUpdate.combat = {
+      ...combat,
+      ...(typeof turnOwner === "string" || turnOwner === null
+        ? { turnOwner }
+        : {}),
+      ...(Array.isArray(combat.initiativeOrder)
+        ? {
+            initiativeOrder: combat.initiativeOrder.map((actorKey) =>
+              typeof actorKey === "string"
+                ? canonicalPlayerActorReference(actorKey, players) ?? actorKey
+                : actorKey
+            )
+          }
+        : {})
+    };
+  }
+
+  return nextUpdate;
+}
+
+function canonicalizeCombatEventValue(
+  value: unknown,
+  players: PlayerRow[],
+  isActorReference = false
+): unknown {
+  if (typeof value === "string" && isActorReference) {
+    return canonicalPlayerActorReference(value, players);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) =>
+      canonicalizeCombatEventValue(item, players, isActorReference)
+    );
+  }
+
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [
+      key,
+      /actor_?key$/i.test(key)
+        ? canonicalizeCombatEventValue(item, players, true)
+        : isRecord(item) || Array.isArray(item)
+          ? canonicalizeCombatEventValue(item, players)
+          : item
+    ])
+  );
+}
+
+function canonicalizeCombatEvents(events: unknown[], players: PlayerRow[]) {
+  return players.length === 0
+    ? events
+    : events.map((event) => canonicalizeCombatEventValue(event, players));
+}
+
 function combatRollContextsFromAction(currentAction: string) {
   const contexts: NonNullable<DiceRollRequest["combat"]>[] = [];
   const pattern = /^Combat roll context JSON:\s*(\{.*\})$/gim;
@@ -10916,9 +11087,32 @@ async function askDungeonMaster(
       });
     }
 
-    const rollRequests = normalizeRollRequests(contract.rollRequests);
+    const shouldLoadActivePlayers =
+      Boolean(contract.inventoryStateUpdate?.patches.length) ||
+      promptContext?.jobNeeded === "combat" ||
+      contract.rollRequests.length > 0 ||
+      contract.inputTargets.length > 0 ||
+      Boolean(contract.mechanicsStateUpdate);
+    const activePlayers = shouldLoadActivePlayers
+      ? await getActiveCampaignPlayers(db, campaign.id)
+      : [];
+    const rollRequests = canonicalizeRollRequests(
+      normalizeRollRequests(contract.rollRequests),
+      activePlayers
+    );
+    const inputTargets = canonicalizeInputTargets(
+      contract.inputTargets,
+      activePlayers
+    );
+    const mechanicsStateUpdate = canonicalizeMechanicsStateUpdate(
+      contract.mechanicsStateUpdate,
+      activePlayers
+    );
+    const combatEvents = outputEnvelope
+      ? canonicalizeCombatEvents(outputEnvelope.combatEvents, activePlayers)
+      : [];
     const combatValidation = outputEnvelope
-      ? validateCombatEvents(outputEnvelope.combatEvents, {
+      ? validateCombatEvents(combatEvents, {
           actors: mechanicsActorsForValidation(campaign)
         })
       : { accepted: [], discarded: [] };
@@ -10940,12 +11134,6 @@ async function askDungeonMaster(
           )
         )
       : { accepted: [], discarded: [] };
-    const shouldLoadActivePlayers =
-      Boolean(contract.inventoryStateUpdate?.patches.length) ||
-      promptContext?.jobNeeded === "combat";
-    const activePlayers = shouldLoadActivePlayers
-      ? await getActiveCampaignPlayers(db, campaign.id)
-      : [];
     const inventoryPlayers = contract.inventoryStateUpdate?.patches.length
       ? activePlayers
       : [];
@@ -10957,7 +11145,7 @@ async function askDungeonMaster(
     const combatInputControl = normalizeCombatInputControl(
       applyMechanicsStateUpdate(
         mechanicsState,
-        contract.mechanicsStateUpdate,
+        mechanicsStateUpdate,
         nowIso(),
         {
           currentAction: currentPlayerAction ?? message,
@@ -10968,7 +11156,7 @@ async function askDungeonMaster(
         mode: campaign.mode,
         nextInputNeeded: contract.nextInputNeeded,
         rollRequests,
-        inputTargets: contract.inputTargets,
+        inputTargets,
         inputPolicy: contract.inputPolicy
       }
     );
@@ -10992,7 +11180,7 @@ async function askDungeonMaster(
       currentAction: message,
       publicNarration: contract.publicNarration,
       mechanicsState,
-      mechanicsStateUpdate: contract.mechanicsStateUpdate
+      mechanicsStateUpdate
     });
 
     if (nextMechanicsState !== mechanicsState) {
@@ -11077,6 +11265,7 @@ async function askDungeonMaster(
         inputTargets: normalizedInputControl.inputTargets,
         originalInputPolicy: contract.inputPolicy,
         originalInputTargets: contract.inputTargets,
+        canonicalizedMechanicsStateUpdate: mechanicsStateUpdate,
         resolutionMode: contract.resolutionMode
       }
     });
@@ -11104,7 +11293,7 @@ async function askDungeonMaster(
         elapsedMs: Date.now() - startedAt,
         payload: {
           diagnostics: combatStateDiagnosticsReport,
-          mechanicsStateUpdate: contract.mechanicsStateUpdate
+          mechanicsStateUpdate
         }
       });
     }
