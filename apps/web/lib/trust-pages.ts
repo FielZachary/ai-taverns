@@ -94,6 +94,11 @@ export const trustPages: TrustPage[] = [
     ],
     links: [
       {
+        label: "Product Hunt",
+        href: "https://www.producthunt.com/products/ai-taverns",
+        description: "Product Hunt listing for AI Taverns."
+      },
+      {
         label: "X launch post",
         href: "https://x.com/zachary_fiel/status/2086026794986254644",
         description: "Launch post for AI Taverns on X."
