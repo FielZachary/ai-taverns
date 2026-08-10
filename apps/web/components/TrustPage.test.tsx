@@ -23,6 +23,10 @@ describe("TrustPage", () => {
       .toBeInTheDocument();
     expect(screen.getByRole("complementary", { name: "Official links" }))
       .toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Product Hunt/i })).toHaveAttribute(
+      "href",
+      "https://www.producthunt.com/products/ai-taverns"
+    );
     expect(screen.getByRole("link", { name: /X launch post/i })).toHaveAttribute(
       "href",
       "https://x.com/zachary_fiel/status/2086026794986254644"
