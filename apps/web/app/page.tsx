@@ -1,15 +1,33 @@
 import Link from "next/link";
 import { publicSeoPages } from "@/lib/public-seo-pages";
+import { siteIdentity } from "@/lib/site-identity";
+import { trustPages } from "@/lib/trust-pages";
 
 const siteJsonLd = {
   "@context": "https://schema.org",
   "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://aitaverns.com/#organization",
+      name: siteIdentity.name,
+      url: siteIdentity.url,
+      logo: siteIdentity.logo,
+      description: siteIdentity.description,
+      sameAs: siteIdentity.sameAs,
+      subjectOf: siteIdentity.subjectOf.map((url) => ({
+        "@type": "WebPage",
+        url
+      }))
+    },
     {
       "@type": "WebSite",
       "@id": "https://aitaverns.com/#website",
       url: "https://aitaverns.com/",
       name: "AI Taverns",
       alternateName: ["AI Taverns", "AITaverns"],
+      publisher: {
+        "@id": "https://aitaverns.com/#organization"
+      },
       description:
         "AI Taverns is an AI dungeon master for solo and multiplayer D&D-style tabletop adventures.",
       inLanguage: "en-US",
@@ -23,6 +41,9 @@ const siteJsonLd = {
       applicationCategory: "GameApplication",
       operatingSystem: "Web",
       url: "https://aitaverns.com/",
+      publisher: {
+        "@id": "https://aitaverns.com/#organization"
+      },
       description:
         "Play D&D-style tabletop adventures with an AI dungeon master that remembers your campaign, asks for rolls, and tracks consequences.",
       genre: "Tabletop role-playing game",
@@ -103,6 +124,7 @@ export default function HomePage() {
           <nav>
             <Link href="/about">About</Link>
             <Link href="/ai-dungeon-master">AI DM</Link>
+            <Link href="/contact">Contact</Link>
             <Link href="/play">Play</Link>
             <Link href="/login">Sign in</Link>
           </nav>
@@ -199,7 +221,7 @@ export default function HomePage() {
       <footer className="landing-footer">
         <span>AI Taverns</span>
         <nav aria-label="Public pages">
-          {publicSeoPages.map((page) => (
+          {[...publicSeoPages, ...trustPages].map((page) => (
             <Link key={page.path} href={page.path}>
               {page.eyebrow}
             </Link>
