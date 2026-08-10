@@ -48,8 +48,11 @@ import type {
   DiceRollRequest,
   DiceRollResult,
   DiceRollSubmission,
+  MechanicsResourceState,
   MechanicsSeed,
   MechanicsState,
+  SpellSlotLevel,
+  SpellSlotState,
   RoomSocketEvent,
   RoomSnapshot
 } from "@ai-dnd/contracts";
@@ -58,6 +61,7 @@ import {
   applyDeathSavingThrow,
   applyAcceptedCast,
   assertMechanicsActionAllowed,
+  detectTrackedCastIntent,
   firstDyingPlayerActorKey,
   isDeadActor,
   isDyingPlayerActor,
@@ -768,8 +772,8 @@ const dungeonMasterContractInstructions = [
   "Use scene_location for the current local scene label, such as a tavern, street, room, road, ruin, district, or wilderness landmark.",
   "Use display_location as the short UI label for the current location; do not use a genre label.",
   "Required top-level keys: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update, combat_events, proposed_context_updates.",
-  "public_narration may use sparse semantic narration markup for inline UI color: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, and <object>...</object>.",
-  "Use semantic narration markup only around exact player-visible words that should be colored. Do not nest tags, add attributes, or use any other HTML/XML tags.",
+  "public_narration may use sparse semantic narration markup for inline UI color or emphasis: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, <object>...</object>, and <em>...</em>.",
+  "Use semantic narration markup only around exact player-visible words that should be colored or italicized. Do not nest tags, add attributes, or use any other HTML/XML tags.",
   "Do not put CSS, hex colors, color names, or Markdown emphasis into public_narration.",
   "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved this turn."
 ].join("\n");
@@ -783,6 +787,7 @@ export type DungeonMasterRuntime = {
     currentPlayerAction?: string;
     dmJob?: DmJobName;
     model?: AiModelId;
+    temperature?: number;
     signal?: AbortSignal;
     onPublicNarrationDelta?: (text: string) => void;
   }): Promise<DungeonMasterProviderResponse>;
@@ -2003,10 +2008,173 @@ function allegianceField(record: Record<string, unknown>, key: string) {
     : undefined;
 }
 
+function sanitizePlayerSpellSlotsUpdate(input: {
+  actorKey: string;
+  existing: MechanicsState["actors"][string] | undefined;
+  proposed: ReturnType<typeof parseMechanicsSpellSlots>;
+  currentAction?: string | undefined;
+  dmJob?: DmJobName | undefined;
+}) {
+  const { actorKey, existing, proposed, currentAction, dmJob } = input;
+
+  if (!proposed || !actorKey.startsWith("player:")) {
+    return proposed;
+  }
+
+  const existingSlots = existing?.spellSlots;
+
+  if (!existingSlots) {
+    return dmJob === "rest_mechanics" ? proposed : undefined;
+  }
+
+  const explicitTrackedCast = currentAction
+    ? Boolean(detectTrackedCastIntent(currentAction))
+    : false;
+  const restCanRestoreSlots = dmJob === "rest_mechanics";
+  const acceptedSlots: Partial<Record<SpellSlotLevel, SpellSlotState>> = {
+    ...existingSlots
+  };
+  let hasAcceptedSlot = false;
+
+  for (const [level, proposedSlot] of Object.entries(proposed) as Array<
+    [SpellSlotLevel, SpellSlotState]
+  >) {
+    const existingSlot = existingSlots[level];
+
+    if (!existingSlot) {
+      continue;
+    }
+
+    const maxIsUnchanged = proposedSlot.max === existingSlot.max;
+    const usedIsUnchanged = proposedSlot.used === existingSlot.used;
+    const spendsSlot = proposedSlot.used > existingSlot.used;
+    const restoresSlot = proposedSlot.used < existingSlot.used;
+
+    if (
+      (maxIsUnchanged && usedIsUnchanged) ||
+      (maxIsUnchanged && spendsSlot && explicitTrackedCast) ||
+      (maxIsUnchanged && restoresSlot && restCanRestoreSlots)
+    ) {
+      acceptedSlots[level] = proposedSlot;
+      hasAcceptedSlot = true;
+    }
+  }
+
+  return hasAcceptedSlot ? acceptedSlots : undefined;
+}
+
+function resourceReferenceVariants(
+  key: string,
+  resource: MechanicsResourceState
+) {
+  const candidates = [
+    key,
+    key.replace(/[_-]+/g, " "),
+    resource.label,
+    resource.label.replace(/s$/i, "")
+  ];
+
+  return Array.from(
+    new Set(
+      candidates
+        .map((candidate) => candidate.trim().toLowerCase())
+        .filter((candidate) => candidate.length > 0)
+    )
+  );
+}
+
+function escapeRegexLiteral(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function actionExplicitlyReferencesResource(input: {
+  currentAction?: string | undefined;
+  key: string;
+  resource: MechanicsResourceState;
+}) {
+  if (!input.currentAction) {
+    return false;
+  }
+
+  return resourceReferenceVariants(input.key, input.resource).some((variant) =>
+    new RegExp(`\\b${escapeRegexLiteral(variant)}\\b`, "i").test(
+      input.currentAction ?? ""
+    )
+  );
+}
+
+function sanitizePlayerResourcesUpdate(input: {
+  actorKey: string;
+  existing: MechanicsState["actors"][string] | undefined;
+  proposed: ReturnType<typeof parseMechanicsResources>;
+  currentAction?: string | undefined;
+  dmJob?: DmJobName | undefined;
+}) {
+  const { actorKey, existing, proposed, currentAction, dmJob } = input;
+
+  if (!proposed || !actorKey.startsWith("player:")) {
+    return proposed;
+  }
+
+  const existingResources = existing?.resources;
+
+  if (!existingResources) {
+    return undefined;
+  }
+
+  const restCanRestoreResources = dmJob === "rest_mechanics";
+  const acceptedResources: Record<string, MechanicsResourceState> = {
+    ...existingResources
+  };
+  let hasAcceptedResource = false;
+
+  for (const [key, proposedResource] of Object.entries(proposed)) {
+    const existingResource = existingResources[key];
+
+    if (!existingResource) {
+      continue;
+    }
+
+    const maxIsUnchanged = proposedResource.max === existingResource.max;
+    const rechargeIsUnchanged =
+      proposedResource.recharge === existingResource.recharge;
+    const labelIsUnchanged = proposedResource.label === existingResource.label;
+    const usedIsUnchanged = proposedResource.used === existingResource.used;
+    const spendsResource = proposedResource.used > existingResource.used;
+    const restoresResource = proposedResource.used < existingResource.used;
+    const explicitlyReferenced = actionExplicitlyReferencesResource({
+      currentAction,
+      key,
+      resource: existingResource
+    });
+
+    if (
+      maxIsUnchanged &&
+      rechargeIsUnchanged &&
+      labelIsUnchanged &&
+      (usedIsUnchanged ||
+        (spendsResource && explicitlyReferenced) ||
+        (restoresResource && restCanRestoreResources))
+    ) {
+      acceptedResources[key] = {
+        ...existingResource,
+        used: proposedResource.used
+      };
+      hasAcceptedResource = true;
+    }
+  }
+
+  return hasAcceptedResource ? acceptedResources : undefined;
+}
+
 function applyMechanicsStateUpdate(
   state: MechanicsState,
   update: Record<string, unknown> | undefined,
-  updatedAt?: string
+  updatedAt?: string,
+  options: {
+    currentAction?: string | undefined;
+    dmJob?: DmJobName | undefined;
+  } = {}
 ): MechanicsState {
   if (!update || Object.keys(update).length === 0) {
     return state;
@@ -2035,8 +2203,20 @@ function applyMechanicsStateUpdate(
         : undefined;
     const saveBonuses = abilityBonusMapField(rawActor, "saveBonuses");
     const abilityModifiers = abilityBonusMapField(rawActor, "abilityModifiers");
-    const spellSlots = parseMechanicsSpellSlots(rawActor.spellSlots);
-    const resources = parseMechanicsResources(rawActor.resources);
+    const spellSlots = sanitizePlayerSpellSlotsUpdate({
+      actorKey,
+      existing,
+      proposed: parseMechanicsSpellSlots(rawActor.spellSlots),
+      currentAction: options.currentAction,
+      dmJob: options.dmJob
+    });
+    const resources = sanitizePlayerResourcesUpdate({
+      actorKey,
+      existing,
+      proposed: parseMechanicsResources(rawActor.resources),
+      currentAction: options.currentAction,
+      dmJob: options.dmJob
+    });
     const characterName =
       typeof rawActor.characterName === "string" && rawActor.characterName.trim()
         ? rawActor.characterName
@@ -8641,6 +8821,9 @@ function formatOpeningSceneRequest(input: {
     players: input.players,
     style: input.style
   });
+  const openingParagraphGuidance = input.omitGenericSettingRequest
+    ? "Write exactly 6 rich paragraphs with concrete sensory detail, spatial clarity, premise, purpose, an immediate tension, and clear interactable choices. The sixth paragraph must be only the final direct prompt, such as 'What do you do?'"
+    : "Write 4-7 rich paragraphs with concrete sensory detail, spatial clarity, premise, purpose, an immediate tension, and clear interactable choices.";
   const currentPlayerAction = input.omitGenericSettingRequest
     ? openingSceneRequest
         .replace(
@@ -8684,7 +8867,7 @@ function formatOpeningSceneRequest(input: {
     "Use character sheet details to personalize hooks, warnings, sensory cues, relationships, or stakes without rewriting character backstories.",
     "",
     "Opening scene quality bar:",
-    "Write 4-7 rich paragraphs with concrete sensory detail, spatial clarity, premise, purpose, an immediate tension, and clear interactable choices.",
+    openingParagraphGuidance,
     "Begin in the fiction immediately; do not ask what kind of world the player wants.",
     "Return no player-facing roll requests unless danger or uncertainty already requires dice before the player can act.",
     "End with a direct player-facing prompt such as 'What do you do?'",
@@ -8708,6 +8891,8 @@ function eldermereOpeningPlannerInstructions() {
     "The player-facing opening should use at most 3 Eldermere-specific setting proper nouns total, not counting ordinary NPC names. The chosen region and starting location count toward this limit.",
     "Prefer plain descriptions over official names: use concrete meaning before setting terminology.",
     "Treat canonical Eldermere facts as source-grounded world truth. Treat any new links, NPC motives, faction plans, or secret ladders you invent as campaign-local premises until established through play.",
+    "Every narrator_instructions array must include this exact structure instruction: 'Keep the opening to exactly 6 paragraphs of vivid sensory detail, with the sixth paragraph only the final direct prompt: What do you do?'",
+    "Do not use flexible paragraph ranges such as 4-7, 3-5, short, brief, concise, or a few paragraphs in narrator_instructions.",
     "Return exactly one valid JSON object and no Markdown.",
     "Use this exact JSON shape:",
     JSON.stringify(
@@ -8880,8 +9065,8 @@ function formatEldermereNarratorOpeningRequest(input: {
     "If a useful idea appears in dm_private_context, imply it only through concrete visible facts or pressure; do not reveal it as confirmed exposition.",
     "Forbidden opening terms must not appear in public_narration.",
     "Allowed player-facing terms must be explained plainly on first use.",
-    "Use sparse semantic narration markup inside public_narration when it helps the player scan important visible nouns or short phrases. Supported tags only: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, and <object>...</object>.",
-    "Wrap only the exact player-visible words that should receive color. Use 2-4 tags when the opener has worthwhile visible names, places, clues, dangers, factions, or objects. Do not wrap full sentences or paragraphs.",
+    "Use 2-3 sparse semantic narration markup tags inside public_narration so players can scan important visible nouns or short phrases. Supported tags: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, <object>...</object>, and <em>...</em>. The 2-3 required tags should be color tags, not <em>.",
+    "Wrap only the exact player-visible words that should receive color or italic emphasis. The opener must include 2-3 color tags around worthwhile visible names, places, clues, dangers, factions, or objects. Do not wrap full sentences or paragraphs.",
     "Do not nest semantic tags, add attributes, invent other tags, include CSS, hex colors, color names, Markdown emphasis, or prose instructions inside public_narration.",
     "Do not return narration_highlights, highlights, sidecar span metadata, post-processing instructions, or any separate highlight records. The inline semantic tags are the only highlight system.",
     "",
@@ -9348,7 +9533,7 @@ function askDmInstructions() {
     "Do not invent names, places, relationships, deaths, meetings, prior scenes, loot amounts, inventory contents, or inventory changes.",
     "Do not treat the player's question as confirmation that something happened. If the question contains a false premise, correct only the part contradicted by provided context and clearly say what is unknown.",
     "If the answer is not clearly established in the provided context, say so as the DM controlling established fiction. Prefer phrasing like \"That's all that I've established; I can't tell you quite yet...\" instead of sounding like a detached assistant with missing context.",
-    "The answer may use sparse semantic narration markup for inline UI color: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, and <object>...</object>. Do not use attributes, nested tags, any other HTML/XML tags, CSS, hex colors, color names, or Markdown emphasis.",
+    "The answer may use sparse semantic narration markup for inline UI color or emphasis: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, <object>...</object>, and <em>...</em>. Do not use attributes, nested tags, any other HTML/XML tags, CSS, hex colors, color names, or Markdown emphasis.",
     "Trust provided campaign context, canonical character sheets, and stored campaign state over prior Ask DM answers when they conflict. Ask DM answers are table guidance, not canon by themselves.",
     "You may explain what the current context says about inventory, equipment, or currency, but you cannot update inventory, promise an update, or declare a corrected total unless the canonical character sheet or provided campaign state already shows it.",
     "If the player is asking to do something in the fiction, tell them to submit it as a turn/action instead of resolving it here.",
@@ -9411,8 +9596,8 @@ const gameplayTurnOutputContractReminder = [
   "Output contract reminder:",
   "Return only one valid JSON object. Do not include prose, Markdown, or commentary outside JSON.",
   "Required top-level keys: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update, combat_events, proposed_context_updates.",
-  "public_narration may use sparse semantic narration markup for inline UI color: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, and <object>...</object>.",
-  "Use semantic narration markup only around exact player-visible words that should be colored. Do not nest tags, add attributes, or use any other HTML/XML tags.",
+  "public_narration may use sparse semantic narration markup for inline UI color or emphasis: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, <object>...</object>, and <em>...</em>.",
+  "Use semantic narration markup only around exact player-visible words that should be colored or italicized. Do not nest tags, add attributes, or use any other HTML/XML tags.",
   "Do not use bold, Markdown, CSS, hex colors, or color names inside public_narration.",
   "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved this turn.",
   "Treat canonical character sheet Inventory, Equipment, and Currency sections as current inventory state.",
@@ -9457,14 +9642,20 @@ const gameplayTurnOutputContractReminder = [
   "Do not write OOC notes like '(resolving NPC turns now)' as a substitute for actually resolving those turns in public_narration and mechanics_state_update.",
   "Only return next_input_needed player_actions in active combat after combat-start initiative requirements are satisfied and mechanics_state_update.combat.turnOwner is a living player-controlled actor, after combat has ended, or while pausing on a non-player-controlled turn for a required player reaction or tactical choice.",
   "For each non-player-controlled turn in the catch-up loop, choose movement, action, and tactics; roll NPC-side dice yourself; show visible combat math; apply HP, condition, resource, and combat turn changes in mechanics_state_update; add combat_events when available; then continue to the next initiative actor.",
+  "Allied NPC turns are real combat turns, not reaction flavor or atmosphere.",
+  "If an allied NPC is in initiative, conscious, and non-player-controlled, resolve their turn with the same action, roll, damage, HP/state update, combat_events discipline, and turn advancement used for hostile NPCs.",
+  "Narrating an allied NPC shouting, parrying, flinching, guarding, or reacting does not count as resolving that ally's turn unless the narration and mechanics_state_update also resolve a concrete combat action such as Attack, Help, Dodge, Disengage, Dash, Use an Object, casting, healing, grappling, shoving, or protecting a target.",
   "During active combat, if next control belongs to a player turnOwner and no roll_requests are pending, set input_policy only_targeted_players and input_targets to that player actor key only; do not use all_players for ordinary turn-based combat.",
   "Off-turn player combat declarations are only stated intent, not actions already in motion; never say they are mid-swing, following immediately, or resolving before the next initiative actor.",
-  "When multiple player submissions arrive in active combat, resolve the current turn owner's valid action first, keep other submissions as pending intent, and if the next actor is an enemy resolve that enemy turn before later player intent.",
   "If the stored turnOwner is an NPC key or NPC character name, do not let submitted player attacks or spells preempt that NPC turn.",
   "If a declared action needs a concrete tactical choice before dice can be interpreted, such as target, targets, spell area, Magic Missile dart distribution, weapon target, movement destination, or affected creatures, do not request dice yet.",
   "For missing tactical choices, return next_input_needed player_actions, roll_requests [], input_policy only_targeted_players, input_targets set to the acting player, and ask only for the missing choice.",
   "For combat attack and damage roll_requests, include combat metadata: {actionId, actorKey, targetActorKey, kind, attackName, sequence, sourceAttackRollId when resolving damage, damageType, and onHitDamage for attack rolls that can hit}. Reuse the same actionId across all rolls for one declared combat action.",
-  "When a player action, spell, feature, or weapon would deal damage and that damage roll was not already submitted, do not roll damage yourself. Request the player's damage roll with next_input_needed dice_results and a structured roll_requests entry. This includes automatic-hit effects such as Magic Missile. Do not update target HP until damage is submitted.",
+  "When a player action, spell, feature, or weapon requires an attack roll and that attack roll was not already submitted, do not roll the attack yourself.",
+  "Request the player's attack roll with next_input_needed dice_results and one structured roll_requests entry per required attack roll.",
+  "For multiattack, multiple beams, multiple rays, or split-target attacks, request each attack roll separately with clear labels such as 'Eldritch Blast attack roll (beam 1)' and 'Eldritch Blast attack roll (beam 2)'.",
+  "Do not narrate hit, miss, damage, target HP changes, defeat, or downstream combat consequences until the player submits the required attack roll.",
+  "When a player action, spell, feature, or weapon would deal damage and that damage roll was not already submitted, do not roll damage yourself. Request the player's damage roll with next_input_needed dice_results and a structured roll_requests entry. This includes automatic-hit effects such as Magic Missile and attack effects whose submitted attack roll has already hit. Do not update target HP until damage is submitted.",
   "Resolve NPC attacks fully using conversational visible math in prose. If the NPC has an attackBonus or other modifier, show the modified total first and natural die in parentheses, such as '<clue>they rolled a 17 (15) against your AC of 14</clue>, so the cutlass catches your ribs'; on a hit, state damage in prose, such as 'the damage comes to <danger>6 slashing</danger> from <clue>1d6 + 2</clue>', update player HP, then continue the non-player-controlled catch-up loop until control reaches a player actor, combat ends, or a player-facing roll, reaction, or tactical choice is required.",
   "For NPC hits, public_narration must include the NPC's roll, the target AC, whether it hit, the damage dice and total, the damage type, and the HP change before injury narration finishes.",
   "When a player spell or feature forces an NPC or enemy saving throw, roll that save yourself before narrating success or failure, add the relevant saveBonus or ability modifier from mechanicsState, reveal the modified total and natural die, compare the total to the player's known spell save DC when available, and do not put the NPC/enemy save in roll_requests.",
@@ -9480,7 +9671,7 @@ const openingSceneOutputContractReminder = [
   "Return only one valid JSON object. Do not include prose, Markdown, or commentary outside JSON.",
   "public_narration must contain the full 6-paragraph opener, not only the character motivation or a short teaser.",
   "Treat narrator_instructions in the Eldermere opening plan as the highest-priority scene blueprint.",
-  "Use 2-3 semantic narration markup tags when the opener has worthwhile visible names, places, clues, dangers, factions, or objects. Use only <npc>, <place>, <clue>, <danger>, <faction>, and <object> tags.",
+  "Use 2-3 semantic narration markup color tags when the opener has worthwhile visible names, places, clues, dangers, factions, or objects. Use <em> only for brief italicized speech or emphasis; it does not count toward the 2-3 required color tags.",
   "Do not use bold, Markdown, CSS, hex colors, color names, attributes, nested tags, or any other HTML/XML tags inside public_narration.",
   "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved in the opener."
 ];
@@ -9495,6 +9686,7 @@ const gameplayTurnModeReminder: Record<CampaignMode, string[]> = {
     "Multiplayer combat reminder:",
     "In active initiative combat, do not end with next_input_needed player_actions while turnOwner is a non-player-controlled actor unless pausing on that actor's turn for a required player reaction or tactical choice; otherwise resolve every consecutive non-player-controlled turn until control reaches a player actor or combat ends.",
     "In active initiative combat, when control reaches a player actor and no roll_requests are pending, set turnOwner to that player actor, input_policy only_targeted_players, and input_targets to that actor key.",
+    "When multiple player submissions arrive in active combat, resolve the current turn owner's valid action first, keep other submissions as pending intent, and if the next actor is non-player-controlled resolve that non-player-controlled turn before later player intent.",
     "Use turnOwner null with an all-player prompt only when combat is inactive or the scene is explicitly outside strict initiative.",
     "For multiplayer player-controlled initiative, saving throws, checks, attacks, and other targeted player rolls, set each roll_requests item's player field to the targeted character's actor key or character name."
   ]
@@ -9979,6 +10171,82 @@ function openingNarrationContainsTerm(narration: string, term: string) {
   return openingNarrationTermPattern(term).test(narration);
 }
 
+const semanticOpeningTagPattern =
+  /<(npc|place|clue|danger|faction|object)>([^<>]+)<\/\1>/giu;
+const semanticOpeningTagMinimum = 2;
+const semanticOpeningTagMaximum = 3;
+const finalEldermereOpeningRetryTemperature = 0.2;
+
+function semanticOpeningTagCount(narration: string) {
+  return Array.from(narration.matchAll(semanticOpeningTagPattern)).length;
+}
+
+function semanticOpeningTagContainsTerm(narration: string, term: string) {
+  const normalizedTerm = term.trim().toLowerCase();
+
+  if (!normalizedTerm) {
+    return false;
+  }
+
+  return Array.from(narration.matchAll(semanticOpeningTagPattern)).some(
+    (match) => match[2]?.toLowerCase().includes(normalizedTerm)
+  );
+}
+
+function stripExtraSemanticOpeningTags(narration: string) {
+  let tagCount = 0;
+
+  return narration.replace(
+    semanticOpeningTagPattern,
+    (match: string, _role: string, text: string) => {
+      tagCount += 1;
+
+      return tagCount > semanticOpeningTagMaximum ? text : match;
+    }
+  );
+}
+
+function addSemanticOpeningTag(
+  narration: string,
+  term: string | undefined,
+  role: "npc" | "place" | "clue" | "danger" | "faction" | "object"
+) {
+  const trimmedTerm = term?.trim();
+
+  if (
+    !trimmedTerm ||
+    semanticOpeningTagCount(narration) >= semanticOpeningTagMinimum ||
+    semanticOpeningTagContainsTerm(narration, trimmedTerm)
+  ) {
+    return narration;
+  }
+
+  return narration.replace(
+    openingNarrationTermPattern(trimmedTerm),
+    (_match, prefix: string) => `${prefix}<${role}>${trimmedTerm}</${role}>`
+  );
+}
+
+function normalizeEldermereOpeningSemanticTags(
+  narration: string,
+  plan: EldermereOpeningPlan
+) {
+  const strippedNarration = stripExtraSemanticOpeningTags(narration);
+  const firstNpc = plan.npcSeed[0]?.name;
+  const firstChoice = plan.firstInteractableChoices[0];
+
+  return [
+    { term: plan.startingLocation.name, role: "place" as const },
+    { term: firstNpc, role: "npc" as const },
+    { term: plan.region.name, role: "place" as const },
+    { term: firstChoice, role: "clue" as const }
+  ].reduce(
+    (current, candidate) =>
+      addSemanticOpeningTag(current, candidate.term, candidate.role),
+    strippedNarration
+  );
+}
+
 function plainReplacementForForbiddenOpeningTerm(term: string) {
   switch (term.toLowerCase()) {
     case "second dominion":
@@ -10021,9 +10289,11 @@ function repairEldermereOpeningReply(
   reply: DungeonMasterReply,
   plan: EldermereOpeningPlan
 ): DungeonMasterReply {
+  const scrubbedContent = scrubForbiddenOpeningTerms(reply.content, plan);
+
   return {
     ...reply,
-    content: scrubForbiddenOpeningTerms(reply.content, plan),
+    content: normalizeEldermereOpeningSemanticTags(scrubbedContent, plan),
     setting: {
       ...reply.setting,
       worldName: "Eldermere",
@@ -10074,6 +10344,24 @@ function openingParagraphCount(content: string) {
 
 function eldermereOpeningNarrationErrors(content: string) {
   const errors: string[] = [];
+  errors.push(...eldermereOpeningStructuralErrors(content));
+
+  const semanticTagCount = semanticOpeningTagCount(content);
+
+  if (
+    semanticTagCount < semanticOpeningTagMinimum ||
+    semanticTagCount > semanticOpeningTagMaximum
+  ) {
+    errors.push(
+      `public_narration must contain ${semanticOpeningTagMinimum}-${semanticOpeningTagMaximum} semantic narration markup tags; found ${semanticTagCount}`
+    );
+  }
+
+  return errors;
+}
+
+function eldermereOpeningStructuralErrors(content: string) {
+  const errors: string[] = [];
   const paragraphCount = openingParagraphCount(content);
 
   if (paragraphCount !== 6) {
@@ -10087,6 +10375,20 @@ function eldermereOpeningNarrationErrors(content: string) {
   }
 
   return errors;
+}
+
+function eldermereOpeningValidationErrorMessage(input: {
+  forbiddenTerms: string[];
+  settingErrors: string[];
+  narrationErrors: string[];
+}) {
+  return [
+    ...input.forbiddenTerms.map(
+      (term) => `public_narration contains forbidden opening term "${term}"`
+    ),
+    ...input.settingErrors,
+    ...input.narrationErrors
+  ].join("; ");
 }
 
 async function askEldermereOpeningNarrator(
@@ -10152,6 +10454,7 @@ async function askEldermereOpeningNarrator(
       : []),
     "Return the same opening situation as valid AI Taverns DM JSON, but fix every issue above.",
     "public_narration must be exactly 6 paragraphs separated by blank lines, must follow narrator_instructions as the highest-priority scene blueprint, and the sixth paragraph must be the final direct prompt 'What do you do?'",
+    `public_narration must include ${semanticOpeningTagMinimum}-${semanticOpeningTagMaximum} semantic narration color tags using <npc>, <place>, <clue>, <danger>, <faction>, or <object>. You may also use <em> for brief italicized emphasis, but <em> does not count toward the required color tags.`,
     "Use only allowed_player_facing_terms and plain descriptions. Preserve setting metadata."
   ].join("\n");
   const repairedOpening = await askDungeonMaster(
@@ -10184,14 +10487,104 @@ async function askEldermereOpeningNarrator(
   );
 
   if (
-    remainingForbiddenTerms.length > 0 ||
-    remainingSettingErrors.length > 0 ||
-    remainingNarrationErrors.length > 0
+    remainingForbiddenTerms.length === 0 &&
+    remainingSettingErrors.length === 0 &&
+    remainingNarrationErrors.length === 0
   ) {
-    return repairEldermereOpeningReply(repairedOpening, plan);
+    return repairedOpening;
   }
 
-  return repairedOpening;
+  const normalizedRepairedOpening = repairEldermereOpeningReply(
+    repairedOpening,
+    plan
+  );
+  const normalizedForbiddenTerms = findForbiddenOpeningTerms(
+    normalizedRepairedOpening.content,
+    plan
+  );
+  const normalizedSettingErrors = eldermereOpeningSettingErrors(
+    normalizedRepairedOpening.setting,
+    plan
+  );
+  const normalizedNarrationErrors = eldermereOpeningNarrationErrors(
+    normalizedRepairedOpening.content
+  );
+
+  if (
+    normalizedForbiddenTerms.length === 0 &&
+    normalizedSettingErrors.length === 0 &&
+    normalizedNarrationErrors.length === 0
+  ) {
+    return normalizedRepairedOpening;
+  }
+
+  const finalRetryMessage = [
+    narratorMessage,
+    "",
+    "Final low-temperature rewrite required:",
+    "The previous repair still failed validation after safe normalization.",
+    `Remaining validation errors: ${eldermereOpeningValidationErrorMessage({
+      forbiddenTerms: normalizedForbiddenTerms,
+      settingErrors: normalizedSettingErrors,
+      narrationErrors: normalizedNarrationErrors
+    })}`,
+    "Rewrite the same opening situation as one valid AI Taverns DM JSON object.",
+    "public_narration must contain exactly 6 paragraphs separated by blank lines.",
+    "Paragraph 1: why this character or party came here now.",
+    "Paragraph 2: the recent travel, arrival context, and what the character knows before the live scene.",
+    "Paragraph 3: the starting location atmosphere narrowing into the first live scene.",
+    "Paragraph 4: visible NPC tension and immediate pressure.",
+    "Paragraph 5: the actionable complication and 2-3 concrete non-dice actions available right now.",
+    "Paragraph 6: exactly 'What do you do?' and nothing else.",
+    `public_narration must include ${semanticOpeningTagMinimum}-${semanticOpeningTagMaximum} semantic narration color tags using <npc>, <place>, <clue>, <danger>, <faction>, or <object>. You may also use <em> for brief italicized emphasis, but <em> does not count toward the required color tags.`,
+    "Do not include Markdown outside JSON, a teaser, a summary, a prologue note, or fewer than 6 paragraphs."
+  ].join("\n");
+  const finalOpening = await askDungeonMaster(
+    db,
+    runtime,
+    campaign,
+    finalRetryMessage,
+    instructions,
+    false,
+    turnId,
+    undefined,
+    contractOptions,
+    {
+      buildPromptContext: false,
+      contractKind: "opening",
+      includeEldermereTurnContext: false,
+      suppressStreaming: true,
+      temperature: finalEldermereOpeningRetryTemperature
+    }
+  );
+  const normalizedFinalOpening = repairEldermereOpeningReply(finalOpening, plan);
+  const finalForbiddenTerms = findForbiddenOpeningTerms(
+    normalizedFinalOpening.content,
+    plan
+  );
+  const finalSettingErrors = eldermereOpeningSettingErrors(
+    normalizedFinalOpening.setting,
+    plan
+  );
+  const finalNarrationErrors = eldermereOpeningNarrationErrors(
+    normalizedFinalOpening.content
+  );
+
+  if (
+    finalForbiddenTerms.length > 0 ||
+    finalSettingErrors.length > 0 ||
+    finalNarrationErrors.length > 0
+  ) {
+    throw new Error(
+      `Eldermere opening narrator returned invalid public_narration after final retry: ${eldermereOpeningValidationErrorMessage({
+        forbiddenTerms: finalForbiddenTerms,
+        settingErrors: finalSettingErrors,
+        narrationErrors: finalNarrationErrors
+      })}`
+    );
+  }
+
+  return normalizedFinalOpening;
 }
 
 async function getActivePlayers(db: Queryable, campaignId: string) {
@@ -10346,6 +10739,7 @@ async function askDungeonMaster(
     includeEldermereTurnContext?: boolean;
     model?: AiModelId;
     suppressStreaming?: boolean;
+    temperature?: number;
     timeoutMs?: number;
   }
 ): Promise<DungeonMasterReply> {
@@ -10421,6 +10815,9 @@ async function askDungeonMaster(
       ...(currentPlayerAction ? { currentPlayerAction } : {}),
       ...(promptContext?.jobNeeded ? { dmJob: promptContext.jobNeeded } : {}),
       ...(options?.model ? { model: options.model } : {}),
+      ...(typeof options?.temperature === "number"
+        ? { temperature: options.temperature }
+        : {}),
       ...(timeoutSignal ? { signal: timeoutSignal } : {}),
       ...(streamEmitter && streamTurnId
         ? {
@@ -10543,16 +10940,30 @@ async function askDungeonMaster(
           )
         )
       : { accepted: [], discarded: [] };
-    const inventoryPlayers = contract.inventoryStateUpdate?.patches.length
+    const shouldLoadActivePlayers =
+      Boolean(contract.inventoryStateUpdate?.patches.length) ||
+      promptContext?.jobNeeded === "combat";
+    const activePlayers = shouldLoadActivePlayers
       ? await getActiveCampaignPlayers(db, campaign.id)
+      : [];
+    const inventoryPlayers = contract.inventoryStateUpdate?.patches.length
+      ? activePlayers
       : [];
     const inventoryValidation = validateInventoryPatches(
       contract.inventoryStateUpdate?.patches ?? [],
       inventoryPlayers
     );
-    const mechanicsState = resolveMechanicsState(campaign, []);
+    const mechanicsState = resolveMechanicsState(campaign, activePlayers);
     const combatInputControl = normalizeCombatInputControl(
-      applyMechanicsStateUpdate(mechanicsState, contract.mechanicsStateUpdate, nowIso()),
+      applyMechanicsStateUpdate(
+        mechanicsState,
+        contract.mechanicsStateUpdate,
+        nowIso(),
+        {
+          currentAction: currentPlayerAction ?? message,
+          dmJob: promptContext?.jobNeeded
+        }
+      ),
       {
         mode: campaign.mode,
         nextInputNeeded: contract.nextInputNeeded,

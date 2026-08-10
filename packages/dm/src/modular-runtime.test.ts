@@ -444,6 +444,18 @@ describe("modular AI DM runtime contracts", () => {
       jobPrompt("scene_director"),
       /exploration, travel, downtime, and ordinary scene resolution/i
     );
+    assert.match(
+      jobPrompt("scene_director"),
+      /Do not spend player spell slots for magical flavor, intimidation, visible aura, patron manifestation, threatening gestures, or roleplay descriptions/i
+    );
+    assert.match(
+      jobPrompt("scene_director"),
+      /If a player describes ambiguous magic without naming a spell, treat it as narration, a cantrip-like display, or ask clarification/i
+    );
+    assert.match(
+      jobPrompt("scene_director"),
+      /Only include spellSlots changes in mechanics_state_update when the current player submission explicitly casts a known leveled spell/i
+    );
     assert.doesNotMatch(
       jobPrompt("scene_director"),
       /Roll Sleight of Hand:[^"]*\\n\\nWhat do you do\?/
@@ -485,6 +497,18 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("npc_dialogue"),
+      /has not chosen the leverage that determines the skill, do not request a generic social roll/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /But first, I'll need you to tell me which approach you take before I ask you to roll/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /"roll_requests": \[\][\s\S]*"next_input_needed": "player_actions"/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
       /Do not let the NPC become wavering, convinced, compliant, or newly informative before the requested roll is submitted/i
     );
     assert.match(
@@ -498,6 +522,10 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(
       jobPrompt("npc_dialogue"),
       /On the second consistent answer, choose one decisive path/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /When uncertainty matters and the player's leverage is clear/i
     );
     assert.match(
       jobPrompt("npc_dialogue"),
@@ -553,11 +581,11 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
-      /semantic narration markup for inline UI color/i
+      /semantic narration markup for inline UI color or emphasis/i
     );
     assert.match(
       jobPrompt("combat"),
-      /<npc>\.\.\.<\/npc>.*<place>\.\.\.<\/place>.*<clue>\.\.\.<\/clue>.*<danger>\.\.\.<\/danger>.*<faction>\.\.\.<\/faction>.*<object>\.\.\.<\/object>/is
+      /<npc>\.\.\.<\/npc>.*<place>\.\.\.<\/place>.*<clue>\.\.\.<\/clue>.*<danger>\.\.\.<\/danger>.*<faction>\.\.\.<\/faction>.*<object>\.\.\.<\/object>.*<em>\.\.\.<\/em>/is
     );
     assert.match(
       jobPrompt("combat"),
@@ -658,6 +686,15 @@ describe("modular AI DM runtime contracts", () => {
       jobPrompt("combat"),
       /resolve every consecutive non-player-controlled actor/i
     );
+    assert.match(jobPrompt("combat"), /Allied NPC turns are first-class combat turns/i);
+    assert.match(
+      jobPrompt("combat"),
+      /Do not compress an allied NPC's initiative turn into flavor/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /resolve their movement, action, visible roll math, damage or effect, mechanics_state_update, and turn advancement/i
+    );
     assert.match(jobPrompt("combat"), /Do not merely announce future turns/i);
     assert.match(
       jobPrompt("combat"),
@@ -675,6 +712,18 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(
       jobPrompt("combat"),
       /player turn resolved, all non-player turns catch up before control returns/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /player turn resolved, enemy and allied NPC turns both catch up before control returns/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Bad response to avoid: resolving Shard Trail Agent 2's attack, then describing Brynn only shouting or parrying in the background/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /<npc>Brynn Stakehold<\/npc> takes her turn immediately/i
     );
     assert.match(
       jobPrompt("combat"),
@@ -785,6 +834,38 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("combat"), /player attack hits, request player damage/i);
     assert.match(
       jobPrompt("combat"),
+      /If a player declares an attack-roll action but has not submitted the attack roll, request the attack roll first/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /For Eldritch Blast, Scorching Ray, Extra Attack, or any action with multiple attack rolls/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Only request damage after a submitted attack roll hits/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /For player attack rolls, use conversational wording with 'you rolled' only when the current turn input contains that submitted player attack roll result/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Eldritch Blast requires player attack rolls before damage/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Bad response to avoid: saying 'You rolled a 19 against Agent 3's AC of 13/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Eldritch Blast attack roll \(beam 1\)/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /"kind": "attack_roll"/i
+    );
+    assert.match(
+      jobPrompt("combat"),
       /Bad response to avoid: inventing greataxe damage/i
     );
     assert.match(
@@ -829,15 +910,39 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("combat"), /Never silently modify HP/);
     assert.match(
       jobPrompt("combat"),
-      /append a compact resources summary at the end of public_narration/i
+      /must include a compact current-resource reminder immediately before the final action handoff/i
     );
     assert.match(
       jobPrompt("combat"),
-      /only when next_input_needed is not dice_results and roll_requests is empty/i
+      /next_input_needed is player_actions, roll_requests is empty/i
     );
     assert.match(
       jobPrompt("combat"),
-      /<clue>Just to remind you, you have: <\/clue>\\n<clue>35<\/clue> hit points\\n<clue>3<\/clue> third level spell slots/i
+      /Do not shape the summary around spellcasters/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Second Wind, Action Surge, Lay on Hands, Divine Sense/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /summarize the pact slot pool as pact magic slots/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Example no-dice combat handoff: 'It is your turn.*<clue>50<\/clue> hit points\\n<clue>3<\/clue> rages\\n\\nWhat do you do\?'/is
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Example pact summary line: '<clue>0<\/clue> pact magic slots'/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Example martial resource lines: '<clue>1<\/clue> second wind\\n<clue>1<\/clue> action surge'/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Example caster resource lines with only present spell slot levels: '<clue>3<\/clue> third level spell slots\\n<clue>5<\/clue> sorcery points'/i
     );
     assert.match(jobPrompt("combat"), /<clue>5<\/clue> sorcery points/i);
     assert.match(
@@ -850,11 +955,15 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
-      /When a player uses a tracked class resource from mechanicsState\.actors\[actorKey\]\.resources/i
+      /Do not spend tracked class resources for flavor, posture, intimidation, effort, style, or descriptive combat narration/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /Only include resources changes in mechanics_state_update when the current player submission explicitly uses a tracked resource/i
     );
     assert.match(
       jobPrompt("scene_director"),
-      /resources with that resource's used value increased by the amount spent/i
+      /When a tracked class resource is spent, include mechanics_state_update\.actors\[actorKey\]\.resources/i
     );
     assert.match(jobPrompt("combat"), /Do not copy their names, actor keys/i);
     assert.match(
@@ -1081,9 +1190,25 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(soloCombatPrompt, /solo player actor key/i);
     assert.doesNotMatch(soloCombatPrompt, /This is multiplayer combat/i);
     assert.doesNotMatch(soloCombatPrompt, /multiplayer all-player prompt/i);
+    assert.doesNotMatch(
+      soloCombatPrompt,
+      /When multiple player submissions arrive/i
+    );
+    assert.doesNotMatch(
+      soloCombatPrompt,
+      /If multiple player-controlled actors are in combat/i
+    );
 
     assert.match(multiplayerCombatPrompt, /This is multiplayer combat/i);
     assert.match(multiplayerCombatPrompt, /all-player prompt/i);
+    assert.match(
+      multiplayerCombatPrompt,
+      /When multiple player submissions arrive, resolve the current turn owner's valid action first/i
+    );
+    assert.match(
+      multiplayerCombatPrompt,
+      /If multiple player-controlled actors are in combat, summarize only the actor who is receiving the handoff/i
+    );
     assert.doesNotMatch(multiplayerCombatPrompt, /This is singleplayer combat/i);
     assert.doesNotMatch(multiplayerCombatPrompt, /solo player actor key/i);
 

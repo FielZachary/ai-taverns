@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { publicSeoPages } from "@/lib/public-seo-pages";
 
 const siteJsonLd = {
   "@context": "https://schema.org",
@@ -11,7 +12,9 @@ const siteJsonLd = {
       alternateName: ["AI Taverns", "AITaverns"],
       description:
         "AI Taverns is an AI dungeon master for solo and multiplayer D&D-style tabletop adventures.",
-      inLanguage: "en-US"
+      inLanguage: "en-US",
+      keywords:
+        "AI Taverns, AI dungeon master, AI DM, D&D AI, solo D&D, tabletop RPG AI"
     },
     {
       "@type": "SoftwareApplication",
@@ -22,6 +25,10 @@ const siteJsonLd = {
       url: "https://aitaverns.com/",
       description:
         "Play D&D-style tabletop adventures with an AI dungeon master that remembers your campaign, asks for rolls, and tracks consequences.",
+      genre: "Tabletop role-playing game",
+      isAccessibleForFree: true,
+      keywords:
+        "AI Taverns, AI dungeon master, AI DM, D&D-style adventures, solo tabletop RPG, multiplayer tabletop RPG",
       offers: {
         "@type": "Offer",
         price: "0",
@@ -94,6 +101,8 @@ export default function HomePage() {
             AI Taverns
           </Link>
           <nav>
+            <Link href="/about">About</Link>
+            <Link href="/ai-dungeon-master">AI DM</Link>
             <Link href="/play">Play</Link>
             <Link href="/login">Sign in</Link>
           </nav>
@@ -102,7 +111,7 @@ export default function HomePage() {
         <div className="landing-hero-copy">
           <p className="landing-kicker">Text-based tabletop adventures</p>
           <h1 id="landing-title">
-            A dungeon master that <span>actually</span> remembers.
+            AI Taverns is a dungeon master that <span>actually</span> remembers.
           </h1>
           <p className="landing-lede">
             Sit down, play, and let AI Taverns direct a masterfully orchestrated
@@ -162,6 +171,24 @@ export default function HomePage() {
         </div>
       </section>
 
+      <section className="landing-section landing-resources" aria-labelledby="resources-title">
+        <p className="landing-section-label">Guides</p>
+        <h2 id="resources-title">Learn what AI Taverns is built to run.</h2>
+        <p className="landing-section-lede">
+          Explore how AI Taverns approaches AI dungeon mastering, solo D&amp;D-style
+          play, and text-based tabletop RPG campaigns.
+        </p>
+        <div className="landing-resource-grid">
+          {publicSeoPages.map((page) => (
+            <Link key={page.path} href={page.path}>
+              <span>{page.eyebrow}</span>
+              <strong>{page.title}</strong>
+              <small>{page.description}</small>
+            </Link>
+          ))}
+        </div>
+      </section>
+
       <section className="landing-final" aria-labelledby="final-title">
         <h2 id="final-title">The fire is lit. The chair is empty.</h2>
         <Link className="landing-button landing-button-primary" href="/play">
@@ -171,7 +198,13 @@ export default function HomePage() {
 
       <footer className="landing-footer">
         <span>AI Taverns</span>
-        <span>An AI dungeon master at a table that remembers.</span>
+        <nav aria-label="Public pages">
+          {publicSeoPages.map((page) => (
+            <Link key={page.path} href={page.path}>
+              {page.eyebrow}
+            </Link>
+          ))}
+        </nav>
       </footer>
     </main>
   );

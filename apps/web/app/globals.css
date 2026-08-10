@@ -289,7 +289,8 @@ button {
 }
 
 .landing-gameplay,
-.landing-scenarios {
+.landing-scenarios,
+.landing-resources {
   position: relative;
   background-repeat: no-repeat;
 }
@@ -310,6 +311,15 @@ button {
     url("/landing/rules-wizard-fire.jpg");
   background-position: right top clamp(40px, 6vw, 78px);
   background-size: min(720px, 62vw) auto;
+}
+
+.landing-resources {
+  background-image:
+    linear-gradient(90deg, #070503 0%, rgba(7, 5, 3, 0.9) 38%, rgba(7, 5, 3, 0.22) 72%, #070503 100%),
+    linear-gradient(180deg, #070503 0%, rgba(7, 5, 3, 0) 22%, rgba(7, 5, 3, 0.08) 72%, #070503 100%),
+    url("/landing-preview/artifact-atmosphere.png");
+  background-position: right top clamp(44px, 6vw, 76px);
+  background-size: min(680px, 60vw) auto;
 }
 
 .landing-section h2 {
@@ -346,7 +356,8 @@ button {
 }
 
 .landing-pillars,
-.landing-scenario-grid {
+.landing-scenario-grid,
+.landing-resource-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: clamp(28px, 4vw, 48px);
@@ -354,10 +365,51 @@ button {
 }
 
 .landing-pillars article,
-.landing-scenario-grid article {
+.landing-scenario-grid article,
+.landing-resource-grid a {
   min-width: 0;
   border-top: 1px solid rgba(201, 164, 92, 0.3);
   padding-top: 26px;
+}
+
+.landing-resource-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.landing-resource-grid a {
+  display: grid;
+  gap: 12px;
+  transition:
+    border-color 180ms ease,
+    transform 180ms ease;
+}
+
+.landing-resource-grid a:hover {
+  border-color: rgba(244, 207, 122, 0.72);
+  transform: translateY(-2px);
+}
+
+.landing-resource-grid span {
+  color: rgba(201, 164, 92, 0.86);
+  font-family: var(--body-font);
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+
+.landing-resource-grid strong {
+  color: #f2e8d5;
+  font-family: var(--heading-font);
+  font-size: clamp(1.1rem, 1.7vw, 1.34rem);
+  font-weight: 500;
+  line-height: 1.28;
+}
+
+.landing-resource-grid small {
+  color: rgba(233, 220, 194, 0.62);
+  font-size: 1rem;
+  line-height: 1.65;
 }
 
 .landing-pillar-label {
@@ -468,6 +520,120 @@ button {
   font-size: 0.72rem;
   letter-spacing: 0.18em;
   text-transform: uppercase;
+}
+
+.landing-footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 14px 22px;
+}
+
+.landing-footer a {
+  color: rgba(233, 220, 194, 0.58);
+  transition: color 180ms ease;
+}
+
+.landing-footer a:hover {
+  color: var(--gold-bright);
+}
+
+.seo-page {
+  min-height: 100dvh;
+  overflow-x: hidden;
+  color: #f2e8d5;
+  background:
+    linear-gradient(180deg, rgba(7, 5, 3, 0.1) 0%, #070503 34%),
+    radial-gradient(circle at 78% 8%, rgba(173, 71, 43, 0.28), transparent 25rem),
+    radial-gradient(circle at 14% 24%, rgba(95, 119, 81, 0.22), transparent 26rem),
+    #070503;
+}
+
+.seo-nav {
+  position: relative;
+}
+
+.seo-hero {
+  width: min(100% - 48px, 1120px);
+  margin: 0 auto;
+  padding: clamp(88px, 10vw, 136px) 0 clamp(64px, 8vw, 96px);
+}
+
+.seo-hero h1 {
+  max-width: 15ch;
+  margin: 0 0 24px;
+  color: #f7efdd;
+  font-size: clamp(2.25rem, 5vw, 4.35rem);
+  line-height: 1.04;
+}
+
+.seo-hero > p:not(.landing-section-label) {
+  max-width: 62ch;
+  margin: 0 0 34px;
+  color: rgba(233, 220, 194, 0.72);
+  font-size: clamp(1.06rem, 1.7vw, 1.24rem);
+  line-height: 1.72;
+}
+
+.seo-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
+  gap: clamp(36px, 6vw, 82px);
+  width: min(100% - 48px, 1120px);
+  margin: 0 auto;
+  padding: 0 0 clamp(84px, 10vw, 136px);
+}
+
+.seo-section-list {
+  display: grid;
+  gap: 34px;
+}
+
+.seo-section-list article,
+.seo-highlights {
+  border-top: 1px solid rgba(201, 164, 92, 0.28);
+  padding-top: 26px;
+}
+
+.seo-section-list h2,
+.seo-highlights h2 {
+  margin: 0 0 14px;
+  color: #f2e8d5;
+  font-size: clamp(1.35rem, 2.2vw, 1.9rem);
+  line-height: 1.2;
+}
+
+.seo-section-list p {
+  max-width: 72ch;
+  margin: 0;
+  color: rgba(233, 220, 194, 0.66);
+  font-size: 1.08rem;
+  line-height: 1.75;
+}
+
+.seo-highlights {
+  align-self: start;
+}
+
+.seo-highlights ul {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.seo-highlights li {
+  border-left: 1px solid rgba(201, 164, 92, 0.38);
+  padding-left: 14px;
+  color: rgba(233, 220, 194, 0.7);
+  font-size: 1rem;
+  line-height: 1.45;
+}
+
+.seo-final {
+  min-height: clamp(420px, 45vw, 600px);
+  padding-top: clamp(210px, 24vw, 300px);
 }
 
 .table-page {
@@ -6278,7 +6444,8 @@ h6 {
 
 @media (max-width: 1040px) {
   .landing-pillars,
-  .landing-scenario-grid {
+  .landing-scenario-grid,
+  .landing-resource-grid {
     grid-template-columns: 1fr;
   }
 
@@ -6345,7 +6512,17 @@ h6 {
   }
 
   .landing-nav {
+    gap: 16px;
     padding: 20px;
+  }
+
+  .landing-nav nav {
+    gap: 14px;
+  }
+
+  .landing-nav nav a {
+    font-size: 0.64rem;
+    letter-spacing: 0.12em;
   }
 
   .landing-hero-copy {
@@ -6379,8 +6556,14 @@ h6 {
 
   .landing-section,
   .landing-final,
-  .landing-footer {
+  .landing-footer,
+  .seo-hero,
+  .seo-content {
     width: min(100% - 40px, 1120px);
+  }
+
+  .seo-content {
+    grid-template-columns: 1fr;
   }
 
   .landing-final h2,

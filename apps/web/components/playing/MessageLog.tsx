@@ -39,7 +39,8 @@ const semanticNarrationRoles = [
   "clue",
   "danger",
   "faction",
-  "object"
+  "object",
+  "em"
 ] as const;
 
 type SemanticNarrationRole = (typeof semanticNarrationRoles)[number];
@@ -57,7 +58,7 @@ function parseSemanticNarrationMarkup(content: string): SemanticNarrationPart[] 
   let cursor = 0;
 
   while (cursor < content.length) {
-    const openingMatch = content.slice(cursor).match(/<(npc|place|clue|danger|faction|object)>/);
+    const openingMatch = content.slice(cursor).match(/<(npc|place|clue|danger|faction|object|em)>/);
 
     if (!openingMatch?.index && openingMatch?.index !== 0) {
       parts.push({ text: content.slice(cursor) });
@@ -120,7 +121,11 @@ function renderSemanticNarrationPart(
   const lines = part.text.split("\n");
 
   return lines.flatMap((line, lineIndex) => {
-    const renderedLine = part.role ? (
+    const renderedLine = part.role === "em" ? (
+      <em key={`semantic-em-${partIndex}-${lineIndex}-${line.slice(0, 16)}`}>
+        {renderInlineMarkdown(line)}
+      </em>
+    ) : part.role ? (
       <span
         className={`message-semantic-narration message-semantic-narration-${part.role}`}
         key={`semantic-${partIndex}-${lineIndex}-${line.slice(0, 16)}`}

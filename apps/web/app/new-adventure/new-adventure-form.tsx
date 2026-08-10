@@ -55,6 +55,7 @@ import {
 import type {
   CharacterBackstoryGenerateRequest,
   EldermereCampaignStart,
+  MechanicsResourceState,
   MechanicsSeed,
   SpellSlotState
 } from "@ai-dnd/contracts";
@@ -492,6 +493,172 @@ const fullCasterClasses = new Set([
   "Sorcerer",
   "Wizard"
 ]);
+
+type ClassResourceDefinition = {
+  key: string;
+  label: string;
+  minLevel: number;
+  max: number | ((level: number) => number);
+  recharge: MechanicsResourceState["recharge"];
+  source: string;
+  notes?: string | ((level: number) => string | undefined);
+};
+
+function rageUsesByLevel(level: number) {
+  return level >= 20
+    ? 999
+    : level >= 17
+      ? 6
+      : level >= 12
+        ? 5
+        : level >= 6
+          ? 4
+          : level >= 3
+            ? 3
+            : 2;
+}
+
+function channelDivinityUsesByLevel(level: number) {
+  return level >= 18 ? 3 : level >= 6 ? 2 : 1;
+}
+
+const classResourceDefinitions: Record<string, ClassResourceDefinition[]> = {
+  Barbarian: [
+    {
+      key: "rages",
+      label: "Rages",
+      minLevel: 1,
+      max: rageUsesByLevel,
+      recharge: "long_rest",
+      source: "Barbarian",
+      notes: (level) => (level >= 20 ? "Unlimited at level 20." : undefined)
+    }
+  ],
+  Bard: [],
+  Cleric: [
+    {
+      key: "channel_divinity",
+      label: "Channel Divinity",
+      minLevel: 2,
+      max: channelDivinityUsesByLevel,
+      recharge: "short_rest",
+      source: "Cleric"
+    }
+  ],
+  Druid: [
+    {
+      key: "wild_shape",
+      label: "Wild Shape",
+      minLevel: 2,
+      max: 2,
+      recharge: "short_rest",
+      source: "Druid"
+    }
+  ],
+  Fighter: [
+    {
+      key: "second_wind",
+      label: "Second Wind",
+      minLevel: 1,
+      max: 1,
+      recharge: "short_rest",
+      source: "Fighter"
+    },
+    {
+      key: "action_surge",
+      label: "Action Surge",
+      minLevel: 2,
+      max: (level) => (level >= 17 ? 2 : 1),
+      recharge: "short_rest",
+      source: "Fighter"
+    }
+  ],
+  Monk: [
+    {
+      key: "ki_points",
+      label: "Ki Points",
+      minLevel: 2,
+      max: (level) => level,
+      recharge: "short_rest",
+      source: "Monk"
+    }
+  ],
+  Paladin: [
+    {
+      key: "lay_on_hands",
+      label: "Lay on Hands",
+      minLevel: 1,
+      max: (level) => level * 5,
+      recharge: "long_rest",
+      source: "Paladin"
+    },
+    {
+      key: "channel_divinity",
+      label: "Channel Divinity",
+      minLevel: 3,
+      max: 1,
+      recharge: "short_rest",
+      source: "Paladin"
+    }
+  ],
+  Ranger: [],
+  Rogue: [],
+  Sorcerer: [
+    {
+      key: "sorcery_points",
+      label: "Sorcery Points",
+      minLevel: 2,
+      max: (level) => level,
+      recharge: "long_rest",
+      source: "Sorcerer"
+    }
+  ],
+  Warlock: [],
+  Wizard: [
+    {
+      key: "arcane_recovery",
+      label: "Arcane Recovery",
+      minLevel: 1,
+      max: 1,
+      recharge: "long_rest",
+      source: "Wizard"
+    }
+  ]
+};
+
+function deriveResourcesForSheet(
+  characterClass: string,
+  level: number
+): Record<string, MechanicsResourceState> | undefined {
+  const normalizedLevel = Math.max(1, Math.floor(level));
+  const resources: Record<string, MechanicsResourceState> = {};
+
+  for (const definition of classResourceDefinitions[characterClass] ?? []) {
+    if (normalizedLevel < definition.minLevel) {
+      continue;
+    }
+
+    const notes =
+      typeof definition.notes === "function"
+        ? definition.notes(normalizedLevel)
+        : definition.notes;
+
+    resources[definition.key] = {
+      label: definition.label,
+      max:
+        typeof definition.max === "function"
+          ? definition.max(normalizedLevel)
+          : definition.max,
+      used: 0,
+      recharge: definition.recharge,
+      source: definition.source,
+      ...(notes ? { notes } : {})
+    };
+  }
+
+  return Object.keys(resources).length > 0 ? resources : undefined;
+}
+
 const spellSourceLabels: Record<string, string> = {
   "Absorb Elements": "Xanathar's Guide to Everything",
   "Aganazzar's Scorcher": "Xanathar's Guide to Everything",
@@ -4053,13 +4220,15 @@ export function NewAdventureForm({
   ]);
   const mechanicsSeed = useMemo<MechanicsSeed>(() => {
     const spellSlots = deriveSpellSlotsForSheet(selectedClass.id, characterLevel);
+    const resources = deriveResourcesForSheet(selectedClass.id, characterLevel);
 
     return {
       characterClass: selectedClass.id,
       level: characterLevel,
       maxHp,
       currentHp: maxHp,
-      ...(spellSlots ? { spellSlots } : {})
+      ...(spellSlots ? { spellSlots } : {}),
+      ...(resources ? { resources } : {})
     };
   }, [maxHp, selectedClass.id]);
   const hasValidSpellSelection =

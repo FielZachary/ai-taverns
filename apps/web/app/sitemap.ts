@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { publicSeoPages } from "@/lib/public-seo-pages";
 
 const siteUrl = (process.env.AUTH_PUBLIC_APP_ORIGIN ?? "https://aitaverns.com").replace(
   /\/$/,
@@ -13,17 +14,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "weekly",
       priority: 1
     },
-    {
-      url: `${siteUrl}/play`,
+    ...publicSeoPages.map((page) => ({
+      url: `${siteUrl}${page.path}`,
       lastModified: new Date(),
-      changeFrequency: "weekly",
-      priority: 0.8
-    },
-    {
-      url: `${siteUrl}/new-adventure`,
-      lastModified: new Date(),
-      changeFrequency: "monthly",
+      changeFrequency: "monthly" as const,
       priority: 0.7
-    }
+    }))
   ];
 }
