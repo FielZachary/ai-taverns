@@ -69,6 +69,7 @@ export type DungeonMasterProviderInput = {
   currentPlayerAction?: string;
   dmJob?: DmJobName;
   model?: AiModelId;
+  temperature?: number;
   signal?: AbortSignal;
   onPublicNarrationDelta?: (text: string) => void;
 };
@@ -460,6 +461,10 @@ function requestContentChars(messages: DeepSeekMessage[]) {
 }
 
 function providerTemperatureForInput(input: DungeonMasterProviderInput) {
+  if (typeof input.temperature === "number") {
+    return input.temperature;
+  }
+
   if (input.dmJob === "combat") {
     return combatProviderTemperature;
   }
@@ -808,6 +813,7 @@ export async function askDungeonMasterProvider({
   currentPlayerAction,
   dmJob,
   model,
+  temperature: temperatureOverride,
   signal,
   onPublicNarrationDelta
 }: DungeonMasterProviderInput): Promise<DungeonMasterProviderResponse> {
@@ -819,6 +825,9 @@ export async function askDungeonMasterProvider({
       ...(currentPlayerAction ? { currentPlayerAction } : {}),
       ...(dmJob ? { dmJob } : {}),
       ...(model ? { model } : {}),
+      ...(typeof temperatureOverride === "number"
+        ? { temperature: temperatureOverride }
+        : {}),
       ...(onPublicNarrationDelta ? { onPublicNarrationDelta } : {})
     });
   }
@@ -844,7 +853,10 @@ export async function askDungeonMasterProvider({
     instructions,
     history,
     ...(currentPlayerAction ? { currentPlayerAction } : {}),
-    ...(dmJob ? { dmJob } : {})
+    ...(dmJob ? { dmJob } : {}),
+    ...(typeof temperatureOverride === "number"
+      ? { temperature: temperatureOverride }
+      : {})
   });
 
   let requestMessages = messages;

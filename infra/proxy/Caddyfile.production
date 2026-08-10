@@ -2,7 +2,11 @@
 	email {$ACME_EMAIL}
 }
 
-{$PRODUCTION_DOMAIN}, www.{$PRODUCTION_DOMAIN} {
+www.{$PRODUCTION_DOMAIN} {
+	redir https://{$PRODUCTION_DOMAIN}{uri} permanent
+}
+
+{$PRODUCTION_DOMAIN} {
 	encode zstd gzip
 
 	handle /health {

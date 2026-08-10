@@ -5,9 +5,11 @@ import {
   applyRestMechanics,
   applyDeathSavingThrow,
   assertMechanicsActionAllowed,
+  actorFromMechanicsSeed,
   deriveResourcesForClass,
   firstDyingPlayerActorKey,
   formatResourceLines,
+  formatSpellSlotLines,
   isDyingPlayerActor,
   mechanicsSeedFromCharacterInput,
   projectMechanicsIntoCharacterSheet,
@@ -104,6 +106,8 @@ test("mechanics state infers tracked spell slots from explicit caster prose", ()
   });
   assert.equal(state.actors["player:seren"]?.maxHp, 20);
   assert.equal(state.actors["player:seren"]?.currentHp, 20);
+  assert.equal(state.actors["player:seren"]?.characterClass, "wizard");
+  assert.equal(state.actors["player:seren"]?.level, 5);
 
   assert.doesNotThrow(() =>
     assertMechanicsActionAllowed({
@@ -117,6 +121,92 @@ test("mechanics state infers tracked spell slots from explicit caster prose", ()
       message: "I cast Fireball on Mara."
     })
   );
+});
+
+test("mechanics state backfills class and level from sheet for old actors", () => {
+  const state = resolveMechanicsState(
+    {
+      metadata: {
+        mechanicsState: {
+          combat: {
+            active: false,
+            round: 0,
+            turnOwner: null,
+            initiativeOrder: []
+          },
+          actors: {
+            "player:jacki": {
+              characterName: "Jacki",
+              currentHp: 28,
+              maxHp: 28,
+              spellSlots: {
+                "3": { max: 2, used: 1 }
+              },
+              concentration: null,
+              conditions: []
+            }
+          }
+        }
+      }
+    },
+    [
+      {
+        id: "jacki",
+        character_name: "Jacki",
+        character_sheet: "Character Name: Jacki\nLevel: 5\nClass: Warlock\nMax HP: 28"
+      }
+    ]
+  );
+
+  assert.equal(state.actors["player:jacki"]?.characterClass, "Warlock");
+  assert.equal(state.actors["player:jacki"]?.level, 5);
+  assert.deepEqual(state.actors["player:jacki"]?.spellSlots, {
+    "3": { max: 2, used: 1 }
+  });
+});
+
+test("warlock spell slot projection uses pact magic labels", () => {
+  assert.deepEqual(
+    formatSpellSlotLines(
+      {
+        "3": { max: 2, used: 2 }
+      },
+      { characterClass: "Warlock" }
+    ),
+    [
+      "Pact Magic slots: 2 total, 2 used, 0 remaining",
+      "Pact slot level: 3rd"
+    ]
+  );
+
+  const projected = projectMechanicsIntoCharacterSheet(
+    [
+      "Character Name: Jacki",
+      "Level: 5",
+      "Class: Warlock",
+      "",
+      "Spell Slots",
+      "1st-level slots: 4 total, 0 used, 4 remaining",
+      "2nd-level slots: 3 total, 0 used, 3 remaining",
+      "3rd-level slots: 2 total, 2 used, 0 remaining"
+    ].join("\n"),
+    {
+      characterName: "Jacki",
+      characterClass: "Warlock",
+      level: 5,
+      spellSlots: {
+        "3": { max: 2, used: 2 }
+      },
+      concentration: null,
+      conditions: []
+    }
+  );
+
+  assert.match(projected, /Pact Magic slots: 2 total, 2 used, 0 remaining/);
+  assert.match(projected, /Pact slot level: 3rd/);
+  assert.doesNotMatch(projected, /1st-level slots/);
+  assert.doesNotMatch(projected, /2nd-level slots/);
+  assert.doesNotMatch(projected, /3rd-level slots/);
 });
 
 test("mechanics seed derives common class resources from class and level", () => {
@@ -142,7 +232,73 @@ test("mechanics seed derives common class resources from class and level", () =>
     source: "Monk"
   });
 
-  assert.equal(deriveResourcesForClass("Wizard", 5), undefined);
+  assert.deepEqual(deriveResourcesForClass("Barbarian", 5)?.rages, {
+    label: "Rages",
+    max: 3,
+    used: 0,
+    recharge: "long_rest",
+    source: "Barbarian"
+  });
+
+  assert.deepEqual(
+    actorFromMechanicsSeed("Rakir", {
+      characterClass: "Barbarian",
+      level: 5,
+      maxHp: 50,
+      currentHp: 50
+    }).resources?.rages,
+    {
+      label: "Rages",
+      max: 3,
+      used: 0,
+      recharge: "long_rest",
+      source: "Barbarian"
+    }
+  );
+
+  assert.deepEqual(deriveResourcesForClass("Fighter", 2), {
+    second_wind: {
+      label: "Second Wind",
+      max: 1,
+      used: 0,
+      recharge: "short_rest",
+      source: "Fighter"
+    },
+    action_surge: {
+      label: "Action Surge",
+      max: 1,
+      used: 0,
+      recharge: "short_rest",
+      source: "Fighter"
+    }
+  });
+
+  assert.deepEqual(deriveResourcesForClass("Paladin", 3), {
+    lay_on_hands: {
+      label: "Lay on Hands",
+      max: 15,
+      used: 0,
+      recharge: "long_rest",
+      source: "Paladin"
+    },
+    channel_divinity: {
+      label: "Channel Divinity",
+      max: 1,
+      used: 0,
+      recharge: "short_rest",
+      source: "Paladin"
+    }
+  });
+
+  assert.deepEqual(deriveResourcesForClass("Wizard", 5)?.arcane_recovery, {
+    label: "Arcane Recovery",
+    max: 1,
+    used: 0,
+    recharge: "long_rest",
+    source: "Wizard"
+  });
+
+  assert.equal(deriveResourcesForClass("Rogue", 5), undefined);
 });
 
 test("mechanics state infers class resources from legacy character sheet", () => {
@@ -158,6 +314,60 @@ test("mechanics state infers class resources from legacy character sheet", () =>
   );
 
   assert.equal(state.actors["player:tem"]?.resources?.ki_points?.max, 5);
+});
+
+test("mechanics state infers explicit sheet-only class resources", () => {
+  const state = resolveMechanicsState(
+    { metadata: {} },
+    [
+      {
+        id: "lute",
+        character_name: "Lute",
+        character_sheet:
+          "Class: Bard\nLevel: 5\nMax HP: 31\nBardic Inspiration: 3 total, 0 used, 3 remaining"
+      },
+      {
+        id: "brann",
+        character_name: "Brann",
+        character_sheet:
+          "Class: Fighter\nLevel: 5\nMax HP: 44\nBattle Master\nSuperiority Dice"
+      },
+      {
+        id: "sera",
+        character_name: "Sera",
+        character_sheet:
+          "Class: Paladin\nLevel: 5\nMax HP: 42\nDivine Sense: 4 total, 0 used, 4 remaining"
+      },
+      {
+        id: "shade",
+        character_name: "Shade",
+        character_sheet: "Class: Rogue\nLevel: 5\nMax HP: 33"
+      }
+    ]
+  );
+
+  assert.deepEqual(state.actors["player:lute"]?.resources?.bardic_inspiration, {
+    label: "Bardic Inspiration",
+    max: 3,
+    used: 0,
+    recharge: "short_rest",
+    source: "Bard"
+  });
+  assert.deepEqual(state.actors["player:brann"]?.resources?.superiority_dice, {
+    label: "Superiority Dice",
+    max: 4,
+    used: 0,
+    recharge: "short_rest",
+    source: "Fighter"
+  });
+  assert.deepEqual(state.actors["player:sera"]?.resources?.divine_sense, {
+    label: "Divine Sense",
+    max: 4,
+    used: 0,
+    recharge: "long_rest",
+    source: "Paladin"
+  });
+  assert.equal(state.actors["player:shade"]?.resources, undefined);
 });
 
 test("mechanics state sanitizes persisted class resources", () => {
