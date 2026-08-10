@@ -2595,6 +2595,14 @@ test("living world engine updates chunks and injects current DM guidance", async
     /Use this as short-lived direction/
   );
   assert.match(
+    mainProviderInput.instructions,
+    /public_narration must use 2-3 sparse semantic narration color tags/
+  );
+  assert.match(
+    mainProviderInput.instructions,
+    /<em> does not count toward the required 2-3 color tags/
+  );
+  assert.match(
     mainProviderInput.message,
     /Claim-Stake Accord is getting closer/
   );
