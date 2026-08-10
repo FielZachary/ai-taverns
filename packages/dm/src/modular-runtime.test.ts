@@ -581,7 +581,15 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("combat"),
-      /semantic narration markup for inline UI color or emphasis/i
+      /public_narration must use 2-3 sparse semantic narration color tags/i
+    );
+    assert.match(
+      jobPrompt("combat"),
+      /<em> does not count toward the required 2-3 color tags/i
+    );
+    assert.doesNotMatch(
+      jobPrompt("combat"),
+      /Use no more than 0-1 semantic tags/i
     );
     assert.match(
       jobPrompt("combat"),
