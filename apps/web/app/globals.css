@@ -584,6 +584,10 @@ button {
   padding: 0 0 clamp(84px, 10vw, 136px);
 }
 
+.trust-content {
+  padding-top: 0;
+}
+
 .seo-section-list {
   display: grid;
   gap: 34px;
@@ -628,6 +632,37 @@ button {
   padding-left: 14px;
   color: rgba(233, 220, 194, 0.7);
   font-size: 1rem;
+  line-height: 1.45;
+}
+
+.trust-links li {
+  padding-left: 0;
+}
+
+.trust-links a {
+  display: grid;
+  gap: 5px;
+  border-left: 1px solid rgba(201, 164, 92, 0.38);
+  padding-left: 14px;
+  transition:
+    border-color 180ms ease,
+    color 180ms ease;
+}
+
+.trust-links a:hover {
+  border-color: rgba(244, 207, 122, 0.72);
+}
+
+.trust-links strong {
+  color: #f2e8d5;
+  font-family: var(--heading-font);
+  font-size: 1.02rem;
+  font-weight: 500;
+}
+
+.trust-links span {
+  color: rgba(233, 220, 194, 0.58);
+  font-size: 0.95rem;
   line-height: 1.45;
 }
 
