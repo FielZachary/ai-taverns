@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { publicSeoPages } from "@/lib/public-seo-pages";
 
 const siteJsonLd = {
   "@context": "https://schema.org",
@@ -100,6 +101,8 @@ export default function HomePage() {
             AI Taverns
           </Link>
           <nav>
+            <Link href="/about">About</Link>
+            <Link href="/ai-dungeon-master">AI DM</Link>
             <Link href="/play">Play</Link>
             <Link href="/login">Sign in</Link>
           </nav>
@@ -168,6 +171,24 @@ export default function HomePage() {
         </div>
       </section>
 
+      <section className="landing-section landing-resources" aria-labelledby="resources-title">
+        <p className="landing-section-label">Guides</p>
+        <h2 id="resources-title">Learn what AI Taverns is built to run.</h2>
+        <p className="landing-section-lede">
+          Explore how AI Taverns approaches AI dungeon mastering, solo D&amp;D-style
+          play, and text-based tabletop RPG campaigns.
+        </p>
+        <div className="landing-resource-grid">
+          {publicSeoPages.map((page) => (
+            <Link key={page.path} href={page.path}>
+              <span>{page.eyebrow}</span>
+              <strong>{page.title}</strong>
+              <small>{page.description}</small>
+            </Link>
+          ))}
+        </div>
+      </section>
+
       <section className="landing-final" aria-labelledby="final-title">
         <h2 id="final-title">The fire is lit. The chair is empty.</h2>
         <Link className="landing-button landing-button-primary" href="/play">
@@ -177,7 +198,13 @@ export default function HomePage() {
 
       <footer className="landing-footer">
         <span>AI Taverns</span>
-        <span>An AI dungeon master at a table that remembers.</span>
+        <nav aria-label="Public pages">
+          {publicSeoPages.map((page) => (
+            <Link key={page.path} href={page.path}>
+              {page.eyebrow}
+            </Link>
+          ))}
+        </nav>
       </footer>
     </main>
   );
