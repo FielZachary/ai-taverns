@@ -635,8 +635,12 @@ test("DM contract accepts clarification as playable targeted input", async () =>
     solo.messages.at(-1)?.content ?? "",
     /are you casting one spell this turn/i
   );
+  const ownerPlayer = database.players.find(
+    (player) => player.campaign_id === campaignId
+  );
+  assert.ok(ownerPlayer);
   assert.equal(solo.nextInputNeeded, "clarification");
-  assert.deepEqual(solo.inputTargets, ["player:owner"]);
+  assert.deepEqual(solo.inputTargets, [`player:${ownerPlayer.id}`]);
   assert.equal(solo.inputPolicy, "only_targeted_players");
 
   const tracesResponse = await app.inject({
@@ -1605,7 +1609,11 @@ test("solo combat catches up NPC turns instead of rejecting the player", async (
   const { cookie, campaignId } = await createSinglePlayerCampaign(
     "dm-runtime-npc-catchup"
   );
-  const playerActorKey = "player:dm-runtime-npc-catchup-client";
+  const player = database.players.find(
+    (candidate) => candidate.campaign_id === campaignId
+  );
+  assert.ok(player);
+  const playerActorKey = `player:${player.id}`;
   const campaign = database.campaigns.find(
     (candidate) => candidate.id === campaignId
   );
@@ -2585,6 +2593,14 @@ test("living world engine updates chunks and injects current DM guidance", async
   assert.match(
     mainProviderInput.instructions,
     /Use this as short-lived direction/
+  );
+  assert.match(
+    mainProviderInput.instructions,
+    /public_narration must use 2-3 sparse semantic narration color tags/
+  );
+  assert.match(
+    mainProviderInput.instructions,
+    /<em> does not count toward the required 2-3 color tags/
   );
   assert.match(
     mainProviderInput.message,

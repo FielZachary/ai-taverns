@@ -15,6 +15,7 @@ export function PublicSeoPage({ page }: PublicSeoPageProps) {
         <nav>
           <Link href="/about">About</Link>
           <Link href="/ai-dungeon-master">AI DM</Link>
+          <Link href="/contact">Contact</Link>
           <Link href="/play">Play</Link>
         </nav>
       </header>
