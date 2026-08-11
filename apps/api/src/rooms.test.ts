@@ -410,8 +410,18 @@ test("multiplayer combat catches up NPC turns instead of rejecting players", asy
 
   assert.equal(beginResponse.statusCode, 200, beginResponse.body);
 
-  const ownerActorKey = `player:${ownerClientId}`;
-  const joinerActorKey = `player:${joinerClientId}`;
+  const ownerPlayer = database.players.find(
+    (player) =>
+      player.campaign_id === campaignId && player.client_id === ownerClientId
+  );
+  const joinerPlayer = database.players.find(
+    (player) =>
+      player.campaign_id === campaignId && player.client_id === joinerClientId
+  );
+  assert.ok(ownerPlayer);
+  assert.ok(joinerPlayer);
+  const ownerActorKey = `player:${ownerPlayer.id}`;
+  const joinerActorKey = `player:${joinerPlayer.id}`;
   const campaign = database.campaigns.find(
     (candidate) => candidate.id === campaignId
   );
@@ -796,7 +806,7 @@ test("room submit accepts targeted input by mechanics actor key", async () => {
 });
 
 test("active combat targets only the next player turn owner after DM resolution", async () => {
-  const { ownerCookie, campaignId, ownerClientId } =
+  const { ownerCookie, campaignId, ownerClientId, joinerClientId } =
     await createMultiplayerRoom("room-combat-targets-turn-owner");
 
   const beginResponse = await app.inject({
@@ -830,6 +840,7 @@ test("active combat targets only the next player turn owner after DM resolution"
 
   const ownerActorKey = `player:${ownerPlayer.id}`;
   const joinerActorKey = `player:${joinerPlayer.id}`;
+  const joinerDisplayActorKey = "player:joined-character";
   campaign.metadata = {
     ...(campaign.metadata as Record<string, unknown>),
     inputTargets: [ownerActorKey],
@@ -877,10 +888,13 @@ test("active combat targets only the next player turn owner after DM resolution"
         combat: {
           active: true,
           round: 1,
-          turnOwner: joinerActorKey,
-          initiativeOrder: [ownerActorKey, joinerActorKey, "npc:warden-1"]
+          turnOwner: joinerDisplayActorKey,
+          initiativeOrder: [ownerActorKey, joinerDisplayActorKey, "npc:warden-1"]
         },
         actors: {
+          [joinerDisplayActorKey]: {
+            currentHp: 17
+          },
           "npc:warden-1": {
             currentHp: 0
           }
@@ -930,6 +944,7 @@ test("active combat targets only the next player turn owner after DM resolution"
     assert.deepEqual(resolved.inputTargets, [joinerActorKey]);
     assert.equal(resolved.inputPolicy, "only_targeted_players");
     assert.equal(resolved.combat.turnOwner, joinerActorKey);
+    assert.equal(resolved.combat.turnOwnerPlayerId, joinerClientId);
     const latestDmDebug = resolved.messages.at(-1)?.debug as
       | {
           router?: {
@@ -957,6 +972,22 @@ test("active combat targets only the next player turn owner after DM resolution"
       (updatedCampaign?.metadata as Record<string, unknown>).inputPolicy,
       "only_targeted_players"
     );
+    const updatedMechanicsState = (
+      updatedCampaign?.metadata as Record<string, unknown>
+    ).mechanicsState as
+      | {
+          actors?: Record<string, { currentHp?: number }>;
+          combat?: { turnOwner?: string; initiativeOrder?: string[] };
+        }
+      | undefined;
+    assert.equal(updatedMechanicsState?.combat?.turnOwner, joinerActorKey);
+    assert.deepEqual(updatedMechanicsState?.combat?.initiativeOrder, [
+      ownerActorKey,
+      joinerActorKey,
+      "npc:warden-1"
+    ]);
+    assert.equal(updatedMechanicsState?.actors?.[joinerActorKey]?.currentHp, 17);
+    assert.equal(updatedMechanicsState?.actors?.[joinerDisplayActorKey], undefined);
 
     const ownerAgainResponse = await app.inject({
       method: "POST",
@@ -1064,10 +1095,17 @@ test("multiplayer combat infers spell slots from explicit caster character sheet
   });
   assert.equal(joinerSubmitResponse.statusCode, 200, joinerSubmitResponse.body);
   const resolved = RoomSubmitResponseSchema.parse(joinerSubmitResponse.json());
+  const ownerPlayer = database.players.find(
+    (player) =>
+      player.campaign_id === created.campaign.id &&
+      player.client_id === "room-inferred-slots-owner-client"
+  );
+  assert.ok(ownerPlayer);
+  const ownerActorKey = `player:${ownerPlayer.id}`;
 
   assert.equal(resolved.pendingRollRequest?.dice, "8d6");
   assert.equal(resolved.pendingRollRequest?.label, "Fireball damage");
-  assert.deepEqual(resolved.inputTargets, ["Owner"]);
+  assert.deepEqual(resolved.inputTargets, [ownerActorKey]);
   assert.equal(resolved.inputPolicy, "only_targeted_players");
 });
 
