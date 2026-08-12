@@ -3722,6 +3722,13 @@ h1 {
   justify-content: space-between;
 }
 
+.chat-sidebar-title-group {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
 .chat-sidebar-header h2 {
   margin-bottom: 0;
   font-size: 1.18rem;
@@ -5045,8 +5052,7 @@ h1 {
 
 .message-card {
   display: grid;
-  grid-template-columns: 38px minmax(0, 1fr);
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
   width: 100%;
 }
 
@@ -5141,7 +5147,6 @@ h1 {
 .message-resource {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  padding-left: 48px;
 }
 
 .message-resource-card img {
@@ -5186,14 +5191,15 @@ h1 {
 
 .message-heading {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  align-items: center;
+  justify-content: flex-start;
   gap: 10px;
   min-width: 0;
   margin-bottom: 6px;
 }
 
 .message-label-stack {
+  flex: 1 1 auto;
   display: grid;
   gap: 6px;
   min-width: 0;
@@ -5231,6 +5237,7 @@ h1 {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
+  margin-left: auto;
   gap: 6px;
 }
 
@@ -5278,7 +5285,7 @@ h1 {
 
 .message-body p {
   margin-bottom: 0;
-  font-size: 0.94rem;
+  font-size: 0.88rem;
   white-space: pre-wrap;
   line-height: 1.5;
 }
@@ -5293,8 +5300,8 @@ h1 {
 }
 
 .message-dm .message-body p {
-  font-size: 0.96rem;
-  line-height: 1.58;
+  font-size: 0.9rem;
+  line-height: 1.54;
 }
 
 .debug-modal-backdrop {
@@ -5561,6 +5568,7 @@ h1 {
   color: var(--ink);
   background: transparent;
   font-family: var(--play-text-font);
+  font-size: 0.9rem;
   line-height: 1.45;
 }
 
@@ -5670,7 +5678,7 @@ h1 {
 
 .turn-action-bar {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
@@ -5679,9 +5687,9 @@ h1 {
 .input-mode-toggle {
   display: flex;
   flex: 1 1 auto;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
-  min-width: min(100%, 260px);
+  min-width: 0;
 }
 
 .turn-form .input-mode-button {
@@ -6943,18 +6951,46 @@ h6 {
 
   .turn-action-bar {
     justify-content: flex-start;
+    gap: 4px;
+    overflow: visible;
   }
 
   .input-mode-toggle {
-    flex: 1 1 100%;
+    flex: 0 1 auto;
+    gap: 4px;
+    min-width: 0;
   }
 
   .turn-form button {
-    min-height: 38px;
+    min-height: 34px;
+  }
+
+  .turn-action-bar button {
+    min-width: 0;
+    padding: 0 10px;
+  }
+
+  .turn-form .input-mode-button {
+    min-width: 62px;
+    min-height: 32px;
+    padding: 0 8px;
+    font-size: 0.68rem;
+  }
+
+  .turn-form .model-settings-button,
+  .turn-form .map-button {
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    min-height: 32px;
   }
 
   .turn-form .dice-roll-button {
-    min-height: 38px;
+    min-width: 58px;
+    height: 34px;
+    min-height: 34px;
+    padding: 0 9px;
+    font-size: 0.72rem;
   }
 
   .turn-form-input-wrap {
