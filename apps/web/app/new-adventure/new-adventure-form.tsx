@@ -5761,6 +5761,29 @@ export function NewAdventureForm({
     }
   }
 
+  function renderSubclassPicker() {
+    return (
+      <fieldset className="option-picker subclass-picker">
+        <legend>{selectedClass.subclassLabel}</legend>
+        <div>
+          {selectedClass.subclassOptions.map((option) => (
+            <button
+              type="button"
+              className={artOptionClassName(subclass === option)}
+              aria-pressed={subclass === option}
+              style={optionArtStyle(optionArtUrl("subclasses", option))}
+              key={option}
+              onClick={() => setSubclass(option)}
+            >
+              <strong>{option}</strong>
+              <small>{subclassDescriptions[option]}</small>
+            </button>
+          ))}
+        </div>
+      </fieldset>
+    );
+  }
+
   async function continueToCampaign() {
     if (isCreating) {
       return;
@@ -6209,38 +6232,41 @@ export function NewAdventureForm({
                 ) : null}
 
                 {currentCharacterStep === "Class" ? (
-                  <fieldset className="option-picker class-picker">
-                    <legend>Class</legend>
-                    <div>
-                      {classOptions.map((option) => (
-                        <button
-                          type="button"
-                          className={characterClass === option.id ? "selected" : ""}
-                          aria-pressed={characterClass === option.id}
-                          key={option.id}
-                          onClick={() => {
-                            handleClassChange(option.id);
-                            trackAnalytics({
-                              name: "Character Step Completed",
-                              properties: {
-                                ...analyticsBaseProperties(),
-                                step: "Class",
-                                characterClass: option.id
-                              }
-                            });
-                          }}
-                          style={
-                            {
-                              "--class-art-url": `url(${classArtByClass[option.id]})`
-                            } as CSSProperties
-                          }
-                        >
-                          <strong>{option.id}</strong>
-                          <small>{option.summary}</small>
-                        </button>
-                      ))}
-                    </div>
-                  </fieldset>
+                  <div className="character-builder-stack">
+                    <fieldset className="option-picker class-picker">
+                      <legend>Class</legend>
+                      <div>
+                        {classOptions.map((option) => (
+                          <button
+                            type="button"
+                            className={characterClass === option.id ? "selected" : ""}
+                            aria-pressed={characterClass === option.id}
+                            key={option.id}
+                            onClick={() => {
+                              handleClassChange(option.id);
+                              trackAnalytics({
+                                name: "Character Step Completed",
+                                properties: {
+                                  ...analyticsBaseProperties(),
+                                  step: "Class",
+                                  characterClass: option.id
+                                }
+                              });
+                            }}
+                            style={
+                              {
+                                "--class-art-url": `url(${classArtByClass[option.id]})`
+                              } as CSSProperties
+                            }
+                          >
+                            <strong>{option.id}</strong>
+                            <small>{option.summary}</small>
+                          </button>
+                        ))}
+                      </div>
+                    </fieldset>
+                    {renderSubclassPicker()}
+                  </div>
                 ) : null}
 
                 {currentCharacterStep === "Species" ? (
@@ -6469,24 +6495,7 @@ export function NewAdventureForm({
 
                 {currentCharacterStep === "Class Choices" ? (
                   <div className="character-builder-stack">
-                    <fieldset className="option-picker subclass-picker">
-                      <legend>{selectedClass.subclassLabel}</legend>
-                      <div>
-                        {selectedClass.subclassOptions.map((option) => (
-                          <button
-                            type="button"
-                            className={artOptionClassName(subclass === option)}
-                            aria-pressed={subclass === option}
-                            style={optionArtStyle(optionArtUrl("subclasses", option))}
-                            key={option}
-                            onClick={() => setSubclass(option)}
-                          >
-                            <strong>{option}</strong>
-                            <small>{subclassDescriptions[option]}</small>
-                          </button>
-                        ))}
-                      </div>
-                    </fieldset>
+                    {renderSubclassPicker()}
                     <fieldset className="option-picker compact-option-picker">
                       <legend>{selectedClass.featureLabel}</legend>
                       <div>
