@@ -98,8 +98,19 @@ export function ChatHistorySidebar({
     >
       <div className="chat-sidebar-history">
         <div className="chat-sidebar-header">
-          <div>
+          <div className="chat-sidebar-title-group">
             <h2 className="eyebrow adventures-title">Adventures</h2>
+            <button
+              type="button"
+              aria-label="Start new chat"
+              disabled={isCreatingChat}
+              onClick={() => {
+                onStartNewChat();
+                onCloseMobileDrawer?.();
+              }}
+            >
+              <Plus size={18} />
+            </button>
           </div>
           <button
             className="chat-sidebar-close"
@@ -108,17 +119,6 @@ export function ChatHistorySidebar({
             onClick={onCloseMobileDrawer}
           >
             <X size={18} />
-          </button>
-          <button
-            type="button"
-            aria-label="Start new chat"
-            disabled={isCreatingChat}
-            onClick={() => {
-              onStartNewChat();
-              onCloseMobileDrawer?.();
-            }}
-          >
-            <Plus size={18} />
           </button>
         </div>
 

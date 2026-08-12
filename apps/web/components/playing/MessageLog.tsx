@@ -574,11 +574,11 @@ export function MessageLog({
             }`}
             key={message.id}
           >
-            <div className="message-icon" aria-hidden="true">
-              <MessageAvatar message={message} />
-            </div>
             <div className="message-content">
               <div className="message-heading">
+                <div className="message-icon" aria-hidden="true">
+                  <MessageAvatar message={message} />
+                </div>
                 <div className="message-label-stack">
                   <p className="message-label">{messageLabel(message)}</p>
                   {locationLabel ? (
@@ -669,11 +669,11 @@ export function MessageLog({
           className="message-card message-player message-waiting"
           key={`waiting-${player.id}`}
         >
-          <div className="message-icon" aria-hidden="true">
-            <UserRound size={18} />
-          </div>
           <div className="message-content">
             <div className="message-heading">
+              <div className="message-icon" aria-hidden="true">
+                <UserRound size={18} />
+              </div>
               <p className="message-label">
                 {player.name}
                 {player.detail ? (
@@ -688,16 +688,18 @@ export function MessageLog({
 
       {isSending && !hideSendingIndicator ? (
         <article className="message-card message-dm">
-          <div className="message-icon" aria-hidden="true">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              alt=""
-              className="message-avatar-image"
-              src="/avatars/dungeon-master.jpg"
-            />
-          </div>
           <div className="message-content">
-            <p className="message-label">Dungeon Master</p>
+            <div className="message-heading">
+              <div className="message-icon" aria-hidden="true">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  alt=""
+                  className="message-avatar-image"
+                  src="/avatars/dungeon-master.jpg"
+                />
+              </div>
+              <p className="message-label">Dungeon Master</p>
+            </div>
             <RuneLoader label="Reading the runes" />
           </div>
         </article>
