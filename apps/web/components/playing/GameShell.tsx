@@ -12,6 +12,7 @@ import {
   Copy,
   HeartPulse,
   Link,
+  Menu,
   Plus,
   Play,
   Send,
@@ -406,6 +407,7 @@ export function GameShell({
   const [isLoadingCampaigns, setIsLoadingCampaigns] = useState(true);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isCreatingChat] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [activeCampaignId, setActiveCampaignId] = useState(initialCampaignId ?? "");
   const [playerProfile, setPlayerProfile] =
     useState<PlayerProfile>(emptyPlayerProfile);
@@ -2468,11 +2470,30 @@ export function GameShell({
 
       <section className="play-table" aria-label="AI Dungeons and Dragons table">
         <div className="table-grid session-panel-collapsed">
+          <button
+            className="mobile-sidebar-toggle"
+            type="button"
+            aria-label="Open adventures drawer"
+            aria-expanded={isMobileSidebarOpen}
+            onClick={() => setIsMobileSidebarOpen(true)}
+          >
+            <Menu size={20} />
+          </button>
+          {isMobileSidebarOpen ? (
+            <button
+              className="mobile-sidebar-backdrop"
+              type="button"
+              aria-label="Close adventures drawer"
+              onClick={() => setIsMobileSidebarOpen(false)}
+            />
+          ) : null}
           <ChatHistorySidebar
             chats={availableCampaigns}
             activeChatId={activeCampaignId}
             isLoading={isLoadingCampaigns}
             isCreatingChat={isCreatingChat}
+            isMobileDrawerOpen={isMobileSidebarOpen}
+            onCloseMobileDrawer={() => setIsMobileSidebarOpen(false)}
             onStartNewChat={handleStartNewChat}
             onDeleteChat={(campaignId) => void handleDeleteChat(campaignId)}
             onRenameChat={(campaignId) => void handleRenameChat(campaignId)}

@@ -26,20 +26,30 @@ vi.mock("./ChatHistorySidebar", () => ({
     onSelectChat,
     onStartNewChat,
     onViewCharacterSheet,
+    isMobileDrawerOpen,
+    onCloseMobileDrawer,
     playerPortraitStatus,
     playerPortraitUrl
   }: {
     chats: Array<{ id: string; title: string }>;
     activeChatId: string;
     isLoading: boolean;
+    isMobileDrawerOpen?: boolean;
     playerPortraitStatus?: "pending" | "ready" | "failed";
     playerPortraitUrl?: string;
+    onCloseMobileDrawer?: () => void;
     onSelectChat: (chatId: string) => void;
     onStartNewChat: () => void;
     onViewCharacterSheet: () => void;
   }) => (
-    <aside aria-label="Chat history">
+    <aside
+      aria-label="Adventures and player resources"
+      data-mobile-open={isMobileDrawerOpen ? "true" : "false"}
+    >
       {isLoading ? <p>Loading adventures...</p> : null}
+      <button type="button" onClick={onCloseMobileDrawer}>
+        Close adventures drawer
+      </button>
       <button type="button" onClick={onStartNewChat}>
         New adventure
       </button>
