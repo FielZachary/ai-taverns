@@ -418,15 +418,16 @@ describe("NewAdventureForm", () => {
     ).toContain("url(");
   });
 
-  it("shows subclass art and descriptions on the class step", async () => {
+  it("shows subclass art and descriptions on the dedicated class choices step", async () => {
     render(<NewAdventureForm />);
 
     await continueFlow();
     await continueFlow();
     await nextCharacterStep();
+    await nextCharacterStep();
 
     expect(
-      screen.getByRole("heading", { name: /choose your class/i })
+      screen.getByRole("heading", { name: /choose your class choices/i })
     ).toBeInTheDocument();
     const subclassPicker = screen.getByRole("group", {
       name: "Martial Archetype"

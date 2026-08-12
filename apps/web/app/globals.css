@@ -1477,6 +1477,12 @@ h1 {
   aspect-ratio: 4 / 3;
   min-height: 150px;
   padding: 14px;
+  background:
+    linear-gradient(180deg, rgba(8, 6, 4, 0.02), rgba(8, 6, 4, 0.82)),
+    var(--option-art-url),
+    rgba(17, 13, 10, 0.48);
+  background-position: center;
+  background-size: cover;
 }
 
 .subclass-picker .art-option-card small {
@@ -1484,6 +1490,18 @@ h1 {
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+}
+
+.subclass-picker .art-option-card.selected,
+.subclass-picker .art-option-card:hover,
+.subclass-picker .art-option-card:focus-visible {
+  background:
+    linear-gradient(180deg, rgba(8, 6, 4, 0.02), rgba(8, 6, 4, 0.76)),
+    linear-gradient(90deg, rgba(173, 71, 43, 0.28), rgba(8, 6, 4, 0.08)),
+    var(--option-art-url),
+    rgba(17, 13, 10, 0.48);
+  background-position: center;
+  background-size: cover;
 }
 
 .tool-picker > div,

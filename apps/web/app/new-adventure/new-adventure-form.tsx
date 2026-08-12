@@ -6232,41 +6232,38 @@ export function NewAdventureForm({
                 ) : null}
 
                 {currentCharacterStep === "Class" ? (
-                  <div className="character-builder-stack">
-                    <fieldset className="option-picker class-picker">
-                      <legend>Class</legend>
-                      <div>
-                        {classOptions.map((option) => (
-                          <button
-                            type="button"
-                            className={characterClass === option.id ? "selected" : ""}
-                            aria-pressed={characterClass === option.id}
-                            key={option.id}
-                            onClick={() => {
-                              handleClassChange(option.id);
-                              trackAnalytics({
-                                name: "Character Step Completed",
-                                properties: {
-                                  ...analyticsBaseProperties(),
-                                  step: "Class",
-                                  characterClass: option.id
-                                }
-                              });
-                            }}
-                            style={
-                              {
-                                "--class-art-url": `url(${classArtByClass[option.id]})`
-                              } as CSSProperties
-                            }
-                          >
-                            <strong>{option.id}</strong>
-                            <small>{option.summary}</small>
-                          </button>
-                        ))}
-                      </div>
-                    </fieldset>
-                    {renderSubclassPicker()}
-                  </div>
+                  <fieldset className="option-picker class-picker">
+                    <legend>Class</legend>
+                    <div>
+                      {classOptions.map((option) => (
+                        <button
+                          type="button"
+                          className={characterClass === option.id ? "selected" : ""}
+                          aria-pressed={characterClass === option.id}
+                          key={option.id}
+                          onClick={() => {
+                            handleClassChange(option.id);
+                            trackAnalytics({
+                              name: "Character Step Completed",
+                              properties: {
+                                ...analyticsBaseProperties(),
+                                step: "Class",
+                                characterClass: option.id
+                              }
+                            });
+                          }}
+                          style={
+                            {
+                              "--class-art-url": `url(${classArtByClass[option.id]})`
+                            } as CSSProperties
+                          }
+                        >
+                          <strong>{option.id}</strong>
+                          <small>{option.summary}</small>
+                        </button>
+                      ))}
+                    </div>
+                  </fieldset>
                 ) : null}
 
                 {currentCharacterStep === "Species" ? (
