@@ -2016,7 +2016,7 @@ h1 {
 
 .equipment-summary-panel ul {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 8px;
   margin: 0;
   padding: 0;
@@ -2024,14 +2024,36 @@ h1 {
 }
 
 .equipment-summary-panel li {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
   min-height: 38px;
-  padding: 9px 10px;
+  padding: 6px 10px 6px 6px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
   color: var(--muted);
   font-size: 0.82rem;
   line-height: 1.35;
   background: rgba(0, 0, 0, 0.12);
+}
+
+.equipment-summary-art {
+  width: 42px;
+  aspect-ratio: 1;
+  border: 1px solid rgba(244, 207, 122, 0.22);
+  border-radius: 6px;
+  background:
+    linear-gradient(180deg, rgba(8, 6, 4, 0.02), rgba(8, 6, 4, 0.26)),
+    var(--option-art-url),
+    rgba(17, 13, 10, 0.48);
+  background-position: center;
+  background-size: cover;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.46);
+}
+
+.equipment-summary-panel li > span:last-child {
+  min-width: 0;
 }
 
 .equipment-modal-backdrop {
