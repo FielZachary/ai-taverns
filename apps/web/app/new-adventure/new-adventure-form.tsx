@@ -286,6 +286,7 @@ type OptionArtCategory =
   | "foci"
   | "instruments"
   | "gear"
+  | "subclasses"
   | "equipment-panels";
 
 function optionArtUrl(category: OptionArtCategory, value: string) {
@@ -2158,10 +2159,62 @@ const defaultAbilityScoresByClass: Record<CharacterClass, CompleteAbilityScores>
   Psion: { str: 8, dex: 14, con: 15, int: 17, wis: 12, cha: 10 }
 };
 type CharacterClass = (typeof classOptions)[number]["id"];
+type CharacterSubclass = (typeof classOptions)[number]["subclassOptions"][number];
 type CharacterSpecies = (typeof speciesOptions)[number];
 type CharacterBackground = (typeof backgroundOptions)[number];
 type Alignment = (typeof alignmentOptions)[number];
 type Gender = (typeof genderOptions)[number];
+
+const subclassDescriptions: Record<CharacterSubclass, string> = {
+  Alchemist: "Turns reagents and restoratives into battlefield support.",
+  Armorer: "Builds enchanted armor for defense, mobility, and force.",
+  Artillerist: "Controls arcane artillery and explosive magical pressure.",
+  Assassin: "Strikes first with disguises, poisons, and decisive ambushes.",
+  "Arcane Trickster": "Pairs stealth and misdirection with subtle wizardry.",
+  "Battle Master": "Controls the fight with maneuvers, timing, and tactics.",
+  "Battle Smith": "Blends weapon craft, healing, and a crafted defender.",
+  "Beast Master": "Fights beside a loyal companion and wilderness instincts.",
+  Champion: "Wins through athletic excellence and relentless martial force.",
+  "Circle of Stars": "Reads constellations to guide magic, healing, and fate.",
+  "Circle of the Land": "Draws spells from a chosen terrain's ancient power.",
+  "Circle of the Moon": "Leans into powerful wild shapes and primal resilience.",
+  "Clockwork Soul": "Bends chaos back into order with planar precision.",
+  "College of Glamour": "Uses fey grace to inspire allies and command attention.",
+  "College of Lore": "Collects secrets, sharp words, and flexible magic.",
+  "College of Valor": "Turns performance into courage, steel, and rallying songs.",
+  "Draconic Bloodline": "Channels ancestral dragon magic into power and durability.",
+  "Eldritch Knight": "Anchors a fighter's discipline with protective spellcraft.",
+  "Gloom Stalker": "Ambushes from darkness and excels before enemies react.",
+  Hunter: "Specializes in tracking, pressure, and monster-slaying tactics.",
+  "Life Domain": "Focuses divine magic into protection and potent healing.",
+  "Light Domain": "Burns away danger with radiance, fire, and revelation.",
+  Metamorph: "Reshapes body and mind through focused psionic adaptation.",
+  "Oath of Devotion": "Protects allies through honor, radiance, and sacred resolve.",
+  "Oath of the Ancients": "Guards life and hope with old magic and resilience.",
+  "Oath of Vengeance": "Pursues sworn foes with speed, pressure, and judgment.",
+  "Order of the Ghostslayer": "Hunts undead and spirits with rites against the grave.",
+  "Order of the Lycan": "Turns controlled transformation into brutal close combat.",
+  "Order of the Mutant": "Uses mutagens to trade risk for tailored power.",
+  "Order of the Profane Soul": "Binds occult magic to blood rites and weapon skill.",
+  "Path of the Berserker": "Channels rage into overwhelming, reckless offense.",
+  "Path of the Totem Warrior": "Calls spirit aspects for toughness and battlefield utility.",
+  "Path of Wild Magic": "Lets rage erupt into unpredictable supernatural effects.",
+  "Psi Warper": "Folds distance and positioning through spatial psionics.",
+  Psykinetic: "Moves matter with raw will and focused psychic force.",
+  "School of Abjuration": "Shapes wards that prevent harm and break hostile magic.",
+  "School of Divination": "Reads possibility to steer rolls, plans, and outcomes.",
+  "School of Evocation": "Sculpts elemental blasts around allies with precision.",
+  Telepath: "Reads, links, and overwhelms minds through psychic contact.",
+  "The Archfey": "Draws on fey charm, escape magic, and beguiling presence.",
+  "The Fiend": "Trades with infernal power for fire, resilience, and menace.",
+  "The Great Old One": "Touches alien thought for telepathy and eldritch insight.",
+  Thief: "Excels at mobility, quick hands, and classic infiltration.",
+  "War Domain": "Turns divine favor toward weapons, armor, and command.",
+  "Way of Mercy": "Balances healing and harm through disciplined ki.",
+  "Way of Shadow": "Uses ki for darkness, silence, and sudden repositioning.",
+  "Way of the Open Hand": "Controls enemies with clean strikes and martial discipline.",
+  "Wild Magic": "Surges with volatile luck and unpredictable arcane power."
+};
 
 const classArtByClass: Record<CharacterClass, string> = {
   Artificer: "/new-adventure/classes/artificer.webp",
@@ -6416,18 +6469,20 @@ export function NewAdventureForm({
 
                 {currentCharacterStep === "Class Choices" ? (
                   <div className="character-builder-stack">
-                    <fieldset className="option-picker compact-option-picker">
+                    <fieldset className="option-picker subclass-picker">
                       <legend>{selectedClass.subclassLabel}</legend>
                       <div>
                         {selectedClass.subclassOptions.map((option) => (
                           <button
                             type="button"
-                            className={subclass === option ? "selected" : ""}
+                            className={artOptionClassName(subclass === option)}
                             aria-pressed={subclass === option}
+                            style={optionArtStyle(optionArtUrl("subclasses", option))}
                             key={option}
                             onClick={() => setSubclass(option)}
                           >
                             <strong>{option}</strong>
+                            <small>{subclassDescriptions[option]}</small>
                           </button>
                         ))}
                       </div>

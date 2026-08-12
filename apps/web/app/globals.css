@@ -1469,6 +1469,23 @@ h1 {
   min-height: 50px;
 }
 
+.subclass-picker > div {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.subclass-picker .art-option-card {
+  aspect-ratio: 4 / 3;
+  min-height: 150px;
+  padding: 14px;
+}
+
+.subclass-picker .art-option-card small {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 .tool-picker > div,
 .skill-picker > div {
   grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
