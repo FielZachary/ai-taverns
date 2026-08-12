@@ -6945,15 +6945,6 @@ h6 {
     min-height: 0;
   }
 
-  .message-player:not(.message-waiting) .message-heading {
-    flex-direction: row-reverse;
-  }
-
-  .message-player:not(.message-waiting) .message-label-stack,
-  .message-player:not(.message-waiting) .message-body p {
-    text-align: right;
-  }
-
   .turn-form {
     grid-template-columns: 1fr;
   }
