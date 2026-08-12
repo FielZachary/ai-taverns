@@ -276,10 +276,19 @@ function optionArtSlug(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
-function optionArtUrl(
-  category: "tools" | "backgrounds" | "skills" | "weapons" | "packs",
-  value: string
-) {
+type OptionArtCategory =
+  | "tools"
+  | "backgrounds"
+  | "skills"
+  | "weapons"
+  | "packs"
+  | "armor"
+  | "foci"
+  | "instruments"
+  | "gear"
+  | "equipment-panels";
+
+function optionArtUrl(category: OptionArtCategory, value: string) {
   return encodeURI(`${optionArtRoot}/${category}/${optionArtSlug(value)}.webp`);
 }
 
@@ -2356,6 +2365,132 @@ const equipmentPackContents: Record<string, string[]> = {
 };
 
 const equipmentPackNames = Object.keys(equipmentPackContents);
+const equipmentArmorArtItems = [
+  "Chain mail",
+  "Leather armor",
+  "Scale mail",
+  "Shield",
+  "Studded leather armor"
+] as const;
+const equipmentFocusArtItems = [
+  "Arcane focus",
+  "Component pouch",
+  "Druidic focus",
+  "Holy symbol"
+] as const;
+const equipmentInstrumentArtItems = [
+  "Bagpipes",
+  "Drum",
+  "Dulcimer",
+  "Flute",
+  "Horn",
+  "Lute",
+  "Lyre",
+  "Musical instrument",
+  "Pan flute",
+  "Shawm",
+  "Viol"
+] as const;
+const equipmentPanelArtLabels = [
+  "Any simple weapon",
+  "Any martial melee weapon",
+  "Any other musical instrument",
+  "Any simple melee weapon",
+  "One martial weapon and a shield",
+  "Two martial weapons",
+  "Two simple melee weapons",
+  "One martial weapon",
+  "Two simple weapons",
+  "Scale mail and shield",
+  "Wooden shield"
+] as const;
+const equipmentGearArtItems = [
+  "10 candles",
+  "10 days of rations",
+  "10 feet of string",
+  "10 GP",
+  "10 pitons",
+  "10 sheets of parchment",
+  "10 torches",
+  "15 GP",
+  "2 blocks of incense",
+  "2 costumes",
+  "2 days of rations",
+  "2 flasks of oil",
+  "2 map cases",
+  "20 arrows",
+  "20 bolts",
+  "25 GP",
+  "5 candles",
+  "5 days of rations",
+  "5 GP",
+  "5 sheets of paper",
+  "5 sticks of incense",
+  "50 feet hempen rope",
+  "50 feet silk rope",
+  "6 GP",
+  "Admirer's favor",
+  "Alms box",
+  "Artisan's tools",
+  "Backpack",
+  "Bag of 1,000 ball bearings",
+  "Bedroll",
+  "Belaying pin",
+  "Bell",
+  "Blanket",
+  "Book of lore",
+  "Bottle of ink",
+  "Censer",
+  "Chest",
+  "City map",
+  "Common clothes",
+  "Con prop",
+  "Costume",
+  "Crowbar",
+  "Dark common clothes with hood",
+  "Fine clothes",
+  "Gaming set",
+  "Guild introduction letter",
+  "Hammer",
+  "Hooded lantern",
+  "Hunting trap",
+  "Hunting trophy",
+  "Ink pen",
+  "Iron pot",
+  "Lamp",
+  "Little bag of sand",
+  "Lucky charm",
+  "Map case",
+  "Mess kit",
+  "Parent token",
+  "Pedigree scroll",
+  "Pet mouse",
+  "Prayer book",
+  "Quill",
+  "Quiver",
+  "Rank insignia",
+  "Scroll case of notes",
+  "Sealing wax",
+  "Shovel",
+  "Signet ring",
+  "Small knife",
+  "Soap",
+  "Spellbook",
+  "Staff",
+  "Tinderbox",
+  "Traveler's clothes",
+  "Trophy from a fallen enemy",
+  "Unanswered scholarly letter",
+  "Vestments",
+  "Vial of perfume",
+  "Waterskin",
+  "Winter blanket"
+] as const;
+const equipmentArmorArtSet = new Set<string>(equipmentArmorArtItems);
+const equipmentFocusArtSet = new Set<string>(equipmentFocusArtItems);
+const equipmentInstrumentArtSet = new Set<string>(equipmentInstrumentArtItems);
+const equipmentPanelArtSet = new Set<string>(equipmentPanelArtLabels);
+const equipmentGearArtSet = new Set<string>(equipmentGearArtItems);
 
 const newAdventureStartupImageUrls = [
   "/new-adventure/flow-bg.webp",
@@ -2377,6 +2512,21 @@ const newAdventureToolImageUrls = toolOptions.map((tool) =>
 const newAdventurePackImageUrls = equipmentPackNames.map((pack) =>
   optionArtUrl("packs", pack)
 );
+const newAdventureArmorImageUrls = equipmentArmorArtItems.map((item) =>
+  optionArtUrl("armor", item)
+);
+const newAdventureFocusImageUrls = equipmentFocusArtItems.map((item) =>
+  optionArtUrl("foci", item)
+);
+const newAdventureInstrumentImageUrls = equipmentInstrumentArtItems.map((item) =>
+  optionArtUrl("instruments", item)
+);
+const newAdventureEquipmentPanelImageUrls = equipmentPanelArtLabels.map((item) =>
+  optionArtUrl("equipment-panels", item)
+);
+const newAdventureGearImageUrls = equipmentGearArtItems.map((item) =>
+  optionArtUrl("gear", item)
+);
 const newAdventureWeaponImageUrls = Array.from(
   new Set(
     weaponCategories
@@ -2389,6 +2539,11 @@ const newAdventureCustomOptionImageUrls = [
   ...newAdventureSkillImageUrls,
   ...newAdventureToolImageUrls,
   ...newAdventurePackImageUrls,
+  ...newAdventureArmorImageUrls,
+  ...newAdventureFocusImageUrls,
+  ...newAdventureInstrumentImageUrls,
+  ...newAdventureEquipmentPanelImageUrls,
+  ...newAdventureGearImageUrls,
   ...newAdventureWeaponImageUrls
 ];
 const adventureImagePreloadPromises = new Map<string, Promise<void>>();
@@ -3145,38 +3300,60 @@ function equipmentChoiceSubtext(
   return formatList(expandedItems);
 }
 
-function equipmentOptionArtUrl(
-  option: EquipmentChoiceOption,
-  characterClass: CharacterClass
-) {
-  if (option.category && isWeaponCategory(option.category)) {
-    return optionArtUrl("weapons", equipmentCategoryOptions[option.category][0]);
-  }
-
-  const weaponItem = option.items?.find(
-    (item) => normalizeEquipmentName(item) in weaponAttackDetails
+function equipmentItemArtUrl(item: string) {
+  const trimmedItem = item.trim();
+  const normalizedName = normalizeEquipmentName(trimmedItem);
+  const normalizedDisplayName = equipmentArmorArtItems.find(
+    (armor) => armor.toLowerCase() === normalizedName
   );
 
-  if (weaponItem) {
-    return optionArtUrl("weapons", normalizeEquipmentName(weaponItem));
+  if (packContentsFor(trimmedItem)) {
+    return optionArtUrl("packs", trimmedItem);
   }
 
-  const toolItem = option.items
-    ?.map(equipmentToolArtValue)
-    .find(Boolean);
+  if (normalizedName in weaponAttackDetails) {
+    return optionArtUrl("weapons", normalizedName);
+  }
+
+  const toolItem = equipmentToolArtValue(trimmedItem);
 
   if (toolItem) {
     return optionArtUrl("tools", toolItem);
   }
 
-  const packItem = option.items?.find((item) => Boolean(packContentsFor(item)));
-
-  if (packItem) {
-    return optionArtUrl("packs", packItem);
+  if (normalizedDisplayName && equipmentArmorArtSet.has(normalizedDisplayName)) {
+    return optionArtUrl("armor", normalizedDisplayName);
   }
 
-  if (option.category === "musicalInstrument") {
-    return optionArtUrl("tools", "Lute");
+  if (equipmentFocusArtSet.has(trimmedItem)) {
+    return optionArtUrl("foci", trimmedItem);
+  }
+
+  if (equipmentInstrumentArtSet.has(trimmedItem)) {
+    return optionArtUrl("instruments", trimmedItem);
+  }
+
+  if (equipmentGearArtSet.has(trimmedItem)) {
+    return optionArtUrl("gear", trimmedItem);
+  }
+
+  return null;
+}
+
+function equipmentOptionArtUrl(
+  option: EquipmentChoiceOption,
+  characterClass: CharacterClass
+) {
+  if (equipmentPanelArtSet.has(option.label)) {
+    return optionArtUrl("equipment-panels", option.label);
+  }
+
+  const itemArt = option.items
+    ?.map(equipmentItemArtUrl)
+    .find(Boolean);
+
+  if (itemArt) {
+    return itemArt;
   }
 
   return classArtByClass[characterClass];
@@ -3185,6 +3362,10 @@ function equipmentOptionArtUrl(
 function equipmentModalItemArtUrl(category: EquipmentCategory, item: string) {
   if (isWeaponCategory(category)) {
     return optionArtUrl("weapons", item);
+  }
+
+  if (category === "musicalInstrument") {
+    return optionArtUrl("instruments", item);
   }
 
   const toolItem = equipmentToolArtValue(item);
@@ -6383,9 +6564,22 @@ export function NewAdventureForm({
                       <section className="equipment-summary-panel">
                         <h3>Your starting gear</h3>
                         <ul>
-                          {chosenEquipmentGear.map((item, index) => (
-                            <li key={`${item}-${index}`}>{item}</li>
-                          ))}
+                          {chosenEquipmentGear.map((item, index) => {
+                            const itemArt = equipmentItemArtUrl(item);
+
+                            return (
+                              <li key={`${item}-${index}`}>
+                                {itemArt ? (
+                                  <span
+                                    className="equipment-summary-art"
+                                    aria-hidden="true"
+                                    style={optionArtStyle(itemArt)}
+                                  />
+                                ) : null}
+                                <span>{item}</span>
+                              </li>
+                            );
+                          })}
                         </ul>
                       </section>
                     )}
