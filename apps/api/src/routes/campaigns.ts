@@ -41,6 +41,7 @@ import {
   LobbyInvitePreviewResponseSchema,
   type CampaignMode
 } from "@ai-dnd/contracts";
+import type { AnalyticsEventProperties } from "@ai-dnd/contracts";
 import {
   eldermereRegions,
   formatEldermereOpeningPromptContext,
@@ -101,6 +102,58 @@ function spellCountFromSheet(sheet: string | undefined) {
     .map((spell) => spell.trim())
     .filter((spell) => spell && !/^dc|spell|slots?|[+-]?\d/.test(spell.toLowerCase()))
     .length;
+}
+
+function characterBuildModeFromSheet(sheet: string | undefined) {
+  return sheetField(sheet, "Build Mode")?.toLowerCase().includes("quick")
+    ? "quick"
+    : "custom";
+}
+
+function characterAnalyticsProperties(input: {
+  userId: string;
+  campaignId: string;
+  campaignMode: CampaignMode;
+  characterSheet?: string | undefined;
+  campaignGenre?: string | undefined;
+  campaignGenreKind?: "preset" | "custom" | undefined;
+  campaignGenrePresetId?: string | undefined;
+  hasCustomWorld?: boolean | undefined;
+  hasEldermereStart?: boolean | undefined;
+  hasPortrait?: boolean | undefined;
+  portraitSource?: "generated" | "preview" | "upload" | undefined;
+  joinSource?: "code" | "invite" | undefined;
+  inviteUsed?: boolean | undefined;
+  campaignAgeHours?: number | undefined;
+  minutesSinceCampaignCreated?: number | undefined;
+}) {
+  return {
+    userId: input.userId,
+    campaignId: input.campaignId,
+    campaignMode: input.campaignMode,
+    campaignGenre: input.campaignGenre,
+    campaignGenreKind: input.campaignGenreKind,
+    campaignGenrePresetId: input.campaignGenrePresetId,
+    characterClass: sheetField(input.characterSheet, "Class"),
+    characterSpecies: sheetField(input.characterSheet, "Species"),
+    characterBuildMode: characterBuildModeFromSheet(input.characterSheet),
+    spellCount: spellCountFromSheet(input.characterSheet),
+    equipmentCompleted: Boolean(input.characterSheet?.includes("\nEquipment\n")),
+    hasBackstory: Boolean(
+      input.characterSheet?.trim().includes("Backstory\n") &&
+        !input.characterSheet.includes(
+          "AI Taverns should generate a fitting backstory"
+        )
+    ),
+    hasCustomWorld: input.hasCustomWorld,
+    hasEldermereStart: input.hasEldermereStart,
+    hasPortrait: input.hasPortrait,
+    portraitSource: input.portraitSource,
+    joinSource: input.joinSource,
+    inviteUsed: input.inviteUsed,
+    campaignAgeHours: input.campaignAgeHours,
+    minutesSinceCampaignCreated: input.minutesSinceCampaignCreated
+  } satisfies Partial<AnalyticsEventProperties>;
 }
 
 type RestartBackstoryContextRow = {
@@ -918,8 +971,23 @@ export async function registerCampaignRoutes(
             portraitUrl: portrait.portraitUrl
           }
         : campaign;
+    const campaignCreateAnalyticsProperties = characterAnalyticsProperties({
+      userId: user.id,
+      campaignId: campaign.id,
+      campaignMode: mode,
+      campaignGenre,
+      campaignGenreKind,
+      campaignGenrePresetId,
+      characterSheet: body.characterSheet,
+      minutesSinceCampaignCreated: 0,
+      campaignAgeHours: 0,
+      hasCustomWorld: campaignGenreKind === "custom",
+      hasEldermereStart: Boolean(body.eldermereStart),
+      hasPortrait: portrait?.status === "ready",
+      portraitSource: portrait?.status === "ready" ? "generated" : undefined
+    });
     analytics?.track({
-      name: "Campaign Created",
+      name: "Campaign World Selected",
       distinctId: `user:${user.id}`,
       properties: {
         userId: user.id,
@@ -928,28 +996,40 @@ export async function registerCampaignRoutes(
         campaignGenre,
         campaignGenreKind,
         campaignGenrePresetId,
-        minutesSinceCampaignCreated: 0,
-        campaignAgeHours: 0,
-        hasCustomWorld: campaignGenreKind === "custom",
-        hasEldermereStart: Boolean(body.eldermereStart),
-        hasBackstory: Boolean(
-          body.characterSheet?.trim().includes("Backstory\n") &&
-            !body.characterSheet.includes(
-              "AI Taverns should generate a fitting backstory"
-            )
-        ),
-        hasPortrait: portrait?.status === "ready",
-        portraitSource: portrait?.status === "ready" ? "generated" : undefined,
-        characterClass: sheetField(body.characterSheet, "Class"),
-        characterSpecies: sheetField(body.characterSheet, "Species"),
-        characterBuildMode: sheetField(body.characterSheet, "Build Mode")
-          ?.toLowerCase()
-          .includes("quick")
-          ? "quick"
-          : "custom",
-        spellCount: spellCountFromSheet(body.characterSheet),
-        equipmentCompleted: Boolean(body.characterSheet?.includes("\nEquipment\n"))
-      },
+        hasCustomWorld: campaignGenreKind === "custom"
+      }
+    });
+    if (campaignGenreKind === "custom") {
+      analytics?.track({
+        name: "Custom World Completed",
+        distinctId: `user:${user.id}`,
+        properties: {
+          userId: user.id,
+          campaignId: campaign.id,
+          campaignMode: mode,
+          campaignGenre,
+          campaignGenreKind,
+          hasCustomWorld: true,
+          customWorldName: body.customWorldName?.trim() || campaignGenre,
+          customWorldDescriptionLength:
+            body.customWorldDescription?.trim().length ?? 0
+        }
+      });
+    }
+    analytics?.track({
+      name: "Character Creation Started",
+      distinctId: `user:${user.id}`,
+      properties: campaignCreateAnalyticsProperties
+    });
+    analytics?.track({
+      name: "Character Created",
+      distinctId: `user:${user.id}`,
+      properties: campaignCreateAnalyticsProperties
+    });
+    analytics?.track({
+      name: "Campaign Created",
+      distinctId: `user:${user.id}`,
+      properties: campaignCreateAnalyticsProperties,
       milestones: [
         "campaign_created_or_joined",
         "character_completed",
@@ -1400,25 +1480,28 @@ export async function registerCampaignRoutes(
       mechanicsSeed: body.mechanicsSeed,
       userId: user.id
     });
+    const joinAnalyticsProperties = characterAnalyticsProperties({
+      userId: user.id,
+      campaignId: campaign.id,
+      campaignMode: "multiplayer",
+      characterSheet: body.characterSheet,
+      joinSource: "invite",
+      inviteUsed: true
+    });
+    analytics?.track({
+      name: "Character Creation Started",
+      distinctId: `user:${user.id}`,
+      properties: joinAnalyticsProperties
+    });
+    analytics?.track({
+      name: "Character Created",
+      distinctId: `user:${user.id}`,
+      properties: joinAnalyticsProperties
+    });
     analytics?.track({
       name: "Campaign Joined",
       distinctId: `user:${user.id}`,
-      properties: {
-        userId: user.id,
-        campaignId: campaign.id,
-        campaignMode: "multiplayer",
-        joinSource: "invite",
-        inviteUsed: true,
-        characterClass: sheetField(body.characterSheet, "Class"),
-        characterSpecies: sheetField(body.characterSheet, "Species"),
-        characterBuildMode: sheetField(body.characterSheet, "Build Mode")
-          ?.toLowerCase()
-          .includes("quick")
-          ? "quick"
-          : "custom",
-        spellCount: spellCountFromSheet(body.characterSheet),
-        equipmentCompleted: Boolean(body.characterSheet?.includes("\nEquipment\n"))
-      },
+      properties: joinAnalyticsProperties,
       milestones: ["campaign_created_or_joined", "character_completed"]
     });
 
@@ -1455,25 +1538,28 @@ export async function registerCampaignRoutes(
       mechanicsSeed: body.mechanicsSeed,
       userId: user.id
     });
+    const joinAnalyticsProperties = characterAnalyticsProperties({
+      userId: user.id,
+      campaignId: campaign.id,
+      campaignMode: "multiplayer",
+      characterSheet: body.characterSheet,
+      joinSource: "code",
+      inviteUsed: false
+    });
+    analytics?.track({
+      name: "Character Creation Started",
+      distinctId: `user:${user.id}`,
+      properties: joinAnalyticsProperties
+    });
+    analytics?.track({
+      name: "Character Created",
+      distinctId: `user:${user.id}`,
+      properties: joinAnalyticsProperties
+    });
     analytics?.track({
       name: "Campaign Joined",
       distinctId: `user:${user.id}`,
-      properties: {
-        userId: user.id,
-        campaignId: campaign.id,
-        campaignMode: "multiplayer",
-        joinSource: "code",
-        inviteUsed: false,
-        characterClass: sheetField(body.characterSheet, "Class"),
-        characterSpecies: sheetField(body.characterSheet, "Species"),
-        characterBuildMode: sheetField(body.characterSheet, "Build Mode")
-          ?.toLowerCase()
-          .includes("quick")
-          ? "quick"
-          : "custom",
-        spellCount: spellCountFromSheet(body.characterSheet),
-        equipmentCompleted: Boolean(body.characterSheet?.includes("\nEquipment\n"))
-      },
+      properties: joinAnalyticsProperties,
       milestones: ["campaign_created_or_joined", "character_completed"]
     });
 
