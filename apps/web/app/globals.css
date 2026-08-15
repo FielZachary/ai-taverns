@@ -5052,7 +5052,9 @@ h1 {
 
 .message-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: 38px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
   width: 100%;
 }
 
@@ -5129,6 +5131,14 @@ h1 {
   height: 38px;
   border-radius: 8px;
   overflow: hidden;
+}
+
+.message-icon-outside {
+  margin-top: 2px;
+}
+
+.message-icon-inline {
+  display: none;
 }
 
 .message-avatar-image {
@@ -6943,6 +6953,18 @@ h6 {
 
   .message-log {
     min-height: 0;
+  }
+
+  .message-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .message-icon-outside {
+    display: none;
+  }
+
+  .message-icon-inline {
+    display: block;
   }
 
   .turn-form {

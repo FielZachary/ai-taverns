@@ -574,9 +574,12 @@ export function MessageLog({
             }`}
             key={message.id}
           >
+            <div className="message-icon message-icon-outside" aria-hidden="true">
+              <MessageAvatar message={message} />
+            </div>
             <div className="message-content">
               <div className="message-heading">
-                <div className="message-icon" aria-hidden="true">
+                <div className="message-icon message-icon-inline" aria-hidden="true">
                   <MessageAvatar message={message} />
                 </div>
                 <div className="message-label-stack">
@@ -669,9 +672,12 @@ export function MessageLog({
           className="message-card message-player message-waiting"
           key={`waiting-${player.id}`}
         >
+          <div className="message-icon message-icon-outside" aria-hidden="true">
+            <UserRound size={18} />
+          </div>
           <div className="message-content">
             <div className="message-heading">
-              <div className="message-icon" aria-hidden="true">
+              <div className="message-icon message-icon-inline" aria-hidden="true">
                 <UserRound size={18} />
               </div>
               <p className="message-label">
@@ -688,9 +694,17 @@ export function MessageLog({
 
       {isSending && !hideSendingIndicator ? (
         <article className="message-card message-dm">
+          <div className="message-icon message-icon-outside" aria-hidden="true">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              alt=""
+              className="message-avatar-image"
+              src="/avatars/dungeon-master.jpg"
+            />
+          </div>
           <div className="message-content">
             <div className="message-heading">
-              <div className="message-icon" aria-hidden="true">
+              <div className="message-icon message-icon-inline" aria-hidden="true">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   alt=""
