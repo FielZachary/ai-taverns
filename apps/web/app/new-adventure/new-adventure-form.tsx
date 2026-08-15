@@ -4732,7 +4732,8 @@ export function NewAdventureForm({
 
   const analyticsBaseProperties = useCallback(() => {
     return {
-      guestId: ownerClientId || analyticsGuestId(),
+      guestId: analyticsGuestId(),
+      playerId: ownerClientId || undefined,
       userId,
       campaignMode: mode,
       campaignGenre: selectedGenre.label,
@@ -5471,6 +5472,21 @@ export function NewAdventureForm({
     }
 
     trackStepCompleted();
+
+    if (isCustomWorldStep) {
+      trackAnalytics({
+        name: "Custom World Completed",
+        properties: {
+          ...analyticsBaseProperties(),
+          campaignGenre: customWorldName.trim(),
+          campaignGenreKind: "custom",
+          campaignGenrePresetId: undefined,
+          hasCustomWorld: true,
+          customWorldName: customWorldName.trim(),
+          customWorldDescriptionLength: customWorldDescription.trim().length
+        }
+      });
+    }
 
     if (isJoinFlow && isCampaignDetailsStep) {
       try {

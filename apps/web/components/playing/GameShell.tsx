@@ -105,6 +105,7 @@ import {
 } from "./game-shell-messages";
 import { extractPlayerBackstory } from "./backstory-intro";
 import {
+  analyticsGuestId,
   identifyAnalyticsUser,
   trackAnalytics,
   trackCampaignReturn
@@ -677,7 +678,8 @@ export function GameShell({
   function analyticsBaseProperties(campaign: CampaignSummary | undefined = activeCampaign) {
     return {
       userId,
-      guestId: playerId || undefined,
+      guestId: analyticsGuestId(),
+      playerId: playerId || undefined,
       campaignId: campaign?.id,
       campaignMode: campaign?.mode,
       playerMessageCount: roomMessages.filter((message) => message.role === "player")
@@ -785,7 +787,8 @@ export function GameShell({
         name: "Campaign Loaded",
         properties: {
           userId,
-          guestId: playerId || undefined,
+          guestId: analyticsGuestId(),
+          playerId: playerId || undefined,
           campaignId: campaign.id,
           campaignMode: campaign.mode,
           playerMessageCount,
