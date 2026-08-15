@@ -187,6 +187,7 @@ export function trackAnalytics(input: TrackInput) {
       ...input.properties,
       app: "ai-taverns",
       distinctId: distinctId(),
+      distinct_id: distinctId(),
       schemaVersion: 1,
       source: "web",
       hookScore: hookSnapshot.score,
