@@ -8,4 +8,3 @@ export * from "./health.js";
 export * from "./dm-provider.js";
 export * from "./mechanics.js";
 export * from "./rooms.js";
-export * from "./subscriptions.js";

@@ -6,7 +6,6 @@ import { join } from "node:path";
 import { test } from "node:test";
 import sharp from "sharp";
 import {
-  AccountUsageResponseSchema,
   ApiErrorResponseSchema,
   CharacterBackstoryGenerateResponseSchema,
   CampaignInviteCreateResponseSchema,
@@ -39,126 +38,6 @@ import {
   generateCharacterPortraitPreview
 } from "./character-portrait-generation.js";
 import { loadConfig } from "./config.js";
-
-test("GET /api/account/usage returns subscription usage limits", async () => {
-  const cookie = await signIn("usage-snapshot@example.com");
-  const user = database.users.find(
-    (candidate) => candidate.email === "usage-snapshot@example.com"
-  );
-
-  assert.ok(user);
-  database.accountUsageEvents.push({
-    id: "usage-snapshot-dm-turn",
-    user_id: user.id,
-    resource: "dm_turn",
-    amount: 2,
-    period_start: new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)),
-    period_end: new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 1, 1)),
-    idempotency_key: "usage-snapshot-dm-turn",
-    status: "committed",
-    metadata: {},
-    created_at: new Date(),
-    updated_at: new Date()
-  });
-
-  const response = await app.inject({
-    method: "GET",
-    url: "/api/account/usage",
-    headers: { cookie }
-  });
-
-  assert.equal(response.statusCode, 200, response.body);
-  const usage = AccountUsageResponseSchema.parse(response.json());
-  assert.ok(usage.resources.dm_turn);
-  assert.ok(usage.resources.active_campaign);
-  assert.equal(usage.subscriptionTier, "free");
-  assert.equal(usage.resources.dm_turn.used, 2);
-  assert.equal(usage.resources.dm_turn.limit, 100);
-  assert.equal(usage.resources.active_campaign.used, 0);
-});
-
-test("campaign creation returns LIMIT_EXCEEDED at the active campaign cap", async () => {
-  const cookie = await signIn("active-campaign-limit@example.com");
-  const first = await app.inject({
-    method: "POST",
-    url: "/api/campaigns",
-    headers: { cookie },
-    payload: {
-      mode: "multiplayer",
-      campaignGenreKind: "preset",
-      campaignGenrePresetId: "classic_fantasy",
-      ownerClientId: "active-campaign-limit-owner",
-      playerName: "Owner",
-      characterName: "Owner",
-      characterSheet: "Level 5 Fighter"
-    }
-  });
-
-  assert.equal(first.statusCode, 201, first.body);
-
-  const second = await app.inject({
-    method: "POST",
-    url: "/api/campaigns",
-    headers: { cookie },
-    payload: {
-      mode: "multiplayer",
-      campaignGenreKind: "preset",
-      campaignGenrePresetId: "classic_fantasy",
-      ownerClientId: "active-campaign-limit-owner-2",
-      playerName: "Owner",
-      characterName: "Owner",
-      characterSheet: "Level 5 Fighter"
-    }
-  });
-
-  assert.equal(second.statusCode, 429, second.body);
-  const error = ApiErrorResponseSchema.parse(second.json());
-  assert.equal(error.error.code, "LIMIT_EXCEEDED");
-  assert.equal(error.error.quota?.resource, "active_campaign");
-});
-
-test("campaign creation returns LIMIT_EXCEEDED at the monthly flow cap", async () => {
-  const cookie = await signIn("campaign-creation-limit@example.com");
-  const user = database.users.find(
-    (candidate) => candidate.email === "campaign-creation-limit@example.com"
-  );
-  const now = new Date();
-
-  assert.ok(user);
-  database.accountUsageEvents.push({
-    id: "campaign-creation-limit-events",
-    user_id: user.id,
-    resource: "campaign_creation",
-    amount: 3,
-    period_start: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)),
-    period_end: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)),
-    idempotency_key: "campaign-creation-limit-events",
-    status: "committed",
-    metadata: {},
-    created_at: now,
-    updated_at: now
-  });
-
-  const response = await app.inject({
-    method: "POST",
-    url: "/api/campaigns",
-    headers: { cookie },
-    payload: {
-      mode: "multiplayer",
-      campaignGenreKind: "preset",
-      campaignGenrePresetId: "classic_fantasy",
-      ownerClientId: "campaign-creation-limit-owner",
-      playerName: "Owner",
-      characterName: "Owner",
-      characterSheet: "Level 5 Fighter"
-    }
-  });
-
-  assert.equal(response.statusCode, 429, response.body);
-  const error = ApiErrorResponseSchema.parse(response.json());
-  assert.equal(error.error.code, "LIMIT_EXCEEDED");
-  assert.equal(error.error.quota?.resource, "campaign_creation");
-});
 
 test("character portrait generation rejects unsupported model selections early", async () => {
   const result = await generateCharacterPortraitForCampaign({

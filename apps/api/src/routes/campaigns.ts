@@ -4,7 +4,6 @@ import {
   CampaignInviteCreateParamsSchema,
   CampaignInviteCreateRequestSchema,
   CampaignInviteCreateResponseSchema,
-  AccountUsageResponseSchema,
   CampaignInviteDisableParamsSchema,
   CampaignInviteDisableResponseSchema,
   CampaignInviteListParamsSchema,
@@ -53,11 +52,8 @@ import {
 import {
   createCampaignInvite,
   createCampaignForMode,
-  commitQuotaReservation,
   disableCampaignInvite,
-  failQuotaReservation,
   type DungeonMasterRuntime,
-  getAccountUsageForUser,
   getCampaignSummaryForUser,
   joinCampaignByInvite,
   joinCampaignByCode,
@@ -67,7 +63,6 @@ import {
   updatePlayerSafeNpcCardMarkdown,
   previewLobbyInvite,
   previewCampaignJoinByCode,
-  reserveMonthlyQuota,
   restartSinglePlayerCampaignForUser
 } from "@ai-dnd/db";
 import type { ApiConfig } from "../config.js";
@@ -228,66 +223,53 @@ async function generateCharacterPortraitAndPublish(input: {
   imageModel?: Parameters<
     typeof generateCharacterPortraitForCampaign
   >[0]["imageModel"];
-  quotaReservation?: Awaited<ReturnType<typeof reserveMonthlyQuota>> | undefined;
 }) {
-  try {
-    const portrait = await generateCharacterPortraitForCampaign({
-      db: input.fastify.pg,
-      config: input.config,
-      campaignId: input.campaignId,
-      userId: input.userId,
-      guidelines: input.guidelines,
-      artStyle: input.artStyle,
-      imageModel: input.imageModel,
-      onPending: async () => {
-        try {
-          await input.fastify.roomRealtime.publishRoomUpdated({
-            roomId: input.campaignId
-          });
-        } catch (error) {
-          input.fastify.log.warn(
-            { error, campaignId: input.campaignId },
-            "Character portrait pending update could not be published."
-          );
-        }
+  const portrait = await generateCharacterPortraitForCampaign({
+    db: input.fastify.pg,
+    config: input.config,
+    campaignId: input.campaignId,
+    userId: input.userId,
+    guidelines: input.guidelines,
+    artStyle: input.artStyle,
+    imageModel: input.imageModel,
+    onPending: async () => {
+      try {
+        await input.fastify.roomRealtime.publishRoomUpdated({
+          roomId: input.campaignId
+        });
+      } catch (error) {
+        input.fastify.log.warn(
+          { error, campaignId: input.campaignId },
+          "Character portrait pending update could not be published."
+        );
       }
-    });
-
-    if (portrait.status === "ready") {
-      await commitQuotaReservation(input.fastify.pg, input.quotaReservation ?? null);
-    } else {
-      await failQuotaReservation(
-        input.fastify.pg,
-        input.quotaReservation ?? null,
-        new Error(portrait.reason)
-      );
-      input.fastify.log.warn(
-        {
-          campaignId: input.campaignId,
-          userId: input.userId,
-          portraitStatus: portrait.status,
-          reason: portrait.reason
-        },
-        "Character portrait generation did not complete."
-      );
     }
+  });
 
-    try {
-      await input.fastify.roomRealtime.publishRoomUpdated({
-        roomId: input.campaignId
-      });
-    } catch (error) {
-      input.fastify.log.warn(
-        { error, campaignId: input.campaignId },
-        "Character portrait completion update could not be published."
-      );
-    }
-
-    return portrait;
-  } catch (error) {
-    await failQuotaReservation(input.fastify.pg, input.quotaReservation ?? null, error);
-    throw error;
+  if (portrait.status !== "ready") {
+    input.fastify.log.warn(
+      {
+        campaignId: input.campaignId,
+        userId: input.userId,
+        portraitStatus: portrait.status,
+        reason: portrait.reason
+      },
+      "Character portrait generation did not complete."
+    );
   }
+
+  try {
+    await input.fastify.roomRealtime.publishRoomUpdated({
+      roomId: input.campaignId
+    });
+  } catch (error) {
+    input.fastify.log.warn(
+      { error, campaignId: input.campaignId },
+      "Character portrait completion update could not be published."
+    );
+  }
+
+  return portrait;
 }
 
 function imageBufferFromDataUrl(dataUrl: string) {
@@ -712,20 +694,6 @@ export async function registerCampaignRoutes(
     return CampaignListResponseSchema.parse(response);
   });
 
-  fastify.get("/account/usage", async (request) => {
-    const user = await requireAuthenticatedUser(
-      fastify,
-      config,
-      request.cookies[config.authCookieName]
-    );
-
-    return AccountUsageResponseSchema.parse(
-      await getAccountUsageForUser(fastify.pg, {
-        userId: user.id
-      })
-    );
-  });
-
   fastify.post("/campaigns/backstory", async (request) => {
     const body = CharacterBackstoryGenerateRequestSchema.parse(request.body);
     const characterSheet = body.characterSheet.trim();
@@ -964,57 +932,34 @@ export async function registerCampaignRoutes(
       config,
       request.cookies[config.authCookieName]
     );
-    const campaignCreationReservation = await reserveMonthlyQuota(fastify.pg, {
+    const campaign = await createCampaignForMode(fastify.pg, {
+      mode,
+      title,
+      campaignGenre,
+      campaignGenreKind,
+      campaignGenrePresetId,
+      campaignGenrePromptBrief,
+      customWorldName,
+      customWorldDescription,
+      ownerClientId: body.ownerClientId?.trim(),
+      playerName,
+      characterName: body.characterName?.trim(),
+      characterSheet: body.characterSheet?.trim(),
+      mechanicsSeed: body.mechanicsSeed,
+      eldermereStart: resolveEldermereCampaignStart({
+        regionName: body.eldermereStart?.regionName,
+        settlementName: body.eldermereStart?.settlementName
+      }),
       userId: user.id,
-      resource: "campaign_creation",
-      idempotencyKey: `campaign_creation:${request.id}`
+      runtime
     });
-    let campaign: Awaited<ReturnType<typeof createCampaignForMode>>;
-
-    try {
-      campaign = await createCampaignForMode(fastify.pg, {
-        mode,
-        title,
-        campaignGenre,
-        campaignGenreKind,
-        campaignGenrePresetId,
-        campaignGenrePromptBrief,
-        customWorldName,
-        customWorldDescription,
-        ownerClientId: body.ownerClientId?.trim(),
-        playerName,
-        characterName: body.characterName?.trim(),
-        characterSheet: body.characterSheet?.trim(),
-        mechanicsSeed: body.mechanicsSeed,
-        eldermereStart: resolveEldermereCampaignStart({
-          regionName: body.eldermereStart?.regionName,
-          settlementName: body.eldermereStart?.settlementName
-        }),
-        userId: user.id,
-        runtime
-      });
-      await commitQuotaReservation(fastify.pg, campaignCreationReservation);
-    } catch (error) {
-      await failQuotaReservation(fastify.pg, campaignCreationReservation, error);
-      throw error;
-    }
-
-    const portraitQuotaReservation =
-      body.generateCharacterPortrait === true
-        ? await reserveMonthlyQuota(fastify.pg, {
-            userId: user.id,
-            resource: "image_generation",
-            idempotencyKey: `image_generation:character_portrait:${campaign.id}:${request.id}`
-          })
-        : undefined;
     const portrait =
       body.generateCharacterPortrait === true
         ? await generateCharacterPortraitAndPublish({
             fastify,
             config,
             campaignId: campaign.id,
-            userId: user.id,
-            quotaReservation: portraitQuotaReservation
+            userId: user.id
           })
         : undefined;
 
@@ -1182,39 +1127,20 @@ export async function registerCampaignRoutes(
       request.cookies[config.authCookieName]
     );
 
-    const quotaReservation = await reserveMonthlyQuota(fastify.pg, {
-      userId: user.id,
-      resource: "image_generation",
-      idempotencyKey: `image_generation:character_portrait_preview:${request.id}`
+    const portrait = await generateCharacterPortraitPreview({
+      characterName: body.characterName,
+      playerName: body.playerName,
+      characterSheet: body.characterSheet,
+      campaignGenre: body.campaignGenre,
+      customWorldName: body.customWorldName,
+      guidelines: body.guidelines,
+      artStyle: body.artStyle,
+      imageModel: body.imageModel
     });
-    let portrait: Awaited<ReturnType<typeof generateCharacterPortraitPreview>>;
-
-    try {
-      portrait = await generateCharacterPortraitPreview({
-        characterName: body.characterName,
-        playerName: body.playerName,
-        characterSheet: body.characterSheet,
-        campaignGenre: body.campaignGenre,
-        customWorldName: body.customWorldName,
-        guidelines: body.guidelines,
-        artStyle: body.artStyle,
-        imageModel: body.imageModel
-      });
-    } catch (error) {
-      await failQuotaReservation(fastify.pg, quotaReservation, error);
-      throw error;
-    }
 
     if (portrait.status !== "ready") {
-      await failQuotaReservation(
-        fastify.pg,
-        quotaReservation,
-        new Error(portrait.reason)
-      );
       throw createHttpError(502, portrait.reason, { expose: true });
     }
-
-    await commitQuotaReservation(fastify.pg, quotaReservation);
 
     analytics?.track({
       name: "Character Portrait Previewed",
@@ -1262,11 +1188,6 @@ export async function registerCampaignRoutes(
       campaignId: params.campaignId,
       userId: user.id
     });
-    const quotaReservation = await reserveMonthlyQuota(fastify.pg, {
-      userId: user.id,
-      resource: "image_generation",
-      idempotencyKey: `image_generation:character_portrait:${params.campaignId}:${request.id}`
-    });
 
     if (body.background) {
       void generateCharacterPortraitAndPublish({
@@ -1276,8 +1197,7 @@ export async function registerCampaignRoutes(
         userId: user.id,
         guidelines: body.guidelines,
         artStyle: body.artStyle,
-        imageModel: body.imageModel,
-        quotaReservation
+        imageModel: body.imageModel
       }).catch((error) => {
         fastify.log.error(
           { error, campaignId: params.campaignId, userId: user.id },
@@ -1311,8 +1231,7 @@ export async function registerCampaignRoutes(
       userId: user.id,
       guidelines: body.guidelines,
       artStyle: body.artStyle,
-      imageModel: body.imageModel,
-      quotaReservation
+      imageModel: body.imageModel
     });
 
     if (portrait.status !== "ready") {

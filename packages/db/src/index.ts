@@ -57,12 +57,6 @@ import type {
   RoomSnapshot
 } from "@ai-dnd/contracts";
 import {
-  subscriptionTierLimits,
-  type AccountUsageResponse,
-  type QuotaResource,
-  type SubscriptionTier
-} from "@ai-dnd/contracts";
-import {
   actorKeyForPlayer,
   applyDeathSavingThrow,
   applyAcceptedCast,
@@ -104,7 +98,6 @@ export type UserRow = {
   id: string;
   email: string;
   display_name: string | null;
-  subscription_tier?: SubscriptionTier | null;
   created_at: Date;
   updated_at: Date;
 };
@@ -113,7 +106,6 @@ export type UserRecord = {
   id: UserId;
   email: string;
   displayName: string | null;
-  subscriptionTier?: SubscriptionTier;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -148,11 +140,6 @@ type AuthenticatedSessionRow = UserRow & {
   expires_at: Date;
   revoked_at: Date | null;
   last_seen_at: Date | null;
-};
-
-type QuotaReservation = {
-  id: string;
-  resource: QuotaResource;
 };
 
 export type LoginTokenRow = {
@@ -200,54 +187,11 @@ function toIso(value: Date | string | null | undefined) {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 }
 
-function normalizeSubscriptionTier(
-  value: SubscriptionTier | string | null | undefined
-): SubscriptionTier {
-  return value === "premium" || value === "prestige" ? value : "free";
-}
-
-function quotaLimit(tier: SubscriptionTier, resource: QuotaResource) {
-  return subscriptionTierLimits[tier][resource];
-}
-
-function periodStart(date: Date) {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
-}
-
-function periodEnd(date: Date) {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1));
-}
-
-function quotaExceededError(
-  resource: QuotaResource,
-  message: string,
-  details: {
-    subscriptionTier: SubscriptionTier;
-    used: number;
-    limit: number;
-    resetAt?: Date | string | null;
-  }
-) {
-  const error = createStatusError(429, message, "LIMIT_EXCEEDED") as Error & {
-    quota?: Record<string, unknown>;
-  };
-  error.quota = {
-    resource,
-    subscriptionTier: details.subscriptionTier,
-    used: details.used,
-    limit: details.limit,
-    remaining: Math.max(0, details.limit - details.used),
-    resetAt: details.resetAt ? toIso(details.resetAt) : null
-  };
-  return error;
-}
-
 export function mapUserRow(row: UserRow): UserRecord {
   return {
     id: row.id as UserId,
     email: row.email,
     displayName: row.display_name,
-    subscriptionTier: normalizeSubscriptionTier(row.subscription_tier),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -464,282 +408,6 @@ export async function revokeSessionByTokenHash(
         and revoked_at is null
     `,
     [tokenHash, revokedAt]
-  );
-}
-
-export async function getUserSubscriptionTier(
-  db: Queryable,
-  userId: string
-): Promise<SubscriptionTier> {
-  const result = await db.query<{ subscription_tier: string | null }>(
-    "select subscription_tier from users where id = $1 limit 1",
-    [userId]
-  );
-
-  return normalizeSubscriptionTier(result.rows[0]?.subscription_tier);
-}
-
-async function currentMonthlyUsage(
-  db: Queryable,
-  input: {
-    userId: string;
-    resource: QuotaResource;
-    now?: Date;
-  }
-) {
-  const now = input.now ?? new Date();
-  const start = periodStart(now);
-  const end = periodEnd(now);
-  const result = await db.query<{ used: string | number }>(
-    `
-      select coalesce(sum(amount), 0) as used
-      from account_usage_events
-      where user_id = $1
-        and resource = $2
-        and period_start = $3
-        and status in ('pending', 'committed')
-    `,
-    [input.userId, input.resource, start]
-  );
-
-  return {
-    used: Number(result.rows[0]?.used ?? 0),
-    periodStart: start,
-    periodEnd: end
-  };
-}
-
-async function activeCampaignUsage(db: Queryable, userId: string) {
-  const result = await db.query<{ used: string | number }>(
-    `
-      select count(*) as used
-      from campaigns
-      where owner_user_id = $1
-        and status = 'active'
-    `,
-    [userId]
-  );
-
-  return Number(result.rows[0]?.used ?? 0);
-}
-
-export async function getAccountUsageForUser(
-  db: Queryable,
-  input: { userId: string; now?: Date }
-): Promise<AccountUsageResponse> {
-  const now = input.now ?? new Date();
-  const start = periodStart(now);
-  const end = periodEnd(now);
-  const tier = await getUserSubscriptionTier(db, input.userId);
-  const monthlyResources: QuotaResource[] = [
-    "dm_turn",
-    "image_generation",
-    "campaign_creation"
-  ];
-  const monthlyUsage = await Promise.all(
-    monthlyResources.map(async (resource) => ({
-      resource,
-      usage: await currentMonthlyUsage(db, {
-        userId: input.userId,
-        resource,
-        now
-      })
-    }))
-  );
-  const activeCampaigns = await activeCampaignUsage(db, input.userId);
-
-  const resources = Object.fromEntries(
-    [
-      ...monthlyUsage.map(({ resource, usage }) => ({
-        resource,
-        used: usage.used,
-        limit: quotaLimit(tier, resource),
-        resetAt: end
-      })),
-      {
-        resource: "active_campaign" as const,
-        used: activeCampaigns,
-        limit: quotaLimit(tier, "active_campaign"),
-        resetAt: null
-      }
-    ].map(({ resource, used, limit, resetAt }) => [
-      resource,
-      {
-        resource,
-        used,
-        limit,
-        remaining: limit === null ? null : Math.max(0, limit - used),
-        resetAt: resetAt ? toIso(resetAt) : null
-      }
-    ])
-  ) as AccountUsageResponse["resources"];
-
-  return {
-    subscriptionTier: tier,
-    periodStart: toIso(start),
-    periodEnd: toIso(end),
-    resources
-  };
-}
-
-async function assertActiveCampaignQuotaAvailable(
-  db: Queryable,
-  input: { userId: string; tier: SubscriptionTier }
-) {
-  const limit = quotaLimit(input.tier, "active_campaign");
-
-  if (limit === null) {
-    return;
-  }
-
-  const used = await activeCampaignUsage(db, input.userId);
-
-  if (used >= limit) {
-    throw quotaExceededError(
-      "active_campaign",
-      "Archive an existing campaign or upgrade your plan to create another adventure.",
-      {
-        subscriptionTier: input.tier,
-        used,
-        limit
-      }
-    );
-  }
-}
-
-export async function reserveMonthlyQuota(
-  db: pg.Pool,
-  input: {
-    userId: string;
-    resource: Exclude<QuotaResource, "active_campaign">;
-    idempotencyKey: string;
-    amount?: number;
-    now?: Date;
-  }
-): Promise<QuotaReservation | null> {
-  return withTransaction(db, async (client) => {
-    const tier = await getUserSubscriptionTier(client, input.userId);
-    const limit = quotaLimit(tier, input.resource);
-    const amount = input.amount ?? 1;
-    const now = input.now ?? new Date();
-    const start = periodStart(now);
-    const end = periodEnd(now);
-
-    if (limit === null) {
-      return null;
-    }
-
-    const existing = await client.query<{
-      id: string;
-      resource: QuotaResource;
-      status: "pending" | "committed" | "failed";
-    }>(
-      `
-        select id, resource, status
-        from account_usage_events
-        where user_id = $1
-          and resource = $2
-          and idempotency_key = $3
-        limit 1
-      `,
-      [input.userId, input.resource, input.idempotencyKey]
-    );
-
-    const existingRow = existing.rows[0];
-
-    if (existingRow && existingRow.status !== "failed") {
-      return { id: existingRow.id, resource: existingRow.resource };
-    }
-
-    const usage = await currentMonthlyUsage(client, {
-      userId: input.userId,
-      resource: input.resource,
-      now
-    });
-
-    if (usage.used + amount > limit) {
-      throw quotaExceededError(
-        input.resource,
-        "You have reached this month's plan limit.",
-        {
-          subscriptionTier: tier,
-          used: usage.used,
-          limit,
-          resetAt: end
-        }
-      );
-    }
-
-    const inserted = await client.query<{
-      id: string;
-      resource: QuotaResource;
-    }>(
-      `
-        insert into account_usage_events (
-          user_id,
-          resource,
-          amount,
-          period_start,
-          period_end,
-          idempotency_key,
-          status
-        )
-        values ($1, $2, $3, $4, $5, $6, 'pending')
-        on conflict (user_id, resource, idempotency_key) do update
-        set status = 'pending',
-            amount = excluded.amount,
-            period_start = excluded.period_start,
-            period_end = excluded.period_end,
-            updated_at = now()
-        returning id, resource
-      `,
-      [input.userId, input.resource, amount, start, end, input.idempotencyKey]
-    );
-
-    return requireRow(inserted.rows[0], "Failed to reserve account usage.");
-  });
-}
-
-export async function commitQuotaReservation(
-  db: Queryable,
-  reservation: QuotaReservation | null
-) {
-  if (!reservation) {
-    return;
-  }
-
-  await db.query(
-    `
-      update account_usage_events
-      set status = 'committed',
-          updated_at = now()
-      where id = $1
-    `,
-    [reservation.id]
-  );
-}
-
-export async function failQuotaReservation(
-  db: Queryable,
-  reservation: QuotaReservation | null,
-  error: unknown
-) {
-  if (!reservation) {
-    return;
-  }
-
-  await db.query(
-    `
-      update account_usage_events
-      set status = 'failed',
-          metadata = jsonb_set(metadata, '{error}', to_jsonb($2::text), true),
-          updated_at = now()
-      where id = $1
-    `,
-    [
-      reservation.id,
-      error instanceof Error ? error.message : "Quota reservation failed."
-    ]
   );
 }
 
@@ -3161,7 +2829,6 @@ export async function createCampaignForMode(
     userId: string;
     runtime?: DungeonMasterRuntime | undefined;
     openingResolutionMode?: "await" | "background" | undefined;
-    skipActiveCampaignQuota?: boolean | undefined;
   }
 ): Promise<CampaignSummary> {
   const sessionId = `ai-dnd-${randomUUID()}`;
@@ -3184,14 +2851,6 @@ export async function createCampaignForMode(
   };
 
   const createdState = await withTransaction(db, async (client) => {
-    if (!input.skipActiveCampaignQuota) {
-      const tier = await getUserSubscriptionTier(client, input.userId);
-      await assertActiveCampaignQuotaAvailable(client, {
-        userId: input.userId,
-        tier
-      });
-    }
-
     const inserted = await client.query<CampaignRow>(
       `
         insert into campaigns (
@@ -3344,19 +3003,13 @@ export async function createCampaignForMode(
     },
     omitGenericSettingRequest: hasEldermereWorldProfile(createdState.campaign)
   });
-  const dmTurnReservation = await reserveMonthlyQuota(db, {
-    userId: input.userId,
-    resource: "dm_turn",
-    idempotencyKey: `dm_turn:${openingTurn.id}:adventure_begun`
-  });
 
   const resolveOpening = async () => {
     let foundationCompilerPromise:
       | Promise<ContextStorageDebugState | undefined>
       | undefined;
-    try {
-      const opening = hasEldermereWorldProfile(createdState.campaign)
-        ? await (async () => {
+    const opening = hasEldermereWorldProfile(createdState.campaign)
+      ? await (async () => {
           const plan = await askEldermereOpeningPlanner(
             db,
             runtime,
@@ -3399,7 +3052,7 @@ export async function createCampaignForMode(
             }
           };
         })()
-        : await askDungeonMaster(
+      : await askDungeonMaster(
           db,
           runtime,
           createdState.campaign,
@@ -3411,60 +3064,55 @@ export async function createCampaignForMode(
           { allowResolvedCombatWithoutRolls: true },
           { buildPromptContext: false, contractKind: "opening" }
         );
-      const resolvedTurn = await finishResolvedTurn(db, {
+    const resolvedTurn = await finishResolvedTurn(db, {
+      campaignId: createdState.campaign.id,
+      turnId: openingTurn.id,
+      modelMessageId: opening.id,
+      reply: opening.content,
+      eventType: "adventure_begun",
+      pendingRollRequests: opening.rollRequests,
+      inputTargets: opening.inputTargets,
+      inputPolicy: opening.inputPolicy,
+      nextInputNeeded: opening.nextInputNeeded,
+      resolutionMode: opening.resolutionMode,
+      setting: opening.setting,
+      aiDebug: opening.debug
+    });
+
+    const foundationContextStorageState = await foundationCompilerPromise;
+
+    if (foundationContextStorageState) {
+      await attachContextStorageStateToDmEventDebug(db, {
         campaignId: createdState.campaign.id,
-        turnId: openingTurn.id,
-        modelMessageId: opening.id,
-        reply: opening.content,
-        eventType: "adventure_begun",
-        pendingRollRequests: opening.rollRequests,
-        inputTargets: opening.inputTargets,
-        inputPolicy: opening.inputPolicy,
-        nextInputNeeded: opening.nextInputNeeded,
-        resolutionMode: opening.resolutionMode,
-        setting: opening.setting,
-        aiDebug: opening.debug
-      });
-      await commitQuotaReservation(db, dmTurnReservation);
-
-      const foundationContextStorageState = await foundationCompilerPromise;
-
-      if (foundationContextStorageState) {
-        await attachContextStorageStateToDmEventDebug(db, {
-          campaignId: createdState.campaign.id,
-          dmEventId: resolvedTurn.dmEventId,
-          contextStorageState: foundationContextStorageState
-        });
-
-        runtime.emitDmStreamEvent?.({
-          type: "room_updated",
-          roomId: createdState.campaign.id,
-          updatedAt: foundationContextStorageState.capturedAt,
-          eventId: resolvedTurn.dmEventId
-        });
-      }
-
-      await db.query("update campaigns set has_begun = true where id = $1", [
-        createdState.campaign.id
-      ]);
-
-      void runtime.runPostTurnContextJobs?.({
-        campaignId: createdState.campaign.id,
-        turnId: openingTurn.id,
-        currentAction: openingRequest,
-        dmResponse: opening.content,
         dmEventId: resolvedTurn.dmEventId,
-        rollRequests: opening.rollRequests
+        contextStorageState: foundationContextStorageState
       });
 
-      return getCampaignSummaryForUser(db, {
-        campaignId: createdState.campaign.id,
-        userId: input.userId
+      runtime.emitDmStreamEvent?.({
+        type: "room_updated",
+        roomId: createdState.campaign.id,
+        updatedAt: foundationContextStorageState.capturedAt,
+        eventId: resolvedTurn.dmEventId
       });
-    } catch (error) {
-      await failQuotaReservation(db, dmTurnReservation, error);
-      throw error;
     }
+
+    await db.query("update campaigns set has_begun = true where id = $1", [
+      createdState.campaign.id
+    ]);
+
+    void runtime.runPostTurnContextJobs?.({
+      campaignId: createdState.campaign.id,
+      turnId: openingTurn.id,
+      currentAction: openingRequest,
+      dmResponse: opening.content,
+      dmEventId: resolvedTurn.dmEventId,
+      rollRequests: opening.rollRequests
+    });
+
+    return getCampaignSummaryForUser(db, {
+      campaignId: createdState.campaign.id,
+      userId: input.userId
+    });
   };
 
   if (input.openingResolutionMode === "background") {
@@ -3698,8 +3346,7 @@ export async function restartSinglePlayerCampaignForUser(
       eldermereStart,
       userId: input.userId,
       runtime: input.runtime,
-      openingResolutionMode: "background",
-      skipActiveCampaignQuota: true
+      openingResolutionMode: "background"
     });
   } catch (error) {
     await logRestartEvent(source.campaign.id, "create_campaign_failed", {
@@ -12392,11 +12039,6 @@ export async function beginRoomForUser(
 
   const runtime = input.runtime;
   const openingTurn = beginState.turn;
-  const dmTurnReservation = await reserveMonthlyQuota(db, {
-    userId: input.userId,
-    resource: "dm_turn",
-    idempotencyKey: `dm_turn:${openingTurn.id}:adventure_begun`
-  });
   const openingRequest = formatOpeningSceneRequest({
     campaign: beginState.campaign,
     mode: "multiplayer",
@@ -12479,7 +12121,6 @@ export async function beginRoomForUser(
       setting: opening.setting,
       aiDebug: opening.debug
     });
-    await commitQuotaReservation(db, dmTurnReservation);
 
     const foundationContextStorageState = await foundationCompilerPromise;
 
@@ -12518,7 +12159,6 @@ export async function beginRoomForUser(
       rollRequests: opening.rollRequests
     });
   } catch (error) {
-    await failQuotaReservation(db, dmTurnReservation, error);
     await markTurnFailed(db, openingTurn.id, error);
     await logCampaignEvent(db, beginState.campaign.id, "turn_failed", {
       turnId: openingTurn.id,
@@ -12824,11 +12464,6 @@ export async function submitRoomTurnForUser(
   });
 
   if (submitState.shouldResolve) {
-    const dmTurnReservation = await reserveMonthlyQuota(db, {
-      userId: input.userId,
-      resource: "dm_turn",
-      idempotencyKey: `dm_turn:${submitState.turn.id}:turn_resolved`
-    });
     try {
       const currentAction = formatMultiplayerTurn(
         submitState.campaign,
@@ -12863,7 +12498,6 @@ export async function submitRoomTurnForUser(
         resolutionMode: reply.resolutionMode,
         aiDebug: reply.debug
       });
-      await commitQuotaReservation(db, dmTurnReservation);
 
       input.runtime.emitDmStreamEvent?.({
         type: "dm_stream_done",
@@ -12881,7 +12515,6 @@ export async function submitRoomTurnForUser(
         rollRequests: reply.rollRequests
       });
     } catch (error) {
-      await failQuotaReservation(db, dmTurnReservation, error);
       await markTurnFailed(db, submitState.turn.id, error);
       await logCampaignEvent(db, submitState.campaign.id, "turn_failed", {
         turnId: submitState.turn.id,
@@ -13389,12 +13022,6 @@ export async function submitSoloTurnForUser(
     );
   }
 
-  const dmTurnReservation = await reserveMonthlyQuota(db, {
-    userId: input.userId,
-    resource: "dm_turn",
-    idempotencyKey: `dm_turn:${soloState.turn.id}:turn_resolved`
-  });
-
   try {
     const currentAction = formatSoloTurn(
       soloState.campaign,
@@ -13429,7 +13056,6 @@ export async function submitSoloTurnForUser(
       resolutionMode: reply.resolutionMode,
       aiDebug: reply.debug
     });
-    await commitQuotaReservation(db, dmTurnReservation);
 
     runtime.emitDmStreamEvent?.({
       type: "dm_stream_done",
@@ -13447,7 +13073,6 @@ export async function submitSoloTurnForUser(
       rollRequests: reply.rollRequests
     });
   } catch (error) {
-    await failQuotaReservation(db, dmTurnReservation, error);
     await markTurnFailed(db, soloState.turn.id, error);
     await logCampaignEvent(db, soloState.campaign.id, "turn_failed", {
       turnId: soloState.turn.id,
@@ -13809,12 +13434,6 @@ export async function regenerateCampaignResponseForUser(
     };
   });
 
-  const dmTurnReservation = await reserveMonthlyQuota(db, {
-    userId: input.userId,
-    resource: "dm_turn",
-    idempotencyKey: `dm_turn:${regenerationState.turn.id}:regenerate`
-  });
-
   try {
     const reply = await askDungeonMaster(
       db,
@@ -13840,7 +13459,6 @@ export async function regenerateCampaignResponseForUser(
       setting: reply.setting,
       aiDebug: reply.debug
     });
-    await commitQuotaReservation(db, dmTurnReservation);
 
     runtime.emitDmStreamEvent?.({
       type: "dm_stream_done",
@@ -13858,7 +13476,6 @@ export async function regenerateCampaignResponseForUser(
       rollRequests: reply.rollRequests
     });
   } catch (error) {
-    await failQuotaReservation(db, dmTurnReservation, error);
     await markTurnFailed(db, regenerationState.turn.id, error);
     await logCampaignEvent(db, regenerationState.campaign.id, "turn_failed", {
       turnId: regenerationState.turn.id,
@@ -13938,19 +13555,9 @@ export async function listCampaignDebugTracesForUser(
   }));
 }
 
-function createStatusError(
-  statusCode: number,
-  message: string,
-  code?: string
-): Error {
-  const error = new Error(message) as Error & {
-    statusCode: number;
-    code?: string;
-  };
+function createStatusError(statusCode: number, message: string): Error {
+  const error = new Error(message) as Error & { statusCode: number };
   error.statusCode = statusCode;
-  if (code) {
-    error.code = code;
-  }
   return error;
 }
 
