@@ -294,33 +294,6 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
             >
               Ask DM
             </button>
-            <button
-              className={`model-settings-button ${
-                isModelPickerOpen ? "active" : ""
-              }`}
-              type="button"
-              aria-label={`AI model: ${selectedAiModelLabel}`}
-              aria-expanded={isModelPickerOpen}
-              disabled={isSending || !canSelectAiModel}
-              onClick={() => {
-                if (canSelectAiModel) {
-                  setSettingsTab("model");
-                  setIsModelPickerOpen(true);
-                }
-              }}
-            >
-              <Settings size={17} />
-            </button>
-            <button
-              className={`map-button ${isMapOpen ? "active" : ""}`}
-              type="button"
-              aria-label="Open Eldermere map"
-              aria-expanded={isMapOpen}
-              disabled={isSending}
-              onClick={() => setIsMapOpen(true)}
-            >
-              <Map size={17} />
-            </button>
           </div>
           <div className="dice-roll-control" ref={diceRollControlRef}>
             <button
@@ -374,6 +347,33 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
               </div>
             ) : null}
           </div>
+          <button
+            className={`map-button ${isMapOpen ? "active" : ""}`}
+            type="button"
+            aria-label="Open Eldermere map"
+            aria-expanded={isMapOpen}
+            disabled={isSending}
+            onClick={() => setIsMapOpen(true)}
+          >
+            <Map size={17} />
+          </button>
+          <button
+            className={`model-settings-button ${
+              isModelPickerOpen ? "active" : ""
+            }`}
+            type="button"
+            aria-label={`AI model: ${selectedAiModelLabel}`}
+            aria-expanded={isModelPickerOpen}
+            disabled={isSending || !canSelectAiModel}
+            onClick={() => {
+              if (canSelectAiModel) {
+                setSettingsTab("model");
+                setIsModelPickerOpen(true);
+              }
+            }}
+          >
+            <Settings size={17} />
+          </button>
           {onSkipTurn ? (
             <div className="turn-form-actions">
               <button

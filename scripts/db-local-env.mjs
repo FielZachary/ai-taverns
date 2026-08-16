@@ -3,9 +3,9 @@ import { join } from "node:path";
 
 export async function loadLocalDatabaseEnv() {
   const envPaths = [
-    join(process.cwd(), ".env.local"),
+    join(process.cwd(), "apps", "api", ".env.local"),
     join(process.cwd(), "apps", "web", ".env.local"),
-    join(process.cwd(), "apps", "api", ".env.local")
+    join(process.cwd(), ".env.local")
   ];
 
   for (const envPath of envPaths) {
@@ -26,7 +26,16 @@ export async function loadLocalDatabaseEnv() {
         }
 
         const key = trimmedLine.slice(0, separatorIndex).trim();
-        const value = trimmedLine.slice(separatorIndex + 1).trim();
+        const rawValue = trimmedLine.slice(separatorIndex + 1).trim();
+        const value =
+          (rawValue.startsWith('"') && rawValue.endsWith('"')) ||
+          (rawValue.startsWith("'") && rawValue.endsWith("'"))
+            ? rawValue.slice(1, -1)
+            : rawValue;
+
+        if (!value) {
+          continue;
+        }
 
         process.env[key] ??= value;
       }

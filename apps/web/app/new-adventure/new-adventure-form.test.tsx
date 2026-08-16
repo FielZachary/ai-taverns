@@ -352,7 +352,8 @@ describe("NewAdventureForm", () => {
     await continueFlow();
     await nextCharacterStep();
 
-    const fighterButton = screen.getByRole("button", {
+    const classPicker = screen.getByRole("group", { name: "Class" });
+    const fighterButton = within(classPicker).getByRole("button", {
       name: /fighter/i
     });
 
@@ -415,6 +416,33 @@ describe("NewAdventureForm", () => {
         .getByRole("button", { name: /human/i })
         .style.getPropertyValue("--species-art-url")
     ).toContain("url(");
+  });
+
+  it("shows subclass art and descriptions on the dedicated class choices step", async () => {
+    render(<NewAdventureForm />);
+
+    await continueFlow();
+    await continueFlow();
+    await nextCharacterStep();
+    await nextCharacterStep();
+
+    expect(
+      screen.getByRole("heading", { name: /choose your class choices/i })
+    ).toBeInTheDocument();
+    const subclassPicker = screen.getByRole("group", {
+      name: "Martial Archetype"
+    });
+    const champion = within(subclassPicker).getByRole("button", {
+      name: /champion/i
+    });
+
+    expect(champion).toHaveClass("art-option-card");
+    expect(champion.style.getPropertyValue("--option-art-url")).toContain(
+      "/new-adventure/options/subclasses/champion.webp"
+    );
+    expect(champion).toHaveTextContent(
+      "Wins through athletic excellence and relentless martial force."
+    );
   });
 
   it("renders art-backed tools, backgrounds, skills, and weapon damage choices", async () => {
