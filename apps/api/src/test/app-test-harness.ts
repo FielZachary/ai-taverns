@@ -64,6 +64,7 @@ type UserRecord = {
   id: string;
   email: string;
   display_name: string | null;
+  subscription_tier: "free" | "premium" | "prestige";
   created_at: Date;
   updated_at: Date;
 };
@@ -210,6 +211,20 @@ type CampaignEventRecord = {
   created_at: Date;
 };
 
+type AccountUsageEventRecord = {
+  id: string;
+  user_id: string;
+  resource: "dm_turn" | "image_generation" | "campaign_creation";
+  amount: number;
+  period_start: Date;
+  period_end: Date;
+  idempotency_key: string;
+  status: "pending" | "committed" | "failed";
+  metadata: unknown;
+  created_at: Date;
+  updated_at: Date;
+};
+
 function recentRoomEventRank(type: string) {
   switch (type) {
     case "dm_answer":
@@ -319,6 +334,7 @@ type LivingWorldEngineRunRecord = {
 class FakeDatabase {
   loginTokens: LoginTokenRecord[] = [];
   users: UserRecord[] = [];
+  accountUsageEvents: AccountUsageEventRecord[] = [];
   authIdentities: AuthIdentityRecord[] = [];
   sessions: SessionRecord[] = [];
   campaigns: CampaignRecord[] = [];
@@ -400,6 +416,7 @@ class FakeDatabase {
           id: `user-${this.nextId++}`,
           email,
           display_name: displayName,
+          subscription_tier: "free",
           created_at: new Date(),
           updated_at: new Date()
         };
@@ -410,6 +427,144 @@ class FakeDatabase {
       }
 
       return { rows: [user as T] };
+    }
+
+    if (normalizedSql === "select subscription_tier from users where id = $1 limit 1") {
+      const user = this.users.find((candidate) => candidate.id === values[0]);
+
+      return {
+        rows: user
+          ? ([{ subscription_tier: user.subscription_tier }] as T[])
+          : ([] as T[])
+      };
+    }
+
+    if (
+      normalizedSql.startsWith("select coalesce(sum(amount), 0) as used") &&
+      normalizedSql.includes("from account_usage_events")
+    ) {
+      const userId = values[0] as string;
+      const resource = values[1] as AccountUsageEventRecord["resource"];
+      const periodStart = (values[2] as Date).getTime();
+      const used = this.accountUsageEvents
+        .filter(
+          (event) =>
+            event.user_id === userId &&
+            event.resource === resource &&
+            event.period_start.getTime() === periodStart &&
+            (event.status === "pending" || event.status === "committed")
+        )
+        .reduce((sum, event) => sum + event.amount, 0);
+
+      return { rows: [{ used } as T] };
+    }
+
+    if (
+      normalizedSql.startsWith("select id, resource, status") &&
+      normalizedSql.includes("from account_usage_events")
+    ) {
+      const [userId, resource, idempotencyKey] = values as [
+        string,
+        AccountUsageEventRecord["resource"],
+        string
+      ];
+      const event = this.accountUsageEvents.find(
+        (candidate) =>
+          candidate.user_id === userId &&
+          candidate.resource === resource &&
+          candidate.idempotency_key === idempotencyKey
+      );
+
+      return { rows: event ? [event as T] : [] };
+    }
+
+    if (normalizedSql.startsWith("insert into account_usage_events")) {
+      const [userId, resource, amount, periodStart, periodEnd, idempotencyKey] =
+        values as [
+          string,
+          AccountUsageEventRecord["resource"],
+          number,
+          Date,
+          Date,
+          string
+        ];
+      let event = this.accountUsageEvents.find(
+        (candidate) =>
+          candidate.user_id === userId &&
+          candidate.resource === resource &&
+          candidate.idempotency_key === idempotencyKey
+      );
+
+      if (!event) {
+        event = {
+          id: `account-usage-event-${this.nextId++}`,
+          user_id: userId,
+          resource,
+          amount,
+          period_start: periodStart,
+          period_end: periodEnd,
+          idempotency_key: idempotencyKey,
+          status: "pending",
+          metadata: {},
+          created_at: new Date(),
+          updated_at: new Date()
+        };
+        this.accountUsageEvents.push(event);
+      } else {
+        event.amount = amount;
+        event.period_start = periodStart;
+        event.period_end = periodEnd;
+        event.status = "pending";
+        event.updated_at = new Date();
+      }
+
+      return { rows: [event as T] };
+    }
+
+    if (
+      normalizedSql.startsWith("update account_usage_events") &&
+      normalizedSql.includes("set status = 'committed'")
+    ) {
+      const event = this.accountUsageEvents.find(
+        (candidate) => candidate.id === values[0]
+      );
+
+      if (event) {
+        event.status = "committed";
+        event.updated_at = new Date();
+      }
+
+      return { rows: [] as T[] };
+    }
+
+    if (
+      normalizedSql.startsWith("update account_usage_events") &&
+      normalizedSql.includes("set status = 'failed'")
+    ) {
+      const event = this.accountUsageEvents.find(
+        (candidate) => candidate.id === values[0]
+      );
+
+      if (event) {
+        event.status = "failed";
+        event.metadata = { error: values[1] };
+        event.updated_at = new Date();
+      }
+
+      return { rows: [] as T[] };
+    }
+
+    if (
+      normalizedSql.startsWith("select count(*) as used from campaigns") &&
+      normalizedSql.includes("owner_user_id = $1")
+    ) {
+      const userId = values[0] as string;
+      const used = this.campaigns.filter(
+        (campaign) =>
+          campaign.owner_user_id === userId && campaign.status === "active"
+      ).length;
+
+      return { rows: [{ used } as T] };
     }
 
     if (normalizedSql.startsWith("insert into auth_identities")) {

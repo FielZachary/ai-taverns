@@ -1924,7 +1924,7 @@ test("DM runtime routes forbid signed-in users without campaign access", async (
 
 test("DM runtime routes return not found for missing campaigns", async () => {
   const cookie = await signIn("dm-runtime-missing@example.com");
-  const campaignId = "00000000-0000-4000-8000-000000000097";
+  const campaignId = "ffffffff-ffff-4fff-8fff-ffffffffffff";
   const requests = [
     app.inject({
       method: "POST",
