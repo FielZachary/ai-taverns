@@ -23,12 +23,11 @@ const sessionId = "ai-dnd-local-seed";
 try {
   await pool.query(
     `
-      insert into users (id, email, display_name, subscription_tier)
-      values ($1, 'player@example.com', 'Local Player', 'prestige')
+      insert into users (id, email, display_name)
+      values ($1, 'player@example.com', 'Local Player')
       on conflict (id) do update
       set email = excluded.email,
-          display_name = excluded.display_name,
-          subscription_tier = excluded.subscription_tier
+          display_name = excluded.display_name
     `,
     [userId]
   );
