@@ -388,7 +388,8 @@ export async function registerAuthRoutes(
         existingUser ??
         (await upsertUserByEmail(client, {
           email: googleUser.email,
-          displayName: googleUser.name ?? null
+          displayName: googleUser.name ?? null,
+          subscriptionTierId: config.subscriptionDefaultTierId
         }));
 
       await ensureGoogleIdentity(client, {
@@ -506,7 +507,8 @@ export async function registerAuthRoutes(
 
       const user = await upsertUserByEmail(client, {
         email: loginToken.email,
-        displayName: null
+        displayName: null,
+        subscriptionTierId: config.subscriptionDefaultTierId
       });
 
       await ensureEmailIdentity(client, {
