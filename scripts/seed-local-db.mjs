@@ -23,11 +23,12 @@ const sessionId = "ai-dnd-local-seed";
 try {
   await pool.query(
     `
-      insert into users (id, email, display_name)
-      values ($1, 'player@example.com', 'Local Player')
+      insert into users (id, email, display_name, subscription_tier)
+      values ($1, 'player@example.com', 'Local Player', 'prestige')
       on conflict (id) do update
       set email = excluded.email,
-          display_name = excluded.display_name
+          display_name = excluded.display_name,
+          subscription_tier = excluded.subscription_tier
     `,
     [userId]
   );
@@ -113,7 +114,9 @@ try {
     [campaignId]
   );
 
-  console.log("Seeded local database with player@example.com and one campaign.");
+  console.log(
+    "Seeded local database with prestige player@example.com and one campaign."
+  );
 } finally {
   await pool.end();
 }
