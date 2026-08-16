@@ -111,10 +111,14 @@ export function createServerAnalytics(input: {
           ...(hookDeltas.length > 0 ? { hookDeltas } : {})
         }
       });
+      const mixpanelProperties = {
+        ...event.properties,
+        distinct_id: distinctId
+      };
 
       sendFireAndForget(
         (callback) =>
-          client.track(event.name, event.properties, callback),
+          client.track(event.name, mixpanelProperties, callback),
         onError
       );
 
@@ -128,7 +132,7 @@ export function createServerAnalytics(input: {
             client.track(
               "Hook Milestone Reached",
               {
-                ...event.properties,
+                ...mixpanelProperties,
                 hookMilestone: metric
               },
               callback

@@ -164,7 +164,7 @@ export async function registerDmRoutes(
       properties: playerTurnProperties,
       milestones
     });
-    if (!rollSubmissions?.length && counts.playerMessageCount === 1) {
+    if (counts.playerMessageCount === 1) {
       analytics?.track({
         name: "First Player Message Sent",
         distinctId: `user:${user.id}`,

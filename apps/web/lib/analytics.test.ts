@@ -89,4 +89,45 @@ describe("client analytics retention tracking", () => {
       })
     );
   });
+
+  it("aliases signed-in users to the browser analytics guest id", async () => {
+    const analyticsGuestIdStorageKey = "ai-taverns.analytics.guestId";
+    const analyticsMetricsStoragePrefix = "ai-taverns.analytics.hookMetrics";
+    const browserGuestId = "browser-guest-id";
+    const playerId = "player-client-id";
+    const userDistinctId = "user:00000000-0000-4000-8000-000000000123";
+
+    localStorage.setItem(analyticsGuestIdStorageKey, browserGuestId);
+    localStorage.setItem(
+      `${analyticsMetricsStoragePrefix}.${browserGuestId}`,
+      JSON.stringify(["dice_submitted"])
+    );
+    localStorage.setItem(
+      `${analyticsMetricsStoragePrefix}.${playerId}`,
+      JSON.stringify(["asked_dm"])
+    );
+
+    const { identifyAnalyticsUser } = await import("./analytics");
+
+    identifyAnalyticsUser({
+      userId: "00000000-0000-4000-8000-000000000123",
+      email: "player@example.com",
+      guestId: playerId
+    });
+
+    expect(mixpanelMock.alias).toHaveBeenCalledWith(
+      userDistinctId,
+      browserGuestId
+    );
+    expect(mixpanelMock.alias).not.toHaveBeenCalledWith(
+      userDistinctId,
+      playerId
+    );
+    expect(
+      JSON.parse(
+        localStorage.getItem(`${analyticsMetricsStoragePrefix}.${userDistinctId}`) ??
+          "[]"
+      )
+    ).toEqual(expect.arrayContaining(["dice_submitted", "asked_dm"]));
+  });
 });

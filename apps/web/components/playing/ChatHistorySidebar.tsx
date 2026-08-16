@@ -16,9 +16,11 @@ type ChatHistorySidebarProps = {
   activeChatId: string;
   isLoading: boolean;
   isCreatingChat: boolean;
+  isMobileDrawerOpen?: boolean;
   playerPortraitAlt?: string;
   playerPortraitStatus?: "pending" | "ready" | "failed";
   playerPortraitUrl?: string;
+  onCloseMobileDrawer?: () => void;
   onStartNewChat: () => void;
   onDeleteChat: (chatId: string) => void;
   onRenameChat: (chatId: string) => void;
@@ -35,9 +37,11 @@ export function ChatHistorySidebar({
   activeChatId,
   isLoading,
   isCreatingChat,
+  isMobileDrawerOpen = false,
   playerPortraitAlt = "Player character portrait",
   playerPortraitStatus,
   playerPortraitUrl,
+  onCloseMobileDrawer,
   onStartNewChat,
   onDeleteChat,
   onRenameChat,
@@ -67,20 +71,54 @@ export function ChatHistorySidebar({
     };
   }, [isPortraitModalOpen]);
 
+  useEffect(() => {
+    if (!isMobileDrawerOpen || !onCloseMobileDrawer) {
+      return;
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onCloseMobileDrawer?.();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isMobileDrawerOpen, onCloseMobileDrawer]);
+
   return (
-    <aside className="chat-sidebar" aria-label="Chat history">
+    <aside
+      className={`chat-sidebar ${isMobileDrawerOpen ? "mobile-open" : ""}`}
+      aria-label="Adventures and player resources"
+      aria-modal={isMobileDrawerOpen ? true : undefined}
+      role={isMobileDrawerOpen ? "dialog" : undefined}
+    >
       <div className="chat-sidebar-history">
         <div className="chat-sidebar-header">
-          <div>
+          <div className="chat-sidebar-title-group">
             <h2 className="eyebrow adventures-title">Adventures</h2>
+            <button
+              type="button"
+              aria-label="Start new chat"
+              disabled={isCreatingChat}
+              onClick={() => {
+                onStartNewChat();
+                onCloseMobileDrawer?.();
+              }}
+            >
+              <Plus size={18} />
+            </button>
           </div>
           <button
+            className="chat-sidebar-close"
             type="button"
-            aria-label="Start new chat"
-            disabled={isCreatingChat}
-            onClick={onStartNewChat}
+            aria-label="Close adventures drawer"
+            onClick={onCloseMobileDrawer}
           >
-            <Plus size={18} />
+            <X size={18} />
           </button>
         </div>
 
@@ -102,7 +140,10 @@ export function ChatHistorySidebar({
                 aria-label={`Open chat: ${chat.title}`}
                 className="chat-list-item"
                 type="button"
-                onClick={() => onSelectChat(chat.id)}
+                onClick={() => {
+                  onSelectChat(chat.id);
+                  onCloseMobileDrawer?.();
+                }}
               >
                 <span>
                   <strong>{chat.title}</strong>
@@ -162,7 +203,10 @@ export function ChatHistorySidebar({
         <button
           className="player-resources-button"
           type="button"
-          onClick={onViewCharacterSheet}
+          onClick={() => {
+            onViewCharacterSheet();
+            onCloseMobileDrawer?.();
+          }}
         >
           Player Resources
         </button>

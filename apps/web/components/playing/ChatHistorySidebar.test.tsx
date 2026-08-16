@@ -43,7 +43,7 @@ describe("ChatHistorySidebar", () => {
 
     const startButton = screen.getByRole("button", { name: /start new chat/i });
 
-    expect(screen.getByLabelText(/chat history/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/adventures and player resources/i)).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/search chats/i)).toBeInTheDocument();
     expect(screen.getByText("Loading adventures...")).toBeInTheDocument();
     expect(startButton).toBeDisabled();
@@ -175,6 +175,34 @@ describe("ChatHistorySidebar", () => {
     expect(props.onSelectChat).toHaveBeenCalledWith("chat-2");
     expect(props.onDeleteChat).toHaveBeenCalledWith("chat-1");
     expect(props.onRenameChat).toHaveBeenCalledWith("chat-2");
+  });
+
+  it("supports mobile drawer close behavior", () => {
+    const props = renderChatHistorySidebar({
+      isMobileDrawerOpen: true,
+      onCloseMobileDrawer: vi.fn(),
+      chats: [chat({ id: "chat-1", title: "The Ember Vault" })]
+    });
+
+    const sidebar = screen.getByRole("dialog", {
+      name: /adventures and player resources/i
+    });
+
+    expect(sidebar).toHaveClass("mobile-open");
+    expect(sidebar).toHaveAttribute("aria-modal", "true");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /close adventures drawer/i })
+    );
+    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.click(
+      screen.getByRole("button", { name: /open chat: the ember vault/i })
+    );
+    fireEvent.click(screen.getByRole("button", { name: /player resources/i }));
+
+    expect(props.onCloseMobileDrawer).toHaveBeenCalledTimes(4);
+    expect(props.onSelectChat).toHaveBeenCalledWith("chat-1");
+    expect(props.onViewCharacterSheet).toHaveBeenCalledTimes(1);
   });
 
   it("omits optional previews without hiding the chat action", () => {

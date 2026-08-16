@@ -121,15 +121,19 @@ function ensureInitialized() {
   initialized = true;
 }
 
-function mergeGuestMetricsIntoUser(input: { guestId?: string; userDistinctId: string }) {
-  if (typeof window === "undefined" || !input.guestId) {
+function mergeGuestMetricsIntoUser(input: {
+  guestIds: string[];
+  userDistinctId: string;
+}) {
+  if (typeof window === "undefined" || input.guestIds.length === 0) {
     return;
   }
 
-  const guestKey = metricStorageKeyForDistinctId(input.guestId);
   const userKey = metricStorageKeyForDistinctId(input.userDistinctId);
   const merged = new Set([
-    ...storedMetricsForKey(guestKey),
+    ...input.guestIds.flatMap((guestId) => [
+      ...storedMetricsForKey(metricStorageKeyForDistinctId(guestId))
+    ]),
     ...storedMetricsForKey(userKey)
   ]);
 
@@ -143,9 +147,14 @@ export function identifyAnalyticsUser(input: {
 }) {
   ensureInitialized();
 
-  const nextDistinctId = input.userId ? `user:${input.userId}` : analyticsGuestId();
+  const anonymousDistinctId = analyticsGuestId();
+  const nextDistinctId = input.userId ? `user:${input.userId}` : anonymousDistinctId;
+  const metricGuestIds = [
+    ...new Set([anonymousDistinctId, input.guestId].filter(Boolean) as string[])
+  ].filter((guestId) => guestId !== nextDistinctId);
+
   mergeGuestMetricsIntoUser({
-    guestId: input.guestId,
+    guestIds: metricGuestIds,
     userDistinctId: nextDistinctId
   });
   identifiedDistinctId = nextDistinctId;
@@ -154,11 +163,11 @@ export function identifyAnalyticsUser(input: {
     return;
   }
 
-  if (input.guestId && input.guestId !== nextDistinctId) {
-    const aliasKey = `${analyticsAliasStoragePrefix}.${input.guestId}.${nextDistinctId}`;
+  if (input.userId && anonymousDistinctId !== nextDistinctId) {
+    const aliasKey = `${analyticsAliasStoragePrefix}.${anonymousDistinctId}.${nextDistinctId}`;
 
     if (window.localStorage.getItem(aliasKey) !== "true") {
-      mixpanel.alias(nextDistinctId, input.guestId);
+      mixpanel.alias(nextDistinctId, anonymousDistinctId);
       window.localStorage.setItem(aliasKey, "true");
     }
   }
@@ -187,6 +196,7 @@ export function trackAnalytics(input: TrackInput) {
       ...input.properties,
       app: "ai-taverns",
       distinctId: distinctId(),
+      distinct_id: distinctId(),
       schemaVersion: 1,
       source: "web",
       hookScore: hookSnapshot.score,

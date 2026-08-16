@@ -276,10 +276,20 @@ function optionArtSlug(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
-function optionArtUrl(
-  category: "tools" | "backgrounds" | "skills" | "weapons" | "packs",
-  value: string
-) {
+type OptionArtCategory =
+  | "tools"
+  | "backgrounds"
+  | "skills"
+  | "weapons"
+  | "packs"
+  | "armor"
+  | "foci"
+  | "instruments"
+  | "gear"
+  | "subclasses"
+  | "equipment-panels";
+
+function optionArtUrl(category: OptionArtCategory, value: string) {
   return encodeURI(`${optionArtRoot}/${category}/${optionArtSlug(value)}.webp`);
 }
 
@@ -2149,10 +2159,62 @@ const defaultAbilityScoresByClass: Record<CharacterClass, CompleteAbilityScores>
   Psion: { str: 8, dex: 14, con: 15, int: 17, wis: 12, cha: 10 }
 };
 type CharacterClass = (typeof classOptions)[number]["id"];
+type CharacterSubclass = (typeof classOptions)[number]["subclassOptions"][number];
 type CharacterSpecies = (typeof speciesOptions)[number];
 type CharacterBackground = (typeof backgroundOptions)[number];
 type Alignment = (typeof alignmentOptions)[number];
 type Gender = (typeof genderOptions)[number];
+
+const subclassDescriptions: Record<CharacterSubclass, string> = {
+  Alchemist: "Turns reagents and restoratives into battlefield support.",
+  Armorer: "Builds enchanted armor for defense, mobility, and force.",
+  Artillerist: "Controls arcane artillery and explosive magical pressure.",
+  Assassin: "Strikes first with disguises, poisons, and decisive ambushes.",
+  "Arcane Trickster": "Pairs stealth and misdirection with subtle wizardry.",
+  "Battle Master": "Controls the fight with maneuvers, timing, and tactics.",
+  "Battle Smith": "Blends weapon craft, healing, and a crafted defender.",
+  "Beast Master": "Fights beside a loyal companion and wilderness instincts.",
+  Champion: "Wins through athletic excellence and relentless martial force.",
+  "Circle of Stars": "Reads constellations to guide magic, healing, and fate.",
+  "Circle of the Land": "Draws spells from a chosen terrain's ancient power.",
+  "Circle of the Moon": "Leans into powerful wild shapes and primal resilience.",
+  "Clockwork Soul": "Bends chaos back into order with planar precision.",
+  "College of Glamour": "Uses fey grace to inspire allies and command attention.",
+  "College of Lore": "Collects secrets, sharp words, and flexible magic.",
+  "College of Valor": "Turns performance into courage, steel, and rallying songs.",
+  "Draconic Bloodline": "Channels ancestral dragon magic into power and durability.",
+  "Eldritch Knight": "Anchors a fighter's discipline with protective spellcraft.",
+  "Gloom Stalker": "Ambushes from darkness and excels before enemies react.",
+  Hunter: "Specializes in tracking, pressure, and monster-slaying tactics.",
+  "Life Domain": "Focuses divine magic into protection and potent healing.",
+  "Light Domain": "Burns away danger with radiance, fire, and revelation.",
+  Metamorph: "Reshapes body and mind through focused psionic adaptation.",
+  "Oath of Devotion": "Protects allies through honor, radiance, and sacred resolve.",
+  "Oath of the Ancients": "Guards life and hope with old magic and resilience.",
+  "Oath of Vengeance": "Pursues sworn foes with speed, pressure, and judgment.",
+  "Order of the Ghostslayer": "Hunts undead and spirits with rites against the grave.",
+  "Order of the Lycan": "Turns controlled transformation into brutal close combat.",
+  "Order of the Mutant": "Uses mutagens to trade risk for tailored power.",
+  "Order of the Profane Soul": "Binds occult magic to blood rites and weapon skill.",
+  "Path of the Berserker": "Channels rage into overwhelming, reckless offense.",
+  "Path of the Totem Warrior": "Calls spirit aspects for toughness and battlefield utility.",
+  "Path of Wild Magic": "Lets rage erupt into unpredictable supernatural effects.",
+  "Psi Warper": "Folds distance and positioning through spatial psionics.",
+  Psykinetic: "Moves matter with raw will and focused psychic force.",
+  "School of Abjuration": "Shapes wards that prevent harm and break hostile magic.",
+  "School of Divination": "Reads possibility to steer rolls, plans, and outcomes.",
+  "School of Evocation": "Sculpts elemental blasts around allies with precision.",
+  Telepath: "Reads, links, and overwhelms minds through psychic contact.",
+  "The Archfey": "Draws on fey charm, escape magic, and beguiling presence.",
+  "The Fiend": "Trades with infernal power for fire, resilience, and menace.",
+  "The Great Old One": "Touches alien thought for telepathy and eldritch insight.",
+  Thief: "Excels at mobility, quick hands, and classic infiltration.",
+  "War Domain": "Turns divine favor toward weapons, armor, and command.",
+  "Way of Mercy": "Balances healing and harm through disciplined ki.",
+  "Way of Shadow": "Uses ki for darkness, silence, and sudden repositioning.",
+  "Way of the Open Hand": "Controls enemies with clean strikes and martial discipline.",
+  "Wild Magic": "Surges with volatile luck and unpredictable arcane power."
+};
 
 const classArtByClass: Record<CharacterClass, string> = {
   Artificer: "/new-adventure/classes/artificer.webp",
@@ -2356,6 +2418,132 @@ const equipmentPackContents: Record<string, string[]> = {
 };
 
 const equipmentPackNames = Object.keys(equipmentPackContents);
+const equipmentArmorArtItems = [
+  "Chain mail",
+  "Leather armor",
+  "Scale mail",
+  "Shield",
+  "Studded leather armor"
+] as const;
+const equipmentFocusArtItems = [
+  "Arcane focus",
+  "Component pouch",
+  "Druidic focus",
+  "Holy symbol"
+] as const;
+const equipmentInstrumentArtItems = [
+  "Bagpipes",
+  "Drum",
+  "Dulcimer",
+  "Flute",
+  "Horn",
+  "Lute",
+  "Lyre",
+  "Musical instrument",
+  "Pan flute",
+  "Shawm",
+  "Viol"
+] as const;
+const equipmentPanelArtLabels = [
+  "Any simple weapon",
+  "Any martial melee weapon",
+  "Any other musical instrument",
+  "Any simple melee weapon",
+  "One martial weapon and a shield",
+  "Two martial weapons",
+  "Two simple melee weapons",
+  "One martial weapon",
+  "Two simple weapons",
+  "Scale mail and shield",
+  "Wooden shield"
+] as const;
+const equipmentGearArtItems = [
+  "10 candles",
+  "10 days of rations",
+  "10 feet of string",
+  "10 GP",
+  "10 pitons",
+  "10 sheets of parchment",
+  "10 torches",
+  "15 GP",
+  "2 blocks of incense",
+  "2 costumes",
+  "2 days of rations",
+  "2 flasks of oil",
+  "2 map cases",
+  "20 arrows",
+  "20 bolts",
+  "25 GP",
+  "5 candles",
+  "5 days of rations",
+  "5 GP",
+  "5 sheets of paper",
+  "5 sticks of incense",
+  "50 feet hempen rope",
+  "50 feet silk rope",
+  "6 GP",
+  "Admirer's favor",
+  "Alms box",
+  "Artisan's tools",
+  "Backpack",
+  "Bag of 1,000 ball bearings",
+  "Bedroll",
+  "Belaying pin",
+  "Bell",
+  "Blanket",
+  "Book of lore",
+  "Bottle of ink",
+  "Censer",
+  "Chest",
+  "City map",
+  "Common clothes",
+  "Con prop",
+  "Costume",
+  "Crowbar",
+  "Dark common clothes with hood",
+  "Fine clothes",
+  "Gaming set",
+  "Guild introduction letter",
+  "Hammer",
+  "Hooded lantern",
+  "Hunting trap",
+  "Hunting trophy",
+  "Ink pen",
+  "Iron pot",
+  "Lamp",
+  "Little bag of sand",
+  "Lucky charm",
+  "Map case",
+  "Mess kit",
+  "Parent token",
+  "Pedigree scroll",
+  "Pet mouse",
+  "Prayer book",
+  "Quill",
+  "Quiver",
+  "Rank insignia",
+  "Scroll case of notes",
+  "Sealing wax",
+  "Shovel",
+  "Signet ring",
+  "Small knife",
+  "Soap",
+  "Spellbook",
+  "Staff",
+  "Tinderbox",
+  "Traveler's clothes",
+  "Trophy from a fallen enemy",
+  "Unanswered scholarly letter",
+  "Vestments",
+  "Vial of perfume",
+  "Waterskin",
+  "Winter blanket"
+] as const;
+const equipmentArmorArtSet = new Set<string>(equipmentArmorArtItems);
+const equipmentFocusArtSet = new Set<string>(equipmentFocusArtItems);
+const equipmentInstrumentArtSet = new Set<string>(equipmentInstrumentArtItems);
+const equipmentPanelArtSet = new Set<string>(equipmentPanelArtLabels);
+const equipmentGearArtSet = new Set<string>(equipmentGearArtItems);
 
 const newAdventureStartupImageUrls = [
   "/new-adventure/flow-bg.webp",
@@ -2377,6 +2565,21 @@ const newAdventureToolImageUrls = toolOptions.map((tool) =>
 const newAdventurePackImageUrls = equipmentPackNames.map((pack) =>
   optionArtUrl("packs", pack)
 );
+const newAdventureArmorImageUrls = equipmentArmorArtItems.map((item) =>
+  optionArtUrl("armor", item)
+);
+const newAdventureFocusImageUrls = equipmentFocusArtItems.map((item) =>
+  optionArtUrl("foci", item)
+);
+const newAdventureInstrumentImageUrls = equipmentInstrumentArtItems.map((item) =>
+  optionArtUrl("instruments", item)
+);
+const newAdventureEquipmentPanelImageUrls = equipmentPanelArtLabels.map((item) =>
+  optionArtUrl("equipment-panels", item)
+);
+const newAdventureGearImageUrls = equipmentGearArtItems.map((item) =>
+  optionArtUrl("gear", item)
+);
 const newAdventureWeaponImageUrls = Array.from(
   new Set(
     weaponCategories
@@ -2389,6 +2592,11 @@ const newAdventureCustomOptionImageUrls = [
   ...newAdventureSkillImageUrls,
   ...newAdventureToolImageUrls,
   ...newAdventurePackImageUrls,
+  ...newAdventureArmorImageUrls,
+  ...newAdventureFocusImageUrls,
+  ...newAdventureInstrumentImageUrls,
+  ...newAdventureEquipmentPanelImageUrls,
+  ...newAdventureGearImageUrls,
   ...newAdventureWeaponImageUrls
 ];
 const adventureImagePreloadPromises = new Map<string, Promise<void>>();
@@ -3145,38 +3353,60 @@ function equipmentChoiceSubtext(
   return formatList(expandedItems);
 }
 
-function equipmentOptionArtUrl(
-  option: EquipmentChoiceOption,
-  characterClass: CharacterClass
-) {
-  if (option.category && isWeaponCategory(option.category)) {
-    return optionArtUrl("weapons", equipmentCategoryOptions[option.category][0]);
-  }
-
-  const weaponItem = option.items?.find(
-    (item) => normalizeEquipmentName(item) in weaponAttackDetails
+function equipmentItemArtUrl(item: string) {
+  const trimmedItem = item.trim();
+  const normalizedName = normalizeEquipmentName(trimmedItem);
+  const normalizedDisplayName = equipmentArmorArtItems.find(
+    (armor) => armor.toLowerCase() === normalizedName
   );
 
-  if (weaponItem) {
-    return optionArtUrl("weapons", normalizeEquipmentName(weaponItem));
+  if (packContentsFor(trimmedItem)) {
+    return optionArtUrl("packs", trimmedItem);
   }
 
-  const toolItem = option.items
-    ?.map(equipmentToolArtValue)
-    .find(Boolean);
+  if (normalizedName in weaponAttackDetails) {
+    return optionArtUrl("weapons", normalizedName);
+  }
+
+  const toolItem = equipmentToolArtValue(trimmedItem);
 
   if (toolItem) {
     return optionArtUrl("tools", toolItem);
   }
 
-  const packItem = option.items?.find((item) => Boolean(packContentsFor(item)));
-
-  if (packItem) {
-    return optionArtUrl("packs", packItem);
+  if (normalizedDisplayName && equipmentArmorArtSet.has(normalizedDisplayName)) {
+    return optionArtUrl("armor", normalizedDisplayName);
   }
 
-  if (option.category === "musicalInstrument") {
-    return optionArtUrl("tools", "Lute");
+  if (equipmentFocusArtSet.has(trimmedItem)) {
+    return optionArtUrl("foci", trimmedItem);
+  }
+
+  if (equipmentInstrumentArtSet.has(trimmedItem)) {
+    return optionArtUrl("instruments", trimmedItem);
+  }
+
+  if (equipmentGearArtSet.has(trimmedItem)) {
+    return optionArtUrl("gear", trimmedItem);
+  }
+
+  return null;
+}
+
+function equipmentOptionArtUrl(
+  option: EquipmentChoiceOption,
+  characterClass: CharacterClass
+) {
+  if (equipmentPanelArtSet.has(option.label)) {
+    return optionArtUrl("equipment-panels", option.label);
+  }
+
+  const itemArt = option.items
+    ?.map(equipmentItemArtUrl)
+    .find(Boolean);
+
+  if (itemArt) {
+    return itemArt;
   }
 
   return classArtByClass[characterClass];
@@ -3185,6 +3415,10 @@ function equipmentOptionArtUrl(
 function equipmentModalItemArtUrl(category: EquipmentCategory, item: string) {
   if (isWeaponCategory(category)) {
     return optionArtUrl("weapons", item);
+  }
+
+  if (category === "musicalInstrument") {
+    return optionArtUrl("instruments", item);
   }
 
   const toolItem = equipmentToolArtValue(item);
@@ -4498,7 +4732,8 @@ export function NewAdventureForm({
 
   const analyticsBaseProperties = useCallback(() => {
     return {
-      guestId: ownerClientId || analyticsGuestId(),
+      guestId: analyticsGuestId(),
+      playerId: ownerClientId || undefined,
       userId,
       campaignMode: mode,
       campaignGenre: selectedGenre.label,
@@ -5238,6 +5473,21 @@ export function NewAdventureForm({
 
     trackStepCompleted();
 
+    if (isCustomWorldStep) {
+      trackAnalytics({
+        name: "Custom World Completed",
+        properties: {
+          ...analyticsBaseProperties(),
+          campaignGenre: customWorldName.trim(),
+          campaignGenreKind: "custom",
+          campaignGenrePresetId: undefined,
+          hasCustomWorld: true,
+          customWorldName: customWorldName.trim(),
+          customWorldDescriptionLength: customWorldDescription.trim().length
+        }
+      });
+    }
+
     if (isJoinFlow && isCampaignDetailsStep) {
       try {
         await previewJoinCode();
@@ -5525,6 +5775,29 @@ export function NewAdventureForm({
       setIsContinuingWithBackstory(false);
       setContinuingBackstoryMode(null);
     }
+  }
+
+  function renderSubclassPicker() {
+    return (
+      <fieldset className="option-picker subclass-picker">
+        <legend>{selectedClass.subclassLabel}</legend>
+        <div>
+          {selectedClass.subclassOptions.map((option) => (
+            <button
+              type="button"
+              className={artOptionClassName(subclass === option)}
+              aria-pressed={subclass === option}
+              style={optionArtStyle(optionArtUrl("subclasses", option))}
+              key={option}
+              onClick={() => setSubclass(option)}
+            >
+              <strong>{option}</strong>
+              <small>{subclassDescriptions[option]}</small>
+            </button>
+          ))}
+        </div>
+      </fieldset>
+    );
   }
 
   async function continueToCampaign() {
@@ -6235,22 +6508,7 @@ export function NewAdventureForm({
 
                 {currentCharacterStep === "Class Choices" ? (
                   <div className="character-builder-stack">
-                    <fieldset className="option-picker compact-option-picker">
-                      <legend>{selectedClass.subclassLabel}</legend>
-                      <div>
-                        {selectedClass.subclassOptions.map((option) => (
-                          <button
-                            type="button"
-                            className={subclass === option ? "selected" : ""}
-                            aria-pressed={subclass === option}
-                            key={option}
-                            onClick={() => setSubclass(option)}
-                          >
-                            <strong>{option}</strong>
-                          </button>
-                        ))}
-                      </div>
-                    </fieldset>
+                    {renderSubclassPicker()}
                     <fieldset className="option-picker compact-option-picker">
                       <legend>{selectedClass.featureLabel}</legend>
                       <div>
@@ -6383,9 +6641,22 @@ export function NewAdventureForm({
                       <section className="equipment-summary-panel">
                         <h3>Your starting gear</h3>
                         <ul>
-                          {chosenEquipmentGear.map((item, index) => (
-                            <li key={`${item}-${index}`}>{item}</li>
-                          ))}
+                          {chosenEquipmentGear.map((item, index) => {
+                            const itemArt = equipmentItemArtUrl(item);
+
+                            return (
+                              <li key={`${item}-${index}`}>
+                                {itemArt ? (
+                                  <span
+                                    className="equipment-summary-art"
+                                    aria-hidden="true"
+                                    style={optionArtStyle(itemArt)}
+                                  />
+                                ) : null}
+                                <span>{item}</span>
+                              </li>
+                            );
+                          })}
                         </ul>
                       </section>
                     )}

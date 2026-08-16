@@ -139,6 +139,8 @@ test("server analytics sends profile, event, and hook milestone updates", () => 
   const eventCall = calls.find((call) => call.type === "track");
   assert.equal(eventCall?.name, "Player Message Sent");
   assert.equal(eventCall?.properties?.source, "api");
+  assert.equal(eventCall?.properties?.distinctId, "user:1");
+  assert.equal(eventCall?.properties?.distinct_id, "user:1");
   assert.deepEqual(eventCall?.properties?.hookDeltas, [
     {
       metric: "first_player_message",
@@ -156,6 +158,10 @@ test("server analytics sends profile, event, and hook milestone updates", () => 
   assert.deepEqual(
     milestoneEventCalls.map((call) => call.properties?.hookMilestone),
     ["first_player_message", "asked_dm"]
+  );
+  assert.deepEqual(
+    milestoneEventCalls.map((call) => call.properties?.distinct_id),
+    ["user:1", "user:1"]
   );
 
   const incrementCall = calls.find((call) => call.type === "people.increment");
@@ -237,6 +243,8 @@ test("server analytics sends plain events without milestone side effects", () =>
     ["track"]
   );
   assert.equal(calls[0]?.name, "Campaign Loaded");
+  assert.equal(calls[0]?.properties?.distinctId, "user:1");
+  assert.equal(calls[0]?.properties?.distinct_id, "user:1");
   assert.equal(calls[0]?.properties?.hookDeltas, undefined);
 });
 
