@@ -17,6 +17,7 @@ import { registerDmRoutes } from "./routes/dm.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerRealtimeRoutes } from "./routes/realtime.js";
 import { registerRoomRoutes } from "./routes/rooms.js";
+import { registerAccountRoutes } from "./routes/account.js";
 
 export type BuildAppOptions = {
   config?: ApiConfig;
@@ -84,6 +85,7 @@ export async function buildApp(
   });
 
   await registerHealthRoutes(fastify);
+  await fastify.register(registerAccountRoutes, { prefix: "/api", config });
   await fastify.register(registerAuthRoutes, {
     prefix: "/api",
     config,

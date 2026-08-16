@@ -44,6 +44,7 @@ test("loadConfig applies development defaults and trims web origins", () => {
   assert.equal(config.mixpanelProjectId, "4049394");
   assert.equal(config.mixpanelEnabled, false);
   assert.equal(config.mixpanelDebug, false);
+  assert.equal(config.subscriptionDefaultTierId, 4);
 });
 
 test("loadConfig applies production security defaults and explicit overrides", () => {
@@ -110,7 +111,8 @@ test("loadConfig applies production security defaults and explicit overrides", (
     mixpanelProjectToken: "mixpanel-token",
     mixpanelProjectId: "4049394",
     mixpanelEnabled: true,
-    mixpanelDebug: true
+    mixpanelDebug: true,
+    subscriptionDefaultTierId: 4
   });
 });
 
