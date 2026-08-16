@@ -1,5 +1,4 @@
 import {
-  AccountUsageResponseSchema,
   CampaignInviteCreateResponseSchema,
   CampaignInviteDisableResponseSchema,
   CampaignInviteListResponseSchema,
@@ -29,7 +28,6 @@ import {
   type CampaignRestartBackstoryRequest,
   type CampaignRestartRequest,
   type CampaignSummary,
-  type AccountUsageResponse,
   type LobbyInviteJoinRequest
 } from "@ai-dnd/contracts";
 
@@ -38,70 +36,27 @@ type Parser<T> = {
 };
 
 type ApiErrorBody = {
-  error?:
-    | string
-    | {
-        code?: string;
-        message?: string;
-        quota?: {
-          resource?: string;
-          subscriptionTier?: string;
-          used?: number;
-          limit?: number;
-          remaining?: number;
-          resetAt?: string | null;
-        };
-      };
+  error?: string | {
+    message?: string;
+  };
 };
 
-export class ApiLimitError extends Error {
-  readonly code = "LIMIT_EXCEEDED";
-  readonly quota?: {
-    resource?: string;
-    subscriptionTier?: string;
-    used?: number;
-    limit?: number;
-    remaining?: number;
-    resetAt?: string | null;
-  };
-
-  constructor(
-    message: string,
-    quota?: {
-      resource?: string;
-      subscriptionTier?: string;
-      used?: number;
-      limit?: number;
-      remaining?: number;
-      resetAt?: string | null;
-    }
-  ) {
-    super(message);
-    this.name = "ApiLimitError";
-    this.quota = quota;
-  }
-}
-
-async function readError(response: Response, fallback: string) {
+async function readErrorMessage(response: Response, fallback: string) {
   try {
     const body = (await response.json()) as ApiErrorBody;
 
     if (typeof body.error === "string") {
-      return { message: body.error };
+      return body.error;
     }
 
     if (body.error?.message) {
-      return {
-        message: body.error.message,
-        code: body.error.code,
-        quota: body.error.quota
-      };
+      return body.error.message;
     }
   } catch {
     // Preserve the original fallback when an error response has no JSON body.
   }
 
-  return { message: fallback };
+  return fallback;
 }
 
 async function parseJsonResponse<T>(
@@ -110,20 +65,13 @@ async function parseJsonResponse<T>(
   fallbackMessage: string
 ): Promise<T> {
   if (!response.ok) {
-    const error = await readError(response, fallbackMessage);
-
-    if (error.code === "LIMIT_EXCEEDED") {
-      throw new ApiLimitError(error.message, error.quota);
-    }
-
-    throw new Error(error.message);
+    throw new Error(await readErrorMessage(response, fallbackMessage));
   }
 
   return schema.parse(await response.json());
 }
 
 export type { CampaignNpcCard, CampaignSummary };
-export type { AccountUsageResponse };
 
 export async function listCampaigns() {
   const response = await fetch("/api/campaigns");
@@ -134,14 +82,6 @@ export async function listCampaigns() {
   );
 
   return data.campaigns;
-}
-
-export async function getAccountUsage() {
-  return parseJsonResponse(
-    await fetch("/api/account/usage"),
-    AccountUsageResponseSchema,
-    "Account usage could not be loaded."
-  );
 }
 
 export async function createCampaign(input: CampaignCreateRequest) {
