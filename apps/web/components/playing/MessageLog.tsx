@@ -741,7 +741,7 @@ export function MessageLog({
                 <div className="message-narration-editor">
                   <label htmlFor={`narration-${message.id}`}>
                     Griffin&apos;s narration script — hidden from players. Keep the words
-                    aligned; use punctuation to shape delivery.
+                    aligned; use punctuation for delivery and blank lines for reveal beats.
                   </label>
                   <textarea
                     id={`narration-${message.id}`}

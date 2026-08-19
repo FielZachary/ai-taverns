@@ -125,16 +125,23 @@ const backstoryIntroDelaySeconds = 10;
 const defaultCampaignPreparationMessage = "Preparing your campaign";
 const narrationVisualLeadMs = 750;
 
-function sentenceWordEnds(content: string) {
+function narrationBeatWordEnds(content: string) {
   const visibleText = content.replace(
     /<\/?(?:npc|place|clue|danger|faction|object|em)>/g,
     ""
   );
-  const sentenceParts = visibleText
-    .split(/\n{2,}/)
-    .flatMap((paragraph) => paragraph.split(/(?<=[.!?…:])\s+/))
+  const explicitBeats = visibleText
+    .split(/\n\s*\n/)
     .map((sentence) => sentence.trim())
     .filter(Boolean);
+  const sentenceParts =
+    explicitBeats.length > 1
+      ? explicitBeats
+      : visibleText
+          .split(/\n{2,}/)
+          .flatMap((paragraph) => paragraph.split(/(?<=[.!?…:])\s+/))
+          .map((sentence) => sentence.trim())
+          .filter(Boolean);
   let wordCount = 0;
 
   return sentenceParts.map((sentence) => {
@@ -1393,7 +1400,7 @@ export function GameShell({
           narrationTimersRef.current.forEach((timer) => window.clearTimeout(timer));
           narrationTimersRef.current = [];
           narrationWordCursorRef.current = 0;
-          narrationSentenceEndsRef.current = sentenceWordEnds(realtimeEvent.text);
+          narrationSentenceEndsRef.current = narrationBeatWordEnds(realtimeEvent.text);
           narrationNextSentenceRef.current = 0;
           setNarrationReveal({
             messageId: realtimeEvent.messageId,

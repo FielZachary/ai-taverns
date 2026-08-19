@@ -109,7 +109,13 @@ export async function registerRealtimeRoutes(
             sendSocketEvent(socket, { type: "tts_failed", roomId, narrationId, message: "That DM message is unavailable." });
             return;
           }
-          sendSocketEvent(socket, { type: "tts_started", roomId, narrationId, messageId: message.id, text: message.content });
+          sendSocketEvent(socket, {
+            type: "tts_started",
+            roomId,
+            narrationId,
+            messageId: message.id,
+            text: message.narrationContent ?? message.content
+          });
           try {
             await streamCartesiaNarration({
               apiKey: config.cartesiaApiKey,
