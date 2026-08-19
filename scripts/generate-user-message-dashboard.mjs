@@ -1,16 +1,45 @@
+import { execFile } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import pg from "pg";
-import { databaseSslConfig, loadLocalDatabaseEnv } from "./db-local-env.mjs";
+import { promisify } from "node:util";
 
-const { Pool } = pg;
 const outputPath = join(process.cwd(), "dashboard.html");
+const execFileAsync = promisify(execFile);
 
-await loadLocalDatabaseEnv();
+const userMessageQuery = `
+  with player_messages as (
+    select
+      campaign_id,
+      payload ->> 'clientId' as client_id
+    from campaign_events
+    where type = 'turn_submitted'
+      and payload ->> 'role' = 'player'
+      and btrim(coalesce(payload ->> 'content', '')) <> ''
+  ),
+  user_message_counts as (
+    select
+      users.id::text as user_id,
+      users.email,
+      users.display_name,
+      users.created_at::text,
+      count(player_messages.client_id)::integer as player_message_count
+    from users
+    left join players
+      on players.user_id = users.id
+    left join player_messages
+      on player_messages.campaign_id = players.campaign_id
+      and player_messages.client_id = players.client_id
+    group by users.id, users.email, users.display_name, users.created_at
+  )
+  select coalesce(
+    json_agg(user_message_counts order by created_at desc, user_id desc),
+    '[]'::json
+  )::text as users
+  from user_message_counts
+`;
 
-if (!process.env.DATABASE_URL) {
-  console.error("DATABASE_URL is required. Set it in apps/api/.env.local or the shell.");
-  process.exit(1);
+function shellQuote(value) {
+  return `'${value.replaceAll("'", "'\\\"'\\\"'")}'`;
 }
 
 function escapeHtml(value) {
@@ -88,40 +117,37 @@ function renderDashboard(rows, generatedAt) {
 </html>`;
 }
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: databaseSslConfig(process.env.DATABASE_URL)
-});
+async function productionUsers() {
+  const containerCommand = [
+    'psql --username="$POSTGRES_USER" --dbname="$POSTGRES_DB"',
+    '--tuples-only --no-align',
+    `--command ${shellQuote(userMessageQuery)}`
+  ].join(" ");
+  const remoteCommand =
+    "cd /opt/ai-taverns && " +
+    "docker compose --env-file infra/production.env -f infra/docker-compose.production.yml " +
+    `exec -T postgres sh -lc ${shellQuote(containerCommand)}`;
+  const { stdout } = await execFileAsync(
+    "npm",
+    ["run", "droplet:one-time-access", "--", "sh", "-lc", remoteCommand],
+    { cwd: process.cwd(), maxBuffer: 5 * 1024 * 1024 }
+  );
+  const json = stdout.trim().split(/\r?\n/).at(-1);
+
+  if (!json) {
+    throw new Error("Production database query returned no data.");
+  }
+
+  return JSON.parse(json);
+}
 
 try {
-  const result = await pool.query(`
-    with player_messages as (
-      select
-        campaign_id,
-        payload ->> 'clientId' as client_id
-      from campaign_events
-      where type = 'turn_submitted'
-        and payload ->> 'role' = 'player'
-        and btrim(coalesce(payload ->> 'content', '')) <> ''
-    )
-    select
-      users.email,
-      users.display_name,
-      users.created_at::text,
-      count(player_messages.client_id)::integer as player_message_count
-    from users
-    left join players
-      on players.user_id = users.id
-    left join player_messages
-      on player_messages.campaign_id = players.campaign_id
-      and player_messages.client_id = players.client_id
-    group by users.id, users.email, users.display_name, users.created_at
-    order by users.created_at desc, users.id desc
-  `);
-
+  const rows = await productionUsers();
   const generatedAt = new Date().toISOString();
-  await writeFile(outputPath, renderDashboard(result.rows, generatedAt), "utf8");
-  console.log(`Wrote ${outputPath} with ${result.rows.length} users.`);
-} finally {
-  await pool.end();
+  await writeFile(outputPath, renderDashboard(rows, generatedAt), "utf8");
+  console.log(`Wrote ${outputPath} with ${rows.length} production users.`);
+} catch (error) {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`Could not generate the production dashboard: ${message}`);
+  process.exitCode = 1;
 }
