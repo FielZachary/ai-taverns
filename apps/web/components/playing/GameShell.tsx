@@ -123,6 +123,7 @@ const dungeonMasterTurnTimeoutMessage =
   "The dungeon master wasn't able to respond to that, please press the retry button on the right to re-send your message";
 const backstoryIntroDelaySeconds = 10;
 const defaultCampaignPreparationMessage = "Preparing your campaign";
+const narrationVisualLeadMs = 750;
 const campaignPreparationMessages = [
   defaultCampaignPreparationMessage,
   "Integrating your backstory",
@@ -1412,7 +1413,8 @@ export function GameShell({
               0,
               (narrationAudioStartRef.current + timing.start -
                 (context?.currentTime ?? 0)) *
-                1000
+                1000 -
+                narrationVisualLeadMs
             );
             narrationTimersRef.current.push(window.setTimeout(() => {
               setNarrationReveal((current) =>
