@@ -113,7 +113,7 @@ export async function registerRealtimeRoutes(
           try {
             await streamCartesiaNarration({
               apiKey: config.cartesiaApiKey,
-              narration: message.content,
+              narration: message.narrationContent ?? message.content,
               onAudio(audio) {
                 sendSocketEvent(socket, {
                   type: "tts_audio",

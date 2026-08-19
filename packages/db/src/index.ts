@@ -5638,6 +5638,9 @@ async function buildRoomSnapshot(
         role,
         kind: roomEventMessageKind(event.type),
         content,
+        ...(typeof payload.narrationContent === "string"
+          ? { narrationContent: payload.narrationContent }
+          : {}),
         createdAt: toIso(event.created_at),
         ...(typeof payload.username === "string"
           ? { playerName: payload.username }
@@ -11699,6 +11702,65 @@ export async function getRoomForUser(
     input.userId,
     input.messageLimit === undefined ? {} : { messageLimit: input.messageLimit }
   );
+}
+
+export async function updateRoomMessageNarrationForUser(
+  db: pg.Pool,
+  input: {
+    roomId: string;
+    sessionId: string;
+    messageId: string;
+    narrationContent: string;
+    userId: string;
+  }
+): Promise<RoomSnapshot> {
+  return withTransaction(db, async (client) => {
+    const campaign = await resolveRoomCampaign(client, input.roomId, input.sessionId);
+
+    if (!campaign) {
+      throw createStatusError(404, "Campaign not found.");
+    }
+
+    assertCampaignOwnerForUser(campaign, input.userId);
+    const event = await client.query<EventRow>(
+      `
+        select id, type, payload, created_at
+        from campaign_events
+        where campaign_id = $1
+          and type in ('turn_resolved', 'adventure_begun', 'dm_answer')
+          and (id::text = $2 or payload->>'messageId' = $2)
+          and payload->>'role' = 'dm'
+        limit 1
+      `,
+      [campaign.id, input.messageId]
+    );
+
+    if (!event.rows[0]) {
+      throw createStatusError(404, "DM message not found.");
+    }
+
+    await client.query(
+      `
+        update campaign_events
+        set payload = case
+          when btrim($2) = '' then payload - 'narrationContent'
+          else jsonb_set(payload, '{narrationContent}', to_jsonb($2::text), true)
+        end
+        where id = $1
+      `,
+      [event.rows[0].id, input.narrationContent]
+    );
+    const updatedCampaign = await client.query<CampaignRow>(
+      "update campaigns set updated_at = clock_timestamp() where id = $1 returning *",
+      [campaign.id]
+    );
+
+    return buildRoomSnapshotForUser(
+      client,
+      updatedCampaign.rows[0] ?? campaign,
+      input.userId
+    );
+  });
 }
 
 export async function registerRoomPlayerForUser(

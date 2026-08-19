@@ -244,6 +244,33 @@ describe("MessageLog", () => {
     expect(screen.getByText("draws")).toHaveClass("message-word-pending");
   });
 
+  it("lets an owner edit a hidden narration script without changing the visible prose", () => {
+    const saveNarration = vi.fn().mockResolvedValue(undefined);
+    renderMessageLog({
+      messages: [
+        gameMessage({
+          id: "dm-narration-script",
+          role: "dm",
+          content: "<danger>The bell tolls.</danger>"
+        })
+      ],
+      onSaveNarration: saveNarration
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit narration script" }));
+    const script = screen.getByLabelText(/Griffin's narration script/i);
+    expect(script).toHaveValue("The bell tolls.");
+    expect(screen.getAllByText("The bell tolls.")).toHaveLength(2);
+
+    fireEvent.change(script, { target: { value: "The bell... tolls." } });
+    fireEvent.click(screen.getByRole("button", { name: "Save script" }));
+
+    expect(saveNarration).toHaveBeenCalledWith(
+      "dm-narration-script",
+      "The bell... tolls."
+    );
+  });
+
   it("colors unfinished semantic narration markup while a DM message streams", () => {
     renderMessageLog({
       messages: [

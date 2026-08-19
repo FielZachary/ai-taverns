@@ -6,6 +6,8 @@ import {
   RoomCombatCheatSheetGenerateResponseSchema,
   RoomPlayerUpdateRequestSchema,
   RoomPlayerUpdateResponseSchema,
+  RoomMessageNarrationUpdateRequestSchema,
+  RoomMessageNarrationUpdateResponseSchema,
   RoomReadQuerySchema,
   RoomReadResponseSchema,
   RoomReviveRequestSchema,
@@ -20,6 +22,7 @@ import {
   getCombatCheatSheetTargetForUser,
   getRoomForUser,
   registerRoomPlayerForUser,
+  updateRoomMessageNarrationForUser,
   reviveSinglePlayerCharacterForUser,
   saveCombatCheatSheetForUser,
   submitRoomTurnForUser
@@ -152,6 +155,27 @@ export async function registerRoomRoutes(
 
     await publishRoomSnapshotUpdate(fastify, snapshot);
 
+    return snapshot;
+  });
+
+  fastify.put("/room/message/narration", async (request) => {
+    const body = RoomMessageNarrationUpdateRequestSchema.parse(request.body);
+    const identity = roomIdentity(body.roomId, body.sessionId);
+    const user = await requireAuthenticatedUser(
+      fastify,
+      config,
+      request.cookies[config.authCookieName]
+    );
+    const snapshot = RoomMessageNarrationUpdateResponseSchema.parse(
+      await updateRoomMessageNarrationForUser(fastify.pg, {
+        ...identity,
+        messageId: body.messageId,
+        narrationContent: body.narrationContent,
+        userId: user.id
+      })
+    );
+
+    await publishRoomSnapshotUpdate(fastify, snapshot);
     return snapshot;
   });
 

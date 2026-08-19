@@ -111,6 +111,7 @@ export const RoomMessageSchema = z
     characterName: z.string().optional(),
     setting: RoomMessageSettingSchema.optional(),
     content: z.string(),
+    narrationContent: z.string().optional(),
     createdAt: z.string().datetime()
   })
   .passthrough();
@@ -167,6 +168,13 @@ export const RoomPlayerUpdateRequestSchema = z.object({
   mechanicsSeed: MechanicsSeedSchema.optional()
 });
 
+export const RoomMessageNarrationUpdateRequestSchema = z.object({
+  roomId: z.string().optional(),
+  sessionId: z.string().optional(),
+  messageId: z.string().min(1),
+  narrationContent: z.string().max(20_000)
+});
+
 export const RoomCombatCheatSheetGenerateRequestSchema = z.object({
   roomId: z.string().optional(),
   sessionId: z.string().optional(),
@@ -193,6 +201,7 @@ export const RoomSubmitRequestSchema = z.object({
 
 export const RoomReadResponseSchema = RoomSnapshotSchema;
 export const RoomPlayerUpdateResponseSchema = RoomSnapshotSchema;
+export const RoomMessageNarrationUpdateResponseSchema = RoomSnapshotSchema;
 export const RoomCombatCheatSheetGenerateResponseSchema = RoomSnapshotSchema;
 export const RoomBeginResponseSchema = RoomSnapshotSchema;
 export const RoomSubmitResponseSchema = RoomSnapshotSchema;

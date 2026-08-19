@@ -104,6 +104,7 @@ export type GameMessage = {
     startingLocation?: string;
   };
   content: string;
+  narrationContent?: string;
   createdAt: string;
   isSyntheticIntro?: boolean;
   resourceCard?: GameMessageResourceCard;

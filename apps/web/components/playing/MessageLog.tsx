@@ -32,6 +32,7 @@ type MessageLogProps = {
   onRetryLastTurn?: () => void;
   onViewEldermereLore?: () => void;
   onNarrateMessage?: (messageId: string) => void;
+  onSaveNarration?: (messageId: string, narrationContent: string) => Promise<void>;
   narrationReveal?: { messageId: string; revealedWordCount: number } | null;
 };
 
@@ -200,6 +201,13 @@ function playerFacingMessageContent(message: GameMessage) {
   }
 
   return message.content;
+}
+
+function narrationEditorText(content: string) {
+  return content
+    .replace(/<\/?(?:npc|place|clue|danger|faction|object|em)>/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function MessageBody({
@@ -531,12 +539,19 @@ export function MessageLog({
   onRetryLastTurn,
   onViewEldermereLore,
   onNarrateMessage,
+  onSaveNarration,
   narrationReveal
 }: MessageLogProps) {
   const logRef = useRef<HTMLDivElement>(null);
   const [openDebugMessageId, setOpenDebugMessageId] = useState<string | null>(
     null
   );
+  const [narrationEditor, setNarrationEditor] = useState<{
+    messageId: string;
+    content: string;
+  } | null>(null);
+  const [isSavingNarration, setIsSavingNarration] = useState(false);
+  const [narrationSaveError, setNarrationSaveError] = useState("");
   const scrollKey = useMemo(
     () =>
       messages
@@ -618,12 +633,36 @@ export function MessageLog({
                   ) : null}
                 </div>
                 {(message.role === "dm" &&
-                  (message.debug || canRegenerateMessage)) ||
+                  (message.debug ||
+                    canRegenerateMessage ||
+                    onNarrateMessage ||
+                    onSaveNarration)) ||
                 canRetryMessage ? (
                   <div className="message-actions">
                     {message.role === "dm" && onNarrateMessage ? (
                       <button type="button" className="message-action-button" onClick={() => onNarrateMessage(message.id)} aria-label="Narrate this message" title="Narrate this message (M)">
                         M
+                      </button>
+                    ) : null}
+                    {message.role === "dm" && onSaveNarration ? (
+                      <button
+                        type="button"
+                        className="message-action-button"
+                        onClick={() =>
+                          {
+                            setNarrationSaveError("");
+                            setNarrationEditor({
+                              messageId: message.id,
+                              content:
+                                message.narrationContent ??
+                                narrationEditorText(messageContent)
+                            });
+                          }
+                        }
+                        aria-label="Edit narration script"
+                        title="Edit the script Griffin reads"
+                      >
+                        N
                       </button>
                     ) : null}
                     {message.debug ? (
@@ -698,6 +737,65 @@ export function MessageLog({
                   }
                 />
               )}
+              {narrationEditor?.messageId === message.id ? (
+                <div className="message-narration-editor">
+                  <label htmlFor={`narration-${message.id}`}>
+                    Griffin&apos;s narration script — hidden from players. Keep the words
+                    aligned; use punctuation to shape delivery.
+                  </label>
+                  <textarea
+                    id={`narration-${message.id}`}
+                    value={narrationEditor.content}
+                    onChange={(event) =>
+                      setNarrationEditor((current) =>
+                        current
+                          ? { ...current, content: event.target.value }
+                          : current
+                      )
+                    }
+                  />
+                  <div className="message-narration-editor-actions">
+                    <button
+                      type="button"
+                      disabled={isSavingNarration}
+                      onClick={() => {
+                        setNarrationEditor(null);
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isSavingNarration}
+                      onClick={async () => {
+                        setIsSavingNarration(true);
+                        try {
+                          await onSaveNarration?.(
+                            message.id,
+                            narrationEditor.content
+                          );
+                          setNarrationEditor(null);
+                        } catch (error) {
+                          setNarrationSaveError(
+                            error instanceof Error
+                              ? error.message
+                              : "Narration script could not be saved."
+                          );
+                        } finally {
+                          setIsSavingNarration(false);
+                        }
+                      }}
+                    >
+                      Save script
+                    </button>
+                  </div>
+                  {narrationSaveError ? (
+                    <p className="message-narration-editor-error">
+                      {narrationSaveError}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
               <MessageResourceCard
                 message={message}
                 onInspectMap={onInspectMap}
