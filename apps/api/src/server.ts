@@ -8,8 +8,10 @@ function loadLocalEnvironment() {
   if (!existsSync(path)) return;
   for (const line of readFileSync(path, "utf8").split(/\r?\n/)) {
     const match = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
-    if (!match || process.env[match[1]] !== undefined) continue;
-    process.env[match[1]] = match[2].replace(/^(["'])(.*)\1$/, "$2");
+    if (!match) continue;
+    const [, key, rawValue] = match;
+    if (!key || rawValue === undefined || process.env[key] !== undefined) continue;
+    process.env[key] = rawValue.replace(/^(["'])(.*)\1$/, "$2");
   }
 }
 
