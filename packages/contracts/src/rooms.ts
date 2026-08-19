@@ -112,7 +112,7 @@ export const RoomMessageSchema = z
     setting: RoomMessageSettingSchema.optional(),
     content: z.string(),
     narrationContent: z.string().optional(),
-    narrationBeats: z.array(z.object({ visibleText: z.string(), narrationText: z.string() })).optional(),
+    narrationBeats: z.array(z.object({ visibleText: z.string(), narrationText: z.string(), paragraphBreakAfter: z.boolean().optional() })).optional(),
     createdAt: z.string().datetime()
   })
   .passthrough();

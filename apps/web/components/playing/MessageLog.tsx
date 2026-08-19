@@ -222,23 +222,29 @@ function MessageBody({
 }: {
   content: string;
   revealedWordCount?: number;
-  narrationBeats?: Array<{ visibleText: string; narrationText: string }>;
+  narrationBeats?: Array<{
+    visibleText: string;
+    narrationText: string;
+    paragraphBreakAfter?: boolean;
+  }>;
   revealedBeatCount?: number;
 }) {
   if (narrationBeats && revealedBeatCount !== undefined) {
     return (
       <div className="message-body">
         {narrationBeats.map((beat, index) => (
-          <p
-            className={
-              index < revealedBeatCount
-                ? "message-narration-beat-revealed"
-                : "message-narration-beat-pending"
-            }
-            key={`narration-beat-${index}-${beat.visibleText.slice(0, 16)}`}
-          >
-            {renderInlineContentWithLineBreaks(beat.visibleText)}
-          </p>
+          <span key={`narration-beat-${index}-${beat.visibleText.slice(0, 16)}`}>
+            <span
+              className={
+                index < revealedBeatCount
+                  ? "message-narration-beat-revealed"
+                  : "message-narration-beat-pending"
+              }
+            >
+              {renderInlineContentWithLineBreaks(beat.visibleText)}
+            </span>
+            {beat.paragraphBreakAfter ? <><br /><br /></> : " "}
+          </span>
         ))}
       </div>
     );

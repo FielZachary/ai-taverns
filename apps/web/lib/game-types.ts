@@ -105,7 +105,11 @@ export type GameMessage = {
   };
   content: string;
   narrationContent?: string;
-  narrationBeats?: Array<{ visibleText: string; narrationText: string }>;
+  narrationBeats?: Array<{
+    visibleText: string;
+    narrationText: string;
+    paragraphBreakAfter?: boolean;
+  }>;
   createdAt: string;
   isSyntheticIntro?: boolean;
   resourceCard?: GameMessageResourceCard;
