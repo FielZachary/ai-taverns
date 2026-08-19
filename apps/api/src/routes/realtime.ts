@@ -17,7 +17,9 @@ function beatWordCounts(beats: Array<{ visibleText: string; narrationText: strin
 
   for (const beat of beats) {
     narrationBeatStarts.push(narrationWordCount + 1);
-    visibleWordCount += beat.visibleText.match(/\S+/g)?.length ?? 0;
+    visibleWordCount += beat.visibleText
+      .replace(/<\/?(?:npc|place|clue|danger|faction|object|em)>/g, "")
+      .match(/\S+/g)?.length ?? 0;
     narrationWordCount += beat.narrationText.match(/\S+/g)?.length ?? 0;
     visibleBeatEnds.push(visibleWordCount);
   }

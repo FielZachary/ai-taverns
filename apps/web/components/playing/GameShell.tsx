@@ -473,6 +473,7 @@ export function GameShell({
   const [narrationReveal, setNarrationReveal] = useState<{
     messageId: string;
     revealedWordCount: number;
+    revealedBeatCount?: number;
   } | null>(null);
 
   const playNarrationAudio = useCallback((audio: string, sampleRate: number) => {
@@ -1408,7 +1409,8 @@ export function GameShell({
           narrationNextSentenceRef.current = 0;
           setNarrationReveal({
             messageId: realtimeEvent.messageId,
-            revealedWordCount: 0
+            revealedWordCount: 0,
+            ...(realtimeEvent.visibleBeatEnds ? { revealedBeatCount: 0 } : {})
           });
           narrationNextStartRef.current = 0;
           narrationAudioStartRef.current = 0;
@@ -1474,7 +1476,10 @@ export function GameShell({
                       revealedWordCount: Math.max(
                         current.revealedWordCount,
                         sentenceEnd
-                      )
+                      ),
+                      ...(current.revealedBeatCount !== undefined
+                        ? { revealedBeatCount: Math.max(current.revealedBeatCount, sentenceIndex + 1) }
+                        : {})
                     }
                   : current
               );

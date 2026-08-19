@@ -5095,6 +5095,8 @@ h1 {
 
 .message-word-pending { opacity: 0; }
 .message-word-revealed { opacity: 1; transition: opacity 120ms ease-out; }
+.message-narration-beat-pending { opacity: 0; }
+.message-narration-beat-revealed { opacity: 1; transition: opacity 180ms ease-out; }
 
 .message-narration-editor {
   display: grid;

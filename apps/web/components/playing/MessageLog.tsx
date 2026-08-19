@@ -33,7 +33,11 @@ type MessageLogProps = {
   onViewEldermereLore?: () => void;
   onNarrateMessage?: (messageId: string) => void;
   onSaveNarration?: (messageId: string, narrationContent: string) => Promise<void>;
-  narrationReveal?: { messageId: string; revealedWordCount: number } | null;
+  narrationReveal?: {
+    messageId: string;
+    revealedWordCount: number;
+    revealedBeatCount?: number;
+  } | null;
 };
 
 const semanticNarrationRoles = [
@@ -212,11 +216,34 @@ function narrationEditorText(content: string) {
 
 function MessageBody({
   content,
-  revealedWordCount
+  revealedWordCount,
+  narrationBeats,
+  revealedBeatCount
 }: {
   content: string;
   revealedWordCount?: number;
+  narrationBeats?: Array<{ visibleText: string; narrationText: string }>;
+  revealedBeatCount?: number;
 }) {
+  if (narrationBeats && revealedBeatCount !== undefined) {
+    return (
+      <div className="message-body">
+        {narrationBeats.map((beat, index) => (
+          <p
+            className={
+              index < revealedBeatCount
+                ? "message-narration-beat-revealed"
+                : "message-narration-beat-pending"
+            }
+            key={`narration-beat-${index}-${beat.visibleText.slice(0, 16)}`}
+          >
+            {renderInlineContentWithLineBreaks(beat.visibleText)}
+          </p>
+        ))}
+      </div>
+    );
+  }
+
   const wordCursor = { current: 0 };
   const paragraphs = content
     .trim()
@@ -733,6 +760,12 @@ export function MessageLog({
                   revealedWordCount={
                     narrationReveal?.messageId === message.id
                       ? narrationReveal.revealedWordCount
+                      : undefined
+                  }
+                  narrationBeats={message.narrationBeats}
+                  revealedBeatCount={
+                    narrationReveal?.messageId === message.id
+                      ? narrationReveal.revealedBeatCount
                       : undefined
                   }
                 />
