@@ -66,6 +66,7 @@ type UserRecord = {
   display_name: string | null;
   created_at: Date;
   updated_at: Date;
+  subscription_tier_id?: number;
 };
 
 type AuthIdentityRecord = {
@@ -402,6 +403,7 @@ class FakeDatabase {
           display_name: displayName,
           created_at: new Date(),
           updated_at: new Date()
+          ,subscription_tier_id: (values[2] as number | undefined) ?? 4
         };
         this.users.push(user);
       } else if (displayName) {
@@ -411,6 +413,22 @@ class FakeDatabase {
 
       return { rows: [user as T] };
     }
+
+    if (normalizedSql === "select subscription_tier_id from users where id = $1") {
+      const user = this.users.find((candidate) => candidate.id === values[0]);
+      return { rows: user ? ([{ subscription_tier_id: user.subscription_tier_id ?? 4 } as T]) : ([] as T[]) };
+    }
+
+    if (normalizedSql.startsWith("select resource_type, used from user_usage_counters")) return { rows: [] as T[] };
+    if (normalizedSql.startsWith("select count(*)::int as count from campaigns where owner_user_id")) {
+      const count = this.campaigns.filter((campaign) => campaign.owner_user_id === values[0] && campaign.status === "active").length;
+      return { rows: [{ count } as T] };
+    }
+    if (normalizedSql.startsWith("select count(*) filter (where status in ('ready', 'deleted'))::int as used")) return { rows: [{ used: 0, in_flight: 0 } as T] };
+    if (normalizedSql.startsWith("select 1 from user_usage_events")) return { rows: [] as T[] };
+    if (normalizedSql.startsWith("insert into user_usage_counters")) return { rows: [{ used: 1 } as T] };
+    if (normalizedSql.startsWith("insert into user_usage_events")) return { rows: [] as T[] };
+    if (normalizedSql.startsWith("select id from media_assets where campaign_id=$1 and player_id=$2")) return { rows: [] as T[] };
 
     if (normalizedSql.startsWith("insert into auth_identities")) {
       const provider = normalizedSql.includes("values ($1, 'google'")

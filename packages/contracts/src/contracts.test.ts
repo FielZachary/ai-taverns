@@ -41,7 +41,8 @@ import {
   RoomSubmitRequestSchema,
   hookPointsForMetric,
   hookSnapshotForMetrics,
-  hookStageForScore
+  hookStageForScore,
+  entitlementForTier
 } from "./index.js";
 
 test("health contract accepts the API health response", () => {
@@ -649,6 +650,13 @@ test("hook scoring derives stable activation stages", () => {
       "returned_after_24h"
     ]
   );
+});
+
+test("subscription entitlements resolve numeric tiers and reject unknown ids", () => {
+  const legend = entitlementForTier(4);
+  assert.equal(legend.code, "legend");
+  assert.equal(legend.limits.dm_turn.limit, null);
+  assert.throws(() => entitlementForTier(99), /Unknown subscription tier id: 99/);
 });
 
 test("analytics event contract accepts hook enrichment", () => {

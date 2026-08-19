@@ -54,8 +54,11 @@ import type {
   SpellSlotLevel,
   SpellSlotState,
   RoomSocketEvent,
-  RoomSnapshot
+  RoomSnapshot,
+  UsageResourceType,
+  UserUsageSummary
 } from "@ai-dnd/contracts";
+import { entitlementForTier } from "@ai-dnd/contracts";
 import {
   actorKeyForPlayer,
   applyDeathSavingThrow,
@@ -100,6 +103,7 @@ export type UserRow = {
   display_name: string | null;
   created_at: Date;
   updated_at: Date;
+  subscription_tier_id?: number;
 };
 
 export type UserRecord = {
@@ -108,6 +112,7 @@ export type UserRecord = {
   displayName: string | null;
   createdAt: Date;
   updatedAt: Date;
+  subscriptionTierId: number;
 };
 
 export type SessionRow = {
@@ -193,7 +198,8 @@ export function mapUserRow(row: UserRow): UserRecord {
     email: row.email,
     displayName: row.display_name,
     createdAt: row.created_at,
-    updatedAt: row.updated_at
+    updatedAt: row.updated_at,
+    subscriptionTierId: row.subscription_tier_id ?? 4
   };
 }
 
@@ -253,20 +259,63 @@ export async function upsertUserByEmail(
   input: {
     email: string;
     displayName: string | null;
+    subscriptionTierId?: number;
   }
 ): Promise<UserRecord> {
   const result = await db.query<UserRow>(
     `
-      insert into users (email, display_name)
-      values ($1, $2)
+      insert into users (email, display_name, subscription_tier_id)
+      values ($1, $2, $3)
       on conflict (email) do update
       set display_name = coalesce(excluded.display_name, users.display_name)
-      returning id, email, display_name, created_at, updated_at
+      returning id, email, display_name, created_at, updated_at, subscription_tier_id
     `,
-    [input.email, input.displayName]
+    [input.email, input.displayName, input.subscriptionTierId ?? 4]
   );
 
   return mapUserRow(requireRow(result.rows[0], "Failed to upsert user."));
+}
+
+export function currentUsagePeriodStart(now = new Date()) {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+}
+
+function nextUsagePeriodStart(now: Date) {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+}
+
+export type LimitExceededError = Error & { statusCode: 403; code: "LIMIT_EXCEEDED"; details: { resourceType: UsageResourceType; tierId: number; limit: number; used: number; resetAt?: string } };
+function limitExceeded(resourceType: UsageResourceType, tierId: number, limit: number, used: number, now: Date): LimitExceededError {
+  const error = new Error(`You have reached your ${resourceType.replace(/_/g, " ")} limit.`) as LimitExceededError;
+  error.statusCode = 403; error.code = "LIMIT_EXCEEDED"; error.details = { resourceType, tierId, limit, used, ...(resourceType === "active_campaign" ? {} : { resetAt: nextUsagePeriodStart(now).toISOString() }) };
+  return error;
+}
+
+async function subscriptionTierForUser(db: Queryable, userId: string) {
+  const result = await db.query<{ subscription_tier_id: number }>("select subscription_tier_id from users where id = $1", [userId]);
+  return requireRow(result.rows[0], "User not found.").subscription_tier_id ?? 4;
+}
+
+export async function getUsageSummary(db: Queryable, input: { userId: string; now?: Date }): Promise<UserUsageSummary> {
+  const now = input.now ?? new Date(); const periodStart = currentUsagePeriodStart(now); const tierId = await subscriptionTierForUser(db, input.userId); const tier = entitlementForTier(tierId);
+  const [counters, campaigns, images] = await Promise.all([
+    db.query<{ resource_type: "dm_turn" | "campaign_creation"; used: number }>("select resource_type, used from user_usage_counters where user_id = $1 and period_start = $2", [input.userId, periodStart]),
+    db.query<{ count: number }>("select count(*)::int as count from campaigns where owner_user_id = $1 and status = 'active'", [input.userId]),
+    db.query<{ used: number; in_flight: number }>("select count(*) filter (where status in ('ready', 'deleted'))::int as used, count(*) filter (where status = 'pending')::int as in_flight from media_assets where owner_user_id = $1 and kind = 'character_portrait' and coalesce(provider, '') <> 'upload' and created_at >= $2", [input.userId, periodStart])
+  ]);
+  const used = Object.fromEntries(counters.rows.map((row) => [row.resource_type, row.used])) as Partial<Record<"dm_turn" | "campaign_creation", number>>;
+  const usage = { dm_turn: { used: used.dm_turn ?? 0, inFlight: 0 }, image_generation: { used: images.rows[0]?.used ?? 0, inFlight: images.rows[0]?.in_flight ?? 0 }, active_campaign: { used: campaigns.rows[0]?.count ?? 0, inFlight: 0 }, campaign_creation: { used: used.campaign_creation ?? 0, inFlight: 0 } };
+  const remaining = Object.fromEntries(Object.entries(tier.limits).map(([key, value]) => [key, value.limit === null ? null : Math.max(0, value.limit - (usage[key as UsageResourceType].used + usage[key as UsageResourceType].inFlight))])) as UserUsageSummary["remaining"];
+  const period = { start: periodStart.toISOString(), resetAt: nextUsagePeriodStart(now).toISOString() };
+  return { tier: { id: tierId, code: tier.code, displayName: tier.displayName }, limits: tier.limits, usage, remaining, periods: { dm_turn: period, image_generation: period, campaign_creation: period } } as UserUsageSummary;
+}
+
+export async function consumeQuota(db: Queryable, input: { userId: string; resourceType: "dm_turn" | "campaign_creation"; amount?: number; idempotencyKey?: string; sourceId?: string; metadata?: Record<string, unknown>; now?: Date }) {
+  const now = input.now ?? new Date(); const amount = input.amount ?? 1; const periodStart = currentUsagePeriodStart(now); const tierId = await subscriptionTierForUser(db, input.userId); const limit = entitlementForTier(tierId).limits[input.resourceType].limit;
+  if (input.idempotencyKey) { const existing = await db.query("select 1 from user_usage_events where user_id=$1 and resource_type=$2 and period_start=$3 and idempotency_key=$4", [input.userId, input.resourceType, periodStart, input.idempotencyKey]); if (existing.rows[0]) return getUsageSummary(db, { userId: input.userId, now }); }
+  if (limit !== null) { const counter = await db.query<{ used: number }>("insert into user_usage_counters (user_id, resource_type, period_start, used) values ($1,$2,$3,$4) on conflict (user_id, resource_type, period_start) do update set used = user_usage_counters.used + excluded.used, updated_at=now() returning used", [input.userId, input.resourceType, periodStart, amount]); const used = requireRow(counter.rows[0], "Failed to consume quota.").used; if (used > limit) throw limitExceeded(input.resourceType, tierId, limit, used - amount, now); }
+  await db.query("insert into user_usage_events (user_id, resource_type, period_start, amount, idempotency_key, source_id, metadata) values ($1,$2,$3,$4,$5,$6,$7::jsonb)", [input.userId, input.resourceType, periodStart, amount, input.idempotencyKey ?? null, input.sourceId ?? null, JSON.stringify(input.metadata ?? {})]);
+  return getUsageSummary(db, { userId: input.userId, now });
 }
 
 export async function ensureEmailIdentity(
@@ -295,7 +344,7 @@ export async function findUserByAuthIdentity(
 ): Promise<UserRecord | null> {
   const result = await db.query<UserRow>(
     `
-      select users.id, users.email, users.display_name, users.created_at, users.updated_at
+      select users.id, users.email, users.display_name, users.created_at, users.updated_at, users.subscription_tier_id
       from auth_identities
       join users on users.id = auth_identities.user_id
       where auth_identities.provider = $1
@@ -2829,6 +2878,7 @@ export async function createCampaignForMode(
     userId: string;
     runtime?: DungeonMasterRuntime | undefined;
     openingResolutionMode?: "await" | "background" | undefined;
+    reason?: "create" | "restart";
   }
 ): Promise<CampaignSummary> {
   const sessionId = `ai-dnd-${randomUUID()}`;
@@ -2851,6 +2901,12 @@ export async function createCampaignForMode(
   };
 
   const createdState = await withTransaction(db, async (client) => {
+    const usage = await getUsageSummary(client, { userId: input.userId });
+    if (input.reason !== "restart") {
+      const activeLimit = usage.limits.active_campaign.limit;
+      if (activeLimit !== null && usage.usage.active_campaign.used >= activeLimit) throw limitExceeded("active_campaign", usage.tier.id, activeLimit, usage.usage.active_campaign.used, new Date());
+    }
+    await consumeQuota(client, { userId: input.userId, resourceType: "campaign_creation", sourceId: sessionId, idempotencyKey: sessionId });
     const inserted = await client.query<CampaignRow>(
       `
         insert into campaigns (
@@ -3346,7 +3402,8 @@ export async function restartSinglePlayerCampaignForUser(
       eldermereStart,
       userId: input.userId,
       runtime: input.runtime,
-      openingResolutionMode: "background"
+      openingResolutionMode: "background",
+      reason: "restart"
     });
   } catch (error) {
     await logRestartEvent(source.campaign.id, "create_campaign_failed", {
@@ -12435,6 +12492,13 @@ export async function submitRoomTurnForUser(
     if (!claimedTurn.rows[0]) {
       throw createStatusError(409, "That turn is already resolving.");
     }
+
+    await consumeQuota(client, {
+      userId: campaignRow.owner_user_id ?? input.userId,
+      resourceType: "dm_turn",
+      sourceId: turn.id,
+      idempotencyKey: turn.id
+    });
 
     await logCampaignEvent(client, campaignRow.id, "turn_resolving", {
       turnId: turn.id,
