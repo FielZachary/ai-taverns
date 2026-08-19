@@ -49,6 +49,12 @@ export DROPLET_ACCESS_TTL_SECONDS=3600
 
 `DROPLET_BOOTSTRAP_SSH_KEY` is the durable private key used only to install and clean up the temporary key. If `DROPLET_BOOTSTRAP_SSH_KEY` is unset, the helper falls back to `DROPLET_SSH_KEY`. For the AI Taverns droplet, the bootstrap key is authorized for the `root` account; the local key filename does not need to match the remote username.
 
+For local agent runs, `npm run droplet:one-time-access` loads only the
+`DROPLET_*` settings from the ignored `apps/api/.env.local` file. Keep the
+private key outside the repository and set `DROPLET_BOOTSTRAP_SSH_KEY` to its
+local path. Run `npm run droplet:preflight` before a production maintenance
+task to verify the path and one-time access configuration.
+
 ## Interactive Access
 
 Open a temporary shell:

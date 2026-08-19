@@ -2,6 +2,10 @@ import { execFile } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import {
+  assertDropletAccessConfig,
+  loadLocalDropletEnv
+} from "./droplet-local-env.mjs";
 
 const outputPath = join(process.cwd(), "dashboard.html");
 const execFileAsync = promisify(execFile);
@@ -118,27 +122,47 @@ function renderDashboard(rows, generatedAt) {
 }
 
 async function productionUsers() {
-  const containerCommand = [
-    'psql --username="$POSTGRES_USER" --dbname="$POSTGRES_DB"',
-    '--tuples-only --no-align',
-    `--command ${shellQuote(userMessageQuery)}`
-  ].join(" ");
+  await loadLocalDropletEnv();
+  await assertDropletAccessConfig();
+
+  const encodedQuery = Buffer.from(userMessageQuery, "utf8").toString("base64");
   const remoteCommand =
     "cd /opt/ai-taverns && " +
+    `printf %s ${encodedQuery} | base64 -d | ` +
     "docker compose --env-file infra/production.env -f infra/docker-compose.production.yml " +
-    `exec -T postgres sh -lc ${shellQuote(containerCommand)}`;
-  const { stdout } = await execFileAsync(
-    "npm",
-    ["run", "droplet:one-time-access", "--", "sh", "-lc", remoteCommand],
-    { cwd: process.cwd(), maxBuffer: 5 * 1024 * 1024 }
-  );
-  const json = stdout.trim().split(/\r?\n/).at(-1);
+    "exec -T postgres psql --username=ai_taverns --dbname=ai_taverns --set ON_ERROR_STOP=1 --tuples-only --no-align";
+  let stdout;
 
-  if (!json) {
-    throw new Error("Production database query returned no data.");
+  try {
+    ({ stdout } = await execFileAsync(
+      "npm",
+      [
+        "run",
+        "droplet:one-time-access",
+        "--",
+        `sh -lc ${shellQuote(remoteCommand)}`
+      ],
+      { cwd: process.cwd(), maxBuffer: 5 * 1024 * 1024 }
+    ));
+  } catch (error) {
+    const stderr =
+      error && typeof error === "object" && "stderr" in error
+        ? String(error.stderr).trim()
+        : "";
+    throw new Error(
+      `Production database query failed through one-time droplet access${
+        stderr ? `: ${stderr.slice(-500)}` : ""
+      }. Run npm run droplet:preflight to verify access.`
+    );
+  }
+  const start = stdout.indexOf("[");
+  const end = stdout.lastIndexOf("]");
+
+  if (start === -1 || end === -1 || end < start) {
+    throw new Error("Production database query returned an invalid data payload.");
   }
 
-  return JSON.parse(json);
+  return JSON.parse(stdout.slice(start, end + 1));
 }
 
 try {
