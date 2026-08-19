@@ -57,7 +57,8 @@ import type {
   EldermereCampaignStart,
   MechanicsResourceState,
   MechanicsSeed,
-  SpellSlotState
+  SpellSlotState,
+  UserUsageSummary
 } from "@ai-dnd/contracts";
 
 export type { SpellLevelLabel, SpellRuleProfile } from "@/lib/spell-rules";
@@ -4229,6 +4230,7 @@ export function NewAdventureForm({
   const [characterSheet, setCharacterSheet] = useState(defaultCharacterSheet);
   const [ownerClientId, setOwnerClientId] = useState("");
   const [error, setError] = useState("");
+  const [usage, setUsage] = useState<UserUsageSummary | null>(null);
   const [isGeneratingBackstory, setIsGeneratingBackstory] = useState(false);
   const [isContinuingWithBackstory, setIsContinuingWithBackstory] =
     useState(false);
@@ -4237,6 +4239,13 @@ export function NewAdventureForm({
   const [hasUsedBackstoryAction, setHasUsedBackstoryAction] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [isCreatingArt, setIsCreatingArt] = useState(false);
+  useEffect(() => {
+    if (!userId) return;
+    void fetch("/api/account/usage", { cache: "no-store" })
+      .then((response) => response.ok ? response.json() : null)
+      .then((summary) => setUsage(summary))
+      .catch(() => undefined);
+  }, [userId]);
   const [createdCampaign, setCreatedCampaign] =
     useState<CampaignSummary | null>(null);
   const [portraitPreviewDataUrl, setPortraitPreviewDataUrl] = useState("");
@@ -5806,6 +5815,10 @@ export function NewAdventureForm({
     }
 
     setError("");
+    if (usage?.remaining.active_campaign === 0) {
+      setError("You have reached your active campaign limit.");
+      return;
+    }
     setIsCreating(true);
 
     try {

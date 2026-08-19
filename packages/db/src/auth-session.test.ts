@@ -130,7 +130,8 @@ test("user and session helpers map returned records", async () => {
   assert.equal(user.displayName, "Mira Vale");
   assert.deepEqual(upsertDb.queries[0]?.values, [
     "mira@example.com",
-    "Mira Vale"
+    "Mira Vale",
+    4
   ]);
 
   const identityDb = fakeDb();

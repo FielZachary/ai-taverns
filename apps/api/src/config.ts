@@ -52,7 +52,8 @@ const ConfigSchema = z.object({
   MIXPANEL_DEBUG: z
     .enum(["true", "false"])
     .optional()
-    .transform((value) => (value === undefined ? undefined : value === "true"))
+    .transform((value) => (value === undefined ? undefined : value === "true")),
+  SUBSCRIPTION_DEFAULT_TIER_ID: z.coerce.number().int().positive().default(4)
 });
 
 export type ApiConfig = {
@@ -86,6 +87,7 @@ export type ApiConfig = {
   mixpanelProjectId: string;
   mixpanelEnabled: boolean;
   mixpanelDebug: boolean;
+  subscriptionDefaultTierId: number;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
@@ -134,6 +136,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     mixpanelProjectId: parsed.MIXPANEL_PROJECT_ID,
     mixpanelEnabled:
       parsed.MIXPANEL_ENABLED ?? Boolean(parsed.MIXPANEL_PROJECT_TOKEN),
-    mixpanelDebug: parsed.MIXPANEL_DEBUG ?? false
+    mixpanelDebug: parsed.MIXPANEL_DEBUG ?? false,
+    subscriptionDefaultTierId: parsed.SUBSCRIPTION_DEFAULT_TIER_ID
   };
 }

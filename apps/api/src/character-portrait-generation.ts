@@ -3,6 +3,7 @@ import { join } from "node:path";
 import sharp from "sharp";
 import {
   createPendingCharacterPortraitAsset,
+  getUsageSummary,
   getCharacterPortraitTargetForUser,
   markCharacterPortraitAssetFailed,
   markCharacterPortraitAssetReady,
@@ -574,6 +575,21 @@ export async function generateCharacterPortraitForCampaign(
     campaignId: input.campaignId,
     userId: input.userId
   });
+  const usage = await getUsageSummary(input.db, { userId: target.ownerUserId ?? input.userId });
+  const imageLimit = usage.limits.image_generation.limit;
+  if (imageLimit !== null && usage.usage.image_generation.used + usage.usage.image_generation.inFlight >= imageLimit) {
+    const error = new Error("You have reached your monthly image generation limit.") as Error & { statusCode: number; code: "LIMIT_EXCEEDED"; details: Record<string, unknown> };
+    error.statusCode = 403; error.code = "LIMIT_EXCEEDED";
+    error.details = { resourceType: "image_generation", tierId: usage.tier.id, limit: imageLimit, used: usage.usage.image_generation.used, resetAt: usage.periods.image_generation.resetAt };
+    throw error;
+  }
+  const pending = await input.db.query<{ id: string }>("select id from media_assets where campaign_id=$1 and player_id=$2 and kind='character_portrait' and status='pending' and coalesce(provider, '') <> 'upload' limit 1", [target.campaignId, target.playerId]);
+  if (pending.rows[0]) {
+    const error = new Error("A portrait generation is already in progress.") as Error & { statusCode: number; code: "LIMIT_EXCEEDED"; details: Record<string, unknown> };
+    error.statusCode = 403; error.code = "LIMIT_EXCEEDED";
+    error.details = { resourceType: "image_generation", tierId: usage.tier.id, limit: imageLimit ?? 0, used: usage.usage.image_generation.used, resetAt: usage.periods.image_generation.resetAt };
+    throw error;
+  }
   const prompt = characterPortraitPrompt({
     ...target,
     guidelines: input.guidelines,

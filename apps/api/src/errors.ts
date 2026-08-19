@@ -31,16 +31,21 @@ export function handleRouteError(
   const statusCode = isValidationError ? 400 : error.statusCode ?? 500;
   const shouldExposeMessage =
     statusCode < 500 || (error as FastifyError & { expose?: boolean }).expose;
+  const codedError = error as FastifyError & {
+    code?: ApiErrorCode;
+    details?: ApiErrorResponse["error"]["details"];
+  };
   const response: ApiErrorResponse = {
     error: {
-      code: statusToCode(statusCode),
+      code: codedError.code ?? statusToCode(statusCode),
       message:
         shouldExposeMessage
           ? isValidationError
             ? "Invalid request body."
             : error.message
           : "Internal server error",
-      requestId: request.id
+      requestId: request.id,
+      ...(codedError.details ? { details: codedError.details } : {})
     }
   };
 
