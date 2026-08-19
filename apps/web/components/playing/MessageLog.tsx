@@ -232,20 +232,22 @@ function MessageBody({
   if (narrationBeats && revealedBeatCount !== undefined) {
     return (
       <div className="message-body">
-        {narrationBeats.map((beat, index) => (
-          <span key={`narration-beat-${index}-${beat.visibleText.slice(0, 16)}`}>
-            <span
-              className={
-                index < revealedBeatCount
-                  ? "message-narration-beat-revealed"
-                  : "message-narration-beat-pending"
-              }
-            >
-              {renderInlineContentWithLineBreaks(beat.visibleText)}
+        <p className="message-narration-stream">
+          {narrationBeats.map((beat, index) => (
+            <span key={`narration-beat-${index}-${beat.visibleText.slice(0, 16)}`}>
+              <span
+                className={
+                  index < revealedBeatCount
+                    ? "message-narration-beat-revealed"
+                    : "message-narration-beat-pending"
+                }
+              >
+                {renderInlineContentWithLineBreaks(beat.visibleText)}
+              </span>
+              {beat.paragraphBreakAfter ? <><br /><br /></> : " "}
             </span>
-            {beat.paragraphBreakAfter ? <><br /><br /></> : " "}
-          </span>
-        ))}
+          ))}
+        </p>
       </div>
     );
   }
