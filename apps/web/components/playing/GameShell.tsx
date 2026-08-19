@@ -226,7 +226,7 @@ type RoomRealtimeEvent =
   | { type: "dm_stream_delta"; roomId: string; turnId: string; text: string }
   | { type: "dm_stream_done"; roomId: string; turnId: string; messageId: string }
   | { type: "dm_stream_failed"; roomId: string; turnId: string; message: string }
-  | { type: "tts_started"; roomId: string; narrationId: string; messageId: string; text: string }
+  | { type: "tts_started"; roomId: string; narrationId: string; messageId: string; text: string; narrationBeatStarts?: number[]; visibleBeatEnds?: number[] }
   | { type: "tts_audio"; roomId: string; narrationId: string; audio: string; sampleRate: number }
   | { type: "tts_timestamps"; roomId: string; narrationId: string; wordTimings: Array<{ word: string; start: number; end: number }> }
   | { type: "tts_done"; roomId: string; narrationId: string }
@@ -461,6 +461,7 @@ export function GameShell({
   const narrationNextStartRef = useRef(0);
   const narrationWordCursorRef = useRef(0);
   const narrationSentenceEndsRef = useRef<number[]>([]);
+  const narrationBeatStartsRef = useRef<number[]>([]);
   const narrationNextSentenceRef = useRef(0);
   const narrationTimersRef = useRef<number[]>([]);
   const narrationPlaybackEndRef = useRef(0);
@@ -1400,7 +1401,10 @@ export function GameShell({
           narrationTimersRef.current.forEach((timer) => window.clearTimeout(timer));
           narrationTimersRef.current = [];
           narrationWordCursorRef.current = 0;
-          narrationSentenceEndsRef.current = narrationBeatWordEnds(realtimeEvent.text);
+          narrationSentenceEndsRef.current =
+            realtimeEvent.visibleBeatEnds ?? narrationBeatWordEnds(realtimeEvent.text);
+          narrationBeatStartsRef.current =
+            realtimeEvent.narrationBeatStarts ?? [];
           narrationNextSentenceRef.current = 0;
           setNarrationReveal({
             messageId: realtimeEvent.messageId,
@@ -1440,10 +1444,11 @@ export function GameShell({
           realtimeEvent.wordTimings.forEach((timing, index) => {
             const spokenWordNumber = wordStart + index + 1;
             const sentenceIndex = narrationNextSentenceRef.current;
-            const previousSentenceEnd =
-              narrationSentenceEndsRef.current[sentenceIndex - 1] ?? 0;
+            const beatStart =
+              narrationBeatStartsRef.current[sentenceIndex] ??
+              (narrationSentenceEndsRef.current[sentenceIndex - 1] ?? 0) + 1;
 
-            if (spokenWordNumber < previousSentenceEnd + 1) {
+            if (spokenWordNumber < beatStart) {
               return;
             }
 

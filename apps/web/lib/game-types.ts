@@ -105,6 +105,7 @@ export type GameMessage = {
   };
   content: string;
   narrationContent?: string;
+  narrationBeats?: Array<{ visibleText: string; narrationText: string }>;
   createdAt: string;
   isSyntheticIntro?: boolean;
   resourceCard?: GameMessageResourceCard;

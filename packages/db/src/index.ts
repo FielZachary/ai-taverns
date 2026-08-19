@@ -5641,6 +5641,9 @@ async function buildRoomSnapshot(
         ...(typeof payload.narrationContent === "string"
           ? { narrationContent: payload.narrationContent }
           : {}),
+        ...(Array.isArray(payload.narrationBeats)
+          ? { narrationBeats: payload.narrationBeats }
+          : {}),
         createdAt: toIso(event.created_at),
         ...(typeof payload.username === "string"
           ? { playerName: payload.username }

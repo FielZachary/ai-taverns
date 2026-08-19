@@ -8,6 +8,22 @@ import {
 import { getRoomForUser } from "@ai-dnd/db";
 import { randomUUID } from "node:crypto";
 import { sampleRate, streamCartesiaNarration } from "../cartesia.js";
+
+function beatWordCounts(beats: Array<{ visibleText: string; narrationText: string }>) {
+  let visibleWordCount = 0;
+  let narrationWordCount = 0;
+  const visibleBeatEnds: number[] = [];
+  const narrationBeatStarts: number[] = [];
+
+  for (const beat of beats) {
+    narrationBeatStarts.push(narrationWordCount + 1);
+    visibleWordCount += beat.visibleText.match(/\S+/g)?.length ?? 0;
+    narrationWordCount += beat.narrationText.match(/\S+/g)?.length ?? 0;
+    visibleBeatEnds.push(visibleWordCount);
+  }
+
+  return { narrationBeatStarts, visibleBeatEnds };
+}
 import type { ApiConfig } from "../config.js";
 import { requireAuthenticatedUser } from "./auth.js";
 
@@ -109,12 +125,24 @@ export async function registerRealtimeRoutes(
             sendSocketEvent(socket, { type: "tts_failed", roomId, narrationId, message: "That DM message is unavailable." });
             return;
           }
+          const narrationBeats = Array.isArray(message.narrationBeats)
+            ? message.narrationBeats.filter(
+                (beat): beat is { visibleText: string; narrationText: string } =>
+                  Boolean(beat) &&
+                  typeof beat.visibleText === "string" &&
+                  typeof beat.narrationText === "string"
+              )
+            : [];
+          const beatCounts = narrationBeats.length > 0
+            ? beatWordCounts(narrationBeats)
+            : undefined;
           sendSocketEvent(socket, {
             type: "tts_started",
             roomId,
             narrationId,
             messageId: message.id,
-            text: message.narrationContent ?? message.content
+            text: message.narrationContent ?? message.content,
+            ...(beatCounts ?? {})
           });
           try {
             await streamCartesiaNarration({
