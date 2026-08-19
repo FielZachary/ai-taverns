@@ -111,9 +111,27 @@ export async function registerRealtimeRoutes(
           }
           sendSocketEvent(socket, { type: "tts_started", roomId, narrationId, messageId: message.id, text: message.content });
           try {
-            await streamCartesiaNarration({ apiKey: config.cartesiaApiKey, narration: message.content, onAudio(audio, wordTimings) {
-              sendSocketEvent(socket, { type: "tts_audio", roomId, narrationId, audio, sampleRate, wordTimings });
-            }});
+            await streamCartesiaNarration({
+              apiKey: config.cartesiaApiKey,
+              narration: message.content,
+              onAudio(audio) {
+                sendSocketEvent(socket, {
+                  type: "tts_audio",
+                  roomId,
+                  narrationId,
+                  audio,
+                  sampleRate
+                });
+              },
+              onWordTimings(wordTimings) {
+                sendSocketEvent(socket, {
+                  type: "tts_timestamps",
+                  roomId,
+                  narrationId,
+                  wordTimings
+                });
+              }
+            });
             sendSocketEvent(socket, { type: "tts_done", roomId, narrationId });
           } catch (error) {
             sendSocketEvent(socket, { type: "tts_failed", roomId, narrationId, message: error instanceof Error ? error.message : "Narration failed." });

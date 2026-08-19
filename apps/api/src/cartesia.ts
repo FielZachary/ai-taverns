@@ -14,7 +14,8 @@ function plainText(value: string) {
 export async function streamCartesiaNarration(input: {
   apiKey: string;
   narration: string;
-  onAudio: (audio: string, wordTimings: CartesiaWordTiming[]) => void;
+  onAudio: (audio: string) => void;
+  onWordTimings: (wordTimings: CartesiaWordTiming[]) => void;
 }) {
   const transcript = plainText(input.narration);
   if (!transcript) throw new Error("Narration is empty.");
@@ -33,8 +34,20 @@ export async function streamCartesiaNarration(input: {
     socket.on("message", (raw) => {
       const event = JSON.parse(raw.toString()) as Record<string, unknown>;
       if (event.type === "chunk" && typeof event.data === "string") {
-        const timestamps = Array.isArray(event.word_timestamps) ? event.word_timestamps : [];
-        input.onAudio(event.data, timestamps.map((item) => ({ word: String((item as Record<string, unknown>).word ?? ""), start: Number((item as Record<string, unknown>).start ?? 0), end: Number((item as Record<string, unknown>).end ?? 0) })));
+        input.onAudio(event.data);
+      }
+      if (event.type === "timestamps" && event.word_timestamps) {
+        const timestamps = event.word_timestamps as Record<string, unknown>;
+        const words = Array.isArray(timestamps.words) ? timestamps.words : [];
+        const starts = Array.isArray(timestamps.start) ? timestamps.start : [];
+        const ends = Array.isArray(timestamps.end) ? timestamps.end : [];
+        input.onWordTimings(
+          words.map((word, index) => ({
+            word: String(word),
+            start: Number(starts[index] ?? 0),
+            end: Number(ends[index] ?? 0)
+          }))
+        );
       }
       if (event.done || event.type === "done") { socket.close(); resolve(); }
       if (event.type === "error") { socket.close(); reject(new Error(String(event.message ?? "Cartesia TTS failed."))); }

@@ -32,6 +32,7 @@ type MessageLogProps = {
   onRetryLastTurn?: () => void;
   onViewEldermereLore?: () => void;
   onNarrateMessage?: (messageId: string) => void;
+  narrationReveal?: { messageId: string; revealedWordCount: number } | null;
 };
 
 const semanticNarrationRoles = [
@@ -117,25 +118,43 @@ function renderInlineMarkdown(content: string) {
 
 function renderSemanticNarrationPart(
   part: SemanticNarrationPart,
-  partIndex: number
+  partIndex: number,
+  revealedWordCount: number | undefined,
+  wordCursor: { current: number }
 ) {
   const lines = part.text.split("\n");
 
   return lines.flatMap((line, lineIndex) => {
+    const words =
+      revealedWordCount === undefined
+        ? renderInlineMarkdown(line)
+        : line.split(/(\s+)/).map((word, wordIndex) => {
+            if (!word.trim()) return word;
+            const visible = wordCursor.current < revealedWordCount;
+            wordCursor.current += 1;
+            return (
+              <span
+                className={visible ? "message-word-revealed" : "message-word-pending"}
+                key={`word-${partIndex}-${lineIndex}-${wordIndex}`}
+              >
+                {word}
+              </span>
+            );
+          });
     const renderedLine = part.role === "em" ? (
       <em key={`semantic-em-${partIndex}-${lineIndex}-${line.slice(0, 16)}`}>
-        {renderInlineMarkdown(line)}
+        {words}
       </em>
     ) : part.role ? (
       <span
         className={`message-semantic-narration message-semantic-narration-${part.role}`}
         key={`semantic-${partIndex}-${lineIndex}-${line.slice(0, 16)}`}
       >
-        {renderInlineMarkdown(line)}
+        {words}
       </span>
     ) : (
       <span key={`plain-${partIndex}-${lineIndex}-${line.slice(0, 16)}`}>
-        {renderInlineMarkdown(line)}
+        {words}
       </span>
     );
 
@@ -145,9 +164,13 @@ function renderSemanticNarrationPart(
   });
 }
 
-function renderInlineContentWithLineBreaks(content: string) {
+function renderInlineContentWithLineBreaks(
+  content: string,
+  revealedWordCount?: number,
+  wordCursor = { current: 0 }
+) {
   return parseSemanticNarrationMarkup(content).flatMap((part, index) =>
-    renderSemanticNarrationPart(part, index)
+    renderSemanticNarrationPart(part, index, revealedWordCount, wordCursor)
   );
 }
 
@@ -180,10 +203,13 @@ function playerFacingMessageContent(message: GameMessage) {
 }
 
 function MessageBody({
-  content
+  content,
+  revealedWordCount
 }: {
   content: string;
+  revealedWordCount?: number;
 }) {
+  const wordCursor = { current: 0 };
   const paragraphs = content
     .trim()
     .split(/\n{2,}/)
@@ -214,7 +240,7 @@ function MessageBody({
 
         return (
           <p key={`${index}-${paragraph.slice(0, 16)}`}>
-            {renderInlineContentWithLineBreaks(paragraph)}
+            {renderInlineContentWithLineBreaks(paragraph, revealedWordCount, wordCursor)}
           </p>
         );
       })}
@@ -504,7 +530,8 @@ export function MessageLog({
   onRegenerateResponse,
   onRetryLastTurn,
   onViewEldermereLore,
-  onNarrateMessage
+  onNarrateMessage,
+  narrationReveal
 }: MessageLogProps) {
   const logRef = useRef<HTMLDivElement>(null);
   const [openDebugMessageId, setOpenDebugMessageId] = useState<string | null>(
@@ -662,7 +689,14 @@ export function MessageLog({
               {message.role === "dm" && !messageContent.trim() ? (
                 <RuneLoader label="Reading the runes" />
               ) : (
-                <MessageBody content={messageContent} />
+                <MessageBody
+                  content={messageContent}
+                  revealedWordCount={
+                    narrationReveal?.messageId === message.id
+                      ? narrationReveal.revealedWordCount
+                      : undefined
+                  }
+                />
               )}
               <MessageResourceCard
                 message={message}

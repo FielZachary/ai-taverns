@@ -254,7 +254,8 @@ export const DmStreamEventSchema = z.discriminatedUnion("type", [
 
 export const TtsSocketEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("tts_started"), roomId: z.string().min(1), narrationId: z.string().min(1), messageId: z.string().min(1), text: z.string() }),
-  z.object({ type: z.literal("tts_audio"), roomId: z.string().min(1), narrationId: z.string().min(1), audio: z.string().min(1), sampleRate: z.number().int().positive(), wordTimings: z.array(z.object({ word: z.string(), start: z.number().nonnegative(), end: z.number().nonnegative() })) }),
+  z.object({ type: z.literal("tts_audio"), roomId: z.string().min(1), narrationId: z.string().min(1), audio: z.string().min(1), sampleRate: z.number().int().positive() }),
+  z.object({ type: z.literal("tts_timestamps"), roomId: z.string().min(1), narrationId: z.string().min(1), wordTimings: z.array(z.object({ word: z.string(), start: z.number().nonnegative(), end: z.number().nonnegative() })) }),
   z.object({ type: z.literal("tts_done"), roomId: z.string().min(1), narrationId: z.string().min(1) }),
   z.object({ type: z.literal("tts_failed"), roomId: z.string().min(1), narrationId: z.string().min(1), message: z.string().min(1) })
 ]);

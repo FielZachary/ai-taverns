@@ -217,6 +217,33 @@ describe("MessageLog", () => {
     expect(screen.queryByText(/<\/em>/)).not.toBeInTheDocument();
   });
 
+  it("keeps a narrated DM message blank until its timed words are revealed", () => {
+    const message = gameMessage({
+      id: "dm-narrated-message",
+      role: "dm",
+      content: "<npc>Captain Vael</npc> draws steel."
+    });
+    const { rerender } = renderMessageLog({
+      messages: [message],
+      narrationReveal: { messageId: message.id, revealedWordCount: 0 }
+    });
+
+    expect(screen.getByText("Captain")).toHaveClass("message-word-pending");
+    expect(screen.getByText("Vael")).toHaveClass("message-word-pending");
+
+    rerender(
+      <MessageLog
+        messages={[message]}
+        isSending={false}
+        narrationReveal={{ messageId: message.id, revealedWordCount: 2 }}
+      />
+    );
+
+    expect(screen.getByText("Captain")).toHaveClass("message-word-revealed");
+    expect(screen.getByText("Vael")).toHaveClass("message-word-revealed");
+    expect(screen.getByText("draws")).toHaveClass("message-word-pending");
+  });
+
   it("colors unfinished semantic narration markup while a DM message streams", () => {
     renderMessageLog({
       messages: [

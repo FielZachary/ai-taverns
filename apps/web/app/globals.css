@@ -5093,6 +5093,9 @@ h1 {
   color: var(--semantic-narration-color, var(--gold-bright));
 }
 
+.message-word-pending { opacity: 0; }
+.message-word-revealed { opacity: 1; transition: opacity 120ms ease-out; }
+
 .message-semantic-narration-npc {
   --semantic-narration-color: #e8b86c;
 }

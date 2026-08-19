@@ -201,7 +201,8 @@ type RoomRealtimeEvent =
   | { type: "dm_stream_done"; roomId: string; turnId: string; messageId: string }
   | { type: "dm_stream_failed"; roomId: string; turnId: string; message: string }
   | { type: "tts_started"; roomId: string; narrationId: string; messageId: string; text: string }
-  | { type: "tts_audio"; roomId: string; narrationId: string; audio: string; sampleRate: number; wordTimings: Array<{ word: string; start: number; end: number }> }
+  | { type: "tts_audio"; roomId: string; narrationId: string; audio: string; sampleRate: number }
+  | { type: "tts_timestamps"; roomId: string; narrationId: string; wordTimings: Array<{ word: string; start: number; end: number }> }
   | { type: "tts_done"; roomId: string; narrationId: string }
   | { type: "tts_failed"; roomId: string; narrationId: string; message: string };
 
@@ -428,27 +429,45 @@ export function GameShell({
   const pendingSubmissionRef = useRef<PendingSubmission | null>(null);
   const roomSocketRef = useRef<WebSocket | null>(null);
   const narrationAudioContextRef = useRef<AudioContext | null>(null);
+  const narrationAudioStartRef = useRef(0);
   const narrationNextStartRef = useRef(0);
+  const narrationWordCursorRef = useRef(0);
+  const narrationTimersRef = useRef<number[]>([]);
+  const narrationPlaybackEndRef = useRef(0);
   const retryableTurnRef = useRef<RetryableTurn | null>(null);
   const [roomMessages, setRoomMessages] = useState<GameMessage[]>([]);
   const [streamingDmMessages, setStreamingDmMessages] = useState<
     StreamingDmMessage[]
   >([]);
+  const [narrationReveal, setNarrationReveal] = useState<{
+    messageId: string;
+    revealedWordCount: number;
+  } | null>(null);
 
   const playNarrationAudio = useCallback((audio: string, sampleRate: number) => {
-    const context = narrationAudioContextRef.current ?? new AudioContext({ sampleRate });
+    const context =
+      narrationAudioContextRef.current ?? new AudioContext({ sampleRate });
     narrationAudioContextRef.current = context;
-    const bytes = Uint8Array.from(atob(audio), (character) => character.charCodeAt(0));
-    const samples = new Int16Array(bytes.buffer, bytes.byteOffset, Math.floor(bytes.byteLength / 2));
+    const bytes = Uint8Array.from(atob(audio), (character) =>
+      character.charCodeAt(0)
+    );
+    const samples = new Int16Array(
+      bytes.buffer,
+      bytes.byteOffset,
+      Math.floor(bytes.byteLength / 2)
+    );
     const buffer = context.createBuffer(1, samples.length, sampleRate);
     const channel = buffer.getChannelData(0);
-    for (let index = 0; index < samples.length; index += 1) channel[index] = samples[index] / 32768;
+    for (let index = 0; index < samples.length; index += 1) {
+      channel[index] = samples[index] / 32768;
+    }
     const source = context.createBufferSource();
     source.buffer = buffer;
     source.connect(context.destination);
     const start = Math.max(context.currentTime + 0.03, narrationNextStartRef.current);
     source.start(start);
     narrationNextStartRef.current = start + buffer.duration;
+    return { context, start, duration: buffer.duration };
   }, []);
 
   const narrateMessage = useCallback((messageId: string) => {
@@ -1309,15 +1328,72 @@ export function GameShell({
         }
 
         if (realtimeEvent.type === "tts_started") {
+          narrationTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+          narrationTimersRef.current = [];
+          narrationWordCursorRef.current = 0;
+          setNarrationReveal({
+            messageId: realtimeEvent.messageId,
+            revealedWordCount: 0
+          });
           narrationNextStartRef.current = 0;
+          narrationAudioStartRef.current = 0;
+          narrationPlaybackEndRef.current = 0;
           void narrationAudioContextRef.current?.resume();
         }
 
         if (realtimeEvent.type === "tts_audio") {
-          playNarrationAudio(realtimeEvent.audio, realtimeEvent.sampleRate);
+          const playback = playNarrationAudio(
+            realtimeEvent.audio,
+            realtimeEvent.sampleRate
+          );
+          narrationPlaybackEndRef.current = Math.max(
+            narrationPlaybackEndRef.current,
+            playback.start + playback.duration
+          );
+          if (narrationAudioStartRef.current === 0) {
+            narrationAudioStartRef.current = playback.start;
+          }
+        }
+
+        if (realtimeEvent.type === "tts_timestamps") {
+          const context = narrationAudioContextRef.current;
+          const wordStart = narrationWordCursorRef.current;
+          narrationWordCursorRef.current += realtimeEvent.wordTimings.length;
+          realtimeEvent.wordTimings.forEach((timing, index) => {
+            const delay = Math.max(
+              0,
+              (narrationAudioStartRef.current + timing.start -
+                (context?.currentTime ?? 0)) *
+                1000
+            );
+            narrationTimersRef.current.push(window.setTimeout(() => {
+              setNarrationReveal((current) =>
+                current
+                  ? {
+                      ...current,
+                      revealedWordCount: Math.max(
+                        current.revealedWordCount,
+                        wordStart + index + 1
+                      )
+                    }
+                  : current
+              );
+            }, delay));
+          });
+        }
+
+        if (realtimeEvent.type === "tts_done") {
+          const context = narrationAudioContextRef.current;
+          const delay = context
+            ? Math.max(0, (narrationPlaybackEndRef.current - context.currentTime) * 1000)
+            : 0;
+          narrationTimersRef.current.push(window.setTimeout(() => {
+            setNarrationReveal(null);
+          }, delay));
         }
 
         if (realtimeEvent.type === "tts_failed") {
+          setNarrationReveal(null);
           setTableAlert(realtimeEvent.message);
         }
       });
@@ -1346,6 +1422,7 @@ export function GameShell({
     activeCampaign,
     applyRoomSnapshot,
     isSinglePlayer,
+    playNarrationAudio,
     roomReadDebugParam,
     setRetryableTurnState,
     setRoomResolvingState
@@ -2621,6 +2698,7 @@ export function GameShell({
                 });
               }}
               onNarrateMessage={narrateMessage}
+              narrationReveal={narrationReveal}
             />
 
             {!isSinglePlayer && !hasAdventureBegun ? (
