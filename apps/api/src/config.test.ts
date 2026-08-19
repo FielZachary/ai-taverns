@@ -32,6 +32,7 @@ test("loadConfig applies development defaults and trims web origins", () => {
   assert.equal(config.googleOAuthClientId, undefined);
   assert.equal(config.googleOAuthClientSecret, undefined);
   assert.equal(config.resendApiKey, undefined);
+  assert.equal(config.cartesiaApiKey, undefined);
   assert.equal(config.mediaStorageDriver, "local");
   assert.equal(config.mediaLocalDir, ".local-media");
   assert.equal(config.mediaPublicBaseUrl, "/media");
@@ -100,6 +101,7 @@ test("loadConfig applies production security defaults and explicit overrides", (
     googleOAuthClientId: "google-client-id",
     googleOAuthClientSecret: "google-client-secret",
     resendApiKey: "resend-test-key",
+    cartesiaApiKey: undefined,
     mediaStorageDriver: "spaces",
     mediaLocalDir: "/tmp/media",
     mediaPublicBaseUrl: "https://cdn.example.com/media",

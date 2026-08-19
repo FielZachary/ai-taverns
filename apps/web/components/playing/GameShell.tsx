@@ -199,7 +199,11 @@ type RoomRealtimeEvent =
   | { type: "dm_stream_started"; roomId: string; turnId: string }
   | { type: "dm_stream_delta"; roomId: string; turnId: string; text: string }
   | { type: "dm_stream_done"; roomId: string; turnId: string; messageId: string }
-  | { type: "dm_stream_failed"; roomId: string; turnId: string; message: string };
+  | { type: "dm_stream_failed"; roomId: string; turnId: string; message: string }
+  | { type: "tts_started"; roomId: string; narrationId: string; messageId: string; text: string }
+  | { type: "tts_audio"; roomId: string; narrationId: string; audio: string; sampleRate: number; wordTimings: Array<{ word: string; start: number; end: number }> }
+  | { type: "tts_done"; roomId: string; narrationId: string }
+  | { type: "tts_failed"; roomId: string; narrationId: string; message: string };
 
 type GameShellProps = {
   initialCampaignId?: string;
@@ -422,11 +426,48 @@ export function GameShell({
   const [optimisticSubmittedPlayerId, setOptimisticSubmittedPlayerId] =
     useState<string | null>(null);
   const pendingSubmissionRef = useRef<PendingSubmission | null>(null);
+  const roomSocketRef = useRef<WebSocket | null>(null);
+  const narrationAudioContextRef = useRef<AudioContext | null>(null);
+  const narrationNextStartRef = useRef(0);
   const retryableTurnRef = useRef<RetryableTurn | null>(null);
   const [roomMessages, setRoomMessages] = useState<GameMessage[]>([]);
   const [streamingDmMessages, setStreamingDmMessages] = useState<
     StreamingDmMessage[]
   >([]);
+
+  const playNarrationAudio = useCallback((audio: string, sampleRate: number) => {
+    const context = narrationAudioContextRef.current ?? new AudioContext({ sampleRate });
+    narrationAudioContextRef.current = context;
+    const bytes = Uint8Array.from(atob(audio), (character) => character.charCodeAt(0));
+    const samples = new Int16Array(bytes.buffer, bytes.byteOffset, Math.floor(bytes.byteLength / 2));
+    const buffer = context.createBuffer(1, samples.length, sampleRate);
+    const channel = buffer.getChannelData(0);
+    for (let index = 0; index < samples.length; index += 1) channel[index] = samples[index] / 32768;
+    const source = context.createBufferSource();
+    source.buffer = buffer;
+    source.connect(context.destination);
+    const start = Math.max(context.currentTime + 0.03, narrationNextStartRef.current);
+    source.start(start);
+    narrationNextStartRef.current = start + buffer.duration;
+  }, []);
+
+  const narrateMessage = useCallback((messageId: string) => {
+    const socket = roomSocketRef.current;
+    if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "tts_start", messageId }));
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (event.key.toLowerCase() !== "m" || event.metaKey || event.ctrlKey || event.altKey || target?.matches("input, textarea, [contenteditable='true']")) return;
+      const latestDmMessage = [...roomMessages].reverse().find((message) => message.role === "dm");
+      if (!latestDmMessage) return;
+      event.preventDefault();
+      narrateMessage(latestDmMessage.id);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [narrateMessage, roomMessages]);
   const [isRoomResolving, setIsRoomResolving] = useState(false);
   const [hasAdventureBegun, setHasAdventureBegun] = useState(false);
   const [pendingRollRequests, setPendingRollRequests] = useState<
@@ -1173,6 +1214,7 @@ export function GameShell({
       }
 
       socket.addEventListener("open", () => {
+        roomSocketRef.current = socket;
         reconnectAttempts = 0;
         void refreshRoom();
       });
@@ -1265,6 +1307,19 @@ export function GameShell({
           }
           void refreshRoom();
         }
+
+        if (realtimeEvent.type === "tts_started") {
+          narrationNextStartRef.current = 0;
+          void narrationAudioContextRef.current?.resume();
+        }
+
+        if (realtimeEvent.type === "tts_audio") {
+          playNarrationAudio(realtimeEvent.audio, realtimeEvent.sampleRate);
+        }
+
+        if (realtimeEvent.type === "tts_failed") {
+          setTableAlert(realtimeEvent.message);
+        }
       });
       socket.addEventListener("close", scheduleReconnect);
       socket.addEventListener("error", () => {
@@ -1284,6 +1339,7 @@ export function GameShell({
         window.clearTimeout(reconnectTimeout);
       }
       socket?.close();
+      if (roomSocketRef.current === socket) roomSocketRef.current = null;
       window.clearInterval(interval);
     };
   }, [
@@ -2564,6 +2620,7 @@ export function GameShell({
                   milestones: ["used_player_resources"]
                 });
               }}
+              onNarrateMessage={narrateMessage}
             />
 
             {!isSinglePlayer && !hasAdventureBegun ? (

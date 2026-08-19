@@ -33,6 +33,7 @@ const ConfigSchema = z.object({
   GOOGLE_OAUTH_CLIENT_ID: z.string().min(1).optional(),
   GOOGLE_OAUTH_CLIENT_SECRET: z.string().min(1).optional(),
   RESEND_API_KEY: z.string().min(1).optional(),
+  CARTESIA_API_KEY: z.string().min(1).optional(),
   MEDIA_STORAGE_DRIVER: z.enum(["local", "spaces", "s3"]).default("local"),
   MEDIA_LOCAL_DIR: z.string().min(1).default(".local-media"),
   MEDIA_PUBLIC_BASE_URL: z.string().min(1).default("/media"),
@@ -75,6 +76,7 @@ export type ApiConfig = {
   googleOAuthClientId: string | undefined;
   googleOAuthClientSecret: string | undefined;
   resendApiKey: string | undefined;
+  cartesiaApiKey: string | undefined;
   mediaStorageDriver: "local" | "spaces" | "s3";
   mediaLocalDir: string;
   mediaPublicBaseUrl: string;
@@ -122,6 +124,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     googleOAuthClientId: parsed.GOOGLE_OAUTH_CLIENT_ID,
     googleOAuthClientSecret: parsed.GOOGLE_OAUTH_CLIENT_SECRET,
     resendApiKey: parsed.RESEND_API_KEY,
+    cartesiaApiKey: parsed.CARTESIA_API_KEY,
     mediaStorageDriver: parsed.MEDIA_STORAGE_DRIVER,
     mediaLocalDir: parsed.MEDIA_LOCAL_DIR,
     mediaPublicBaseUrl: parsed.MEDIA_PUBLIC_BASE_URL.replace(/\/+$/, ""),

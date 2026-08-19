@@ -31,6 +31,7 @@ type MessageLogProps = {
   onRegenerateResponse?: (messageId: string) => void;
   onRetryLastTurn?: () => void;
   onViewEldermereLore?: () => void;
+  onNarrateMessage?: (messageId: string) => void;
 };
 
 const semanticNarrationRoles = [
@@ -502,7 +503,8 @@ export function MessageLog({
   onInspectMap,
   onRegenerateResponse,
   onRetryLastTurn,
-  onViewEldermereLore
+  onViewEldermereLore,
+  onNarrateMessage
 }: MessageLogProps) {
   const logRef = useRef<HTMLDivElement>(null);
   const [openDebugMessageId, setOpenDebugMessageId] = useState<string | null>(
@@ -592,6 +594,11 @@ export function MessageLog({
                   (message.debug || canRegenerateMessage)) ||
                 canRetryMessage ? (
                   <div className="message-actions">
+                    {message.role === "dm" && onNarrateMessage ? (
+                      <button type="button" className="message-action-button" onClick={() => onNarrateMessage(message.id)} aria-label="Narrate this message" title="Narrate this message (M)">
+                        M
+                      </button>
+                    ) : null}
                     {message.debug ? (
                       <button
                         type="button"

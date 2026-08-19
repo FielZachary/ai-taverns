@@ -2,9 +2,12 @@ import type { FastifyInstance } from "fastify";
 import {
   RoomReadQuerySchema,
   RoomRealtimeEventSchema,
+  RoomSocketEventSchema,
   type RoomRealtimeEvent
 } from "@ai-dnd/contracts";
 import { getRoomForUser } from "@ai-dnd/db";
+import { randomUUID } from "node:crypto";
+import { sampleRate, streamCartesiaNarration } from "../cartesia.js";
 import type { ApiConfig } from "../config.js";
 import { requireAuthenticatedUser } from "./auth.js";
 
@@ -20,6 +23,7 @@ const subscribedRoomId = Symbol("subscribedRoomId");
 
 type SubscribedRequest = {
   [subscribedRoomId]?: string;
+  userId?: string;
 };
 
 function sendRoomRealtimeEvent(
@@ -27,6 +31,10 @@ function sendRoomRealtimeEvent(
   event: RoomRealtimeEvent
 ): void {
   socket.send(JSON.stringify(RoomRealtimeEventSchema.parse(event)));
+}
+
+function sendSocketEvent(socket: RoomRealtimeSocket, event: unknown): void {
+  socket.send(JSON.stringify(RoomSocketEventSchema.parse(event)));
 }
 
 export async function registerRealtimeRoutes(
@@ -55,6 +63,7 @@ export async function registerRealtimeRoutes(
         });
 
         (request as SubscribedRequest)[subscribedRoomId] = snapshot.roomId;
+        (request as SubscribedRequest).userId = user.id;
       }
     },
     (socket, request) => {
@@ -80,11 +89,36 @@ export async function registerRealtimeRoutes(
 
       setImmediate(sendHeartbeat);
 
-      socket.on("message", () => {
-        sendRoomRealtimeEvent(socket, {
-          type: "error",
-          message: "Client messages are not supported on this channel yet."
-        });
+      socket.on("message", (raw: Buffer) => {
+        void (async () => {
+          let event: { type?: string; messageId?: string };
+          try { event = JSON.parse(raw.toString()) as { type?: string; messageId?: string }; } catch { event = {}; }
+          if (event.type !== "tts_start" || !event.messageId) {
+            sendRoomRealtimeEvent(socket, { type: "error", message: "Client messages are not supported on this channel yet." });
+            return;
+          }
+          const subscriber = request as SubscribedRequest;
+          if (!config.cartesiaApiKey || !subscriber.userId) {
+            sendSocketEvent(socket, { type: "tts_failed", roomId, narrationId: randomUUID(), message: "Narration is not configured." });
+            return;
+          }
+          const snapshot = await getRoomForUser(fastify.pg, { roomId, sessionId: roomId, userId: subscriber.userId });
+          const message = snapshot.messages.find((entry) => entry.id === event.messageId && entry.role === "dm");
+          const narrationId = randomUUID();
+          if (!message) {
+            sendSocketEvent(socket, { type: "tts_failed", roomId, narrationId, message: "That DM message is unavailable." });
+            return;
+          }
+          sendSocketEvent(socket, { type: "tts_started", roomId, narrationId, messageId: message.id, text: message.content });
+          try {
+            await streamCartesiaNarration({ apiKey: config.cartesiaApiKey, narration: message.content, onAudio(audio, wordTimings) {
+              sendSocketEvent(socket, { type: "tts_audio", roomId, narrationId, audio, sampleRate, wordTimings });
+            }});
+            sendSocketEvent(socket, { type: "tts_done", roomId, narrationId });
+          } catch (error) {
+            sendSocketEvent(socket, { type: "tts_failed", roomId, narrationId, message: error instanceof Error ? error.message : "Narration failed." });
+          }
+        })();
       });
 
       socket.on("close", () => {

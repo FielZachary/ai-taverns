@@ -21,11 +21,13 @@
     "@fastify/cors": "^11.0.0",
     "@fastify/static": "^10.1.2",
     "@fastify/websocket": "^11.2.0",
+    "@types/ws": "^8.18.1",
     "fastify": "^5.0.0",
     "fastify-plugin": "^5.0.0",
     "mixpanel": "^0.23.0",
     "pg": "^8.22.0",
     "sharp": "^0.35.3",
+    "ws": "^8.21.3",
     "zod": "^3.25.0"
   },
   "devDependencies": {
