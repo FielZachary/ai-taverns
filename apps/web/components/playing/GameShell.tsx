@@ -124,6 +124,24 @@ const dungeonMasterTurnTimeoutMessage =
 const backstoryIntroDelaySeconds = 10;
 const defaultCampaignPreparationMessage = "Preparing your campaign";
 const narrationVisualLeadMs = 750;
+
+function sentenceWordEnds(content: string) {
+  const visibleText = content.replace(
+    /<\/?(?:npc|place|clue|danger|faction|object|em)>/g,
+    ""
+  );
+  const sentenceParts = visibleText
+    .split(/\n{2,}/)
+    .flatMap((paragraph) => paragraph.split(/(?<=[.!?…:])\s+/))
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+  let wordCount = 0;
+
+  return sentenceParts.map((sentence) => {
+    wordCount += sentence.match(/\S+/g)?.length ?? 0;
+    return wordCount;
+  });
+}
 const campaignPreparationMessages = [
   defaultCampaignPreparationMessage,
   "Integrating your backstory",
@@ -435,6 +453,8 @@ export function GameShell({
   const narrationHasTimingRef = useRef(false);
   const narrationNextStartRef = useRef(0);
   const narrationWordCursorRef = useRef(0);
+  const narrationSentenceEndsRef = useRef<number[]>([]);
+  const narrationNextSentenceRef = useRef(0);
   const narrationTimersRef = useRef<number[]>([]);
   const narrationPlaybackEndRef = useRef(0);
   const retryableTurnRef = useRef<RetryableTurn | null>(null);
@@ -1373,6 +1393,8 @@ export function GameShell({
           narrationTimersRef.current.forEach((timer) => window.clearTimeout(timer));
           narrationTimersRef.current = [];
           narrationWordCursorRef.current = 0;
+          narrationSentenceEndsRef.current = sentenceWordEnds(realtimeEvent.text);
+          narrationNextSentenceRef.current = 0;
           setNarrationReveal({
             messageId: realtimeEvent.messageId,
             revealedWordCount: 0
@@ -1409,6 +1431,22 @@ export function GameShell({
           const wordStart = narrationWordCursorRef.current;
           narrationWordCursorRef.current += realtimeEvent.wordTimings.length;
           realtimeEvent.wordTimings.forEach((timing, index) => {
+            const spokenWordNumber = wordStart + index + 1;
+            const sentenceIndex = narrationNextSentenceRef.current;
+            const previousSentenceEnd =
+              narrationSentenceEndsRef.current[sentenceIndex - 1] ?? 0;
+
+            if (spokenWordNumber < previousSentenceEnd + 1) {
+              return;
+            }
+
+            const sentenceEnd = narrationSentenceEndsRef.current[sentenceIndex];
+
+            if (sentenceEnd === undefined) {
+              return;
+            }
+
+            narrationNextSentenceRef.current += 1;
             const delay = Math.max(
               0,
               (narrationAudioStartRef.current + timing.start -
@@ -1423,7 +1461,7 @@ export function GameShell({
                       ...current,
                       revealedWordCount: Math.max(
                         current.revealedWordCount,
-                        wordStart + index + 1
+                        sentenceEnd
                       )
                     }
                   : current
