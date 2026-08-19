@@ -17,5 +17,6 @@ infra/backups/
 apps/web/app/debug/
 *.tsbuildinfo
 npm-debug.log*
+dashboard.html
 .vercel
 supabase/.temp/
