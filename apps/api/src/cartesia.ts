@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import WebSocket from "ws";
 
 const cartesiaVersion = "2026-03-01";
-const griffinVoiceId = "34d923aa-c3b5-4f21-aac7-2c1f12730d4b";
+const caspianOracleVoiceId = "d7862948-75c3-4c7c-ae28-2959fe166f49";
 const sampleRate = 44_100;
 
 export type CartesiaWordTiming = { word: string; start: number; end: number };
@@ -27,7 +27,7 @@ export async function streamCartesiaNarration(input: {
     socket.once("error", reject);
     socket.once("open", () => socket.send(JSON.stringify({
       model_id: "sonic-3.5-2026-05-04", transcript, context_id: contextId,
-      voice: { mode: "id", id: griffinVoiceId }, language: "en",
+      voice: { mode: "id", id: caspianOracleVoiceId }, language: "en",
       output_format: { container: "raw", encoding: "pcm_s16le", sample_rate: sampleRate },
       add_timestamps: true, continue: false
     })));
