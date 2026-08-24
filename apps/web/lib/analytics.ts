@@ -3,10 +3,9 @@
 import mixpanel from "mixpanel-browser";
 import {
   AnalyticsEventSchema,
-  hookSnapshotForMetrics,
   type AnalyticsEventName,
   type AnalyticsEventProperties,
-  type HookMetric
+  type HookStage
 } from "@ai-dnd/contracts";
 
 type TrackInput = {
@@ -15,21 +14,19 @@ type TrackInput = {
     AnalyticsEventProperties,
     "app" | "distinctId" | "schemaVersion" | "source"
   >;
-  milestones?: HookMetric[];
+  /** @deprecated Legacy score inputs are ignored by the lifecycle model. */
+  milestones?: string[];
 };
 
 const analyticsGuestIdStorageKey = "ai-taverns.analytics.guestId";
-const analyticsMetricsStoragePrefix = "ai-taverns.analytics.hookMetrics";
 const analyticsAliasStoragePrefix = "ai-taverns.analytics.alias";
+const analyticsLifecycleStoragePrefix = "ai-taverns.analytics.lifecycle";
 const analyticsCampaignSeenStoragePrefix = "ai-taverns.analytics.campaignSeen";
-const analyticsCampaignReturnStoragePrefix =
-  "ai-taverns.analytics.campaignReturn24h";
-const analyticsCampaignReturn7dStoragePrefix =
-  "ai-taverns.analytics.campaignReturn7d";
 const analyticsCampaignLastActivityStoragePrefix =
   "ai-taverns.analytics.campaignLastActivity";
 const oneDayMs = 24 * 60 * 60 * 1000;
 const sevenDaysMs = 7 * oneDayMs;
+const fourteenDaysMs = 14 * oneDayMs;
 
 let initialized = false;
 let identifiedDistinctId = "";
@@ -72,40 +69,66 @@ function distinctId() {
   return identifiedDistinctId || analyticsGuestId();
 }
 
-function metricStorageKey() {
-  return metricStorageKeyForDistinctId(distinctId());
+type LifecycleState = {
+  characterCreated: boolean;
+  campaignReady: boolean;
+  meaningfulFirstSession: boolean;
+  firstMeaningfulPlayAt?: number;
+  qualifiedReturnDays: string[];
+  pendingReturn?: { campaignId: string; at: number };
+  stage: HookStage;
+};
+
+function lifecycleStorageKey(id = distinctId()) {
+  return `${analyticsLifecycleStoragePrefix}.${id}`;
 }
 
-function metricStorageKeyForDistinctId(id: string) {
-  return `${analyticsMetricsStoragePrefix}.${id}`;
-}
-
-function storedMetricsForKey(key: string) {
-  if (typeof window === "undefined") {
-    return new Set<HookMetric>();
-  }
-
+function lifecycleState(): LifecycleState {
+  const fallback: LifecycleState = {
+    characterCreated: false,
+    campaignReady: false,
+    meaningfulFirstSession: false,
+    qualifiedReturnDays: [],
+    stage: "visitor"
+  };
+  if (typeof window === "undefined") return fallback;
   try {
-    const parsed = JSON.parse(
-      window.localStorage.getItem(key) ?? "[]"
-    ) as HookMetric[];
-
-    return new Set(parsed);
+    return { ...fallback, ...JSON.parse(window.localStorage.getItem(lifecycleStorageKey()) ?? "{}") };
   } catch {
-    return new Set<HookMetric>();
+    return fallback;
   }
 }
 
-function storedMetrics() {
-  return storedMetricsForKey(metricStorageKey());
+function persistLifecycle(state: LifecycleState) {
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(lifecycleStorageKey(), JSON.stringify(state));
+  }
 }
 
-function persistMetrics(metrics: Set<HookMetric>) {
-  if (typeof window === "undefined") {
-    return;
-  }
+function lifecycleScore(state: LifecycleState, now: number) {
+  const returns = state.qualifiedReturnDays.length;
+  const age = state.firstMeaningfulPlayAt ? now - state.firstMeaningfulPlayAt : 0;
+  return Math.min(100,
+    (state.campaignReady && state.characterCreated ? 10 : 0) +
+    (returns >= 1 ? 15 : 0) +
+    (returns >= 2 ? 20 : 0) +
+    (age >= sevenDaysMs && returns >= 1 ? 30 : 0) +
+    (age >= fourteenDaysMs && returns >= 1 ? 30 : 0) +
+    Math.min(10, Math.max(0, returns - 2) * 5)
+  );
+}
 
-  window.localStorage.setItem(metricStorageKey(), JSON.stringify([...metrics]));
+function stageForLifecycle(state: LifecycleState, now: number): HookStage {
+  const score = lifecycleScore(state, now);
+  const firstMeaningfulPlayAt = state.firstMeaningfulPlayAt;
+  const hasSevenDayReturn = Boolean(
+    firstMeaningfulPlayAt &&
+      state.qualifiedReturnDays.some((day) => Date.parse(day) - firstMeaningfulPlayAt >= sevenDaysMs)
+  );
+  if (score >= 70 && state.qualifiedReturnDays.length >= 2 && hasSevenDayReturn) return "hooked";
+  if (state.meaningfulFirstSession) return "engaged";
+  if (state.characterCreated && state.campaignReady) return "activated";
+  return "visitor";
 }
 
 function ensureInitialized() {
@@ -121,7 +144,7 @@ function ensureInitialized() {
   initialized = true;
 }
 
-function mergeGuestMetricsIntoUser(input: {
+function mergeGuestLifecycleIntoUser(input: {
   guestIds: string[];
   userDistinctId: string;
 }) {
@@ -129,15 +152,19 @@ function mergeGuestMetricsIntoUser(input: {
     return;
   }
 
-  const userKey = metricStorageKeyForDistinctId(input.userDistinctId);
-  const merged = new Set([
-    ...input.guestIds.flatMap((guestId) => [
-      ...storedMetricsForKey(metricStorageKeyForDistinctId(guestId))
-    ]),
-    ...storedMetricsForKey(userKey)
-  ]);
-
-  window.localStorage.setItem(userKey, JSON.stringify([...merged]));
+  const candidates = input.guestIds.map((guestId) => {
+    try { return JSON.parse(window.localStorage.getItem(lifecycleStorageKey(guestId)) ?? "{}") as Partial<LifecycleState>; } catch { return {}; }
+  });
+  const current = lifecycleState();
+  const merged = candidates.reduce<LifecycleState>((state, candidate) => ({
+    ...state,
+    characterCreated: state.characterCreated || Boolean(candidate.characterCreated),
+    campaignReady: state.campaignReady || Boolean(candidate.campaignReady),
+    meaningfulFirstSession: state.meaningfulFirstSession || Boolean(candidate.meaningfulFirstSession),
+    firstMeaningfulPlayAt: [state.firstMeaningfulPlayAt, candidate.firstMeaningfulPlayAt].filter((value): value is number => typeof value === "number").sort((a, b) => a - b)[0],
+    qualifiedReturnDays: [...new Set([...state.qualifiedReturnDays, ...(candidate.qualifiedReturnDays ?? [])])]
+  }), current);
+  window.localStorage.setItem(lifecycleStorageKey(input.userDistinctId), JSON.stringify(merged));
 }
 
 export function identifyAnalyticsUser(input: {
@@ -153,7 +180,7 @@ export function identifyAnalyticsUser(input: {
     ...new Set([anonymousDistinctId, input.guestId].filter(Boolean) as string[])
   ].filter((guestId) => guestId !== nextDistinctId);
 
-  mergeGuestMetricsIntoUser({
+  mergeGuestLifecycleIntoUser({
     guestIds: metricGuestIds,
     userDistinctId: nextDistinctId
   });
@@ -181,15 +208,36 @@ export function identifyAnalyticsUser(input: {
 }
 
 export function trackAnalytics(input: TrackInput) {
-  const metrics = storedMetrics();
-  const newMilestones = (input.milestones ?? []).filter(
-    (metric) => !metrics.has(metric)
-  );
+  const now = Date.now();
+  const lifecycle = lifecycleState();
+  if (input.name === "Character Created") lifecycle.characterCreated = true;
+  if (input.name === "Campaign Created" || input.name === "Campaign Joined") lifecycle.campaignReady = true;
+  if (
+    input.name === "Player Message Sent" &&
+    Number(input.properties?.playerMessageCount ?? 0) >= 5 &&
+    Number(input.properties?.dmMessageCount ?? 0) >= 5
+  ) {
+    lifecycle.meaningfulFirstSession = true;
+    lifecycle.firstMeaningfulPlayAt ??= now;
+  }
 
-  newMilestones.forEach((metric) => metrics.add(metric));
-  persistMetrics(metrics);
+  let qualifiedReturn: { campaignId: string; ordinal: number } | undefined;
+  if (input.name === "Player Message Sent" && lifecycle.pendingReturn && lifecycle.firstMeaningfulPlayAt) {
+    const day = new Date(now).toISOString().slice(0, 10);
+    if (!lifecycle.qualifiedReturnDays.includes(day)) {
+      lifecycle.qualifiedReturnDays.push(day);
+      qualifiedReturn = { campaignId: lifecycle.pendingReturn.campaignId, ordinal: lifecycle.qualifiedReturnDays.length };
+    }
+    lifecycle.pendingReturn = undefined;
+  }
 
-  const hookSnapshot = hookSnapshotForMetrics(metrics);
+  const previousStage = lifecycle.stage;
+  lifecycle.stage = stageForLifecycle(lifecycle, now);
+  const score = lifecycleScore(lifecycle, now);
+  const hasQualifiedReturn7d = Boolean(lifecycle.firstMeaningfulPlayAt && lifecycle.qualifiedReturnDays.some(
+    (day) => Date.parse(day) - lifecycle.firstMeaningfulPlayAt! >= sevenDaysMs
+  ));
+  persistLifecycle(lifecycle);
   const event = AnalyticsEventSchema.parse({
     name: input.name,
     properties: {
@@ -199,16 +247,10 @@ export function trackAnalytics(input: TrackInput) {
       distinct_id: distinctId(),
       schemaVersion: 1,
       source: "web",
-      hookScore: hookSnapshot.score,
-      hookStage: hookSnapshot.stage,
-      isHooked: hookSnapshot.isHooked,
-      ...(newMilestones.length > 0
-        ? {
-            hookDeltas: hookSnapshot.deltas.filter((delta) =>
-              newMilestones.includes(delta.metric)
-            )
-          }
-        : {})
+      lifecycleScore: score,
+      lifecycleStage: lifecycle.stage,
+      qualifiedReturnDays: lifecycle.qualifiedReturnDays.length,
+      hasQualifiedReturn7d
     }
   });
 
@@ -219,18 +261,26 @@ export function trackAnalytics(input: TrackInput) {
   ensureInitialized();
   mixpanel.track(event.name, event.properties);
 
-  if (newMilestones.length > 0) {
-    mixpanel.people.set({
-      hook_score: hookSnapshot.score,
-      hook_stage: hookSnapshot.stage,
-      is_hooked: hookSnapshot.isHooked
+  if (qualifiedReturn) {
+    mixpanel.track("Qualified Return", {
+      ...event.properties,
+      campaignId: qualifiedReturn.campaignId,
+      qualifiedReturnOrdinal: qualifiedReturn.ordinal
     });
-    newMilestones.forEach((metric) => {
-      mixpanel.people.set({ [`hook_${metric}`]: true });
-      mixpanel.track("Hook Milestone Reached", {
-        ...event.properties,
-        hookMilestone: metric
-      });
+  }
+
+  if (previousStage !== lifecycle.stage) {
+    mixpanel.people.set({
+      lifecycle_score: score,
+      lifecycle_stage: lifecycle.stage,
+      qualified_return_days: lifecycle.qualifiedReturnDays.length,
+      has_qualified_return_7d: hasQualifiedReturn7d,
+      lifecycle_stage_updated_at: new Date(now).toISOString()
+    });
+    mixpanel.track("Lifecycle Stage Reached", {
+      ...event.properties,
+      lifecyclePreviousStage: previousStage,
+      lifecycleReason: lifecycle.stage === "hooked" ? "retention_gate" : lifecycle.stage === "engaged" ? "meaningful_first_session" : "campaign_ready"
     });
   }
 
@@ -246,8 +296,6 @@ export function trackCampaignReturn(input: {
   }
 
   const seenKey = `${analyticsCampaignSeenStoragePrefix}.${input.campaignId}`;
-  const returnedKey = `${analyticsCampaignReturnStoragePrefix}.${input.campaignId}`;
-  const returned7dKey = `${analyticsCampaignReturn7dStoragePrefix}.${input.campaignId}`;
   const lastActivityKey = `${analyticsCampaignLastActivityStoragePrefix}.${input.campaignId}`;
   const firstSeen = Number(window.localStorage.getItem(seenKey) ?? "0");
   const lastActivity = Number(
@@ -276,40 +324,10 @@ export function trackCampaignReturn(input: {
     }
   });
 
-  if (
-    now - firstSeen >= oneDayMs &&
-    window.localStorage.getItem(returnedKey) !== "true"
-  ) {
-    window.localStorage.setItem(returnedKey, "true");
-    trackAnalytics({
-      name: "Campaign Returned After 24h",
-      properties: {
-        campaignId: input.campaignId,
-        campaignMode: input.campaignMode,
-        hoursSinceFirstSeen,
-        hoursSinceLastActivity,
-        returnedAfterDays: 1
-      },
-      milestones: ["returned_after_24h"]
-    });
-  }
-
-  if (
-    now - firstSeen >= sevenDaysMs &&
-    window.localStorage.getItem(returned7dKey) !== "true"
-  ) {
-    window.localStorage.setItem(returned7dKey, "true");
-    trackAnalytics({
-      name: "Campaign Returned After 7d",
-      properties: {
-        campaignId: input.campaignId,
-        campaignMode: input.campaignMode,
-        hoursSinceFirstSeen,
-        hoursSinceLastActivity,
-        returnedAfterDays: 7
-      },
-      milestones: ["returned_after_7d"]
-    });
+  const lifecycle = lifecycleState();
+  if (lifecycle.firstMeaningfulPlayAt && now - lifecycle.firstMeaningfulPlayAt >= oneDayMs) {
+    lifecycle.pendingReturn = { campaignId: input.campaignId, at: now };
+    persistLifecycle(lifecycle);
   }
 
   window.localStorage.setItem(lastActivityKey, String(now));

@@ -1,10 +1,8 @@
 import mixpanel from "mixpanel";
 import {
   AnalyticsEventSchema,
-  hookPointsForMetric,
   type AnalyticsEventName,
-  type AnalyticsEventProperties,
-  type HookMetric
+  type AnalyticsEventProperties
 } from "@ai-dnd/contracts";
 import type { ApiConfig } from "./config.js";
 
@@ -17,7 +15,9 @@ type TrackInput = {
     AnalyticsEventProperties,
     "app" | "distinctId" | "schemaVersion" | "source"
   >;
-  milestones?: HookMetric[];
+  // Accepted temporarily so existing product events remain source-compatible;
+  // lifecycle promotion is now evaluated in the shared client lifecycle model.
+  milestones?: string[];
 };
 
 type UserProfileInput = {
@@ -41,10 +41,6 @@ function sendFireAndForget(
       onError(error);
     }
   });
-}
-
-function milestoneProperty(metric: HookMetric) {
-  return `hook_${metric}`;
 }
 
 export function createServerAnalytics(input: {
@@ -95,11 +91,7 @@ export function createServerAnalytics(input: {
         );
       }
     },
-    track({ name, distinctId, properties = {}, milestones = [] }) {
-      const hookDeltas = milestones.map((metric) => ({
-        metric,
-        points: hookPointsForMetric(metric)
-      }));
+    track({ name, distinctId, properties = {} }) {
       const event = AnalyticsEventSchema.parse({
         name,
         properties: {
@@ -107,8 +99,7 @@ export function createServerAnalytics(input: {
           app: "ai-taverns",
           distinctId,
           schemaVersion: 1,
-          source: "api",
-          ...(hookDeltas.length > 0 ? { hookDeltas } : {})
+          source: "api"
         }
       });
       const mixpanelProperties = {
@@ -122,53 +113,6 @@ export function createServerAnalytics(input: {
         onError
       );
 
-      if (hookDeltas.length === 0) {
-        return;
-      }
-
-      milestones.forEach((metric) => {
-        sendFireAndForget(
-          (callback) =>
-            client.track(
-              "Hook Milestone Reached",
-              {
-                ...mixpanelProperties,
-                hookMilestone: metric
-              },
-              callback
-            ),
-          onError
-        );
-      });
-
-      const incrementBy = hookDeltas.reduce(
-        (total, delta) => total + delta.points,
-        0
-      );
-      const milestoneFlags = Object.fromEntries(
-        hookDeltas.map((delta) => [milestoneProperty(delta.metric), true])
-      );
-
-      sendFireAndForget(
-        (callback) =>
-          client.people.increment(
-            distinctId,
-            "hook_score_lifetime",
-            incrementBy,
-            callback
-          ),
-        onError
-      );
-      sendFireAndForget(
-        (callback) =>
-          client.people.set(distinctId, {
-            ...milestoneFlags,
-            latest_hook_score_delta: incrementBy,
-            latest_hook_milestone_at: new Date().toISOString(),
-            is_hooked_candidate: Boolean(event.properties.isHooked)
-          }, callback),
-        onError
-      );
     }
   };
 }
