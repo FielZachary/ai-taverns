@@ -3707,96 +3707,35 @@ before(async () => {
 
         if (input.instructions.includes("campaign-opening planner")) {
           const selectedRegion =
-            input.message.match(/Region: ([^.]+)\./)?.[1] ?? "Cael Ambrose";
+            input.message.match(/Region: ([^\n]+)/)?.[1]?.trim() ?? "Cael Ambrose";
           const startingLocation =
-            input.message.match(/Starting settlement: ([^(.\n]+)/)?.[1]?.trim() ??
+            input.message.match(/Starting location: ([^\n]+)/)?.[1]?.trim() ??
             "Suncross";
 
           return {
             id: "provider-planner-1",
             content: JSON.stringify({
-              campaign_title: "The Quiet Road",
-              region: {
-                name: selectedRegion,
-                why_this_region: "It gives the opener a concrete local conflict.",
-                plain_description: "A troubled Eldermere region with pressure close enough to touch."
-              },
-              starting_location: {
-                name: startingLocation,
-                type: "settlement",
-                why_this_location: "It is the selected campaign start.",
-                plain_description: "A specific place where the first problem is already visible."
-              },
-              starting_location_atmosphere: {
-                arrival_impression: `${startingLocation} feels busy, guarded, and already shaped by the trouble that brought the party here.`,
-                daily_life_and_liveliness: "Locals keep working, trading, arguing, and watching the streets even while tension sits plainly over the settlement.",
-                local_attitude: "People treat strangers with cautious courtesy and look twice at anyone capable of helping.",
-                dominant_vibe: "watchful daily life under public strain",
-                sensory_entry_details: [
-                  "lanterns lit earlier than the hour requires",
-                  "low voices stopping when armed strangers pass",
-                  "cold rain and smoke hanging in narrow streets"
-                ],
-                transition_into_first_scene: "The wider settlement pressure narrows toward the marked doorway where Mara Vell waits."
-              },
-              opening_premise: {
-                why_the_party_is_here: "The party has come to answer a local summons.",
-                immediate_objective: "Find the person who sent for them.",
-                immediate_complication: "The locals are afraid to explain what happened.",
-                first_scene_location: "At the edge of the starting settlement.",
-                opening_mood: "watchful and tense",
-                campaign_promise: "A grounded mystery with old power underneath it."
-              },
-              player_facing_facts: [
-                "The party has a reason to be here now.",
-                "Someone local needs help and is afraid."
-              ],
-              allowed_player_facing_terms: [
-                {
-                  term: selectedRegion,
-                  plain_meaning: "the larger region where the campaign begins"
-                },
-                {
-                  term: startingLocation,
-                  plain_meaning: "the settlement where the first scene begins"
-                }
-              ],
-              npc_seed: [
+              region: selectedRegion,
+              starting_location: startingLocation,
+              how_the_player_got_here:
+                "The character followed an unresolved personal lead to the selected starting location.",
+              concept:
+                "A local request turns into an escalating mystery as the character learns why several people want the same truth hidden.",
+              opening_scene:
+                "At a marked doorway in the selected starting location, a worried messenger offers the first lead while someone watches the street.",
+              private_truth:
+                "The messenger's request is connected to a concealed local network that will act first if ignored.",
+              campaign_anchors: [
                 {
                   name: "Mara Vell",
-                  role: "a worried local messenger",
-                  wants: "help without drawing official attention",
-                  visible_behavior: "keeps watching the street behind her"
+                  description:
+                    "A worried local messenger who knows the first lead and becomes an early point of contact in the campaign."
+                },
+                {
+                  name: "The Marked Doorway",
+                  description:
+                    "The first visible clue, tied to the hidden network and a place the player can investigate immediately."
                 }
-              ],
-              first_interactable_choices: [
-                "question Mara Vell",
-                "inspect the marked doorway",
-                "ask nearby locals what frightened them"
-              ],
-              sensory_palette: {
-                sights: ["a marked doorway", "lanterns lit early"],
-                sounds: ["low voices", "boots on stone"],
-                smells: ["cold rain"],
-                textures_or_weather: ["damp air"]
-              },
-              dm_private_context: [
-                "Old world lore may matter later, but should not be named in the opening."
-              ],
-              forbidden_opening_terms: [
-                "Second Dominion",
-                "Graywake",
-                "Wellglass",
-                "Curia of Watchers",
-                "Ashen Scholar"
-              ],
-              narrator_instructions: [
-                "Use the allowed terms only.",
-                "Explain each allowed term plainly."
-              ],
-              opening_quality_checks: [
-                "No forbidden opening terms appear.",
-                "The first choices are clear."
               ]
             }),
             debug: {
