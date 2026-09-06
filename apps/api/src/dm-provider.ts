@@ -251,77 +251,27 @@ function testProviderDebug(
 
 function testOpeningPlanContent() {
   return JSON.stringify({
-    campaign_title: "Lanterns at Ashford Tollhouse",
-    region: {
-      name: "Ashford Vale",
-      why_this_region: "It gives the party a grounded road mystery.",
-      plain_description: "A rain-washed valley crossed by old trade roads."
-    },
-    starting_location: {
-      name: "Ashford Tollhouse",
-      type: "roadside tollhouse",
-      why_this_location: "It puts the party at the first obstacle immediately.",
-      plain_description: "A stone tollhouse beside a fogbound bridge."
-    },
-    starting_location_atmosphere: {
-      arrival_impression: "The tollhouse feels like the last lit place before the road gives up.",
-      daily_life_and_liveliness: "Teamsters crowd the wet yard while clerks, guards, and stranded travelers argue over delayed passage.",
-      local_attitude: "Locals are wary of anyone asking direct questions, but they watch capable travelers with desperate interest.",
-      dominant_vibe: "busy, rain-soaked, and afraid to admit why",
-      sensory_entry_details: [
-        "lanterns swinging over muddy wagon ruts",
-        "drivers shouting over rain and restless horses",
-        "wet wool, river fog, and smoke from a crowded hearth"
-      ],
-      transition_into_first_scene: "The rain-choked yard funnels everyone into the common room where Marra waits by the shutters."
-    },
-    opening_premise: {
-      why_the_party_is_here: "They were hired to escort a sealed road charter.",
-      immediate_objective: "Find out why the bridge watch has gone silent.",
-      immediate_complication: "The courier is frightened and the bridge is hidden by fog.",
-      first_scene_location: "Inside the Ashford Tollhouse common room.",
-      opening_mood: "rainy, watchful, and urgent",
-      campaign_promise: "A road mystery with practical choices and hidden danger."
-    },
-    player_facing_facts: [
-      "The courier needs help before nightfall.",
-      "The fogbound bridge blocks the road ahead."
-    ],
-    allowed_player_facing_terms: [
-      {
-        term: "Ashford Tollhouse",
-        plain_meaning: "a stone roadside checkpoint"
-      }
-    ],
-    npc_seed: [
+    region: "Ashford Vale",
+    starting_location: "Ashford Tollhouse",
+    how_the_player_got_here:
+      "The player accepted work escorting a sealed road charter through the valley.",
+    concept:
+      "A routine escort becomes a road mystery when the bridge watch goes silent and several people want the charter before the player can deliver it.",
+    opening_scene:
+      "Inside the Ashford Tollhouse, a frightened courier asks the player to cross the fogbound bridge before nightfall.",
+    private_truth:
+      "The bridge watch found evidence beneath the road, and the charter identifies who is trying to conceal it.",
+    campaign_anchors: [
       {
         name: "Marra Vale",
-        role: "worried courier",
-        wants: "safe passage across the bridge",
-        visible_behavior: "keeps checking the rain-dark windows"
+        description:
+          "A worried courier carrying the sealed road charter. She knows the bridge is dangerous and becomes the player's first connection to the mystery."
+      },
+      {
+        name: "The Sealed Road Charter",
+        description:
+          "An official document whose broken seal makes it both an immediate clue and a reason several parties will pursue the player."
       }
-    ],
-    first_interactable_choices: [
-      "Question Marra about the silent bridge watch.",
-      "Inspect the sealed road charter.",
-      "Step outside and study the fogbound bridge."
-    ],
-    sensory_palette: {
-      sights: ["lanternlight on wet stone"],
-      sounds: ["rain tapping shutters"],
-      smells: ["damp wool and woodsmoke"],
-      textures_or_weather: ["cold rain in the doorway"]
-    },
-    dm_private_context: [
-      "The bridge watch discovered something under the road."
-    ],
-    forbidden_opening_terms: ["Second Dominion"],
-    narrator_instructions: [
-      "Open inside the tollhouse and end by asking what the players do."
-    ],
-    opening_quality_checks: [
-      "No forbidden terms appear.",
-      "The opener gives the party at least two clear options."
     ]
   });
 }

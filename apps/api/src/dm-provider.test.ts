@@ -523,23 +523,18 @@ test("test DM provider returns deterministic campaign planner JSON without strea
     onPublicNarrationDelta: (delta) => narrationDeltas.push(delta)
   });
   const parsed = JSON.parse(response.content) as {
-    campaign_title: string;
-    region: { name: string };
-    allowed_player_facing_terms: { term: string; plain_meaning: string }[];
-    first_interactable_choices: string[];
+    region: string;
+    starting_location: string;
+    concept: string;
+    campaign_anchors: { name: string; description: string }[];
   };
 
-  assert.equal(parsed.campaign_title, "Lanterns at Ashford Tollhouse");
-  assert.equal(parsed.region.name, "Ashford Vale");
-  assert.deepEqual(parsed.allowed_player_facing_terms, [
-    {
-      term: "Ashford Tollhouse",
-      plain_meaning: "a stone roadside checkpoint"
-    }
-  ]);
+  assert.equal(parsed.region, "Ashford Vale");
+  assert.equal(parsed.starting_location, "Ashford Tollhouse");
+  assert.match(parsed.concept, /road mystery/i);
   assert.ok(
-    parsed.first_interactable_choices.includes(
-      "Question Marra about the silent bridge watch."
+    parsed.campaign_anchors.some(
+      (anchor) => anchor.name === "Marra Vale" && /courier/i.test(anchor.description)
     )
   );
   assert.deepEqual(narrationDeltas, []);
