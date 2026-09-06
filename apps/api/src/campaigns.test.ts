@@ -333,7 +333,7 @@ test("character portrait preview handles OpenAI base64 and empty image responses
   }
 });
 
-test("POST /api/campaigns/backstory generates a world-grounded character backstory", async () => {
+test("POST /api/campaigns/backstory generates a focused, player-readable character backstory", async () => {
   resetProviderInputs();
   setProviderOverride(async () => {
     const content = JSON.stringify({
@@ -410,15 +410,17 @@ test("POST /api/campaigns/backstory generates a world-grounded character backsto
   assert.match(providerInput?.instructions ?? "", /invented proper nouns are allowed only for people/i);
   assert.match(providerInput?.instructions ?? "", /Explain any setting terms inside the prose itself/i);
   assert.match(providerInput?.message ?? "", /Backstory override for Eldermere opener context/i);
-  assert.match(providerInput?.message ?? "", /Do not add a 'Hooks:' label/i);
-  assert.match(providerInput?.message ?? "", /3-5 readable paragraphs separated by blank lines/i);
-  assert.match(providerInput?.message ?? "", /at most two other canonical setting proper nouns/i);
-  assert.match(providerInput?.message ?? "", /briefly define it in the same sentence or a nearby clause/i);
-  assert.match(providerInput?.message ?? "", /Do not add a separate glossary/i);
+  assert.match(providerInput?.message ?? "", /one clear chain: a close relationship or ordinary part of the character's life, one specific event that changed them, and what they began doing afterward/i);
+  assert.match(providerInput?.message ?? "", /Do not summarize the character with abstract claims/i);
+  assert.match(providerInput?.message ?? "", /no more than one named setting detail/i);
+  assert.match(providerInput?.message ?? "", /Do not require an unresolved hook/i);
+  assert.match(providerInput?.message ?? "", /final paragraph shows how the character moved forward/i);
+  assert.match(providerInput?.message ?? "", /Length: 150-250 words/i);
   assert.match(
-    providerInput?.message ?? "",
-    /why those people matter not only to the player character, but also to the living world/i
+    providerInput?.message ?? "", /Explain why a person matters to the character, not why they matter to the wider world/i
   );
+  assert.doesNotMatch(providerInput?.message ?? "", /Include 2-4 usable story hooks/i);
+  assert.doesNotMatch(providerInput?.message ?? "", /why those people matter not only to the player character, but also to the living world/i);
   assert.doesNotMatch(providerInput?.message ?? "", /Current backstory field/i);
   resetProviderInputs();
 });
@@ -489,8 +491,9 @@ test("POST /api/campaigns/backstory adds details and falls back to plain prose",
 
   assert.match(providerInput?.message ?? "", /Player-written backstory:/);
   assert.match(providerInput?.message ?? "", /Player-written backstory:\nx/);
-  assert.match(providerInput?.message ?? "", /3-5 readable paragraphs separated by blank lines/i);
-  assert.match(providerInput?.message ?? "", /briefly define it in the same sentence or a nearby clause/i);
+  assert.match(providerInput?.message ?? "", /Add detail only when it strengthens the existing relationship, event, or aftermath/i);
+  assert.match(providerInput?.message ?? "", /Do not add new subplots, mysteries, prophecies, tragedies, factions, goals, or adventure hooks/i);
+  assert.match(providerInput?.message ?? "", /Stay close to the original length/i);
   assert.match(providerInput?.message ?? "", /World: Clockwork Isles/);
   assert.doesNotMatch(providerInput?.message ?? "", /Canonical Eldermere start options:/);
   resetProviderInputs();
@@ -542,10 +545,10 @@ test("POST /api/campaigns/backstory add details localizes Eldermere details", as
 
   const providerInput = getProviderInputs().at(-1);
 
-  assert.match(providerInput?.message ?? "", /Expand, enrich, and localize/i);
+  assert.match(providerInput?.message ?? "", /Clarify and enrich the player-written backstory/i);
   assert.match(
     providerInput?.message ?? "",
-    /convert generic world details into terms and places native/i
+    /convert generic or non-canonical places, factions, institutions, threats, magic, customs, and historical references into Eldermere-native equivalents/i
   );
   assert.match(providerInput?.message ?? "", /When the world is Eldermere/i);
   assert.match(providerInput?.message ?? "", /Canonical Eldermere start options:/);
