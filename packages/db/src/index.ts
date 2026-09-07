@@ -9274,22 +9274,20 @@ function formatEldermereNarratorOpeningRequest(input: {
     "Focus on establishing what is unknown to the player but immediately in front of them: where they are, who is present, what is happening, what feels wrong or urgent, and what they can do now.",
     "Do not explain wider factions, politics, history, hidden stakes, future campaign developments, or abstract implications unless they are directly necessary to understand the player's immediate situation and choice.",
     "",
-    "Return only plain prose. It must contain exactly 6 paragraphs separated by blank lines. Do not add headings, labels, notes, Markdown, JSON, or commentary. Paragraph 6 must be exactly 'What do you do?'.",
+    "Return only plain prose. It must contain exactly 4 paragraphs separated by blank lines. Do not add headings, labels, notes, Markdown, JSON, or commentary. Paragraph 4 must be exactly 'What do you do?'.",
     "Preserve all established character-sheet and backstory facts. Do not change, resolve, soften, or invent past events, relationships, debts, gifts, clues, promises, or causes.",
     "Use only facts the character could reasonably see, hear, know, infer, or be told in this opening scene. Do not request dice; the player must receive control before attempting any uncertain action.",
-    "Use exactly 6 semantic narration color tags across paragraphs 1-5: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, or <object>...</object>. Each tag must wrap only a short, player-visible noun or phrase. Do not nest tags, add attributes, use <em>, use Markdown emphasis, or use any other HTML/XML tags.",
+    "Use exactly 6 semantic narration color tags across paragraphs 1-3: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, or <object>...</object>. Each tag must wrap only a short, player-visible noun or phrase. Do not nest tags, add attributes, use <em>, use Markdown emphasis, or use any other HTML/XML tags.",
     "",
-    "REQUIRED SIX-PARAGRAPH STRUCTURE:",
-    "Paragraph 1 — Campaign premise: Begin with the immediate situation that brings the character or party into this campaign. Use how_the_player_got_here to establish why they are now caught in the campaign's central problem. Do not begin with scenery, weather, location, dialogue, combat, or 'You arrive.'",
-    "Paragraph 2 — Arrival: Describe the recent journey and the last few hours that brought the character or party into the selected region and starting location. Establish what they plausibly know about the place and its immediate trouble. Make the campaign premise from concept understandable without summarizing its future plot.",
-    "Paragraph 3 — Live scene: Establish the selected starting location with concrete sensory and spatial details. Place the player physically inside opening_scene with visible exits, reachable objects, present NPCs, and immediate environmental details.",
-    "Paragraph 4 — Pressure: Introduce the visible tension, NPC demand, danger, discovery, or interruption that makes the opening situation urgent. Draw only on visible consequences.",
-    "Paragraph 5 — Choice: Make the immediate problem actionable. Show why it matters now and present 2-3 distinct non-dice actions the player can take immediately. These must be genuine choices, not steps toward a predetermined outcome.",
-    "Paragraph 6 — Handoff: Write exactly 'What do you do?'",
+    "REQUIRED FOUR-PARAGRAPH STRUCTURE:",
+    "Paragraph 1 — Present premise with retrospective context: Begin inside the exact current playable situation in opening_scene, establishing why the character or party is caught in the campaign's central problem now. Use how_the_player_got_here only to briefly explain a present person, object, consequence, or situation when that context helps orient the player. Do not narrate a journey, arrival, or chain of events leading to the scene; frame earlier events retrospectively, such as 'Forty minutes ago...' or 'Earlier that evening...'.",
+    "Paragraph 2 — Live scene and pressure: Establish the selected starting location with concrete sensory and spatial details. Place the player physically inside opening_scene with visible exits, reachable objects, present NPCs, immediate environmental details, and the visible tension, NPC demand, danger, discovery, or interruption that makes the situation urgent. Draw only on visible consequences.",
+    "Paragraph 3 — Choice: Make the immediate problem actionable. Show why it matters now and present 2-3 distinct non-dice actions the player can take immediately. These must be genuine choices, not steps toward a predetermined outcome.",
+    "Paragraph 4 — Handoff: Write exactly 'What do you do?'",
     "",
     "Opening style: Write grounded, direct, detailed fantasy prose. Create atmosphere through physical details, behavior, sound, weather, terrain, objects, and visible consequences—not lyrical abstractions, prophecy, or a campaign trailer. The opener should feel like a DM placing the player in a specific, dangerous, playable moment.",
     "",
-    "Before returning, silently verify that the campaign concept is dramatized rather than summarized, all 6 paragraphs follow the required sequence, paragraph 6 is exactly 'What do you do?', and exactly 6 valid semantic color tags appear across paragraphs 1-5."
+    "Before returning, silently verify that the campaign concept is dramatized rather than summarized, the first 3 paragraphs follow the required present-first sequence, paragraph 4 is exactly 'What do you do?', and exactly 6 valid semantic color tags appear across paragraphs 1-3."
   ].join("\n");
 }
 
@@ -10436,9 +10434,9 @@ function eldermereOpeningStructuralErrors(content: string) {
   const errors: string[] = [];
   const paragraphCount = openingParagraphCount(content);
 
-  if (paragraphCount < 6) {
+  if (paragraphCount !== 4) {
     errors.push(
-      `public_narration must contain at least 6 paragraphs; found ${paragraphCount}`
+      `public_narration must contain exactly 4 paragraphs; found ${paragraphCount}`
     );
   }
 
@@ -10526,7 +10524,7 @@ async function askEldermereOpeningNarrator(
         ]
       : []),
     "Return only a complete plain-prose opener for the same opening situation, fixing every issue above.",
-    "Use exactly 6 paragraphs separated by blank lines. The sixth and final paragraph must be exactly 'What do you do?'.",
+    "Use exactly 4 paragraphs separated by blank lines. The fourth and final paragraph must be exactly 'What do you do?'.",
     `Use exactly ${semanticOpeningTagMinimum} semantic narration color tags using <npc>, <place>, <clue>, <danger>, <faction>, or <object>.`,
     "Do not return JSON, Markdown fences, headings, metadata, setting information, roll requests, state updates, or commentary."
   ].join("\n");
@@ -10606,15 +10604,13 @@ async function askEldermereOpeningNarrator(
       narrationErrors: normalizedNarrationErrors
     })}`,
     "Rewrite the same opening situation as plain prose only.",
-    "Use exactly 6 paragraphs separated by blank lines.",
-    "Paragraph 1: why this character or party came here now.",
-    "Paragraph 2: the recent travel, arrival context, and what the character knows before the live scene.",
-    "Paragraph 3: the starting location atmosphere narrowing into the first live scene.",
-    "Paragraph 4: visible NPC tension and immediate pressure.",
-    "Paragraph 5: the actionable complication and 2-3 concrete non-dice actions available right now.",
-    "Paragraph 6: exactly 'What do you do?' and nothing else.",
+    "Use exactly 4 paragraphs separated by blank lines.",
+    "Paragraph 1: the current playable situation and why the character or party is caught in it now; explain earlier events only as brief retrospective context for a present person, object, consequence, or situation, never as a narrated journey or event sequence.",
+    "Paragraph 2: the starting location's immediate sensory and spatial details, visible NPCs, reachable objects, exits, and urgent visible pressure.",
+    "Paragraph 3: the actionable complication and 2-3 concrete non-dice actions available right now.",
+    "Paragraph 4: exactly 'What do you do?' and nothing else.",
     `Use exactly ${semanticOpeningTagMinimum} semantic narration color tags using <npc>, <place>, <clue>, <danger>, <faction>, or <object>.`,
-    "Do not include JSON, Markdown fences, a teaser, a summary, a prologue note, metadata, or fewer than 6 paragraphs."
+    "Do not include JSON, Markdown fences, a teaser, a summary, a prologue note, metadata, or anything other than exactly 4 paragraphs."
   ].join("\n");
   const finalOpening = await askDungeonMaster(
     db,
