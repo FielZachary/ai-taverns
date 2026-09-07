@@ -9104,6 +9104,8 @@ function formatEldermereCampaignConceptRequest(input: {
     "",
     "CONCEPT REQUIREMENTS",
     "Create a campaign concept that begins with a specific change in the player's life.",
+    "Before writing the concept, think through the campaign as an evolving situation: why the player's new situation exists, how it can deepen or change through play, what the player can eventually learn that changes their understanding of it, and what meaningful choices that discovery can create.",
+    "Write the concept as that complete evolving situation—not merely as an opening hook, a first job, or a premise with a vague future mystery attached.",
     "The concept must:",
     "- Put the player in a clear starting position.",
     "- Establish an ongoing situation that can generate many sessions of play.",
@@ -9119,14 +9121,16 @@ function formatEldermereCampaignConceptRequest(input: {
         starting_location: settlement?.name ?? "selected starting location",
         how_the_player_got_here:
           "A short explanation of the events that brought the player from their established backstory into this situation.",
-        concept: "A complete 1-2 paragraph campaign concept.",
+        concept:
+          "A complete 2-3 paragraph account of the campaign as an evolving situation: its beginning, how it can deepen through play, and what the player may eventually discover and decide.",
         opening_scene: "The exact first playable situation.",
-        private_truth: "The concealed reality that can unfold over the campaign.",
+        private_truth:
+          "The underlying truth of the campaign situation: what the player can eventually discover, how it recontextualizes their starting situation, and why it creates consequential new choices.",
         campaign_anchors: [
           {
             name: "Durable campaign anchor",
             description:
-              "Explain what this person, object, place, institution, relationship, or threat is, provide useful information about it, and explain why it matters across the campaign."
+              "Explain what this person, object, place, institution, relationship, or threat is; provide useful information about it; explain its role in the opening; and explain how it can remain relevant, change, or create pressure later in the campaign."
           }
         ]
       },
@@ -9135,11 +9139,11 @@ function formatEldermereCampaignConceptRequest(input: {
     ),
     "",
     "The following examples show the intended vibe and level of specificity for the concept field. They are reference examples only; do not copy their people, objects, events, or wording. Only the concept portion is shown.",
-    JSON.stringify({ concept: "You are serving a prison sentence when an officer offers conditional freedom. You may leave custody only while completing her jobs, under an iron band that can restrain you if you flee or disobey. Your first job is to retrieve a ledger from a house on the east side of town. Each job buys more freedom while drawing you into the officer's hidden agenda." }),
-    JSON.stringify({ concept: "You return to your inn room to find a bounty notice bearing your face. The crime is one you have never heard of, committed in a place you have never been, and the innkeeper has already summoned the guard. Finding who marked you and why becomes the campaign while you learn the world on the run." }),
-    JSON.stringify({ concept: "A speaking blade, creature, or other companion refuses to leave you. It knows roads, names, buried places, and lies, but will not say what it wants. The campaign grows from where it leads you and what it is concealing." }),
-    JSON.stringify({ concept: "A merchant hires you as one more guard on a six-day wagon journey. The pay is decent and the only rule is not to open the crates. Each town, danger, and broken rule reveals why the cargo matters and who wants it." }),
-    JSON.stringify({ concept: "You are brought blindfolded with other recruits to a guild whose instructor will not give her name. Your first assignment is to follow a man across the city and report where he sleeps. The campaign follows your rise through its work and the question of whether the guild is making you useful, disposable, or complicit." })
+    JSON.stringify({ concept: "You are serving a prison sentence when an officer offers conditional freedom. You may leave custody only while completing her jobs, under an iron band that can restrain you if you flee or disobey. Your first job is to retrieve a ledger from a house on the east side of town. Each job buys more freedom while drawing you into the officer's hidden agenda.\n\nAs the assignments grow stranger, you learn that the officer did not choose you at random: your sentence, the band, and the work are connected to why you were imprisoned. The campaign becomes a question of whether to earn real freedom, expose the arrangement, use it against its creators, or decide that the power it grants is worth keeping." }),
+    JSON.stringify({ concept: "You return to your inn room to find a bounty notice bearing your face. The crime is one you have never heard of, committed in a place you have never been, and the innkeeper has already summoned the guard. Finding who marked you and why becomes the campaign while you evade hunters, follow evidence, and decide who might help rather than claim the reward.\n\nThe accusation eventually reveals that the player was chosen to conceal a larger crime, not merely to create a convenient fugitive. Learning whose interests the false identity protects changes the goal from clearing a name to deciding whether to expose the crime, bargain with its architects, or turn the false identity into leverage." }),
+    JSON.stringify({ concept: "A speaking blade, creature, or other companion refuses to leave you. It knows roads, names, buried places, and lies, but will not say what it wants. You begin with no grand mission beyond deciding whether to listen to it, trust it, or get rid of it; the world is learned through the places it points toward and the people who recognize it.\n\nOver time, the companion's selective knowledge reveals that the bond is not an accident and that fulfilling its goal will cost someone something real. The campaign asks whether the player will free it, bind it more tightly, betray it, or find a third path once they understand what it has been leading them toward." }),
+    JSON.stringify({ concept: "A merchant hires you as one more guard for a six-day wagon journey. The pay is decent and the only rule is not to open the crates. The campaign begins as a job on the road and expands one town, danger, rumor, and broken rule at a time as the player learns why the cargo matters and who wants it.\n\nEventually the player discovers that the merchant's story is incomplete and that delivering, exposing, destroying, or redirecting the cargo would each reshape lives along the route. What began as hired protection becomes a decision about responsibility, loyalty, and who should control what is inside the crates." }),
+    JSON.stringify({ concept: "You are brought blindfolded with other recruits to a guild whose instructor will not give her name. Your first assignment is to follow a man across the city and report where he sleeps. The campaign follows your rise through guild work, the relationships formed with the other recruits, and the question of whether the organization is making you useful, disposable, or complicit.\n\nAs assignments reveal what the guild truly protects and profits from, the player learns that recruitment itself was part of an internal struggle. That discovery turns advancement into a choice: reform the guild, expose it, seize a place within it, protect the people it uses, or leave knowing what the organization will do without you." })
   ].join("\n");
 }
 

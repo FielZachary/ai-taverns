@@ -256,21 +256,21 @@ function testOpeningPlanContent() {
     how_the_player_got_here:
       "The player accepted work escorting a sealed road charter through the valley.",
     concept:
-      "A routine escort becomes a road mystery when the bridge watch goes silent and several people want the charter before the player can deliver it.",
+      "A routine escort becomes a road mystery when the bridge watch goes silent and several people want the charter before the player can deliver it. Following the charter's trail reveals that its destination, its broken seal, and the player's hiring were arranged to hide what lies beneath the road. The player eventually decides whether to expose the discovery, deliver it to the people who buried it, or use it to protect the communities along the route.",
     opening_scene:
       "Inside the Ashford Tollhouse, a frightened courier asks the player to cross the fogbound bridge before nightfall.",
     private_truth:
-      "The bridge watch found evidence beneath the road, and the charter identifies who is trying to conceal it.",
+      "The bridge watch found evidence beneath the road, and the charter identifies who is trying to conceal it; learning this reveals that the player was hired as a disposable courier and gives them leverage over the people behind the cover-up.",
     campaign_anchors: [
       {
         name: "Marra Vale",
         description:
-          "A worried courier carrying the sealed road charter. She knows the bridge is dangerous and becomes the player's first connection to the mystery."
+          "A worried courier carrying the sealed road charter. She knows the bridge is dangerous, becomes the player's first connection to the mystery, and may later choose between protecting the charter's owners or helping expose them."
       },
       {
         name: "The Sealed Road Charter",
         description:
-          "An official document whose broken seal makes it both an immediate clue and a reason several parties will pursue the player."
+          "An official document whose broken seal makes it both an immediate clue and a reason several parties will pursue the player. Its contents and intended destination reframe the player as more than a hired guard."
       }
     ]
   });

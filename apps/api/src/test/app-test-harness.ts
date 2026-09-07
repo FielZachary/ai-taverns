@@ -3720,21 +3720,21 @@ before(async () => {
               how_the_player_got_here:
                 "The character followed an unresolved personal lead to the selected starting location.",
               concept:
-                "A local request turns into an escalating mystery as the character learns why several people want the same truth hidden.",
+                "A local request turns into an escalating mystery as the character learns why several people want the same truth hidden. As the player follows the messenger's lead, they discover their arrival was anticipated and the local network is using the same personal history that brought them here. The campaign becomes a choice between exposing the network, using its leverage, or protecting the people it has trapped.",
               opening_scene:
                 "At a marked doorway in the selected starting location, a worried messenger offers the first lead while someone watches the street.",
               private_truth:
-                "The messenger's request is connected to a concealed local network that will act first if ignored.",
+                "The messenger's request is connected to a concealed local network that selected the player because of their personal history; discovering that recontextualizes the opening and gives the player leverage over the network.",
               campaign_anchors: [
                 {
                   name: "Mara Vell",
                   description:
-                    "A worried local messenger who knows the first lead and becomes an early point of contact in the campaign."
+                    "A worried local messenger who knows the first lead and becomes an early point of contact. Her growing fear and divided loyalties can expose the network or put her in danger later in the campaign."
                 },
                 {
                   name: "The Marked Doorway",
                   description:
-                    "The first visible clue, tied to the hidden network and a place the player can investigate immediately."
+                    "The first visible clue, tied to the hidden network and a place the player can investigate immediately. Its meaning changes as the player learns who marked it and why the network needs it hidden."
                 }
               ]
             }),
