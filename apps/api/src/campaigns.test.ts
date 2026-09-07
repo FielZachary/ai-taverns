@@ -2665,13 +2665,18 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(narratorInput.message, /Authoritative backstory:/);
   assert.match(narratorInput.message, /Captain Saela/);
   assert.match(narratorInput.message, /Use how_the_player_got_here/);
-  assert.match(narratorInput.message, /Paragraph 1 — Campaign premise/);
-  assert.match(narratorInput.message, /Paragraph 2 — Arrival/);
-  assert.match(narratorInput.message, /Paragraph 3 — Live scene/);
+  assert.match(
+    narratorInput.message,
+    /Paragraph 1 — Present premise with retrospective context/
+  );
+  assert.match(narratorInput.message, /exact current playable situation/);
+  assert.match(narratorInput.message, /Do not narrate a journey, arrival/);
+  assert.match(narratorInput.message, /Forty minutes ago/);
+  assert.match(narratorInput.message, /Paragraph 2 — Live scene and pressure/);
   assert.match(narratorInput.message, /opening_scene/);
-  assert.match(narratorInput.message, /Paragraph 4 — Pressure/);
-  assert.match(narratorInput.message, /Paragraph 5 — Choice/);
-  assert.match(narratorInput.message, /Paragraph 6 — Handoff/);
+  assert.match(narratorInput.message, /Paragraph 3 — Choice/);
+  assert.match(narratorInput.message, /Paragraph 4 — Handoff/);
+  assert.match(narratorInput.message, /exactly 4 paragraphs/);
   assert.match(narratorInput.message, /grounded, direct, detailed fantasy prose/);
   assert.doesNotMatch(narratorInput.message, /Flagship world context:/);
   assert.doesNotMatch(narratorInput.message, /Seven regions available for the opener:/);
@@ -2917,10 +2922,8 @@ test.skip("POST /api/campaigns scrubs forbidden Eldermere opening terms after na
     }
 
     const repairedNarration = [
-      "The summons that brought you to Suncross has the weight of unfinished business, the kind that makes an old promise feel heavier than your pack.",
-      "For the last three days, cold rain and stranger warnings followed the road, and the last hour brought you through crowded streets where locals lowered their voices at your questions.",
-      "Suncross crouches beneath the old stones of the Second Dominion, where the Hush still seems to press against every shutter.",
-      "Mara Vell waits by a marked doorway, rain silvering her cloak while guards argue nearby and market carts slow to stare.",
+      "<npc>Mara Vell</npc> waits by a <clue>marked doorway</clue> in <place>Suncross</place>, rain silvering her cloak while guards argue nearby and market carts slow to stare. The summons in your pocket is why you are here; earlier that evening, its bearer warned that the street would turn dangerous if you were late.",
+      "<danger>Guards</danger> close on the doorway as <faction>watchful locals</faction> lower their voices, and the city seems to hold its breath around the sealed entrance.",
       "You can question Mara Vell, inspect the marked doorway, or ask nearby locals what frightened them before the street closes around you.",
       "What do you do?"
     ].join("\n\n");
@@ -3118,7 +3121,7 @@ test.skip("POST /api/campaigns uses a low-temperature final retry for short Elde
           narrator_instructions: [
             "Begin at the edge of Suncross.",
             "Introduce Mara Vell as a visible NPC.",
-            "Keep the opening to exactly 6 paragraphs of vivid sensory detail, with the sixth paragraph only the final direct prompt: What do you do?"
+            "Keep the opening to exactly 4 paragraphs of vivid sensory detail, with the fourth paragraph only the final direct prompt: What do you do?"
           ]
         }),
         debug: {
@@ -3133,10 +3136,8 @@ test.skip("POST /api/campaigns uses a low-temperature final retry for short Elde
 
     if (input.message.includes("Final low-temperature rewrite required:")) {
       const finalNarration = [
-        "The summons that brought you to Suncross has the weight of unfinished business, the kind that makes an old promise feel heavier than your pack.",
-        "For the last three days, cold rain and stranger warnings followed the road, and the last hour brought you through crowded streets where locals lowered their voices at your questions.",
-        "<place>Suncross</place> rises around you in wet stone and early lanternlight, busy enough to hide a secret and tense enough to make every passerby look away.",
-        "<npc>Mara Vell</npc> waits by a marked doorway, rain silvering her cloak while guards argue nearby and market carts slow to stare.",
+        "<npc>Mara Vell</npc> waits by a <clue>marked doorway</clue> in <place>Suncross</place>, rain silvering her cloak while guards argue nearby and market carts slow to stare. The summons in your pocket is why you are here; earlier that evening, its bearer warned that the street would turn dangerous if you were late.",
+        "<danger>Guards</danger> close on the doorway as <faction>watchful locals</faction> lower their voices, and the city seems to hold its breath around the sealed entrance.",
         "You can question Mara Vell, inspect the marked doorway, or ask nearby locals what frightened them before the street closes around you.",
         "What do you do?"
       ].join("\n\n");

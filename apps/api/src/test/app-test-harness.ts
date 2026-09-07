@@ -3876,14 +3876,19 @@ before(async () => {
         const isEldermereNarrator = input.message.includes(
           "ELDERMERE OPENING BRIEF"
         );
+        const eldermerePublicNarration =
+          "A <npc>courier</npc> waits beside a <clue>weathered sign</clue> on the <place>old road</place>, glancing between you and the <danger>ruined watchtower</danger> beyond the ridge. The summons in your pocket brought you here; earlier that evening, its bearer warned that the tower's lantern had gone dark.\n\nA <object>lantern</object> flickers over wet stones and wagon ruts as <faction>nearby travelers</faction> retreat from the watchtower's distant metal knock. The road, the sign, and the courier are all within reach, but the darkness inside the ruin is no longer still.\n\nYou can question the courier, inspect the weathered sign, or follow the road toward the ruined watchtower before the lantern burns out.\n\nWhat do you do?";
+        const narratorContent = isEldermereNarrator
+          ? eldermerePublicNarration
+          : publicNarration;
 
-        input.onPublicNarrationDelta?.(publicNarration.slice(0, 28));
-        input.onPublicNarrationDelta?.(publicNarration.slice(28));
+        input.onPublicNarrationDelta?.(narratorContent.slice(0, 28));
+        input.onPublicNarrationDelta?.(narratorContent.slice(28));
 
         return {
           id: "provider-message-1",
           content: isEldermereNarrator
-            ? publicNarration
+            ? eldermerePublicNarration
             : JSON.stringify({
                 public_narration: publicNarration,
                 roll_requests: [],
