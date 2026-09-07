@@ -699,7 +699,7 @@ describe("NewAdventureForm", () => {
     ).toContain("/new-adventure/options/packs/dungeoneer-s-pack.webp");
   });
 
-  it("validates identity and keeps campaign creation behind Continue", async () => {
+  it("validates identity and creates the campaign from Continue", async () => {
     render(<NewAdventureForm />);
 
     await advanceSingleplayerToIdentity();
@@ -760,17 +760,6 @@ describe("NewAdventureForm", () => {
 
     expect(screen.getByLabelText("Image model")).toHaveValue("openai");
     expect(screen.getByLabelText("Art style")).toHaveValue("ink_and_watercolor");
-    fireEvent.click(screen.getByRole("button", { name: /create art/i }));
-
-    await act(async () => {});
-
-    expect(screen.getByText("Generating portrait")).toHaveClass("rune-loader");
-    expect(createCampaignMock).not.toHaveBeenCalled();
-    expect(generateCharacterPortraitMock).not.toHaveBeenCalled();
-    expect(previewCharacterPortraitMock).not.toHaveBeenCalled();
-    expect(uploadCharacterPortraitMock).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled();
-
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
 
     await act(async () => {});
@@ -1025,12 +1014,6 @@ describe("NewAdventureForm", () => {
       screen.getByRole("heading", { name: /create your character art/i })
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /create art/i }));
-
-    await act(async () => {});
-
-    expect(createCampaignMock).not.toHaveBeenCalled();
-
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
 
     await act(async () => {});
@@ -1049,7 +1032,7 @@ describe("NewAdventureForm", () => {
     );
   });
 
-  it("uses the shared rune loader for portrait and campaign preparation", async () => {
+  it("uses the shared rune loader while campaign creation starts portrait generation", async () => {
     generateCharacterPortraitMock.mockReturnValue(
       new Promise(() => {})
     );
@@ -1064,30 +1047,6 @@ describe("NewAdventureForm", () => {
 
     await nextCharacterStep();
 
-    fireEvent.click(screen.getByRole("button", { name: /create art/i }));
-
-    expect(screen.getByText("Generating portrait")).toHaveClass("rune-loader");
-    expect(
-      screen.getByText(
-        "this takes quite a long while, so you may move on to the next part if you wish"
-      )
-    ).toHaveClass("character-art-wait-note");
-    expect(createCampaignMock).not.toHaveBeenCalled();
-    expect(generateCharacterPortraitMock).not.toHaveBeenCalled();
-    expect(
-      screen.queryByText("this'll take about a minute and a half, sit tight ;)")
-    ).not.toBeInTheDocument();
-
-    await act(async () => {
-      vi.advanceTimersByTime(10_000);
-    });
-
-    expect(screen.getByText("Generating portrait")).toBeInTheDocument();
-    expect(
-      screen.queryByText("Integrating your backstory")
-    ).not.toBeInTheDocument();
-
-    expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
 
     expect(screen.getByText("Preparing your campaign")).toHaveClass(
@@ -1120,12 +1079,6 @@ describe("NewAdventureForm", () => {
     });
 
     await nextCharacterStep();
-
-    fireEvent.click(screen.getByRole("button", { name: /create art/i }));
-
-    await act(async () => {});
-
-    expect(createCampaignMock).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
 

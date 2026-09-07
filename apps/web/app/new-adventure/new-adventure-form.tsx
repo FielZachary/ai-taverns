@@ -17,8 +17,7 @@ import {
   Minus,
   Plus,
   RefreshCw,
-  ScrollText,
-  Wand2
+  ScrollText
 } from "lucide-react";
 import {
   campaignGenrePresets,
@@ -6120,16 +6119,6 @@ export function NewAdventureForm({
         return;
       }
 
-      if (
-        !portraitPreviewDataUrl &&
-        !uploadedPortraitFileName &&
-        !createdCampaign &&
-        !isCreatingArt
-      ) {
-        void createCharacterArt();
-        return;
-      }
-
       void continueToCampaign();
       return;
     }
@@ -7306,8 +7295,15 @@ export function NewAdventureForm({
                 </>
               ) : isLastStep ? (
                 <>
-                  {isJoinFlow ? "Join Game" : "Create art"}
-                  {isJoinFlow ? <Check size={16} /> : <Wand2 size={16} />}
+                  {isJoinFlow ? "Join Game" : "Continue"}
+                  {isJoinFlow ? (
+                    <Check size={16} />
+                  ) : (
+                    <span
+                      className="fantasy-arrow-icon fantasy-arrow-forward"
+                      aria-hidden="true"
+                    />
+                  )}
                 </>
               ) : (
                 <>
@@ -7317,12 +7313,6 @@ export function NewAdventureForm({
               )}
             </button>
           </div>
-          {stepIndex === reviewStepIndex && !isJoinFlow && isCreatingArt ? (
-            <p className="character-art-wait-note">
-              this takes quite a long while, so you may move on to the next part if
-              you wish
-            </p>
-          ) : null}
       </form>
 
       {activeSpellDetail && activeSpellRuleProfile ? (
