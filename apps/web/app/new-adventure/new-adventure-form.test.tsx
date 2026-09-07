@@ -749,7 +749,7 @@ describe("NewAdventureForm", () => {
     await nextCharacterStep();
 
     expect(
-      screen.getByRole("heading", { name: /create your character art/i })
+      screen.getByRole("heading", { name: /add your character portrait/i })
     ).toBeInTheDocument();
     expect(generateCharacterBackstoryMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -758,13 +758,6 @@ describe("NewAdventureForm", () => {
       })
     );
 
-    expect(screen.getByLabelText("Image model")).toHaveValue("openai");
-    expect(screen.getByLabelText("Art style")).toHaveValue("ink_and_watercolor");
-    fireEvent.click(screen.getByRole("button", { name: /create art/i }));
-
-    await act(async () => {});
-
-    expect(screen.getByText("Generating portrait")).toHaveClass("rune-loader");
     expect(createCampaignMock).not.toHaveBeenCalled();
     expect(generateCharacterPortraitMock).not.toHaveBeenCalled();
     expect(previewCharacterPortraitMock).not.toHaveBeenCalled();
@@ -803,14 +796,7 @@ describe("NewAdventureForm", () => {
         "Charisma: 11 (+0)"
       ].join("\n")
     );
-    expect(generateCharacterPortraitMock).toHaveBeenCalledWith(
-      "11111111-1111-4111-8111-111111111111",
-      expect.objectContaining({
-        artStyle: "ink_and_watercolor",
-        imageModel: "openai",
-        background: true
-      })
-    );
+    expect(generateCharacterPortraitMock).not.toHaveBeenCalled();
     expect(previewCharacterPortraitMock).not.toHaveBeenCalled();
     expect(uploadCharacterPortraitMock).not.toHaveBeenCalled();
   });
@@ -862,7 +848,7 @@ describe("NewAdventureForm", () => {
     await finishFlowTransition();
 
     expect(
-      screen.getByRole("heading", { name: /create your character art/i })
+      screen.getByRole("heading", { name: /add your character portrait/i })
     ).toBeInTheDocument();
   });
 
@@ -911,7 +897,7 @@ describe("NewAdventureForm", () => {
     await finishFlowTransition();
 
     expect(
-      screen.getByRole("heading", { name: /create your character art/i })
+      screen.getByRole("heading", { name: /add your character portrait/i })
     ).toBeInTheDocument();
   });
 
@@ -983,7 +969,7 @@ describe("NewAdventureForm", () => {
     await finishFlowTransition();
 
     expect(
-      screen.getByRole("heading", { name: /create your character art/i })
+      screen.getByRole("heading", { name: /add your character portrait/i })
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /back/i }));
@@ -997,7 +983,7 @@ describe("NewAdventureForm", () => {
 
     expect(generateCharacterBackstoryMock).toHaveBeenCalledTimes(1);
     expect(
-      screen.getByRole("heading", { name: /create your character art/i })
+      screen.getByRole("heading", { name: /add your character portrait/i })
     ).toBeInTheDocument();
   });
 
@@ -1022,14 +1008,8 @@ describe("NewAdventureForm", () => {
 
     expect(generateCharacterBackstoryMock).toHaveBeenCalledTimes(1);
     expect(
-      screen.getByRole("heading", { name: /create your character art/i })
+      screen.getByRole("heading", { name: /add your character portrait/i })
     ).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /create art/i }));
-
-    await act(async () => {});
-
-    expect(createCampaignMock).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
 
@@ -1049,11 +1029,7 @@ describe("NewAdventureForm", () => {
     );
   });
 
-  it("uses the shared rune loader for portrait and campaign preparation", async () => {
-    generateCharacterPortraitMock.mockReturnValue(
-      new Promise(() => {})
-    );
-
+  it("uses the shared rune loader for campaign preparation", async () => {
     render(<NewAdventureForm />);
 
     await advanceSingleplayerToIdentity();
@@ -1064,31 +1040,9 @@ describe("NewAdventureForm", () => {
 
     await nextCharacterStep();
 
-    fireEvent.click(screen.getByRole("button", { name: /create art/i }));
-
-    expect(screen.getByText("Generating portrait")).toHaveClass("rune-loader");
-    expect(
-      screen.getByText(
-        "this takes quite a long while, so you may move on to the next part if you wish"
-      )
-    ).toHaveClass("character-art-wait-note");
-    expect(createCampaignMock).not.toHaveBeenCalled();
-    expect(generateCharacterPortraitMock).not.toHaveBeenCalled();
-    expect(
-      screen.queryByText("this'll take about a minute and a half, sit tight ;)")
-    ).not.toBeInTheDocument();
-
-    await act(async () => {
-      vi.advanceTimersByTime(10_000);
-    });
-
-    expect(screen.getByText("Generating portrait")).toBeInTheDocument();
-    expect(
-      screen.queryByText("Integrating your backstory")
-    ).not.toBeInTheDocument();
-
-    expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+
+    expect(generateCharacterPortraitMock).not.toHaveBeenCalled();
 
     expect(screen.getByText("Preparing your campaign")).toHaveClass(
       "rune-loader"
@@ -1106,11 +1060,7 @@ describe("NewAdventureForm", () => {
     );
   });
 
-  it("recovers when background art start fails during campaign creation", async () => {
-    generateCharacterPortraitMock.mockRejectedValue(
-      new Error("The portrait easel cracked.")
-    );
-
+  it("creates a campaign without requesting a generated portrait", async () => {
     render(<NewAdventureForm />);
 
     await advanceSingleplayerToIdentity();
@@ -1121,23 +1071,13 @@ describe("NewAdventureForm", () => {
 
     await nextCharacterStep();
 
-    fireEvent.click(screen.getByRole("button", { name: /create art/i }));
-
-    await act(async () => {});
-
-    expect(createCampaignMock).not.toHaveBeenCalled();
-
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
 
     await act(async () => {});
 
     expect(createCampaignMock).toHaveBeenCalledTimes(1);
-    expect(generateCharacterPortraitMock).toHaveBeenCalledTimes(1);
+    expect(generateCharacterPortraitMock).not.toHaveBeenCalled();
     expect(uploadCharacterPortraitMock).not.toHaveBeenCalled();
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "The portrait easel cracked."
-    );
-    expect(screen.getByRole("button", { name: /retry portrait/i })).toBeEnabled();
   });
 });
 
