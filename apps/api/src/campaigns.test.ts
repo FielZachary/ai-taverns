@@ -2627,6 +2627,8 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(plannerInput.message, /CAMPAIGN ANCHOR REQUIREMENTS/);
   assert.match(plannerInput.message, /Create 6-9 campaign anchors/);
   assert.match(plannerInput.message, /exactly one region anchor/);
+  assert.match(plannerInput.message, /Visibility applies to the entire anchor object/);
+  assert.match(plannerInput.message, /never include hidden motives/i);
   assert.match(plannerInput.message, /future_pressure_or_change/);
   assert.match(plannerInput.message, /Player backstory anchors for the opening scene:/);
   assert.match(plannerInput.message, /Captain Saela/);
