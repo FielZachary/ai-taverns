@@ -16,7 +16,9 @@ import {
   X,
   Minus,
   Plus,
-  ScrollText
+  RefreshCw,
+  ScrollText,
+  Wand2
 } from "lucide-react";
 import {
   campaignGenrePresets,
@@ -29,6 +31,7 @@ import {
 } from "@/lib/spell-rules";
 import {
   createCampaign as createCampaignViaApi,
+  generateCharacterPortrait,
   generateCharacterBackstory,
   joinCampaign as joinCampaignViaApi,
   joinLobbyInvite,
@@ -39,7 +42,10 @@ import {
 } from "@/lib/campaign-api";
 import { defaultCharacterSheet } from "@/components/playing/PlayerPanel";
 import { DiceRollReveal3D } from "@/components/playing/DiceRollReveal3D";
-import { FullPageRuneLoader } from "@/components/FullPageRuneLoader";
+import {
+  FullPageRuneLoader,
+  RuneLoaderText
+} from "@/components/FullPageRuneLoader";
 import { ScrollProgressSlider } from "@/components/ScrollProgressSlider";
 import {
   analyticsGuestId,
@@ -104,6 +110,36 @@ type SkillName = (typeof skillDefinitions)[number]["name"];
 type CharacterBuildMode = "quick" | "custom";
 type BackstoryWriteMode = CharacterBackstoryGenerateRequest["mode"];
 type StatGenerationMode = "roll" | "point_buy";
+type CharacterArtStyle =
+  | "painterly_fantasy"
+  | "storybook_illustration"
+  | "ink_and_watercolor"
+  | "cinematic_concept_art";
+type CharacterImageModel = "qwen" | "openai";
+type PortraitRoomPlayer = {
+  portraitStatus?: "pending" | "ready" | "failed";
+  portraitUrl?: string;
+};
+type PortraitRoomSnapshot = {
+  players?: PortraitRoomPlayer[];
+};
+type PortraitRoomRealtimeEvent =
+  | { type: "room_updated"; roomId: string }
+  | { type: "room_snapshot"; roomId: string; snapshot: PortraitRoomSnapshot }
+  | { type: string; roomId?: string };
+
+function roomSocketUrl(campaign: CampaignSummary) {
+  const apiOrigin =
+    process.env.NEXT_PUBLIC_FASTIFY_API_ORIGIN?.replace(/\/$/, "") ||
+    window.location.origin;
+  const url = new URL("/api/room/live", apiOrigin);
+
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  url.searchParams.set("roomId", campaign.id);
+  url.searchParams.set("sessionId", campaign.sessionId);
+
+  return url.toString();
+}
 type SpellGroup = {
   level: SpellLevelLabel;
   base: string[];
@@ -4247,6 +4283,10 @@ function CampaignPreparationLoader() {
   );
 }
 
+function PortraitPreparationLoader() {
+  return <RuneLoaderText>Generating portrait</RuneLoaderText>;
+}
+
 function NewAdventureEntryLoadingPanel({
   isExiting = false
 }: {
@@ -4352,6 +4392,11 @@ export function NewAdventureForm({
   const [createdCampaign, setCreatedCampaign] =
     useState<CampaignSummary | null>(null);
   const [portraitPreviewDataUrl, setPortraitPreviewDataUrl] = useState("");
+  const [characterArtGuidelines, setCharacterArtGuidelines] = useState("");
+  const [characterArtStyle, setCharacterArtStyle] =
+    useState<CharacterArtStyle>("ink_and_watercolor");
+  const [characterImageModel, setCharacterImageModel] =
+    useState<CharacterImageModel>("openai");
   const [uploadedPortraitFileName, setUploadedPortraitFileName] = useState("");
   const [flowTransition, setFlowTransition] =
     useState<FlowTransitionState>("idle");
@@ -4770,7 +4815,9 @@ export function NewAdventureForm({
   ]);
   const stepTitle = useMemo(() => {
     if (stepIndex === reviewStepIndex && !isJoinFlow) {
-      return "Add your character portrait";
+      return portraitPreviewDataUrl
+        ? "Your portrait is ready"
+        : "Create your character art";
     }
 
     if (stepIndex === 0) {
@@ -4831,7 +4878,8 @@ export function NewAdventureForm({
     isInviteJoinFlow,
     mode,
     reviewStepIndex,
-    stepIndex
+    stepIndex,
+    portraitPreviewDataUrl
   ]);
 
   const analyticsBaseProperties = useCallback(() => {
@@ -4923,6 +4971,121 @@ export function NewAdventureForm({
       });
     }
   }, [analyticsBaseProperties, inviteToken, ownerClientId, userEmail, userId]);
+
+  useEffect(() => {
+    if (
+      !createdCampaign ||
+      !isCreatingArt ||
+      uploadedPortraitFileName ||
+      portraitPreviewDataUrl
+    ) {
+      return;
+    }
+
+    const portraitCampaign = createdCampaign;
+    let shouldIgnore = false;
+    let socket: WebSocket | null = null;
+
+    async function refreshPortraitStatus() {
+      try {
+        const response = await fetch(
+          `/api/room?roomId=${encodeURIComponent(
+            portraitCampaign.id
+          )}&sessionId=${encodeURIComponent(portraitCampaign.sessionId)}`,
+          { cache: "no-store" }
+        );
+
+        if (!response.ok) {
+          return;
+        }
+
+        const room = (await response.json()) as PortraitRoomSnapshot;
+        const portraitPlayer = room.players?.find(
+          (player) => player.portraitStatus || player.portraitUrl
+        );
+
+        if (shouldIgnore || !portraitPlayer) {
+          return;
+        }
+
+        if (portraitPlayer.portraitUrl) {
+          setPortraitPreviewDataUrl(portraitPlayer.portraitUrl);
+          setIsCreatingArt(false);
+          setError("");
+          return;
+        }
+
+        if (portraitPlayer.portraitStatus === "failed") {
+          setError("Character art could not be created.");
+          setIsCreatingArt(false);
+        }
+      } catch {
+        // The WebSocket remains the source of truth for the next pushed update.
+      }
+    }
+
+    function connectSocket() {
+      try {
+        socket = new WebSocket(roomSocketUrl(portraitCampaign));
+      } catch {
+        return;
+      }
+
+      socket.addEventListener("open", () => {
+        void refreshPortraitStatus();
+      });
+      socket.addEventListener("message", (event) => {
+        if (typeof event.data !== "string") {
+          return;
+        }
+
+        let parsed: PortraitRoomRealtimeEvent;
+
+        try {
+          parsed = JSON.parse(event.data) as PortraitRoomRealtimeEvent;
+        } catch {
+          return;
+        }
+
+        if (parsed.roomId !== portraitCampaign.id) {
+          return;
+        }
+
+        if (parsed.type === "room_snapshot" && "snapshot" in parsed) {
+          const portraitPlayer = parsed.snapshot.players?.find(
+            (player: PortraitRoomPlayer) =>
+              player.portraitStatus || player.portraitUrl
+          );
+
+          if (portraitPlayer?.portraitUrl) {
+            setPortraitPreviewDataUrl(portraitPlayer.portraitUrl);
+            setIsCreatingArt(false);
+            setError("");
+          } else if (portraitPlayer?.portraitStatus === "failed") {
+            setError("Character art could not be created.");
+            setIsCreatingArt(false);
+          }
+          return;
+        }
+
+        if (parsed.type === "room_updated") {
+          void refreshPortraitStatus();
+        }
+      });
+    }
+
+    connectSocket();
+
+    return () => {
+      shouldIgnore = true;
+      socket?.close();
+    };
+  }, [
+    createdCampaign,
+    isCreatingArt,
+    portraitPreviewDataUrl,
+    uploadedPortraitFileName
+  ]);
 
   useEffect(() => {
     if (!isInviteJoinFlow) {
@@ -5651,6 +5814,24 @@ export function NewAdventureForm({
     return campaign;
   }
 
+  async function createCharacterArt() {
+    if (isCreatingArt) {
+      return;
+    }
+
+    setError("");
+    setIsCreatingArt(true);
+    setPortraitPreviewDataUrl("");
+    setUploadedPortraitFileName("");
+    trackAnalytics({
+      name: "Character Portrait Requested",
+      properties: {
+        ...analyticsBaseProperties(),
+        portraitSource: "generated"
+      }
+    });
+  }
+
   function readImageFileAsDataUrl(file: File) {
     return new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
@@ -5826,8 +6007,8 @@ export function NewAdventureForm({
         campaignWithPortrait = await uploadCharacterPortrait(campaign.id, {
           imageDataUrl: portraitPreviewDataUrl,
           fileName: uploadedPortraitFileName,
-          guidelines: "",
-          artStyle: "ink_and_watercolor"
+          guidelines: characterArtGuidelines,
+          artStyle: characterArtStyle
         });
         trackAnalytics({
           name: "Character Portrait Uploaded",
@@ -5839,6 +6020,23 @@ export function NewAdventureForm({
             portraitSource: "upload"
           },
           milestones: ["portrait_added"]
+        });
+      } else if (!portraitPreviewDataUrl) {
+        setIsCreatingArt(true);
+        await generateCharacterPortrait(campaign.id, {
+          guidelines: characterArtGuidelines,
+          artStyle: characterArtStyle,
+          imageModel: characterImageModel,
+          background: true
+        });
+        trackAnalytics({
+          name: "Character Portrait Requested",
+          properties: {
+            ...analyticsBaseProperties(),
+            campaignId: campaign.id,
+            campaignMode: campaign.mode,
+            portraitSource: "generated"
+          }
         });
       }
 
@@ -5919,6 +6117,16 @@ export function NewAdventureForm({
     if (isLastStep) {
       if (isJoinFlow) {
         void joinCampaign();
+        return;
+      }
+
+      if (
+        !portraitPreviewDataUrl &&
+        !uploadedPortraitFileName &&
+        !createdCampaign &&
+        !isCreatingArt
+      ) {
+        void createCharacterArt();
         return;
       }
 
@@ -6881,13 +7089,65 @@ export function NewAdventureForm({
                     />
                   ) : (
                     <div className="portrait-placeholder">
-                      <ImagePlus size={42} />
-                      <span>Portrait placeholder</span>
+                      {isCreatingArt ? (
+                        <PortraitPreparationLoader />
+                      ) : (
+                        <>
+                          <ImagePlus size={42} />
+                          <span>Portrait placeholder</span>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
 
                 <div className="character-art-controls">
+                  <label>
+                    <span>Character art guidelines</span>
+                    <textarea
+                      value={characterArtGuidelines}
+                      onChange={(event) =>
+                        setCharacterArtGuidelines(event.target.value)
+                      }
+                      placeholder="Describe pose, expression, outfit details, color mood, or anything the portrait should avoid."
+                    />
+                  </label>
+
+                  <div className="character-art-selectors">
+                    <label>
+                      <span>Image model</span>
+                      <select
+                        value={characterImageModel}
+                        onChange={(event) =>
+                          setCharacterImageModel(
+                            event.target.value as CharacterImageModel
+                          )
+                        }
+                      >
+                        <option value="qwen">Qwen</option>
+                        <option value="openai">ChatGPT Image 2</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>Art style</span>
+                      <select
+                        value={characterArtStyle}
+                        onChange={(event) =>
+                          setCharacterArtStyle(event.target.value as CharacterArtStyle)
+                        }
+                      >
+                        <option value="painterly_fantasy">Painterly fantasy</option>
+                        <option value="storybook_illustration">
+                          Storybook illustration
+                        </option>
+                        <option value="ink_and_watercolor">Ink and watercolor</option>
+                        <option value="cinematic_concept_art">
+                          Cinematic concept art
+                        </option>
+                      </select>
+                    </label>
+                  </div>
+
                   <label className="character-art-upload">
                     <span>Upload your own image</span>
                     <input
@@ -6904,6 +7164,17 @@ export function NewAdventureForm({
                     ) : null}
                   </label>
 
+                  {portraitPreviewDataUrl || createdCampaign ? (
+                    <button
+                      type="button"
+                      className="character-art-regenerate"
+                      disabled={isCreatingArt}
+                      onClick={() => void createCharacterArt()}
+                    >
+                      <RefreshCw size={16} />
+                      {portraitPreviewDataUrl ? "Regenerate" : "Retry portrait"}
+                    </button>
+                  ) : null}
                 </div>
               </div>
             ) : null}
@@ -7001,12 +7272,7 @@ export function NewAdventureForm({
             </button>
             <button
               type="submit"
-              disabled={
-                isCreating ||
-                isCreatingArt ||
-                isFlowTransitioning ||
-                isGeneratingBackstory
-              }
+              disabled={isCreating || isFlowTransitioning || isGeneratingBackstory}
             >
               {isCreating ? (
                 isJoinFlow ? "Joining..." : "Creating..."
@@ -7018,15 +7284,30 @@ export function NewAdventureForm({
                 ) : (
                   "Generating backstory..."
                 )
-              ) : (portraitPreviewDataUrl || createdCampaign) ? (
+              ) : isCreatingArt && !createdCampaign ? (
+                <>
+                  Continue
+                  <span className="fantasy-arrow-icon fantasy-arrow-forward" aria-hidden="true" />
+                </>
+              ) : portraitPreviewDataUrl ? (
+                <>
+                  Continue
+                  <span className="fantasy-arrow-icon fantasy-arrow-forward" aria-hidden="true" />
+                </>
+              ) : isCreatingArt && createdCampaign ? (
+                <>
+                  Continue
+                  <span className="fantasy-arrow-icon fantasy-arrow-forward" aria-hidden="true" />
+                </>
+              ) : createdCampaign ? (
                 <>
                   Continue
                   <span className="fantasy-arrow-icon fantasy-arrow-forward" aria-hidden="true" />
                 </>
               ) : isLastStep ? (
                 <>
-                  {isJoinFlow ? "Join Game" : "Continue"}
-                  {isJoinFlow ? <Check size={16} /> : <span className="fantasy-arrow-icon fantasy-arrow-forward" aria-hidden="true" />}
+                  {isJoinFlow ? "Join Game" : "Create art"}
+                  {isJoinFlow ? <Check size={16} /> : <Wand2 size={16} />}
                 </>
               ) : (
                 <>
@@ -7036,6 +7317,12 @@ export function NewAdventureForm({
               )}
             </button>
           </div>
+          {stepIndex === reviewStepIndex && !isJoinFlow && isCreatingArt ? (
+            <p className="character-art-wait-note">
+              this takes quite a long while, so you may move on to the next part if
+              you wish
+            </p>
+          ) : null}
       </form>
 
       {activeSpellDetail && activeSpellRuleProfile ? (
