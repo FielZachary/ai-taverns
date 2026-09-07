@@ -2624,7 +2624,10 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(plannerInput.message, /not merely as an opening hook/i);
   assert.match(plannerInput.message, /what the player may eventually discover and decide/i);
   assert.match(plannerInput.message, /how it recontextualizes their starting situation/i);
-  assert.match(plannerInput.message, /remain relevant, change, or create pressure later/i);
+  assert.match(plannerInput.message, /CAMPAIGN ANCHOR REQUIREMENTS/);
+  assert.match(plannerInput.message, /Create 6-9 campaign anchors/);
+  assert.match(plannerInput.message, /exactly one region anchor/);
+  assert.match(plannerInput.message, /future_pressure_or_change/);
   assert.match(plannerInput.message, /Player backstory anchors for the opening scene:/);
   assert.match(plannerInput.message, /Captain Saela/);
   assert.match(plannerInput.message, /compass that points toward Selwick/);

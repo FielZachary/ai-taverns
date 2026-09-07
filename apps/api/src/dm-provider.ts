@@ -263,14 +263,66 @@ function testOpeningPlanContent() {
       "The bridge watch found evidence beneath the road, and the charter identifies who is trying to conceal it; learning this reveals that the player was hired as a disposable courier and gives them leverage over the people behind the cover-up.",
     campaign_anchors: [
       {
-        name: "Marra Vale",
-        description:
-          "A worried courier carrying the sealed road charter. She knows the bridge is dangerous, becomes the player's first connection to the mystery, and may later choose between protecting the charter's owners or helping expose them."
+        type: "region",
+        name: "Ashford Vale",
+        visibility: "player_safe",
+        description: "A rain-washed valley whose trade road and bridge connect isolated communities.",
+        opening_role: "Its weather and blocked crossing create the opening pressure.",
+        campaign_relevance: "The road mystery can affect every community relying on the route.",
+        future_pressure_or_change: "Isolation, disrupted trade, and hidden discoveries can reshape the valley.",
+        player_influence: "The player can restore access, expose danger, or decide who benefits from the road."
       },
       {
-        name: "The Sealed Road Charter",
+        type: "settlement",
+        name: "Ashford Tollhouse",
+        visibility: "player_safe",
+        description: "A stone roadside checkpoint beside the fogbound bridge.",
+        opening_role: "It is the first playable scene and refuge for stranded travelers.",
+        campaign_relevance: "It becomes the first place affected by the hidden conflict under the road.",
+        future_pressure_or_change: "It can become a refuge, bottleneck, or contested outpost.",
+        player_influence: "The player can protect its people, expose corruption, or change who controls passage."
+      },
+      {
+        type: "person",
+        name: "Marra Vale",
+        visibility: "player_safe",
         description:
-          "An official document whose broken seal makes it both an immediate clue and a reason several parties will pursue the player. Its contents and intended destination reframe the player as more than a hired guard."
+          "A worried courier carrying the sealed road charter.",
+        opening_role: "She asks the player to cross the bridge before nightfall.",
+        campaign_relevance: "Her loyalties connect the player to the charter's hidden purpose.",
+        future_pressure_or_change: "She may protect the charter's owners or help expose them.",
+        player_influence: "The player can earn her trust, protect her, or challenge her loyalties."
+      },
+      {
+        type: "object",
+        name: "The Sealed Road Charter",
+        visibility: "player_safe",
+        description:
+          "An official document with a broken seal and a concealed significance.",
+        opening_role: "It is the first object that makes the bridge crossing urgent.",
+        campaign_relevance: "Its contents reveal why the player was hired and who is concealing the discovery.",
+        future_pressure_or_change: "Its destination and contents can change the stakes of the whole route.",
+        player_influence: "The player can deliver, expose, destroy, or redirect it."
+      },
+      {
+        type: "mystery",
+        name: "What Lies Beneath the Road",
+        visibility: "dm_only",
+        description: "The concealed discovery found by the bridge watch beneath the old road.",
+        opening_role: "It causes the bridge watch's silence and the urgency around the charter.",
+        campaign_relevance: "It is the truth that recontextualizes the escort job.",
+        future_pressure_or_change: "Its discovery can draw rivals, endanger the route, or change regional power.",
+        player_influence: "The player can reveal, contain, exploit, or protect it."
+      },
+      {
+        type: "threat",
+        name: "The Charter's Claimants",
+        visibility: "dm_only",
+        description: "The people pursuing the charter to keep the underlying discovery hidden.",
+        opening_role: "Their pressure is felt through the courier's fear and the blocked bridge.",
+        campaign_relevance: "They turn a delivery into a conflict over truth and control.",
+        future_pressure_or_change: "They can bribe, threaten, erase evidence, or fracture as the player acts.",
+        player_influence: "The player can evade, expose, bargain with, or defeat them."
       }
     ]
   });

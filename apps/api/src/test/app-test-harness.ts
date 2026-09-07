@@ -3727,14 +3727,66 @@ before(async () => {
                 "The messenger's request is connected to a concealed local network that selected the player because of their personal history; discovering that recontextualizes the opening and gives the player leverage over the network.",
               campaign_anchors: [
                 {
-                  name: "Mara Vell",
+                  type: "region",
+                  name: selectedRegion,
+                  visibility: "player_safe",
                   description:
-                    "A worried local messenger who knows the first lead and becomes an early point of contact. Her growing fear and divided loyalties can expose the network or put her in danger later in the campaign."
+                    "The selected Eldermere region, whose local pressures shape the mystery and its consequences.",
+                  opening_role: "Its tensions are felt through the first local conflict.",
+                  campaign_relevance: "The network exploits regional pressure to protect itself.",
+                  future_pressure_or_change: "The regional balance can worsen or shift as the truth emerges.",
+                  player_influence: "The player can expose abuses, protect communities, or change which local power gains ground."
                 },
                 {
-                  name: "The Marked Doorway",
+                  type: "settlement",
+                  name: startingLocation,
+                  visibility: "player_safe",
                   description:
-                    "The first visible clue, tied to the hidden network and a place the player can investigate immediately. Its meaning changes as the player learns who marked it and why the network needs it hidden."
+                    "The selected starting settlement, where the network's first visible pressure is taking shape.",
+                  opening_role: "It contains the marked doorway and first lead.",
+                  campaign_relevance: "The settlement is the first community affected by the hidden conflict.",
+                  future_pressure_or_change: "It can become more divided, controlled, or resilient as events unfold.",
+                  player_influence: "The player can build trust, protect residents, or change who holds local influence."
+                },
+                {
+                  type: "person",
+                  name: "Mara Vell",
+                  visibility: "player_safe",
+                  description: "A worried local messenger carrying the first lead.",
+                  opening_role: "She asks the player for help at the marked doorway.",
+                  campaign_relevance: "Her divided loyalties connect the player to the hidden network.",
+                  future_pressure_or_change: "Fear may make her cooperate, disappear, or betray someone under pressure.",
+                  player_influence: "The player can earn her trust, protect her, or expose what she knows."
+                },
+                {
+                  type: "mystery",
+                  name: "The Marked Doorway",
+                  visibility: "player_safe",
+                  description: "A visible sign connected to a concealed local network.",
+                  opening_role: "It is an immediate clue the player can investigate.",
+                  campaign_relevance: "Its meaning points toward why the network anticipated the player.",
+                  future_pressure_or_change: "New markings and erased evidence can deepen the trail.",
+                  player_influence: "The player can follow, protect, publicize, or misuse the clues it provides."
+                },
+                {
+                  type: "institution",
+                  name: "The Local Network",
+                  visibility: "dm_only",
+                  description: "A concealed network using local pressure to protect its interests.",
+                  opening_role: "Its watchers create the unseen pressure around the first lead.",
+                  campaign_relevance: "It is the force behind the campaign's central situation.",
+                  future_pressure_or_change: "It can erase evidence, fracture internally, or act openly if threatened.",
+                  player_influence: "The player can infiltrate, expose, bargain with, or dismantle it."
+                },
+                {
+                  type: "relationship",
+                  name: "Mira's Missing Mentor",
+                  visibility: "player_safe",
+                  description: "The unresolved relationship that brought Mira to the selected starting location.",
+                  opening_role: "It gives the opening lead personal urgency.",
+                  campaign_relevance: "The mentor's trail reveals why the player was anticipated.",
+                  future_pressure_or_change: "New evidence can change whether the mentor is a victim, ally, or source of danger.",
+                  player_influence: "The player can pursue, protect, forgive, or challenge the mentor's legacy."
                 }
               ]
             }),

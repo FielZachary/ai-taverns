@@ -684,6 +684,21 @@ type CampaignOpeningStyle = {
   customWorldDescription?: string | undefined;
 };
 
+const campaignAnchorTypes = [
+  "region",
+  "settlement",
+  "person",
+  "faction",
+  "institution",
+  "place",
+  "object",
+  "relationship",
+  "threat",
+  "mystery"
+] as const;
+type CampaignAnchorType = (typeof campaignAnchorTypes)[number];
+type CampaignAnchorVisibility = "player_safe" | "dm_only";
+
 type EldermereOpeningPlan = {
   region: string;
   startingLocation: string;
@@ -692,8 +707,14 @@ type EldermereOpeningPlan = {
   openingScene: string;
   privateTruth: string;
   campaignAnchors: Array<{
+    type: CampaignAnchorType;
     name: string;
+    visibility: CampaignAnchorVisibility;
     description: string;
+    openingRole: string;
+    campaignRelevance: string;
+    futurePressureOrChange: string;
+    playerInfluence: string;
   }>;
 };
 
@@ -9114,6 +9135,11 @@ function formatEldermereCampaignConceptRequest(input: {
     "- Doesn't require the player to know anything about Eldermere beforehand.",
     "- Fit the concept to the lore, atmosphere, conflicts, and character of the selected Eldermere region and starting location.",
     "",
+    "CAMPAIGN ANCHOR REQUIREMENTS",
+    "Create 6-9 campaign anchors. An anchor is any person, place, object, institution, relationship, threat, mystery, or regional force that the campaign can revisit, change, depend on, or reveal over time.",
+    "Include exactly one region anchor for the selected Eldermere region and exactly one settlement anchor for the selected starting location. Include at least one person or relationship, one active force such as a faction, threat, or institution, and one clue, object, place, or mystery connected to the truth the player may discover.",
+    "For every anchor, use every field in the required object shape. Do not create anchors for disposable props or one-scene details. Do not predetermine player actions, outcomes, or the campaign ending.",
+    "",
     "Return only this JSON:",
     JSON.stringify(
       {
@@ -9128,9 +9154,19 @@ function formatEldermereCampaignConceptRequest(input: {
           "The underlying truth of the campaign situation: what the player can eventually discover, how it recontextualizes their starting situation, and why it creates consequential new choices.",
         campaign_anchors: [
           {
+            type: "region | settlement | person | faction | institution | place | object | relationship | threat | mystery",
             name: "Durable campaign anchor",
+            visibility: "player_safe | dm_only",
             description:
-              "Explain what this person, object, place, institution, relationship, or threat is; provide useful information about it; explain its role in the opening; and explain how it can remain relevant, change, or create pressure later in the campaign."
+              "What this anchor is and its relevant current state in this campaign. For region and settlement anchors, combine canonical local character with the campaign-specific situation; do not merely repeat general lore.",
+            opening_role:
+              "How the anchor is present, felt, introduced, or relevant in the opening situation.",
+            campaign_relevance:
+              "Why this anchor matters to the evolving campaign concept, including its connection to the central situation or the truth the player may uncover.",
+            future_pressure_or_change:
+              "How this anchor can create pressure, change, become endangered, reveal new meaning, or develop later in play. Describe possibilities, not a predetermined outcome.",
+            player_influence:
+              "Concrete ways the player could affect this anchor, change its direction, protect it, expose it, ally with it, oppose it, or decide its fate."
           }
         ]
       },
@@ -9315,11 +9351,31 @@ function readObjectArray(
 
 function parseCampaignAnchor(value: Record<string, unknown>, index: number) {
   const errors: string[] = [];
+  const type = readString(value, "type", errors);
+  const visibility = readString(value, "visibility", errors);
+
+  if (!campaignAnchorTypes.includes(type as CampaignAnchorType)) {
+    errors.push(`type must be one of: ${campaignAnchorTypes.join(", ")}`);
+  }
+
+  if (visibility !== "player_safe" && visibility !== "dm_only") {
+    errors.push("visibility must be player_safe or dm_only");
+  }
 
   return {
     value: {
+      type: type as CampaignAnchorType,
       name: readString(value, "name", errors),
-      description: readString(value, "description", errors)
+      visibility: visibility as CampaignAnchorVisibility,
+      description: readString(value, "description", errors),
+      openingRole: readString(value, "opening_role", errors),
+      campaignRelevance: readString(value, "campaign_relevance", errors),
+      futurePressureOrChange: readString(
+        value,
+        "future_pressure_or_change",
+        errors
+      ),
+      playerInfluence: readString(value, "player_influence", errors)
     },
     errors: errors.map((error) => `campaign_anchors[${index}].${error}`)
   };
@@ -9346,8 +9402,19 @@ function parseEldermereOpeningPlan(content: string) {
 
   errors.push(...campaignAnchorResults.flatMap((result) => result.errors));
 
-  if (plan.campaignAnchors.length === 0) {
-    errors.push("campaign_anchors must include at least one anchor");
+  if (
+    plan.campaignAnchors.length < 6 ||
+    plan.campaignAnchors.length > 9
+  ) {
+    errors.push("campaign_anchors must include 6-9 anchors");
+  }
+
+  if (plan.campaignAnchors.filter((anchor) => anchor.type === "region").length !== 1) {
+    errors.push("campaign_anchors must include exactly one region anchor");
+  }
+
+  if (plan.campaignAnchors.filter((anchor) => anchor.type === "settlement").length !== 1) {
+    errors.push("campaign_anchors must include exactly one settlement anchor");
   }
 
   if (errors.length > 0) {
@@ -9366,8 +9433,14 @@ function openingPlanToJson(plan: EldermereOpeningPlan) {
     opening_scene: plan.openingScene,
     private_truth: plan.privateTruth,
     campaign_anchors: plan.campaignAnchors.map((anchor) => ({
+      type: anchor.type,
       name: anchor.name,
-      description: anchor.description
+      visibility: anchor.visibility,
+      description: anchor.description,
+      opening_role: anchor.openingRole,
+      campaign_relevance: anchor.campaignRelevance,
+      future_pressure_or_change: anchor.futurePressureOrChange,
+      player_influence: anchor.playerInfluence
     }))
   };
 }
@@ -9805,6 +9878,7 @@ function buildCampaignFoundationCompilerPrompt() {
     "Player-safe chunks may include mysteries as mysteries: use 'Unknown', 'rumored', 'unconfirmed', or 'not yet discovered' instead of revealing the true answer.",
     "Treat Pageden/canonical Eldermere material as source-grounded world truth. Treat planner-created links, motives, clocks, and secrets as campaign-local premises until established through play.",
     "Use concept for the campaign premise and primary active thread; how_the_player_got_here for player-character context; opening_scene for current playable context; private_truth for DM-only secrets; and campaign_anchors for durable NPC, object, place, institution, relationship, faction, and threat chunks.",
+    "Create a dedicated context chunk for every campaign anchor. The region and settlement anchors must each receive their own player_safe relevant_world_context chunk. Honor each anchor's visibility: never place dm_only anchor details in player_safe chunks.",
     "Every chunk should label its epistemic status with sections or bullets such as Canonical Grounding, Campaign-Local Premise, Established Facts, Strong Inferences, DM Seeds, Hidden Truth, Future Reveal Paths, Constraints, or Open Questions.",
     "When an anchor has both player-safe continuity and hidden truth, create a public/world or NPC chunk plus a DM-only secret chunk only when both need independent retrieval. Example: world:sunder-kiln for known leads, rumors, local pressures, and playable context, plus secret:sunder-kiln for the time-loop truth and reveal ladder.",
     "Do not resolve long-term secrets immediately. Preserve a long runway for discovery, player choice, and the player leaving a mark on Eldermere.",
@@ -10132,15 +10206,47 @@ function normalizeEldermereOpeningSemanticTags(
   plan: EldermereOpeningPlan
 ) {
   const strippedNarration = stripExtraSemanticOpeningTags(narration);
-  const firstAnchor = plan.campaignAnchors[0]?.name;
-  const secondAnchor = plan.campaignAnchors[1]?.name;
+  const playerSafeAnchors = plan.campaignAnchors.filter(
+    (anchor) =>
+      anchor.visibility === "player_safe" &&
+      anchor.type !== "region" &&
+      anchor.type !== "settlement"
+  );
+  const semanticRoleForAnchor = (anchor: (typeof playerSafeAnchors)[number]) => {
+    switch (anchor.type) {
+      case "person":
+        return "npc" as const;
+      case "faction":
+      case "institution":
+        return "faction" as const;
+      case "place":
+      case "region":
+      case "settlement":
+        return "place" as const;
+      case "threat":
+        return "danger" as const;
+      case "object":
+        return "object" as const;
+      case "relationship":
+      case "mystery":
+        return "clue" as const;
+    }
+  };
+  const firstAnchor = playerSafeAnchors[0];
+  const secondAnchor = playerSafeAnchors[1];
 
-  return [
+  const candidates = [
     { term: plan.startingLocation, role: "place" as const },
-    { term: firstAnchor, role: "object" as const },
+    ...(firstAnchor
+      ? [{ term: firstAnchor.name, role: semanticRoleForAnchor(firstAnchor) }]
+      : []),
     { term: plan.region, role: "place" as const },
-    { term: secondAnchor, role: "clue" as const }
-  ].reduce(
+    ...(secondAnchor
+      ? [{ term: secondAnchor.name, role: semanticRoleForAnchor(secondAnchor) }]
+      : [])
+  ];
+
+  return candidates.reduce(
     (current, candidate) =>
       addSemanticOpeningTag(current, candidate.term, candidate.role),
     strippedNarration
