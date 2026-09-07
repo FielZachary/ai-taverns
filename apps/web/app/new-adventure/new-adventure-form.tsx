@@ -4189,7 +4189,7 @@ export function NewAdventureForm({
   const [customWorldDescription, setCustomWorldDescription] = useState("");
   const [characterName, setCharacterName] = useState("");
   const [characterBuildMode, setCharacterBuildMode] =
-    useState<CharacterBuildMode>("custom");
+    useState<CharacterBuildMode>("quick");
   const [characterClass, setCharacterClass] = useState<CharacterClass>("Fighter");
   const [characterSpecies, setCharacterSpecies] = useState<CharacterSpecies>("Human");
   const [characterBackground, setCharacterBackground] = useState<CharacterBackground>("Folk Hero");
@@ -6043,22 +6043,12 @@ export function NewAdventureForm({
                     } as CSSProperties
                   }
                   aria-pressed={mode === "multiplayer"}
-                  onClick={() => {
-                    setMode("multiplayer");
-                    trackAnalytics({
-                      name: "Campaign Mode Selected",
-                      properties: {
-                        ...analyticsBaseProperties(),
-                        mode: "multiplayer",
-                        campaignMode: "multiplayer"
-                      }
-                    });
-                  }}
+                  disabled
                 >
                   <span className="mode-banner-frame" aria-hidden="true" />
                   <span>
                     <strong>Multiplayer</strong>
-                    <small>Invite players and resolve party turns together.</small>
+                    <small>Temporarily unavailable while it is being maintained.</small>
                   </span>
                 </button>
               </div>
@@ -6221,6 +6211,12 @@ export function NewAdventureForm({
                       <button
                         type="button"
                         className={characterBuildMode === "quick" ? "selected" : ""}
+                        style={
+                          {
+                            "--build-mode-art-url":
+                              'url("/new-adventure/build-styles/quick-build.webp")'
+                          } as CSSProperties
+                        }
                         aria-pressed={characterBuildMode === "quick"}
                         onClick={() => {
                           setCharacterBuildMode("quick");
@@ -6237,9 +6233,20 @@ export function NewAdventureForm({
                         <strong>Quick Build</strong>
                         <small>Auto-pick background and proficiencies, then choose the core play details.</small>
                       </button>
+                      <div className="build-mode-divider" aria-hidden="true">
+                        <span />
+                        OR
+                        <span />
+                      </div>
                       <button
                         type="button"
                         className={characterBuildMode === "custom" ? "selected" : ""}
+                        style={
+                          {
+                            "--build-mode-art-url":
+                              'url("/new-adventure/build-styles/custom-build.webp")'
+                          } as CSSProperties
+                        }
                         aria-pressed={characterBuildMode === "custom"}
                         onClick={() => {
                           setCharacterBuildMode("custom");

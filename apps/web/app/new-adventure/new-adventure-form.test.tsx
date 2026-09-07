@@ -62,6 +62,10 @@ async function continueFlow() {
   await finishFlowTransition();
 }
 
+function chooseCustomBuild() {
+  fireEvent.click(screen.getByRole("button", { name: /custom build/i }));
+}
+
 async function nextCharacterStep() {
   fireEvent.click(screen.getByRole("button", { name: /next/i }));
   await act(async () => {});
@@ -177,51 +181,10 @@ describe("NewAdventureForm", () => {
     localStorage.clear();
   });
 
-  it("validates, normalizes, and previews a multiplayer join code", async () => {
+  it("keeps multiplayer unavailable from the campaign mode picker", () => {
     render(<NewAdventureForm />);
 
-    fireEvent.click(screen.getByRole("button", { name: /multiplayer/i }));
-    await continueFlow();
-
-    expect(
-      screen.getByRole("heading", { name: /choose multiplayer setup/i })
-    ).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /join game/i }));
-    await continueFlow();
-
-    expect(
-      screen.getByRole("heading", { name: /enter the game code/i })
-    ).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "Enter the six-character game code before continuing."
-    );
-    expect(previewCampaignJoinMock).not.toHaveBeenCalled();
-
-    fireEvent.change(screen.getByLabelText("Game code"), {
-      target: { value: "ab-cd-12!" }
-    });
-
-    expect(screen.getByLabelText("Game code")).toHaveValue("ABCD12");
-
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-
-    await act(async () => {});
-
-    expect(previewCampaignJoinMock).toHaveBeenCalledWith({
-      gameCode: "ABCD12"
-    });
-    expect(screen.getByText("Crystal Caves")).toBeInTheDocument();
-    expect(screen.getByText("2 seats open")).toBeInTheDocument();
-
-    await finishFlowTransition();
-
-    expect(
-      screen.getByRole("heading", { name: /choose your character build/i })
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /multiplayer/i })).toBeDisabled();
   });
 
   it("lets point-buy stats spend points and advance from valid stats", async () => {
@@ -238,6 +201,7 @@ describe("NewAdventureForm", () => {
       screen.queryByRole("list", { name: /character creation progress/i })
     ).not.toBeInTheDocument();
 
+    chooseCustomBuild();
     await nextCharacterStep();
 
     expect(
@@ -319,6 +283,7 @@ describe("NewAdventureForm", () => {
 
     await continueFlow();
     await continueFlow();
+    chooseCustomBuild();
     await nextCharacterStep();
     await nextCharacterStep();
     await nextCharacterStep();
@@ -375,6 +340,31 @@ describe("NewAdventureForm", () => {
         .getByRole("button", { name: /multiplayer/i })
         .style.getPropertyValue("--mode-banner-art-url")
     ).toContain("/new-adventure/multiplayer-banner.webp");
+    expect(screen.getByRole("button", { name: /multiplayer/i })).toBeDisabled();
+  });
+
+  it("defaults to Quick Build and renders both build-style cards with artwork", async () => {
+    render(<NewAdventureForm />);
+
+    await continueFlow();
+    await continueFlow();
+
+    const buildPicker = screen.getByRole("group", { name: "Build style" });
+    const quickBuild = within(buildPicker).getByRole("button", {
+      name: /quick build/i
+    });
+    const customBuild = within(buildPicker).getByRole("button", {
+      name: /custom build/i
+    });
+
+    expect(quickBuild).toHaveAttribute("aria-pressed", "true");
+    expect(quickBuild.style.getPropertyValue("--build-mode-art-url")).toContain(
+      "/new-adventure/build-styles/quick-build.webp"
+    );
+    expect(customBuild.style.getPropertyValue("--build-mode-art-url")).toContain(
+      "/new-adventure/build-styles/custom-build.webp"
+    );
+    expect(buildPicker.querySelector(".build-mode-divider")).toHaveTextContent("OR");
   });
 
   it("shows campaign worlds as banner choices with generated art", async () => {
@@ -403,6 +393,7 @@ describe("NewAdventureForm", () => {
 
     await continueFlow();
     await continueFlow();
+    chooseCustomBuild();
     await choosePointBuyStats();
     await nextCharacterStep();
 
@@ -423,6 +414,7 @@ describe("NewAdventureForm", () => {
 
     await continueFlow();
     await continueFlow();
+    chooseCustomBuild();
     await nextCharacterStep();
     await nextCharacterStep();
 
@@ -450,6 +442,7 @@ describe("NewAdventureForm", () => {
 
     await continueFlow();
     await continueFlow();
+    chooseCustomBuild();
     await choosePointBuyStats();
     await nextCharacterStep();
     await nextCharacterStep();
@@ -578,6 +571,7 @@ describe("NewAdventureForm", () => {
 
     await continueFlow();
     await continueFlow();
+    chooseCustomBuild();
     await choosePointBuyStats();
     await nextCharacterStep();
     await nextCharacterStep();
