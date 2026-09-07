@@ -2643,7 +2643,17 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(narratorInput.message, /NARRATOR TASK - WRITE THE FULL PLAYER-FACING OPENER:/);
   assert.match(narratorInput.message, /campaign source of truth/);
   assert.match(narratorInput.message, /how_the_player_got_here/);
-  assert.match(narratorInput.message, /private_truth/);
+  assert.match(narratorInput.message, /PLAYER KNOWLEDGE AND OPENING FOCUS:/);
+  assert.match(
+    narratorInput.message,
+    /Assume the player knows nothing about this campaign or setting/
+  );
+  assert.match(narratorInput.message, /concept is author guidance/);
+  assert.match(
+    narratorInput.message,
+    /what is unknown to the player but immediately in front of them/
+  );
+  assert.match(narratorInput.message, /Do not explain wider factions, politics, history/);
   assert.match(narratorInput.message, /exactly 6 semantic narration color tags/);
   assert.match(narratorInput.message, /<npc>\.\.\.<\/npc>/);
   assert.match(narratorInput.message, /<place>\.\.\.<\/place>/);
@@ -2651,7 +2661,6 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(narratorInput.message, /<danger>\.\.\.<\/danger>/);
   assert.match(narratorInput.message, /<faction>\.\.\.<\/faction>/);
   assert.match(narratorInput.message, /<object>\.\.\.<\/object>/);
-  assert.match(narratorInput.message, /campaign_anchors/);
   assert.match(narratorInput.message, /Player backstory anchors for the opening scene:/);
   assert.match(narratorInput.message, /Captain Saela/);
   assert.match(narratorInput.message, /Use how_the_player_got_here/);
@@ -2671,9 +2680,14 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(narratorInput.instructions, /Required top-level keys/);
   assert.match(narratorInput.message, /"region": "The Salt Concordat"/);
   assert.match(narratorInput.message, /"starting_location": "Selwick"/);
+  assert.match(narratorInput.message, /"how_the_player_got_here":/);
+  assert.match(narratorInput.message, /"concept":/);
+  assert.match(narratorInput.message, /"opening_scene":/);
+  assert.doesNotMatch(narratorInput.message, /"private_truth":/);
+  assert.doesNotMatch(narratorInput.message, /"campaign_anchors":/);
   assert.match(
     narratorInput.message,
-    /Fulfill how_the_player_got_here, concept, opening_scene, and player-safe campaign_anchors/
+    /Fulfill how_the_player_got_here, concept, and opening_scene/
   );
 
   assert.ok(plannerDebug);

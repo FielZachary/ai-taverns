@@ -9192,11 +9192,16 @@ function formatEldermereNarratorOpeningRequest(input: {
     input.openingRequest,
     "",
     "Eldermere opening plan:",
-    JSON.stringify(openingPlanToJson(input.plan), null, 2),
+    JSON.stringify(narratorOpeningPlanToJson(input.plan), null, 2),
     "",
     "NARRATOR TASK - WRITE THE FULL PLAYER-FACING OPENER:",
-    "The Eldermere opening plan is the campaign source of truth. Fulfill how_the_player_got_here, concept, opening_scene, and player-safe campaign_anchors as one cohesive campaign opener. Do not summarize the plan, explain its fields, or describe future campaign events as a synopsis. Turn it into the first live scene.",
-    "Do not reveal, confirm, or name private_truth or any campaign anchor whose visibility is dm_only. You may imply that something is wrong only through visible evidence, NPC behavior, sounds, objects, threats, or unanswered questions.",
+    "The Eldermere opening plan is the campaign source of truth. Fulfill how_the_player_got_here, concept, and opening_scene as one cohesive campaign opener. Do not summarize the plan, explain its fields, or describe future campaign events as a synopsis. Turn it into the first live scene.",
+    "",
+    "PLAYER KNOWLEDGE AND OPENING FOCUS:",
+    "Assume the player knows nothing about this campaign or setting beyond their established character backstory and what this narration has already shown them.",
+    "The concept is author guidance for you, not exposition for the player. Use it to understand the direction of the campaign, but reveal only what the player can immediately encounter, observe, be told, or reasonably infer in this first scene.",
+    "Focus on establishing what is unknown to the player but immediately in front of them: where they are, who is present, what is happening, what feels wrong or urgent, and what they can do now.",
+    "Do not explain wider factions, politics, history, hidden stakes, future campaign developments, or abstract implications unless they are directly necessary to understand the player's immediate situation and choice.",
     "",
     "public_narration must contain exactly 6 paragraphs separated by blank lines. Do not add headings, labels, notes, Markdown, or text outside the JSON object. Paragraph 6 must be exactly 'What do you do?'.",
     "Preserve all established character-sheet and backstory facts. Do not change, resolve, soften, or invent past events, relationships, debts, gifts, clues, promises, or causes.",
@@ -9427,6 +9432,16 @@ function openingPlanToJson(plan: EldermereOpeningPlan) {
       future_pressure_or_change: anchor.futurePressureOrChange,
       player_influence: anchor.playerInfluence
     }))
+  };
+}
+
+function narratorOpeningPlanToJson(plan: EldermereOpeningPlan) {
+  return {
+    region: plan.region,
+    starting_location: plan.startingLocation,
+    how_the_player_got_here: plan.howThePlayerGotHere,
+    concept: plan.concept,
+    opening_scene: plan.openingScene
   };
 }
 
