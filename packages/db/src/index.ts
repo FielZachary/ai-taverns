@@ -10436,9 +10436,9 @@ function eldermereOpeningStructuralErrors(content: string) {
   const errors: string[] = [];
   const paragraphCount = openingParagraphCount(content);
 
-  if (paragraphCount !== 6) {
+  if (paragraphCount < 6) {
     errors.push(
-      `public_narration must contain exactly 6 paragraphs; found ${paragraphCount}`
+      `public_narration must contain at least 6 paragraphs; found ${paragraphCount}`
     );
   }
 
