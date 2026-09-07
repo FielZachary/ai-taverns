@@ -22,7 +22,7 @@ export type AiDebugProviderTiming = {
   responseBytes?: number;
   requestMessageCount: number;
   requestContentChars: number;
-  responseFormat: "json_contract_prompt";
+  responseFormat: "json_contract_prompt" | "text_prompt";
 };
 
 export type AiDebugInfo = {
