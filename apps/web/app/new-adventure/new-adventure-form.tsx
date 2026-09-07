@@ -7039,8 +7039,7 @@ export function NewAdventureForm({
                     <label className="backstory-field">
                       <span>Backstory</span>
                       <small>
-                        Feel free to leave it blank and let AI Taverns generate the
-                        backstory for you.
+                        Its highly recommended you write your own backstory to be more immersed in your character, but if you&apos;re too lazy to do that, you can just skip it ;)
                       </small>
                       <div className="backstory-input-shell">
                         <textarea
@@ -7066,28 +7065,6 @@ export function NewAdventureForm({
                       </div>
                     </label>
 
-                    <div className="backstory-actions" aria-label="Backstory actions">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setHasUsedBackstoryAction(true);
-                          void writeBackstory("generate");
-                        }}
-                        disabled={isGeneratingBackstory}
-                      >
-                        Generate story
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setHasUsedBackstoryAction(true);
-                          void writeBackstory("add_details");
-                        }}
-                        disabled={isGeneratingBackstory || !backstory.trim()}
-                      >
-                        Add details
-                      </button>
-                    </div>
                   </div>
                 ) : null}
 

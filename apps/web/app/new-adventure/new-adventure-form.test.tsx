@@ -726,22 +726,15 @@ describe("NewAdventureForm", () => {
     });
     expect(
       screen.getByText(
-        "Feel free to leave it blank and let AI Taverns generate the backstory for you."
+        "Its highly recommended you write your own backstory to be more immersed in your character, but if you're too lazy to do that, you can just skip it ;)"
       )
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /add details/i })
-    ).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /generate story/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /add details/i })).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByPlaceholderText("Optional: Write Backstory"), {
       target: { value: "Raised among lighthouse keepers beneath twin moons." }
     });
-    expect(
-      screen.getByRole("button", { name: /generate story/i })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /add details/i })
-    ).toBeEnabled();
     expect(
       screen.queryByRole("checkbox", {
         name: /let ai taverns add unto my backstory/i
@@ -820,91 +813,6 @@ describe("NewAdventureForm", () => {
     );
     expect(previewCharacterPortraitMock).not.toHaveBeenCalled();
     expect(uploadCharacterPortraitMock).not.toHaveBeenCalled();
-  });
-
-  it("generates and enriches backstory from the identity step", async () => {
-    let resolveBackstory:
-      | ((
-          value:
-            | {
-                backstory: string;
-                eldermereStart?: {
-                  regionName: string;
-                  settlementName: string;
-                  reason?: string;
-                };
-              }
-            | PromiseLike<{
-                backstory: string;
-                eldermereStart?: {
-                  regionName: string;
-                  settlementName: string;
-                  reason?: string;
-                };
-              }>
-        ) => void)
-      | undefined;
-    generateCharacterBackstoryMock.mockReturnValueOnce(
-      new Promise((resolve) => {
-        resolveBackstory = resolve;
-      })
-    );
-
-    render(<NewAdventureForm />);
-
-    await advanceSingleplayerToIdentity();
-
-    fireEvent.change(screen.getByLabelText("Character name"), {
-      target: { value: "Mira Vale" }
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: /generate story/i }));
-
-    expect(screen.getByText("Writing your backstory")).toHaveClass(
-      "rune-loader"
-    );
-    expect(screen.getByPlaceholderText("Optional: Write Backstory")).toHaveAttribute(
-      "aria-busy",
-      "true"
-    );
-    expect(generateCharacterBackstoryMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        mode: "generate",
-        campaignGenre: "Eldermere",
-        campaignGenreKind: "preset",
-        campaignGenrePresetId: "eldermere",
-        characterSheet: expect.stringContaining("Character Name: Mira Vale")
-      })
-    );
-    expect(generateCharacterBackstoryMock.mock.calls[0]?.[0]).not.toHaveProperty(
-      "currentBackstory"
-    );
-
-    await act(async () => {
-      resolveBackstory?.({
-        backstory: "Mira once guarded a lantern no storm could drown.",
-        eldermereStart: {
-          regionName: "The Salt Concordat",
-          settlementName: "Selwick"
-        }
-      });
-    });
-
-    expect(screen.getByPlaceholderText("Optional: Write Backstory")).toHaveValue(
-      "Mira once guarded a lantern no storm could drown."
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: /add details/i }));
-
-    expect(generateCharacterBackstoryMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        mode: "add_details",
-        currentBackstory: "Mira once guarded a lantern no storm could drown.",
-        characterSheet: expect.stringContaining(
-          "Mira once guarded a lantern no storm could drown."
-        )
-      })
-    );
   });
 
   it("generates a blank identity backstory before continuing", async () => {
@@ -1110,17 +1018,12 @@ describe("NewAdventureForm", () => {
     fireEvent.change(screen.getByLabelText("Character name"), {
       target: { value: "Mira Vale" }
     });
-    fireEvent.click(screen.getByRole("button", { name: /generate story/i }));
-
-    await act(async () => {});
-
-    expect(screen.getByPlaceholderText("Optional: Write Backstory")).toHaveValue(
-      "Mira owes a debt to a Selwick shipwright."
-    );
-
     await nextCharacterStep();
 
     expect(generateCharacterBackstoryMock).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole("heading", { name: /create your character art/i })
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /create art/i }));
 
