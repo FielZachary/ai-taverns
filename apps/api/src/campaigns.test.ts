@@ -2639,7 +2639,8 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(plannerInput.message, /Starting location: Selwick/);
 
   assert.ok(narratorInput);
-  assert.match(narratorInput.message, /Eldermere opening plan:/);
+  assert.match(narratorInput.message, /AUTHORITATIVE CHARACTER CONTEXT/);
+  assert.match(narratorInput.message, /ELDERMERE OPENING BRIEF/);
   assert.match(narratorInput.message, /NARRATOR TASK - WRITE THE FULL PLAYER-FACING OPENER:/);
   assert.match(narratorInput.message, /campaign source of truth/);
   assert.match(narratorInput.message, /how_the_player_got_here/);
@@ -2661,7 +2662,7 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(narratorInput.message, /<danger>\.\.\.<\/danger>/);
   assert.match(narratorInput.message, /<faction>\.\.\.<\/faction>/);
   assert.match(narratorInput.message, /<object>\.\.\.<\/object>/);
-  assert.match(narratorInput.message, /Player backstory anchors for the opening scene:/);
+  assert.match(narratorInput.message, /Authoritative backstory:/);
   assert.match(narratorInput.message, /Captain Saela/);
   assert.match(narratorInput.message, /Use how_the_player_got_here/);
   assert.match(narratorInput.message, /Paragraph 1 — Campaign premise/);
@@ -2685,6 +2686,9 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(narratorInput.message, /"opening_scene":/);
   assert.doesNotMatch(narratorInput.message, /"private_truth":/);
   assert.doesNotMatch(narratorInput.message, /"campaign_anchors":/);
+  assert.doesNotMatch(narratorInput.message, /Validated name bank for this campaign opener:/);
+  assert.doesNotMatch(narratorInput.message, /Campaign opener requirements:/);
+  assert.doesNotMatch(narratorInput.message, /Authoritative mechanics state:/);
   assert.match(
     narratorInput.message,
     /Fulfill how_the_player_got_here, concept, and opening_scene/

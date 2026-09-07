@@ -3073,7 +3073,7 @@ export async function createCampaignForMode(
             db,
             runtime,
             createdState.campaign,
-            openingRequest,
+            [createdState.player],
             eldermereOpeningNarratorInstructions(),
             plan.plan,
             openingTurn.id,
@@ -8811,6 +8811,76 @@ function formatOpeningBackstoryAnchors(players: PlayerRow[]) {
   ].join("\n");
 }
 
+function characterSheetField(characterSheet: string, label: string) {
+  const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = characterSheet.match(
+    new RegExp(`(?:^|\\n)${escapedLabel}:\\s*([^\\n]+)`, "i")
+  );
+
+  return match?.[1]?.trim() ?? "";
+}
+
+function formatEldermereNarratorCharacterContext(players: PlayerRow[]) {
+  const playablePlayers = players.filter(isProfileComplete);
+
+  if (playablePlayers.length === 0) {
+    return "AUTHORITATIVE CHARACTER CONTEXT\nNo completed character sheets are available.";
+  }
+
+  return [
+    "AUTHORITATIVE CHARACTER CONTEXT",
+    ...playablePlayers.map((player, index) => {
+      const sheet = player.character_sheet;
+      const identity = [
+        characterSheetField(sheet, "Level"),
+        characterSheetField(sheet, "Species"),
+        characterSheetField(sheet, "Class"),
+        characterSheetField(sheet, "Subclass")
+      ].filter(Boolean);
+      const coreStats = extractCharacterSheetSectionLines(sheet, "Core Stats");
+      const abilityScores = extractCharacterSheetSectionLines(
+        sheet,
+        "Ability Scores"
+      );
+      const proficientSkills = extractCharacterSheetSectionLines(
+        sheet,
+        "Skills"
+      ).filter((line) => /proficient/i.test(line));
+      const equipment = [
+        ...extractCharacterSheetSectionLines(sheet, "Equipment"),
+        ...extractCharacterSheetSectionLines(sheet, "Inventory")
+      ];
+      const spells = extractCharacterSheetSectionLines(sheet, "Spells");
+      const backstory = extractCharacterBackstory(sheet);
+
+      return [
+        `${index + 1}. ${player.character_name}`,
+        `Character: ${[
+          identity.join(" "),
+          characterSheetField(sheet, "Background"),
+          characterSheetField(sheet, "Alignment")
+        ]
+          .filter(Boolean)
+          .join("; ")}`,
+        coreStats.length > 0 ? `Core stats: ${coreStats.join("; ")}` : "",
+        abilityScores.length > 0
+          ? `Ability scores: ${abilityScores.join("; ")}`
+          : "",
+        proficientSkills.length > 0
+          ? `Relevant skills and proficiencies: ${proficientSkills.join("; ")}`
+          : "",
+        equipment.length > 0 ? `Equipment: ${equipment.join("; ")}` : "",
+        spells.length > 0 ? `Spells: ${spells.join("; ")}` : "",
+        backstory ? `Authoritative backstory:\n${backstory}` : ""
+      ]
+        .filter(Boolean)
+        .join("\n");
+    }),
+    "",
+    "Preserve this backstory exactly. Do not invent, alter, resolve, soften, or contradict past events, relationships, possessions, letters, promises, causes, or losses."
+  ].join("\n\n");
+}
+
 function formatMechanicsPromptContext(mechanicsState: MechanicsState) {
   return [
     "Authoritative mechanics state:",
@@ -9185,13 +9255,13 @@ function formatEldermereCampaignConceptRequest(input: {
 }
 
 function formatEldermereNarratorOpeningRequest(input: {
-  openingRequest: string;
+  players: PlayerRow[];
   plan: EldermereOpeningPlan;
 }) {
   return [
-    input.openingRequest,
+    formatEldermereNarratorCharacterContext(input.players),
     "",
-    "Eldermere opening plan:",
+    "ELDERMERE OPENING BRIEF",
     JSON.stringify(narratorOpeningPlanToJson(input.plan), null, 2),
     "",
     "NARRATOR TASK - WRITE THE FULL PLAYER-FACING OPENER:",
@@ -9212,13 +9282,13 @@ function formatEldermereNarratorOpeningRequest(input: {
     "Paragraph 1 — Campaign premise: Begin with the immediate situation that brings the character or party into this campaign. Use how_the_player_got_here to establish why they are now caught in the campaign's central problem. Do not begin with scenery, weather, location, dialogue, combat, or 'You arrive.'",
     "Paragraph 2 — Arrival: Describe the recent journey and the last few hours that brought the character or party into the selected region and starting location. Establish what they plausibly know about the place and its immediate trouble. Make the campaign premise from concept understandable without summarizing its future plot.",
     "Paragraph 3 — Live scene: Establish the selected starting location with concrete sensory and spatial details. Place the player physically inside opening_scene with visible exits, reachable objects, present NPCs, and immediate environmental details.",
-    "Paragraph 4 — Pressure: Introduce the visible tension, NPC demand, danger, discovery, or interruption that makes the opening situation urgent. Draw only on player-safe anchors and visible consequences.",
+    "Paragraph 4 — Pressure: Introduce the visible tension, NPC demand, danger, discovery, or interruption that makes the opening situation urgent. Draw only on visible consequences.",
     "Paragraph 5 — Choice: Make the immediate problem actionable. Show why it matters now and present 2-3 distinct non-dice actions the player can take immediately. These must be genuine choices, not steps toward a predetermined outcome.",
     "Paragraph 6 — Handoff: Write exactly 'What do you do?'",
     "",
     "Opening style: Write grounded, direct, detailed fantasy prose. Create atmosphere through physical details, behavior, sound, weather, terrain, objects, and visible consequences—not lyrical abstractions, prophecy, or a campaign trailer. The opener should feel like a DM placing the player in a specific, dangerous, playable moment.",
     "",
-    "Before returning, silently verify that the campaign concept is dramatized rather than summarized, private facts are absent, all 6 paragraphs follow the required sequence, paragraph 6 is exactly 'What do you do?', and exactly 6 valid semantic color tags appear across paragraphs 1-5.",
+    "Before returning, silently verify that the campaign concept is dramatized rather than summarized, all 6 paragraphs follow the required sequence, paragraph 6 is exactly 'What do you do?', and exactly 6 valid semantic color tags appear across paragraphs 1-5.",
     'Set setting.world_name to "Eldermere".',
     `Set setting.region_name to "${input.plan.region}".`,
     `Set setting.settlement_name to "${input.plan.startingLocation}".`,
@@ -10391,14 +10461,14 @@ async function askEldermereOpeningNarrator(
   db: Queryable,
   runtime: DungeonMasterRuntime,
   campaign: CampaignRow,
-  openingRequest: string,
+  players: PlayerRow[],
   instructions: string,
   plan: EldermereOpeningPlan,
   turnId?: string,
   contractOptions?: DmContractParseOptions
 ) {
   const narratorMessage = formatEldermereNarratorOpeningRequest({
-    openingRequest,
+    players,
     plan
   });
   const opening = await askDungeonMaster(
@@ -11905,7 +11975,7 @@ export async function beginRoomForUser(
             db,
             runtime,
             beginState.campaign,
-            openingRequest,
+            beginState.players,
             eldermereOpeningNarratorInstructions(),
             plan.plan,
             openingTurn.id,
