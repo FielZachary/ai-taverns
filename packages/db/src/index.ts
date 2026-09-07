@@ -3074,7 +3074,7 @@ export async function createCampaignForMode(
             runtime,
             createdState.campaign,
             openingRequest,
-            openingSceneInstructions("single_player"),
+            eldermereOpeningNarratorInstructions(),
             plan.plan,
             openingTurn.id,
             { allowResolvedCombatWithoutRolls: true }
@@ -9195,41 +9195,25 @@ function formatEldermereNarratorOpeningRequest(input: {
     JSON.stringify(openingPlanToJson(input.plan), null, 2),
     "",
     "NARRATOR TASK - WRITE THE FULL PLAYER-FACING OPENER:",
-    "Your only job is to write the complete opening scene in public_narration. Do not summarize the premise. Do not stop after the character motivation. Do not return a teaser, prologue note, or partial first paragraph.",
-    "public_narration must be a complete campaign-opening narration of exactly 6 paragraphs separated by blank lines. Do not write fewer or more than 6 paragraphs. The sixth and final paragraph must be the direct prompt, such as 'What do you do?'",
-    "Write the player-facing opener only from the Eldermere opening plan above, the canonical character sheets, and the website DM instructions.",
-    "Keep the first scene anchored in the planned region and starting location. Do not relocate it without support from the concept or opening_scene.",
-    "Use how_the_player_got_here to connect the character's established backstory to the campaign situation without retelling or rewriting it.",
-    "Use concept as the campaign's central pressure and opening_scene as the exact playable situation. private_truth is DM-only: never reveal it as confirmed exposition.",
-    "Use 2-3 sparse semantic narration markup tags inside public_narration so players can scan important visible nouns or short phrases. Supported tags: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, <object>...</object>, and <em>...</em>. The 2-3 required tags should be color tags, not <em>.",
-    "Wrap only the exact player-visible words that should receive color or italic emphasis. The opener must include 2-3 color tags around worthwhile visible names, places, clues, dangers, factions, or objects. Do not wrap full sentences or paragraphs.",
-    "Do not nest semantic tags, add attributes, invent other tags, include CSS, hex colors, color names, Markdown emphasis, or prose instructions inside public_narration.",
-    "Do not return narration_highlights, highlights, sidecar span metadata, post-processing instructions, or any separate highlight records. The inline semantic tags are the only highlight system.",
+    "The Eldermere opening plan is the campaign source of truth. Fulfill how_the_player_got_here, concept, opening_scene, and player-safe campaign_anchors as one cohesive campaign opener. Do not summarize the plan, explain its fields, or describe future campaign events as a synopsis. Turn it into the first live scene.",
+    "Do not reveal, confirm, or name private_truth or any campaign anchor whose visibility is dm_only. You may imply that something is wrong only through visible evidence, NPC behavior, sounds, objects, threats, or unanswered questions.",
     "",
-    "HIGHEST PRIORITY - CAMPAIGN CONCEPT:",
-    "The concept and opening_scene fields are the scene blueprint. campaign_anchors identify durable people, objects, places, institutions, relationships, and threats; introduce only the anchors needed for this first scene.",
+    "public_narration must contain exactly 6 paragraphs separated by blank lines. Do not add headings, labels, notes, Markdown, or text outside the JSON object. Paragraph 6 must be exactly 'What do you do?'.",
+    "Preserve all established character-sheet and backstory facts. Do not change, resolve, soften, or invent past events, relationships, debts, gifts, clues, promises, or causes.",
+    "Use only facts the character could reasonably see, hear, know, infer, or be told in this opening scene. Do not request dice; the player must receive control before attempting any uncertain action.",
+    "Use exactly 6 semantic narration color tags across paragraphs 1-5: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, or <object>...</object>. Each tag must wrap only a short, player-visible noun or phrase. Do not nest tags, add attributes, use <em>, use Markdown emphasis, or use any other HTML/XML tags.",
     "",
-    "REQUIRED OPENING STRUCTURE:",
-    "Treat the opener as an arrival runway into the first live scene, not only a cold open. Begin with character-facing fiction, but still complete every required opener part below.",
-    "Paragraph 1 must explain why this specific character or party has come here now, using player-facing backstory context. Assume the player has not recently read the backstory. Connect the arrival to at least one unresolved dream, loss, secret, promise, obligation, fear, ambition, or relationship. Do not begin with scenery, weather, crowds, dialogue, combat, or the name of the starting location.",
-    "The first sentence must be about the character's reason for coming, not where they are standing. Do not start with phrases like 'You stand at', 'You arrive at', 'The town', 'The road', or any location-first camera direction.",
-    "Paragraph 2 must describe what the character or party has been doing over the last few days and then the last few hours to reach this place. Explain how they entered the region or settlement, where exactly they have landed, what kind of area it is, what locals say about it, and what the character plausibly knows before the immediate scene begins. Keep this player-facing and concrete. Do not reveal DM-private secrets.",
-    "Paragraph 3 must establish the selected starting location through concrete, player-facing details, then place the player physically inside opening_scene with reachable objects, exits, NPC pressure, and immediate sensory detail.",
-    "Paragraph 4 must introduce the visible tension, contact, or pressure established by opening_scene and the relevant campaign anchors.",
-    "Paragraph 5 must make the immediate problem actionable and give the player 2-3 concrete things they can do right now. Tie that pressure back to how_the_player_got_here.",
-    "Paragraph 6 must be the final direct handoff prompt, such as 'What do you do?'",
-    "Do not write a seventh paragraph.",
-    "Before the final question, include one short personal urgency beat that connects the immediate clue, demand, threat, or opportunity back to the character's backstory reason for being here. Do not explain why the player should care abstractly. Show the character noticing, reacting, or connecting it to their unresolved backstory.",
-    "Even when no dice are needed, present 2-3 concrete non-dice actions the player could take right now.",
-    "Invalid opener: any opener with fewer or more than exactly 6 paragraphs, any opener that only explains why the character arrived, or any opener that ignores narrator_instructions instead of establishing the live scene, immediate obstacle, NPC or discovery pressure, and actionable choices.",
+    "REQUIRED SIX-PARAGRAPH STRUCTURE:",
+    "Paragraph 1 — Campaign premise: Begin with the immediate situation that brings the character or party into this campaign. Use how_the_player_got_here to establish why they are now caught in the campaign's central problem. Do not begin with scenery, weather, location, dialogue, combat, or 'You arrive.'",
+    "Paragraph 2 — Arrival: Describe the recent journey and the last few hours that brought the character or party into the selected region and starting location. Establish what they plausibly know about the place and its immediate trouble. Make the campaign premise from concept understandable without summarizing its future plot.",
+    "Paragraph 3 — Live scene: Establish the selected starting location with concrete sensory and spatial details. Place the player physically inside opening_scene with visible exits, reachable objects, present NPCs, and immediate environmental details.",
+    "Paragraph 4 — Pressure: Introduce the visible tension, NPC demand, danger, discovery, or interruption that makes the opening situation urgent. Draw only on player-safe anchors and visible consequences.",
+    "Paragraph 5 — Choice: Make the immediate problem actionable. Show why it matters now and present 2-3 distinct non-dice actions the player can take immediately. These must be genuine choices, not steps toward a predetermined outcome.",
+    "Paragraph 6 — Handoff: Write exactly 'What do you do?'",
     "",
-    "Opening style:",
-    "Write in grounded, direct fantasy prose. Keep the narration detailed and atmospheric, but avoid ornate, poetic, elevated, or mythic phrasing. Do not solve this by making the narration shorter; keep the same amount of detail and make the details more concrete.",
-    "Use physical, observable wording for magical or emotional details. Prefer direct wording like 'vibrates', 'shakes', 'burns', 'goes cold', 'draws attention', 'people argue', 'the road was hard', and 'someone here knows something' over lyrical abstractions like 'pulls at you like a thread', 'the dream is here', or 'every instinct says'.",
-    "The tone should feel serious, grounded, and specific, like a DM clearly describing a dangerous place to the player. It should not sound like a bard, prophecy, epic poem, or fantasy trailer.",
-    "Do not rewrite, soften, or alter the character backstory. If the backstory says someone died, do not say they disappeared. If the narrator mentions a backstory event, preserve the cause and relationship exactly.",
-    "Do not invent new circumstances for how a keepsake, clue, wound, relationship, promise, or obligation entered the character's life. If the exact handoff is not specified, use neutral wording like 'the scroll case you carry from her' instead of inventing a scene where someone gave it to the character.",
-    "Useful personal urgency beats look like: 'The handwriting looks enough like your mother's that your hand goes to the scroll case before you decide to move.', 'The same name from your dream is written on the board in front of you. Someone in this town knows something.', or 'The shard vibrates at your side at the same moment you read the note.'",
+    "Opening style: Write grounded, direct, detailed fantasy prose. Create atmosphere through physical details, behavior, sound, weather, terrain, objects, and visible consequences—not lyrical abstractions, prophecy, or a campaign trailer. The opener should feel like a DM placing the player in a specific, dangerous, playable moment.",
+    "",
+    "Before returning, silently verify that the campaign concept is dramatized rather than summarized, private facts are absent, all 6 paragraphs follow the required sequence, paragraph 6 is exactly 'What do you do?', and exactly 6 valid semantic color tags appear across paragraphs 1-5.",
     'Set setting.world_name to "Eldermere".',
     `Set setting.region_name to "${input.plan.region}".`,
     `Set setting.settlement_name to "${input.plan.startingLocation}".`,
@@ -9501,6 +9485,17 @@ function openingSceneInstructions(mode: CampaignMode) {
     modeDirection,
     "Use the campaign setup and canonical character sheets to begin with a rich campaign opener: establish named place, larger context, shared purpose, first objective, and immediate obstacle. Do not mention implementation details."
   ].join(" ");
+}
+
+function eldermereOpeningNarratorInstructions() {
+  return [
+    "You are the AI Taverns DnD Dungeon Master writing a campaign opener.",
+    "Return exactly one valid JSON object and no Markdown outside that object.",
+    "Required top-level keys: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update, combat_events, proposed_context_updates.",
+    "Use public_narration for player-facing narration. Include setting with display_location, world_name, region_name, settlement_name, scene_location, and starting_location.",
+    "For this opener, return resolution_mode resolved_without_dice, roll_requests [], next_input_needed player_actions, input_targets [], input_policy all_players, mechanics_state_update {}, inventory_state_update { patches: [] }, combat_events [], and proposed_context_updates [].",
+    "Follow the opener-specific narration, semantic tag, setting, and secrecy requirements in the user request exactly."
+  ].join("\n");
 }
 
 function askDmInstructions() {
@@ -10148,8 +10143,8 @@ function openingNarrationContainsTerm(narration: string, term: string) {
 
 const semanticOpeningTagPattern =
   /<(npc|place|clue|danger|faction|object)>([^<>]+)<\/\1>/giu;
-const semanticOpeningTagMinimum = 2;
-const semanticOpeningTagMaximum = 3;
+const semanticOpeningTagMinimum = 6;
+const semanticOpeningTagMaximum = 6;
 const finalEldermereOpeningRetryTemperature = 0.2;
 
 function semanticOpeningTagCount(narration: string) {
@@ -10233,18 +10228,13 @@ function normalizeEldermereOpeningSemanticTags(
         return "clue" as const;
     }
   };
-  const firstAnchor = playerSafeAnchors[0];
-  const secondAnchor = playerSafeAnchors[1];
-
   const candidates = [
     { term: plan.startingLocation, role: "place" as const },
-    ...(firstAnchor
-      ? [{ term: firstAnchor.name, role: semanticRoleForAnchor(firstAnchor) }]
-      : []),
     { term: plan.region, role: "place" as const },
-    ...(secondAnchor
-      ? [{ term: secondAnchor.name, role: semanticRoleForAnchor(secondAnchor) }]
-      : [])
+    ...playerSafeAnchors.map((anchor) => ({
+      term: anchor.name,
+      role: semanticRoleForAnchor(anchor)
+    }))
   ];
 
   return candidates.reduce(
@@ -10344,7 +10334,7 @@ function eldermereOpeningNarrationErrors(content: string) {
     semanticTagCount > semanticOpeningTagMaximum
   ) {
     errors.push(
-      `public_narration must contain ${semanticOpeningTagMinimum}-${semanticOpeningTagMaximum} semantic narration markup tags; found ${semanticTagCount}`
+      `public_narration must contain exactly ${semanticOpeningTagMinimum} semantic narration markup tags; found ${semanticTagCount}`
     );
   }
 
@@ -10445,7 +10435,7 @@ async function askEldermereOpeningNarrator(
       : []),
     "Return the same opening situation as valid AI Taverns DM JSON, but fix every issue above.",
     "public_narration must be exactly 6 paragraphs separated by blank lines, must follow narrator_instructions as the highest-priority scene blueprint, and the sixth paragraph must be the final direct prompt 'What do you do?'",
-    `public_narration must include ${semanticOpeningTagMinimum}-${semanticOpeningTagMaximum} semantic narration color tags using <npc>, <place>, <clue>, <danger>, <faction>, or <object>. You may also use <em> for brief italicized emphasis, but <em> does not count toward the required color tags.`,
+    `public_narration must include exactly ${semanticOpeningTagMinimum} semantic narration color tags using <npc>, <place>, <clue>, <danger>, <faction>, or <object>.`,
     "Use only allowed_player_facing_terms and plain descriptions. Preserve setting metadata."
   ].join("\n");
   const repairedOpening = await askDungeonMaster(
@@ -10527,7 +10517,7 @@ async function askEldermereOpeningNarrator(
     "Paragraph 4: visible NPC tension and immediate pressure.",
     "Paragraph 5: the actionable complication and 2-3 concrete non-dice actions available right now.",
     "Paragraph 6: exactly 'What do you do?' and nothing else.",
-    `public_narration must include ${semanticOpeningTagMinimum}-${semanticOpeningTagMaximum} semantic narration color tags using <npc>, <place>, <clue>, <danger>, <faction>, or <object>. You may also use <em> for brief italicized emphasis, but <em> does not count toward the required color tags.`,
+    `public_narration must include exactly ${semanticOpeningTagMinimum} semantic narration color tags using <npc>, <place>, <clue>, <danger>, <faction>, or <object>.`,
     "Do not include Markdown outside JSON, a teaser, a summary, a prologue note, or fewer than 6 paragraphs."
   ].join("\n");
   const finalOpening = await askDungeonMaster(
@@ -11901,7 +11891,7 @@ export async function beginRoomForUser(
             runtime,
             beginState.campaign,
             openingRequest,
-            openingSceneInstructions("multiplayer"),
+            eldermereOpeningNarratorInstructions(),
             plan.plan,
             openingTurn.id,
             { allowResolvedCombatWithoutRolls: true }

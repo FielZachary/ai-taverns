@@ -2641,59 +2641,39 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.ok(narratorInput);
   assert.match(narratorInput.message, /Eldermere opening plan:/);
   assert.match(narratorInput.message, /NARRATOR TASK - WRITE THE FULL PLAYER-FACING OPENER:/);
-  assert.match(narratorInput.message, /complete campaign-opening narration of exactly 6 paragraphs/);
-  assert.match(narratorInput.message, /HIGHEST PRIORITY - CAMPAIGN CONCEPT:/);
-  assert.match(narratorInput.message, /scene blueprint/);
-  assert.match(narratorInput.message, /Do not return a teaser, prologue note, or partial first paragraph/);
+  assert.match(narratorInput.message, /campaign source of truth/);
   assert.match(narratorInput.message, /how_the_player_got_here/);
   assert.match(narratorInput.message, /private_truth/);
-  assert.match(narratorInput.message, /semantic narration markup/);
-  assert.match(narratorInput.message, /2-3 required tags should be color tags/i);
+  assert.match(narratorInput.message, /exactly 6 semantic narration color tags/);
   assert.match(narratorInput.message, /<npc>\.\.\.<\/npc>/);
   assert.match(narratorInput.message, /<place>\.\.\.<\/place>/);
   assert.match(narratorInput.message, /<clue>\.\.\.<\/clue>/);
   assert.match(narratorInput.message, /<danger>\.\.\.<\/danger>/);
   assert.match(narratorInput.message, /<faction>\.\.\.<\/faction>/);
   assert.match(narratorInput.message, /<object>\.\.\.<\/object>/);
-  assert.match(narratorInput.message, /<em>\.\.\.<\/em>/);
-  assert.match(narratorInput.message, /color tags, not <em>/);
-  assert.match(narratorInput.message, /Do not return narration_highlights/);
-  assert.match(narratorInput.message, /sidecar span metadata/);
-  assert.match(narratorInput.message, /inline semantic tags are the only highlight system/);
   assert.match(narratorInput.message, /campaign_anchors/);
   assert.match(narratorInput.message, /Player backstory anchors for the opening scene:/);
   assert.match(narratorInput.message, /Captain Saela/);
-  assert.match(
-    narratorInput.message,
-    /Keep the first scene anchored in the planned region and starting location/
-  );
   assert.match(narratorInput.message, /Use how_the_player_got_here/);
-  assert.match(narratorInput.message, /arrival runway into the first live scene/);
-  assert.match(narratorInput.message, /Paragraph 1 must explain why/);
-  assert.match(narratorInput.message, /The first sentence must be about/);
-  assert.match(narratorInput.message, /You stand at/);
-  assert.match(narratorInput.message, /Paragraph 2 must describe what/);
-  assert.match(narratorInput.message, /Paragraph 3 must establish the selected starting location/);
+  assert.match(narratorInput.message, /Paragraph 1 — Campaign premise/);
+  assert.match(narratorInput.message, /Paragraph 2 — Arrival/);
+  assert.match(narratorInput.message, /Paragraph 3 — Live scene/);
   assert.match(narratorInput.message, /opening_scene/);
-  assert.match(narratorInput.message, /Paragraph 4 must introduce the visible tension/);
-  assert.match(narratorInput.message, /Paragraph 5 must make the immediate problem actionable/);
-  assert.match(narratorInput.message, /Paragraph 6 must be the final direct handoff prompt/);
-  assert.match(narratorInput.message, /Do not write a seventh paragraph/);
-  assert.match(narratorInput.message, /personal urgency beat/);
-  assert.match(narratorInput.message, /2-3 concrete non-dice actions/);
-  assert.match(narratorInput.message, /Invalid opener: any opener with fewer or more than exactly 6 paragraphs/);
-  assert.match(narratorInput.message, /grounded, direct fantasy prose/);
-  assert.match(narratorInput.message, /do not say they disappeared/);
-  assert.match(narratorInput.message, /Do not invent new circumstances/);
+  assert.match(narratorInput.message, /Paragraph 4 — Pressure/);
+  assert.match(narratorInput.message, /Paragraph 5 — Choice/);
+  assert.match(narratorInput.message, /Paragraph 6 — Handoff/);
+  assert.match(narratorInput.message, /grounded, direct, detailed fantasy prose/);
   assert.doesNotMatch(narratorInput.message, /Flagship world context:/);
   assert.doesNotMatch(narratorInput.message, /Seven regions available for the opener:/);
   assert.doesNotMatch(narratorInput.instructions, /World Context:/);
   assert.doesNotMatch(narratorInput.instructions, /Regions of Eldermere:/);
+  assert.doesNotMatch(narratorInput.instructions, /2-3 sparse semantic narration color tags/);
+  assert.match(narratorInput.instructions, /Required top-level keys/);
   assert.match(narratorInput.message, /"region": "The Salt Concordat"/);
   assert.match(narratorInput.message, /"starting_location": "Selwick"/);
   assert.match(
     narratorInput.message,
-    /Write the player-facing opener only from the Eldermere opening plan/
+    /Fulfill how_the_player_got_here, concept, opening_scene, and player-safe campaign_anchors/
   );
 
   assert.ok(plannerDebug);
@@ -3025,7 +3005,7 @@ test.skip("POST /api/campaigns scrubs forbidden Eldermere opening terms after na
   assert.equal(providerInputs.length, 3);
   assert.match(
     repairInput?.message ?? "",
-    /public_narration must contain 2-3 semantic narration markup tags; found 0/
+    /public_narration must contain exactly 6 semantic narration markup tags; found 0/
   );
 });
 
