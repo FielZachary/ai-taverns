@@ -817,6 +817,7 @@ export type DungeonMasterRuntime = {
     dmJob?: DmJobName;
     model?: AiModelId;
     temperature?: number;
+    responseFormat?: "json" | "text";
     signal?: AbortSignal;
     onPublicNarrationDelta?: (text: string) => void;
   }): Promise<DungeonMasterProviderResponse>;
@@ -9273,7 +9274,7 @@ function formatEldermereNarratorOpeningRequest(input: {
     "Focus on establishing what is unknown to the player but immediately in front of them: where they are, who is present, what is happening, what feels wrong or urgent, and what they can do now.",
     "Do not explain wider factions, politics, history, hidden stakes, future campaign developments, or abstract implications unless they are directly necessary to understand the player's immediate situation and choice.",
     "",
-    "public_narration must contain exactly 6 paragraphs separated by blank lines. Do not add headings, labels, notes, Markdown, or text outside the JSON object. Paragraph 6 must be exactly 'What do you do?'.",
+    "Return only plain prose. It must contain exactly 6 paragraphs separated by blank lines. Do not add headings, labels, notes, Markdown, JSON, or commentary. Paragraph 6 must be exactly 'What do you do?'.",
     "Preserve all established character-sheet and backstory facts. Do not change, resolve, soften, or invent past events, relationships, debts, gifts, clues, promises, or causes.",
     "Use only facts the character could reasonably see, hear, know, infer, or be told in this opening scene. Do not request dice; the player must receive control before attempting any uncertain action.",
     "Use exactly 6 semantic narration color tags across paragraphs 1-5: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, or <object>...</object>. Each tag must wrap only a short, player-visible noun or phrase. Do not nest tags, add attributes, use <em>, use Markdown emphasis, or use any other HTML/XML tags.",
@@ -9288,12 +9289,7 @@ function formatEldermereNarratorOpeningRequest(input: {
     "",
     "Opening style: Write grounded, direct, detailed fantasy prose. Create atmosphere through physical details, behavior, sound, weather, terrain, objects, and visible consequences—not lyrical abstractions, prophecy, or a campaign trailer. The opener should feel like a DM placing the player in a specific, dangerous, playable moment.",
     "",
-    "Before returning, silently verify that the campaign concept is dramatized rather than summarized, all 6 paragraphs follow the required sequence, paragraph 6 is exactly 'What do you do?', and exactly 6 valid semantic color tags appear across paragraphs 1-5.",
-    'Set setting.world_name to "Eldermere".',
-    `Set setting.region_name to "${input.plan.region}".`,
-    `Set setting.settlement_name to "${input.plan.startingLocation}".`,
-    `Set setting.scene_location and setting.display_location to "${input.plan.startingLocation}".`,
-    `Set setting.starting_location to "${input.plan.startingLocation}".`
+    "Before returning, silently verify that the campaign concept is dramatized rather than summarized, all 6 paragraphs follow the required sequence, paragraph 6 is exactly 'What do you do?', and exactly 6 valid semantic color tags appear across paragraphs 1-5."
   ].join("\n");
 }
 
@@ -9575,11 +9571,9 @@ function openingSceneInstructions(mode: CampaignMode) {
 function eldermereOpeningNarratorInstructions() {
   return [
     "You are the AI Taverns DnD Dungeon Master writing a campaign opener.",
-    "Return exactly one valid JSON object and no Markdown outside that object.",
-    "Required top-level keys: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update, combat_events, proposed_context_updates.",
-    "Use public_narration for player-facing narration. Include setting with display_location, world_name, region_name, settlement_name, scene_location, and starting_location.",
-    "For this opener, return resolution_mode resolved_without_dice, roll_requests [], next_input_needed player_actions, input_targets [], input_policy all_players, mechanics_state_update {}, inventory_state_update { patches: [] }, combat_events [], and proposed_context_updates [].",
-    "Follow the opener-specific narration, semantic tag, setting, and secrecy requirements in the user request exactly."
+    "Return only the complete player-facing opener as plain prose.",
+    "Do not return JSON, Markdown fences, headings, metadata, roll requests, state updates, setting information, or commentary.",
+    "Follow the opener-specific narration and semantic tag requirements in the user request exactly."
   ].join("\n");
 }
 
@@ -10357,13 +10351,25 @@ function repairEldermereOpeningReply(
 ): DungeonMasterReply {
   const scrubbedContent = scrubForbiddenOpeningTerms(reply.content, plan);
 
+  return withEldermereOpeningSetting(
+    {
+      ...reply,
+      content: normalizeEldermereOpeningSemanticTags(scrubbedContent, plan)
+    },
+    plan
+  );
+}
+
+function withEldermereOpeningSetting(
+  reply: DungeonMasterReply,
+  plan: EldermereOpeningPlan
+): DungeonMasterReply {
   return {
     ...reply,
-    content: normalizeEldermereOpeningSemanticTags(scrubbedContent, plan),
     setting: {
-      ...reply.setting,
       worldName: "Eldermere",
       regionName: plan.region,
+      settlementName: plan.startingLocation,
       sceneLocation: plan.startingLocation,
       startingLocation: plan.startingLocation,
       displayLocation: plan.startingLocation
@@ -10471,22 +10477,26 @@ async function askEldermereOpeningNarrator(
     players,
     plan
   });
-  const opening = await askDungeonMaster(
-    db,
-    runtime,
-    campaign,
-    narratorMessage,
-    instructions,
-    false,
-    turnId,
-    undefined,
-    contractOptions,
-    {
-      buildPromptContext: false,
-      contractKind: "opening",
-      includeEldermereTurnContext: false,
-      suppressStreaming: true
-    }
+  const opening = withEldermereOpeningSetting(
+    await askDungeonMaster(
+      db,
+      runtime,
+      campaign,
+      narratorMessage,
+      instructions,
+      false,
+      turnId,
+      undefined,
+      contractOptions,
+      {
+        buildPromptContext: false,
+        contractKind: "opening",
+        includeEldermereTurnContext: false,
+        suppressStreaming: true,
+        providerResponseFormat: "text"
+      }
+    ),
+    plan
   );
   const forbiddenTerms = findForbiddenOpeningTerms(opening.content, plan);
   const settingErrors = eldermereOpeningSettingErrors(opening.setting, plan);
@@ -10510,35 +10520,36 @@ async function askEldermereOpeningNarrator(
           `The previous public_narration used ${forbiddenTerms.length} forbidden opening term${forbiddenTermPlural} from forbidden_opening_terms.`
         ]
       : []),
-    ...(settingErrors.length > 0
-      ? [`The previous setting metadata was invalid: ${settingErrors.join("; ")}.`]
-      : []),
     ...(narrationErrors.length > 0
       ? [
           `The previous public_narration structure was invalid: ${narrationErrors.join("; ")}.`
         ]
       : []),
-    "Return the same opening situation as valid AI Taverns DM JSON, but fix every issue above.",
-    "public_narration must be exactly 6 paragraphs separated by blank lines, must follow narrator_instructions as the highest-priority scene blueprint, and the sixth paragraph must be the final direct prompt 'What do you do?'",
-    `public_narration must include exactly ${semanticOpeningTagMinimum} semantic narration color tags using <npc>, <place>, <clue>, <danger>, <faction>, or <object>.`,
-    "Use only allowed_player_facing_terms and plain descriptions. Preserve setting metadata."
+    "Return only a complete plain-prose opener for the same opening situation, fixing every issue above.",
+    "Use exactly 6 paragraphs separated by blank lines. The sixth and final paragraph must be exactly 'What do you do?'.",
+    `Use exactly ${semanticOpeningTagMinimum} semantic narration color tags using <npc>, <place>, <clue>, <danger>, <faction>, or <object>.`,
+    "Do not return JSON, Markdown fences, headings, metadata, setting information, roll requests, state updates, or commentary."
   ].join("\n");
-  const repairedOpening = await askDungeonMaster(
-    db,
-    runtime,
-    campaign,
-    repairMessage,
-    instructions,
-    false,
-    turnId,
-    undefined,
-    contractOptions,
-    {
-      buildPromptContext: false,
-      contractKind: "opening",
-      includeEldermereTurnContext: false,
-      suppressStreaming: true
-    }
+  const repairedOpening = withEldermereOpeningSetting(
+    await askDungeonMaster(
+      db,
+      runtime,
+      campaign,
+      repairMessage,
+      instructions,
+      false,
+      turnId,
+      undefined,
+      contractOptions,
+      {
+        buildPromptContext: false,
+        contractKind: "opening",
+        includeEldermereTurnContext: false,
+        suppressStreaming: true,
+        providerResponseFormat: "text"
+      }
+    ),
+    plan
   );
   const remainingForbiddenTerms = findForbiddenOpeningTerms(
     repairedOpening.content,
@@ -10594,16 +10605,16 @@ async function askEldermereOpeningNarrator(
       settingErrors: normalizedSettingErrors,
       narrationErrors: normalizedNarrationErrors
     })}`,
-    "Rewrite the same opening situation as one valid AI Taverns DM JSON object.",
-    "public_narration must contain exactly 6 paragraphs separated by blank lines.",
+    "Rewrite the same opening situation as plain prose only.",
+    "Use exactly 6 paragraphs separated by blank lines.",
     "Paragraph 1: why this character or party came here now.",
     "Paragraph 2: the recent travel, arrival context, and what the character knows before the live scene.",
     "Paragraph 3: the starting location atmosphere narrowing into the first live scene.",
     "Paragraph 4: visible NPC tension and immediate pressure.",
     "Paragraph 5: the actionable complication and 2-3 concrete non-dice actions available right now.",
     "Paragraph 6: exactly 'What do you do?' and nothing else.",
-    `public_narration must include exactly ${semanticOpeningTagMinimum} semantic narration color tags using <npc>, <place>, <clue>, <danger>, <faction>, or <object>.`,
-    "Do not include Markdown outside JSON, a teaser, a summary, a prologue note, or fewer than 6 paragraphs."
+    `Use exactly ${semanticOpeningTagMinimum} semantic narration color tags using <npc>, <place>, <clue>, <danger>, <faction>, or <object>.`,
+    "Do not include JSON, Markdown fences, a teaser, a summary, a prologue note, metadata, or fewer than 6 paragraphs."
   ].join("\n");
   const finalOpening = await askDungeonMaster(
     db,
@@ -10620,7 +10631,8 @@ async function askEldermereOpeningNarrator(
       contractKind: "opening",
       includeEldermereTurnContext: false,
       suppressStreaming: true,
-      temperature: finalEldermereOpeningRetryTemperature
+      temperature: finalEldermereOpeningRetryTemperature,
+      providerResponseFormat: "text"
     }
   );
   const normalizedFinalOpening = repairEldermereOpeningReply(finalOpening, plan);
@@ -10806,6 +10818,7 @@ async function askDungeonMaster(
     model?: AiModelId;
     suppressStreaming?: boolean;
     temperature?: number;
+    providerResponseFormat?: "json" | "text";
     timeoutMs?: number;
   }
 ): Promise<DungeonMasterReply> {
@@ -10865,11 +10878,14 @@ async function askDungeonMaster(
             ...(options?.model ? { model: options.model } : {})
           })
       : null;
-    const providerMessage = appendGameplayTurnOutputContractReminder(
-      promptContext?.message ?? message,
-      campaign.mode,
-      options?.contractKind
-    );
+    const providerMessage =
+      options?.providerResponseFormat === "text"
+        ? promptContext?.message ?? message
+        : appendGameplayTurnOutputContractReminder(
+            promptContext?.message ?? message,
+            campaign.mode,
+            options?.contractKind
+          );
     const providerStartedAt = Date.now();
     const timeoutSignal = options?.timeoutMs
       ? AbortSignal.timeout(options.timeoutMs)
@@ -10883,6 +10899,9 @@ async function askDungeonMaster(
       ...(options?.model ? { model: options.model } : {}),
       ...(typeof options?.temperature === "number"
         ? { temperature: options.temperature }
+        : {}),
+      ...(options?.providerResponseFormat
+        ? { responseFormat: options.providerResponseFormat }
         : {}),
       ...(timeoutSignal ? { signal: timeoutSignal } : {}),
       ...(streamEmitter && streamTurnId

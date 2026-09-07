@@ -2677,8 +2677,10 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.doesNotMatch(narratorInput.message, /Seven regions available for the opener:/);
   assert.doesNotMatch(narratorInput.instructions, /World Context:/);
   assert.doesNotMatch(narratorInput.instructions, /Regions of Eldermere:/);
-  assert.doesNotMatch(narratorInput.instructions, /2-3 sparse semantic narration color tags/);
-  assert.match(narratorInput.instructions, /Required top-level keys/);
+  assert.match(narratorInput.instructions, /Return only the complete player-facing opener as plain prose/);
+  assert.doesNotMatch(narratorInput.instructions, /Required top-level keys/);
+  assert.doesNotMatch(narratorInput.message, /Set setting\./);
+  assert.doesNotMatch(narratorInput.message, /Return exactly one valid JSON/);
   assert.match(narratorInput.message, /"region": "The Salt Concordat"/);
   assert.match(narratorInput.message, /"starting_location": "Selwick"/);
   assert.match(narratorInput.message, /"how_the_player_got_here":/);

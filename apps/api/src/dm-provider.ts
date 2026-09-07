@@ -70,6 +70,7 @@ export type DungeonMasterProviderInput = {
   dmJob?: DmJobName;
   model?: AiModelId;
   temperature?: number;
+  responseFormat?: "json" | "text";
   signal?: AbortSignal;
   onPublicNarrationDelta?: (text: string) => void;
 };
@@ -584,6 +585,7 @@ async function requestDeepSeek(
   temperature: number,
   attempt: number,
   settings: ReturnType<typeof resolvedProviderSettings>,
+  responseFormat: "json" | "text",
   onPublicNarrationDelta?: (text: string) => void,
   signal?: AbortSignal
 ) {
@@ -599,7 +601,9 @@ async function requestDeepSeek(
     max_completion_tokens: 4096,
     ...(onPublicNarrationDelta
       ? { stream: true }
-      : { response_format: { type: "json_object" } })
+      : responseFormat === "json"
+        ? { response_format: { type: "json_object" } }
+        : {})
   });
   const requestStarted = Date.now();
   const timing: DeepSeekTiming = {
@@ -610,7 +614,8 @@ async function requestDeepSeek(
     requestBytes: Buffer.byteLength(requestBody, "utf8"),
     requestMessageCount: messages.length,
     requestContentChars: requestContentChars(messages),
-    responseFormat: "json_contract_prompt"
+    responseFormat:
+      responseFormat === "json" ? "json_contract_prompt" : "text_prompt"
   };
 
   if (!settings.apiKey) {
@@ -817,7 +822,8 @@ export async function askDungeonMasterProvider({
   model,
   temperature: temperatureOverride,
   signal,
-  onPublicNarrationDelta
+  onPublicNarrationDelta,
+  responseFormat = "json"
 }: DungeonMasterProviderInput): Promise<DungeonMasterProviderResponse> {
   if (shouldUseTestProvider()) {
     return askTestDungeonMasterProvider({
@@ -830,6 +836,7 @@ export async function askDungeonMasterProvider({
       ...(typeof temperatureOverride === "number"
         ? { temperature: temperatureOverride }
         : {}),
+      ...(responseFormat === "text" ? { responseFormat } : {}),
       ...(onPublicNarrationDelta ? { onPublicNarrationDelta } : {})
     });
   }
@@ -869,6 +876,7 @@ export async function askDungeonMasterProvider({
     temperature,
     1,
     settings,
+    responseFormat,
     onPublicNarrationDelta,
     signal
   );
@@ -882,6 +890,7 @@ export async function askDungeonMasterProvider({
       temperature,
       2,
       settings,
+      responseFormat,
       undefined,
       signal
     ));

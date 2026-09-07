@@ -3874,41 +3874,30 @@ before(async () => {
         const publicNarration =
           "The summons that brought you here has the weight of <clue>unfinished business</clue>, the kind that does not let a traveler turn back once the old road bends toward trouble.\n\nFor the last few days, the <place>old road</place> has been mud, cold meals, and warnings from strangers who would not meet your eyes; in the last hour, the trees thinned enough to show the ruined watchtower beyond the ridge.\n\nA <object>lantern</object> flickers over the <place>old road</place> as your adventure begins, its light catching wet stones, wagon ruts, and a <clue>weathered sign</clue> pointing toward the tower beyond the trees.\n\nA <npc>courier</npc> waits beside the sign with their cloak pulled tight, glancing between you and the dark treeline while distant metal knocks once from somewhere inside the ruin.\n\nYou can question the courier, inspect the weathered sign, or follow the road toward the <danger>ruined watchtower</danger> before the lantern burns out.\n\nWhat do you do?";
         const isEldermereNarrator = input.message.includes(
-          'Set setting.world_name to "Eldermere".'
+          "ELDERMERE OPENING BRIEF"
         );
-          const eldermereStartingLocation =
-            input.message.match(
-              /Set setting\.starting_location to "([^"]+)"/
-            )?.[1] ?? "Old Road";
-          const eldermereRegion =
-            input.message.match(/Set setting\.region_name to "([^"]+)"/)?.[1] ??
-            "Test Region";
 
         input.onPublicNarrationDelta?.(publicNarration.slice(0, 28));
         input.onPublicNarrationDelta?.(publicNarration.slice(28));
 
         return {
           id: "provider-message-1",
-          content: JSON.stringify({
-            public_narration: publicNarration,
-            roll_requests: [],
-            next_input_needed: "player_actions",
-            input_targets: [],
-            input_policy: "all_players",
-            setting: {
-              display_location: isEldermereNarrator
-                ? eldermereStartingLocation
-                : "Old Road",
-              world_name: isEldermereNarrator ? "Eldermere" : "Test Realm",
-              region_name: isEldermereNarrator ? eldermereRegion : "Test Region",
-              scene_location: isEldermereNarrator
-                ? eldermereStartingLocation
-                : "Old Road",
-              starting_location: isEldermereNarrator
-                ? eldermereStartingLocation
-                : "Old Road"
-            }
-          }),
+          content: isEldermereNarrator
+            ? publicNarration
+            : JSON.stringify({
+                public_narration: publicNarration,
+                roll_requests: [],
+                next_input_needed: "player_actions",
+                input_targets: [],
+                input_policy: "all_players",
+                setting: {
+                  display_location: "Old Road",
+                  world_name: "Test Realm",
+                  region_name: "Test Region",
+                  scene_location: "Old Road",
+                  starting_location: "Old Road"
+                }
+              }),
           debug: {
             requestMessages: [],
             rawResponse: "{}",

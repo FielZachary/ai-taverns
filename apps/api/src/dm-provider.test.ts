@@ -211,6 +211,34 @@ test("DeepSeek provider sends filtered history and returns non-stream debug meta
   );
 });
 
+test("DeepSeek provider omits JSON mode for plain-text requests", async () => {
+  let requestBody: { response_format?: unknown; stream?: boolean } | undefined;
+
+  globalThis.fetch = async (_url, init) => {
+    requestBody = JSON.parse(String(init?.body)) as typeof requestBody;
+
+    return jsonResponse({
+      id: "text-1",
+      model: "test-chat-model",
+      choices: [{ message: { content: "A plain-text campaign opener." } }]
+    });
+  };
+
+  const response = await askDungeonMasterProvider({
+    instructions: "Return only plain prose.",
+    message: "Write the opener.",
+    responseFormat: "text"
+  });
+
+  assert.equal(requestBody?.response_format, undefined);
+  assert.equal(requestBody?.stream, undefined);
+  assert.equal(response.content, "A plain-text campaign opener.");
+  assert.equal(
+    response.debug.providerTimings?.[0]?.responseFormat,
+    "text_prompt"
+  );
+});
+
 test("provider routes Qwen model selections to Qwen credentials", async () => {
   process.env.QWEN_MODEL = "custom-qwen-flash";
   let requestUrl = "";
