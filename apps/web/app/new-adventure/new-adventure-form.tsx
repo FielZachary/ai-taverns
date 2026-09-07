@@ -2164,6 +2164,35 @@ type CharacterBackground = (typeof backgroundOptions)[number];
 type Alignment = (typeof alignmentOptions)[number];
 type Gender = (typeof genderOptions)[number];
 
+export function quickBuildStatAssignmentsFor(
+  characterClass: CharacterClass,
+  statRollValues: readonly number[]
+) {
+  const abilityPriority = [...abilityDefinitions].sort(
+    (left, right) =>
+      defaultAbilityScoresByClass[characterClass][right.key] -
+      defaultAbilityScoresByClass[characterClass][left.key]
+  );
+  const rollPriority = statRollValues
+    .map((value, index) => ({ index, value }))
+    .sort((left, right) => right.value - left.value || left.index - right.index);
+  const assignments = { ...emptyStatRollAssignments };
+  const scores = { ...emptyAbilityScores };
+
+  abilityPriority.forEach(({ key }, index) => {
+    const roll = rollPriority[index];
+
+    if (!roll) {
+      return;
+    }
+
+    assignments[key] = roll.index;
+    scores[key] = roll.value;
+  });
+
+  return { assignments, scores };
+}
+
 const subclassDescriptions: Record<CharacterSubclass, string> = {
   Alchemist: "Turns reagents and restoratives into battlefield support.",
   Armorer: "Builds enchanted armor for defense, mobility, and force.",
@@ -5339,41 +5368,57 @@ export function NewAdventureForm({
 
     if (activeStatRoll.targetRollIndex !== undefined) {
       const targetRollIndex = activeStatRoll.targetRollIndex;
+      const nextValues =
+        statRollValues.length === abilityDefinitions.length
+          ? [...statRollValues]
+          : [...emptyStatRollValues];
+      nextValues[targetRollIndex] = activeStatRoll.values[0] ?? null;
+      setStatRollValues(nextValues);
 
-      setStatRollValues((currentValues) => {
-        const nextValues =
-          currentValues.length === abilityDefinitions.length
-            ? [...currentValues]
-            : [...emptyStatRollValues];
-        nextValues[targetRollIndex] = activeStatRoll.values[0] ?? null;
-        return nextValues;
-      });
-      setStatRollAssignments((currentAssignments) => {
-        const nextAssignments = { ...currentAssignments };
+      if (characterBuildMode === "quick" && nextValues.every((value) => value !== null)) {
+        const { assignments, scores } = quickBuildStatAssignmentsFor(
+          characterClass,
+          nextValues as number[]
+        );
+        setStatRollAssignments(assignments);
+        setAbilityScores(scores);
+      } else {
+        setStatRollAssignments((currentAssignments) => {
+          const nextAssignments = { ...currentAssignments };
 
-        abilityDefinitions.forEach(({ key }) => {
-          if (nextAssignments[key] === targetRollIndex) {
-            nextAssignments[key] = null;
-          }
+          abilityDefinitions.forEach(({ key }) => {
+            if (nextAssignments[key] === targetRollIndex) {
+              nextAssignments[key] = null;
+            }
+          });
+
+          return nextAssignments;
         });
+        setAbilityScores((currentScores) => {
+          const nextScores = { ...currentScores };
 
-        return nextAssignments;
-      });
-      setAbilityScores((currentScores) => {
-        const nextScores = { ...currentScores };
+          abilityDefinitions.forEach(({ key }) => {
+            if (statRollAssignments[key] === targetRollIndex) {
+              nextScores[key] = null;
+            }
+          });
 
-        abilityDefinitions.forEach(({ key }) => {
-          if (statRollAssignments[key] === targetRollIndex) {
-            nextScores[key] = null;
-          }
+          return nextScores;
         });
-
-        return nextScores;
-      });
+      }
     } else {
       setStatRollValues(activeStatRoll.values);
-      setStatRollAssignments({ ...emptyStatRollAssignments });
-      setAbilityScores({ ...emptyAbilityScores });
+      if (characterBuildMode === "quick") {
+        const { assignments, scores } = quickBuildStatAssignmentsFor(
+          characterClass,
+          activeStatRoll.values
+        );
+        setStatRollAssignments(assignments);
+        setAbilityScores(scores);
+      } else {
+        setStatRollAssignments({ ...emptyStatRollAssignments });
+        setAbilityScores({ ...emptyAbilityScores });
+      }
     }
 
     setActiveStatRoll(null);

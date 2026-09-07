@@ -6,6 +6,7 @@ import {
   finalAbilityScoresFor,
   quickBuildEquipmentSelectionsFor,
   quickBuildSpellSelectionFor,
+  quickBuildStatAssignmentsFor,
   spellArchetypeFor,
   spellArtPathFor,
   spellCastingTimeFor,
@@ -392,6 +393,29 @@ describe("NewAdventureForm", () => {
       "weapon-1": { optionId: "martial-and-shield", customItems: ["Longsword"] },
       "weapon-2": { optionId: "light-crossbow" },
       pack: { optionId: "dungeoneers-pack" }
+    });
+  });
+
+  it("assigns Quick Build rolls to each class's prioritized abilities", () => {
+    expect(
+      quickBuildStatAssignmentsFor("Fighter", [8, 18, 10, 13, 15, 12])
+    ).toEqual({
+      assignments: {
+        str: 1,
+        dex: 3,
+        con: 4,
+        int: 2,
+        wis: 5,
+        cha: 0
+      },
+      scores: {
+        str: 18,
+        dex: 13,
+        con: 15,
+        int: 10,
+        wis: 12,
+        cha: 8
+      }
     });
   });
 
