@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   NewAdventureForm,
   finalAbilityScoresFor,
+  quickBuildEquipmentSelectionsFor,
+  quickBuildSpellSelectionFor,
   spellArchetypeFor,
   spellArtPathFor,
   spellCastingTimeFor,
@@ -107,6 +109,7 @@ async function advanceThroughFighterEquipment() {
 async function advanceSingleplayerToIdentity() {
   await continueFlow();
   await continueFlow();
+  chooseCustomBuild();
   await choosePointBuyStats();
   await nextCharacterStep();
   await nextCharacterStep();
@@ -367,6 +370,31 @@ describe("NewAdventureForm", () => {
     expect(buildPicker.querySelector(".build-mode-divider")).toHaveTextContent("OR");
   });
 
+  it("uses offensive spells and complete equipment defaults for Quick Build", () => {
+    const selectedSpells = quickBuildSpellSelectionFor(
+      "Wizard",
+      [
+        { level: "Cantrip", base: ["Fire Bolt", "Mage Hand"] },
+        { level: "1st level", base: ["Burning Hands", "Magic Missile"] },
+        { level: "3rd level", base: ["Fireball", "Lightning Bolt"] }
+      ],
+      {
+        cantrips: 1,
+        leveledSpells: 2,
+        availableLevels: ["Cantrip", "1st level", "3rd level"],
+        spellSlotsText: "Test slots"
+      }
+    );
+
+    expect(selectedSpells).toEqual(["Fire Bolt", "Burning Hands", "Fireball"]);
+    expect(quickBuildEquipmentSelectionsFor("Fighter")).toMatchObject({
+      armor: { optionId: "chain-mail" },
+      "weapon-1": { optionId: "martial-and-shield", customItems: ["Longsword"] },
+      "weapon-2": { optionId: "light-crossbow" },
+      pack: { optionId: "dungeoneers-pack" }
+    });
+  });
+
   it("shows campaign worlds as banner choices with generated art", async () => {
     render(<NewAdventureForm />);
 
@@ -514,6 +542,7 @@ describe("NewAdventureForm", () => {
 
     await continueFlow();
     await continueFlow();
+    chooseCustomBuild();
     await choosePointBuyStats();
     await nextCharacterStep();
     await nextCharacterStep();
@@ -607,6 +636,7 @@ describe("NewAdventureForm", () => {
 
     await continueFlow();
     await continueFlow();
+    chooseCustomBuild();
     await choosePointBuyStats();
     await nextCharacterStep();
     await nextCharacterStep();

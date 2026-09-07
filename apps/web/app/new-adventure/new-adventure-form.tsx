@@ -250,8 +250,6 @@ const quickCharacterCreationSteps = [
   "Class",
   "Stats",
   "Species",
-  "Spells",
-  "Equipment",
   "Identity"
 ];
 const campaignGenres = [...campaignGenrePresets, customCampaignGenre];
@@ -3311,6 +3309,27 @@ const quickBuildBackgroundByClass: Record<CharacterClass, CharacterBackground> =
   Psion: "Sage"
 };
 
+const quickBuildOffensiveSpellPriority: Partial<Record<CharacterClass, string[]>> = {
+  Artificer: ["Fire Bolt", "Shocking Grasp", "Ray of Frost", "Heat Metal", "Web", "Magic Weapon", "Faerie Fire"],
+  Bard: ["Vicious Mockery", "Dissonant Whispers", "Thunderwave", "Shatter", "Heat Metal", "Cloud of Daggers", "Hypnotic Pattern", "Stinking Cloud"],
+  Cleric: ["Sacred Flame", "Guiding Bolt", "Inflict Wounds", "Spiritual Weapon", "Spirit Guardians", "Hold Person", "Bestow Curse"],
+  Druid: ["Produce Flame", "Poison Spray", "Thorn Whip", "Thunderwave", "Moonbeam", "Heat Metal", "Flaming Sphere", "Spike Growth", "Call Lightning"],
+  Paladin: ["Searing Smite", "Thunderous Smite", "Wrathful Smite", "Branding Smite", "Blinding Smite", "Elemental Weapon"],
+  Psion: ["Mind Sliver", "Telekinetic Fling", "Dissonant Whispers", "Mind Spike", "Shatter", "Hypnotic Pattern", "Fear"],
+  Ranger: ["Hunter's Mark", "Hail of Thorns", "Ensnaring Strike", "Spike Growth", "Conjure Barrage"],
+  Sorcerer: ["Fire Bolt", "Ray of Frost", "Shocking Grasp", "Chromatic Orb", "Burning Hands", "Scorching Ray", "Shatter", "Fireball", "Lightning Bolt"],
+  Warlock: ["Eldritch Blast", "Hellish Rebuke", "Hex", "Arms of Hadar", "Shatter", "Hunger of Hadar", "Vampiric Touch"],
+  Wizard: ["Fire Bolt", "Ray of Frost", "Shocking Grasp", "Chromatic Orb", "Burning Hands", "Scorching Ray", "Shatter", "Fireball", "Lightning Bolt"]
+};
+
+const quickBuildEquipmentDefaults: Record<EquipmentCategory, string[]> = {
+  simpleWeapon: ["Light crossbow"],
+  simpleMeleeWeapon: ["Spear"],
+  martialWeapon: ["Longsword"],
+  martialMeleeWeapon: ["Longsword"],
+  musicalInstrument: ["Lute"]
+};
+
 function formatList(items: readonly string[]) {
   return items.length > 0 ? items.join(", ") : "None";
 }
@@ -3325,6 +3344,44 @@ function equipmentSelectionItems(selection?: EquipmentChoiceSelection) {
 
 function equipmentChoiceQuantity(option: EquipmentChoiceOption) {
   return option.quantity ?? 1;
+}
+
+export function quickBuildEquipmentSelectionsFor(characterClass: CharacterClass) {
+  return classEquipmentRules[characterClass].choices.reduce<EquipmentSelections>(
+    (selections, choice) => {
+      const option = choice.options[0];
+
+      if (!option) {
+        return selections;
+      }
+
+      if (!option.category) {
+        selections[choice.id] = { optionId: option.id };
+        return selections;
+      }
+
+      const category = option.category;
+      const categoryDefaults = quickBuildEquipmentDefaults[category];
+      const items = categoryDefaults
+        .filter((item) => equipmentCategoryOptions[category].includes(item))
+        .slice(0, equipmentChoiceQuantity(option));
+
+      if (items.length < equipmentChoiceQuantity(option)) {
+        items.push(
+          ...equipmentCategoryOptions[category]
+            .filter((item) => !items.includes(item))
+            .slice(0, equipmentChoiceQuantity(option) - items.length)
+        );
+      }
+
+      selections[choice.id] = {
+        optionId: option.id,
+        customItems: items
+      };
+      return selections;
+    },
+    {}
+  );
 }
 
 function packContentsFor(item: string) {
@@ -3900,6 +3957,61 @@ function defaultSpellSelectionFor(
   return [...cantripDefaults, ...leveledDefaults];
 }
 
+function spellOffenseScore(spell: string, level: SpellLevelLabel) {
+  const normalizedSpell = spell.toLowerCase();
+  const levelBonus =
+    level === "3rd level" ? 30 : level === "2nd level" ? 20 : level === "1st level" ? 10 : 0;
+
+  return (
+    levelBonus +
+    (/fireball|lightning bolt|spirit guardians|call lightning|hunger of hadar/i.test(normalizedSpell)
+      ? 100
+      : /bolt|blast|ray|smite|shatter|whispers|wounds|moonbeam|spike growth|heat metal|weapon|flaming sphere|hunter's mark|hex/i.test(normalizedSpell)
+        ? 70
+        : /fear|hold person|hypnotic|web|ensnaring|curse/i.test(normalizedSpell)
+          ? 45
+          : 0)
+  );
+}
+
+export function quickBuildSpellSelectionFor(
+  characterClass: CharacterClass,
+  spellGroups: readonly SpellGroup[],
+  limits: SpellSelectionLimits
+) {
+  const priority = quickBuildOffensiveSpellPriority[characterClass] ?? [];
+  const rankedSpells = spellGroups
+    .filter((group) => isSpellLevelAvailable(group.level, limits))
+    .flatMap((group) =>
+      group.base.map((spell) => ({
+        spell,
+        level: group.level,
+        priority: priority.indexOf(spell)
+      }))
+    )
+    .sort((left, right) => {
+      const leftPriority = left.priority === -1 ? Number.MAX_SAFE_INTEGER : left.priority;
+      const rightPriority = right.priority === -1 ? Number.MAX_SAFE_INTEGER : right.priority;
+
+      return (
+        leftPriority - rightPriority ||
+        spellOffenseScore(right.spell, right.level) - spellOffenseScore(left.spell, left.level) ||
+        left.spell.localeCompare(right.spell)
+      );
+    });
+
+  const cantrips = rankedSpells
+    .filter(({ level }) => level === "Cantrip")
+    .slice(0, limits.cantrips)
+    .map(({ spell }) => spell);
+  const leveledSpells = rankedSpells
+    .filter(({ level }) => level !== "Cantrip")
+    .slice(0, limits.leveledSpells)
+    .map(({ spell }) => spell);
+
+  return [...cantrips, ...leveledSpells];
+}
+
 function pruneSpellSelection(
   spellGroups: readonly SpellGroup[],
   selectedSpells: readonly string[],
@@ -4215,7 +4327,9 @@ export function NewAdventureForm({
   const [selectedSkills, setSelectedSkills] = useState<SkillName[]>(["Athletics", "Perception"]);
   const [selectedTool, setSelectedTool] = useState<(typeof toolOptions)[number]>("Dice set");
   const [selectedLanguage, setSelectedLanguage] = useState<(typeof languageOptions)[number]>("Elvish");
-  const [equipmentSelections, setEquipmentSelections] = useState<EquipmentSelections>({});
+  const [equipmentSelections, setEquipmentSelections] = useState<EquipmentSelections>(
+    () => quickBuildEquipmentSelectionsFor("Fighter")
+  );
   const [equipmentChoiceStepIndex, setEquipmentChoiceStepIndex] = useState(0);
   const [activeEquipmentModal, setActiveEquipmentModal] =
     useState<ActiveEquipmentModal>(null);
@@ -5103,11 +5217,23 @@ export function NewAdventureForm({
     setSubclass(nextClassData.subclassOptions[0]);
     setClassFeatureChoice(nextClassData.featureOptions[0]);
     setSelectedSkills(defaultSkillsForClass(nextClassData));
-    setEquipmentSelections({});
+    setEquipmentSelections(
+      characterBuildMode === "quick"
+        ? quickBuildEquipmentSelectionsFor(nextClass)
+        : {}
+    );
     setEquipmentChoiceStepIndex(0);
     setActiveEquipmentModal(null);
     setDlcSpellVisibility({});
-    setSelectedSpells(defaultSpellSelectionFor(nextClassData.spellGroups, nextSpellLimits));
+    setSelectedSpells(
+      characterBuildMode === "quick"
+        ? quickBuildSpellSelectionFor(
+            nextClass,
+            nextClassData.spellGroups,
+            nextSpellLimits
+          )
+        : defaultSpellSelectionFor(nextClassData.spellGroups, nextSpellLimits)
+    );
 
     if (characterBuildMode === "quick") {
       setCharacterBackground(quickBuildBackgroundByClass[nextClass]);
@@ -5124,13 +5250,19 @@ export function NewAdventureForm({
     setSubclass(selectedClass.subclassOptions[0]);
     setClassFeatureChoice(selectedClass.featureOptions[0]);
     setSelectedSkills(defaultSkillsForClass(selectedClass));
-    setEquipmentSelections({});
+    setEquipmentSelections(quickBuildEquipmentSelectionsFor(characterClass));
     setEquipmentChoiceStepIndex(0);
     setActiveEquipmentModal(null);
     setSelectedTool("Dice set");
     setSelectedLanguage("Elvish");
     setDlcSpellVisibility({});
-    setSelectedSpells(defaultSpellSelectionFor(selectedClass.spellGroups, spellSelectionLimits));
+    setSelectedSpells(
+      quickBuildSpellSelectionFor(
+        characterClass,
+        selectedClass.spellGroups,
+        spellSelectionLimits
+      )
+    );
   }
 
   function applyCustomBuildDefaults() {
