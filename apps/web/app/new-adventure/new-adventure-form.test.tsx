@@ -396,6 +396,43 @@ describe("NewAdventureForm", () => {
     });
   });
 
+  it("shows spell details while choosing a custom wizard build", async () => {
+    render(<NewAdventureForm />);
+
+    await continueFlow();
+    await continueFlow();
+    chooseCustomBuild();
+    await nextCharacterStep();
+
+    fireEvent.click(screen.getByRole("button", { name: /wizard/i }));
+    await nextCharacterStep();
+    await nextCharacterStep();
+
+    fireEvent.click(screen.getByRole("button", { name: "Point Buy" }));
+    await nextCharacterStep();
+    await nextCharacterStep();
+
+    expect(screen.getByRole("group", { name: "Spells" })).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getAllByRole("checkbox", { name: "Non PHB Spells" })[0]
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open Fireball spell details" })
+    );
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByRole("heading", { name: "Fireball" })).toBeInTheDocument();
+    expect(within(dialog).getByText("Rolls Involved")).toBeInTheDocument();
+
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Close spell details" })
+    );
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
   it("assigns Quick Build rolls to each class's prioritized abilities", () => {
     expect(
       quickBuildStatAssignmentsFor("Fighter", [8, 18, 10, 13, 15, 12])
