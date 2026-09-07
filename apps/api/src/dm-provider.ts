@@ -70,6 +70,7 @@ export type DungeonMasterProviderInput = {
   dmJob?: DmJobName;
   model?: AiModelId;
   temperature?: number;
+  responseFormat?: "json" | "text";
   signal?: AbortSignal;
   onPublicNarrationDelta?: (text: string) => void;
 };
@@ -251,77 +252,79 @@ function testProviderDebug(
 
 function testOpeningPlanContent() {
   return JSON.stringify({
-    campaign_title: "Lanterns at Ashford Tollhouse",
-    region: {
-      name: "Ashford Vale",
-      why_this_region: "It gives the party a grounded road mystery.",
-      plain_description: "A rain-washed valley crossed by old trade roads."
-    },
-    starting_location: {
-      name: "Ashford Tollhouse",
-      type: "roadside tollhouse",
-      why_this_location: "It puts the party at the first obstacle immediately.",
-      plain_description: "A stone tollhouse beside a fogbound bridge."
-    },
-    starting_location_atmosphere: {
-      arrival_impression: "The tollhouse feels like the last lit place before the road gives up.",
-      daily_life_and_liveliness: "Teamsters crowd the wet yard while clerks, guards, and stranded travelers argue over delayed passage.",
-      local_attitude: "Locals are wary of anyone asking direct questions, but they watch capable travelers with desperate interest.",
-      dominant_vibe: "busy, rain-soaked, and afraid to admit why",
-      sensory_entry_details: [
-        "lanterns swinging over muddy wagon ruts",
-        "drivers shouting over rain and restless horses",
-        "wet wool, river fog, and smoke from a crowded hearth"
-      ],
-      transition_into_first_scene: "The rain-choked yard funnels everyone into the common room where Marra waits by the shutters."
-    },
-    opening_premise: {
-      why_the_party_is_here: "They were hired to escort a sealed road charter.",
-      immediate_objective: "Find out why the bridge watch has gone silent.",
-      immediate_complication: "The courier is frightened and the bridge is hidden by fog.",
-      first_scene_location: "Inside the Ashford Tollhouse common room.",
-      opening_mood: "rainy, watchful, and urgent",
-      campaign_promise: "A road mystery with practical choices and hidden danger."
-    },
-    player_facing_facts: [
-      "The courier needs help before nightfall.",
-      "The fogbound bridge blocks the road ahead."
-    ],
-    allowed_player_facing_terms: [
+    region: "Ashford Vale",
+    starting_location: "Ashford Tollhouse",
+    how_the_player_got_here:
+      "The player accepted work escorting a sealed road charter through the valley.",
+    concept:
+      "A routine escort becomes a road mystery when the bridge watch goes silent and several people want the charter before the player can deliver it. Following the charter's trail reveals that its destination, its broken seal, and the player's hiring were arranged to hide what lies beneath the road. The player eventually decides whether to expose the discovery, deliver it to the people who buried it, or use it to protect the communities along the route.",
+    opening_scene:
+      "Inside the Ashford Tollhouse, a frightened courier asks the player to cross the fogbound bridge before nightfall.",
+    private_truth:
+      "The bridge watch found evidence beneath the road, and the charter identifies who is trying to conceal it; learning this reveals that the player was hired as a disposable courier and gives them leverage over the people behind the cover-up.",
+    campaign_anchors: [
       {
-        term: "Ashford Tollhouse",
-        plain_meaning: "a stone roadside checkpoint"
-      }
-    ],
-    npc_seed: [
+        type: "region",
+        name: "Ashford Vale",
+        visibility: "player_safe",
+        description: "A rain-washed valley whose trade road and bridge connect isolated communities.",
+        opening_role: "Its weather and blocked crossing create the opening pressure.",
+        campaign_relevance: "The road mystery can affect every community relying on the route.",
+        future_pressure_or_change: "Isolation, disrupted trade, and hidden discoveries can reshape the valley.",
+        player_influence: "The player can restore access, expose danger, or decide who benefits from the road."
+      },
       {
+        type: "settlement",
+        name: "Ashford Tollhouse",
+        visibility: "player_safe",
+        description: "A stone roadside checkpoint beside the fogbound bridge.",
+        opening_role: "It is the first playable scene and refuge for stranded travelers.",
+        campaign_relevance: "It becomes the first place affected by the hidden conflict under the road.",
+        future_pressure_or_change: "It can become a refuge, bottleneck, or contested outpost.",
+        player_influence: "The player can protect its people, expose corruption, or change who controls passage."
+      },
+      {
+        type: "person",
         name: "Marra Vale",
-        role: "worried courier",
-        wants: "safe passage across the bridge",
-        visible_behavior: "keeps checking the rain-dark windows"
+        visibility: "player_safe",
+        description:
+          "A worried courier carrying the sealed road charter.",
+        opening_role: "She asks the player to cross the bridge before nightfall.",
+        campaign_relevance: "Her loyalties connect the player to the charter's hidden purpose.",
+        future_pressure_or_change: "She may protect the charter's owners or help expose them.",
+        player_influence: "The player can earn her trust, protect her, or challenge her loyalties."
+      },
+      {
+        type: "object",
+        name: "The Sealed Road Charter",
+        visibility: "player_safe",
+        description:
+          "An official document with a broken seal and a concealed significance.",
+        opening_role: "It is the first object that makes the bridge crossing urgent.",
+        campaign_relevance: "Its contents reveal why the player was hired and who is concealing the discovery.",
+        future_pressure_or_change: "Its destination and contents can change the stakes of the whole route.",
+        player_influence: "The player can deliver, expose, destroy, or redirect it."
+      },
+      {
+        type: "mystery",
+        name: "What Lies Beneath the Road",
+        visibility: "dm_only",
+        description: "The concealed discovery found by the bridge watch beneath the old road.",
+        opening_role: "It causes the bridge watch's silence and the urgency around the charter.",
+        campaign_relevance: "It is the truth that recontextualizes the escort job.",
+        future_pressure_or_change: "Its discovery can draw rivals, endanger the route, or change regional power.",
+        player_influence: "The player can reveal, contain, exploit, or protect it."
+      },
+      {
+        type: "threat",
+        name: "The Charter's Claimants",
+        visibility: "dm_only",
+        description: "The people pursuing the charter to keep the underlying discovery hidden.",
+        opening_role: "Their pressure is felt through the courier's fear and the blocked bridge.",
+        campaign_relevance: "They turn a delivery into a conflict over truth and control.",
+        future_pressure_or_change: "They can bribe, threaten, erase evidence, or fracture as the player acts.",
+        player_influence: "The player can evade, expose, bargain with, or defeat them."
       }
-    ],
-    first_interactable_choices: [
-      "Question Marra about the silent bridge watch.",
-      "Inspect the sealed road charter.",
-      "Step outside and study the fogbound bridge."
-    ],
-    sensory_palette: {
-      sights: ["lanternlight on wet stone"],
-      sounds: ["rain tapping shutters"],
-      smells: ["damp wool and woodsmoke"],
-      textures_or_weather: ["cold rain in the doorway"]
-    },
-    dm_private_context: [
-      "The bridge watch discovered something under the road."
-    ],
-    forbidden_opening_terms: ["Second Dominion"],
-    narrator_instructions: [
-      "Open inside the tollhouse and end by asking what the players do."
-    ],
-    opening_quality_checks: [
-      "No forbidden terms appear.",
-      "The opener gives the party at least two clear options."
     ]
   });
 }
@@ -582,6 +585,7 @@ async function requestDeepSeek(
   temperature: number,
   attempt: number,
   settings: ReturnType<typeof resolvedProviderSettings>,
+  responseFormat: "json" | "text",
   onPublicNarrationDelta?: (text: string) => void,
   signal?: AbortSignal
 ) {
@@ -597,7 +601,9 @@ async function requestDeepSeek(
     max_completion_tokens: 4096,
     ...(onPublicNarrationDelta
       ? { stream: true }
-      : { response_format: { type: "json_object" } })
+      : responseFormat === "json"
+        ? { response_format: { type: "json_object" } }
+        : {})
   });
   const requestStarted = Date.now();
   const timing: DeepSeekTiming = {
@@ -608,7 +614,8 @@ async function requestDeepSeek(
     requestBytes: Buffer.byteLength(requestBody, "utf8"),
     requestMessageCount: messages.length,
     requestContentChars: requestContentChars(messages),
-    responseFormat: "json_contract_prompt"
+    responseFormat:
+      responseFormat === "json" ? "json_contract_prompt" : "text_prompt"
   };
 
   if (!settings.apiKey) {
@@ -815,7 +822,8 @@ export async function askDungeonMasterProvider({
   model,
   temperature: temperatureOverride,
   signal,
-  onPublicNarrationDelta
+  onPublicNarrationDelta,
+  responseFormat = "json"
 }: DungeonMasterProviderInput): Promise<DungeonMasterProviderResponse> {
   if (shouldUseTestProvider()) {
     return askTestDungeonMasterProvider({
@@ -828,6 +836,7 @@ export async function askDungeonMasterProvider({
       ...(typeof temperatureOverride === "number"
         ? { temperature: temperatureOverride }
         : {}),
+      ...(responseFormat === "text" ? { responseFormat } : {}),
       ...(onPublicNarrationDelta ? { onPublicNarrationDelta } : {})
     });
   }
@@ -867,6 +876,7 @@ export async function askDungeonMasterProvider({
     temperature,
     1,
     settings,
+    responseFormat,
     onPublicNarrationDelta,
     signal
   );
@@ -880,6 +890,7 @@ export async function askDungeonMasterProvider({
       temperature,
       2,
       settings,
+      responseFormat,
       undefined,
       signal
     ));
