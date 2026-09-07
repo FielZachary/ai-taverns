@@ -2824,8 +2824,6 @@ test.skip("POST /api/campaigns scrubs forbidden Eldermere opening terms after na
       return {
         id: "provider-planner-forbidden-terms",
         content: JSON.stringify({
-          region: "Cael Ambrose",
-          starting_location: "Suncross",
           how_the_player_got_here: "The party followed a local summons to Suncross.",
           concept: "A local request becomes an escalating mystery in Suncross.",
           opening_scene: "Mara Vell waits by a marked doorway while the street watches.",
@@ -3038,8 +3036,6 @@ test.skip("POST /api/campaigns uses a low-temperature final retry for short Elde
       return {
         id: "provider-planner-final-retry",
         content: JSON.stringify({
-          region: "Cael Ambrose",
-          starting_location: "Suncross",
           how_the_player_got_here: "The party followed a local summons to Suncross.",
           concept: "A local request becomes an escalating mystery in Suncross.",
           opening_scene: "Mara Vell waits by a marked doorway while the street watches.",
