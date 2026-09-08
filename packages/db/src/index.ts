@@ -684,58 +684,38 @@ type CampaignOpeningStyle = {
   customWorldDescription?: string | undefined;
 };
 
-type OpeningTerm = {
-  term: string;
-  plainMeaning: string;
-};
-
-type OpeningNpcSeed = {
-  name: string;
-  role: string;
-  wants: string;
-  visibleBehavior: string;
-};
-
-type StartingLocationAtmosphere = {
-  arrivalImpression: string;
-  dailyLifeAndLiveliness: string;
-  localAttitude: string;
-  dominantVibe: string;
-  sensoryEntryDetails: string[];
-  transitionIntoFirstScene: string;
-};
+const campaignAnchorTypes = [
+  "region",
+  "settlement",
+  "person",
+  "faction",
+  "institution",
+  "place",
+  "object",
+  "relationship",
+  "threat",
+  "mystery"
+] as const;
+type CampaignAnchorType = (typeof campaignAnchorTypes)[number];
+type CampaignAnchorVisibility = "player_safe" | "dm_only";
 
 type EldermereOpeningPlan = {
-  campaignTitle: string;
-  region: {
+  region: string;
+  startingLocation: string;
+  howThePlayerGotHere: string;
+  concept: string;
+  openingScene: string;
+  privateTruth: string;
+  campaignAnchors: Array<{
+    type: CampaignAnchorType;
     name: string;
-    whyThisRegion: string;
-    plainDescription: string;
-  };
-  startingLocation: {
-    name: string;
-    type: string;
-    whyThisLocation: string;
-    plainDescription: string;
-  };
-  startingLocationAtmosphere: StartingLocationAtmosphere;
-  openingPremise: {
-    whyThePartyIsHere: string;
-    immediateObjective: string;
-    immediateComplication: string;
-    firstSceneLocation: string;
-    openingMood: string;
-    campaignPromise: string;
-  };
-  playerFacingFacts: string[];
-  allowedPlayerFacingTerms: OpeningTerm[];
-  npcSeed: OpeningNpcSeed[];
-  firstInteractableChoices: string[];
-  sensoryPalette: Record<string, string[]>;
-  dmPrivateContext: string[];
-  campaignFoundation?: Record<string, unknown> | undefined;
-  forbiddenOpeningTerms: string[];
-  narratorInstructions: string[];
+    visibility: CampaignAnchorVisibility;
+    description: string;
+    openingRole: string;
+    campaignRelevance: string;
+    futurePressureOrChange: string;
+    playerInfluence: string;
+  }>;
 };
 
 function extractExistingPromptNames(...values: Array<string | undefined>) {
@@ -837,6 +817,7 @@ export type DungeonMasterRuntime = {
     dmJob?: DmJobName;
     model?: AiModelId;
     temperature?: number;
+    responseFormat?: "json" | "text";
     signal?: AbortSignal;
     onPublicNarrationDelta?: (text: string) => void;
   }): Promise<DungeonMasterProviderResponse>;
@@ -3070,7 +3051,7 @@ export async function createCampaignForMode(
             db,
             runtime,
             createdState.campaign,
-            openingRequest,
+            [createdState.player],
             openingTurn.id
           );
           await persistEldermereOpeningPlan(
@@ -3093,8 +3074,8 @@ export async function createCampaignForMode(
             db,
             runtime,
             createdState.campaign,
-            openingRequest,
-            openingSceneInstructions("single_player"),
+            [createdState.player],
+            eldermereOpeningNarratorInstructions(),
             plan.plan,
             openingTurn.id,
             { allowResolvedCombatWithoutRolls: true }
@@ -8831,6 +8812,76 @@ function formatOpeningBackstoryAnchors(players: PlayerRow[]) {
   ].join("\n");
 }
 
+function characterSheetField(characterSheet: string, label: string) {
+  const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = characterSheet.match(
+    new RegExp(`(?:^|\\n)${escapedLabel}:\\s*([^\\n]+)`, "i")
+  );
+
+  return match?.[1]?.trim() ?? "";
+}
+
+function formatEldermereNarratorCharacterContext(players: PlayerRow[]) {
+  const playablePlayers = players.filter(isProfileComplete);
+
+  if (playablePlayers.length === 0) {
+    return "AUTHORITATIVE CHARACTER CONTEXT\nNo completed character sheets are available.";
+  }
+
+  return [
+    "AUTHORITATIVE CHARACTER CONTEXT",
+    ...playablePlayers.map((player, index) => {
+      const sheet = player.character_sheet;
+      const identity = [
+        characterSheetField(sheet, "Level"),
+        characterSheetField(sheet, "Species"),
+        characterSheetField(sheet, "Class"),
+        characterSheetField(sheet, "Subclass")
+      ].filter(Boolean);
+      const coreStats = extractCharacterSheetSectionLines(sheet, "Core Stats");
+      const abilityScores = extractCharacterSheetSectionLines(
+        sheet,
+        "Ability Scores"
+      );
+      const proficientSkills = extractCharacterSheetSectionLines(
+        sheet,
+        "Skills"
+      ).filter((line) => /proficient/i.test(line));
+      const equipment = [
+        ...extractCharacterSheetSectionLines(sheet, "Equipment"),
+        ...extractCharacterSheetSectionLines(sheet, "Inventory")
+      ];
+      const spells = extractCharacterSheetSectionLines(sheet, "Spells");
+      const backstory = extractCharacterBackstory(sheet);
+
+      return [
+        `${index + 1}. ${player.character_name}`,
+        `Character: ${[
+          identity.join(" "),
+          characterSheetField(sheet, "Background"),
+          characterSheetField(sheet, "Alignment")
+        ]
+          .filter(Boolean)
+          .join("; ")}`,
+        coreStats.length > 0 ? `Core stats: ${coreStats.join("; ")}` : "",
+        abilityScores.length > 0
+          ? `Ability scores: ${abilityScores.join("; ")}`
+          : "",
+        proficientSkills.length > 0
+          ? `Relevant skills and proficiencies: ${proficientSkills.join("; ")}`
+          : "",
+        equipment.length > 0 ? `Equipment: ${equipment.join("; ")}` : "",
+        spells.length > 0 ? `Spells: ${spells.join("; ")}` : "",
+        backstory ? `Authoritative backstory:\n${backstory}` : ""
+      ]
+        .filter(Boolean)
+        .join("\n");
+    }),
+    "",
+    "Preserve this backstory exactly. Do not invent, alter, resolve, soften, or contradict past events, relationships, possessions, letters, promises, causes, or losses."
+  ].join("\n\n");
+}
+
 function formatMechanicsPromptContext(mechanicsState: MechanicsState) {
   return [
     "Authoritative mechanics state:",
@@ -9107,229 +9158,136 @@ function formatOpeningSceneRequest(input: {
 
 function eldermereOpeningPlannerInstructions() {
   return [
-    "You are the campaign-opening planner and campaign foundation planner for AI Taverns, a D&D-style fantasy campaign app.",
-    "Your job is not to write player-facing narration.",
-    "Create a structured campaign foundation that a separate narrator will turn into only the opening scene, and that a background compiler can turn into durable DM context chunks.",
-    "The narrator will not receive the full world lore, so separate player-safe facts, private DM context, allowed opening terms, and forbidden opening terms.",
-    "Use the selected Eldermere region and settlement when provided. Do not choose a different primary region or starting settlement.",
-    "Use the player backstory anchors from the opening request as core premise material: the opener must make at least one unresolved backstory relationship, obligation, loss, secret, fear, promise, or ambition immediately relevant.",
-    "Make the campaign foundation feel like a living part of Eldermere: include what has been happening locally, what factions or NPCs are doing if unopposed, what secrets can be discovered over time, and how the player could eventually leave a mark on the region or world.",
-    "Give the campaign long-term direction without railroading: create reveal ladders, escalation clocks, NPC agendas, and possible consequences, not a fixed plot that ignores player choice.",
-    "Make the first scene specific, playable, and mysterious. Let the narrator start with a human-scale scene, not a history lecture.",
-    "The player-facing opening should use at most 3 Eldermere-specific setting proper nouns total, not counting ordinary NPC names. The chosen region and starting location count toward this limit.",
-    "Prefer plain descriptions over official names: use concrete meaning before setting terminology.",
-    "Treat canonical Eldermere facts as source-grounded world truth. Treat any new links, NPC motives, faction plans, or secret ladders you invent as campaign-local premises until established through play.",
-    "Every narrator_instructions array must include this exact structure instruction: 'Keep the opening to exactly 6 paragraphs of vivid sensory detail, with the sixth paragraph only the final direct prompt: What do you do?'",
-    "Do not use flexible paragraph ranges such as 4-7, 3-5, short, brief, concise, or a few paragraphs in narrator_instructions.",
+    "You are the campaign-opening planner for AI Taverns, designing the core concept for a new Eldermere campaign.",
+    "Create a campaign concept, not player-facing narration, encounter instructions, or a world bible.",
     "Return exactly one valid JSON object and no Markdown.",
-    "Use this exact JSON shape:",
-    JSON.stringify(
-      {
-        campaign_title: "short evocative title",
-        region: {
-          name: "chosen region name",
-          why_this_region: "why this region makes a strong opener",
-          plain_description: "one sentence the player could understand"
-        },
-        starting_location: {
-          name: "chosen town, ruin, road, tavern, settlement, camp, observatory, shrine, district, or landmark",
-          type: "short type label",
-          why_this_location: "why this is the right first location",
-          plain_description: "one sentence the player could understand"
-        },
-        starting_location_atmosphere: {
-          arrival_impression: "what the city, settlement, camp, or landmark feels like when the character enters or reaches the active district",
-          daily_life_and_liveliness: "how busy, loud, tense, prosperous, frightened, festive, poor, guarded, or worn-down it feels in ordinary motion",
-          local_attitude: "how locals treat strangers, officials, travelers, adventurers, or someone like this character",
-          dominant_vibe: "short phrase for the starting place's emotional texture",
-          sensory_entry_details: [
-            "specific visible settlement detail",
-            "specific sound or crowd behavior",
-            "specific smell, weather, trade, ritual, traffic, or social detail"
-          ],
-          transition_into_first_scene: "how the wider starting-place atmosphere naturally narrows into opening_premise.first_scene_location"
-        },
-        opening_premise: {
-          why_the_party_is_here: "concrete reason the player or party came here",
-          immediate_objective: "what they are trying to do now",
-          immediate_complication: "what blocks, complicates, or pressures that objective",
-          first_scene_location: "where the narration should begin physically",
-          opening_mood: "short mood phrase",
-          campaign_promise: "what kind of adventure this opener promises"
-        },
-        player_facing_facts: [
-          "facts the narrator may safely reveal immediately"
-        ],
-        allowed_player_facing_terms: [
-          {
-            term: "setting term allowed in narration",
-            plain_meaning: "plain explanation the narrator should include on first use"
-          }
-        ],
-        npc_seed: [
-          {
-            name: "NPC name",
-            role: "what the player understands this person to be",
-            wants: "what this NPC wants in the opening",
-            visible_behavior: "how they come across"
-          }
-        ],
-        first_interactable_choices: [
-          "clear option the player could take",
-          "clear option the player could take",
-          "clear option the player could take"
-        ],
-        sensory_palette: {
-          sights: ["specific visible detail"],
-          sounds: ["specific sound"],
-          smells: ["specific smell"],
-          textures_or_weather: ["specific tactile or weather detail"]
-        },
-        dm_private_context: [
-          "facts the DM can use later but the narrator must not reveal directly in the opening"
-        ],
-        campaign_foundation: {
-          campaign_thesis: {
-            core_question: "the campaign-scale dramatic question",
-            player_personal_stake: "how the player backstory connects to the world conflict",
-            world_stake: "what changes in Eldermere if no one intervenes",
-            possible_mark_on_eldermere: "how the player could eventually change a place, faction, secret, or power structure"
-          },
-          living_local_context: {
-            recent_events: [
-              "what has been happening around the starting place before the player arrives"
-            ],
-            local_pressures: [
-              "arguments, shortages, fears, opportunities, or social tensions locals are living with"
-            ],
-            visible_signs: [
-              "observable details that imply deeper trouble without explaining everything"
-            ],
-            rumors_half_true: [
-              "rumors that are useful, incomplete, or distorted"
-            ]
-          },
-          npc_web: [
-            {
-              name: "important or recurring NPC name",
-              public_role: "what players can understand early",
-              private_agenda: "DM-only motive, pressure, secret, or plan",
-              relationship_to_player_hook: "how they touch a player backstory, ambition, debt, fear, promise, or capability",
-              if_unopposed: "what this NPC will do if the player ignores them"
-            }
-          ],
-          faction_and_event_clocks: [
-            {
-              name: "clock or pressure name",
-              current_stage: "what is true now",
-              next_escalation: "what happens next if no one changes it",
-              what_advances_it: "events or player choices that make it worse",
-              what_slows_or_changes_it: "actions that can bend or stop it"
-            }
-          ],
-          secret_ladder: {
-            opening_secrets: [
-              "small secrets that can be discovered in the first few scenes"
-            ],
-            early_arc_revelations: [
-              "truths for the first local arc"
-            ],
-            mid_campaign_revelations: [
-              "truths that connect local events to major regional/world forces"
-            ],
-            late_campaign_truths: [
-              "truths that should only become clear after earned discovery"
-            ],
-            do_not_resolve_too_soon: [
-              "mysteries, relationships, or stakes that need a long runway"
-            ]
-          },
-          arc_direction: {
-            act_1: "local survival, trust, first mysteries, and immediate choices",
-            act_2: "regional power, faction pressure, deeper costs, and player agency",
-            act_3: "world secrets, irreversible choices, and the player's mark on Eldermere"
-          }
-        },
-        forbidden_opening_terms: [
-          "setting terms or lore names that should not appear in the first player-facing narration"
-        ],
-        narrator_instructions: ["instructions for the second narrator call"]
-      },
-      null,
-      2
-    )
+    "Use the exact JSON shape supplied in the request."
   ].join("\n");
 }
 
-function formatEldermereOpeningPlannerRequest(input: {
-  openingRequest: string;
+function formatEldermereCampaignConceptRequest(input: {
   campaign: CampaignRow;
+  players: PlayerRow[];
 }) {
+  const start = eldermereCampaignStartFromMetadata(input.campaign);
+  const region = start?.region;
+  const settlement = start?.settlement;
+
   return [
-    input.openingRequest,
+    "PLAYER CHARACTER",
+    formatCanonicalCharacterContext(
+      input.players,
+      resolveMechanicsState(input.campaign, input.players)
+    ),
+    formatOpeningBackstoryAnchors(input.players),
     "",
-    formatEldermereOpeningPromptContext(
-      eldermereCampaignStartFromMetadata(input.campaign)
-    )
+    "CANONICAL START",
+    `Region: ${region?.name ?? "Eldermere"}`,
+    `Starting location: ${settlement?.name ?? "the selected starting location"}`,
+    "",
+    "ELDERMERE GROUNDING",
+    "Eldermere is grounded high fantasy built on the ruins of a fallen magocracy. Magic is costly, old ruins remain dangerous, and local powers compete over what the past left behind.",
+    region
+      ? `Selected region: ${region.summary} Its current tensions include ${region.internalConflict} and ${region.externalConflict}.`
+      : "",
+    settlement
+      ? `Selected starting location: ${settlement.draw} Remembered detail: ${settlement.rememberedDetail}. Current friction: ${settlement.friction}.`
+      : "",
+    "",
+    "CONCEPT REQUIREMENTS",
+    "Create a campaign concept that begins with a specific change in the player's life.",
+    "Before writing the concept, think through the campaign as an evolving situation: why the player's new situation exists, how it can deepen or change through play, what the player can eventually learn that changes their understanding of it, and what meaningful choices that discovery can create.",
+    "Write the concept as that complete evolving situation—not merely as an opening hook, a first job, or a premise with a vague future mystery attached.",
+    "The concept must:",
+    "- Put the player in a clear starting position.",
+    "- Establish an ongoing situation that can generate many sessions of play.",
+    "- Let the player learn Eldermere naturally through action and consequences.",
+    "- Use the selected region and starting location as the campaign's beginning.",
+    "- Doesn't require the player to know anything about Eldermere beforehand.",
+    "- Fit the concept to the lore, atmosphere, conflicts, and character of the selected Eldermere region and starting location.",
+    "",
+    "CAMPAIGN ANCHOR REQUIREMENTS",
+    "Create 6-9 campaign anchors. An anchor is any person, place, object, institution, relationship, threat, mystery, or regional force that the campaign can revisit, change, depend on, or reveal over time.",
+    "Include exactly one region anchor for the selected Eldermere region and exactly one settlement anchor for the selected starting location. Include at least one person or relationship, one active force such as a faction, threat, or institution, and one clue, object, place, or mystery connected to the truth the player may discover.",
+    "Visibility applies to the entire anchor object, including description, opening_role, campaign_relevance, future_pressure_or_change, and player_influence. A player_safe anchor may contain only facts, leads, pressures, and possibilities the player can safely know at the campaign opening; never include hidden motives, secret affiliations, true causes, unrevealed identities or locations, private truths, or future revelations in any of its fields. Put every such detail in a dm_only anchor instead.",
+    "For every anchor, use every field in the required object shape. Do not create anchors for disposable props or one-scene details. Do not predetermine player actions, outcomes, or the campaign ending.",
+    "",
+    "Return only this JSON:",
+    JSON.stringify(
+      {
+        region: region?.name ?? "selected Eldermere region",
+        starting_location: settlement?.name ?? "selected starting location",
+        how_the_player_got_here:
+          "A short explanation of the events that brought the player from their established backstory into this situation.",
+        concept:
+          "A complete 2-3 paragraph account of the campaign as an evolving situation: its beginning, how it can deepen through play, and what the player may eventually discover and decide.",
+        opening_scene: "The exact first playable situation.",
+        private_truth:
+          "The underlying truth of the campaign situation: what the player can eventually discover, how it recontextualizes their starting situation, and why it creates consequential new choices.",
+        campaign_anchors: [
+          {
+            type: "region | settlement | person | faction | institution | place | object | relationship | threat | mystery",
+            name: "Durable campaign anchor",
+            visibility: "player_safe | dm_only",
+            description:
+              "What this anchor is and its relevant current state in this campaign. For region and settlement anchors, combine canonical local character with the campaign-specific situation; do not merely repeat general lore.",
+            opening_role:
+              "How the anchor is present, felt, introduced, or relevant in the opening situation.",
+            campaign_relevance:
+              "Why this anchor matters to the evolving campaign concept, including its connection to the central situation or the truth the player may uncover.",
+            future_pressure_or_change:
+              "How this anchor can create pressure, change, become endangered, reveal new meaning, or develop later in play. Describe possibilities, not a predetermined outcome.",
+            player_influence:
+              "Concrete ways the player could affect this anchor, change its direction, protect it, expose it, ally with it, oppose it, or decide its fate."
+          }
+        ]
+      },
+      null,
+      2
+    ),
+    "",
+    "The following examples show the intended vibe and level of specificity for the concept field. They are reference examples only; do not copy their people, objects, events, or wording. Only the concept portion is shown.",
+    JSON.stringify({ concept: "You are serving a prison sentence when an officer offers conditional freedom. You may leave custody only while completing her jobs, under an iron band that can restrain you if you flee or disobey. Your first job is to retrieve a ledger from a house on the east side of town. Each job buys more freedom while drawing you into the officer's hidden agenda.\n\nAs the assignments grow stranger, you learn that the officer did not choose you at random: your sentence, the band, and the work are connected to why you were imprisoned. The campaign becomes a question of whether to earn real freedom, expose the arrangement, use it against its creators, or decide that the power it grants is worth keeping." }),
+    JSON.stringify({ concept: "You return to your inn room to find a bounty notice bearing your face. The crime is one you have never heard of, committed in a place you have never been, and the innkeeper has already summoned the guard. Finding who marked you and why becomes the campaign while you evade hunters, follow evidence, and decide who might help rather than claim the reward.\n\nThe accusation eventually reveals that the player was chosen to conceal a larger crime, not merely to create a convenient fugitive. Learning whose interests the false identity protects changes the goal from clearing a name to deciding whether to expose the crime, bargain with its architects, or turn the false identity into leverage." }),
+    JSON.stringify({ concept: "A speaking blade, creature, or other companion refuses to leave you. It knows roads, names, buried places, and lies, but will not say what it wants. You begin with no grand mission beyond deciding whether to listen to it, trust it, or get rid of it; the world is learned through the places it points toward and the people who recognize it.\n\nOver time, the companion's selective knowledge reveals that the bond is not an accident and that fulfilling its goal will cost someone something real. The campaign asks whether the player will free it, bind it more tightly, betray it, or find a third path once they understand what it has been leading them toward." }),
+    JSON.stringify({ concept: "A merchant hires you as one more guard for a six-day wagon journey. The pay is decent and the only rule is not to open the crates. The campaign begins as a job on the road and expands one town, danger, rumor, and broken rule at a time as the player learns why the cargo matters and who wants it.\n\nEventually the player discovers that the merchant's story is incomplete and that delivering, exposing, destroying, or redirecting the cargo would each reshape lives along the route. What began as hired protection becomes a decision about responsibility, loyalty, and who should control what is inside the crates." }),
+    JSON.stringify({ concept: "You are brought blindfolded with other recruits to a guild whose instructor will not give her name. Your first assignment is to follow a man across the city and report where he sleeps. The campaign follows your rise through guild work, the relationships formed with the other recruits, and the question of whether the organization is making you useful, disposable, or complicit.\n\nAs assignments reveal what the guild truly protects and profits from, the player learns that recruitment itself was part of an internal struggle. That discovery turns advancement into a choice: reform the guild, expose it, seize a place within it, protect the people it uses, or leave knowing what the organization will do without you." })
   ].join("\n");
 }
 
 function formatEldermereNarratorOpeningRequest(input: {
-  openingRequest: string;
+  players: PlayerRow[];
   plan: EldermereOpeningPlan;
 }) {
   return [
-    input.openingRequest,
+    formatEldermereNarratorCharacterContext(input.players),
     "",
-    "Eldermere opening plan:",
-    JSON.stringify(openingPlanToJson(input.plan), null, 2),
+    "ELDERMERE OPENING BRIEF",
+    JSON.stringify(narratorOpeningPlanToJson(input.plan), null, 2),
     "",
     "NARRATOR TASK - WRITE THE FULL PLAYER-FACING OPENER:",
-    "Your only job is to write the complete opening scene in public_narration. Do not summarize the premise. Do not stop after the character motivation. Do not return a teaser, prologue note, or partial first paragraph.",
-    "public_narration must be a complete campaign-opening narration of exactly 6 paragraphs separated by blank lines. Do not write fewer or more than 6 paragraphs. The sixth and final paragraph must be the direct prompt, such as 'What do you do?'",
-    "Write the player-facing opener only from the Eldermere opening plan above, the canonical character sheets, and the website DM instructions.",
-    "Keep the first scene anchored in the planned region and starting location; do not relocate the opener to another settlement, region, road, tavern, faction hall, or invented landmark unless the plan explicitly places it inside the starting location.",
-    "Make at least one player backstory anchor visible in the first scene through a clue, NPC demand, debt, danger, opportunity, sensory trigger, or emotional pressure. Do not retell the whole backstory.",
-    "If a useful idea appears in dm_private_context, imply it only through concrete visible facts or pressure; do not reveal it as confirmed exposition.",
-    "Forbidden opening terms must not appear in public_narration.",
-    "Allowed player-facing terms must be explained plainly on first use.",
-    "Use 2-3 sparse semantic narration markup tags inside public_narration so players can scan important visible nouns or short phrases. Supported tags: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, <object>...</object>, and <em>...</em>. The 2-3 required tags should be color tags, not <em>.",
-    "Wrap only the exact player-visible words that should receive color or italic emphasis. The opener must include 2-3 color tags around worthwhile visible names, places, clues, dangers, factions, or objects. Do not wrap full sentences or paragraphs.",
-    "Do not nest semantic tags, add attributes, invent other tags, include CSS, hex colors, color names, Markdown emphasis, or prose instructions inside public_narration.",
-    "Do not return narration_highlights, highlights, sidecar span metadata, post-processing instructions, or any separate highlight records. The inline semantic tags are the only highlight system.",
+    "The Eldermere opening plan is the campaign source of truth. Fulfill how_the_player_got_here, concept, and opening_scene as one cohesive campaign opener. Do not summarize the plan, explain its fields, or describe future campaign events as a synopsis. Turn it into the first live scene.",
     "",
-    "HIGHEST PRIORITY - narrator_instructions:",
-    "The narrator_instructions array inside the Eldermere opening plan is the scene blueprint. Follow every item in it before using any optional campaign_foundation detail.",
-    "If narrator_instructions names a location, NPC, object, pet, keepsake, complication, forbidden name, fee, favor, contact, or final question, it must appear in public_narration unless it would reveal a forbidden term.",
-    "Use narrator_instructions to decide what paragraphs 3-5 show. Do not replace them with generic setting summary, distant lore, or abstract mood.",
+    "PLAYER KNOWLEDGE AND OPENING FOCUS:",
+    "Assume the player knows nothing about this campaign or setting beyond their established character backstory and what this narration has already shown them.",
+    "The concept is author guidance for you, not exposition for the player. Use it to understand the direction of the campaign, but reveal only what the player can immediately encounter, observe, be told, or reasonably infer in this first scene.",
+    "Focus on establishing what is unknown to the player but immediately in front of them: where they are, who is present, what is happening, what feels wrong or urgent, and what they can do now.",
+    "Do not explain wider factions, politics, history, hidden stakes, future campaign developments, or abstract implications unless they are directly necessary to understand the player's immediate situation and choice.",
     "",
-    "REQUIRED OPENING STRUCTURE:",
-    "Treat the opener as an arrival runway into the first live scene, not only a cold open. Begin with character-facing fiction, but still complete every required opener part below.",
-    "Paragraph 1 must explain why this specific character or party has come here now, using player-facing backstory context. Assume the player has not recently read the backstory. Connect the arrival to at least one unresolved dream, loss, secret, promise, obligation, fear, ambition, or relationship. Do not begin with scenery, weather, crowds, dialogue, combat, or the name of the starting location.",
-    "The first sentence must be about the character's reason for coming, not where they are standing. Do not start with phrases like 'You stand at', 'You arrive at', 'The town', 'The road', or any location-first camera direction.",
-    "Paragraph 2 must describe what the character or party has been doing over the last few days and then the last few hours to reach this place. Explain how they entered the region or settlement, where exactly they have landed, what kind of area it is, what locals say about it, and what the character plausibly knows before the immediate scene begins. Keep this player-facing and concrete. Do not reveal DM-private secrets.",
-    "Paragraph 3 must start with a vivid, player-facing description of starting_location as the character enters or reaches the active district: how lively it is, what the dominant vibe is, what people are doing, how locals regard strangers, and what the air, streets, crowds, trade, weather, or public tension feel like. Use starting_location_atmosphere plus sensory_palette from the JSON.",
-    "In the same Paragraph 3, smoothly narrow that wider city, settlement, camp, or landmark impression into opening_premise.first_scene_location, placing the player physically inside the first live scene with reachable objects, exits, NPC pressure, and immediate sensory detail. If narrator_instructions names Pip, a locket, a wrapped clue, a tavern, or another physical anchor, place it visibly and tangibly here.",
-    "Paragraph 4 must introduce visible NPC tension and the live contact or pressure named in npc_seed and narrator_instructions. Use campaign_foundation.living_local_context.recent_events to explain what people are tense about, and use campaign_foundation.living_local_context.visible_signs to show that tension through observable details rather than exposition.",
-    "Paragraph 5 must present the immediate complication from opening_premise.immediate_complication and narrator_instructions, then make it actionable. Use campaign_foundation.living_local_context.rumors_half_true only as uncertain tavern talk or a visible rumor hook, use first_interactable_choices for 2-3 concrete things the player can do right now, and include one short personal urgency beat tying the immediate pressure back to the character's backstory.",
-    "Paragraph 6 must be the final direct handoff prompt, such as 'What do you do?'",
-    "Do not write a seventh paragraph.",
-    "Before the final question, include one short personal urgency beat that connects the immediate clue, demand, threat, or opportunity back to the character's backstory reason for being here. Do not explain why the player should care abstractly. Show the character noticing, reacting, or connecting it to their unresolved backstory.",
-    "Even when no dice are needed, present 2-3 concrete non-dice actions the player could take right now.",
-    "Invalid opener: any opener with fewer or more than exactly 6 paragraphs, any opener that only explains why the character arrived, or any opener that ignores narrator_instructions instead of establishing the live scene, immediate obstacle, NPC or discovery pressure, and actionable choices.",
+    "Return only plain prose. It must contain exactly 4 paragraphs separated by blank lines. Do not add headings, labels, notes, Markdown, JSON, or commentary. Paragraph 4 must be exactly 'What do you do?'.",
+    "Preserve all established character-sheet and backstory facts. Do not change, resolve, soften, or invent past events, relationships, debts, gifts, clues, promises, or causes.",
+    "Use only facts the character could reasonably see, hear, know, infer, or be told in this opening scene. Do not request dice; the player must receive control before attempting any uncertain action.",
+    "Use exactly 6 semantic narration color tags across paragraphs 1-3: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, or <object>...</object>. Each tag must wrap only a short, player-visible noun or phrase. Do not nest tags, add attributes, use <em>, use Markdown emphasis, or use any other HTML/XML tags.",
     "",
-    "Opening style:",
-    "Write in grounded, direct fantasy prose. Keep the narration detailed and atmospheric, but avoid ornate, poetic, elevated, or mythic phrasing. Do not solve this by making the narration shorter; keep the same amount of detail and make the details more concrete.",
-    "Use physical, observable wording for magical or emotional details. Prefer direct wording like 'vibrates', 'shakes', 'burns', 'goes cold', 'draws attention', 'people argue', 'the road was hard', and 'someone here knows something' over lyrical abstractions like 'pulls at you like a thread', 'the dream is here', or 'every instinct says'.",
-    "The tone should feel serious, grounded, and specific, like a DM clearly describing a dangerous place to the player. It should not sound like a bard, prophecy, epic poem, or fantasy trailer.",
-    "Do not rewrite, soften, or alter the character backstory. If the backstory says someone died, do not say they disappeared. If the narrator mentions a backstory event, preserve the cause and relationship exactly.",
-    "Do not invent new circumstances for how a keepsake, clue, wound, relationship, promise, or obligation entered the character's life. If the exact handoff is not specified, use neutral wording like 'the scroll case you carry from her' instead of inventing a scene where someone gave it to the character.",
-    "Useful personal urgency beats look like: 'The handwriting looks enough like your mother's that your hand goes to the scroll case before you decide to move.', 'The same name from your dream is written on the board in front of you. Someone in this town knows something.', or 'The shard vibrates at your side at the same moment you read the note.'",
-    'Set setting.world_name to "Eldermere".',
-    `Set setting.region_name to "${input.plan.region.name}".`,
-    `Set setting.settlement_name to "${input.plan.startingLocation.name}" when the starting location is a settlement; otherwise omit it.`,
-    `Set setting.scene_location and setting.display_location to "${input.plan.startingLocation.name}".`,
-    `Set setting.starting_location to "${input.plan.startingLocation.name}".`
+    "REQUIRED FOUR-PARAGRAPH STRUCTURE:",
+    "Paragraph 1 — Present premise with retrospective context: Begin inside the exact current playable situation in opening_scene, establishing why the character or party is caught in the campaign's central problem now. Use how_the_player_got_here only to briefly explain a present person, object, consequence, or situation when that context helps orient the player. Do not narrate a journey, arrival, or chain of events leading to the scene; frame earlier events retrospectively, such as 'Forty minutes ago...' or 'Earlier that evening...'.",
+    "Paragraph 2 — Live scene and pressure: Establish the selected starting location with concrete sensory and spatial details. Place the player physically inside opening_scene with visible exits, reachable objects, present NPCs, immediate environmental details, and the visible tension, NPC demand, danger, discovery, or interruption that makes the situation urgent. Draw only on visible consequences.",
+    "Paragraph 3 — Choice: Make the immediate problem actionable. Show why it matters now and present 2-3 distinct non-dice actions the player can take immediately. These must be genuine choices, not steps toward a predetermined outcome.",
+    "Paragraph 4 — Handoff: Write exactly 'What do you do?'",
+    "",
+    "Opening style: Write grounded, direct, detailed fantasy prose. Create atmosphere through physical details, behavior, sound, weather, terrain, objects, and visible consequences—not lyrical abstractions, prophecy, or a campaign trailer. The opener should feel like a DM placing the player in a specific, dangerous, playable moment.",
+    "",
+    "Before returning, silently verify that the campaign concept is dramatized rather than summarized, the first 3 paragraphs follow the required present-first sequence, paragraph 4 is exactly 'What do you do?', and exactly 6 valid semantic color tags appear across paragraphs 1-3."
   ].join("\n");
 }
 
@@ -9445,185 +9403,72 @@ function readObjectArray(
   return objects;
 }
 
-function parseOpeningTerm(value: Record<string, unknown>, index: number) {
+function parseCampaignAnchor(value: Record<string, unknown>, index: number) {
   const errors: string[] = [];
+  const type = readString(value, "type", errors);
+  const visibility = readString(value, "visibility", errors);
+
+  if (!campaignAnchorTypes.includes(type as CampaignAnchorType)) {
+    errors.push(`type must be one of: ${campaignAnchorTypes.join(", ")}`);
+  }
+
+  if (visibility !== "player_safe" && visibility !== "dm_only") {
+    errors.push("visibility must be player_safe or dm_only");
+  }
 
   return {
     value: {
-      term: readString(value, "term", errors),
-      plainMeaning: readString(value, "plain_meaning", errors)
-    },
-    errors: errors.map((error) => `allowed_player_facing_terms[${index}].${error}`)
-  };
-}
-
-function parseOpeningNpcSeed(value: Record<string, unknown>, index: number) {
-  const errors: string[] = [];
-
-  return {
-    value: {
+      type: type as CampaignAnchorType,
       name: readString(value, "name", errors),
-      role: readString(value, "role", errors),
-      wants: readString(value, "wants", errors),
-      visibleBehavior: readString(value, "visible_behavior", errors)
+      visibility: visibility as CampaignAnchorVisibility,
+      description: readString(value, "description", errors),
+      openingRole: readString(value, "opening_role", errors),
+      campaignRelevance: readString(value, "campaign_relevance", errors),
+      futurePressureOrChange: readString(
+        value,
+        "future_pressure_or_change",
+        errors
+      ),
+      playerInfluence: readString(value, "player_influence", errors)
     },
-    errors: errors.map((error) => `npc_seed[${index}].${error}`)
+    errors: errors.map((error) => `campaign_anchors[${index}].${error}`)
   };
-}
-
-function parseStartingLocationAtmosphere(
-  value: Record<string, unknown>,
-  errors: string[]
-): StartingLocationAtmosphere {
-  return {
-    arrivalImpression: readString(value, "arrival_impression", errors),
-    dailyLifeAndLiveliness: readString(
-      value,
-      "daily_life_and_liveliness",
-      errors
-    ),
-    localAttitude: readString(value, "local_attitude", errors),
-    dominantVibe: readString(value, "dominant_vibe", errors),
-    sensoryEntryDetails: readStringArray(
-      value,
-      "sensory_entry_details",
-      errors
-    ),
-    transitionIntoFirstScene: readString(
-      value,
-      "transition_into_first_scene",
-      errors
-    )
-  };
-}
-
-function parseSensoryPalette(
-  value: Record<string, unknown>,
-  errors: string[]
-): Record<string, string[]> {
-  return Object.fromEntries(
-    Object.entries(value).map(([key, item]) => {
-      if (!Array.isArray(item)) {
-        errors.push(`sensory_palette.${key} must be an array`);
-        return [key, []];
-      }
-
-      const strings = item
-        .filter((entry): entry is string => typeof entry === "string")
-        .map((entry) => entry.trim())
-        .filter(Boolean);
-
-      if (strings.length !== item.length) {
-        errors.push(`sensory_palette.${key} must contain only non-empty strings`);
-      }
-
-      return [key, strings];
-    })
-  );
 }
 
 function parseEldermereOpeningPlan(content: string) {
   const parsed = parseJsonRecord(content);
   const errors: string[] = [];
-  const region = readObject(parsed, "region", errors);
-  const startingLocation = readObject(parsed, "starting_location", errors);
-  const startingLocationAtmosphere = readObject(
+  const campaignAnchorResults = readObjectArray(
     parsed,
-    "starting_location_atmosphere",
+    "campaign_anchors",
     errors
-  );
-  const openingPremise = readObject(parsed, "opening_premise", errors);
-  const sensoryPalette = readObject(parsed, "sensory_palette", errors);
-  const allowedTermResults = readObjectArray(
-    parsed,
-    "allowed_player_facing_terms",
-    errors
-  ).map(parseOpeningTerm);
-  const npcSeedResults = readObjectArray(parsed, "npc_seed", errors).map(
-    parseOpeningNpcSeed
-  );
+  ).map(parseCampaignAnchor);
 
   const plan: EldermereOpeningPlan = {
-    campaignTitle: readString(parsed, "campaign_title", errors),
-    region: {
-      name: readString(region, "name", errors),
-      whyThisRegion: readString(region, "why_this_region", errors),
-      plainDescription: readString(region, "plain_description", errors)
-    },
-    startingLocation: {
-      name: readString(startingLocation, "name", errors),
-      type: readString(startingLocation, "type", errors),
-      whyThisLocation: readString(startingLocation, "why_this_location", errors),
-      plainDescription: readString(
-        startingLocation,
-        "plain_description",
-        errors
-      )
-    },
-    startingLocationAtmosphere: parseStartingLocationAtmosphere(
-      startingLocationAtmosphere,
-      errors
-    ),
-    openingPremise: {
-      whyThePartyIsHere: readString(
-        openingPremise,
-        "why_the_party_is_here",
-        errors
-      ),
-      immediateObjective: readString(
-        openingPremise,
-        "immediate_objective",
-        errors
-      ),
-      immediateComplication: readString(
-        openingPremise,
-        "immediate_complication",
-        errors
-      ),
-      firstSceneLocation: readString(
-        openingPremise,
-        "first_scene_location",
-        errors
-      ),
-      openingMood: readString(openingPremise, "opening_mood", errors),
-      campaignPromise: readString(openingPremise, "campaign_promise", errors)
-    },
-    playerFacingFacts: readStringArray(parsed, "player_facing_facts", errors),
-    allowedPlayerFacingTerms: allowedTermResults.map((result) => result.value),
-    npcSeed: npcSeedResults.map((result) => result.value),
-    firstInteractableChoices: readStringArray(
-      parsed,
-      "first_interactable_choices",
-      errors
-    ),
-    sensoryPalette: parseSensoryPalette(sensoryPalette, errors),
-    dmPrivateContext: readStringArray(parsed, "dm_private_context", errors),
-    ...(isRecord(parsed?.campaign_foundation)
-      ? { campaignFoundation: parsed.campaign_foundation }
-      : {}),
-    forbiddenOpeningTerms: readStringArray(
-      parsed,
-      "forbidden_opening_terms",
-      errors
-    ),
-    narratorInstructions: readStringArray(
-      parsed,
-      "narrator_instructions",
-      errors
-    )
+    region: readString(parsed, "region", errors),
+    startingLocation: readString(parsed, "starting_location", errors),
+    howThePlayerGotHere: readString(parsed, "how_the_player_got_here", errors),
+    concept: readString(parsed, "concept", errors),
+    openingScene: readString(parsed, "opening_scene", errors),
+    privateTruth: readString(parsed, "private_truth", errors),
+    campaignAnchors: campaignAnchorResults.map((result) => result.value)
   };
 
-  errors.push(
-    ...allowedTermResults.flatMap((result) => result.errors),
-    ...npcSeedResults.flatMap((result) => result.errors)
-  );
+  errors.push(...campaignAnchorResults.flatMap((result) => result.errors));
 
-  if (plan.allowedPlayerFacingTerms.length === 0) {
-    errors.push("allowed_player_facing_terms must include at least one term");
+  if (
+    plan.campaignAnchors.length < 6 ||
+    plan.campaignAnchors.length > 9
+  ) {
+    errors.push("campaign_anchors must include 6-9 anchors");
   }
 
-  if (plan.firstInteractableChoices.length < 2) {
-    errors.push("first_interactable_choices must include at least two choices");
+  if (plan.campaignAnchors.filter((anchor) => anchor.type === "region").length !== 1) {
+    errors.push("campaign_anchors must include exactly one region anchor");
+  }
+
+  if (plan.campaignAnchors.filter((anchor) => anchor.type === "settlement").length !== 1) {
+    errors.push("campaign_anchors must include exactly one settlement anchor");
   }
 
   if (errors.length > 0) {
@@ -9635,57 +9480,32 @@ function parseEldermereOpeningPlan(content: string) {
 
 function openingPlanToJson(plan: EldermereOpeningPlan) {
   return {
-    campaign_title: plan.campaignTitle,
-    region: {
-      name: plan.region.name,
-      why_this_region: plan.region.whyThisRegion,
-      plain_description: plan.region.plainDescription
-    },
-    starting_location: {
-      name: plan.startingLocation.name,
-      type: plan.startingLocation.type,
-      why_this_location: plan.startingLocation.whyThisLocation,
-      plain_description: plan.startingLocation.plainDescription
-    },
-    starting_location_atmosphere: {
-      arrival_impression:
-        plan.startingLocationAtmosphere.arrivalImpression,
-      daily_life_and_liveliness:
-        plan.startingLocationAtmosphere.dailyLifeAndLiveliness,
-      local_attitude: plan.startingLocationAtmosphere.localAttitude,
-      dominant_vibe: plan.startingLocationAtmosphere.dominantVibe,
-      sensory_entry_details:
-        plan.startingLocationAtmosphere.sensoryEntryDetails,
-      transition_into_first_scene:
-        plan.startingLocationAtmosphere.transitionIntoFirstScene
-    },
-    opening_premise: {
-      why_the_party_is_here: plan.openingPremise.whyThePartyIsHere,
-      immediate_objective: plan.openingPremise.immediateObjective,
-      immediate_complication: plan.openingPremise.immediateComplication,
-      first_scene_location: plan.openingPremise.firstSceneLocation,
-      opening_mood: plan.openingPremise.openingMood,
-      campaign_promise: plan.openingPremise.campaignPromise
-    },
-    player_facing_facts: plan.playerFacingFacts,
-    allowed_player_facing_terms: plan.allowedPlayerFacingTerms.map((term) => ({
-      term: term.term,
-      plain_meaning: term.plainMeaning
-    })),
-    npc_seed: plan.npcSeed.map((npc) => ({
-      name: npc.name,
-      role: npc.role,
-      wants: npc.wants,
-      visible_behavior: npc.visibleBehavior
-    })),
-    first_interactable_choices: plan.firstInteractableChoices,
-    sensory_palette: plan.sensoryPalette,
-    dm_private_context: plan.dmPrivateContext,
-    ...(plan.campaignFoundation
-      ? { campaign_foundation: plan.campaignFoundation }
-      : {}),
-    forbidden_opening_terms: plan.forbiddenOpeningTerms,
-    narrator_instructions: plan.narratorInstructions
+    region: plan.region,
+    starting_location: plan.startingLocation,
+    how_the_player_got_here: plan.howThePlayerGotHere,
+    concept: plan.concept,
+    opening_scene: plan.openingScene,
+    private_truth: plan.privateTruth,
+    campaign_anchors: plan.campaignAnchors.map((anchor) => ({
+      type: anchor.type,
+      name: anchor.name,
+      visibility: anchor.visibility,
+      description: anchor.description,
+      opening_role: anchor.openingRole,
+      campaign_relevance: anchor.campaignRelevance,
+      future_pressure_or_change: anchor.futurePressureOrChange,
+      player_influence: anchor.playerInfluence
+    }))
+  };
+}
+
+function narratorOpeningPlanToJson(plan: EldermereOpeningPlan) {
+  return {
+    region: plan.region,
+    starting_location: plan.startingLocation,
+    how_the_player_got_here: plan.howThePlayerGotHere,
+    concept: plan.concept,
+    opening_scene: plan.openingScene
   };
 }
 
@@ -9744,6 +9564,15 @@ function openingSceneInstructions(mode: CampaignMode) {
     modeDirection,
     "Use the campaign setup and canonical character sheets to begin with a rich campaign opener: establish named place, larger context, shared purpose, first objective, and immediate obstacle. Do not mention implementation details."
   ].join(" ");
+}
+
+function eldermereOpeningNarratorInstructions() {
+  return [
+    "You are the AI Taverns DnD Dungeon Master writing a campaign opener.",
+    "Return only the complete player-facing opener as plain prose.",
+    "Do not return JSON, Markdown fences, headings, metadata, roll requests, state updates, setting information, or commentary.",
+    "Follow the opener-specific narration and semantic tag requirements in the user request exactly."
+  ].join("\n");
 }
 
 function askDmInstructions() {
@@ -9941,15 +9770,15 @@ async function askEldermereOpeningPlanner(
   db: Queryable,
   runtime: DungeonMasterRuntime,
   campaign: CampaignRow,
-  openingRequest: string,
+  players: PlayerRow[],
   turnId?: string
 ): Promise<EldermereOpeningPlannerResult> {
   const traceId = randomUUID();
   const startedAt = Date.now();
   const instructions = eldermereOpeningPlannerInstructions();
-  const message = formatEldermereOpeningPlannerRequest({
-    openingRequest,
-    campaign
+  const message = formatEldermereCampaignConceptRequest({
+    campaign,
+    players
   });
 
   await logTurnDebugTrace(db, {
@@ -10012,11 +9841,9 @@ async function askEldermereOpeningPlanner(
       turnId,
       elapsedMs: Date.now() - startedAt,
       payload: {
-        campaignTitle: plan.campaignTitle,
-        region: plan.region.name,
-        startingLocation: plan.startingLocation.name,
-        allowedTerms: plan.allowedPlayerFacingTerms.map((term) => term.term),
-        forbiddenTerms: plan.forbiddenOpeningTerms
+        region: plan.region,
+        startingLocation: plan.startingLocation,
+        anchorCount: plan.campaignAnchors.length
       }
     });
 
@@ -10052,12 +9879,10 @@ async function askEldermereOpeningPlanner(
         phase: "eldermere_opening_planner_repair_completed",
         turnId,
         elapsedMs: Date.now() - startedAt,
-        payload: {
-          campaignTitle: plan.campaignTitle,
-          region: plan.region.name,
-          startingLocation: plan.startingLocation.name,
-          allowedTerms: plan.allowedPlayerFacingTerms.map((term) => term.term),
-          forbiddenTerms: plan.forbiddenOpeningTerms
+      payload: {
+        region: plan.region,
+        startingLocation: plan.startingLocation,
+        anchorCount: plan.campaignAnchors.length
         }
       });
 
@@ -10103,7 +9928,7 @@ function buildCampaignFoundationCompilerPrompt() {
   return [
     "You are the AI Taverns campaign foundation compiler.",
     "You run after an Eldermere campaign opening planner and before long-term play has accumulated.",
-    "Your job is to transform the planner's campaign foundation into durable campaign_context_chunks for future AI DM retrieval.",
+    "Your job is to transform the planner's concept, opening scene, private truth, and campaign anchors into durable campaign_context_chunks for future AI DM retrieval.",
     "You are not the narrator. Do not write player-facing prose. Do not continue the scene.",
     "Return strict JSON with patches, new_context_chunks, and remove_context_chunks.",
     "Use the same context patch contract as the memory/context updater.",
@@ -10125,6 +9950,8 @@ function buildCampaignFoundationCompilerPrompt() {
     "For an anchor with both public continuity and hidden truth, split it into a player_safe parent chunk and a dm_only secret chunk. Only make the parent chunk dm_only when there is no player-safe rumor, lead, place-name, symbol, or local pressure to preserve yet.",
     "Player-safe chunks may include mysteries as mysteries: use 'Unknown', 'rumored', 'unconfirmed', or 'not yet discovered' instead of revealing the true answer.",
     "Treat Pageden/canonical Eldermere material as source-grounded world truth. Treat planner-created links, motives, clocks, and secrets as campaign-local premises until established through play.",
+    "Use concept for the campaign premise and primary active thread; how_the_player_got_here for player-character context; opening_scene for current playable context; private_truth for DM-only secrets; and campaign_anchors for durable NPC, object, place, institution, relationship, faction, and threat chunks.",
+    "Create a dedicated context chunk for every campaign anchor. The region and settlement anchors must each receive their own player_safe relevant_world_context chunk. Honor each anchor's visibility across every field: never place dm_only anchor details in player_safe chunks.",
     "Every chunk should label its epistemic status with sections or bullets such as Canonical Grounding, Campaign-Local Premise, Established Facts, Strong Inferences, DM Seeds, Hidden Truth, Future Reveal Paths, Constraints, or Open Questions.",
     "When an anchor has both player-safe continuity and hidden truth, create a public/world or NPC chunk plus a DM-only secret chunk only when both need independent retrieval. Example: world:sunder-kiln for known leads, rumors, local pressures, and playable context, plus secret:sunder-kiln for the time-loop truth and reveal ladder.",
     "Do not resolve long-term secrets immediately. Preserve a long runway for discovery, player choice, and the player leaving a mark on Eldermere.",
@@ -10248,9 +10075,9 @@ async function runEldermereCampaignFoundationCompiler(
       payload: {
         message: textStats(message),
         instructions: textStats(instructions),
-        campaignTitle: input.plan.campaignTitle,
-        region: input.plan.region.name,
-        startingLocation: input.plan.startingLocation.name
+        region: input.plan.region,
+        startingLocation: input.plan.startingLocation,
+        anchorCount: input.plan.campaignAnchors.length
       }
     });
 
@@ -10372,18 +10199,10 @@ async function runEldermereCampaignFoundationCompiler(
 }
 
 function findForbiddenOpeningTerms(
-  narration: string,
-  plan: EldermereOpeningPlan
+  _narration: string,
+  _plan: EldermereOpeningPlan
 ) {
-  const allowedTerms = new Set(
-    plan.allowedPlayerFacingTerms.map((term) => term.term.toLowerCase())
-  );
-
-  return [...new Set(plan.forbiddenOpeningTerms)]
-    .map((term) => term.trim())
-    .filter(Boolean)
-    .filter((term) => !allowedTerms.has(term.toLowerCase()))
-    .filter((term) => openingNarrationContainsTerm(narration, term));
+  return [] as string[];
 }
 
 function openingNarrationTermPattern(term: string) {
@@ -10401,8 +10220,8 @@ function openingNarrationContainsTerm(narration: string, term: string) {
 
 const semanticOpeningTagPattern =
   /<(npc|place|clue|danger|faction|object)>([^<>]+)<\/\1>/giu;
-const semanticOpeningTagMinimum = 2;
-const semanticOpeningTagMaximum = 3;
+const semanticOpeningTagMinimum = 6;
+const semanticOpeningTagMaximum = 6;
 const finalEldermereOpeningRetryTemperature = 0.2;
 
 function semanticOpeningTagCount(narration: string) {
@@ -10460,15 +10279,42 @@ function normalizeEldermereOpeningSemanticTags(
   plan: EldermereOpeningPlan
 ) {
   const strippedNarration = stripExtraSemanticOpeningTags(narration);
-  const firstNpc = plan.npcSeed[0]?.name;
-  const firstChoice = plan.firstInteractableChoices[0];
+  const playerSafeAnchors = plan.campaignAnchors.filter(
+    (anchor) =>
+      anchor.visibility === "player_safe" &&
+      anchor.type !== "region" &&
+      anchor.type !== "settlement"
+  );
+  const semanticRoleForAnchor = (anchor: (typeof playerSafeAnchors)[number]) => {
+    switch (anchor.type) {
+      case "person":
+        return "npc" as const;
+      case "faction":
+      case "institution":
+        return "faction" as const;
+      case "place":
+      case "region":
+      case "settlement":
+        return "place" as const;
+      case "threat":
+        return "danger" as const;
+      case "object":
+        return "object" as const;
+      case "relationship":
+      case "mystery":
+        return "clue" as const;
+    }
+  };
+  const candidates = [
+    { term: plan.startingLocation, role: "place" as const },
+    { term: plan.region, role: "place" as const },
+    ...playerSafeAnchors.map((anchor) => ({
+      term: anchor.name,
+      role: semanticRoleForAnchor(anchor)
+    }))
+  ];
 
-  return [
-    { term: plan.startingLocation.name, role: "place" as const },
-    { term: firstNpc, role: "npc" as const },
-    { term: plan.region.name, role: "place" as const },
-    { term: firstChoice, role: "clue" as const }
-  ].reduce(
+  return candidates.reduce(
     (current, candidate) =>
       addSemanticOpeningTag(current, candidate.term, candidate.role),
     strippedNarration
@@ -10492,25 +10338,9 @@ function plainReplacementForForbiddenOpeningTerm(term: string) {
 
 function scrubForbiddenOpeningTerms(
   narration: string,
-  plan: EldermereOpeningPlan
+  _plan: EldermereOpeningPlan
 ) {
-  const allowedTerms = new Set(
-    plan.allowedPlayerFacingTerms.map((term) => term.term.toLowerCase())
-  );
-
-  return [...new Set(plan.forbiddenOpeningTerms)]
-    .map((term) => term.trim())
-    .filter(Boolean)
-    .filter((term) => !allowedTerms.has(term.toLowerCase()))
-    .reduce(
-      (current, term) =>
-        current.replace(
-          openingNarrationTermPattern(term),
-          (_match, prefix: string) =>
-            `${prefix}${plainReplacementForForbiddenOpeningTerm(term)}`
-        ),
-      narration
-    );
+  return narration;
 }
 
 function repairEldermereOpeningReply(
@@ -10519,16 +10349,28 @@ function repairEldermereOpeningReply(
 ): DungeonMasterReply {
   const scrubbedContent = scrubForbiddenOpeningTerms(reply.content, plan);
 
+  return withEldermereOpeningSetting(
+    {
+      ...reply,
+      content: normalizeEldermereOpeningSemanticTags(scrubbedContent, plan)
+    },
+    plan
+  );
+}
+
+function withEldermereOpeningSetting(
+  reply: DungeonMasterReply,
+  plan: EldermereOpeningPlan
+): DungeonMasterReply {
   return {
     ...reply,
-    content: normalizeEldermereOpeningSemanticTags(scrubbedContent, plan),
     setting: {
-      ...reply.setting,
       worldName: "Eldermere",
-      regionName: plan.region.name,
-      sceneLocation: plan.startingLocation.name,
-      startingLocation: plan.startingLocation.name,
-      displayLocation: plan.startingLocation.name
+      regionName: plan.region,
+      settlementName: plan.startingLocation,
+      sceneLocation: plan.startingLocation,
+      startingLocation: plan.startingLocation,
+      displayLocation: plan.startingLocation
     }
   };
 }
@@ -10553,10 +10395,10 @@ function eldermereOpeningSettingErrors(
 
   if (
     setting?.startingLocation &&
-    setting.startingLocation !== plan.startingLocation.name
+    setting.startingLocation !== plan.startingLocation
   ) {
     errors.push(
-      `setting.starting_location must be "${plan.startingLocation.name}"`
+      `setting.starting_location must be "${plan.startingLocation}"`
     );
   }
 
@@ -10581,7 +10423,7 @@ function eldermereOpeningNarrationErrors(content: string) {
     semanticTagCount > semanticOpeningTagMaximum
   ) {
     errors.push(
-      `public_narration must contain ${semanticOpeningTagMinimum}-${semanticOpeningTagMaximum} semantic narration markup tags; found ${semanticTagCount}`
+      `public_narration must contain exactly ${semanticOpeningTagMinimum} semantic narration markup tags; found ${semanticTagCount}`
     );
   }
 
@@ -10592,9 +10434,9 @@ function eldermereOpeningStructuralErrors(content: string) {
   const errors: string[] = [];
   const paragraphCount = openingParagraphCount(content);
 
-  if (paragraphCount !== 6) {
+  if (paragraphCount !== 4) {
     errors.push(
-      `public_narration must contain exactly 6 paragraphs; found ${paragraphCount}`
+      `public_narration must contain exactly 4 paragraphs; found ${paragraphCount}`
     );
   }
 
@@ -10623,32 +10465,36 @@ async function askEldermereOpeningNarrator(
   db: Queryable,
   runtime: DungeonMasterRuntime,
   campaign: CampaignRow,
-  openingRequest: string,
+  players: PlayerRow[],
   instructions: string,
   plan: EldermereOpeningPlan,
   turnId?: string,
   contractOptions?: DmContractParseOptions
 ) {
   const narratorMessage = formatEldermereNarratorOpeningRequest({
-    openingRequest,
+    players,
     plan
   });
-  const opening = await askDungeonMaster(
-    db,
-    runtime,
-    campaign,
-    narratorMessage,
-    instructions,
-    false,
-    turnId,
-    undefined,
-    contractOptions,
-    {
-      buildPromptContext: false,
-      contractKind: "opening",
-      includeEldermereTurnContext: false,
-      suppressStreaming: true
-    }
+  const opening = withEldermereOpeningSetting(
+    await askDungeonMaster(
+      db,
+      runtime,
+      campaign,
+      narratorMessage,
+      instructions,
+      false,
+      turnId,
+      undefined,
+      contractOptions,
+      {
+        buildPromptContext: false,
+        contractKind: "opening",
+        includeEldermereTurnContext: false,
+        suppressStreaming: true,
+        providerResponseFormat: "text"
+      }
+    ),
+    plan
   );
   const forbiddenTerms = findForbiddenOpeningTerms(opening.content, plan);
   const settingErrors = eldermereOpeningSettingErrors(opening.setting, plan);
@@ -10672,35 +10518,36 @@ async function askEldermereOpeningNarrator(
           `The previous public_narration used ${forbiddenTerms.length} forbidden opening term${forbiddenTermPlural} from forbidden_opening_terms.`
         ]
       : []),
-    ...(settingErrors.length > 0
-      ? [`The previous setting metadata was invalid: ${settingErrors.join("; ")}.`]
-      : []),
     ...(narrationErrors.length > 0
       ? [
           `The previous public_narration structure was invalid: ${narrationErrors.join("; ")}.`
         ]
       : []),
-    "Return the same opening situation as valid AI Taverns DM JSON, but fix every issue above.",
-    "public_narration must be exactly 6 paragraphs separated by blank lines, must follow narrator_instructions as the highest-priority scene blueprint, and the sixth paragraph must be the final direct prompt 'What do you do?'",
-    `public_narration must include ${semanticOpeningTagMinimum}-${semanticOpeningTagMaximum} semantic narration color tags using <npc>, <place>, <clue>, <danger>, <faction>, or <object>. You may also use <em> for brief italicized emphasis, but <em> does not count toward the required color tags.`,
-    "Use only allowed_player_facing_terms and plain descriptions. Preserve setting metadata."
+    "Return only a complete plain-prose opener for the same opening situation, fixing every issue above.",
+    "Use exactly 4 paragraphs separated by blank lines. The fourth and final paragraph must be exactly 'What do you do?'.",
+    `Use exactly ${semanticOpeningTagMinimum} semantic narration color tags using <npc>, <place>, <clue>, <danger>, <faction>, or <object>.`,
+    "Do not return JSON, Markdown fences, headings, metadata, setting information, roll requests, state updates, or commentary."
   ].join("\n");
-  const repairedOpening = await askDungeonMaster(
-    db,
-    runtime,
-    campaign,
-    repairMessage,
-    instructions,
-    false,
-    turnId,
-    undefined,
-    contractOptions,
-    {
-      buildPromptContext: false,
-      contractKind: "opening",
-      includeEldermereTurnContext: false,
-      suppressStreaming: true
-    }
+  const repairedOpening = withEldermereOpeningSetting(
+    await askDungeonMaster(
+      db,
+      runtime,
+      campaign,
+      repairMessage,
+      instructions,
+      false,
+      turnId,
+      undefined,
+      contractOptions,
+      {
+        buildPromptContext: false,
+        contractKind: "opening",
+        includeEldermereTurnContext: false,
+        suppressStreaming: true,
+        providerResponseFormat: "text"
+      }
+    ),
+    plan
   );
   const remainingForbiddenTerms = findForbiddenOpeningTerms(
     repairedOpening.content,
@@ -10756,16 +10603,14 @@ async function askEldermereOpeningNarrator(
       settingErrors: normalizedSettingErrors,
       narrationErrors: normalizedNarrationErrors
     })}`,
-    "Rewrite the same opening situation as one valid AI Taverns DM JSON object.",
-    "public_narration must contain exactly 6 paragraphs separated by blank lines.",
-    "Paragraph 1: why this character or party came here now.",
-    "Paragraph 2: the recent travel, arrival context, and what the character knows before the live scene.",
-    "Paragraph 3: the starting location atmosphere narrowing into the first live scene.",
-    "Paragraph 4: visible NPC tension and immediate pressure.",
-    "Paragraph 5: the actionable complication and 2-3 concrete non-dice actions available right now.",
-    "Paragraph 6: exactly 'What do you do?' and nothing else.",
-    `public_narration must include ${semanticOpeningTagMinimum}-${semanticOpeningTagMaximum} semantic narration color tags using <npc>, <place>, <clue>, <danger>, <faction>, or <object>. You may also use <em> for brief italicized emphasis, but <em> does not count toward the required color tags.`,
-    "Do not include Markdown outside JSON, a teaser, a summary, a prologue note, or fewer than 6 paragraphs."
+    "Rewrite the same opening situation as plain prose only.",
+    "Use exactly 4 paragraphs separated by blank lines.",
+    "Paragraph 1: the current playable situation and why the character or party is caught in it now; explain earlier events only as brief retrospective context for a present person, object, consequence, or situation, never as a narrated journey or event sequence.",
+    "Paragraph 2: the starting location's immediate sensory and spatial details, visible NPCs, reachable objects, exits, and urgent visible pressure.",
+    "Paragraph 3: the actionable complication and 2-3 concrete non-dice actions available right now.",
+    "Paragraph 4: exactly 'What do you do?' and nothing else.",
+    `Use exactly ${semanticOpeningTagMinimum} semantic narration color tags using <npc>, <place>, <clue>, <danger>, <faction>, or <object>.`,
+    "Do not include JSON, Markdown fences, a teaser, a summary, a prologue note, metadata, or anything other than exactly 4 paragraphs."
   ].join("\n");
   const finalOpening = await askDungeonMaster(
     db,
@@ -10782,7 +10627,8 @@ async function askEldermereOpeningNarrator(
       contractKind: "opening",
       includeEldermereTurnContext: false,
       suppressStreaming: true,
-      temperature: finalEldermereOpeningRetryTemperature
+      temperature: finalEldermereOpeningRetryTemperature,
+      providerResponseFormat: "text"
     }
   );
   const normalizedFinalOpening = repairEldermereOpeningReply(finalOpening, plan);
@@ -10968,6 +10814,7 @@ async function askDungeonMaster(
     model?: AiModelId;
     suppressStreaming?: boolean;
     temperature?: number;
+    providerResponseFormat?: "json" | "text";
     timeoutMs?: number;
   }
 ): Promise<DungeonMasterReply> {
@@ -11027,11 +10874,14 @@ async function askDungeonMaster(
             ...(options?.model ? { model: options.model } : {})
           })
       : null;
-    const providerMessage = appendGameplayTurnOutputContractReminder(
-      promptContext?.message ?? message,
-      campaign.mode,
-      options?.contractKind
-    );
+    const providerMessage =
+      options?.providerResponseFormat === "text"
+        ? promptContext?.message ?? message
+        : appendGameplayTurnOutputContractReminder(
+            promptContext?.message ?? message,
+            campaign.mode,
+            options?.contractKind
+          );
     const providerStartedAt = Date.now();
     const timeoutSignal = options?.timeoutMs
       ? AbortSignal.timeout(options.timeoutMs)
@@ -11045,6 +10895,9 @@ async function askDungeonMaster(
       ...(options?.model ? { model: options.model } : {}),
       ...(typeof options?.temperature === "number"
         ? { temperature: options.temperature }
+        : {}),
+      ...(options?.providerResponseFormat
+        ? { responseFormat: options.providerResponseFormat }
         : {}),
       ...(timeoutSignal ? { signal: timeoutSignal } : {}),
       ...(streamEmitter && streamTurnId
@@ -12114,7 +11967,7 @@ export async function beginRoomForUser(
             db,
             runtime,
             beginState.campaign,
-            openingRequest,
+            beginState.players,
             openingTurn.id
           );
           await persistEldermereOpeningPlan(
@@ -12137,8 +11990,8 @@ export async function beginRoomForUser(
             db,
             runtime,
             beginState.campaign,
-            openingRequest,
-            openingSceneInstructions("multiplayer"),
+            beginState.players,
+            eldermereOpeningNarratorInstructions(),
             plan.plan,
             openingTurn.id,
             { allowResolvedCombatWithoutRolls: true }

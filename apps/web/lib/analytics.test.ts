@@ -33,21 +33,30 @@ describe("client analytics retention tracking", () => {
     vi.unstubAllEnvs();
   });
 
-  it("tracks 24-hour and 7-day campaign returns as hook milestones", async () => {
-    const { trackCampaignReturn } = await import("./analytics");
+  it("tracks qualified returns only after a meaningful resumed play action", async () => {
+    const { trackAnalytics, trackCampaignReturn } = await import("./analytics");
+    const campaignId = "00000000-0000-4000-8000-000000000001";
 
     vi.setSystemTime(new Date("2026-08-01T00:00:00.000Z"));
+    trackAnalytics({ name: "Character Created" });
+    trackAnalytics({ name: "Campaign Created", properties: { campaignId } });
+    trackAnalytics({
+      name: "Player Message Sent",
+      properties: { campaignId, playerMessageCount: 5, dmMessageCount: 5 }
+    });
     trackCampaignReturn({
-      campaignId: "00000000-0000-4000-8000-000000000001",
+      campaignId,
       campaignMode: "single_player"
     });
 
-    expect(mixpanelMock.track).not.toHaveBeenCalled();
-
     vi.setSystemTime(new Date("2026-08-02T01:00:00.000Z"));
     trackCampaignReturn({
-      campaignId: "00000000-0000-4000-8000-000000000001",
+      campaignId,
       campaignMode: "single_player"
+    });
+    trackAnalytics({
+      name: "Player Message Sent",
+      properties: { campaignId, playerMessageCount: 6, dmMessageCount: 6 }
     });
 
     expect(mixpanelMock.track).toHaveBeenCalledWith(
@@ -58,53 +67,43 @@ describe("client analytics retention tracking", () => {
       })
     );
     expect(mixpanelMock.track).toHaveBeenCalledWith(
-      "Campaign Returned After 24h",
+      "Qualified Return",
       expect.objectContaining({
-        returnedAfterDays: 1
-      })
-    );
-    expect(mixpanelMock.track).toHaveBeenCalledWith(
-      "Hook Milestone Reached",
-      expect.objectContaining({
-        hookMilestone: "returned_after_24h"
+        campaignId,
+        qualifiedReturnOrdinal: 1
       })
     );
 
     vi.setSystemTime(new Date("2026-08-08T01:00:00.000Z"));
     trackCampaignReturn({
-      campaignId: "00000000-0000-4000-8000-000000000001",
+      campaignId,
       campaignMode: "single_player"
     });
-
+    trackAnalytics({
+      name: "Player Message Sent",
+      properties: { campaignId, playerMessageCount: 6, dmMessageCount: 6 }
+    });
     expect(mixpanelMock.track).toHaveBeenCalledWith(
-      "Campaign Returned After 7d",
-      expect.objectContaining({
-        returnedAfterDays: 7
-      })
-    );
-    expect(mixpanelMock.track).toHaveBeenCalledWith(
-      "Hook Milestone Reached",
-      expect.objectContaining({
-        hookMilestone: "returned_after_7d"
-      })
+      "Lifecycle Stage Reached",
+      expect.objectContaining({ lifecycleStage: "hooked" })
     );
   });
 
   it("aliases signed-in users to the browser analytics guest id", async () => {
     const analyticsGuestIdStorageKey = "ai-taverns.analytics.guestId";
-    const analyticsMetricsStoragePrefix = "ai-taverns.analytics.hookMetrics";
+    const analyticsLifecycleStoragePrefix = "ai-taverns.analytics.lifecycle";
     const browserGuestId = "browser-guest-id";
     const playerId = "player-client-id";
     const userDistinctId = "user:00000000-0000-4000-8000-000000000123";
 
     localStorage.setItem(analyticsGuestIdStorageKey, browserGuestId);
     localStorage.setItem(
-      `${analyticsMetricsStoragePrefix}.${browserGuestId}`,
-      JSON.stringify(["dice_submitted"])
+      `${analyticsLifecycleStoragePrefix}.${browserGuestId}`,
+      JSON.stringify({ characterCreated: true, campaignReady: true, qualifiedReturnDays: ["2026-08-02"] })
     );
     localStorage.setItem(
-      `${analyticsMetricsStoragePrefix}.${playerId}`,
-      JSON.stringify(["asked_dm"])
+      `${analyticsLifecycleStoragePrefix}.${playerId}`,
+      JSON.stringify({ meaningfulFirstSession: true, qualifiedReturnDays: ["2026-08-08"] })
     );
 
     const { identifyAnalyticsUser } = await import("./analytics");
@@ -124,10 +123,12 @@ describe("client analytics retention tracking", () => {
       playerId
     );
     expect(
-      JSON.parse(
-        localStorage.getItem(`${analyticsMetricsStoragePrefix}.${userDistinctId}`) ??
-          "[]"
-      )
-    ).toEqual(expect.arrayContaining(["dice_submitted", "asked_dm"]));
+      JSON.parse(localStorage.getItem(`${analyticsLifecycleStoragePrefix}.${userDistinctId}`) ?? "{}")
+    ).toEqual(expect.objectContaining({
+      characterCreated: true,
+      campaignReady: true,
+      meaningfulFirstSession: true,
+      qualifiedReturnDays: expect.arrayContaining(["2026-08-02", "2026-08-08"])
+    }));
   });
 });

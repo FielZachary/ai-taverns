@@ -4,6 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   NewAdventureForm,
   finalAbilityScoresFor,
+  quickBuildEquipmentSelectionsFor,
+  quickBuildSpellSelectionFor,
+  quickBuildStatAssignmentsFor,
   spellArchetypeFor,
   spellArtPathFor,
   spellCastingTimeFor,
@@ -62,6 +65,10 @@ async function continueFlow() {
   await finishFlowTransition();
 }
 
+function chooseCustomBuild() {
+  fireEvent.click(screen.getByRole("button", { name: /custom build/i }));
+}
+
 async function nextCharacterStep() {
   fireEvent.click(screen.getByRole("button", { name: /next/i }));
   await act(async () => {});
@@ -103,6 +110,7 @@ async function advanceThroughFighterEquipment() {
 async function advanceSingleplayerToIdentity() {
   await continueFlow();
   await continueFlow();
+  chooseCustomBuild();
   await choosePointBuyStats();
   await nextCharacterStep();
   await nextCharacterStep();
@@ -177,51 +185,10 @@ describe("NewAdventureForm", () => {
     localStorage.clear();
   });
 
-  it("validates, normalizes, and previews a multiplayer join code", async () => {
+  it("keeps multiplayer unavailable from the campaign mode picker", () => {
     render(<NewAdventureForm />);
 
-    fireEvent.click(screen.getByRole("button", { name: /multiplayer/i }));
-    await continueFlow();
-
-    expect(
-      screen.getByRole("heading", { name: /choose multiplayer setup/i })
-    ).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /join game/i }));
-    await continueFlow();
-
-    expect(
-      screen.getByRole("heading", { name: /enter the game code/i })
-    ).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "Enter the six-character game code before continuing."
-    );
-    expect(previewCampaignJoinMock).not.toHaveBeenCalled();
-
-    fireEvent.change(screen.getByLabelText("Game code"), {
-      target: { value: "ab-cd-12!" }
-    });
-
-    expect(screen.getByLabelText("Game code")).toHaveValue("ABCD12");
-
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-
-    await act(async () => {});
-
-    expect(previewCampaignJoinMock).toHaveBeenCalledWith({
-      gameCode: "ABCD12"
-    });
-    expect(screen.getByText("Crystal Caves")).toBeInTheDocument();
-    expect(screen.getByText("2 seats open")).toBeInTheDocument();
-
-    await finishFlowTransition();
-
-    expect(
-      screen.getByRole("heading", { name: /choose your character build/i })
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /multiplayer/i })).toBeDisabled();
   });
 
   it("lets point-buy stats spend points and advance from valid stats", async () => {
@@ -238,6 +205,7 @@ describe("NewAdventureForm", () => {
       screen.queryByRole("list", { name: /character creation progress/i })
     ).not.toBeInTheDocument();
 
+    chooseCustomBuild();
     await nextCharacterStep();
 
     expect(
@@ -319,6 +287,7 @@ describe("NewAdventureForm", () => {
 
     await continueFlow();
     await continueFlow();
+    chooseCustomBuild();
     await nextCharacterStep();
     await nextCharacterStep();
     await nextCharacterStep();
@@ -375,6 +344,116 @@ describe("NewAdventureForm", () => {
         .getByRole("button", { name: /multiplayer/i })
         .style.getPropertyValue("--mode-banner-art-url")
     ).toContain("/new-adventure/multiplayer-banner.webp");
+    expect(screen.getByRole("button", { name: /multiplayer/i })).toBeDisabled();
+  });
+
+  it("defaults to Quick Build and renders both build-style cards with artwork", async () => {
+    render(<NewAdventureForm />);
+
+    await continueFlow();
+    await continueFlow();
+
+    const buildPicker = screen.getByRole("group", { name: "Build style" });
+    const quickBuild = within(buildPicker).getByRole("button", {
+      name: /quick build/i
+    });
+    const customBuild = within(buildPicker).getByRole("button", {
+      name: /custom build/i
+    });
+
+    expect(quickBuild).toHaveAttribute("aria-pressed", "true");
+    expect(quickBuild.style.getPropertyValue("--build-mode-art-url")).toContain(
+      "/new-adventure/build-styles/quick-build.webp"
+    );
+    expect(customBuild.style.getPropertyValue("--build-mode-art-url")).toContain(
+      "/new-adventure/build-styles/custom-build.webp"
+    );
+    expect(buildPicker.querySelector(".build-mode-divider")).toHaveTextContent("OR");
+  });
+
+  it("uses offensive spells and complete equipment defaults for Quick Build", () => {
+    const selectedSpells = quickBuildSpellSelectionFor(
+      "Wizard",
+      [
+        { level: "Cantrip", base: ["Fire Bolt", "Mage Hand"] },
+        { level: "1st level", base: ["Burning Hands", "Magic Missile"] },
+        { level: "3rd level", base: ["Fireball", "Lightning Bolt"] }
+      ],
+      {
+        cantrips: 1,
+        leveledSpells: 2,
+        availableLevels: ["Cantrip", "1st level", "3rd level"],
+        spellSlotsText: "Test slots"
+      }
+    );
+
+    expect(selectedSpells).toEqual(["Fire Bolt", "Burning Hands", "Fireball"]);
+    expect(quickBuildEquipmentSelectionsFor("Fighter")).toMatchObject({
+      armor: { optionId: "chain-mail" },
+      "weapon-1": { optionId: "martial-and-shield", customItems: ["Longsword"] },
+      "weapon-2": { optionId: "light-crossbow" },
+      pack: { optionId: "dungeoneers-pack" }
+    });
+  });
+
+  it("shows spell details while choosing a custom wizard build", async () => {
+    render(<NewAdventureForm />);
+
+    await continueFlow();
+    await continueFlow();
+    chooseCustomBuild();
+    await nextCharacterStep();
+
+    fireEvent.click(screen.getByRole("button", { name: /wizard/i }));
+    await nextCharacterStep();
+    await nextCharacterStep();
+
+    fireEvent.click(screen.getByRole("button", { name: "Point Buy" }));
+    await nextCharacterStep();
+    await nextCharacterStep();
+
+    expect(screen.getByRole("group", { name: "Spells" })).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getAllByRole("checkbox", { name: "Non PHB Spells" })[0]
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open Fireball spell details" })
+    );
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByRole("heading", { name: "Fireball" })).toBeInTheDocument();
+    expect(within(dialog).getByText("Rolls Involved")).toBeInTheDocument();
+
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Close spell details" })
+    );
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("assigns Quick Build rolls to each class's prioritized abilities", () => {
+    expect(
+      quickBuildStatAssignmentsFor("Fighter", [8, 18, 10, 13, 15, 12])
+    ).toEqual({
+      assignments: {
+        str: 1,
+        dex: 3,
+        con: 4,
+        int: 2,
+        wis: 5,
+        cha: 0
+      },
+      scores: {
+        str: 18,
+        dex: 13,
+        con: 15,
+        int: 10,
+        wis: 12,
+        cha: 8
+      }
+    });
   });
 
   it("shows campaign worlds as banner choices with generated art", async () => {
@@ -403,6 +482,7 @@ describe("NewAdventureForm", () => {
 
     await continueFlow();
     await continueFlow();
+    chooseCustomBuild();
     await choosePointBuyStats();
     await nextCharacterStep();
 
@@ -423,6 +503,7 @@ describe("NewAdventureForm", () => {
 
     await continueFlow();
     await continueFlow();
+    chooseCustomBuild();
     await nextCharacterStep();
     await nextCharacterStep();
 
@@ -450,6 +531,7 @@ describe("NewAdventureForm", () => {
 
     await continueFlow();
     await continueFlow();
+    chooseCustomBuild();
     await choosePointBuyStats();
     await nextCharacterStep();
     await nextCharacterStep();
@@ -521,6 +603,7 @@ describe("NewAdventureForm", () => {
 
     await continueFlow();
     await continueFlow();
+    chooseCustomBuild();
     await choosePointBuyStats();
     await nextCharacterStep();
     await nextCharacterStep();
@@ -578,6 +661,7 @@ describe("NewAdventureForm", () => {
 
     await continueFlow();
     await continueFlow();
+    chooseCustomBuild();
     await choosePointBuyStats();
     await nextCharacterStep();
     await nextCharacterStep();
@@ -613,6 +697,7 @@ describe("NewAdventureForm", () => {
 
     await continueFlow();
     await continueFlow();
+    chooseCustomBuild();
     await choosePointBuyStats();
     await nextCharacterStep();
     await nextCharacterStep();
@@ -651,7 +736,7 @@ describe("NewAdventureForm", () => {
     ).toContain("/new-adventure/options/packs/dungeoneer-s-pack.webp");
   });
 
-  it("validates identity and keeps campaign creation behind Continue", async () => {
+  it("validates identity and creates the campaign from Continue", async () => {
     render(<NewAdventureForm />);
 
     await advanceSingleplayerToIdentity();
@@ -678,22 +763,15 @@ describe("NewAdventureForm", () => {
     });
     expect(
       screen.getByText(
-        "Feel free to leave it blank and let AI Taverns generate the backstory for you."
+        "Its highly recommended you write your own backstory to be more immersed in your character, but if you're too lazy to do that, you can just skip it ;)"
       )
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /add details/i })
-    ).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /generate story/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /add details/i })).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByPlaceholderText("Optional: Write Backstory"), {
       target: { value: "Raised among lighthouse keepers beneath twin moons." }
     });
-    expect(
-      screen.getByRole("button", { name: /generate story/i })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /add details/i })
-    ).toBeEnabled();
     expect(
       screen.queryByRole("checkbox", {
         name: /let ai taverns add unto my backstory/i
@@ -719,17 +797,6 @@ describe("NewAdventureForm", () => {
 
     expect(screen.getByLabelText("Image model")).toHaveValue("openai");
     expect(screen.getByLabelText("Art style")).toHaveValue("ink_and_watercolor");
-    fireEvent.click(screen.getByRole("button", { name: /create art/i }));
-
-    await act(async () => {});
-
-    expect(screen.getByText("Generating portrait")).toHaveClass("rune-loader");
-    expect(createCampaignMock).not.toHaveBeenCalled();
-    expect(generateCharacterPortraitMock).not.toHaveBeenCalled();
-    expect(previewCharacterPortraitMock).not.toHaveBeenCalled();
-    expect(uploadCharacterPortraitMock).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled();
-
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
 
     await act(async () => {});
@@ -772,91 +839,6 @@ describe("NewAdventureForm", () => {
     );
     expect(previewCharacterPortraitMock).not.toHaveBeenCalled();
     expect(uploadCharacterPortraitMock).not.toHaveBeenCalled();
-  });
-
-  it("generates and enriches backstory from the identity step", async () => {
-    let resolveBackstory:
-      | ((
-          value:
-            | {
-                backstory: string;
-                eldermereStart?: {
-                  regionName: string;
-                  settlementName: string;
-                  reason?: string;
-                };
-              }
-            | PromiseLike<{
-                backstory: string;
-                eldermereStart?: {
-                  regionName: string;
-                  settlementName: string;
-                  reason?: string;
-                };
-              }>
-        ) => void)
-      | undefined;
-    generateCharacterBackstoryMock.mockReturnValueOnce(
-      new Promise((resolve) => {
-        resolveBackstory = resolve;
-      })
-    );
-
-    render(<NewAdventureForm />);
-
-    await advanceSingleplayerToIdentity();
-
-    fireEvent.change(screen.getByLabelText("Character name"), {
-      target: { value: "Mira Vale" }
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: /generate story/i }));
-
-    expect(screen.getByText("Writing your backstory")).toHaveClass(
-      "rune-loader"
-    );
-    expect(screen.getByPlaceholderText("Optional: Write Backstory")).toHaveAttribute(
-      "aria-busy",
-      "true"
-    );
-    expect(generateCharacterBackstoryMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        mode: "generate",
-        campaignGenre: "Eldermere",
-        campaignGenreKind: "preset",
-        campaignGenrePresetId: "eldermere",
-        characterSheet: expect.stringContaining("Character Name: Mira Vale")
-      })
-    );
-    expect(generateCharacterBackstoryMock.mock.calls[0]?.[0]).not.toHaveProperty(
-      "currentBackstory"
-    );
-
-    await act(async () => {
-      resolveBackstory?.({
-        backstory: "Mira once guarded a lantern no storm could drown.",
-        eldermereStart: {
-          regionName: "The Salt Concordat",
-          settlementName: "Selwick"
-        }
-      });
-    });
-
-    expect(screen.getByPlaceholderText("Optional: Write Backstory")).toHaveValue(
-      "Mira once guarded a lantern no storm could drown."
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: /add details/i }));
-
-    expect(generateCharacterBackstoryMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        mode: "add_details",
-        currentBackstory: "Mira once guarded a lantern no storm could drown.",
-        characterSheet: expect.stringContaining(
-          "Mira once guarded a lantern no storm could drown."
-        )
-      })
-    );
   });
 
   it("generates a blank identity backstory before continuing", async () => {
@@ -1062,23 +1044,12 @@ describe("NewAdventureForm", () => {
     fireEvent.change(screen.getByLabelText("Character name"), {
       target: { value: "Mira Vale" }
     });
-    fireEvent.click(screen.getByRole("button", { name: /generate story/i }));
-
-    await act(async () => {});
-
-    expect(screen.getByPlaceholderText("Optional: Write Backstory")).toHaveValue(
-      "Mira owes a debt to a Selwick shipwright."
-    );
-
     await nextCharacterStep();
 
     expect(generateCharacterBackstoryMock).toHaveBeenCalledTimes(1);
-
-    fireEvent.click(screen.getByRole("button", { name: /create art/i }));
-
-    await act(async () => {});
-
-    expect(createCampaignMock).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("heading", { name: /create your character art/i })
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
 
@@ -1098,7 +1069,7 @@ describe("NewAdventureForm", () => {
     );
   });
 
-  it("uses the shared rune loader for portrait and campaign preparation", async () => {
+  it("uses the shared rune loader while campaign creation starts portrait generation", async () => {
     generateCharacterPortraitMock.mockReturnValue(
       new Promise(() => {})
     );
@@ -1113,30 +1084,6 @@ describe("NewAdventureForm", () => {
 
     await nextCharacterStep();
 
-    fireEvent.click(screen.getByRole("button", { name: /create art/i }));
-
-    expect(screen.getByText("Generating portrait")).toHaveClass("rune-loader");
-    expect(
-      screen.getByText(
-        "this takes quite a long while, so you may move on to the next part if you wish"
-      )
-    ).toHaveClass("character-art-wait-note");
-    expect(createCampaignMock).not.toHaveBeenCalled();
-    expect(generateCharacterPortraitMock).not.toHaveBeenCalled();
-    expect(
-      screen.queryByText("this'll take about a minute and a half, sit tight ;)")
-    ).not.toBeInTheDocument();
-
-    await act(async () => {
-      vi.advanceTimersByTime(10_000);
-    });
-
-    expect(screen.getByText("Generating portrait")).toBeInTheDocument();
-    expect(
-      screen.queryByText("Integrating your backstory")
-    ).not.toBeInTheDocument();
-
-    expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
 
     expect(screen.getByText("Preparing your campaign")).toHaveClass(
@@ -1169,12 +1116,6 @@ describe("NewAdventureForm", () => {
     });
 
     await nextCharacterStep();
-
-    fireEvent.click(screen.getByRole("button", { name: /create art/i }));
-
-    await act(async () => {});
-
-    expect(createCampaignMock).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
 

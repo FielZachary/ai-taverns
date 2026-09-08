@@ -17,8 +17,7 @@ import {
   Minus,
   Plus,
   RefreshCw,
-  ScrollText,
-  Wand2
+  ScrollText
 } from "lucide-react";
 import {
   campaignGenrePresets,
@@ -57,9 +56,9 @@ import type {
   EldermereCampaignStart,
   MechanicsResourceState,
   MechanicsSeed,
-  SpellSlotState,
-  UserUsageSummary
+  SpellSlotState
 } from "@ai-dnd/contracts";
+import type { UserUsageSummary } from "@ai-dnd/contracts";
 
 export type { SpellLevelLabel, SpellRuleProfile } from "@/lib/spell-rules";
 
@@ -250,8 +249,6 @@ const quickCharacterCreationSteps = [
   "Class",
   "Stats",
   "Species",
-  "Spells",
-  "Equipment",
   "Identity"
 ];
 const campaignGenres = [...campaignGenrePresets, customCampaignGenre];
@@ -2166,6 +2163,35 @@ type CharacterBackground = (typeof backgroundOptions)[number];
 type Alignment = (typeof alignmentOptions)[number];
 type Gender = (typeof genderOptions)[number];
 
+export function quickBuildStatAssignmentsFor(
+  characterClass: CharacterClass,
+  statRollValues: readonly number[]
+) {
+  const abilityPriority = [...abilityDefinitions].sort(
+    (left, right) =>
+      defaultAbilityScoresByClass[characterClass][right.key] -
+      defaultAbilityScoresByClass[characterClass][left.key]
+  );
+  const rollPriority = statRollValues
+    .map((value, index) => ({ index, value }))
+    .sort((left, right) => right.value - left.value || left.index - right.index);
+  const assignments = { ...emptyStatRollAssignments };
+  const scores = { ...emptyAbilityScores };
+
+  abilityPriority.forEach(({ key }, index) => {
+    const roll = rollPriority[index];
+
+    if (!roll) {
+      return;
+    }
+
+    assignments[key] = roll.index;
+    scores[key] = roll.value;
+  });
+
+  return { assignments, scores };
+}
+
 const subclassDescriptions: Record<CharacterSubclass, string> = {
   Alchemist: "Turns reagents and restoratives into battlefield support.",
   Armorer: "Builds enchanted armor for defense, mobility, and force.",
@@ -3311,6 +3337,27 @@ const quickBuildBackgroundByClass: Record<CharacterClass, CharacterBackground> =
   Psion: "Sage"
 };
 
+const quickBuildOffensiveSpellPriority: Partial<Record<CharacterClass, string[]>> = {
+  Artificer: ["Fire Bolt", "Shocking Grasp", "Ray of Frost", "Heat Metal", "Web", "Magic Weapon", "Faerie Fire"],
+  Bard: ["Vicious Mockery", "Dissonant Whispers", "Thunderwave", "Shatter", "Heat Metal", "Cloud of Daggers", "Hypnotic Pattern", "Stinking Cloud"],
+  Cleric: ["Sacred Flame", "Guiding Bolt", "Inflict Wounds", "Spiritual Weapon", "Spirit Guardians", "Hold Person", "Bestow Curse"],
+  Druid: ["Produce Flame", "Poison Spray", "Thorn Whip", "Thunderwave", "Moonbeam", "Heat Metal", "Flaming Sphere", "Spike Growth", "Call Lightning"],
+  Paladin: ["Searing Smite", "Thunderous Smite", "Wrathful Smite", "Branding Smite", "Blinding Smite", "Elemental Weapon"],
+  Psion: ["Mind Sliver", "Telekinetic Fling", "Dissonant Whispers", "Mind Spike", "Shatter", "Hypnotic Pattern", "Fear"],
+  Ranger: ["Hunter's Mark", "Hail of Thorns", "Ensnaring Strike", "Spike Growth", "Conjure Barrage"],
+  Sorcerer: ["Fire Bolt", "Ray of Frost", "Shocking Grasp", "Chromatic Orb", "Burning Hands", "Scorching Ray", "Shatter", "Fireball", "Lightning Bolt"],
+  Warlock: ["Eldritch Blast", "Hellish Rebuke", "Hex", "Arms of Hadar", "Shatter", "Hunger of Hadar", "Vampiric Touch"],
+  Wizard: ["Fire Bolt", "Ray of Frost", "Shocking Grasp", "Chromatic Orb", "Burning Hands", "Scorching Ray", "Shatter", "Fireball", "Lightning Bolt"]
+};
+
+const quickBuildEquipmentDefaults: Record<EquipmentCategory, string[]> = {
+  simpleWeapon: ["Light crossbow"],
+  simpleMeleeWeapon: ["Spear"],
+  martialWeapon: ["Longsword"],
+  martialMeleeWeapon: ["Longsword"],
+  musicalInstrument: ["Lute"]
+};
+
 function formatList(items: readonly string[]) {
   return items.length > 0 ? items.join(", ") : "None";
 }
@@ -3325,6 +3372,44 @@ function equipmentSelectionItems(selection?: EquipmentChoiceSelection) {
 
 function equipmentChoiceQuantity(option: EquipmentChoiceOption) {
   return option.quantity ?? 1;
+}
+
+export function quickBuildEquipmentSelectionsFor(characterClass: CharacterClass) {
+  return classEquipmentRules[characterClass].choices.reduce<EquipmentSelections>(
+    (selections, choice) => {
+      const option = choice.options[0];
+
+      if (!option) {
+        return selections;
+      }
+
+      if (!option.category) {
+        selections[choice.id] = { optionId: option.id };
+        return selections;
+      }
+
+      const category = option.category;
+      const categoryDefaults = quickBuildEquipmentDefaults[category];
+      const items = categoryDefaults
+        .filter((item) => equipmentCategoryOptions[category].includes(item))
+        .slice(0, equipmentChoiceQuantity(option));
+
+      if (items.length < equipmentChoiceQuantity(option)) {
+        items.push(
+          ...equipmentCategoryOptions[category]
+            .filter((item) => !items.includes(item))
+            .slice(0, equipmentChoiceQuantity(option) - items.length)
+        );
+      }
+
+      selections[choice.id] = {
+        optionId: option.id,
+        customItems: items
+      };
+      return selections;
+    },
+    {}
+  );
 }
 
 function packContentsFor(item: string) {
@@ -3900,6 +3985,61 @@ function defaultSpellSelectionFor(
   return [...cantripDefaults, ...leveledDefaults];
 }
 
+function spellOffenseScore(spell: string, level: SpellLevelLabel) {
+  const normalizedSpell = spell.toLowerCase();
+  const levelBonus =
+    level === "3rd level" ? 30 : level === "2nd level" ? 20 : level === "1st level" ? 10 : 0;
+
+  return (
+    levelBonus +
+    (/fireball|lightning bolt|spirit guardians|call lightning|hunger of hadar/i.test(normalizedSpell)
+      ? 100
+      : /bolt|blast|ray|smite|shatter|whispers|wounds|moonbeam|spike growth|heat metal|weapon|flaming sphere|hunter's mark|hex/i.test(normalizedSpell)
+        ? 70
+        : /fear|hold person|hypnotic|web|ensnaring|curse/i.test(normalizedSpell)
+          ? 45
+          : 0)
+  );
+}
+
+export function quickBuildSpellSelectionFor(
+  characterClass: CharacterClass,
+  spellGroups: readonly SpellGroup[],
+  limits: SpellSelectionLimits
+) {
+  const priority = quickBuildOffensiveSpellPriority[characterClass] ?? [];
+  const rankedSpells = spellGroups
+    .filter((group) => isSpellLevelAvailable(group.level, limits))
+    .flatMap((group) =>
+      group.base.map((spell) => ({
+        spell,
+        level: group.level,
+        priority: priority.indexOf(spell)
+      }))
+    )
+    .sort((left, right) => {
+      const leftPriority = left.priority === -1 ? Number.MAX_SAFE_INTEGER : left.priority;
+      const rightPriority = right.priority === -1 ? Number.MAX_SAFE_INTEGER : right.priority;
+
+      return (
+        leftPriority - rightPriority ||
+        spellOffenseScore(right.spell, right.level) - spellOffenseScore(left.spell, left.level) ||
+        left.spell.localeCompare(right.spell)
+      );
+    });
+
+  const cantrips = rankedSpells
+    .filter(({ level }) => level === "Cantrip")
+    .slice(0, limits.cantrips)
+    .map(({ spell }) => spell);
+  const leveledSpells = rankedSpells
+    .filter(({ level }) => level !== "Cantrip")
+    .slice(0, limits.leveledSpells)
+    .map(({ spell }) => spell);
+
+  return [...cantrips, ...leveledSpells];
+}
+
 function pruneSpellSelection(
   spellGroups: readonly SpellGroup[],
   selectedSpells: readonly string[],
@@ -4189,7 +4329,7 @@ export function NewAdventureForm({
   const [customWorldDescription, setCustomWorldDescription] = useState("");
   const [characterName, setCharacterName] = useState("");
   const [characterBuildMode, setCharacterBuildMode] =
-    useState<CharacterBuildMode>("custom");
+    useState<CharacterBuildMode>("quick");
   const [characterClass, setCharacterClass] = useState<CharacterClass>("Fighter");
   const [characterSpecies, setCharacterSpecies] = useState<CharacterSpecies>("Human");
   const [characterBackground, setCharacterBackground] = useState<CharacterBackground>("Folk Hero");
@@ -4215,7 +4355,9 @@ export function NewAdventureForm({
   const [selectedSkills, setSelectedSkills] = useState<SkillName[]>(["Athletics", "Perception"]);
   const [selectedTool, setSelectedTool] = useState<(typeof toolOptions)[number]>("Dice set");
   const [selectedLanguage, setSelectedLanguage] = useState<(typeof languageOptions)[number]>("Elvish");
-  const [equipmentSelections, setEquipmentSelections] = useState<EquipmentSelections>({});
+  const [equipmentSelections, setEquipmentSelections] = useState<EquipmentSelections>(
+    () => quickBuildEquipmentSelectionsFor("Fighter")
+  );
   const [equipmentChoiceStepIndex, setEquipmentChoiceStepIndex] = useState(0);
   const [activeEquipmentModal, setActiveEquipmentModal] =
     useState<ActiveEquipmentModal>(null);
@@ -5103,11 +5245,23 @@ export function NewAdventureForm({
     setSubclass(nextClassData.subclassOptions[0]);
     setClassFeatureChoice(nextClassData.featureOptions[0]);
     setSelectedSkills(defaultSkillsForClass(nextClassData));
-    setEquipmentSelections({});
+    setEquipmentSelections(
+      characterBuildMode === "quick"
+        ? quickBuildEquipmentSelectionsFor(nextClass)
+        : {}
+    );
     setEquipmentChoiceStepIndex(0);
     setActiveEquipmentModal(null);
     setDlcSpellVisibility({});
-    setSelectedSpells(defaultSpellSelectionFor(nextClassData.spellGroups, nextSpellLimits));
+    setSelectedSpells(
+      characterBuildMode === "quick"
+        ? quickBuildSpellSelectionFor(
+            nextClass,
+            nextClassData.spellGroups,
+            nextSpellLimits
+          )
+        : defaultSpellSelectionFor(nextClassData.spellGroups, nextSpellLimits)
+    );
 
     if (characterBuildMode === "quick") {
       setCharacterBackground(quickBuildBackgroundByClass[nextClass]);
@@ -5124,13 +5278,19 @@ export function NewAdventureForm({
     setSubclass(selectedClass.subclassOptions[0]);
     setClassFeatureChoice(selectedClass.featureOptions[0]);
     setSelectedSkills(defaultSkillsForClass(selectedClass));
-    setEquipmentSelections({});
+    setEquipmentSelections(quickBuildEquipmentSelectionsFor(characterClass));
     setEquipmentChoiceStepIndex(0);
     setActiveEquipmentModal(null);
     setSelectedTool("Dice set");
     setSelectedLanguage("Elvish");
     setDlcSpellVisibility({});
-    setSelectedSpells(defaultSpellSelectionFor(selectedClass.spellGroups, spellSelectionLimits));
+    setSelectedSpells(
+      quickBuildSpellSelectionFor(
+        characterClass,
+        selectedClass.spellGroups,
+        spellSelectionLimits
+      )
+    );
   }
 
   function applyCustomBuildDefaults() {
@@ -5207,41 +5367,57 @@ export function NewAdventureForm({
 
     if (activeStatRoll.targetRollIndex !== undefined) {
       const targetRollIndex = activeStatRoll.targetRollIndex;
+      const nextValues =
+        statRollValues.length === abilityDefinitions.length
+          ? [...statRollValues]
+          : [...emptyStatRollValues];
+      nextValues[targetRollIndex] = activeStatRoll.values[0] ?? null;
+      setStatRollValues(nextValues);
 
-      setStatRollValues((currentValues) => {
-        const nextValues =
-          currentValues.length === abilityDefinitions.length
-            ? [...currentValues]
-            : [...emptyStatRollValues];
-        nextValues[targetRollIndex] = activeStatRoll.values[0] ?? null;
-        return nextValues;
-      });
-      setStatRollAssignments((currentAssignments) => {
-        const nextAssignments = { ...currentAssignments };
+      if (characterBuildMode === "quick" && nextValues.every((value) => value !== null)) {
+        const { assignments, scores } = quickBuildStatAssignmentsFor(
+          characterClass,
+          nextValues as number[]
+        );
+        setStatRollAssignments(assignments);
+        setAbilityScores(scores);
+      } else {
+        setStatRollAssignments((currentAssignments) => {
+          const nextAssignments = { ...currentAssignments };
 
-        abilityDefinitions.forEach(({ key }) => {
-          if (nextAssignments[key] === targetRollIndex) {
-            nextAssignments[key] = null;
-          }
+          abilityDefinitions.forEach(({ key }) => {
+            if (nextAssignments[key] === targetRollIndex) {
+              nextAssignments[key] = null;
+            }
+          });
+
+          return nextAssignments;
         });
+        setAbilityScores((currentScores) => {
+          const nextScores = { ...currentScores };
 
-        return nextAssignments;
-      });
-      setAbilityScores((currentScores) => {
-        const nextScores = { ...currentScores };
+          abilityDefinitions.forEach(({ key }) => {
+            if (statRollAssignments[key] === targetRollIndex) {
+              nextScores[key] = null;
+            }
+          });
 
-        abilityDefinitions.forEach(({ key }) => {
-          if (statRollAssignments[key] === targetRollIndex) {
-            nextScores[key] = null;
-          }
+          return nextScores;
         });
-
-        return nextScores;
-      });
+      }
     } else {
       setStatRollValues(activeStatRoll.values);
-      setStatRollAssignments({ ...emptyStatRollAssignments });
-      setAbilityScores({ ...emptyAbilityScores });
+      if (characterBuildMode === "quick") {
+        const { assignments, scores } = quickBuildStatAssignmentsFor(
+          characterClass,
+          activeStatRoll.values
+        );
+        setStatRollAssignments(assignments);
+        setAbilityScores(scores);
+      } else {
+        setStatRollAssignments({ ...emptyStatRollAssignments });
+        setAbilityScores({ ...emptyAbilityScores });
+      }
     }
 
     setActiveStatRoll(null);
@@ -5943,16 +6119,6 @@ export function NewAdventureForm({
         return;
       }
 
-      if (
-        !portraitPreviewDataUrl &&
-        !uploadedPortraitFileName &&
-        !createdCampaign &&
-        !isCreatingArt
-      ) {
-        void createCharacterArt();
-        return;
-      }
-
       void continueToCampaign();
       return;
     }
@@ -6043,22 +6209,12 @@ export function NewAdventureForm({
                     } as CSSProperties
                   }
                   aria-pressed={mode === "multiplayer"}
-                  onClick={() => {
-                    setMode("multiplayer");
-                    trackAnalytics({
-                      name: "Campaign Mode Selected",
-                      properties: {
-                        ...analyticsBaseProperties(),
-                        mode: "multiplayer",
-                        campaignMode: "multiplayer"
-                      }
-                    });
-                  }}
+                  disabled
                 >
                   <span className="mode-banner-frame" aria-hidden="true" />
                   <span>
                     <strong>Multiplayer</strong>
-                    <small>Invite players and resolve party turns together.</small>
+                    <small>Temporarily unavailable while it is being maintained.</small>
                   </span>
                 </button>
               </div>
@@ -6221,6 +6377,12 @@ export function NewAdventureForm({
                       <button
                         type="button"
                         className={characterBuildMode === "quick" ? "selected" : ""}
+                        style={
+                          {
+                            "--build-mode-art-url":
+                              'url("/new-adventure/build-styles/quick-build.webp")'
+                          } as CSSProperties
+                        }
                         aria-pressed={characterBuildMode === "quick"}
                         onClick={() => {
                           setCharacterBuildMode("quick");
@@ -6237,9 +6399,20 @@ export function NewAdventureForm({
                         <strong>Quick Build</strong>
                         <small>Auto-pick background and proficiencies, then choose the core play details.</small>
                       </button>
+                      <div className="build-mode-divider" aria-hidden="true">
+                        <span />
+                        OR
+                        <span />
+                      </div>
                       <button
                         type="button"
                         className={characterBuildMode === "custom" ? "selected" : ""}
+                        style={
+                          {
+                            "--build-mode-art-url":
+                              'url("/new-adventure/build-styles/custom-build.webp")'
+                          } as CSSProperties
+                        }
                         aria-pressed={characterBuildMode === "custom"}
                         onClick={() => {
                           setCharacterBuildMode("custom");
@@ -6855,8 +7028,7 @@ export function NewAdventureForm({
                     <label className="backstory-field">
                       <span>Backstory</span>
                       <small>
-                        Feel free to leave it blank and let AI Taverns generate the
-                        backstory for you.
+                        Its highly recommended you write your own backstory to be more immersed in your character, but if you&apos;re too lazy to do that, you can just skip it ;)
                       </small>
                       <div className="backstory-input-shell">
                         <textarea
@@ -6882,28 +7054,6 @@ export function NewAdventureForm({
                       </div>
                     </label>
 
-                    <div className="backstory-actions" aria-label="Backstory actions">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setHasUsedBackstoryAction(true);
-                          void writeBackstory("generate");
-                        }}
-                        disabled={isGeneratingBackstory}
-                      >
-                        Generate story
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setHasUsedBackstoryAction(true);
-                          void writeBackstory("add_details");
-                        }}
-                        disabled={isGeneratingBackstory || !backstory.trim()}
-                      >
-                        Add details
-                      </button>
-                    </div>
                   </div>
                 ) : null}
 
@@ -7145,8 +7295,15 @@ export function NewAdventureForm({
                 </>
               ) : isLastStep ? (
                 <>
-                  {isJoinFlow ? "Join Game" : "Create art"}
-                  {isJoinFlow ? <Check size={16} /> : <Wand2 size={16} />}
+                  {isJoinFlow ? "Join Game" : "Continue"}
+                  {isJoinFlow ? (
+                    <Check size={16} />
+                  ) : (
+                    <span
+                      className="fantasy-arrow-icon fantasy-arrow-forward"
+                      aria-hidden="true"
+                    />
+                  )}
                 </>
               ) : (
                 <>
@@ -7156,12 +7313,6 @@ export function NewAdventureForm({
               )}
             </button>
           </div>
-          {stepIndex === reviewStepIndex && !isJoinFlow && isCreatingArt ? (
-            <p className="character-art-wait-note">
-              this takes quite a long while, so you may move on to the next part if
-              you wish
-            </p>
-          ) : null}
       </form>
 
       {activeSpellDetail && activeSpellRuleProfile ? (
