@@ -39,9 +39,6 @@ import {
   RoomSocketEventSchema,
   RoomSnapshotSchema,
   RoomSubmitRequestSchema,
-  hookPointsForMetric,
-  hookSnapshotForMetrics,
-  hookStageForScore,
   entitlementForTier
 } from "./index.js";
 
@@ -620,38 +617,6 @@ test("DM provider contracts accept turn and prep payloads", () => {
   assert.equal(response.message.role, "dm");
 });
 
-test("hook scoring derives stable activation stages", () => {
-  assert.equal(hookStageForScore(0), "visitor");
-  assert.equal(hookStageForScore(25), "activated");
-  assert.equal(hookStageForScore(50), "engaged");
-  assert.equal(hookStageForScore(75), "hooked");
-  assert.equal(hookPointsForMetric("portrait_added"), 10);
-  assert.equal(hookPointsForMetric("five_dm_responses"), 10);
-  assert.equal(hookPointsForMetric("returned_after_7d"), 15);
-
-  const snapshot = hookSnapshotForMetrics([
-    "campaign_created_or_joined",
-    "character_completed",
-    "first_player_message",
-    "five_player_messages",
-    "returned_after_24h"
-  ]);
-
-  assert.equal(snapshot.score, 80);
-  assert.equal(snapshot.stage, "hooked");
-  assert.equal(snapshot.isHooked, true);
-  assert.deepEqual(
-    snapshot.deltas.map((delta) => delta.metric),
-    [
-      "campaign_created_or_joined",
-      "character_completed",
-      "first_player_message",
-      "five_player_messages",
-      "returned_after_24h"
-    ]
-  );
-});
-
 test("subscription entitlements resolve numeric tiers and reject unknown ids", () => {
   const legend = entitlementForTier(4);
   assert.equal(legend.code, "legend");
@@ -659,7 +624,7 @@ test("subscription entitlements resolve numeric tiers and reject unknown ids", (
   assert.throws(() => entitlementForTier(99), /Unknown subscription tier id: 99/);
 });
 
-test("analytics event contract accepts hook enrichment", () => {
+test("analytics event contract accepts lifecycle enrichment", () => {
   const event = AnalyticsEventSchema.parse({
     name: "Player Message Sent",
     properties: {
@@ -680,19 +645,14 @@ test("analytics event contract accepts hook enrichment", () => {
       hasStateChange: true,
       rollType: "d20",
       requestedByDm: true,
-      hookScore: 80,
-      hookStage: "hooked",
-      isHooked: true,
-      hookDeltas: [
-        {
-          metric: "five_player_messages",
-          points: 20
-        }
-      ]
+      lifecycleScore: 75,
+      lifecycleStage: "hooked",
+      qualifiedReturnDays: 2,
+      hasQualifiedReturn7d: true
     }
   });
 
   assert.equal(event.name, "Player Message Sent");
-  assert.equal(event.properties.hookStage, "hooked");
-  assert.equal(event.properties.hookDeltas?.[0]?.metric, "five_player_messages");
+  assert.equal(event.properties.lifecycleStage, "hooked");
+  assert.equal(event.properties.qualifiedReturnDays, 2);
 });

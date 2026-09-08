@@ -3707,96 +3707,87 @@ before(async () => {
 
         if (input.instructions.includes("campaign-opening planner")) {
           const selectedRegion =
-            input.message.match(/Region: ([^.]+)\./)?.[1] ?? "Cael Ambrose";
+            input.message.match(/Region: ([^\n]+)/)?.[1]?.trim() ?? "Cael Ambrose";
           const startingLocation =
-            input.message.match(/Starting settlement: ([^(.\n]+)/)?.[1]?.trim() ??
+            input.message.match(/Starting location: ([^\n]+)/)?.[1]?.trim() ??
             "Suncross";
 
           return {
             id: "provider-planner-1",
             content: JSON.stringify({
-              campaign_title: "The Quiet Road",
-              region: {
-                name: selectedRegion,
-                why_this_region: "It gives the opener a concrete local conflict.",
-                plain_description: "A troubled Eldermere region with pressure close enough to touch."
-              },
-              starting_location: {
-                name: startingLocation,
-                type: "settlement",
-                why_this_location: "It is the selected campaign start.",
-                plain_description: "A specific place where the first problem is already visible."
-              },
-              starting_location_atmosphere: {
-                arrival_impression: `${startingLocation} feels busy, guarded, and already shaped by the trouble that brought the party here.`,
-                daily_life_and_liveliness: "Locals keep working, trading, arguing, and watching the streets even while tension sits plainly over the settlement.",
-                local_attitude: "People treat strangers with cautious courtesy and look twice at anyone capable of helping.",
-                dominant_vibe: "watchful daily life under public strain",
-                sensory_entry_details: [
-                  "lanterns lit earlier than the hour requires",
-                  "low voices stopping when armed strangers pass",
-                  "cold rain and smoke hanging in narrow streets"
-                ],
-                transition_into_first_scene: "The wider settlement pressure narrows toward the marked doorway where Mara Vell waits."
-              },
-              opening_premise: {
-                why_the_party_is_here: "The party has come to answer a local summons.",
-                immediate_objective: "Find the person who sent for them.",
-                immediate_complication: "The locals are afraid to explain what happened.",
-                first_scene_location: "At the edge of the starting settlement.",
-                opening_mood: "watchful and tense",
-                campaign_promise: "A grounded mystery with old power underneath it."
-              },
-              player_facing_facts: [
-                "The party has a reason to be here now.",
-                "Someone local needs help and is afraid."
-              ],
-              allowed_player_facing_terms: [
+              region: selectedRegion,
+              starting_location: startingLocation,
+              how_the_player_got_here:
+                "The character followed an unresolved personal lead to the selected starting location.",
+              concept:
+                "A local request turns into an escalating mystery as the character learns why several people want the same truth hidden. As the player follows the messenger's lead, they discover their arrival was anticipated and the local network is using the same personal history that brought them here. The campaign becomes a choice between exposing the network, using its leverage, or protecting the people it has trapped.",
+              opening_scene:
+                "At a marked doorway in the selected starting location, a worried messenger offers the first lead while someone watches the street.",
+              private_truth:
+                "The messenger's request is connected to a concealed local network that selected the player because of their personal history; discovering that recontextualizes the opening and gives the player leverage over the network.",
+              campaign_anchors: [
                 {
-                  term: selectedRegion,
-                  plain_meaning: "the larger region where the campaign begins"
+                  type: "region",
+                  name: selectedRegion,
+                  visibility: "player_safe",
+                  description:
+                    "The selected Eldermere region, whose local pressures shape the mystery and its consequences.",
+                  opening_role: "Its tensions are felt through the first local conflict.",
+                  campaign_relevance: "The network exploits regional pressure to protect itself.",
+                  future_pressure_or_change: "The regional balance can worsen or shift as the truth emerges.",
+                  player_influence: "The player can expose abuses, protect communities, or change which local power gains ground."
                 },
                 {
-                  term: startingLocation,
-                  plain_meaning: "the settlement where the first scene begins"
-                }
-              ],
-              npc_seed: [
+                  type: "settlement",
+                  name: startingLocation,
+                  visibility: "player_safe",
+                  description:
+                    "The selected starting settlement, where the network's first visible pressure is taking shape.",
+                  opening_role: "It contains the marked doorway and first lead.",
+                  campaign_relevance: "The settlement is the first community affected by the hidden conflict.",
+                  future_pressure_or_change: "It can become more divided, controlled, or resilient as events unfold.",
+                  player_influence: "The player can build trust, protect residents, or change who holds local influence."
+                },
                 {
+                  type: "person",
                   name: "Mara Vell",
-                  role: "a worried local messenger",
-                  wants: "help without drawing official attention",
-                  visible_behavior: "keeps watching the street behind her"
+                  visibility: "player_safe",
+                  description: "A worried local messenger carrying the first lead.",
+                  opening_role: "She asks the player for help at the marked doorway.",
+                  campaign_relevance: "Her divided loyalties connect the player to the hidden network.",
+                  future_pressure_or_change: "Fear may make her cooperate, disappear, or betray someone under pressure.",
+                  player_influence: "The player can earn her trust, protect her, or expose what she knows."
+                },
+                {
+                  type: "mystery",
+                  name: "The Marked Doorway",
+                  visibility: "player_safe",
+                  description: "A visible sign connected to a concealed local network.",
+                  opening_role: "It is an immediate clue the player can investigate.",
+                  campaign_relevance: "Its meaning points toward why the network anticipated the player.",
+                  future_pressure_or_change: "New markings and erased evidence can deepen the trail.",
+                  player_influence: "The player can follow, protect, publicize, or misuse the clues it provides."
+                },
+                {
+                  type: "institution",
+                  name: "The Local Network",
+                  visibility: "dm_only",
+                  description: "A concealed network using local pressure to protect its interests.",
+                  opening_role: "Its watchers create the unseen pressure around the first lead.",
+                  campaign_relevance: "It is the force behind the campaign's central situation.",
+                  future_pressure_or_change: "It can erase evidence, fracture internally, or act openly if threatened.",
+                  player_influence: "The player can infiltrate, expose, bargain with, or dismantle it."
+                },
+                {
+                  type: "relationship",
+                  name: "Mira's Missing Mentor",
+                  visibility: "player_safe",
+                  description: "The unresolved relationship that brought Mira to the selected starting location.",
+                  opening_role: "It gives the opening lead personal urgency.",
+                  campaign_relevance: "The mentor's trail reveals why the player was anticipated.",
+                  future_pressure_or_change: "New evidence can change whether the mentor is a victim, ally, or source of danger.",
+                  player_influence: "The player can pursue, protect, forgive, or challenge the mentor's legacy."
                 }
-              ],
-              first_interactable_choices: [
-                "question Mara Vell",
-                "inspect the marked doorway",
-                "ask nearby locals what frightened them"
-              ],
-              sensory_palette: {
-                sights: ["a marked doorway", "lanterns lit early"],
-                sounds: ["low voices", "boots on stone"],
-                smells: ["cold rain"],
-                textures_or_weather: ["damp air"]
-              },
-              dm_private_context: [
-                "Old world lore may matter later, but should not be named in the opening."
-              ],
-              forbidden_opening_terms: [
-                "Second Dominion",
-                "Graywake",
-                "Wellglass",
-                "Curia of Watchers",
-                "Ashen Scholar"
-              ],
-              narrator_instructions: [
-                "Use the allowed terms only.",
-                "Explain each allowed term plainly."
-              ],
-              opening_quality_checks: [
-                "No forbidden opening terms appear.",
-                "The first choices are clear."
               ]
             }),
             debug: {
@@ -3881,43 +3872,37 @@ before(async () => {
         }
 
         const publicNarration =
-          "The summons that brought you here has the weight of unfinished business, the kind that does not let a traveler turn back once the <place>old road</place> bends toward trouble.\n\nFor the last few days, the road has been mud, cold meals, and warnings from strangers who would not meet your eyes; in the last hour, the trees thinned enough to show the ruined watchtower beyond the ridge.\n\nA <object>lantern</object> flickers over the old road as your adventure begins, its light catching wet stones, wagon ruts, and a weathered sign pointing toward the tower beyond the trees.\n\nA courier waits beside the sign with their cloak pulled tight, glancing between you and the dark treeline while distant metal knocks once from somewhere inside the ruin.\n\nYou can question the courier, inspect the weathered sign, or follow the road toward the ruined watchtower before the lantern burns out.\n\nWhat do you do?";
+          "The summons that brought you here has the weight of <clue>unfinished business</clue>, the kind that does not let a traveler turn back once the old road bends toward trouble.\n\nFor the last few days, the <place>old road</place> has been mud, cold meals, and warnings from strangers who would not meet your eyes; in the last hour, the trees thinned enough to show the ruined watchtower beyond the ridge.\n\nA <object>lantern</object> flickers over the <place>old road</place> as your adventure begins, its light catching wet stones, wagon ruts, and a <clue>weathered sign</clue> pointing toward the tower beyond the trees.\n\nA <npc>courier</npc> waits beside the sign with their cloak pulled tight, glancing between you and the dark treeline while distant metal knocks once from somewhere inside the ruin.\n\nYou can question the courier, inspect the weathered sign, or follow the road toward the <danger>ruined watchtower</danger> before the lantern burns out.\n\nWhat do you do?";
         const isEldermereNarrator = input.message.includes(
-          'Set setting.world_name to "Eldermere".'
+          "ELDERMERE OPENING BRIEF"
         );
-          const eldermereStartingLocation =
-            input.message.match(
-              /Set setting\.starting_location to "([^"]+)"/
-            )?.[1] ?? "Old Road";
-          const eldermereRegion =
-            input.message.match(/Set setting\.region_name to "([^"]+)"/)?.[1] ??
-            "Test Region";
+        const eldermerePublicNarration =
+          "A <npc>courier</npc> waits beside a <clue>weathered sign</clue> on the <place>old road</place>, glancing between you and the <danger>ruined watchtower</danger> beyond the ridge. The summons in your pocket brought you here; earlier that evening, its bearer warned that the tower's lantern had gone dark.\n\nA <object>lantern</object> flickers over wet stones and wagon ruts as <faction>nearby travelers</faction> retreat from the watchtower's distant metal knock. The road, the sign, and the courier are all within reach, but the darkness inside the ruin is no longer still.\n\nYou can question the courier, inspect the weathered sign, or follow the road toward the ruined watchtower before the lantern burns out.\n\nWhat do you do?";
+        const narratorContent = isEldermereNarrator
+          ? eldermerePublicNarration
+          : publicNarration;
 
-        input.onPublicNarrationDelta?.(publicNarration.slice(0, 28));
-        input.onPublicNarrationDelta?.(publicNarration.slice(28));
+        input.onPublicNarrationDelta?.(narratorContent.slice(0, 28));
+        input.onPublicNarrationDelta?.(narratorContent.slice(28));
 
         return {
           id: "provider-message-1",
-          content: JSON.stringify({
-            public_narration: publicNarration,
-            roll_requests: [],
-            next_input_needed: "player_actions",
-            input_targets: [],
-            input_policy: "all_players",
-            setting: {
-              display_location: isEldermereNarrator
-                ? eldermereStartingLocation
-                : "Old Road",
-              world_name: isEldermereNarrator ? "Eldermere" : "Test Realm",
-              region_name: isEldermereNarrator ? eldermereRegion : "Test Region",
-              scene_location: isEldermereNarrator
-                ? eldermereStartingLocation
-                : "Old Road",
-              starting_location: isEldermereNarrator
-                ? eldermereStartingLocation
-                : "Old Road"
-            }
-          }),
+          content: isEldermereNarrator
+            ? eldermerePublicNarration
+            : JSON.stringify({
+                public_narration: publicNarration,
+                roll_requests: [],
+                next_input_needed: "player_actions",
+                input_targets: [],
+                input_policy: "all_players",
+                setting: {
+                  display_location: "Old Road",
+                  world_name: "Test Realm",
+                  region_name: "Test Region",
+                  scene_location: "Old Road",
+                  starting_location: "Old Road"
+                }
+              }),
           debug: {
             requestMessages: [],
             rawResponse: "{}",

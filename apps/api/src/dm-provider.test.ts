@@ -211,6 +211,34 @@ test("DeepSeek provider sends filtered history and returns non-stream debug meta
   );
 });
 
+test("DeepSeek provider omits JSON mode for plain-text requests", async () => {
+  let requestBody: { response_format?: unknown; stream?: boolean } | undefined;
+
+  globalThis.fetch = async (_url, init) => {
+    requestBody = JSON.parse(String(init?.body)) as typeof requestBody;
+
+    return jsonResponse({
+      id: "text-1",
+      model: "test-chat-model",
+      choices: [{ message: { content: "A plain-text campaign opener." } }]
+    });
+  };
+
+  const response = await askDungeonMasterProvider({
+    instructions: "Return only plain prose.",
+    message: "Write the opener.",
+    responseFormat: "text"
+  });
+
+  assert.equal(requestBody?.response_format, undefined);
+  assert.equal(requestBody?.stream, undefined);
+  assert.equal(response.content, "A plain-text campaign opener.");
+  assert.equal(
+    response.debug.providerTimings?.[0]?.responseFormat,
+    "text_prompt"
+  );
+});
+
 test("provider routes Qwen model selections to Qwen credentials", async () => {
   process.env.QWEN_MODEL = "custom-qwen-flash";
   let requestUrl = "";
@@ -523,23 +551,18 @@ test("test DM provider returns deterministic campaign planner JSON without strea
     onPublicNarrationDelta: (delta) => narrationDeltas.push(delta)
   });
   const parsed = JSON.parse(response.content) as {
-    campaign_title: string;
-    region: { name: string };
-    allowed_player_facing_terms: { term: string; plain_meaning: string }[];
-    first_interactable_choices: string[];
+    region: string;
+    starting_location: string;
+    concept: string;
+    campaign_anchors: { name: string; description: string }[];
   };
 
-  assert.equal(parsed.campaign_title, "Lanterns at Ashford Tollhouse");
-  assert.equal(parsed.region.name, "Ashford Vale");
-  assert.deepEqual(parsed.allowed_player_facing_terms, [
-    {
-      term: "Ashford Tollhouse",
-      plain_meaning: "a stone roadside checkpoint"
-    }
-  ]);
+  assert.equal(parsed.region, "Ashford Vale");
+  assert.equal(parsed.starting_location, "Ashford Tollhouse");
+  assert.match(parsed.concept, /road mystery/i);
   assert.ok(
-    parsed.first_interactable_choices.includes(
-      "Question Marra about the silent bridge watch."
+    parsed.campaign_anchors.some(
+      (anchor) => anchor.name === "Marra Vale" && /courier/i.test(anchor.description)
     )
   );
   assert.deepEqual(narrationDeltas, []);

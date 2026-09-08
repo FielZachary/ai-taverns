@@ -35,3 +35,12 @@ test("buildApp serves local media from an absolute public base URL path", async 
   assert.equal(response.body, "media-ok");
   await app.close();
 });
+
+test("buildApp supports default development configuration without a database connection", async () => {
+  const app = await buildApp({ connectToDatabase: false });
+
+  const response = await app.inject({ method: "GET", url: "/health" });
+
+  assert.equal(response.statusCode, 200);
+  await app.close();
+});

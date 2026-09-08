@@ -42,7 +42,7 @@ test("server analytics no-ops when Mixpanel is disabled", () => {
   });
 });
 
-test("server analytics sends profile, event, and hook milestone updates", () => {
+test("server analytics sends profile and plain product events", () => {
   const calls: Array<{
     type: string;
     distinctId?: string;
@@ -126,7 +126,6 @@ test("server analytics sends profile, event, and hook milestone updates", () => 
       userId: "1",
       playerMessageCount: 1
     },
-    milestones: ["first_player_message", "asked_dm"]
   });
 
   assert.equal(calls[0]?.type, "init");
@@ -141,40 +140,8 @@ test("server analytics sends profile, event, and hook milestone updates", () => 
   assert.equal(eventCall?.properties?.source, "api");
   assert.equal(eventCall?.properties?.distinctId, "user:1");
   assert.equal(eventCall?.properties?.distinct_id, "user:1");
-  assert.deepEqual(eventCall?.properties?.hookDeltas, [
-    {
-      metric: "first_player_message",
-      points: 15
-    },
-    {
-      metric: "asked_dm",
-      points: 5
-    }
-  ]);
-
-  const milestoneEventCalls = calls.filter(
-    (call) => call.type === "track" && call.name === "Hook Milestone Reached"
-  );
-  assert.deepEqual(
-    milestoneEventCalls.map((call) => call.properties?.hookMilestone),
-    ["first_player_message", "asked_dm"]
-  );
-  assert.deepEqual(
-    milestoneEventCalls.map((call) => call.properties?.distinct_id),
-    ["user:1", "user:1"]
-  );
-
-  const incrementCall = calls.find((call) => call.type === "people.increment");
-  assert.equal(incrementCall?.property, "hook_score_lifetime");
-  assert.equal(incrementCall?.value, 20);
-
-  const milestoneProfile = calls.find(
-    (call) =>
-      call.type === "people.set" &&
-      call.properties?.hook_first_player_message === true
-  );
-  assert.equal(milestoneProfile?.properties?.hook_asked_dm, true);
-  assert.equal(milestoneProfile?.properties?.latest_hook_score_delta, 20);
+  assert.equal(eventCall?.properties?.hookDeltas, undefined);
+  assert.equal(calls.some((call) => call.type === "people.increment"), false);
 });
 
 test("server analytics sends plain events without milestone side effects", () => {
@@ -310,5 +277,5 @@ test("server analytics reports Mixpanel callback errors without throwing", () =>
     milestones: ["asked_dm"]
   });
 
-  assert.equal(warnings.length, 6);
+  assert.equal(warnings.length, 3);
 });
