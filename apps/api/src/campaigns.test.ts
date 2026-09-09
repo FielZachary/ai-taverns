@@ -2650,11 +2650,9 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
     /Assume the player knows nothing about this campaign or setting/
   );
   assert.match(narratorInput.message, /concept is author guidance/);
-  assert.match(
-    narratorInput.message,
-    /what is unknown to the player but immediately in front of them/
-  );
-  assert.match(narratorInput.message, /Do not explain wider factions, politics, history/);
+  assert.match(narratorInput.message, /Favor orientation and clear comprehension over brevity/);
+  assert.match(narratorInput.message, /Explain every unfamiliar proper noun, local role, institution/);
+  assert.match(narratorInput.message, /This is not permission for a world-history lecture/);
   assert.match(narratorInput.message, /exactly 6 semantic narration color tags/);
   assert.match(narratorInput.message, /<npc>\.\.\.<\/npc>/);
   assert.match(narratorInput.message, /<place>\.\.\.<\/place>/);
@@ -2664,15 +2662,11 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(narratorInput.message, /<object>\.\.\.<\/object>/);
   assert.match(narratorInput.message, /Authoritative backstory:/);
   assert.match(narratorInput.message, /Captain Saela/);
-  assert.match(narratorInput.message, /Use how_the_player_got_here/);
-  assert.match(
-    narratorInput.message,
-    /Paragraph 1 — Present premise with retrospective context/
-  );
-  assert.match(narratorInput.message, /exact current playable situation/);
-  assert.match(narratorInput.message, /Do not narrate a journey, arrival/);
-  assert.match(narratorInput.message, /Forty minutes ago/);
-  assert.match(narratorInput.message, /Paragraph 2 — Live scene and pressure/);
+  assert.match(narratorInput.message, /Then use how_the_player_got_here/);
+  assert.match(narratorInput.message, /Paragraph 1 — Orientation and personal premise/);
+  assert.match(narratorInput.message, /exact selected starting location/);
+  assert.match(narratorInput.message, /Do not narrate a journey or recap/);
+  assert.match(narratorInput.message, /Paragraph 2 — People, purpose, and pressure/);
   assert.match(narratorInput.message, /opening_scene/);
   assert.match(narratorInput.message, /Paragraph 3 — Choice/);
   assert.match(narratorInput.message, /Paragraph 4 — Handoff/);
