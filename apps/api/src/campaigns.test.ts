@@ -2650,11 +2650,9 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
     /Assume the player knows nothing about this campaign or setting/
   );
   assert.match(narratorInput.message, /concept is author guidance/);
-  assert.match(
-    narratorInput.message,
-    /what is unknown to the player but immediately in front of them/
-  );
-  assert.match(narratorInput.message, /Do not explain wider factions, politics, history/);
+  assert.match(narratorInput.message, /Favor orientation and clear comprehension over brevity/);
+  assert.match(narratorInput.message, /Explain every unfamiliar proper noun, local role, institution/);
+  assert.match(narratorInput.message, /This is not permission for a world-history lecture/);
   assert.match(narratorInput.message, /exactly 6 semantic narration color tags/);
   assert.match(narratorInput.message, /<npc>\.\.\.<\/npc>/);
   assert.match(narratorInput.message, /<place>\.\.\.<\/place>/);
@@ -2665,11 +2663,11 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(narratorInput.message, /Authoritative backstory:/);
   assert.match(narratorInput.message, /Captain Saela/);
   assert.match(narratorInput.message, /Use how_the_player_got_here/);
-  assert.match(narratorInput.message, /Paragraph 1 — Campaign premise/);
-  assert.match(narratorInput.message, /Paragraph 2 — Arrival/);
-  assert.match(narratorInput.message, /Paragraph 3 — Live scene/);
+  assert.match(narratorInput.message, /Paragraph 1 — Orientation/);
+  assert.match(narratorInput.message, /Paragraph 2 — Personal premise/);
+  assert.match(narratorInput.message, /Paragraph 3 — People and purpose/);
   assert.match(narratorInput.message, /opening_scene/);
-  assert.match(narratorInput.message, /Paragraph 4 — Pressure/);
+  assert.match(narratorInput.message, /Paragraph 4 — Discovery and pressure/);
   assert.match(narratorInput.message, /Paragraph 5 — Choice/);
   assert.match(narratorInput.message, /Paragraph 6 — Handoff/);
   assert.match(narratorInput.message, /grounded, direct, detailed fantasy prose/);
