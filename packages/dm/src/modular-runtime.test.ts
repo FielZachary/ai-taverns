@@ -1154,6 +1154,14 @@ describe("modular AI DM runtime contracts", () => {
       assert.match(prompt, /new page, hidden annotation, translation, cipher result/i);
     }
     assert.match(buildMemoryUpdaterPrompt(), /Allowed operations/);
+    assert.match(buildMemoryUpdaterPrompt(), /Player-character context rules/);
+    assert.match(buildMemoryUpdaterPrompt(), /## Character Memory/);
+    assert.match(buildMemoryUpdaterPrompt(), /## Previously Explained Context/);
+    assert.match(buildMemoryUpdaterPrompt(), /## Player-Facing Discoveries/);
+    assert.match(
+      buildMemoryUpdaterPrompt(),
+      /only after the player has actually received it in narration/i
+    );
     assert.match(buildMemoryUpdaterPrompt(), /rename_chunk/);
     assert.match(buildMemoryUpdaterPrompt(), /merge_chunk/);
     assert.match(buildMemoryUpdaterPrompt(), /Create a new NPC card/i);

@@ -804,6 +804,7 @@ const dungeonMasterContractInstructions = [
   "public_narration must use 2-3 sparse semantic narration color tags for inline UI emphasis: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, or <object>...</object>. Use <em>...</em> only for brief italic emphasis; <em> does not count toward the required 2-3 color tags.",
   "Use semantic narration markup only around exact player-visible words that should be colored or italicized. Do not nest tags, add attributes, or use any other HTML/XML tags.",
   "Do not put CSS, hex colors, color names, or Markdown emphasis into public_narration.",
+  "PLAYER–CHARACTER KNOWLEDGE BRIDGES\n\nWhenever public narration mentions a person, place, institution, custom, clue, past event, or technical term, immediately ground it in what the character knows about it. Give the player one or two short, natural sentences of context inside the narration: ‘You remember…’, ‘Growing up here, you know…’, or ‘From your studies, you recognize…’.\n\nUse canonical character backstory, player-safe campaign context, and facts already revealed in public narration. Never use DM-only information or invent character memories. Do not re-explain context already recorded under ‘Previously Explained Context’ unless a brief recap is needed in the moment.",
   "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved this turn."
 ].join("\n");
 const playerTurnDmTimeoutMs = 60_000;
@@ -6419,6 +6420,36 @@ function emptyContextKeys(): RouterContextKeys {
   );
 }
 
+function withAlwaysIncludedPlayerCharacterContext(
+  router: ValidatedRouterOutput,
+  availableContextChunks: ContextChunkIndex,
+  players: PlayerRow[]
+): ValidatedRouterOutput {
+  const activePlayerContextKeys = new Set(
+    players.map((player) => `pc:${kebabCaseContextSlug(player.character_name)}`)
+  );
+  const playerCharacterContextKeys = availableContextChunks.player_character_context
+    .filter((entry) => activePlayerContextKeys.has(entry.key))
+    .map((entry) => entry.key);
+
+  if (playerCharacterContextKeys.length === 0) {
+    return router;
+  }
+
+  return {
+    ...router,
+    contextKeys: {
+      ...router.contextKeys,
+      player_character_context: [
+        ...new Set([
+          ...playerCharacterContextKeys,
+          ...router.contextKeys.player_character_context
+        ])
+      ]
+    }
+  };
+}
+
 function markdownSectionBody(markdown: string, sectionName: string) {
   const escaped = sectionName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const pattern = new RegExp(
@@ -6834,7 +6865,16 @@ async function buildModularDmPromptContext(
     }
   });
 
-  const context = await retrieveSelectedContextChunks(db, campaign.id, router);
+  const contextRouter = withAlwaysIncludedPlayerCharacterContext(
+    router,
+    availableContextChunks,
+    players
+  );
+  const context = await retrieveSelectedContextChunks(
+    db,
+    campaign.id,
+    contextRouter
+  );
 
   await logDmContextSnapshot(db, {
     campaignId: campaign.id,
@@ -6882,6 +6922,7 @@ async function buildModularDmPromptContext(
       },
       {
         kind: "context_snapshot",
+        routerContextKeys: contextRouter.contextKeys,
         includedContextKeys: context.chunks.map((chunk) => chunk.id),
         omittedContextKeys: context.omitted
       },
@@ -9957,6 +9998,7 @@ function buildCampaignFoundationCompilerPrompt() {
     "Player-safe chunks may include mysteries as mysteries: use 'Unknown', 'rumored', 'unconfirmed', or 'not yet discovered' instead of revealing the true answer.",
     "Treat Pageden/canonical Eldermere material as source-grounded world truth. Treat planner-created links, motives, clocks, and secrets as campaign-local premises until established through play.",
     "Use concept for the campaign premise and primary active thread; how_the_player_got_here for player-character context; opening_scene for current playable context; private_truth for DM-only secrets; and campaign_anchors for durable NPC, object, place, institution, relationship, faction, and threat chunks.",
+    "Create one player_safe player_character_context chunk for each player character, using a stable pc:kebab-case-name context_id. Use exactly these sections: ## Character Memory, ## Previously Explained Context, and ## Player-Facing Discoveries. Put only pre-play backstory facts in Character Memory; leave the other sections as Unknown until public narration establishes content. Never put hidden facts, private motives, or unrevealed answers in this chunk.",
     "Create a dedicated context chunk for every campaign anchor. The region and settlement anchors must each receive their own player_safe relevant_world_context chunk. Honor each anchor's visibility across every field: never place dm_only anchor details in player_safe chunks.",
     "Every chunk should label its epistemic status with sections or bullets such as Canonical Grounding, Campaign-Local Premise, Established Facts, Strong Inferences, DM Seeds, Hidden Truth, Future Reveal Paths, Constraints, or Open Questions.",
     "When an anchor has both player-safe continuity and hidden truth, create a public/world or NPC chunk plus a DM-only secret chunk only when both need independent retrieval. Example: world:sunder-kiln for known leads, rumors, local pressures, and playable context, plus secret:sunder-kiln for the time-loop truth and reveal ladder.",

@@ -116,6 +116,9 @@ test("foundation compiler prompt shares alias-aware NPC identity contract", () =
   assert.match(prompt, /merge_chunk/);
   assert.match(prompt, /Aliases \/ Former Labels/);
   assert.match(prompt, /instead of creating a second NPC card/i);
+  assert.match(prompt, /player_character_context chunk for each player character/i);
+  assert.match(prompt, /## Previously Explained Context/);
+  assert.match(prompt, /Never put hidden facts, private motives, or unrevealed answers/i);
 });
 
 test("router context index includes compact NPC identity preview", async () => {
