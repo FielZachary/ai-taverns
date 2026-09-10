@@ -131,4 +131,51 @@ describe("client analytics retention tracking", () => {
       qualifiedReturnDays: expect.arrayContaining(["2026-08-02", "2026-08-08"])
     }));
   });
+
+  it("keeps first-touch UTMs through navigation and later identifies the user", async () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/?utm_source=instagram&utm_medium=organic_social&utm_campaign=bio"
+    );
+    const { identifyAnalyticsUser, trackAnalytics, trackLandingPageView } = await import("./analytics");
+
+    trackLandingPageView();
+    window.history.replaceState({}, "", "/play");
+    trackAnalytics({ name: "Onboarding Started" });
+    window.history.replaceState(
+      {},
+      "",
+      "/?utm_source=tiktok&utm_medium=organic_social&utm_campaign=bio"
+    );
+    trackLandingPageView();
+    identifyAnalyticsUser({ userId: "00000000-0000-4000-8000-000000000123" });
+
+    expect(mixpanelMock.track).toHaveBeenCalledWith(
+      "Landing Page Viewed",
+      expect.objectContaining({
+        utm_source: "instagram",
+        utm_medium: "organic_social",
+        utm_campaign: "bio",
+        initial_utm_source: "instagram",
+        landing_path: "/"
+      })
+    );
+    expect(mixpanelMock.track).toHaveBeenCalledWith(
+      "Onboarding Started",
+      expect.objectContaining({
+        utm_source: "instagram",
+        initial_utm_source: "instagram"
+      })
+    );
+    expect(mixpanelMock.people.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        utm_source: "tiktok",
+        initial_utm_source: "instagram"
+      })
+    );
+    expect(mixpanelMock.people.set).toHaveBeenCalledWith(
+      expect.objectContaining({ initial_utm_source: "instagram" })
+    );
+  });
 });
