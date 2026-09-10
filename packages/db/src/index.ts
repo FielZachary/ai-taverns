@@ -9324,7 +9324,7 @@ function formatEldermereNarratorOpeningRequest(input: {
     "Return only plain prose. It must contain exactly 4 paragraphs separated by blank lines. Do not add headings, labels, notes, Markdown, JSON, or commentary. Paragraph 4 must be exactly 'What do you do?'.",
     "Preserve all established character-sheet and backstory facts. Do not change, resolve, soften, or invent past events, relationships, debts, gifts, clues, promises, or causes.",
     "Use only facts the character could reasonably see, hear, know, infer, or be told in this opening scene. Do not request dice; the player must receive control before attempting any uncertain action.",
-    "Use exactly 6 semantic narration color tags across paragraphs 1-3: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, or <object>...</object>. Each tag must wrap only a short, player-visible noun or phrase. Do not nest tags, add attributes, use <em>, use Markdown emphasis, or use any other HTML/XML tags.",
+    "Use semantic narration color tags when they help highlight a player-visible person, place, clue, danger, faction, or object: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, or <object>...</object>. Each tag must wrap only a short, player-visible noun or phrase. Do not nest tags, add attributes, use <em>, use Markdown emphasis, or use any other HTML/XML tags.",
     "",
     "REQUIRED FOUR-PARAGRAPH STRUCTURE:",
     "Paragraph 1 — Orientation and personal premise: Start by naming and plainly describing the exact selected starting location and the character's current position within it. Include only immediately useful local context: what kind of place it is, who depends on it, and what the character can see around them. Then use how_the_player_got_here to explain why the character came to the settlement and why they are in this particular establishment or scene now. State the relevant backstory connection plainly, including what the character knows and what remains unknown. Do not narrate a journey or recap a chain of travel events.",
@@ -10253,121 +10253,7 @@ function findForbiddenOpeningTerms(
   return [] as string[];
 }
 
-function openingNarrationTermPattern(term: string) {
-  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-  return new RegExp(
-    `(^|[^\\p{L}\\p{N}_])${escaped}(?=$|[^\\p{L}\\p{N}_])`,
-    "iu"
-  );
-}
-
-function openingNarrationContainsTerm(narration: string, term: string) {
-  return openingNarrationTermPattern(term).test(narration);
-}
-
-const semanticOpeningTagPattern =
-  /<(npc|place|clue|danger|faction|object)>([^<>]+)<\/\1>/giu;
-const semanticOpeningTagMinimum = 6;
-const semanticOpeningTagMaximum = 6;
 const finalEldermereOpeningRetryTemperature = 0.2;
-
-function semanticOpeningTagCount(narration: string) {
-  return Array.from(narration.matchAll(semanticOpeningTagPattern)).length;
-}
-
-function semanticOpeningTagContainsTerm(narration: string, term: string) {
-  const normalizedTerm = term.trim().toLowerCase();
-
-  if (!normalizedTerm) {
-    return false;
-  }
-
-  return Array.from(narration.matchAll(semanticOpeningTagPattern)).some(
-    (match) => match[2]?.toLowerCase().includes(normalizedTerm)
-  );
-}
-
-function stripExtraSemanticOpeningTags(narration: string) {
-  let tagCount = 0;
-
-  return narration.replace(
-    semanticOpeningTagPattern,
-    (match: string, _role: string, text: string) => {
-      tagCount += 1;
-
-      return tagCount > semanticOpeningTagMaximum ? text : match;
-    }
-  );
-}
-
-function addSemanticOpeningTag(
-  narration: string,
-  term: string | undefined,
-  role: "npc" | "place" | "clue" | "danger" | "faction" | "object"
-) {
-  const trimmedTerm = term?.trim();
-
-  if (
-    !trimmedTerm ||
-    semanticOpeningTagCount(narration) >= semanticOpeningTagMinimum ||
-    semanticOpeningTagContainsTerm(narration, trimmedTerm)
-  ) {
-    return narration;
-  }
-
-  return narration.replace(
-    openingNarrationTermPattern(trimmedTerm),
-    (_match, prefix: string) => `${prefix}<${role}>${trimmedTerm}</${role}>`
-  );
-}
-
-function normalizeEldermereOpeningSemanticTags(
-  narration: string,
-  plan: EldermereOpeningPlan
-) {
-  const strippedNarration = stripExtraSemanticOpeningTags(narration);
-  const playerSafeAnchors = plan.campaignAnchors.filter(
-    (anchor) =>
-      anchor.visibility === "player_safe" &&
-      anchor.type !== "region" &&
-      anchor.type !== "settlement"
-  );
-  const semanticRoleForAnchor = (anchor: (typeof playerSafeAnchors)[number]) => {
-    switch (anchor.type) {
-      case "person":
-        return "npc" as const;
-      case "faction":
-      case "institution":
-        return "faction" as const;
-      case "place":
-      case "region":
-      case "settlement":
-        return "place" as const;
-      case "threat":
-        return "danger" as const;
-      case "object":
-        return "object" as const;
-      case "relationship":
-      case "mystery":
-        return "clue" as const;
-    }
-  };
-  const candidates = [
-    { term: plan.startingLocation, role: "place" as const },
-    { term: plan.region, role: "place" as const },
-    ...playerSafeAnchors.map((anchor) => ({
-      term: anchor.name,
-      role: semanticRoleForAnchor(anchor)
-    }))
-  ];
-
-  return candidates.reduce(
-    (current, candidate) =>
-      addSemanticOpeningTag(current, candidate.term, candidate.role),
-    strippedNarration
-  );
-}
 
 function plainReplacementForForbiddenOpeningTerm(term: string) {
   switch (term.toLowerCase()) {
@@ -10400,7 +10286,7 @@ function repairEldermereOpeningReply(
   return withEldermereOpeningSetting(
     {
       ...reply,
-      content: normalizeEldermereOpeningSemanticTags(scrubbedContent, plan)
+      content: scrubbedContent
     },
     plan
   );
@@ -10461,21 +10347,7 @@ function openingParagraphCount(content: string) {
 }
 
 function eldermereOpeningNarrationErrors(content: string) {
-  const errors: string[] = [];
-  errors.push(...eldermereOpeningStructuralErrors(content));
-
-  const semanticTagCount = semanticOpeningTagCount(content);
-
-  if (
-    semanticTagCount < semanticOpeningTagMinimum ||
-    semanticTagCount > semanticOpeningTagMaximum
-  ) {
-    errors.push(
-      `public_narration must contain exactly ${semanticOpeningTagMinimum} semantic narration markup tags; found ${semanticTagCount}`
-    );
-  }
-
-  return errors;
+  return eldermereOpeningStructuralErrors(content);
 }
 
 function eldermereOpeningStructuralErrors(content: string) {
@@ -10573,7 +10445,6 @@ async function askEldermereOpeningNarrator(
       : []),
     "Return only a complete plain-prose opener for the same opening situation, fixing every issue above.",
     "Use exactly 4 paragraphs separated by blank lines. The fourth and final paragraph must be exactly 'What do you do?'.",
-    `Use exactly ${semanticOpeningTagMinimum} semantic narration color tags using <npc>, <place>, <clue>, <danger>, <faction>, or <object>.`,
     "Do not return JSON, Markdown fences, headings, metadata, setting information, roll requests, state updates, or commentary."
   ].join("\n");
   const repairedOpening = withEldermereOpeningSetting(
@@ -10657,7 +10528,6 @@ async function askEldermereOpeningNarrator(
     "Paragraph 2: the starting location's immediate sensory and spatial details, visible NPCs, reachable objects, exits, and urgent visible pressure.",
     "Paragraph 3: the actionable complication and 2-3 concrete non-dice actions available right now.",
     "Paragraph 4: exactly 'What do you do?' and nothing else.",
-    `Use exactly ${semanticOpeningTagMinimum} semantic narration color tags using <npc>, <place>, <clue>, <danger>, <faction>, or <object>.`,
     "Do not include JSON, Markdown fences, a teaser, a summary, a prologue note, metadata, or anything other than exactly 4 paragraphs."
   ].join("\n");
   const finalOpening = await askDungeonMaster(

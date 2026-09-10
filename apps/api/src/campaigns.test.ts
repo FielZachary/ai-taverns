@@ -2653,7 +2653,7 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(narratorInput.message, /Favor orientation and clear comprehension over brevity/);
   assert.match(narratorInput.message, /Explain every unfamiliar proper noun, local role, institution/);
   assert.match(narratorInput.message, /This is not permission for a world-history lecture/);
-  assert.match(narratorInput.message, /exactly 6 semantic narration color tags/);
+  assert.match(narratorInput.message, /semantic narration color tags when they help highlight/i);
   assert.match(narratorInput.message, /<npc>\.\.\.<\/npc>/);
   assert.match(narratorInput.message, /<place>\.\.\.<\/place>/);
   assert.match(narratorInput.message, /<clue>\.\.\.<\/clue>/);
