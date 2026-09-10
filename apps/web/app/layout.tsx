@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Cinzel, Cormorant_Garamond } from "next/font/google";
+import { AnalyticsBootstrap } from "@/components/AnalyticsBootstrap";
 import "./globals.css";
 
 const siteUrl = new URL(
@@ -73,7 +74,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${cinzel.variable} ${cormorantGaramond.variable}`}>{children}</body>
+      <body className={`${cinzel.variable} ${cormorantGaramond.variable}`}>
+        <AnalyticsBootstrap />
+        {children}
+      </body>
     </html>
   );
 }

@@ -5,7 +5,8 @@ const mixpanelMock = vi.hoisted(() => ({
   identify: vi.fn(),
   init: vi.fn(),
   people: {
-    set: vi.fn()
+    set: vi.fn(),
+    set_once: vi.fn()
   },
   track: vi.fn()
 }));
@@ -26,6 +27,7 @@ describe("client analytics retention tracking", () => {
       }
     });
     mixpanelMock.people.set.mockClear();
+    mixpanelMock.people.set_once.mockClear();
   });
 
   afterEach(() => {
@@ -130,5 +132,39 @@ describe("client analytics retention tracking", () => {
       meaningfulFirstSession: true,
       qualifiedReturnDays: expect.arrayContaining(["2026-08-02", "2026-08-08"])
     }));
+  });
+
+  it("keeps the first ad touch while updating the most recent touch", async () => {
+    window.history.replaceState({}, "", "/?utm_source=tiktok&utm_medium=paid_social&utm_campaign=launch&ttclid=first-click");
+    const { trackLandingPageView, trackAnalytics } = await import("./analytics");
+
+    trackLandingPageView();
+    window.history.replaceState({}, "", "/?utm_source=reddit&utm_medium=paid_social&utm_campaign=retargeting");
+    trackLandingPageView();
+    trackAnalytics({ name: "Onboarding Started" });
+
+    expect(mixpanelMock.track).toHaveBeenCalledWith(
+      "Onboarding Started",
+      expect.objectContaining({
+        utm_source: "reddit",
+        utm_campaign: "retargeting",
+        initial_utm_source: "tiktok",
+        initial_utm_campaign: "launch",
+        initial_marketing_click_id: "first-click",
+        initial_marketing_click_id_type: "ttclid"
+      })
+    );
+  });
+
+  it("sets first-touch acquisition data on the identified profile", async () => {
+    window.history.replaceState({}, "", "/?utm_source=instagram&utm_medium=paid_social");
+    const { identifyAnalyticsUser, trackLandingPageView } = await import("./analytics");
+
+    trackLandingPageView();
+    identifyAnalyticsUser({ userId: "00000000-0000-4000-8000-000000000321" });
+
+    expect(mixpanelMock.people.set_once).toHaveBeenCalledWith(
+      expect.objectContaining({ initial_utm_source: "instagram" })
+    );
   });
 });

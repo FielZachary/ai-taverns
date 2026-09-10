@@ -24,6 +24,8 @@ const analyticsLifecycleStoragePrefix = "ai-taverns.analytics.lifecycle";
 const analyticsCampaignSeenStoragePrefix = "ai-taverns.analytics.campaignSeen";
 const analyticsCampaignLastActivityStoragePrefix =
   "ai-taverns.analytics.campaignLastActivity";
+const analyticsAttributionStorageKey = "ai-taverns.analytics.attribution";
+const analyticsLandingTrackedStorageKey = "ai-taverns.analytics.landingTracked";
 const oneDayMs = 24 * 60 * 60 * 1000;
 const sevenDaysMs = 7 * oneDayMs;
 const fourteenDaysMs = 14 * oneDayMs;
@@ -31,12 +33,139 @@ const fourteenDaysMs = 14 * oneDayMs;
 let initialized = false;
 let identifiedDistinctId = "";
 
+const utmKeys = [
+  "utm_source",
+  "utm_medium",
+  "utm_campaign",
+  "utm_content",
+  "utm_term",
+  "utm_id",
+  "utm_source_platform",
+  "utm_campaign_id",
+  "utm_creative_format",
+  "utm_marketing_tactic"
+] as const;
+
+const clickIdKeys = [
+  "fbclid",
+  "ttclid",
+  "twclid",
+  "gclid",
+  "gbraid",
+  "wbraid",
+  "msclkid",
+  "dclid",
+  "li_fat_id"
+] as const;
+
+type AttributionTouch = Partial<Record<(typeof utmKeys)[number], string>> & {
+  landingPath: string;
+  landingReferrerDomain?: string;
+  attributionCapturedAt: string;
+  marketing_click_id?: string;
+  marketing_click_id_type?: string;
+};
+
+type AttributionState = {
+  firstTouch: AttributionTouch;
+  lastTouch: AttributionTouch;
+};
+
 function token() {
   return process.env.NEXT_PUBLIC_MIXPANEL_TOKEN?.trim();
 }
 
 function isEnabled() {
   return Boolean(token()) && typeof window !== "undefined";
+}
+
+function normalizedValue(value: string | null) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed.slice(0, 200) : undefined;
+}
+
+function referrerDomain() {
+  if (typeof document === "undefined" || !document.referrer) return undefined;
+  try {
+    const domain = new URL(document.referrer).hostname;
+    return domain && domain !== window.location.hostname ? domain : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function readAttribution(): AttributionState | undefined {
+  if (typeof window === "undefined") return undefined;
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(analyticsAttributionStorageKey) ?? "") as AttributionState;
+    if (!parsed.firstTouch?.landingPath || !parsed.lastTouch?.landingPath) return undefined;
+    return parsed;
+  } catch {
+    return undefined;
+  }
+}
+
+function captureAttribution(): AttributionState | undefined {
+  if (typeof window === "undefined") return undefined;
+
+  const params = new URLSearchParams(window.location.search);
+  const touch: AttributionTouch = {
+    landingPath: window.location.pathname || "/",
+    landingReferrerDomain: referrerDomain(),
+    attributionCapturedAt: new Date().toISOString()
+  };
+  let hasMarketingParameters = false;
+
+  for (const key of utmKeys) {
+    const value = normalizedValue(params.get(key));
+    if (value) {
+      touch[key] = value;
+      hasMarketingParameters = true;
+    }
+  }
+
+  for (const key of clickIdKeys) {
+    const value = normalizedValue(params.get(key));
+    if (value) {
+      touch.marketing_click_id = value;
+      touch.marketing_click_id_type = key;
+      hasMarketingParameters = true;
+      break;
+    }
+  }
+
+  if (!hasMarketingParameters) return readAttribution();
+
+  const existing = readAttribution();
+  const next: AttributionState = {
+    firstTouch: existing?.firstTouch ?? touch,
+    lastTouch: touch
+  };
+  window.localStorage.setItem(analyticsAttributionStorageKey, JSON.stringify(next));
+  return next;
+}
+
+function touchProperties(touch: AttributionTouch, prefix = "") {
+  const properties: Record<string, string> = {};
+  for (const key of utmKeys) {
+    const value = touch[key];
+    if (value) properties[`${prefix}${key}`] = value;
+  }
+  if (touch.marketing_click_id) properties[`${prefix}marketing_click_id`] = touch.marketing_click_id;
+  if (touch.marketing_click_id_type) properties[`${prefix}marketing_click_id_type`] = touch.marketing_click_id_type;
+  properties[`${prefix}landingPath`] = touch.landingPath;
+  if (touch.landingReferrerDomain) properties[`${prefix}landingReferrerDomain`] = touch.landingReferrerDomain;
+  properties[`${prefix}attributionCapturedAt`] = touch.attributionCapturedAt;
+  return properties;
+}
+
+function attributionProperties() {
+  const attribution = readAttribution();
+  if (!attribution) return {};
+  return {
+    ...touchProperties(attribution.lastTouch),
+    ...touchProperties(attribution.firstTouch, "initial_")
+  };
 }
 
 function createId() {
@@ -131,7 +260,7 @@ function stageForLifecycle(state: LifecycleState, now: number): HookStage {
   return "visitor";
 }
 
-function ensureInitialized() {
+export function initializeAnalytics() {
   if (initialized || !isEnabled()) {
     return;
   }
@@ -172,7 +301,7 @@ export function identifyAnalyticsUser(input: {
   email?: string;
   guestId?: string;
 }) {
-  ensureInitialized();
+  initializeAnalytics();
 
   const anonymousDistinctId = analyticsGuestId();
   const nextDistinctId = input.userId ? `user:${input.userId}` : anonymousDistinctId;
@@ -205,6 +334,23 @@ export function identifyAnalyticsUser(input: {
     app: "ai-taverns",
     schemaVersion: 1
   });
+  const attribution = readAttribution();
+  if (attribution) {
+    mixpanel.people.set_once(touchProperties(attribution.firstTouch, "initial_"));
+    mixpanel.people.set(touchProperties(attribution.lastTouch));
+  }
+}
+
+/** Captures the first page a browser enters on before app navigation can drop its query string. */
+export function trackLandingPageView() {
+  captureAttribution();
+  initializeAnalytics();
+  if (typeof window === "undefined") return;
+
+  const viewKey = `${window.location.pathname}${window.location.search}`;
+  if (window.sessionStorage.getItem(analyticsLandingTrackedStorageKey) === viewKey) return;
+  window.sessionStorage.setItem(analyticsLandingTrackedStorageKey, viewKey);
+  trackAnalytics({ name: "Landing Page Viewed" });
 }
 
 export function trackAnalytics(input: TrackInput) {
@@ -242,6 +388,7 @@ export function trackAnalytics(input: TrackInput) {
     name: input.name,
     properties: {
       ...input.properties,
+      ...attributionProperties(),
       app: "ai-taverns",
       distinctId: distinctId(),
       distinct_id: distinctId(),
@@ -258,7 +405,7 @@ export function trackAnalytics(input: TrackInput) {
     return event;
   }
 
-  ensureInitialized();
+  initializeAnalytics();
   mixpanel.track(event.name, event.properties);
 
   if (qualifiedReturn) {
