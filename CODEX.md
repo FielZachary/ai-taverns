@@ -2,18 +2,22 @@
 
 ## Git Workflow
 
-Use the PR-gated workflow for completed work when GitHub branch protection and
-auto-merge are available:
+Do not create, switch, delete, rename, or otherwise manage Git branches unless
+the user explicitly requests it.
 
-```bash
-git switch -c codex/<short-change-slug>
-git add -A
-git commit -m "<descriptive message>"
-npm run pr:auto-merge
-```
+Do not open, update, merge, or enable auto-merge on a pull request unless the
+user explicitly asks for that pull request action.
 
-The helper pushes the current branch, opens a PR against `development` when one
-does not already exist, and requests squash auto-merge with branch deletion.
+When working on code, remain on the branch the user specified. If they did not
+specify one, remain on the current branch and report that branch when handing
+off the work.
+
+After code changes, commit and push only when required by higher-priority
+instructions or when the user explicitly asks. A push must not create, update,
+or merge a pull request unless the user explicitly requested that too.
+
+When the user explicitly requests a pull request, first confirm its source and
+target branches. Use the repository PR helper only after that explicit request.
 
 When the user explicitly asks to promote `development` to `production`, create a
 short-lived promotion branch from `production`, merge `origin/development` into
@@ -28,14 +32,8 @@ auto-merge with an explicit clean squash title/body so the resulting production
 push still triggers the deploy workflow. Never include GitHub Actions skip
 directives in production promotion PR titles or bodies.
 
-Current repository caveat: GitHub branch protection/rulesets are unavailable
-while this private repository lacks the required GitHub plan features. Until
-that is resolved, keep using small verified changes and leave PRs open for
-manual merge if auto-merge cannot be enabled.
-
-Before pushing into a branch, check if the branch has already been merged into
-developement. If it has, delete the branch and create a new one for the code you
-are about to push
+Never infer that a completed code change should be promoted, merged, or
+deployed.
 
 ## Droplet Access
 
