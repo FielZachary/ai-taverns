@@ -5,8 +5,8 @@
 Do not create, switch, delete, rename, or otherwise manage Git branches unless
 the user explicitly requests it.
 
-Do not open, update, merge, or enable auto-merge on a pull request unless the
-user explicitly asks for that pull request action.
+Do not open, update, or merge a pull request unless the user explicitly asks
+for that pull request action.
 
 When working on code, remain on the branch the user specified. If they did not
 specify one, remain on the current branch and report that branch when handing
@@ -17,7 +17,9 @@ instructions or when the user explicitly asks. A push must not create, update,
 or merge a pull request unless the user explicitly requested that too.
 
 When the user explicitly requests a pull request, first confirm its source and
-target branches. Use the repository PR helper only after that explicit request.
+target branches. Then enable squash auto-merge unless the user explicitly asks
+to leave auto-merge off. Use the repository PR helper only after that explicit
+request.
 
 When the user explicitly asks to promote `development` to `production`, create a
 short-lived promotion branch from `production`, merge `origin/development` into
