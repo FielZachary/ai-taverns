@@ -22,7 +22,7 @@ fi
 
 git push -u origin "$CURRENT_BRANCH"
 
-PR_URL="$(gh pr view "$CURRENT_BRANCH" --json url --jq .url 2>/dev/null || true)"
+PR_URL="$(gh pr list --head "$CURRENT_BRANCH" --base "$BASE_BRANCH" --state open --json url --jq '.[0].url' 2>/dev/null || true)"
 if [ -z "$PR_URL" ]; then
   PR_URL="$(gh pr create --fill --base "$BASE_BRANCH" --head "$CURRENT_BRANCH")"
 fi
