@@ -5,6 +5,30 @@
 Do not create, switch, delete, rename, or otherwise manage Git branches unless
 the user explicitly requests it.
 
+### Branch Creation Preflight
+
+When the user asks to create a new branch, first verify that local
+`development` exactly matches `origin/development`:
+
+1. Run `git fetch origin`.
+2. Compare `development` with `origin/development`.
+3. If they differ, stop. Inform the user that local `development` is stale and
+   ask whether they would like to sync it before creating the branch.
+4. Only create the requested branch after they match.
+
+Do not automatically pull, merge, rebase, reset, or otherwise synchronize
+`development` unless the user explicitly authorizes it.
+
+### Development Branch Protection
+
+Never write, edit, generate, format, or commit code directly on the
+`development` branch.
+
+Before any code-changing action, verify the current branch. If it is
+`development`, stop and ask the user whether they would like a new branch
+created for the work. Ask them to provide the branch name. Do not infer or
+choose a branch name, and do not make code changes until the user responds.
+
 Do not open, update, or merge a pull request unless the user explicitly asks
 for that pull request action.
 
