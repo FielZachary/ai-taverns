@@ -24,12 +24,61 @@ const analyticsLifecycleStoragePrefix = "ai-taverns.analytics.lifecycle";
 const analyticsCampaignSeenStoragePrefix = "ai-taverns.analytics.campaignSeen";
 const analyticsCampaignLastActivityStoragePrefix =
   "ai-taverns.analytics.campaignLastActivity";
+const analyticsAttributionStorageKey = "ai-taverns.analytics.attribution.v1";
 const oneDayMs = 24 * 60 * 60 * 1000;
 const sevenDaysMs = 7 * oneDayMs;
 const fourteenDaysMs = 14 * oneDayMs;
 
 let initialized = false;
 let identifiedDistinctId = "";
+
+type AttributionValues = {
+  utm_source?: string;
+  utm_medium?: string;
+  utm_campaign?: string;
+  utm_content?: string;
+  utm_term?: string;
+  utm_id?: string;
+  utm_source_platform?: string;
+  utm_campaign_id?: string;
+  utm_creative_format?: string;
+  utm_marketing_tactic?: string;
+  click_id?: string;
+  landing_path: string;
+  referrer_domain?: string;
+  captured_at: string;
+};
+
+type AttributionState = {
+  first: AttributionValues;
+  last: AttributionValues;
+};
+
+const utmParameterNames = [
+  "utm_source",
+  "utm_medium",
+  "utm_campaign",
+  "utm_content",
+  "utm_term",
+  "utm_id",
+  "utm_source_platform",
+  "utm_campaign_id",
+  "utm_creative_format",
+  "utm_marketing_tactic"
+] as const;
+
+const clickIdParameterNames = [
+  "dclid",
+  "fbclid",
+  "gclid",
+  "ko_click_id",
+  "li_fat_id",
+  "msclkid",
+  "sccid",
+  "ttclid",
+  "twclid",
+  "wbraid"
+] as const;
 
 function token() {
   return process.env.NEXT_PUBLIC_MIXPANEL_TOKEN?.trim();
@@ -47,6 +96,103 @@ function createId() {
   return `guest-${Date.now().toString(36)}-${Math.random()
     .toString(36)
     .slice(2)}`;
+}
+
+function readAttribution(): AttributionState | undefined {
+  if (typeof window === "undefined") return undefined;
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(analyticsAttributionStorageKey) ?? "null"
+    ) as AttributionState | null;
+    if (!parsed?.first || !parsed?.last) return undefined;
+    return parsed;
+  } catch {
+    return undefined;
+  }
+}
+
+function referrerDomain() {
+  if (typeof document === "undefined" || !document.referrer) return undefined;
+  try {
+    return new URL(document.referrer).hostname || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function currentAttribution(): AttributionValues | undefined {
+  if (typeof window === "undefined") return undefined;
+
+  const search = new URLSearchParams(window.location.search);
+  const values: AttributionValues = {
+    landing_path: window.location.pathname || "/",
+    referrer_domain: referrerDomain(),
+    captured_at: new Date().toISOString()
+  };
+  let hasAttribution = false;
+
+  for (const parameter of utmParameterNames) {
+    const value = search.get(parameter)?.trim();
+    if (value) {
+      values[parameter] = value;
+      hasAttribution = true;
+    }
+  }
+
+  for (const parameter of clickIdParameterNames) {
+    const value = search.get(parameter)?.trim();
+    if (value) {
+      values.click_id = value;
+      hasAttribution = true;
+      break;
+    }
+  }
+
+  return hasAttribution ? values : undefined;
+}
+
+function persistAttributionFromCurrentUrl() {
+  const captured = currentAttribution();
+  const existing = readAttribution();
+
+  if (!captured || typeof window === "undefined") return existing;
+
+  const next: AttributionState = {
+    first: existing?.first ?? captured,
+    last: captured
+  };
+  try {
+    window.localStorage.setItem(analyticsAttributionStorageKey, JSON.stringify(next));
+  } catch {
+    // Analytics must never prevent a visit when storage is unavailable.
+  }
+  return next;
+}
+
+function attributionProperties() {
+  const attribution = readAttribution();
+  if (!attribution) return {};
+
+  const { first, last } = attribution;
+  const properties: Record<string, string> = {
+    landing_path: last.landing_path,
+    attribution_captured_at: last.captured_at,
+    initial_landing_path: first.landing_path,
+    initial_attribution_captured_at: first.captured_at
+  };
+
+  for (const parameter of utmParameterNames) {
+    const currentValue = last[parameter];
+    const firstValue = first[parameter];
+    if (currentValue) properties[parameter] = currentValue;
+    if (firstValue) properties[`initial_${parameter}`] = firstValue;
+  }
+  if (last.click_id) properties.click_id = last.click_id;
+  if (first.click_id) properties.initial_click_id = first.click_id;
+  if (last.referrer_domain) properties.referrer_domain = last.referrer_domain;
+  if (first.referrer_domain) properties.initial_referrer_domain = first.referrer_domain;
+
+  return properties;
 }
 
 export function analyticsGuestId() {
@@ -141,7 +287,23 @@ function ensureInitialized() {
     persistence: "localStorage",
     ignore_dnt: false
   });
+  // Use the same stable anonymous id for the landing event and the later
+  // alias call, instead of letting the SDK create an unrelated device id.
+  mixpanel.identify(distinctId());
   initialized = true;
+}
+
+/** Capture a tagged entrance before client navigation removes its query string. */
+export function trackLandingPageView() {
+  persistAttributionFromCurrentUrl();
+  return trackAnalytics({
+    name: "Landing Page Viewed",
+    properties: {
+      ...(typeof window === "undefined"
+        ? {}
+        : { landing_path: window.location.pathname || "/" })
+    }
+  });
 }
 
 function mergeGuestLifecycleIntoUser(input: {
@@ -203,7 +365,8 @@ export function identifyAnalyticsUser(input: {
   mixpanel.people.set({
     ...(input.email ? { $email: input.email } : {}),
     app: "ai-taverns",
-    schemaVersion: 1
+    schemaVersion: 1,
+    ...attributionProperties()
   });
 }
 
@@ -241,6 +404,7 @@ export function trackAnalytics(input: TrackInput) {
   const event = AnalyticsEventSchema.parse({
     name: input.name,
     properties: {
+      ...attributionProperties(),
       ...input.properties,
       app: "ai-taverns",
       distinctId: distinctId(),
