@@ -702,7 +702,7 @@ type CampaignAnchorVisibility = "player_safe" | "dm_only";
 type EldermereOpeningPlan = {
   region: string;
   startingLocation: string;
-  howThePlayerGotHere: string;
+  whyThePlayerIsHereNow: string;
   concept: string;
   openingScene: string;
   privateTruth: string;
@@ -8821,7 +8821,7 @@ function characterSheetField(characterSheet: string, label: string) {
   return match?.[1]?.trim() ?? "";
 }
 
-function formatEldermereNarratorCharacterContext(players: PlayerRow[]) {
+function formatEldermereCampaignCharacterContext(players: PlayerRow[]) {
   const playablePlayers = players.filter(isProfileComplete);
 
   if (playablePlayers.length === 0) {
@@ -8852,8 +8852,6 @@ function formatEldermereNarratorCharacterContext(players: PlayerRow[]) {
         ...extractCharacterSheetSectionLines(sheet, "Inventory")
       ];
       const spells = extractCharacterSheetSectionLines(sheet, "Spells");
-      const backstory = extractCharacterBackstory(sheet);
-
       return [
         `${index + 1}. ${player.character_name}`,
         `Character: ${[
@@ -8871,14 +8869,13 @@ function formatEldermereNarratorCharacterContext(players: PlayerRow[]) {
           ? `Relevant skills and proficiencies: ${proficientSkills.join("; ")}`
           : "",
         equipment.length > 0 ? `Equipment: ${equipment.join("; ")}` : "",
-        spells.length > 0 ? `Spells: ${spells.join("; ")}` : "",
-        backstory ? `Authoritative backstory:\n${backstory}` : ""
+        spells.length > 0 ? `Spells: ${spells.join("; ")}` : ""
       ]
         .filter(Boolean)
         .join("\n");
     }),
     "",
-    "Preserve this backstory exactly. Do not invent, alter, resolve, soften, or contradict past events, relationships, possessions, letters, promises, causes, or losses."
+    "Use this mechanical character profile only to frame capabilities, spotlight class and equipment, and judge what the character can plausibly attempt. It contains no character history; do not invent personal history, past relationships, possessions, promises, causes, or losses."
   ].join("\n\n");
 }
 
@@ -9175,11 +9172,7 @@ function formatEldermereCampaignConceptRequest(input: {
 
   return [
     "PLAYER CHARACTER",
-    formatCanonicalCharacterContext(
-      input.players,
-      resolveMechanicsState(input.campaign, input.players)
-    ),
-    formatOpeningBackstoryAnchors(input.players),
+    formatEldermereCampaignCharacterContext(input.players),
     "",
     "CANONICAL START",
     `Region: ${region?.name ?? "Eldermere"}`,
@@ -9195,11 +9188,12 @@ function formatEldermereCampaignConceptRequest(input: {
       : "",
     "",
     "CONCEPT REQUIREMENTS",
-    "Create a campaign concept that begins with a specific change in the player's life.",
+    "Create a campaign concept that begins with a specific, present-tense change in the selected starting location.",
     "Before writing the concept, think through the campaign as an evolving situation: why the player's new situation exists, how it can deepen or change through play, what the player can eventually learn that changes their understanding of it, and what meaningful choices that discovery can create.",
     "Write the concept as that complete evolving situation—not merely as an opening hook, a first job, or a premise with a vague future mystery attached.",
     "The concept must:",
     "- Put the player in a clear starting position.",
+    "- Establish why the player is here now through an immediate local circumstance, such as a public problem, job, mistake, discovery, threat, or opportunity.",
     "- Establish an ongoing situation that can generate many sessions of play.",
     "- Let the player learn Eldermere naturally through action and consequences.",
     "- Use the selected region and starting location as the campaign's beginning.",
@@ -9217,8 +9211,8 @@ function formatEldermereCampaignConceptRequest(input: {
       {
         region: region?.name ?? "selected Eldermere region",
         starting_location: settlement?.name ?? "selected starting location",
-        how_the_player_got_here:
-          "A short explanation of the events that brought the player from their established backstory into this situation.",
+        why_the_player_is_here_now:
+          "A short, self-contained explanation of the immediate local circumstance that puts the player in this situation. Do not rely on or invent personal history.",
         concept:
           "A complete 2-3 paragraph account of the campaign as an evolving situation: its beginning, how it can deepen through play, and what the player may eventually discover and decide.",
         opening_scene: "The exact first playable situation.",
@@ -9260,27 +9254,27 @@ function formatEldermereNarratorOpeningRequest(input: {
   plan: EldermereOpeningPlan;
 }) {
   return [
-    formatEldermereNarratorCharacterContext(input.players),
+    formatEldermereCampaignCharacterContext(input.players),
     "",
     "ELDERMERE OPENING BRIEF",
     JSON.stringify(narratorOpeningPlanToJson(input.plan), null, 2),
     "",
     "NARRATOR TASK - WRITE THE FULL PLAYER-FACING OPENER:",
-    "The Eldermere opening plan is the campaign source of truth. Fulfill how_the_player_got_here, concept, and opening_scene as one cohesive campaign opener. Do not summarize the plan, explain its fields, or describe future campaign events as a synopsis. Turn it into the first live scene.",
+    "The Eldermere opening plan is the campaign source of truth. Fulfill why_the_player_is_here_now, concept, and opening_scene as one cohesive campaign opener. Do not summarize the plan, explain its fields, or describe future campaign events as a synopsis. Turn it into the first live scene.",
     "",
     "PLAYER KNOWLEDGE AND OPENING FOCUS:",
-    "Assume the player knows nothing about this campaign or setting beyond their established character backstory and what this narration has already shown them.",
+    "Assume the player knows nothing about this campaign or setting beyond what this narration has already shown them.",
     "The concept is author guidance for you, not exposition for the player. Use it to understand the direction of the campaign, but reveal only what the player can immediately encounter, observe, be told, or reasonably infer in this first scene.",
     "Focus on establishing what is unknown to the player but immediately in front of them: where they are, who is present, what is happening, what feels wrong or urgent, and what they can do now.",
     "Do not explain wider factions, politics, history, hidden stakes, future campaign developments, or abstract implications unless they are directly necessary to understand the player's immediate situation and choice.",
     "",
     "Return only plain prose. It must contain exactly 6 paragraphs separated by blank lines. Do not add headings, labels, notes, Markdown, JSON, or commentary. Paragraph 6 must be exactly 'What do you do?'.",
-    "Preserve all established character-sheet and backstory facts. Do not change, resolve, soften, or invent past events, relationships, debts, gifts, clues, promises, or causes.",
+    "Use the supplied character profile only for present capabilities and visible details. Do not invent, reference, resolve, or imply personal history, past relationships, debts, gifts, clues, promises, or causes.",
     "Use only facts the character could reasonably see, hear, know, infer, or be told in this opening scene. Do not request dice; the player must receive control before attempting any uncertain action.",
     "Use exactly 6 semantic narration color tags across paragraphs 1-5: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, or <object>...</object>. Each tag must wrap only a short, player-visible noun or phrase. Do not nest tags, add attributes, use <em>, use Markdown emphasis, or use any other HTML/XML tags.",
     "",
     "REQUIRED SIX-PARAGRAPH STRUCTURE:",
-    "Paragraph 1 — Campaign premise: Begin with the immediate situation that brings the character or party into this campaign. Use how_the_player_got_here to establish why they are now caught in the campaign's central problem. Do not begin with scenery, weather, location, dialogue, combat, or 'You arrive.'",
+    "Paragraph 1 — Campaign premise: Begin with the immediate situation that brings the character or party into this campaign. Use why_the_player_is_here_now to establish why they are now caught in the campaign's central problem. Do not begin with scenery, weather, location, dialogue, combat, or 'You arrive.'",
     "Paragraph 2 — Arrival: Describe the recent journey and the last few hours that brought the character or party into the selected region and starting location. Establish what they plausibly know about the place and its immediate trouble. Make the campaign premise from concept understandable without summarizing its future plot.",
     "Paragraph 3 — Live scene: Establish the selected starting location with concrete sensory and spatial details. Place the player physically inside opening_scene with visible exits, reachable objects, present NPCs, and immediate environmental details.",
     "Paragraph 4 — Pressure: Introduce the visible tension, NPC demand, danger, discovery, or interruption that makes the opening situation urgent. Draw only on visible consequences.",
@@ -9449,7 +9443,7 @@ function parseEldermereOpeningPlan(content: string) {
   const plan: EldermereOpeningPlan = {
     region: readString(parsed, "region", errors),
     startingLocation: readString(parsed, "starting_location", errors),
-    howThePlayerGotHere: readString(parsed, "how_the_player_got_here", errors),
+    whyThePlayerIsHereNow: readString(parsed, "why_the_player_is_here_now", errors),
     concept: readString(parsed, "concept", errors),
     openingScene: readString(parsed, "opening_scene", errors),
     privateTruth: readString(parsed, "private_truth", errors),
@@ -9484,7 +9478,7 @@ function openingPlanToJson(plan: EldermereOpeningPlan) {
   return {
     region: plan.region,
     starting_location: plan.startingLocation,
-    how_the_player_got_here: plan.howThePlayerGotHere,
+    why_the_player_is_here_now: plan.whyThePlayerIsHereNow,
     concept: plan.concept,
     opening_scene: plan.openingScene,
     private_truth: plan.privateTruth,
@@ -9505,7 +9499,7 @@ function narratorOpeningPlanToJson(plan: EldermereOpeningPlan) {
   return {
     region: plan.region,
     starting_location: plan.startingLocation,
-    how_the_player_got_here: plan.howThePlayerGotHere,
+    why_the_player_is_here_now: plan.whyThePlayerIsHereNow,
     concept: plan.concept,
     opening_scene: plan.openingScene
   };
@@ -9952,7 +9946,7 @@ function buildCampaignFoundationCompilerPrompt() {
     "For an anchor with both public continuity and hidden truth, split it into a player_safe parent chunk and a dm_only secret chunk. Only make the parent chunk dm_only when there is no player-safe rumor, lead, place-name, symbol, or local pressure to preserve yet.",
     "Player-safe chunks may include mysteries as mysteries: use 'Unknown', 'rumored', 'unconfirmed', or 'not yet discovered' instead of revealing the true answer.",
     "Treat Pageden/canonical Eldermere material as source-grounded world truth. Treat planner-created links, motives, clocks, and secrets as campaign-local premises until established through play.",
-    "Use concept for the campaign premise and primary active thread; how_the_player_got_here for player-character context; opening_scene for current playable context; private_truth for DM-only secrets; and campaign_anchors for durable NPC, object, place, institution, relationship, faction, and threat chunks.",
+    "Use concept for the campaign premise and primary active thread; why_the_player_is_here_now for immediate player-character context; opening_scene for current playable context; private_truth for DM-only secrets; and campaign_anchors for durable NPC, object, place, institution, relationship, faction, and threat chunks.",
     "Create a dedicated context chunk for every campaign anchor. The region and settlement anchors must each receive their own player_safe relevant_world_context chunk. Honor each anchor's visibility across every field: never place dm_only anchor details in player_safe chunks.",
     "Every chunk should label its epistemic status with sections or bullets such as Canonical Grounding, Campaign-Local Premise, Established Facts, Strong Inferences, DM Seeds, Hidden Truth, Future Reveal Paths, Constraints, or Open Questions.",
     "When an anchor has both player-safe continuity and hidden truth, create a public/world or NPC chunk plus a DM-only secret chunk only when both need independent retrieval. Example: world:sunder-kiln for known leads, rumors, local pressures, and playable context, plus secret:sunder-kiln for the time-loop truth and reveal ladder.",
@@ -10029,7 +10023,7 @@ function formatCampaignFoundationCompilerRequest(input: {
       eldermereCampaignStartFromMetadata(input.campaign)
     ),
     "",
-    "Opening request and canonical character/backstory context:",
+    "Opening request and canonical character context:",
     input.openingRequest,
     "",
     "Eldermere opening planner output JSON:",
@@ -11371,7 +11365,7 @@ async function persistEldermereOpeningPlan(
       set metadata = jsonb_set(
         jsonb_set(metadata, '{eldermereOpeningPlan}', $2::jsonb, true),
         '{eldermereOpeningPlanVersion}',
-        '1'::jsonb,
+        '2'::jsonb,
         true
       )
       where id = $1

@@ -254,7 +254,7 @@ function testOpeningPlanContent() {
   return JSON.stringify({
     region: "Ashford Vale",
     starting_location: "Ashford Tollhouse",
-    how_the_player_got_here:
+    why_the_player_is_here_now:
       "The player accepted work escorting a sealed road charter through the valley.",
     concept:
       "A routine escort becomes a road mystery when the bridge watch goes silent and several people want the charter before the player can deliver it. Following the charter's trail reveals that its destination, its broken seal, and the player's hiring were arranged to hide what lies beneath the road. The player eventually decides whether to expose the discovery, deliver it to the people who buried it, or use it to protect the communities along the route.",
