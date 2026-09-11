@@ -2585,7 +2585,7 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.equal(selectedRegion.name, "The Salt Concordat");
   assert.equal(startingLocation.name, "Selwick");
   assert.equal(startingLocation.displayLocation, startingLocation.name);
-  assert.equal(metadata.eldermereOpeningPlanVersion, 1);
+  assert.equal(metadata.eldermereOpeningPlanVersion, 2);
   assert.equal(openingPlan.region, "The Salt Concordat");
   assert.equal(openingPlan.starting_location, "Selwick");
   assert.match(openingPlan.concept as string, /local request turns into an escalating mystery/i);
@@ -2630,9 +2630,12 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(plannerInput.message, /Visibility applies to the entire anchor object/);
   assert.match(plannerInput.message, /never include hidden motives/i);
   assert.match(plannerInput.message, /future_pressure_or_change/);
-  assert.match(plannerInput.message, /Player backstory anchors for the opening scene:/);
-  assert.match(plannerInput.message, /Captain Saela/);
-  assert.match(plannerInput.message, /compass that points toward Selwick/);
+  assert.match(plannerInput.message, /AUTHORITATIVE CHARACTER CONTEXT/);
+  assert.match(plannerInput.message, /Character: Rogue; Archaeologist/);
+  assert.doesNotMatch(plannerInput.message, /Player backstory anchors for the opening scene:/);
+  assert.doesNotMatch(plannerInput.message, /Captain Saela/);
+  assert.doesNotMatch(plannerInput.message, /compass that points toward Selwick/);
+  assert.doesNotMatch(plannerInput.message, /Backstory/);
   assert.match(plannerInput.message, /Doesn't require the player to know anything about Eldermere beforehand/i);
   assert.match(plannerInput.message, /serving a prison sentence/i);
   assert.match(plannerInput.message, /Region: The Salt Concordat/);
@@ -2643,7 +2646,7 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(narratorInput.message, /ELDERMERE OPENING BRIEF/);
   assert.match(narratorInput.message, /NARRATOR TASK - WRITE THE FULL PLAYER-FACING OPENER:/);
   assert.match(narratorInput.message, /campaign source of truth/);
-  assert.match(narratorInput.message, /how_the_player_got_here/);
+  assert.match(narratorInput.message, /why_the_player_is_here_now/);
   assert.match(narratorInput.message, /PLAYER KNOWLEDGE AND OPENING FOCUS:/);
   assert.match(
     narratorInput.message,
@@ -2660,10 +2663,12 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(narratorInput.message, /<danger>\.\.\.<\/danger>/);
   assert.match(narratorInput.message, /<faction>\.\.\.<\/faction>/);
   assert.match(narratorInput.message, /<object>\.\.\.<\/object>/);
-  assert.match(narratorInput.message, /Authoritative backstory:/);
-  assert.match(narratorInput.message, /Captain Saela/);
-  assert.match(narratorInput.message, /Then use how_the_player_got_here/);
-  assert.match(narratorInput.message, /Paragraph 1 — Orientation and personal premise/);
+  assert.doesNotMatch(narratorInput.message, /Authoritative backstory:/);
+  assert.doesNotMatch(narratorInput.message, /Captain Saela/);
+  assert.doesNotMatch(narratorInput.message, /compass that points toward Selwick/);
+  assert.doesNotMatch(narratorInput.message, /Backstory/);
+  assert.match(narratorInput.message, /Then use why_the_player_is_here_now/);
+  assert.match(narratorInput.message, /Paragraph 1 — Orientation and present premise/);
   assert.match(narratorInput.message, /exact selected starting location/);
   assert.match(narratorInput.message, /Do not narrate a journey or recap/);
   assert.match(narratorInput.message, /Paragraph 2 — People, purpose, and pressure/);
@@ -2682,7 +2687,7 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.doesNotMatch(narratorInput.message, /Return exactly one valid JSON/);
   assert.match(narratorInput.message, /"region": "The Salt Concordat"/);
   assert.match(narratorInput.message, /"starting_location": "Selwick"/);
-  assert.match(narratorInput.message, /"how_the_player_got_here":/);
+  assert.match(narratorInput.message, /"why_the_player_is_here_now":/);
   assert.match(narratorInput.message, /"concept":/);
   assert.match(narratorInput.message, /"opening_scene":/);
   assert.doesNotMatch(narratorInput.message, /"private_truth":/);
@@ -2692,7 +2697,7 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.doesNotMatch(narratorInput.message, /Authoritative mechanics state:/);
   assert.match(
     narratorInput.message,
-    /Fulfill how_the_player_got_here, concept, and opening_scene/
+    /Fulfill why_the_player_is_here_now, concept, and opening_scene/
   );
 
   assert.ok(plannerDebug);
@@ -2709,7 +2714,7 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
     JSON.stringify(plannerDebug.requestMessages),
     /CONCEPT REQUIREMENTS/
   );
-  assert.match(JSON.stringify(plannerDebug.requestMessages), /Captain Saela/);
+  assert.doesNotMatch(JSON.stringify(plannerDebug.requestMessages), /Captain Saela/);
 });
 
 test("GET /api/campaigns/:campaignId/npc-cards lists existing NPC context cards", async () => {
@@ -2823,7 +2828,7 @@ test.skip("POST /api/campaigns scrubs forbidden Eldermere opening terms after na
       return {
         id: "provider-planner-forbidden-terms",
         content: JSON.stringify({
-          how_the_player_got_here: "The party followed a local summons to Suncross.",
+          why_the_player_is_here_now: "The party answered a local summons in Suncross.",
           concept: "A local request becomes an escalating mystery in Suncross.",
           opening_scene: "Mara Vell waits by a marked doorway while the street watches.",
           private_truth: "The marked doorway conceals evidence a local power wants erased.",
@@ -3033,7 +3038,7 @@ test.skip("POST /api/campaigns uses a low-temperature final retry for short Elde
       return {
         id: "provider-planner-final-retry",
         content: JSON.stringify({
-          how_the_player_got_here: "The party followed a local summons to Suncross.",
+          why_the_player_is_here_now: "The party answered a local summons in Suncross.",
           concept: "A local request becomes an escalating mystery in Suncross.",
           opening_scene: "Mara Vell waits by a marked doorway while the street watches.",
           private_truth: "The marked doorway conceals evidence a local power wants erased.",
