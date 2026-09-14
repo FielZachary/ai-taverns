@@ -83,6 +83,7 @@ export const AnalyticsEventNameSchema = z.enum([
   "Campaign Invite Disabled",
   "Multiplayer Adventure Begun",
   "Campaign Loaded",
+  "Initial Scene Viewed",
   "Campaign Switched",
   "Session Resumed",
   "Qualified Return",

@@ -116,6 +116,7 @@ const aiModelStorageKey = "ai-dnd.aiModel";
 const defaultAiModel: AiModelId = "deepseek-v4-flash";
 const playerIdStorageKey = "ai-dnd.playerId";
 const backstoryIntroSeenStoragePrefix = "ai-dnd.backstoryIntroSeen";
+const initialSceneViewedStoragePrefix = "ai-dnd.initialSceneViewed";
 const roomRequestTimeoutMs = 8_000;
 const turnSubmissionRequestTimeoutMs = 30_000;
 const fallbackRoomPollMs = 25_000;
@@ -423,6 +424,7 @@ export function GameShell({
     useState<string | null>(null);
   const pendingSubmissionRef = useRef<PendingSubmission | null>(null);
   const retryableTurnRef = useRef<RetryableTurn | null>(null);
+  const initialSceneViewedRef = useRef(new Set<string>());
   const [roomMessages, setRoomMessages] = useState<GameMessage[]>([]);
   const [streamingDmMessages, setStreamingDmMessages] = useState<
     StreamingDmMessage[]
@@ -644,6 +646,67 @@ export function GameShell({
       ),
     [visibleMessages]
   );
+
+  useEffect(() => {
+    if (
+      routePath !== "/play" ||
+      !activeCampaign?.id ||
+      !playerId ||
+      !hasVisibleDmOpener
+    ) {
+      return;
+    }
+
+    const storageKey = [
+      initialSceneViewedStoragePrefix,
+      activeCampaign.id,
+      playerId
+    ].join(".");
+
+    if (
+      initialSceneViewedRef.current.has(storageKey) ||
+      window.localStorage.getItem(storageKey) === "true"
+    ) {
+      return;
+    }
+
+    initialSceneViewedRef.current.add(storageKey);
+    trackAnalytics({
+      name: "Initial Scene Viewed",
+      properties: {
+        userId,
+        guestId: analyticsGuestId(),
+        playerId,
+        campaignId: activeCampaign.id,
+        campaignMode: activeCampaign.mode,
+        playerMessageCount: roomMessages.filter(
+          (message) => message.role === "player"
+        ).length,
+        dmMessageCount: roomMessages.filter((message) => message.role === "dm")
+          .length,
+        totalMessageCount: roomMessages.length,
+        hasDiceRequest: pendingRollRequests.length > 0,
+        combatActive: Boolean(roomCombat?.active),
+        hasBegun: hasAdventureBegun
+      }
+    });
+
+    try {
+      window.localStorage.setItem(storageKey, "true");
+    } catch {
+      // Keep the in-memory guard when browser storage is unavailable.
+    }
+  }, [
+    activeCampaign,
+    hasAdventureBegun,
+    hasVisibleDmOpener,
+    pendingRollRequests.length,
+    playerId,
+    roomCombat?.active,
+    roomMessages,
+    routePath,
+    userId
+  ]);
   const isRestartPreparing =
     Boolean(restartPreparingCampaignId) &&
     activeCampaign?.id === restartPreparingCampaignId &&

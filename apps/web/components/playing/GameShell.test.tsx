@@ -18,6 +18,13 @@ vi.mock("@/lib/campaign-api", () => ({
   updateCampaignNpcCard: vi.fn()
 }));
 
+vi.mock("@/lib/analytics", () => ({
+  analyticsGuestId: vi.fn(() => "analytics-guest-id"),
+  identifyAnalyticsUser: vi.fn(),
+  trackAnalytics: vi.fn(),
+  trackCampaignReturn: vi.fn()
+}));
+
 vi.mock("./ChatHistorySidebar", () => ({
   ChatHistorySidebar: ({
     chats,
@@ -178,10 +185,12 @@ vi.mock("./CharacterSheetOverlay", () => ({
 }));
 
 import { listCampaignNpcCards, listCampaigns } from "@/lib/campaign-api";
+import { trackAnalytics } from "@/lib/analytics";
 import { GameShell } from "./GameShell";
 
 const listCampaignNpcCardsMock = vi.mocked(listCampaignNpcCards);
 const listCampaignsMock = vi.mocked(listCampaigns);
+const trackAnalyticsMock = vi.mocked(trackAnalytics);
 
 const campaign = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -295,6 +304,7 @@ beforeEach(() => {
   localStorage.clear();
   localStorage.setItem("ai-dnd.playerId", "player-1");
   MockWebSocket.instances = [];
+  trackAnalyticsMock.mockClear();
   vi.stubGlobal("WebSocket", MockWebSocket);
   listCampaignNpcCardsMock.mockResolvedValue([]);
   listCampaignsMock.mockResolvedValue([campaign]);
@@ -307,6 +317,61 @@ afterEach(() => {
 });
 
 describe("GameShell", () => {
+  it("tracks the initial scene once after the DM opening is rendered", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.startsWith("/api/room?")) {
+        return responseJson(roomSnapshot());
+      }
+
+      if (url === "/api/auth/claim-guest-state") {
+        return responseJson({});
+      }
+
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<GameShell initialCampaignId={campaign.id} />);
+
+    expect(
+      await screen.findByText("The lantern guttered beside the sealed door.")
+    ).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(trackAnalyticsMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "Initial Scene Viewed",
+          properties: expect.objectContaining({
+            campaignId: campaign.id,
+            campaignMode: "single_player",
+            playerId: "player-1",
+            dmMessageCount: 1,
+            totalMessageCount: 1,
+            hasBegun: true
+          })
+        })
+      );
+    });
+
+    act(() => {
+      MockWebSocket.instances[0]?.emitMessage({
+        type: "room_snapshot",
+        roomId: campaign.id,
+        snapshot: roomSnapshot()
+      });
+    });
+
+    await waitFor(() => {
+      expect(
+        trackAnalyticsMock.mock.calls.filter(
+          ([event]) => event.name === "Initial Scene Viewed"
+        )
+      ).toHaveLength(1);
+    });
+  });
+
   it("shows a turn submit failure and unlocks the input for retry", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
