@@ -2620,6 +2620,11 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(plannerInput.message, /CANONICAL START/);
   assert.match(plannerInput.message, /ELDERMERE GROUNDING/);
   assert.match(plannerInput.message, /CONCEPT REQUIREMENTS/);
+  assert.match(plannerInput.message, /OPENING-SCENE HANDOFF REQUIREMENTS/);
+  assert.match(plannerInput.message, /live situation already unfolding/);
+  assert.match(plannerInput.message, /Start one beat before anyone recruits the player/);
+  assert.match(plannerInput.message, /common local context about the selected starting settlement/);
+  assert.match(plannerInput.message, /Do not have an NPC appoint the player/);
   assert.match(plannerInput.message, /campaign as an evolving situation/i);
   assert.match(plannerInput.message, /not merely as an opening hook/i);
   assert.match(plannerInput.message, /what the player may eventually discover and decide/i);
@@ -2647,15 +2652,17 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(narratorInput.message, /NARRATOR TASK - WRITE THE FULL PLAYER-FACING OPENER:/);
   assert.match(narratorInput.message, /campaign source of truth/);
   assert.match(narratorInput.message, /why_the_player_is_here_now/);
-  assert.match(narratorInput.message, /PLAYER KNOWLEDGE AND OPENING FOCUS:/);
+  assert.match(narratorInput.message, /PLAYER KNOWLEDGE, VOICE, AND OPENING FOCUS:/);
   assert.match(
     narratorInput.message,
     /Assume the player knows nothing about this campaign or setting/
   );
   assert.match(narratorInput.message, /concept is author guidance/);
-  assert.match(narratorInput.message, /Favor orientation and clear comprehension over brevity/);
-  assert.match(narratorInput.message, /Explain every unfamiliar proper noun, local role, institution/);
-  assert.match(narratorInput.message, /This is not permission for a world-history lecture/);
+  assert.match(narratorInput.message, /Write entirely in second person/);
+  assert.match(narratorInput.message, /Open with a lived-in moment, not a briefing/);
+  assert.match(narratorInput.message, /Use simple, precise, colorful language/);
+  assert.match(narratorInput.message, /what the settlement is and what it is commonly known for/);
+  assert.match(narratorInput.message, /opportunity, not an assignment/);
   assert.match(narratorInput.message, /exactly 6 semantic narration color tags/);
   assert.match(narratorInput.message, /<npc>\.\.\.<\/npc>/);
   assert.match(narratorInput.message, /<place>\.\.\.<\/place>/);
@@ -2667,16 +2674,13 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.doesNotMatch(narratorInput.message, /Captain Saela/);
   assert.doesNotMatch(narratorInput.message, /compass that points toward Selwick/);
   assert.doesNotMatch(narratorInput.message, /Backstory/);
-  assert.match(narratorInput.message, /Then use why_the_player_is_here_now/);
-  assert.match(narratorInput.message, /Paragraph 1 — Orientation and present premise/);
-  assert.match(narratorInput.message, /exact selected starting location/);
-  assert.match(narratorInput.message, /Do not narrate a journey or recap/);
-  assert.match(narratorInput.message, /Paragraph 2 — People, purpose, and pressure/);
+  assert.match(narratorInput.message, /Paragraph 1 — Arrival/);
+  assert.match(narratorInput.message, /Paragraph 2 — The live incident/);
   assert.match(narratorInput.message, /opening_scene/);
-  assert.match(narratorInput.message, /Paragraph 3 — Choice/);
+  assert.match(narratorInput.message, /Paragraph 3 — The opening/);
   assert.match(narratorInput.message, /Paragraph 4 — Handoff/);
   assert.match(narratorInput.message, /exactly 4 paragraphs/);
-  assert.match(narratorInput.message, /grounded, direct, detailed fantasy prose/);
+  assert.match(narratorInput.message, /grounded, direct fantasy prose that feels vivid because it is specific/);
   assert.doesNotMatch(narratorInput.message, /Flagship world context:/);
   assert.doesNotMatch(narratorInput.message, /Seven regions available for the opener:/);
   assert.doesNotMatch(narratorInput.instructions, /World Context:/);
