@@ -135,6 +135,8 @@ const campaignPreparationMessages = [
 ];
 const campaignPreparationMessageIntervalMs = 10_000;
 const campaignPreparationTransitionMs = 650;
+const campaignPreparationProgressIntervalMs = 1_000;
+const campaignPreparationProgressCeiling = 95;
 
 function isAiModelId(value: FormDataEntryValue | string | null): value is AiModelId {
   return value === "deepseek-v4-flash" || value === "qwen-3-5-plus";
@@ -222,6 +224,7 @@ type ActiveDiceReveal = {
 function CampaignPreparationLoader() {
   const [messageIndex, setMessageIndex] = useState(0);
   const [exitingMessage, setExitingMessage] = useState("");
+  const [progress, setProgress] = useState(0);
   const currentMessage =
     campaignPreparationMessages[messageIndex] ??
     defaultCampaignPreparationMessage;
@@ -259,6 +262,19 @@ function CampaignPreparationLoader() {
     };
   }, []);
 
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setProgress((currentProgress) =>
+        Math.min(
+          campaignPreparationProgressCeiling,
+          currentProgress + Math.max(1, Math.ceil((100 - currentProgress) / 12))
+        )
+      );
+    }, campaignPreparationProgressIntervalMs);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
+
   return (
     <div className="campaign-prep-loader">
       <div className="campaign-prep-loader-window">
@@ -289,7 +305,7 @@ function CampaignPreparationLoader() {
         </p>
       </div>
       <p className="campaign-prep-loader-note">
-        this&apos;ll take about a minute and a half, sit tight ;)
+        {progress}%
       </p>
     </div>
   );

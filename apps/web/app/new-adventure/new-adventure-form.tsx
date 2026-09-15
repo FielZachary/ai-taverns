@@ -98,6 +98,8 @@ const campaignPreparationMessages = [
 ];
 const campaignPreparationMessageIntervalMs = 10_000;
 const campaignPreparationTransitionMs = 650;
+const campaignPreparationProgressIntervalMs = 1_000;
+const campaignPreparationProgressCeiling = 95;
 
 type NewAdventureEntryState = "preloading" | "transitioning" | "ready";
 
@@ -4235,6 +4237,7 @@ function normalizeGameCodeInput(value: string) {
 function CampaignPreparationLoader() {
   const [messageIndex, setMessageIndex] = useState(0);
   const [exitingMessage, setExitingMessage] = useState("");
+  const [progress, setProgress] = useState(0);
   const currentMessage =
     campaignPreparationMessages[messageIndex] ??
     defaultCampaignPreparationMessage;
@@ -4272,11 +4275,24 @@ function CampaignPreparationLoader() {
     };
   }, []);
 
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setProgress((currentProgress) =>
+        Math.min(
+          campaignPreparationProgressCeiling,
+          currentProgress + Math.max(1, Math.ceil((100 - currentProgress) / 12))
+        )
+      );
+    }, campaignPreparationProgressIntervalMs);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
+
   return (
     <FullPageRuneLoader
       message={currentMessage}
       exitingMessage={exitingMessage}
-      note="this'll take about a minute and a half, sit tight ;)"
+      note={`${progress}%`}
       ariaLabel="Preparing campaign"
     />
   );

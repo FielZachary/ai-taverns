@@ -1090,7 +1090,7 @@ describe("NewAdventureForm", () => {
       "rune-loader"
     );
     expect(
-      screen.getByText("this'll take about a minute and a half, sit tight ;)")
+      screen.getByText("0%")
     ).toHaveClass("campaign-prep-loader-note");
 
     await act(async () => {
