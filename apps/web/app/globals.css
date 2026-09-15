@@ -5660,7 +5660,7 @@ h1 {
   color: var(--ink);
   background: transparent;
   font-family: var(--play-text-font);
-  font-size: 1rem;
+  font-size: 1.1rem;
   line-height: 1.45;
 }
 
