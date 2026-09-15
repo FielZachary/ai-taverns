@@ -432,6 +432,26 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("scene_director"), /observable behavior/i);
     assert.match(jobPrompt("scene_director"), /Keep player agency intact/i);
     assert.doesNotMatch(jobPrompt("scene_director"), /Default narration length:/i);
+    assert.match(
+      jobPrompt("scene_director"),
+      /Resolve the player's declared action through its natural immediate endpoint/i
+    );
+    assert.match(
+      jobPrompt("scene_director"),
+      /Narrate until the first meaningful decision point/i
+    );
+    assert.match(
+      jobPrompt("scene_director"),
+      /carry the character through uneventful intervening space and narrate the arrival/i
+    );
+    assert.match(
+      jobPrompt("scene_director"),
+      /Do not skip material intermediate events/i
+    );
+    assert.match(
+      jobPrompt("scene_director"),
+      /A handoff is justified by a meaningful new choice or required roll/i
+    );
     for (const job of [
       "scene_director",
       "investigation",
