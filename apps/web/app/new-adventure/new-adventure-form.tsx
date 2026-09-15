@@ -4646,7 +4646,7 @@ export function NewAdventureForm({
             );
           }, flowTransitionDurationMs)
         );
-      }, 5_000)
+      }, 7_000)
     ];
 
     return () => timeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId));
