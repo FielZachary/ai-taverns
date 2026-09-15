@@ -44,6 +44,8 @@ test("loadConfig applies development defaults and trims web origins", () => {
   assert.equal(config.mixpanelProjectId, "4049394");
   assert.equal(config.mixpanelEnabled, false);
   assert.equal(config.mixpanelDebug, false);
+  assert.equal(config.redditCapiPixelId, undefined);
+  assert.equal(config.redditCapiAccessToken, undefined);
   assert.equal(config.subscriptionDefaultTierId, 4);
 });
 
@@ -78,7 +80,9 @@ test("loadConfig applies production security defaults and explicit overrides", (
     MIXPANEL_PROJECT_TOKEN: "mixpanel-token",
     MIXPANEL_PROJECT_ID: "4049394",
     MIXPANEL_ENABLED: "true",
-    MIXPANEL_DEBUG: "true"
+    MIXPANEL_DEBUG: "true",
+    REDDIT_CAPI_PIXEL_ID: "reddit-pixel-id",
+    REDDIT_CAPI_ACCESS_TOKEN: "reddit-access-token"
   });
 
   assert.deepEqual(config, {
@@ -112,6 +116,8 @@ test("loadConfig applies production security defaults and explicit overrides", (
     mixpanelProjectId: "4049394",
     mixpanelEnabled: true,
     mixpanelDebug: true,
+    redditCapiPixelId: "reddit-pixel-id",
+    redditCapiAccessToken: "reddit-access-token",
     subscriptionDefaultTierId: 4
   });
 });

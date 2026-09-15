@@ -391,6 +391,15 @@ class FakeDatabase {
       return { rows: [record as T] };
     }
 
+    if (
+      normalizedSql.startsWith(
+        "select id, email, display_name, created_at, updated_at, subscription_tier_id from users where email = $1"
+      )
+    ) {
+      const user = this.users.find((candidate) => candidate.email === values[0]);
+      return { rows: user ? [user as T] : ([] as T[]) };
+    }
+
     if (normalizedSql.startsWith("insert into users")) {
       const email = values[0] as string;
       const displayName = values[1] as string | null;

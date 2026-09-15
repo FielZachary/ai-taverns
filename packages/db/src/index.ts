@@ -276,6 +276,23 @@ export async function upsertUserByEmail(
   return mapUserRow(requireRow(result.rows[0], "Failed to upsert user."));
 }
 
+export async function findUserByEmail(
+  db: Queryable,
+  email: string
+): Promise<UserRecord | null> {
+  const result = await db.query<UserRow>(
+    `
+      select id, email, display_name, created_at, updated_at, subscription_tier_id
+      from users
+      where email = $1
+      limit 1
+    `,
+    [email]
+  );
+
+  return result.rows[0] ? mapUserRow(result.rows[0]) : null;
+}
+
 export function currentUsagePeriodStart(now = new Date()) {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
 }
