@@ -212,6 +212,13 @@ describe("NewAdventureForm", () => {
     expect(screen.getByRole("button", { name: "Instagram" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "TikTok" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Other" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Reddit" }));
+    await finishFlowTransition();
+
+    expect(
+      screen.getByRole("heading", { name: /choose your character build/i })
+    ).toBeInTheDocument();
   });
 
   it("lets point-buy stats spend points and advance from valid stats", async () => {

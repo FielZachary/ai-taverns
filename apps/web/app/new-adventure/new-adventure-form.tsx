@@ -4640,10 +4640,7 @@ export function NewAdventureForm({
         timeoutIds.push(
           window.setTimeout(() => {
             setStepIndex(1);
-            setFlowTransition("entering");
-            timeoutIds.push(
-              window.setTimeout(() => setFlowTransition("idle"), flowTransitionDurationMs)
-            );
+            setFlowTransition("idle");
           }, flowTransitionDurationMs)
         );
       }, 5_000)
