@@ -431,6 +431,30 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("scene_director"), /concrete sensory detail/i);
     assert.match(jobPrompt("scene_director"), /observable behavior/i);
     assert.match(jobPrompt("scene_director"), /Keep player agency intact/i);
+    assert.doesNotMatch(jobPrompt("scene_director"), /Default narration length:/i);
+    for (const job of [
+      "scene_director",
+      "investigation",
+      "npc_dialogue",
+      "combat",
+      "rest_mechanics",
+      "death_saving_throws"
+    ] as const) {
+      const prompt = jobPrompt(job);
+      assert.match(prompt, /Storyteller Voice:/);
+      assert.match(
+        prompt,
+        /engaged, expressive human Dungeon Master who is glad to be telling this story/i
+      );
+      assert.match(
+        prompt,
+        /Do not add length merely to create feeling/i
+      );
+      assert.match(
+        prompt,
+        /Do not state what a player character thinks, feels, intends, or values/i
+      );
+    }
     assert.match(jobPrompt("scene_director"), /pause for dice/i);
     assert.match(jobPrompt("scene_director"), /next_input_needed to dice_results/i);
     assert.match(jobPrompt("scene_director"), /structured roll_requests entry/i);

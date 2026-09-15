@@ -329,6 +329,16 @@ export function jobPrompt(
     "Avoid ending with vague prompts like 'What do you do?' when a more specific handoff is available."
   ];
 
+  const storytellerVoiceGuidance = [
+    "Storyteller Voice:",
+    "- Narrate as an engaged, expressive human Dungeon Master who is glad to be telling this story. Do not sound like a neutral camera log or an encounter summary.",
+    "- Let the narration have a restrained point of view: notice when something lands badly, when a gesture costs someone effort, when an irony is ugly, when a room feels relieved too soon, or when danger seems patient.",
+    "- Give the world and NPCs emotional texture through selected wording, rhythm, and implication. The narrator may savor tension, warmth, unease, humor, or wonder without explaining every feeling.",
+    "- Preserve player agency. Do not state what a player character thinks, feels, intends, or values unless the player established it. Put emotional interpretation in visible behavior, dialogue, atmosphere, and the narrator's framing of events.",
+    "- Do not add length merely to create feeling. Keep the existing pacing and information density; one vivid, emotionally charged observation can do more than a paragraph of explanation.",
+    "- Avoid purple prose, melodrama, constant ominousness, and narrator commentary that breaks immersion."
+  ];
+
   const rollAdjudicationGuidance = [
     "When a player attempts something uncertain, risky, opposed, time-sensitive, hidden, or consequential, pause for dice instead of resolving the outcome.",
     "In public_narration, describe the attempted action up to the point of uncertainty, then clearly ask for the needed roll.",
@@ -1654,7 +1664,6 @@ export function jobPrompt(
         "- For exploration, travel, downtime, and ordinary scene resolution, include inventory patches only when the resolved outcome clearly changes possession, carried equipment, equipped gear, consumables, or currency.",
         "",
         "Pacing and Handoff:",
-        "- Default narration length: 2-5 paragraphs for ordinary turns. Use 4-7 richer paragraphs for major scene openings, location reveals, travel arrivals, or campaign-significant transitions.",
         "- End with a clear present-tense handoff that invites action, usually by naming what is immediately available or pressing, without listing menu options unless clarity requires it."
       ].join("\n"),
       ...physicalCommunicationGuidance,
@@ -1662,6 +1671,7 @@ export function jobPrompt(
       ...rollAdjudicationGuidance,
       ...playerCanonClaimGuidance,
       ...narrativeQualityBar,
+      ...storytellerVoiceGuidance,
       "Examples below demonstrate pacing, specificity, agency boundaries, and roll handling. Do not copy their names, locations, weather, NPC roles, scene structure, or exact phrasing. Match their clarity and dramatic discipline, not their content.",
       ...sceneDirectorExamples
     ],
@@ -1682,7 +1692,8 @@ export function jobPrompt(
         "Inventory Boundary:",
         "- Distinguish discovering, seeing, identifying, or learning about an item from taking possession of it. Only add inventory when the character actually takes, receives, pockets, collects, or is handed the item."
       ].join("\n"),
-      ...playerRollResultOpeningGuidance
+      ...playerRollResultOpeningGuidance,
+      ...storytellerVoiceGuidance
     ],
     npc_dialogue: [
       [
@@ -1764,6 +1775,7 @@ export function jobPrompt(
       ...playerCanonClaimGuidance,
       ...socialRollGuidance,
       ...narrativeQualityBar,
+      ...storytellerVoiceGuidance,
       "Examples below demonstrate NPC motive, voice, social pressure, partial concessions, failed social pressure, and roll-result narration. Do not copy their names, locations, NPC roles, conflicts, scene structure, or exact phrasing. Match their dramatic logic and conversational texture, not their content.",
       ...npcDialogueExamples
     ],
@@ -1778,6 +1790,7 @@ export function jobPrompt(
       ].join("\n"),
       ...physicalCommunicationGuidance,
       ...combatGuidance,
+      ...storytellerVoiceGuidance,
       "Examples below demonstrate combat pacing, visible math, paragraph grouping, turn ownership, roll pauses, and state-safe narration. Do not copy their names, actor keys, enemies, abilities, locations, or exact phrasing. Match their clarity and discipline, not their content.",
       ...combatExamples
     ],
@@ -1807,7 +1820,8 @@ export function jobPrompt(
         "- Do not spend or restore inventory unless the rest consumes or returns a concrete item through inventory_state_update."
       ].join("\n"),
       ...rollAdjudicationGuidance,
-      ...narrativeQualityBar
+      ...narrativeQualityBar,
+      ...storytellerVoiceGuidance
     ],
     death_saving_throws: [
       [
@@ -1831,7 +1845,8 @@ export function jobPrompt(
         "Death And Revival Boundary:",
         "- Do not soften death into a temporary setback inside this job. Revival is a separate player choice handled after death.",
         "- Do not include UI button text in public_narration; the website presents Revive your character and Create new Campaign."
-      ].join("\n")
+      ].join("\n"),
+      ...storytellerVoiceGuidance
     ],
     clarification: [
       "Ask one concise clarifying question.",
