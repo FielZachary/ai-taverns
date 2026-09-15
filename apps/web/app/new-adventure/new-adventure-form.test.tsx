@@ -191,6 +191,29 @@ describe("NewAdventureForm", () => {
     expect(screen.getByRole("button", { name: /multiplayer/i })).toBeDisabled();
   });
 
+  it("keeps onboarding welcome and referral steps in the adventure flow", async () => {
+    render(<NewAdventureForm onboarding />);
+
+    expect(
+      screen.getByRole("heading", { name: "Welcome, traveller." })
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(2_480);
+    });
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Where did you hear about AI Taverns?"
+      })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reddit" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "X" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Instagram" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "TikTok" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Other" })).toBeInTheDocument();
+  });
+
   it("lets point-buy stats spend points and advance from valid stats", async () => {
     render(<NewAdventureForm />);
 

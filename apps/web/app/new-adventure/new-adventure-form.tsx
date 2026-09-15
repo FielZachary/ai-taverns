@@ -232,7 +232,7 @@ const multiplayerCustomCreateSteps = [
   "Review"
 ];
 const joinSteps = ["Mode", "Multiplayer", "Game Code", "Character", "Review"];
-const onboardingSteps = ["Character", "Review"];
+const onboardingSteps = ["Welcome", "Referral", "Character", "Review"];
 const joinCodePattern = /[A-HJ-NP-Z2-9]{6}/;
 const eldermereBackstoryLocalizationThreshold = 100;
 const customCharacterCreationSteps = [
@@ -4318,6 +4318,32 @@ function NewAdventureEntryLoadingPanel({
   );
 }
 
+const referralSources = [
+  { label: "Reddit", icon: "reddit" },
+  { label: "X", icon: "x" },
+  { label: "Instagram", icon: "instagram" },
+  { label: "TikTok", icon: "tiktok" },
+  { label: "Other", icon: "other" }
+] as const;
+
+function ReferralIcon({ icon }: { icon: (typeof referralSources)[number]["icon"] }) {
+  if (icon === "x") {
+    return <span aria-hidden="true" className="referral-icon referral-icon-x">𝕏</span>;
+  }
+
+  if (icon === "other") {
+    return <span aria-hidden="true" className="referral-icon referral-icon-other">✦</span>;
+  }
+
+  return (
+    <svg aria-hidden="true" className={`referral-icon referral-icon-${icon}`} viewBox="0 0 24 24">
+      {icon === "reddit" ? <><circle cx="12" cy="12" r="8" /><circle cx="9.2" cy="12" r="1" fill="currentColor" /><circle cx="14.8" cy="12" r="1" fill="currentColor" /><path d="M8.5 15c2.2 1.7 4.8 1.7 7 0M14.5 7.2l1.1-2.2 2 .6" /></> : null}
+      {icon === "instagram" ? <><rect x="4" y="4" width="16" height="16" rx="4" /><circle cx="12" cy="12" r="3.5" /><circle cx="17.2" cy="6.8" r=".9" fill="currentColor" /></> : null}
+      {icon === "tiktok" ? <><path d="M14 4v9.2a3.7 3.7 0 1 1-3-3.6M14 4c1 2.1 2.5 3.2 4.7 3.4" /></> : null}
+    </svg>
+  );
+}
+
 export function NewAdventureForm({
   initialInviteToken = "",
   onboarding = false,
@@ -4442,9 +4468,13 @@ export function NewAdventureForm({
   const campaignDetailsStepIndex = isOnboarding ? -1 : mode === "multiplayer" ? 2 : 1;
   const customWorldStepIndex = hasCustomWorldStep ? campaignDetailsStepIndex + 1 : -1;
   const characterStepIndexInFlow = isOnboarding
-    ? 0
+    ? 2
     : campaignDetailsStepIndex + (hasCustomWorldStep ? 2 : 1);
   const reviewStepIndex = characterStepIndexInFlow + 1;
+  const isOnboardingWelcomeStep = isOnboarding && stepIndex === 0;
+  const isOnboardingReferralStep = isOnboarding && stepIndex === 1;
+  const isOnboardingIntroStep =
+    isOnboardingWelcomeStep || isOnboardingReferralStep;
   const isMultiplayerIntentStep = stepIndex === multiplayerIntentStepIndex;
   const isCampaignDetailsStep = stepIndex === campaignDetailsStepIndex;
   const isCustomWorldStep = stepIndex === customWorldStepIndex;
@@ -4598,6 +4628,29 @@ export function NewAdventureForm({
       isCancelled = true;
     };
   }, [entryState]);
+
+  useEffect(() => {
+    if (!isOnboardingWelcomeStep || entryState !== "ready") {
+      return;
+    }
+
+    const timeoutIds = [
+      window.setTimeout(() => {
+        setFlowTransition("exiting");
+        timeoutIds.push(
+          window.setTimeout(() => {
+            setStepIndex(1);
+            setFlowTransition("entering");
+            timeoutIds.push(
+              window.setTimeout(() => setFlowTransition("idle"), flowTransitionDurationMs)
+            );
+          }, flowTransitionDurationMs)
+        );
+      }, 2_000)
+    ];
+
+    return () => timeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId));
+  }, [entryState, isOnboardingWelcomeStep]);
 
   useEffect(() => {
     if (entryState !== "ready") {
@@ -6184,15 +6237,45 @@ export function NewAdventureForm({
         className="new-adventure-scroll-slider"
         controls="new-adventure-scroll-root"
       />
-      <div className="new-adventure-heading">
-        <p className="eyebrow">New Adventure</p>
-        <h1>{stepTitle}</h1>
-      </div>
+      {!isOnboardingIntroStep ? (
+        <div className="new-adventure-heading">
+          <p className="eyebrow">New Adventure</p>
+          <h1>{stepTitle}</h1>
+        </div>
+      ) : null}
 
       <form className="new-adventure-form" onSubmit={handleSubmit}>
         <div
           className={`new-adventure-flow new-adventure-flow-${flowTransition}`}
         >
+          {isOnboardingWelcomeStep ? (
+            <h1 className="onboarding-welcome">Welcome, traveller.</h1>
+          ) : null}
+
+          {isOnboardingReferralStep ? (
+            <section className="onboarding-referral" aria-labelledby="referral-heading">
+              <h1 id="referral-heading">Where did you hear about AI Taverns?</h1>
+              <div className="onboarding-referral-options">
+                {referralSources.map(({ label, icon }) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => {
+                      trackAnalytics({
+                        name: "Onboarding Referral Source Selected",
+                        properties: { referralSource: label }
+                      });
+                      transitionFlow(() => setStepIndex(characterStepIndexInFlow));
+                    }}
+                  >
+                    <ReferralIcon icon={icon} />
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
           {!isOnboarding && stepIndex === 0 ? (
             <>
               <div className="mode-picker" role="radiogroup" aria-label="Campaign mode">
@@ -7250,6 +7333,7 @@ export function NewAdventureForm({
             </div>
           ) : null}
         </div>
+          {!isOnboardingIntroStep ? <>
           <div className="new-adventure-error-slot">
             {error ? (
               <p className="new-adventure-error" role="alert">
@@ -7338,6 +7422,7 @@ export function NewAdventureForm({
               )}
             </button>
           </div>
+          </> : null}
       </form>
 
       {activeSpellDetail && activeSpellRuleProfile ? (

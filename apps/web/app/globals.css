@@ -1017,17 +1017,9 @@ h1 {
     linear-gradient(180deg, rgba(18, 15, 13, 0.82), transparent 26%, transparent 70%, rgba(18, 15, 13, 0.78));
 }
 
-.onboarding-intro {
-  display: grid;
-  place-items: center;
-  min-height: 100dvh;
-  padding: 24px;
-  overflow: hidden;
-  color: var(--ink);
-  background:
-    radial-gradient(circle at 50% 48%, rgba(18, 15, 13, 0.08) 0 28%, rgba(18, 15, 13, 0.62) 70%, rgba(18, 15, 13, 0.92) 100%),
-    linear-gradient(90deg, rgba(18, 15, 13, 0.84), rgba(18, 15, 13, 0.2) 24%, rgba(18, 15, 13, 0.2) 76%, rgba(18, 15, 13, 0.84)),
-    url("/new-adventure/flow-bg.webp") center / cover;
+.new-adventure-page:has(.onboarding-welcome),
+.new-adventure-page:has(.onboarding-referral) {
+  align-content: center;
 }
 
 .onboarding-welcome {
