@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { NewAdventureForm } from "../new-adventure/new-adventure-form";
+import { OnboardingForm } from "./onboarding-form";
 import { getOptionalUser } from "@/lib/auth";
 
 type OnboardingPageProps = {
@@ -24,7 +24,7 @@ export default async function OnboardingPage({
   }
 
   return (
-    <NewAdventureForm
+    <OnboardingForm
       initialInviteToken={inviteToken}
       userEmail={user.email}
       userId={user.id}

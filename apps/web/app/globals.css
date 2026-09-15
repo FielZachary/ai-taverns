@@ -1017,6 +1017,102 @@ h1 {
     linear-gradient(180deg, rgba(18, 15, 13, 0.82), transparent 26%, transparent 70%, rgba(18, 15, 13, 0.78));
 }
 
+.onboarding-intro {
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: 24px;
+  overflow: hidden;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 50% 48%, rgba(18, 15, 13, 0.08) 0 28%, rgba(18, 15, 13, 0.62) 70%, rgba(18, 15, 13, 0.92) 100%),
+    linear-gradient(90deg, rgba(18, 15, 13, 0.84), rgba(18, 15, 13, 0.2) 24%, rgba(18, 15, 13, 0.2) 76%, rgba(18, 15, 13, 0.84)),
+    url("/new-adventure/flow-bg.webp") center / cover;
+}
+
+.onboarding-welcome {
+  margin: 0;
+  font-size: clamp(3rem, 9vw, 7rem);
+  line-height: 0.95;
+  text-align: center;
+  animation: onboarding-welcome 2s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.onboarding-referral {
+  display: grid;
+  justify-items: center;
+  gap: 34px;
+  width: min(100%, 680px);
+  text-align: center;
+  animation: new-adventure-flow-enter 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.onboarding-referral h1 {
+  margin: 0;
+  font-size: clamp(2.1rem, 5vw, 4.3rem);
+  line-height: 1;
+}
+
+.onboarding-referral-options {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+
+.onboarding-referral-options button {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 122px;
+  padding: 13px 17px;
+  border: 1px solid rgba(244, 207, 122, 0.55);
+  border-radius: 8px;
+  color: var(--ink);
+  background: rgba(28, 21, 16, 0.76);
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 180ms ease, background 180ms ease, box-shadow 180ms ease;
+}
+
+.onboarding-referral-options button:hover,
+.onboarding-referral-options button:focus-visible {
+  transform: translateY(-2px);
+  background: rgba(75, 53, 27, 0.88);
+  box-shadow: 0 0 18px rgba(244, 207, 122, 0.22);
+}
+
+.referral-icon {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  fill: none;
+}
+
+.referral-icon-x,
+.referral-icon-other {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+@keyframes onboarding-welcome {
+  0% { opacity: 0; transform: translateY(44px); }
+  25%, 75% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(44px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-welcome,
+  .onboarding-referral { animation: none; }
+}
+
 .new-adventure-heading,
 .new-adventure-form {
   position: relative;

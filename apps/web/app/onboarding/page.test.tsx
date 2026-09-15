@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { getOptionalUserMock, newAdventureFormMock, redirectMock } = vi.hoisted(
+const { getOptionalUserMock, onboardingFormMock, redirectMock } = vi.hoisted(
   () => ({
     getOptionalUserMock: vi.fn(),
-    newAdventureFormMock: vi.fn(),
+    onboardingFormMock: vi.fn(),
     redirectMock: vi.fn((destination: string) => {
       throw Object.assign(new Error("NEXT_REDIRECT"), { destination });
     })
@@ -18,8 +18,8 @@ vi.mock("next/navigation", () => ({
   redirect: redirectMock
 }));
 
-vi.mock("../new-adventure/new-adventure-form", () => ({
-  NewAdventureForm: newAdventureFormMock
+vi.mock("./onboarding-form", () => ({
+  OnboardingForm: onboardingFormMock
 }));
 
 import OnboardingPage from "./page";
@@ -60,7 +60,7 @@ describe("onboarding page", () => {
     const result = await OnboardingPage({ searchParams: Promise.resolve({}) });
 
     expect(result).toMatchObject({
-      type: newAdventureFormMock,
+      type: onboardingFormMock,
       props: {
         initialInviteToken: undefined,
         userEmail: "hero@example.com",

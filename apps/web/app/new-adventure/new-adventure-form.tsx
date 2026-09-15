@@ -76,6 +76,7 @@ type JoinPreview = {
 
 type NewAdventureFormProps = {
   initialInviteToken?: string;
+  onboarding?: boolean;
   userEmail?: string;
   userId?: string;
 };
@@ -231,6 +232,7 @@ const multiplayerCustomCreateSteps = [
   "Review"
 ];
 const joinSteps = ["Mode", "Multiplayer", "Game Code", "Character", "Review"];
+const onboardingSteps = ["Character", "Review"];
 const joinCodePattern = /[A-HJ-NP-Z2-9]{6}/;
 const eldermereBackstoryLocalizationThreshold = 100;
 const customCharacterCreationSteps = [
@@ -4318,6 +4320,7 @@ function NewAdventureEntryLoadingPanel({
 
 export function NewAdventureForm({
   initialInviteToken = "",
+  onboarding = false,
   userEmail,
   userId
 }: NewAdventureFormProps) {
@@ -4325,12 +4328,13 @@ export function NewAdventureForm({
     process.env.NODE_ENV === "test" ? "ready" : "preloading"
   );
   const normalizedInitialInviteToken = initialInviteToken.trim();
+  const isOnboarding = onboarding;
   const [stepIndex, setStepIndex] = useState(
-    normalizedInitialInviteToken ? 2 : 0
+    isOnboarding ? 0 : normalizedInitialInviteToken ? 2 : 0
   );
   const [characterStepIndex, setCharacterStepIndex] = useState(0);
   const [mode, setMode] = useState<CampaignMode>(
-    normalizedInitialInviteToken ? "multiplayer" : "single_player"
+    isOnboarding || !normalizedInitialInviteToken ? "single_player" : "multiplayer"
   );
   const [multiplayerIntent, setMultiplayerIntent] =
     useState<MultiplayerIntent>(
@@ -4422,7 +4426,9 @@ export function NewAdventureForm({
   const isCustomGenre = campaignGenre === "custom";
   const hasCustomWorldStep = !isJoinFlow && isCustomGenre;
   const steps =
-    mode === "multiplayer"
+    isOnboarding
+      ? onboardingSteps
+      : mode === "multiplayer"
       ? isJoinFlow
         ? joinSteps
         : hasCustomWorldStep
@@ -4432,10 +4438,12 @@ export function NewAdventureForm({
       ? customCreateSteps
       : createSteps;
   const isLastStep = stepIndex === steps.length - 1;
-  const multiplayerIntentStepIndex = mode === "multiplayer" ? 1 : -1;
-  const campaignDetailsStepIndex = mode === "multiplayer" ? 2 : 1;
+  const multiplayerIntentStepIndex = isOnboarding ? -1 : mode === "multiplayer" ? 1 : -1;
+  const campaignDetailsStepIndex = isOnboarding ? -1 : mode === "multiplayer" ? 2 : 1;
   const customWorldStepIndex = hasCustomWorldStep ? campaignDetailsStepIndex + 1 : -1;
-  const characterStepIndexInFlow = campaignDetailsStepIndex + (hasCustomWorldStep ? 2 : 1);
+  const characterStepIndexInFlow = isOnboarding
+    ? 0
+    : campaignDetailsStepIndex + (hasCustomWorldStep ? 2 : 1);
   const reviewStepIndex = characterStepIndexInFlow + 1;
   const isMultiplayerIntentStep = stepIndex === multiplayerIntentStepIndex;
   const isCampaignDetailsStep = stepIndex === campaignDetailsStepIndex;
@@ -4835,11 +4843,11 @@ export function NewAdventureForm({
         : "Create your character art";
     }
 
-    if (stepIndex === 0) {
+    if (!isOnboarding && stepIndex === 0) {
       return "Choose your game mode";
     }
 
-    if (stepIndex === 1) {
+    if (!isOnboarding && stepIndex === 1) {
       if (mode === "multiplayer") {
         return "Choose multiplayer setup";
       }
@@ -4891,6 +4899,7 @@ export function NewAdventureForm({
     isEquipmentCharacterStep,
     isEquipmentSummaryStep,
     isInviteJoinFlow,
+    isOnboarding,
     mode,
     reviewStepIndex,
     stepIndex,
@@ -6184,7 +6193,7 @@ export function NewAdventureForm({
         <div
           className={`new-adventure-flow new-adventure-flow-${flowTransition}`}
         >
-          {stepIndex === 0 ? (
+          {!isOnboarding && stepIndex === 0 ? (
             <>
               <div className="mode-picker" role="radiogroup" aria-label="Campaign mode">
                 <button
