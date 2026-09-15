@@ -69,6 +69,7 @@ export const AnalyticsEventNameSchema = z.enum([
   "Landing Page Viewed",
   "Onboarding Started",
   "Onboarding Referral Source Selected",
+  "Onboarding D&D Experience Selected",
   "User Signed In",
   "Campaign Mode Selected",
   "Multiplayer Intent Selected",

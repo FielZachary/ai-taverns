@@ -232,7 +232,13 @@ const multiplayerCustomCreateSteps = [
   "Review"
 ];
 const joinSteps = ["Mode", "Multiplayer", "Game Code", "Character", "Review"];
-const onboardingSteps = ["Welcome", "Referral", "Character", "Review"];
+const onboardingSteps = [
+  "Welcome",
+  "Referral",
+  "Experience",
+  "Character",
+  "Review"
+];
 const joinCodePattern = /[A-HJ-NP-Z2-9]{6}/;
 const eldermereBackstoryLocalizationThreshold = 100;
 const customCharacterCreationSteps = [
@@ -4325,6 +4331,12 @@ const referralSources = [
   { label: "TikTok", icon: "tiktok" },
   { label: "Other", icon: "other" }
 ] as const;
+const onboardingExperienceOptions = [
+  "I am new to D&D",
+  "I have played a few times",
+  "I play D&D regularly",
+  "I am an experienced player or DM"
+] as const;
 
 function ReferralIcon({ icon }: { icon: (typeof referralSources)[number]["icon"] }) {
   if (icon === "x") {
@@ -4368,6 +4380,7 @@ export function NewAdventureForm({
     );
   const [inviteToken] = useState(normalizedInitialInviteToken);
   const [gameCode, setGameCode] = useState("");
+  const [onboardingDndExperience, setOnboardingDndExperience] = useState("");
   const [joinPreview, setJoinPreview] = useState<JoinPreview | null>(null);
   const [playerName, setPlayerName] = useState("");
   const [campaignGenre, setCampaignGenre] = useState(campaignGenres[0].id);
@@ -4468,13 +4481,16 @@ export function NewAdventureForm({
   const campaignDetailsStepIndex = isOnboarding ? -1 : mode === "multiplayer" ? 2 : 1;
   const customWorldStepIndex = hasCustomWorldStep ? campaignDetailsStepIndex + 1 : -1;
   const characterStepIndexInFlow = isOnboarding
-    ? 2
+    ? 3
     : campaignDetailsStepIndex + (hasCustomWorldStep ? 2 : 1);
   const reviewStepIndex = characterStepIndexInFlow + 1;
   const isOnboardingWelcomeStep = isOnboarding && stepIndex === 0;
   const isOnboardingReferralStep = isOnboarding && stepIndex === 1;
+  const isOnboardingExperienceStep = isOnboarding && stepIndex === 2;
   const isOnboardingIntroStep =
-    isOnboardingWelcomeStep || isOnboardingReferralStep;
+    isOnboardingWelcomeStep ||
+    isOnboardingReferralStep ||
+    isOnboardingExperienceStep;
   const isMultiplayerIntentStep = stepIndex === multiplayerIntentStepIndex;
   const isCampaignDetailsStep = stepIndex === campaignDetailsStepIndex;
   const isCustomWorldStep = stepIndex === customWorldStepIndex;
@@ -6264,7 +6280,7 @@ export function NewAdventureForm({
                         name: "Onboarding Referral Source Selected",
                         properties: { referralSource: label }
                       });
-                      transitionFlow(() => setStepIndex(characterStepIndexInFlow));
+                      transitionFlow(() => setStepIndex(2));
                     }}
                   >
                     <ReferralIcon icon={icon} />
@@ -6272,6 +6288,38 @@ export function NewAdventureForm({
                   </button>
                 ))}
               </div>
+            </section>
+          ) : null}
+
+          {isOnboardingExperienceStep ? (
+            <section className="onboarding-experience" aria-labelledby="experience-heading">
+              <h1 id="experience-heading">Describe your experience in D&amp;D 5e</h1>
+              <label>
+                <span>Experience level</span>
+                <select
+                  value={onboardingDndExperience}
+                  onChange={(event) => setOnboardingDndExperience(event.target.value)}
+                >
+                  <option disabled value="">Select your experience</option>
+                  {onboardingExperienceOptions.map((experience) => (
+                    <option key={experience} value={experience}>{experience}</option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                disabled={!onboardingDndExperience}
+                onClick={() => {
+                  trackAnalytics({
+                    name: "Onboarding D&D Experience Selected",
+                    properties: { dndExperience: onboardingDndExperience }
+                  });
+                  transitionFlow(() => setStepIndex(characterStepIndexInFlow));
+                }}
+              >
+                Continue
+                <span className="fantasy-arrow-icon fantasy-arrow-forward" aria-hidden="true" />
+              </button>
             </section>
           ) : null}
 

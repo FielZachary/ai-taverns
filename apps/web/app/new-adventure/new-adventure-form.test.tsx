@@ -217,8 +217,18 @@ describe("NewAdventureForm", () => {
     await finishFlowTransition();
 
     expect(
-      screen.getByRole("heading", { name: /choose your character build/i })
+      screen.getByRole("heading", {
+        name: "Describe your experience in D&D 5e"
+      })
     ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Experience level"), {
+      target: { value: "I have played a few times" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await finishFlowTransition();
+
+    expect(screen.getByRole("heading", { name: /choose your character build/i })).toBeInTheDocument();
   });
 
   it("lets point-buy stats spend points and advance from valid stats", async () => {
