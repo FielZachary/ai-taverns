@@ -1030,12 +1030,12 @@ h1 {
   line-height: 0.95;
   white-space: nowrap;
   text-align: center;
-  animation: onboarding-welcome 3.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: onboarding-welcome 5s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .onboarding-welcome-traveller {
   color: var(--ink);
-  animation: onboarding-welcome-traveller 3.4s ease-in-out both;
+  animation: onboarding-welcome-traveller 5s ease-in-out both;
 }
 
 .onboarding-referral {
@@ -1105,13 +1105,13 @@ h1 {
 
 @keyframes onboarding-welcome {
   0% { opacity: 0; transform: translateY(54px); }
-  32%, 70% { opacity: 1; transform: translateY(0); }
+  28%, 78% { opacity: 1; transform: translateY(0); }
   100% { opacity: 0; transform: translateY(36px); }
 }
 
 @keyframes onboarding-welcome-traveller {
-  0%, 42% { color: var(--ink); }
-  64%, 100% { color: var(--gold-bright); }
+  0%, 40% { color: var(--ink); }
+  62%, 100% { color: var(--gold-bright); }
 }
 
 @media (prefers-reduced-motion: reduce) {
