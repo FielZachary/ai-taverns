@@ -11,6 +11,7 @@ import {
 } from "react";
 import {
   Check,
+  ChevronDown,
   Dice5,
   ImagePlus,
   X,
@@ -4332,10 +4333,10 @@ const referralSources = [
   { label: "Other", icon: "other" }
 ] as const;
 const onboardingExperienceOptions = [
-  "I am new to D&D",
-  "I have played a few times",
-  "I play D&D regularly",
-  "I am an experienced player or DM"
+  "I am completely new, hehe",
+  "I've played Baldur's Gate but thats pretty much it!",
+  "I've played D&D quite a few times",
+  "I'm an experience player or DM"
 ] as const;
 
 function ReferralIcon({ icon }: { icon: (typeof referralSources)[number]["icon"] }) {
@@ -4381,6 +4382,8 @@ export function NewAdventureForm({
   const [inviteToken] = useState(normalizedInitialInviteToken);
   const [gameCode, setGameCode] = useState("");
   const [onboardingDndExperience, setOnboardingDndExperience] = useState("");
+  const [isOnboardingExperienceMenuOpen, setIsOnboardingExperienceMenuOpen] =
+    useState(false);
   const [joinPreview, setJoinPreview] = useState<JoinPreview | null>(null);
   const [playerName, setPlayerName] = useState("");
   const [campaignGenre, setCampaignGenre] = useState(campaignGenres[0].id);
@@ -6294,32 +6297,60 @@ export function NewAdventureForm({
           {isOnboardingExperienceStep ? (
             <section className="onboarding-experience" aria-labelledby="experience-heading">
               <h1 id="experience-heading">Describe your experience in D&amp;D 5e</h1>
-              <label>
+              <div className="onboarding-experience-dropdown">
                 <span>Experience level</span>
-                <select
-                  value={onboardingDndExperience}
-                  onChange={(event) => setOnboardingDndExperience(event.target.value)}
+                <button
+                  aria-expanded={isOnboardingExperienceMenuOpen}
+                  aria-haspopup="listbox"
+                  aria-label="Experience level"
+                  className="onboarding-experience-trigger"
+                  onClick={() =>
+                    setIsOnboardingExperienceMenuOpen((isOpen) => !isOpen)
+                  }
+                  type="button"
                 >
-                  <option disabled value="">Select your experience</option>
+                  <span>{onboardingDndExperience || "Select your experience"}</span>
+                  <ChevronDown aria-hidden="true" size={18} />
+                </button>
+                <div
+                  aria-hidden={!isOnboardingExperienceMenuOpen}
+                  className={`onboarding-experience-options${
+                    isOnboardingExperienceMenuOpen ? " open" : ""
+                  }`}
+                  role="listbox"
+                >
                   {onboardingExperienceOptions.map((experience) => (
-                    <option key={experience} value={experience}>{experience}</option>
+                    <button
+                      aria-selected={onboardingDndExperience === experience}
+                      key={experience}
+                      onClick={() => {
+                        setOnboardingDndExperience(experience);
+                        setIsOnboardingExperienceMenuOpen(false);
+                      }}
+                      role="option"
+                      type="button"
+                    >
+                      {experience}
+                    </button>
                   ))}
-                </select>
-              </label>
-              <button
-                type="button"
-                disabled={!onboardingDndExperience}
-                onClick={() => {
-                  trackAnalytics({
-                    name: "Onboarding D&D Experience Selected",
-                    properties: { dndExperience: onboardingDndExperience }
-                  });
-                  transitionFlow(() => setStepIndex(characterStepIndexInFlow));
-                }}
-              >
-                Continue
-                <span className="fantasy-arrow-icon fantasy-arrow-forward" aria-hidden="true" />
-              </button>
+                </div>
+              </div>
+              <div className="creation-actions onboarding-experience-actions">
+                <button
+                  type="button"
+                  disabled={!onboardingDndExperience}
+                  onClick={() => {
+                    trackAnalytics({
+                      name: "Onboarding D&D Experience Selected",
+                      properties: { dndExperience: onboardingDndExperience }
+                    });
+                    transitionFlow(() => setStepIndex(characterStepIndexInFlow));
+                  }}
+                >
+                  Continue
+                  <span className="fantasy-arrow-icon fantasy-arrow-forward" aria-hidden="true" />
+                </button>
+              </div>
             </section>
           ) : null}
 

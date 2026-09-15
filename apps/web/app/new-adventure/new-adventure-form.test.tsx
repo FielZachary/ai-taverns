@@ -222,9 +222,10 @@ describe("NewAdventureForm", () => {
       })
     ).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Experience level"), {
-      target: { value: "I have played a few times" }
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Experience level" }));
+    fireEvent.click(
+      screen.getByRole("option", { name: "I've played D&D quite a few times" })
+    );
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     await finishFlowTransition();
 

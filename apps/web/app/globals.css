@@ -1065,22 +1065,99 @@ h1 {
   white-space: nowrap;
 }
 
-.onboarding-experience label {
+.onboarding-experience-dropdown {
+  position: relative;
   display: grid;
   gap: 9px;
   width: min(100%, 380px);
   text-align: left;
 }
 
-.onboarding-experience label span {
+.onboarding-experience-dropdown > span {
   color: var(--gold-bright);
   font-size: 0.8rem;
   font-weight: 900;
   text-transform: uppercase;
 }
 
-.onboarding-experience select {
+.onboarding-experience-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   width: 100%;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid rgba(244, 207, 122, 0.42);
+  border-radius: 8px;
+  color: var(--ink);
+  background: rgba(17, 13, 10, 0.76);
+  font: inherit;
+  font-weight: 800;
+  text-align: left;
+}
+
+.onboarding-experience-trigger svg {
+  transition: transform 220ms ease;
+}
+
+.onboarding-experience-trigger[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+.onboarding-experience-options {
+  position: absolute;
+  top: calc(100% - 1px);
+  right: 0;
+  left: 0;
+  z-index: 4;
+  display: grid;
+  gap: 4px;
+  max-height: 0;
+  overflow: hidden;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-top: 0;
+  border-radius: 0 0 8px 8px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-8px);
+  transition: max-height 280ms ease, padding 280ms ease, opacity 180ms ease, transform 280ms ease;
+}
+
+.onboarding-experience-options.open {
+  max-height: 260px;
+  padding: 8px;
+  border-color: rgba(244, 207, 122, 0.42);
+  border-top-color: rgba(244, 207, 122, 0.18);
+  background: rgba(17, 13, 10, 0.97);
+  box-shadow: 0 16px 28px rgba(0, 0, 0, 0.28);
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.onboarding-experience-options button {
+  width: 100%;
+  padding: 10px;
+  border: 0;
+  border-radius: 5px;
+  color: var(--ink);
+  background: transparent;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-align: left;
+}
+
+.onboarding-experience-options button:hover,
+.onboarding-experience-options button:focus-visible,
+.onboarding-experience-options button[aria-selected="true"] {
+  background: rgba(244, 207, 122, 0.16);
+}
+
+.onboarding-experience-actions {
+  padding-top: 0;
 }
 
 .onboarding-referral-options {
