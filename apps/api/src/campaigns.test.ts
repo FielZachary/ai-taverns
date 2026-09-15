@@ -2567,8 +2567,15 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
     unknown
   >;
   const openingPlan = metadata.eldermereOpeningPlan as Record<string, unknown>;
-  const plannerInput = getProviderInputs().at(0);
-  const narratorInput = getProviderInputs().at(1);
+  const briefPlannerInput = getProviderInputs().find((input) =>
+    input.instructions.includes("opener-critical brief")
+  );
+  const plannerInput = getProviderInputs().find((input) =>
+    input.message.includes("APPROVED OPENING BRIEF — SOURCE OF TRUTH")
+  );
+  const narratorInput = getProviderInputs().find((input) =>
+    input.instructions.includes("writing a campaign opener")
+  );
   const openingEvent = database.campaignEvents.find(
     (event) =>
       event.campaign_id === created.campaign.id &&
@@ -2614,6 +2621,10 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   );
   assert.ok((contextStorageState?.contextChunkCount ?? 0) >= 3);
 
+  assert.ok(briefPlannerInput);
+  assert.match(briefPlannerInput.instructions, /opener-critical brief/);
+  assert.match(briefPlannerInput.message, /OPENING-SCENE HANDOFF REQUIREMENTS/);
+  assert.doesNotMatch(briefPlannerInput.message, /CAMPAIGN ANCHOR REQUIREMENTS/);
   assert.ok(plannerInput);
   assert.match(plannerInput.instructions, /campaign-opening planner/);
   assert.match(plannerInput.message, /PLAYER CHARACTER/);
@@ -2735,7 +2746,15 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
     JSON.parse(plannerDebug.rawResponse as string).concept,
     openingPlan.concept
   );
-  assert.deepEqual(plannerDebug.parsedOutput, openingPlan);
+  assert.deepEqual(plannerDebug.parsedOutput, {
+    region: openingPlan.region,
+    starting_location: openingPlan.starting_location,
+    why_the_player_is_here_now: openingPlan.why_the_player_is_here_now,
+    concept: openingPlan.concept,
+    opening_scene: openingPlan.opening_scene,
+    private_truth: "",
+    campaign_anchors: []
+  });
   assert.match(
     JSON.stringify(plannerDebug.requestMessages),
     /campaign-opening planner/

@@ -699,12 +699,15 @@ const campaignAnchorTypes = [
 type CampaignAnchorType = (typeof campaignAnchorTypes)[number];
 type CampaignAnchorVisibility = "player_safe" | "dm_only";
 
-type EldermereOpeningPlan = {
+type EldermereOpeningBrief = {
   region: string;
   startingLocation: string;
   whyThePlayerIsHereNow: string;
   concept: string;
   openingScene: string;
+};
+
+type EldermereOpeningPlan = EldermereOpeningBrief & {
   privateTruth: string;
   campaignAnchors: Array<{
     type: CampaignAnchorType;
@@ -3047,28 +3050,31 @@ export async function createCampaignForMode(
       | undefined;
     const opening = hasEldermereWorldProfile(createdState.campaign)
       ? await (async () => {
-          const plan = await askEldermereOpeningPlanner(
+          const brief = await askEldermereOpeningBriefPlanner(
             db,
             runtime,
             createdState.campaign,
             [createdState.player],
             openingTurn.id
           );
-          await persistEldermereOpeningPlan(
-            db,
-            createdState.campaign.id,
-            plan.plan
-          );
-          foundationCompilerPromise = runEldermereCampaignFoundationCompiler(
-            db,
-            runtime,
-            {
+          await persistEldermereOpeningBrief(db, createdState.campaign.id, brief.brief);
+          foundationCompilerPromise = (async () => {
+            const foundation = await askEldermereOpeningPlanner(
+              db,
+              runtime,
+              createdState.campaign,
+              [createdState.player],
+              openingTurn.id,
+              brief.brief
+            );
+            await persistEldermereOpeningPlan(db, createdState.campaign.id, foundation.plan);
+            return runEldermereCampaignFoundationCompiler(db, runtime, {
               campaign: createdState.campaign,
               openingRequest,
-              plan: plan.plan,
+              plan: foundation.plan,
               turnId: openingTurn.id
-            }
-          );
+            });
+          })();
 
           const opening = await askEldermereOpeningNarrator(
             db,
@@ -3076,7 +3082,7 @@ export async function createCampaignForMode(
             createdState.campaign,
             [createdState.player],
             eldermereOpeningNarratorInstructions(),
-            plan.plan,
+            brief.brief,
             openingTurn.id,
             { allowResolvedCombatWithoutRolls: true }
           );
@@ -3085,7 +3091,7 @@ export async function createCampaignForMode(
             ...opening,
             debug: {
               ...opening.debug,
-              eldermereOpeningPlanner: plan.debug
+              eldermereOpeningPlanner: brief.debug
             }
           };
         })()
@@ -9148,6 +9154,74 @@ function eldermereOpeningPlannerInstructions() {
   ].join("\n");
 }
 
+function eldermereOpeningBriefPlannerInstructions() {
+  return [
+    "You are the campaign-opening planner for AI Taverns, designing the core concept for a new Eldermere campaign.",
+    "Create a campaign concept, not player-facing narration, encounter instructions, or a world bible.",
+    "Return exactly one valid JSON object and no Markdown.",
+    "Use the exact JSON shape supplied in the request.",
+    "This is the opener-critical brief. Do not create private_truth or campaign_anchors; a background foundation planner will create those after the opening brief is approved."
+  ].join("\n");
+}
+
+function formatEldermereOpeningBriefRequest(input: {
+  campaign: CampaignRow;
+  players: PlayerRow[];
+}) {
+  const start = eldermereCampaignStartFromMetadata(input.campaign);
+  const region = start?.region;
+  const settlement = start?.settlement;
+
+  return [
+    "PLAYER CHARACTER",
+    formatEldermereCampaignCharacterContext(input.players),
+    "",
+    "CANONICAL START",
+    `Region: ${region?.name ?? "Eldermere"}`,
+    `Starting location: ${settlement?.name ?? "the selected starting location"}`,
+    "",
+    "ELDERMERE GROUNDING",
+    "Eldermere is grounded high fantasy built on the ruins of a fallen magocracy. Magic is costly, old ruins remain dangerous, and local powers compete over what the past left behind.",
+    region
+      ? `Selected region: ${region.summary} Its current tensions include ${region.internalConflict} and ${region.externalConflict}.`
+      : "",
+    settlement
+      ? `Selected starting location: ${settlement.draw} Remembered detail: ${settlement.rememberedDetail}. Current friction: ${settlement.friction}.`
+      : "",
+    "",
+    "CONCEPT REQUIREMENTS",
+    "Create a campaign concept that begins with a specific, present-tense change in the selected starting location.",
+    "Before writing the concept, think through the campaign as an evolving situation: why the player's new situation exists, how it can deepen or change through play, what the player can eventually learn that changes their understanding of it, and what meaningful choices that discovery can create.",
+    "Write the concept as that complete evolving situation—not merely as an opening hook, a first job, or a premise with a vague future mystery attached.",
+    "The concept must:",
+    "- Put the player in a clear starting position.",
+    "- Establish why the player is here now through an immediate local circumstance, such as a public problem, job, mistake, discovery, threat, or opportunity.",
+    "- Establish an ongoing situation that can generate many sessions of play.",
+    "- Let the player learn Eldermere naturally through action and consequences.",
+    "- Use the selected region and starting location as the campaign's beginning.",
+    "- Doesn't require the player to know anything about Eldermere beforehand.",
+    "- Fit the concept to the lore, atmosphere, conflicts, and character of the selected Eldermere region and starting location.",
+    "",
+    "OPENING-SCENE HANDOFF REQUIREMENTS",
+    "Write opening_scene as a compact handoff for the narrator: a first playable moment, not player-facing prose, a quest briefing, or a list of instructions.",
+    "The opening must begin when the player first encounters a live situation already unfolding. Start one beat before anyone recruits the player, asks for help, explains the central problem, or assigns a task.",
+    "Put a visible conflict, disruption, danger, exchange, discovery, pursuit, argument, suspicious behavior, or other active situation in motion before the player. The player must be free to engage, ignore, investigate, interrupt, help, exploit, leave, or respond in an unexpected way.",
+    "Describe only what the player can immediately observe, hear, reasonably infer, or learn from brief overheard dialogue: the exact location, striking sensory details, visible people and their behavior, the immediate source of tension, and an unanswered question or suspicious detail.",
+    "Include one short, player-safe piece of common local context about the selected starting settlement: what an ordinary person from Eldermere would recognize it as, remember it for, depend on it for, or expect to find there. This must orient the player without becoming a history lesson or explaining the campaign's deeper conflict.",
+    "Do not state the full cause, full stakes, deadline, institution, political context, hidden truth, or likely consequences unless the player could naturally know them at a glance or from what is said in the moment.",
+    "Do not have an NPC appoint the player, give the player a job, or ask the player to solve the central problem in opening_scene. Convey why an object, service, role, or system matters through visible behavior, conflict, or immediate consequence rather than explanation.",
+    "",
+    "Return only this JSON:",
+    JSON.stringify({
+      region: region?.name ?? "selected Eldermere region",
+      starting_location: settlement?.name ?? "selected Eldermere location",
+      why_the_player_is_here_now: "A short, self-contained explanation of the immediate local circumstance that puts the player in this situation. Do not rely on or invent personal history.",
+      concept: "A complete 2-3 paragraph account of the campaign as an evolving situation: its beginning, how it can deepen through play, and what the player may eventually discover and decide.",
+      opening_scene: "The exact first playable situation."
+    }, null, 2)
+  ].filter(Boolean).join("\n");
+}
+
 function formatEldermereCampaignConceptRequest(input: {
   campaign: CampaignRow;
   players: PlayerRow[];
@@ -9246,7 +9320,7 @@ function formatEldermereCampaignConceptRequest(input: {
 
 function formatEldermereNarratorOpeningRequest(input: {
   players: PlayerRow[];
-  plan: EldermereOpeningPlan;
+  plan: EldermereOpeningBrief;
 }) {
   return [
     formatEldermereCampaignCharacterContext(input.players),
@@ -9434,6 +9508,24 @@ function parseCampaignAnchor(value: Record<string, unknown>, index: number) {
   };
 }
 
+function parseEldermereOpeningBrief(content: string) {
+  const parsed = parseJsonRecord(content);
+  const errors: string[] = [];
+  const brief: EldermereOpeningBrief = {
+    region: readString(parsed, "region", errors),
+    startingLocation: readString(parsed, "starting_location", errors),
+    whyThePlayerIsHereNow: readString(parsed, "why_the_player_is_here_now", errors),
+    concept: readString(parsed, "concept", errors),
+    openingScene: readString(parsed, "opening_scene", errors)
+  };
+
+  if (errors.length > 0) {
+    throw new Error(`Eldermere opening brief returned invalid JSON: ${errors.join("; ")}`);
+  }
+
+  return brief;
+}
+
 function parseEldermereOpeningPlan(content: string) {
   const parsed = parseJsonRecord(content);
   const errors: string[] = [];
@@ -9477,6 +9569,16 @@ function parseEldermereOpeningPlan(content: string) {
   return plan;
 }
 
+function applyEldermereOpeningBrief(
+  brief: EldermereOpeningBrief,
+  foundation: EldermereOpeningPlan
+): EldermereOpeningPlan {
+  return {
+    ...foundation,
+    ...brief
+  };
+}
+
 function openingPlanToJson(plan: EldermereOpeningPlan) {
   return {
     region: plan.region,
@@ -9498,7 +9600,7 @@ function openingPlanToJson(plan: EldermereOpeningPlan) {
   };
 }
 
-function narratorOpeningPlanToJson(plan: EldermereOpeningPlan) {
+function narratorOpeningPlanToJson(plan: EldermereOpeningBrief) {
   return {
     region: plan.region,
     starting_location: plan.startingLocation,
@@ -9765,20 +9867,82 @@ function appendGameplayTurnOutputContractReminder(
   ].join("\n");
 }
 
-async function askEldermereOpeningPlanner(
+async function askEldermereOpeningBriefPlanner(
   db: Queryable,
   runtime: DungeonMasterRuntime,
   campaign: CampaignRow,
   players: PlayerRow[],
   turnId?: string
+): Promise<{ brief: EldermereOpeningBrief; debug: EldermereOpeningPlannerDebug }> {
+  const traceId = randomUUID();
+  const startedAt = Date.now();
+  const instructions = eldermereOpeningBriefPlannerInstructions();
+  const message = formatEldermereOpeningBriefRequest({ campaign, players });
+
+  await logTurnDebugTrace(db, {
+    campaignId: campaign.id,
+    traceId,
+    phase: "eldermere_opening_brief_planner_started",
+    turnId,
+    elapsedMs: 0,
+    payload: { message: textStats(message), instructions: textStats(instructions) }
+  });
+
+  const providerData = await runtime.askProvider({ message, instructions });
+  const brief = parseEldermereOpeningBrief(providerData.content);
+  const start = eldermereCampaignStartFromMetadata(campaign);
+
+  if (
+    (start?.region && brief.region !== start.region.name) ||
+    (start?.settlement && brief.startingLocation !== start.settlement.name)
+  ) {
+    throw new Error("Eldermere opening brief must use the selected canonical start.");
+  }
+
+  await logTurnDebugTrace(db, {
+    campaignId: campaign.id,
+    traceId,
+    phase: "eldermere_opening_brief_planner_completed",
+    turnId,
+    elapsedMs: Date.now() - startedAt,
+    payload: { region: brief.region, startingLocation: brief.startingLocation }
+  });
+
+  return {
+    brief,
+    debug: eldermereOpeningPlannerDebug({
+      instructions,
+      message,
+      providerData,
+      plan: { ...brief, privateTruth: "", campaignAnchors: [] }
+    })
+  };
+}
+
+async function askEldermereOpeningPlanner(
+  db: Queryable,
+  runtime: DungeonMasterRuntime,
+  campaign: CampaignRow,
+  players: PlayerRow[],
+  turnId?: string,
+  brief?: EldermereOpeningBrief
 ): Promise<EldermereOpeningPlannerResult> {
   const traceId = randomUUID();
   const startedAt = Date.now();
   const instructions = eldermereOpeningPlannerInstructions();
-  const message = formatEldermereCampaignConceptRequest({
+  const baseMessage = formatEldermereCampaignConceptRequest({
     campaign,
     players
   });
+  const message = brief
+    ? [
+        baseMessage,
+        "",
+        "APPROVED OPENING BRIEF — SOURCE OF TRUTH",
+        "Do not change, contradict, or replace these five fields. Return them verbatim while completing the private truth and campaign anchors.",
+        JSON.stringify(narratorOpeningPlanToJson(brief), null, 2)
+      ].join("\n")
+    : baseMessage;
 
   await logTurnDebugTrace(db, {
     campaignId: campaign.id,
@@ -9831,7 +9995,9 @@ async function askEldermereOpeningPlanner(
 
   try {
     initialData = await callPlanner("initial");
-    const plan = parseEldermereOpeningPlan(initialData.content);
+    const plan = brief
+      ? applyEldermereOpeningBrief(brief, parseEldermereOpeningPlan(initialData.content))
+      : parseEldermereOpeningPlan(initialData.content);
 
     await logTurnDebugTrace(db, {
       campaignId: campaign.id,
@@ -9870,7 +10036,9 @@ async function askEldermereOpeningPlanner(
 
     try {
       const repairData = await callPlanner("repair");
-      const plan = parseEldermereOpeningPlan(repairData.content);
+      const plan = brief
+        ? applyEldermereOpeningBrief(brief, parseEldermereOpeningPlan(repairData.content))
+        : parseEldermereOpeningPlan(repairData.content);
 
       await logTurnDebugTrace(db, {
         campaignId: campaign.id,
@@ -10271,7 +10439,7 @@ function scheduleOpeningContextFinalization(
 
 function findForbiddenOpeningTerms(
   _narration: string,
-  _plan: EldermereOpeningPlan
+  _plan: EldermereOpeningBrief
 ) {
   return [] as string[];
 }
@@ -10347,10 +10515,13 @@ function addSemanticOpeningTag(
 
 function normalizeEldermereOpeningSemanticTags(
   narration: string,
-  plan: EldermereOpeningPlan
+  plan: EldermereOpeningBrief
 ) {
   const strippedNarration = stripExtraSemanticOpeningTags(narration);
-  const playerSafeAnchors = plan.campaignAnchors.filter(
+  const campaignAnchors = hasEldermereCampaignAnchors(plan)
+    ? plan.campaignAnchors
+    : [];
+  const playerSafeAnchors = campaignAnchors.filter(
     (anchor) =>
       anchor.visibility === "player_safe" &&
       anchor.type !== "region" &&
@@ -10392,6 +10563,12 @@ function normalizeEldermereOpeningSemanticTags(
   );
 }
 
+function hasEldermereCampaignAnchors(
+  plan: EldermereOpeningBrief
+): plan is EldermereOpeningPlan {
+  return "campaignAnchors" in plan;
+}
+
 function plainReplacementForForbiddenOpeningTerm(term: string) {
   switch (term.toLowerCase()) {
     case "second dominion":
@@ -10409,14 +10586,14 @@ function plainReplacementForForbiddenOpeningTerm(term: string) {
 
 function scrubForbiddenOpeningTerms(
   narration: string,
-  _plan: EldermereOpeningPlan
+  _plan: EldermereOpeningBrief
 ) {
   return narration;
 }
 
 function repairEldermereOpeningReply(
   reply: DungeonMasterReply,
-  plan: EldermereOpeningPlan
+  plan: EldermereOpeningBrief
 ): DungeonMasterReply {
   const scrubbedContent = scrubForbiddenOpeningTerms(reply.content, plan);
 
@@ -10431,7 +10608,7 @@ function repairEldermereOpeningReply(
 
 function withEldermereOpeningSetting(
   reply: DungeonMasterReply,
-  plan: EldermereOpeningPlan
+  plan: EldermereOpeningBrief
 ): DungeonMasterReply {
   return {
     ...reply,
@@ -10448,7 +10625,7 @@ function withEldermereOpeningSetting(
 
 function eldermereOpeningSettingErrors(
   setting: CampaignSettingSummary | undefined,
-  plan: EldermereOpeningPlan
+  plan: EldermereOpeningBrief
 ) {
   const errors: string[] = [];
 
@@ -10538,7 +10715,7 @@ async function askEldermereOpeningNarrator(
   campaign: CampaignRow,
   players: PlayerRow[],
   instructions: string,
-  plan: EldermereOpeningPlan,
+  plan: EldermereOpeningBrief,
   turnId?: string,
   contractOptions?: DmContractParseOptions
 ) {
@@ -11447,6 +11624,26 @@ async function persistEldermereOpeningPlan(
   );
 }
 
+async function persistEldermereOpeningBrief(
+  db: Queryable,
+  campaignId: string,
+  brief: EldermereOpeningBrief
+) {
+  await db.query(
+    `
+      update campaigns
+      set metadata = jsonb_set(
+        metadata,
+        '{eldermereOpeningBrief}',
+        $2::jsonb,
+        true
+      )
+      where id = $1
+    `,
+    [campaignId, JSON.stringify(narratorOpeningPlanToJson(brief))]
+  );
+}
+
 async function setPendingInputTargets(
   db: Queryable,
   campaignId: string,
@@ -12034,28 +12231,31 @@ export async function beginRoomForUser(
       | undefined;
     const opening = hasEldermereWorldProfile(beginState.campaign)
       ? await (async () => {
-          const plan = await askEldermereOpeningPlanner(
+          const brief = await askEldermereOpeningBriefPlanner(
             db,
             runtime,
             beginState.campaign,
             beginState.players,
             openingTurn.id
           );
-          await persistEldermereOpeningPlan(
-            db,
-            beginState.campaign.id,
-            plan.plan
-          );
-          foundationCompilerPromise = runEldermereCampaignFoundationCompiler(
-            db,
-            runtime,
-            {
+          await persistEldermereOpeningBrief(db, beginState.campaign.id, brief.brief);
+          foundationCompilerPromise = (async () => {
+            const foundation = await askEldermereOpeningPlanner(
+              db,
+              runtime,
+              beginState.campaign,
+              beginState.players,
+              openingTurn.id,
+              brief.brief
+            );
+            await persistEldermereOpeningPlan(db, beginState.campaign.id, foundation.plan);
+            return runEldermereCampaignFoundationCompiler(db, runtime, {
               campaign: beginState.campaign,
               openingRequest,
-              plan: plan.plan,
+              plan: foundation.plan,
               turnId: openingTurn.id
-            }
-          );
+            });
+          })();
 
           const opening = await askEldermereOpeningNarrator(
             db,
@@ -12063,7 +12263,7 @@ export async function beginRoomForUser(
             beginState.campaign,
             beginState.players,
             eldermereOpeningNarratorInstructions(),
-            plan.plan,
+            brief.brief,
             openingTurn.id,
             { allowResolvedCombatWithoutRolls: true }
           );
@@ -12072,7 +12272,7 @@ export async function beginRoomForUser(
             ...opening,
             debug: {
               ...opening.debug,
-              eldermereOpeningPlanner: plan.debug
+              eldermereOpeningPlanner: brief.debug
             }
           };
         })()
