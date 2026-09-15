@@ -5391,8 +5391,9 @@ h1 {
   gap: 1.45rem;
 }
 
+.message-player .message-body p,
 .message-dm .message-body p {
-  font-size: 0.9rem;
+  font-size: 1.1rem;
   line-height: 1.54;
 }
 
@@ -5660,7 +5661,7 @@ h1 {
   color: var(--ink);
   background: transparent;
   font-family: var(--play-text-font);
-  font-size: 1.1rem;
+  font-size: 0.9rem;
   line-height: 1.45;
 }
 
