@@ -480,7 +480,7 @@ describe("modular AI DM runtime contracts", () => {
       );
       assert.match(
         prompt,
-        /Do not flatten the prose into short or simple sentences/i
+        /Let sentences carry several connected observations when the scene is unfolding/i
       );
       assert.match(
         prompt,
