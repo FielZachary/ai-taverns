@@ -459,8 +459,13 @@ export async function registerAuthRoutes(
         });
       }
 
+      const redirectPath =
+        !existingUser && !existingEmailUser
+          ? "/onboarding"
+          : stateCookie.nextPath ?? "/play";
+
       return reply.redirect(
-        new URL(stateCookie.nextPath ?? "/play", config.authPublicAppOrigin).toString()
+        new URL(redirectPath, config.authPublicAppOrigin).toString()
       );
     } catch (error) {
       await client.query("rollback");
@@ -595,7 +600,8 @@ export async function registerAuthRoutes(
         session: {
           id: session.id,
           expiresAt: session.expiresAt.toISOString()
-        }
+        },
+        isNewUser: !existingUser
       } satisfies AuthMeResponse;
 
       return AuthMeResponseSchema.parse(response);

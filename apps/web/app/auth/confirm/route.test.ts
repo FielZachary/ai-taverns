@@ -58,6 +58,22 @@ describe("passwordless auth confirmation route", () => {
     expect(response.headers.get("set-cookie")).toBe("sid=abc; Path=/; HttpOnly");
   });
 
+  it("sends first-time passwordless sign-ins to onboarding", async () => {
+    vi.stubEnv("AUTH_PUBLIC_APP_ORIGIN", "https://app.example");
+    vi.stubEnv("FASTIFY_API_INTERNAL_ORIGIN", "https://api.internal");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({ authenticated: true, isNewUser: true })
+    );
+
+    const response = await GET(
+      new Request("https://app.example/auth/confirm?token=magic&next=/new-adventure")
+    );
+
+    expect(response.headers.get("location")).toBe(
+      "https://app.example/onboarding"
+    );
+  });
+
   it("rejects failed verification and unsafe next URLs", async () => {
     vi.stubEnv("AUTH_PUBLIC_APP_ORIGIN", "https://app.example");
     vi.spyOn(globalThis, "fetch")
