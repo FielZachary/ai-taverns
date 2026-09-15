@@ -10661,21 +10661,7 @@ function openingParagraphCount(content: string) {
 }
 
 function eldermereOpeningNarrationErrors(content: string) {
-  const errors: string[] = [];
-  errors.push(...eldermereOpeningStructuralErrors(content));
-
-  const semanticTagCount = semanticOpeningTagCount(content);
-
-  if (
-    semanticTagCount < semanticOpeningTagMinimum ||
-    semanticTagCount > semanticOpeningTagMaximum
-  ) {
-    errors.push(
-      `public_narration must contain exactly ${semanticOpeningTagMinimum} semantic narration markup tags; found ${semanticTagCount}`
-    );
-  }
-
-  return errors;
+  return eldermereOpeningStructuralErrors(content);
 }
 
 function eldermereOpeningStructuralErrors(content: string) {
