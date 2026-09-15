@@ -1023,12 +1023,19 @@ h1 {
 }
 
 .onboarding-welcome {
+  position: relative;
+  top: -10vh;
   margin: 0;
   font-size: clamp(2rem, 5vw, 4rem);
   line-height: 0.95;
   white-space: nowrap;
   text-align: center;
-  animation: onboarding-welcome 2s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: onboarding-welcome 3.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.onboarding-welcome-traveller {
+  color: var(--ink);
+  animation: onboarding-welcome-traveller 3.4s ease-in-out both;
 }
 
 .onboarding-referral {
@@ -1097,14 +1104,22 @@ h1 {
 }
 
 @keyframes onboarding-welcome {
-  0% { opacity: 0; transform: translateY(44px); }
-  25%, 75% { opacity: 1; transform: translateY(0); }
-  100% { opacity: 0; transform: translateY(44px); }
+  0% { opacity: 0; transform: translateY(54px); }
+  32%, 70% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(36px); }
+}
+
+@keyframes onboarding-welcome-traveller {
+  0%, 42% { color: var(--ink); }
+  64%, 100% { color: var(--gold-bright); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .onboarding-welcome,
+  .onboarding-welcome-traveller,
   .onboarding-referral { animation: none; }
+
+  .onboarding-welcome-traveller { color: var(--gold-bright); }
 }
 
 .new-adventure-heading,

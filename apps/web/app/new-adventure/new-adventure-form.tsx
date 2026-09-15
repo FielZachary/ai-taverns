@@ -4646,7 +4646,7 @@ export function NewAdventureForm({
             );
           }, flowTransitionDurationMs)
         );
-      }, 2_000)
+      }, 3_400)
     ];
 
     return () => timeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId));
@@ -6249,7 +6249,9 @@ export function NewAdventureForm({
           className={`new-adventure-flow new-adventure-flow-${flowTransition}`}
         >
           {isOnboardingWelcomeStep ? (
-            <h1 className="onboarding-welcome">Welcome, traveller.</h1>
+            <h1 className="onboarding-welcome">
+              Welcome, <span className="onboarding-welcome-traveller">traveller.</span>
+            </h1>
           ) : null}
 
           {isOnboardingReferralStep ? (
