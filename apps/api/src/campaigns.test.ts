@@ -2661,6 +2661,22 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(narratorInput.message, /Write entirely in second person/);
   assert.match(narratorInput.message, /Open with a lived-in moment, not a briefing/);
   assert.match(narratorInput.message, /Use simple, precise, colorful language/);
+  assert.match(
+    narratorInput.message,
+    /engaged, expressive human Dungeon Master who is glad to be telling this story/i
+  );
+  assert.match(
+    narratorInput.message,
+    /Give the opening emotional texture through selected wording, rhythm, and implication/i
+  );
+  assert.match(
+    narratorInput.message,
+    /Do not state what the player character thinks, feels, intends, or values/i
+  );
+  assert.match(
+    narratorInput.message,
+    /Do not add detail merely to create feeling/i
+  );
   assert.match(narratorInput.message, /what the settlement is and what it is commonly known for/);
   assert.match(narratorInput.message, /opportunity, not an assignment/);
   assert.match(narratorInput.message, /exactly 6 semantic narration color tags/);
