@@ -2677,6 +2677,16 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
     narratorInput.message,
     /Do not add detail merely to create feeling/i
   );
+  assert.match(narratorInput.message, /plainspoken, natural language/i);
+  assert.match(narratorInput.message, /Prefer everyday, spoken vocabulary/i);
+  assert.match(
+    narratorInput.message,
+    /Do not flatten the prose into short or simple sentences/i
+  );
+  assert.match(
+    narratorInput.message,
+    /Heightened, poetic, funny, blunt, or dramatic language is welcome/i
+  );
   assert.match(narratorInput.message, /what the settlement is and what it is commonly known for/);
   assert.match(narratorInput.message, /opportunity, not an assignment/);
   assert.match(narratorInput.message, /exactly 6 semantic narration color tags/);

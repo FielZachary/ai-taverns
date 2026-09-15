@@ -472,6 +472,22 @@ describe("modular AI DM runtime contracts", () => {
       );
       assert.match(
         prompt,
+        /plainspoken, natural language/i
+      );
+      assert.match(
+        prompt,
+        /Prefer everyday, spoken vocabulary/i
+      );
+      assert.match(
+        prompt,
+        /Do not flatten the prose into short or simple sentences/i
+      );
+      assert.match(
+        prompt,
+        /Heightened, poetic, funny, blunt, or dramatic language is welcome/i
+      );
+      assert.match(
+        prompt,
         /Do not state what a player character thinks, feels, intends, or values/i
       );
     }
