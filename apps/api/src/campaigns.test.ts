@@ -2692,7 +2692,7 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(narratorInput.message, /Prefer everyday, spoken vocabulary/i);
   assert.match(
     narratorInput.message,
-    /Do not flatten the prose into short or simple sentences/i
+    /Let sentences carry several connected observations when the scene is unfolding/i
   );
   assert.match(
     narratorInput.message,
