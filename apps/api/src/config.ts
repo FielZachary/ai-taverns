@@ -55,6 +55,7 @@ const ConfigSchema = z.object({
     .transform((value) => (value === undefined ? undefined : value === "true")),
   REDDIT_CAPI_PIXEL_ID: z.string().min(1).optional(),
   REDDIT_CAPI_ACCESS_TOKEN: z.string().min(1).optional(),
+  REDDIT_CLIENT_SECRET: z.string().min(1).optional(),
   SUBSCRIPTION_DEFAULT_TIER_ID: z.coerce.number().int().positive().default(4)
 });
 
@@ -142,7 +143,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
       parsed.MIXPANEL_ENABLED ?? Boolean(parsed.MIXPANEL_PROJECT_TOKEN),
     mixpanelDebug: parsed.MIXPANEL_DEBUG ?? false,
     redditCapiPixelId: parsed.REDDIT_CAPI_PIXEL_ID,
-    redditCapiAccessToken: parsed.REDDIT_CAPI_ACCESS_TOKEN,
+    redditCapiAccessToken:
+      parsed.REDDIT_CAPI_ACCESS_TOKEN ?? parsed.REDDIT_CLIENT_SECRET,
     subscriptionDefaultTierId: parsed.SUBSCRIPTION_DEFAULT_TIER_ID
   };
 }

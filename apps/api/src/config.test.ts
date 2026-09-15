@@ -131,6 +131,16 @@ test("loadConfig falls back to localhost when web origins are blank", () => {
   assert.equal(config.authPublicAppOrigin, "http://localhost:3000");
 });
 
+test("loadConfig accepts the existing Reddit client-secret environment name", () => {
+  const config = loadConfig({
+    REDDIT_CAPI_PIXEL_ID: "reddit-pixel-id",
+    REDDIT_CLIENT_SECRET: "reddit-client-secret"
+  });
+
+  assert.equal(config.redditCapiPixelId, "reddit-pixel-id");
+  assert.equal(config.redditCapiAccessToken, "reddit-client-secret");
+});
+
 test("loadConfig rejects invalid required environment values", () => {
   assert.throws(
     () =>
