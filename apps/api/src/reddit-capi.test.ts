@@ -58,10 +58,13 @@ test("Reddit signup conversion sends a hashed standard Sign Up event", async () 
     "https://ads-api.reddit.com/api/v3/pixels/pixel-123/conversion_events"
   );
   assert.equal(request.headers.get("authorization"), "Bearer secret-token");
-  const body = (await request.json()) as { events: Array<Record<string, unknown>> };
-  const event = body.events[0];
+  const body = (await request.json()) as {
+    data: { events: Array<Record<string, unknown>> };
+  };
+  const event = body.data.events[0];
   assert.ok(event);
   assert.equal(event.action_source, "WEBSITE");
+  assert.equal(event.click_id, "click-id");
   assert.deepEqual(event.type, { tracking_type: "SIGN_UP" });
   assert.equal(event.event_source_url, "https://ai-taverns.com/onboarding?rdt_cid=click-id");
   assert.deepEqual(event.user, {
