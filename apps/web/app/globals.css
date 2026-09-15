@@ -1030,12 +1030,12 @@ h1 {
   line-height: 0.95;
   white-space: nowrap;
   text-align: center;
-  animation: onboarding-welcome 7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: onboarding-welcome 5s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .onboarding-welcome-traveller {
   color: var(--ink);
-  animation: onboarding-welcome-traveller 7s ease-in-out both;
+  animation: onboarding-welcome-traveller 5s ease-in-out both;
 }
 
 .onboarding-referral {
