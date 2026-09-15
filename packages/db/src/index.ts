@@ -3116,33 +3116,18 @@ export async function createCampaignForMode(
       aiDebug: opening.debug
     });
 
-    const foundationContextStorageState = await foundationCompilerPromise;
-
-    if (foundationContextStorageState) {
-      await attachContextStorageStateToDmEventDebug(db, {
-        campaignId: createdState.campaign.id,
-        dmEventId: resolvedTurn.dmEventId,
-        contextStorageState: foundationContextStorageState
-      });
-
-      runtime.emitDmStreamEvent?.({
-        type: "room_updated",
-        roomId: createdState.campaign.id,
-        updatedAt: foundationContextStorageState.capturedAt,
-        eventId: resolvedTurn.dmEventId
-      });
-    }
-
     await db.query("update campaigns set has_begun = true where id = $1", [
       createdState.campaign.id
     ]);
 
-    void runtime.runPostTurnContextJobs?.({
+    scheduleOpeningContextFinalization(db, {
       campaignId: createdState.campaign.id,
       turnId: openingTurn.id,
+      dmEventId: resolvedTurn.dmEventId,
+      foundationCompilerPromise,
+      runtime,
       currentAction: openingRequest,
       dmResponse: opening.content,
-      dmEventId: resolvedTurn.dmEventId,
       rollRequests: opening.rollRequests
     });
 
@@ -10212,6 +10197,78 @@ async function runEldermereCampaignFoundationCompiler(
   }
 }
 
+function scheduleOpeningContextFinalization(
+  db: Queryable,
+  input: {
+    campaignId: string;
+    turnId: string;
+    dmEventId?: string | undefined;
+    foundationCompilerPromise:
+      | Promise<ContextStorageDebugState | undefined>
+      | undefined;
+    runtime: DungeonMasterRuntime;
+    currentAction: string;
+    dmResponse: string;
+    rollRequests: DiceRollRequest[];
+  }
+) {
+  void (async () => {
+    const traceId = randomUUID();
+
+    try {
+      const contextStorageState = await input.foundationCompilerPromise;
+
+      if (contextStorageState) {
+        await attachContextStorageStateToDmEventDebug(db, {
+          campaignId: input.campaignId,
+          dmEventId: input.dmEventId,
+          contextStorageState
+        });
+
+        input.runtime.emitDmStreamEvent?.({
+          type: "room_updated",
+          roomId: input.campaignId,
+          updatedAt: contextStorageState.capturedAt,
+          ...(input.dmEventId ? { eventId: input.dmEventId } : {})
+        });
+      }
+    } catch (error) {
+      await logDmMemoryPatchLog(db, {
+        campaignId: input.campaignId,
+        traceId,
+        turnId: input.turnId,
+        payload: {
+          source: "opening_context_finalizer",
+          failed: true,
+          error: errorSummary(error)
+        }
+      });
+    }
+
+    try {
+      await input.runtime.runPostTurnContextJobs?.({
+        campaignId: input.campaignId,
+        turnId: input.turnId,
+        currentAction: input.currentAction,
+        dmResponse: input.dmResponse,
+        dmEventId: input.dmEventId,
+        rollRequests: input.rollRequests
+      });
+    } catch (error) {
+      await logDmMemoryPatchLog(db, {
+        campaignId: input.campaignId,
+        traceId,
+        turnId: input.turnId,
+        payload: {
+          source: "opening_post_turn_context_jobs",
+          failed: true,
+          error: errorSummary(error)
+        }
+      });
+    }
+  })().catch(() => undefined);
+}
+
 function findForbiddenOpeningTerms(
   _narration: string,
   _plan: EldermereOpeningPlan
@@ -12046,23 +12103,6 @@ export async function beginRoomForUser(
       aiDebug: opening.debug
     });
 
-    const foundationContextStorageState = await foundationCompilerPromise;
-
-    if (foundationContextStorageState) {
-      await attachContextStorageStateToDmEventDebug(db, {
-        campaignId: beginState.campaign.id,
-        dmEventId: resolvedTurn.dmEventId,
-        contextStorageState: foundationContextStorageState
-      });
-
-      runtime.emitDmStreamEvent?.({
-        type: "room_updated",
-        roomId: beginState.campaign.id,
-        updatedAt: foundationContextStorageState.capturedAt,
-        eventId: resolvedTurn.dmEventId
-      });
-    }
-
     runtime.emitDmStreamEvent?.({
       type: "dm_stream_done",
       roomId: beginState.campaign.id,
@@ -12074,12 +12114,14 @@ export async function beginRoomForUser(
       beginState.campaign.id
     ]);
 
-    void runtime.runPostTurnContextJobs?.({
+    scheduleOpeningContextFinalization(db, {
       campaignId: beginState.campaign.id,
       turnId: openingTurn.id,
+      dmEventId: resolvedTurn.dmEventId,
+      foundationCompilerPromise,
+      runtime,
       currentAction: openingRequest,
       dmResponse: opening.content,
-      dmEventId: resolvedTurn.dmEventId,
       rollRequests: opening.rollRequests
     });
   } catch (error) {
