@@ -229,7 +229,10 @@ describe("NewAdventureForm", () => {
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     await finishFlowTransition();
 
-    expect(screen.getByRole("heading", { name: /choose your character build/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /choose your class/i })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: /choose your character build/i })
+    ).not.toBeInTheDocument();
   });
 
   it("lets point-buy stats spend points and advance from valid stats", async () => {

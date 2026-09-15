@@ -6340,9 +6340,23 @@ export function NewAdventureForm({
                   type="button"
                   disabled={!onboardingDndExperience}
                   onClick={() => {
+                    const useQuickBuild =
+                      onboardingDndExperience === onboardingExperienceOptions[0] ||
+                      onboardingDndExperience === onboardingExperienceOptions[1];
+
+                    setCharacterBuildMode(useQuickBuild ? "quick" : "custom");
+                    if (useQuickBuild) {
+                      applyQuickBuildDefaults();
+                    } else {
+                      applyCustomBuildDefaults();
+                    }
+                    setCharacterStepIndex(1);
                     trackAnalytics({
                       name: "Onboarding D&D Experience Selected",
-                      properties: { dndExperience: onboardingDndExperience }
+                      properties: {
+                        dndExperience: onboardingDndExperience,
+                        characterBuildMode: useQuickBuild ? "quick" : "custom"
+                      }
                     });
                     transitionFlow(() => setStepIndex(characterStepIndexInFlow));
                   }}
