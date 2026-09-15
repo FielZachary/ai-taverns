@@ -11,6 +11,7 @@ import {
 } from "react";
 import {
   Check,
+  ChevronDown,
   Dice5,
   ImagePlus,
   X,
@@ -76,6 +77,7 @@ type JoinPreview = {
 
 type NewAdventureFormProps = {
   initialInviteToken?: string;
+  onboarding?: boolean;
   userEmail?: string;
   userId?: string;
 };
@@ -98,6 +100,8 @@ const campaignPreparationMessages = [
 ];
 const campaignPreparationMessageIntervalMs = 10_000;
 const campaignPreparationTransitionMs = 650;
+const campaignPreparationProgressIntervalMs = 1_000;
+const campaignPreparationProgressCeiling = 95;
 
 type NewAdventureEntryState = "preloading" | "transitioning" | "ready";
 
@@ -229,6 +233,13 @@ const multiplayerCustomCreateSteps = [
   "Review"
 ];
 const joinSteps = ["Mode", "Multiplayer", "Game Code", "Character", "Review"];
+const onboardingSteps = [
+  "Welcome",
+  "Referral",
+  "Experience",
+  "Character",
+  "Review"
+];
 const joinCodePattern = /[A-HJ-NP-Z2-9]{6}/;
 const eldermereBackstoryLocalizationThreshold = 100;
 const customCharacterCreationSteps = [
@@ -4235,6 +4246,7 @@ function normalizeGameCodeInput(value: string) {
 function CampaignPreparationLoader() {
   const [messageIndex, setMessageIndex] = useState(0);
   const [exitingMessage, setExitingMessage] = useState("");
+  const [progress, setProgress] = useState(0);
   const currentMessage =
     campaignPreparationMessages[messageIndex] ??
     defaultCampaignPreparationMessage;
@@ -4272,11 +4284,24 @@ function CampaignPreparationLoader() {
     };
   }, []);
 
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setProgress((currentProgress) =>
+        Math.min(
+          campaignPreparationProgressCeiling,
+          currentProgress + Math.max(1, Math.ceil((100 - currentProgress) / 12))
+        )
+      );
+    }, campaignPreparationProgressIntervalMs);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
+
   return (
     <FullPageRuneLoader
       message={currentMessage}
       exitingMessage={exitingMessage}
-      note="this'll take about a minute and a half, sit tight ;)"
+      note={`${progress}%`}
       ariaLabel="Preparing campaign"
     />
   );
@@ -4300,8 +4325,41 @@ function NewAdventureEntryLoadingPanel({
   );
 }
 
+const referralSources = [
+  { label: "Reddit", icon: "reddit" },
+  { label: "X", icon: "x" },
+  { label: "Instagram", icon: "instagram" },
+  { label: "TikTok", icon: "tiktok" },
+  { label: "Other", icon: "other" }
+] as const;
+const onboardingExperienceOptions = [
+  "I am completely new, hehe",
+  "I've played Baldur's Gate but thats pretty much it!",
+  "I've played D&D quite a few times",
+  "I'm an experience player or DM"
+] as const;
+
+function ReferralIcon({ icon }: { icon: (typeof referralSources)[number]["icon"] }) {
+  if (icon === "x") {
+    return <span aria-hidden="true" className="referral-icon referral-icon-x">𝕏</span>;
+  }
+
+  if (icon === "other") {
+    return <span aria-hidden="true" className="referral-icon referral-icon-other">✦</span>;
+  }
+
+  return (
+    <svg aria-hidden="true" className={`referral-icon referral-icon-${icon}`} viewBox="0 0 24 24">
+      {icon === "reddit" ? <><circle cx="12" cy="12" r="8" /><circle cx="9.2" cy="12" r="1" fill="currentColor" /><circle cx="14.8" cy="12" r="1" fill="currentColor" /><path d="M8.5 15c2.2 1.7 4.8 1.7 7 0M14.5 7.2l1.1-2.2 2 .6" /></> : null}
+      {icon === "instagram" ? <><rect x="4" y="4" width="16" height="16" rx="4" /><circle cx="12" cy="12" r="3.5" /><circle cx="17.2" cy="6.8" r=".9" fill="currentColor" /></> : null}
+      {icon === "tiktok" ? <><path d="M14 4v9.2a3.7 3.7 0 1 1-3-3.6M14 4c1 2.1 2.5 3.2 4.7 3.4" /></> : null}
+    </svg>
+  );
+}
+
 export function NewAdventureForm({
   initialInviteToken = "",
+  onboarding = false,
   userEmail,
   userId
 }: NewAdventureFormProps) {
@@ -4309,12 +4367,13 @@ export function NewAdventureForm({
     process.env.NODE_ENV === "test" ? "ready" : "preloading"
   );
   const normalizedInitialInviteToken = initialInviteToken.trim();
+  const isOnboarding = onboarding;
   const [stepIndex, setStepIndex] = useState(
-    normalizedInitialInviteToken ? 2 : 0
+    isOnboarding ? 0 : normalizedInitialInviteToken ? 2 : 0
   );
   const [characterStepIndex, setCharacterStepIndex] = useState(0);
   const [mode, setMode] = useState<CampaignMode>(
-    normalizedInitialInviteToken ? "multiplayer" : "single_player"
+    isOnboarding || !normalizedInitialInviteToken ? "single_player" : "multiplayer"
   );
   const [multiplayerIntent, setMultiplayerIntent] =
     useState<MultiplayerIntent>(
@@ -4322,6 +4381,9 @@ export function NewAdventureForm({
     );
   const [inviteToken] = useState(normalizedInitialInviteToken);
   const [gameCode, setGameCode] = useState("");
+  const [onboardingDndExperience, setOnboardingDndExperience] = useState("");
+  const [isOnboardingExperienceMenuOpen, setIsOnboardingExperienceMenuOpen] =
+    useState(false);
   const [joinPreview, setJoinPreview] = useState<JoinPreview | null>(null);
   const [playerName, setPlayerName] = useState("");
   const [campaignGenre, setCampaignGenre] = useState(campaignGenres[0].id);
@@ -4406,7 +4468,9 @@ export function NewAdventureForm({
   const isCustomGenre = campaignGenre === "custom";
   const hasCustomWorldStep = !isJoinFlow && isCustomGenre;
   const steps =
-    mode === "multiplayer"
+    isOnboarding
+      ? onboardingSteps
+      : mode === "multiplayer"
       ? isJoinFlow
         ? joinSteps
         : hasCustomWorldStep
@@ -4416,11 +4480,20 @@ export function NewAdventureForm({
       ? customCreateSteps
       : createSteps;
   const isLastStep = stepIndex === steps.length - 1;
-  const multiplayerIntentStepIndex = mode === "multiplayer" ? 1 : -1;
-  const campaignDetailsStepIndex = mode === "multiplayer" ? 2 : 1;
+  const multiplayerIntentStepIndex = isOnboarding ? -1 : mode === "multiplayer" ? 1 : -1;
+  const campaignDetailsStepIndex = isOnboarding ? -1 : mode === "multiplayer" ? 2 : 1;
   const customWorldStepIndex = hasCustomWorldStep ? campaignDetailsStepIndex + 1 : -1;
-  const characterStepIndexInFlow = campaignDetailsStepIndex + (hasCustomWorldStep ? 2 : 1);
+  const characterStepIndexInFlow = isOnboarding
+    ? 3
+    : campaignDetailsStepIndex + (hasCustomWorldStep ? 2 : 1);
   const reviewStepIndex = characterStepIndexInFlow + 1;
+  const isOnboardingWelcomeStep = isOnboarding && stepIndex === 0;
+  const isOnboardingReferralStep = isOnboarding && stepIndex === 1;
+  const isOnboardingExperienceStep = isOnboarding && stepIndex === 2;
+  const isOnboardingIntroStep =
+    isOnboardingWelcomeStep ||
+    isOnboardingReferralStep ||
+    isOnboardingExperienceStep;
   const isMultiplayerIntentStep = stepIndex === multiplayerIntentStepIndex;
   const isCampaignDetailsStep = stepIndex === campaignDetailsStepIndex;
   const isCustomWorldStep = stepIndex === customWorldStepIndex;
@@ -4574,6 +4647,26 @@ export function NewAdventureForm({
       isCancelled = true;
     };
   }, [entryState]);
+
+  useEffect(() => {
+    if (!isOnboardingWelcomeStep || entryState !== "ready") {
+      return;
+    }
+
+    const timeoutIds = [
+      window.setTimeout(() => {
+        setFlowTransition("exiting");
+        timeoutIds.push(
+          window.setTimeout(() => {
+            setStepIndex(1);
+            setFlowTransition("idle");
+          }, flowTransitionDurationMs)
+        );
+      }, 5_000)
+    ];
+
+    return () => timeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId));
+  }, [entryState, isOnboardingWelcomeStep]);
 
   useEffect(() => {
     if (entryState !== "ready") {
@@ -4819,11 +4912,11 @@ export function NewAdventureForm({
         : "Create your character art";
     }
 
-    if (stepIndex === 0) {
+    if (!isOnboarding && stepIndex === 0) {
       return "Choose your game mode";
     }
 
-    if (stepIndex === 1) {
+    if (!isOnboarding && stepIndex === 1) {
       if (mode === "multiplayer") {
         return "Choose multiplayer setup";
       }
@@ -4875,6 +4968,7 @@ export function NewAdventureForm({
     isEquipmentCharacterStep,
     isEquipmentSummaryStep,
     isInviteJoinFlow,
+    isOnboarding,
     mode,
     reviewStepIndex,
     stepIndex,
@@ -6159,16 +6253,122 @@ export function NewAdventureForm({
         className="new-adventure-scroll-slider"
         controls="new-adventure-scroll-root"
       />
-      <div className="new-adventure-heading">
-        <p className="eyebrow">New Adventure</p>
-        <h1>{stepTitle}</h1>
-      </div>
+      {!isOnboardingIntroStep ? (
+        <div className="new-adventure-heading">
+          <p className="eyebrow">New Adventure</p>
+          <h1>{stepTitle}</h1>
+        </div>
+      ) : null}
 
       <form className="new-adventure-form" onSubmit={handleSubmit}>
         <div
           className={`new-adventure-flow new-adventure-flow-${flowTransition}`}
         >
-          {stepIndex === 0 ? (
+          {isOnboardingWelcomeStep ? (
+            <h1 className="onboarding-welcome">
+              Welcome, <span className="onboarding-welcome-traveller">traveller.</span>
+            </h1>
+          ) : null}
+
+          {isOnboardingReferralStep ? (
+            <section className="onboarding-referral" aria-labelledby="referral-heading">
+              <h1 id="referral-heading">Where did you hear about AI Taverns?</h1>
+              <div className="onboarding-referral-options">
+                {referralSources.map(({ label, icon }) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => {
+                      trackAnalytics({
+                        name: "Onboarding Referral Source Selected",
+                        properties: { referralSource: label }
+                      });
+                      transitionFlow(() => setStepIndex(2));
+                    }}
+                  >
+                    <ReferralIcon icon={icon} />
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {isOnboardingExperienceStep ? (
+            <section className="onboarding-experience" aria-labelledby="experience-heading">
+              <h1 id="experience-heading">Describe your experience in D&amp;D 5e</h1>
+              <div className="onboarding-experience-dropdown">
+                <span>Experience level</span>
+                <button
+                  aria-expanded={isOnboardingExperienceMenuOpen}
+                  aria-haspopup="listbox"
+                  aria-label="Experience level"
+                  className="onboarding-experience-trigger"
+                  onClick={() =>
+                    setIsOnboardingExperienceMenuOpen((isOpen) => !isOpen)
+                  }
+                  type="button"
+                >
+                  <span>{onboardingDndExperience || "Select your experience"}</span>
+                  <ChevronDown aria-hidden="true" size={18} />
+                </button>
+                <div
+                  aria-hidden={!isOnboardingExperienceMenuOpen}
+                  className={`onboarding-experience-options${
+                    isOnboardingExperienceMenuOpen ? " open" : ""
+                  }`}
+                  role="listbox"
+                >
+                  {onboardingExperienceOptions.map((experience) => (
+                    <button
+                      aria-selected={onboardingDndExperience === experience}
+                      key={experience}
+                      onClick={() => {
+                        setOnboardingDndExperience(experience);
+                        setIsOnboardingExperienceMenuOpen(false);
+                      }}
+                      role="option"
+                      type="button"
+                    >
+                      {experience}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="creation-actions onboarding-experience-actions">
+                <button
+                  type="button"
+                  disabled={!onboardingDndExperience}
+                  onClick={() => {
+                    const useQuickBuild =
+                      onboardingDndExperience === onboardingExperienceOptions[0] ||
+                      onboardingDndExperience === onboardingExperienceOptions[1];
+
+                    setCharacterBuildMode(useQuickBuild ? "quick" : "custom");
+                    if (useQuickBuild) {
+                      applyQuickBuildDefaults();
+                    } else {
+                      applyCustomBuildDefaults();
+                    }
+                    setCharacterStepIndex(1);
+                    trackAnalytics({
+                      name: "Onboarding D&D Experience Selected",
+                      properties: {
+                        dndExperience: onboardingDndExperience,
+                        characterBuildMode: useQuickBuild ? "quick" : "custom"
+                      }
+                    });
+                    transitionFlow(() => setStepIndex(characterStepIndexInFlow));
+                  }}
+                >
+                  Continue
+                  <span className="fantasy-arrow-icon fantasy-arrow-forward" aria-hidden="true" />
+                </button>
+              </div>
+            </section>
+          ) : null}
+
+          {!isOnboarding && stepIndex === 0 ? (
             <>
               <div className="mode-picker" role="radiogroup" aria-label="Campaign mode">
                 <button
@@ -7225,6 +7425,7 @@ export function NewAdventureForm({
             </div>
           ) : null}
         </div>
+          {!isOnboardingIntroStep ? <>
           <div className="new-adventure-error-slot">
             {error ? (
               <p className="new-adventure-error" role="alert">
@@ -7313,6 +7514,7 @@ export function NewAdventureForm({
               )}
             </button>
           </div>
+          </> : null}
       </form>
 
       {activeSpellDetail && activeSpellRuleProfile ? (

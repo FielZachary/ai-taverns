@@ -391,6 +391,15 @@ class FakeDatabase {
       return { rows: [record as T] };
     }
 
+    if (
+      normalizedSql.startsWith(
+        "select id, email, display_name, created_at, updated_at, subscription_tier_id from users where email = $1"
+      )
+    ) {
+      const user = this.users.find((candidate) => candidate.email === values[0]);
+      return { rows: user ? [user as T] : ([] as T[]) };
+    }
+
     if (normalizedSql.startsWith("insert into users")) {
       const email = values[0] as string;
       const displayName = values[1] as string | null;
@@ -2094,7 +2103,7 @@ class FakeDatabase {
         campaign.metadata = {
           ...(campaign.metadata as Record<string, unknown>),
           eldermereOpeningPlan: openingPlan,
-          eldermereOpeningPlanVersion: 1
+          eldermereOpeningPlanVersion: 2
         };
         campaign.updated_at = new Date();
       }
@@ -3717,14 +3726,14 @@ before(async () => {
             content: JSON.stringify({
               region: selectedRegion,
               starting_location: startingLocation,
-              how_the_player_got_here:
-                "The character followed an unresolved personal lead to the selected starting location.",
+              why_the_player_is_here_now:
+                "A local messenger asks the character to help with an urgent problem in the selected starting location.",
               concept:
-                "A local request turns into an escalating mystery as the character learns why several people want the same truth hidden. As the player follows the messenger's lead, they discover their arrival was anticipated and the local network is using the same personal history that brought them here. The campaign becomes a choice between exposing the network, using its leverage, or protecting the people it has trapped.",
+                "A local request turns into an escalating mystery as the character learns why several people want the same truth hidden. As the player follows the messenger's lead, they discover the local network has been exploiting the town's pressures to conceal its work. The campaign becomes a choice between exposing the network, using its leverage, or protecting the people it has trapped.",
               opening_scene:
                 "At a marked doorway in the selected starting location, a worried messenger offers the first lead while someone watches the street.",
               private_truth:
-                "The messenger's request is connected to a concealed local network that selected the player because of their personal history; discovering that recontextualizes the opening and gives the player leverage over the network.",
+                "The messenger's request is connected to a concealed local network that has been exploiting the town's pressures; discovering that recontextualizes the opening and gives the player leverage over the network.",
               campaign_anchors: [
                 {
                   type: "region",

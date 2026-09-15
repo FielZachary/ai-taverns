@@ -68,6 +68,8 @@ const AnalyticsBasePropertiesSchema = z.object({
 export const AnalyticsEventNameSchema = z.enum([
   "Landing Page Viewed",
   "Onboarding Started",
+  "Onboarding Referral Source Selected",
+  "Onboarding D&D Experience Selected",
   "User Signed In",
   "Campaign Mode Selected",
   "Multiplayer Intent Selected",
@@ -83,6 +85,7 @@ export const AnalyticsEventNameSchema = z.enum([
   "Campaign Invite Disabled",
   "Multiplayer Adventure Begun",
   "Campaign Loaded",
+  "Initial Scene Viewed",
   "Campaign Switched",
   "Session Resumed",
   "Qualified Return",
@@ -123,6 +126,13 @@ export const AnalyticsEventSchema = z.object({
       customWorldName: z.string().min(1).optional(),
       customWorldDescriptionLength: z.number().int().nonnegative().optional(),
       hasEldermereStart: z.boolean().optional(),
+      referralSource: z.enum(["Reddit", "X", "Instagram", "TikTok", "Other"]).optional(),
+      dndExperience: z.enum([
+        "I am completely new, hehe",
+        "I've played Baldur's Gate but thats pretty much it!",
+        "I've played D&D quite a few times",
+        "I'm an experience player or DM"
+      ]).optional(),
       hasBackstory: z.boolean().optional(),
       hasPortrait: z.boolean().optional(),
       portraitSource: z.enum(["preview", "upload", "generated"]).optional(),

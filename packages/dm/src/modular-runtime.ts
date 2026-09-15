@@ -329,6 +329,20 @@ export function jobPrompt(
     "Avoid ending with vague prompts like 'What do you do?' when a more specific handoff is available."
   ];
 
+  const storytellerVoiceGuidance = [
+    "Storyteller Voice:",
+    "- Narrate as an engaged, expressive human Dungeon Master who is glad to be telling this story. Do not sound like a neutral camera log or an encounter summary.",
+    "- Let the narration have a restrained point of view: notice when something lands badly, when a gesture costs someone effort, when an irony is ugly, when a room feels relieved too soon, or when danger seems patient.",
+    "- Give the world and NPCs emotional texture through selected wording, rhythm, and implication. The narrator may savor tension, warmth, unease, humor, or wonder without explaining every feeling.",
+    "- Write in plainspoken, natural language: like a gifted Dungeon Master speaking to players at the table, expressive and fluent rather than literary for its own sake.",
+    "- Prefer everyday, spoken vocabulary when it communicates the same idea. Choose ordinary direct words over needlessly elevated alternatives.",
+    "- Let sentences carry several connected observations when the scene is unfolding or the player is taking in a place, allowing setting, action, and implication to gather before the sentence lands. Keep the narrative viewpoint moving continuously through the space so one detail leads naturally into the next, and let tension emerge through accumulation rather than repeatedly isolating details for emphasis. Favor connective language such as 'where,' 'while,' 'as,' 'before,' 'and,' and 'beyond' whenever it preserves the scene's movement. Describe mysteries plainly and let their implications do the work.",
+    "- Heightened, poetic, funny, blunt, or dramatic language is welcome when it fits the moment. The goal is natural expression, not restrained language.",
+    "- Preserve player agency. Do not state what a player character thinks, feels, intends, or values unless the player established it. Put emotional interpretation in visible behavior, dialogue, atmosphere, and the narrator's framing of events.",
+    "- Do not add length merely to create feeling. Keep the existing pacing and information density; one vivid, emotionally charged observation can do more than a paragraph of explanation.",
+    "- Avoid purple prose, melodrama, constant ominousness, and narrator commentary that breaks immersion."
+  ];
+
   const rollAdjudicationGuidance = [
     "When a player attempts something uncertain, risky, opposed, time-sensitive, hidden, or consequential, pause for dice instead of resolving the outcome.",
     "In public_narration, describe the attempted action up to the point of uncertainty, then clearly ask for the needed roll.",
@@ -1649,12 +1663,18 @@ export function jobPrompt(
         "- Resolve simple consequences directly when no roll is needed. If uncertainty, danger, resistance, or meaningful cost matters, request an appropriate roll instead of deciding the uncertain outcome.",
         "- Separate simultaneous intentions cleanly: respond to visible conversation or positioning, then pause at the risky uncertain action with a roll request instead of resolving it.",
         "",
+        "Action Completion and Decision Points:",
+        "- Resolve the player's declared action through its natural immediate endpoint before handing control back. Do not stop merely because the action has begun, the scenery has changed, or a new description is available.",
+        "- Narrate until the first meaningful decision point: a consequential obstacle, interaction, fork, discovery, threat, uncertainty, or arrival whose next step requires player input.",
+        "- For committed travel, movement, or entering a named destination, carry the character through uneventful intervening space and narrate the arrival. Do not pause mid-route just because the road is atmospheric or because the destination is visible ahead.",
+        "- Do not skip material intermediate events that follow from established scene pressure, location facts, or the player's action. Compress only what has no meaningful consequence or decision.",
+        "- A handoff is justified by a meaningful new choice or required roll, not merely by the completion of a paragraph.",
+        "",
         "State Safety:",
         "- Outside combat, do not silently modify HP, inventory, spell slots, conditions, gold, experience, faction standing, or durable world state. Propose state changes only through the structured output fields.",
         "- For exploration, travel, downtime, and ordinary scene resolution, include inventory patches only when the resolved outcome clearly changes possession, carried equipment, equipped gear, consumables, or currency.",
         "",
         "Pacing and Handoff:",
-        "- Default narration length: 2-5 paragraphs for ordinary turns. Use 4-7 richer paragraphs for major scene openings, location reveals, travel arrivals, or campaign-significant transitions.",
         "- End with a clear present-tense handoff that invites action, usually by naming what is immediately available or pressing, without listing menu options unless clarity requires it."
       ].join("\n"),
       ...physicalCommunicationGuidance,
@@ -1662,6 +1682,7 @@ export function jobPrompt(
       ...rollAdjudicationGuidance,
       ...playerCanonClaimGuidance,
       ...narrativeQualityBar,
+      ...storytellerVoiceGuidance,
       "Examples below demonstrate pacing, specificity, agency boundaries, and roll handling. Do not copy their names, locations, weather, NPC roles, scene structure, or exact phrasing. Match their clarity and dramatic discipline, not their content.",
       ...sceneDirectorExamples
     ],
@@ -1682,7 +1703,8 @@ export function jobPrompt(
         "Inventory Boundary:",
         "- Distinguish discovering, seeing, identifying, or learning about an item from taking possession of it. Only add inventory when the character actually takes, receives, pockets, collects, or is handed the item."
       ].join("\n"),
-      ...playerRollResultOpeningGuidance
+      ...playerRollResultOpeningGuidance,
+      ...storytellerVoiceGuidance
     ],
     npc_dialogue: [
       [
@@ -1764,6 +1786,7 @@ export function jobPrompt(
       ...playerCanonClaimGuidance,
       ...socialRollGuidance,
       ...narrativeQualityBar,
+      ...storytellerVoiceGuidance,
       "Examples below demonstrate NPC motive, voice, social pressure, partial concessions, failed social pressure, and roll-result narration. Do not copy their names, locations, NPC roles, conflicts, scene structure, or exact phrasing. Match their dramatic logic and conversational texture, not their content.",
       ...npcDialogueExamples
     ],
@@ -1778,6 +1801,7 @@ export function jobPrompt(
       ].join("\n"),
       ...physicalCommunicationGuidance,
       ...combatGuidance,
+      ...storytellerVoiceGuidance,
       "Examples below demonstrate combat pacing, visible math, paragraph grouping, turn ownership, roll pauses, and state-safe narration. Do not copy their names, actor keys, enemies, abilities, locations, or exact phrasing. Match their clarity and discipline, not their content.",
       ...combatExamples
     ],
@@ -1807,7 +1831,8 @@ export function jobPrompt(
         "- Do not spend or restore inventory unless the rest consumes or returns a concrete item through inventory_state_update."
       ].join("\n"),
       ...rollAdjudicationGuidance,
-      ...narrativeQualityBar
+      ...narrativeQualityBar,
+      ...storytellerVoiceGuidance
     ],
     death_saving_throws: [
       [
@@ -1831,7 +1856,8 @@ export function jobPrompt(
         "Death And Revival Boundary:",
         "- Do not soften death into a temporary setback inside this job. Revival is a separate player choice handled after death.",
         "- Do not include UI button text in public_narration; the website presents Revive your character and Create new Campaign."
-      ].join("\n")
+      ].join("\n"),
+      ...storytellerVoiceGuidance
     ],
     clarification: [
       "Ask one concise clarifying question.",
