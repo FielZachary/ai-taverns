@@ -64,6 +64,7 @@ type UserRecord = {
   id: string;
   email: string;
   display_name: string | null;
+  onboarding_completed_at: Date | null;
   created_at: Date;
   updated_at: Date;
   subscription_tier_id?: number;
@@ -393,7 +394,7 @@ class FakeDatabase {
 
     if (
       normalizedSql.startsWith(
-        "select id, email, display_name, created_at, updated_at, subscription_tier_id from users where email = $1"
+        "select id, email, display_name, onboarding_completed_at, created_at, updated_at, subscription_tier_id from users where email = $1"
       )
     ) {
       const user = this.users.find((candidate) => candidate.email === values[0]);
@@ -410,6 +411,7 @@ class FakeDatabase {
           id: `user-${this.nextId++}`,
           email,
           display_name: displayName,
+          onboarding_completed_at: null,
           created_at: new Date(),
           updated_at: new Date()
           ,subscription_tier_id: (values[2] as number | undefined) ?? 4
@@ -421,6 +423,17 @@ class FakeDatabase {
       }
 
       return { rows: [user as T] };
+    }
+
+    if (normalizedSql.startsWith("update users set onboarding_completed_at")) {
+      const user = this.users.find((candidate) => candidate.id === values[0]);
+
+      if (user && user.onboarding_completed_at === null) {
+        user.onboarding_completed_at = new Date();
+        user.updated_at = new Date();
+      }
+
+      return { rows: [] as T[] };
     }
 
     if (normalizedSql === "select subscription_tier_id from users where id = $1") {
@@ -535,6 +548,7 @@ class FakeDatabase {
             id: user.id,
             email: user.email,
             display_name: user.display_name,
+            onboarding_completed_at: user.onboarding_completed_at,
             created_at: user.created_at,
             updated_at: user.updated_at,
             session_id: session.id,

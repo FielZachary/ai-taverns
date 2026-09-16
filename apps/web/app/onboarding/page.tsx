@@ -23,6 +23,10 @@ export default async function OnboardingPage({
     redirect(`/login?next=${encodeURIComponent(next)}`);
   }
 
+  if (user.onboardingCompletedAt) {
+    redirect("/play");
+  }
+
   return (
     <OnboardingForm
       initialInviteToken={inviteToken}

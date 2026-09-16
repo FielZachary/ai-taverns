@@ -78,7 +78,8 @@ test("auth/me contract accepts authenticated state", () => {
     user: {
       id: "user_123",
       email: "player@example.com",
-      displayName: "Player"
+      displayName: "Player",
+      onboardingCompletedAt: null
     },
     session: {
       id: "session_123",
@@ -96,7 +97,8 @@ test("auth/me contract rejects invalid authenticated users", () => {
       user: {
         id: "user_123",
         email: "not-an-email",
-        displayName: "Player"
+        displayName: "Player",
+        onboardingCompletedAt: null
       },
       session: {
         id: "session_123",
@@ -156,7 +158,8 @@ test("sign out and protected endpoint contracts accept success responses", () =>
     user: {
       id: "user_123",
       email: "player@example.com",
-      displayName: null
+      displayName: null,
+      onboardingCompletedAt: null
     }
   });
 
