@@ -21,12 +21,14 @@ import {
   ensureEmailIdentity,
   ensureGoogleIdentity,
   findUserByAuthIdentity,
+  findUserByEmail,
   findActiveSessionByTokenHash,
   revokeSessionByTokenHash,
   upsertUserByEmail
 } from "@ai-dnd/db";
 import type { ApiConfig } from "../config.js";
 import type { ServerAnalytics } from "../analytics.js";
+import { trackRedditSignup } from "../reddit-capi.js";
 
 export type AuthRouteOptions = {
   config: ApiConfig;
@@ -294,7 +296,9 @@ async function getAuthenticatedSession(
     user: {
       id: authSession.user.id,
       email: authSession.user.email,
-      displayName: authSession.user.displayName
+      displayName: authSession.user.displayName,
+      onboardingCompletedAt:
+        authSession.user.onboardingCompletedAt?.toISOString() ?? null
     },
     session: {
       id: authSession.session.id,
@@ -384,6 +388,9 @@ export async function registerAuthRoutes(
         provider: "google",
         providerSubject: googleUser.sub
       });
+      const existingEmailUser = existingUser
+        ? null
+        : await findUserByEmail(client, googleUser.email);
       const user =
         existingUser ??
         (await upsertUserByEmail(client, {
@@ -437,9 +444,30 @@ export async function registerAuthRoutes(
           authProvider: "google"
         }
       });
+      if (!existingUser && !existingEmailUser) {
+        void trackRedditSignup({
+          config,
+          log: fastify.log,
+          signup: {
+            email: user.email,
+            userId: user.id,
+            eventSourceUrl: new URL(
+              stateCookie.nextPath ?? "/play",
+              config.authPublicAppOrigin
+            ).toString(),
+            ipAddress: request.ip,
+            userAgent: request.headers["user-agent"]
+          }
+        });
+      }
+
+      const redirectPath =
+        !existingUser && !existingEmailUser
+          ? "/onboarding"
+          : stateCookie.nextPath ?? "/play";
 
       return reply.redirect(
-        new URL(stateCookie.nextPath ?? "/play", config.authPublicAppOrigin).toString()
+        new URL(redirectPath, config.authPublicAppOrigin).toString()
       );
     } catch (error) {
       await client.query("rollback");
@@ -505,6 +533,8 @@ export async function registerAuthRoutes(
         throw createHttpError(401, "Login token is invalid or expired.");
       }
 
+      const existingUser = await findUserByEmail(client, loginToken.email);
+
       const user = await upsertUserByEmail(client, {
         email: loginToken.email,
         displayName: null,
@@ -548,18 +578,33 @@ export async function registerAuthRoutes(
           authProvider: "passwordless"
         }
       });
+      if (!existingUser) {
+        void trackRedditSignup({
+          config,
+          log: fastify.log,
+          signup: {
+            email: user.email,
+            userId: user.id,
+            eventSourceUrl: config.authPublicAppOrigin,
+            ipAddress: request.ip,
+            userAgent: request.headers["user-agent"]
+          }
+        });
+      }
 
       const response = {
         authenticated: true,
         user: {
           id: user.id,
           email: user.email,
-          displayName: user.displayName
+          displayName: user.displayName,
+          onboardingCompletedAt: user.onboardingCompletedAt?.toISOString() ?? null
         },
         session: {
           id: session.id,
           expiresAt: session.expiresAt.toISOString()
-        }
+        },
+        isNewUser: !existingUser
       } satisfies AuthMeResponse;
 
       return AuthMeResponseSchema.parse(response);
@@ -625,7 +670,12 @@ export async function registerAuthRoutes(
 
     return AuthProtectedResponseSchema.parse({
       ok: true,
-      user
+      user: {
+        id: user.id,
+        email: user.email,
+        displayName: user.displayName,
+        onboardingCompletedAt: user.onboardingCompletedAt
+      }
     });
   });
 }

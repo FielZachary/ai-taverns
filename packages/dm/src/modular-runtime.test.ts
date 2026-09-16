@@ -431,6 +431,66 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("scene_director"), /concrete sensory detail/i);
     assert.match(jobPrompt("scene_director"), /observable behavior/i);
     assert.match(jobPrompt("scene_director"), /Keep player agency intact/i);
+    assert.doesNotMatch(jobPrompt("scene_director"), /Default narration length:/i);
+    assert.match(
+      jobPrompt("scene_director"),
+      /Resolve the player's declared action through its natural immediate endpoint/i
+    );
+    assert.match(
+      jobPrompt("scene_director"),
+      /Narrate until the first meaningful decision point/i
+    );
+    assert.match(
+      jobPrompt("scene_director"),
+      /carry the character through uneventful intervening space and narrate the arrival/i
+    );
+    assert.match(
+      jobPrompt("scene_director"),
+      /Do not skip material intermediate events/i
+    );
+    assert.match(
+      jobPrompt("scene_director"),
+      /A handoff is justified by a meaningful new choice or required roll/i
+    );
+    for (const job of [
+      "scene_director",
+      "investigation",
+      "npc_dialogue",
+      "combat",
+      "rest_mechanics",
+      "death_saving_throws"
+    ] as const) {
+      const prompt = jobPrompt(job);
+      assert.match(prompt, /Storyteller Voice:/);
+      assert.match(
+        prompt,
+        /engaged, expressive human Dungeon Master who is glad to be telling this story/i
+      );
+      assert.match(
+        prompt,
+        /Do not add length merely to create feeling/i
+      );
+      assert.match(
+        prompt,
+        /plainspoken, natural language/i
+      );
+      assert.match(
+        prompt,
+        /Prefer everyday, spoken vocabulary/i
+      );
+      assert.match(
+        prompt,
+        /Let sentences carry several connected observations when the scene is unfolding/i
+      );
+      assert.match(
+        prompt,
+        /Heightened, poetic, funny, blunt, or dramatic language is welcome/i
+      );
+      assert.match(
+        prompt,
+        /Do not state what a player character thinks, feels, intends, or values/i
+      );
+    }
     assert.match(jobPrompt("scene_director"), /pause for dice/i);
     assert.match(jobPrompt("scene_director"), /next_input_needed to dice_results/i);
     assert.match(jobPrompt("scene_director"), /structured roll_requests entry/i);

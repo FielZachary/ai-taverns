@@ -26,13 +26,18 @@ describe("getOptionalUser", () => {
       .mockResolvedValue(
         Response.json({
           authenticated: true,
-          user: { id: "user-1", email: "hero@example.com" }
+          user: {
+            id: "user-1",
+            email: "hero@example.com",
+            onboardingCompletedAt: null
+          }
         })
       );
 
     await expect(getOptionalUser()).resolves.toEqual({
       id: "user-1",
-      email: "hero@example.com"
+      email: "hero@example.com",
+      onboardingCompletedAt: null
     });
     expect(fetchMock).toHaveBeenCalledWith(
       "https://api.internal/api/auth/me",

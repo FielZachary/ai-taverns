@@ -6,6 +6,7 @@ import {
 export type AuthUser = {
   id: string;
   email?: string;
+  onboardingCompletedAt: string | null;
 };
 
 export async function getOptionalUser(): Promise<AuthUser | null> {
@@ -35,6 +36,7 @@ export async function getOptionalUser(): Promise<AuthUser | null> {
         user: {
           id: string;
           email: string;
+          onboardingCompletedAt: string | null;
         };
       };
 
@@ -44,6 +46,7 @@ export async function getOptionalUser(): Promise<AuthUser | null> {
 
   return {
     id: auth.user.id,
-    email: auth.user.email
+    email: auth.user.email,
+    onboardingCompletedAt: auth.user.onboardingCompletedAt
   };
 }
