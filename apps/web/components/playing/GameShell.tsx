@@ -43,7 +43,6 @@ import {
   ChatHistorySidebar,
   type ChatSummary
 } from "./ChatHistorySidebar";
-import { BackstoryIntroModal } from "./BackstoryIntroModal";
 import {
   CharacterSheetOverlay,
   type PlayerResourcesTab
@@ -115,14 +114,12 @@ const openingMessages: GameMessage[] = [];
 const aiModelStorageKey = "ai-dnd.aiModel";
 const defaultAiModel: AiModelId = "deepseek-v4-flash";
 const playerIdStorageKey = "ai-dnd.playerId";
-const backstoryIntroSeenStoragePrefix = "ai-dnd.backstoryIntroSeen";
 const initialSceneViewedStoragePrefix = "ai-dnd.initialSceneViewed";
 const roomRequestTimeoutMs = 8_000;
 const turnSubmissionRequestTimeoutMs = 30_000;
 const fallbackRoomPollMs = 25_000;
 const dungeonMasterTurnTimeoutMessage =
   "The dungeon master wasn't able to respond to that, please press the retry button on the right to re-send your message";
-const backstoryIntroDelaySeconds = 10;
 const defaultCampaignPreparationMessage = "Preparing your campaign";
 const campaignPreparationMessages = [
   defaultCampaignPreparationMessage,
@@ -467,13 +464,6 @@ export function GameShell({
   const [playerResourcesInitialTab, setPlayerResourcesInitialTab] =
     useState<PlayerResourcesTab>("character_sheet");
   const [isMessageMapOpen, setIsMessageMapOpen] = useState(false);
-  const [backstoryIntro, setBackstoryIntro] = useState<{
-    backstory: string;
-    storageKey: string;
-  } | null>(null);
-  const [backstoryIntroCountdown, setBackstoryIntroCountdown] = useState(
-    backstoryIntroDelaySeconds
-  );
   const [npcCards, setNpcCards] = useState<CampaignNpcCard[]>([]);
   const [isLoadingNpcCards, setIsLoadingNpcCards] = useState(false);
   const [npcCardsError, setNpcCardsError] = useState("");
@@ -986,60 +976,6 @@ export function GameShell({
       setRestartPreparingCampaignId(null);
     }
   }, [activeCampaign?.id, hasVisibleDmOpener, restartPreparingCampaignId]);
-
-  useEffect(() => {
-    if (!activeCampaign?.id || !hasAdventureBegun || !activeBackstory) {
-      return;
-    }
-
-    const storageKey = [
-      backstoryIntroSeenStoragePrefix,
-      activeCampaign.id,
-      playerId || "player"
-    ].join(".");
-
-    if (
-      backstoryIntro?.storageKey === storageKey ||
-      window.localStorage.getItem(storageKey) === "true"
-    ) {
-      return;
-    }
-
-    setBackstoryIntro({
-      backstory: activeBackstory,
-      storageKey
-    });
-    setBackstoryIntroCountdown(backstoryIntroDelaySeconds);
-  }, [
-    activeBackstory,
-    activeCampaign?.id,
-    backstoryIntro?.storageKey,
-    hasAdventureBegun,
-    playerId
-  ]);
-
-  useEffect(() => {
-    if (!backstoryIntro || backstoryIntroCountdown <= 0) {
-      return;
-    }
-
-    const timeout = window.setTimeout(() => {
-      setBackstoryIntroCountdown((currentCountdown) =>
-        Math.max(0, currentCountdown - 1)
-      );
-    }, 1_000);
-
-    return () => window.clearTimeout(timeout);
-  }, [backstoryIntro, backstoryIntroCountdown]);
-
-  function closeBackstoryIntro() {
-    if (backstoryIntro) {
-      window.localStorage.setItem(backstoryIntro.storageKey, "true");
-    }
-
-    setBackstoryIntro(null);
-    setBackstoryIntroCountdown(backstoryIntroDelaySeconds);
-  }
 
   useEffect(() => {
     if (!isCharacterSheetOpen || !activeCampaign?.id) {
@@ -2812,14 +2748,6 @@ export function GameShell({
 
       {isMessageMapOpen ? (
         <EldermereMapModal onClose={() => setIsMessageMapOpen(false)} />
-      ) : null}
-
-      {backstoryIntro ? (
-        <BackstoryIntroModal
-          backstory={backstoryIntro.backstory}
-          countdown={backstoryIntroCountdown}
-          onContinue={closeBackstoryIntro}
-        />
       ) : null}
 
       <button
