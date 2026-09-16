@@ -3356,6 +3356,10 @@ test("campaign creation stores a multiplayer campaign and list returns it", asyn
   const listBody = CampaignListResponseSchema.parse(listResponse.json());
   assert.equal(listBody.campaigns.length, 1);
   assert.equal(listBody.campaigns[0]?.id, createBody.campaign.id);
+  assert.ok(
+    database.users.find((user) => user.email === "campaign-owner@example.com")
+      ?.onboarding_completed_at
+  );
 });
 
 test("solo turns persist revealed written artifacts as canonical document text", async () => {
@@ -4379,6 +4383,14 @@ test("campaign join preview and join use the Fastify campaign API", async () => 
     ).length,
     2
   );
+  assert.ok(
+    database.users.find((user) => user.email === "join-owner@example.com")
+      ?.onboarding_completed_at
+  );
+  assert.ok(
+    database.users.find((user) => user.email === "joiner@example.com")
+      ?.onboarding_completed_at
+  );
 });
 
 test("campaign join rejects invalid and disabled game codes", async () => {
@@ -4571,6 +4583,14 @@ test("campaign lobby invites are owner managed and let players join unstarted lo
   assert.equal(joined.campaign.title, "Tamsin");
   assert.equal(database.campaignInvites[0]?.use_count, 1);
   assert.equal(database.campaignInviteUses.length, 1);
+  assert.ok(
+    database.users.find((user) => user.email === "invite-owner@example.com")
+      ?.onboarding_completed_at
+  );
+  assert.ok(
+    database.users.find((user) => user.email === "invite-joiner@example.com")
+      ?.onboarding_completed_at
+  );
 
   const disableResponse = await app.inject({
     method: "POST",

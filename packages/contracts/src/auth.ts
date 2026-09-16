@@ -5,7 +5,8 @@ export const AuthEmailSchema = z.string().trim().toLowerCase().email();
 export const AuthUserSchema = z.object({
   id: z.string().min(1),
   email: z.string().email(),
-  displayName: z.string().min(1).nullable()
+  displayName: z.string().min(1).nullable(),
+  onboardingCompletedAt: z.string().datetime().nullable()
 });
 
 export const AuthSessionSchema = z.object({

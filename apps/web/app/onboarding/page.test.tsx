@@ -54,7 +54,8 @@ describe("onboarding page", () => {
   it("renders the same adventure form for authenticated users", async () => {
     getOptionalUserMock.mockResolvedValue({
       id: "user-1",
-      email: "hero@example.com"
+      email: "hero@example.com",
+      onboardingCompletedAt: null
     });
 
     const result = await OnboardingPage({ searchParams: Promise.resolve({}) });
@@ -67,5 +68,17 @@ describe("onboarding page", () => {
         userId: "user-1"
       }
     });
+  });
+
+  it("redirects users who have completed onboarding to play", async () => {
+    getOptionalUserMock.mockResolvedValue({
+      id: "user-1",
+      email: "hero@example.com",
+      onboardingCompletedAt: "2026-09-16T00:00:00.000Z"
+    });
+
+    await expect(
+      OnboardingPage({ searchParams: Promise.resolve({ invite: "invite-token" }) })
+    ).rejects.toMatchObject({ destination: "/play" });
   });
 });

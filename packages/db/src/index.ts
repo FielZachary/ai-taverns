@@ -101,6 +101,7 @@ export type UserRow = {
   id: string;
   email: string;
   display_name: string | null;
+  onboarding_completed_at?: Date | null;
   created_at: Date;
   updated_at: Date;
   subscription_tier_id?: number;
@@ -110,6 +111,7 @@ export type UserRecord = {
   id: UserId;
   email: string;
   displayName: string | null;
+  onboardingCompletedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   subscriptionTierId: number;
@@ -197,6 +199,7 @@ export function mapUserRow(row: UserRow): UserRecord {
     id: row.id as UserId,
     email: row.email,
     displayName: row.display_name,
+    onboardingCompletedAt: row.onboarding_completed_at ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     subscriptionTierId: row.subscription_tier_id ?? 4
@@ -268,7 +271,7 @@ export async function upsertUserByEmail(
       values ($1, $2, $3)
       on conflict (email) do update
       set display_name = coalesce(excluded.display_name, users.display_name)
-      returning id, email, display_name, created_at, updated_at, subscription_tier_id
+      returning id, email, display_name, onboarding_completed_at, created_at, updated_at, subscription_tier_id
     `,
     [input.email, input.displayName, input.subscriptionTierId ?? 4]
   );
@@ -282,7 +285,7 @@ export async function findUserByEmail(
 ): Promise<UserRecord | null> {
   const result = await db.query<UserRow>(
     `
-      select id, email, display_name, created_at, updated_at, subscription_tier_id
+      select id, email, display_name, onboarding_completed_at, created_at, updated_at, subscription_tier_id
       from users
       where email = $1
       limit 1
@@ -361,7 +364,7 @@ export async function findUserByAuthIdentity(
 ): Promise<UserRecord | null> {
   const result = await db.query<UserRow>(
     `
-      select users.id, users.email, users.display_name, users.created_at, users.updated_at, users.subscription_tier_id
+      select users.id, users.email, users.display_name, users.onboarding_completed_at, users.created_at, users.updated_at, users.subscription_tier_id
       from auth_identities
       join users on users.id = auth_identities.user_id
       where auth_identities.provider = $1
@@ -431,6 +434,7 @@ export async function findActiveSessionByTokenHash(
         users.id,
         users.email,
         users.display_name,
+        users.onboarding_completed_at,
         users.created_at,
         users.updated_at,
         sessions.id as session_id,
@@ -2961,6 +2965,7 @@ export async function createCampaignForMode(
       ]
     );
     const playerRow = requireRow(player.rows[0], "Failed to create player.");
+    await markOnboardingComplete(client, input.userId);
     const mechanicsState = mechanicsStateWithActor({
       playerId: playerRow.id,
       characterName: playerRow.character_name,
@@ -3675,6 +3680,8 @@ export async function joinCampaignByCode(
       throw createStatusError(409, "That game is already full.");
     }
 
+    await markOnboardingComplete(client, input.userId);
+
     if (userPlayer?.status === "active") {
       await client.query(
         `
@@ -4162,6 +4169,8 @@ export async function joinCampaignByInvite(
       throw createStatusError(409, "That game is already full.");
     }
 
+    await markOnboardingComplete(client, input.userId);
+
     if (userPlayer?.status === "active") {
       await client.query(
         `
@@ -4284,6 +4293,20 @@ export async function joinCampaignByInvite(
     current_user_player_id: clientId,
     join_code: null
   });
+}
+
+async function markOnboardingComplete(
+  db: Queryable,
+  userId: string
+): Promise<void> {
+  await db.query(
+    `
+      update users
+      set onboarding_completed_at = coalesce(onboarding_completed_at, now())
+      where id = $1
+    `,
+    [userId]
+  );
 }
 
 function isUuid(value: string) {

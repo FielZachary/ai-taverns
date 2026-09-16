@@ -296,7 +296,9 @@ async function getAuthenticatedSession(
     user: {
       id: authSession.user.id,
       email: authSession.user.email,
-      displayName: authSession.user.displayName
+      displayName: authSession.user.displayName,
+      onboardingCompletedAt:
+        authSession.user.onboardingCompletedAt?.toISOString() ?? null
     },
     session: {
       id: authSession.session.id,
@@ -595,7 +597,8 @@ export async function registerAuthRoutes(
         user: {
           id: user.id,
           email: user.email,
-          displayName: user.displayName
+          displayName: user.displayName,
+          onboardingCompletedAt: user.onboardingCompletedAt?.toISOString() ?? null
         },
         session: {
           id: session.id,
@@ -667,7 +670,12 @@ export async function registerAuthRoutes(
 
     return AuthProtectedResponseSchema.parse({
       ok: true,
-      user
+      user: {
+        id: user.id,
+        email: user.email,
+        displayName: user.displayName,
+        onboardingCompletedAt: user.onboardingCompletedAt
+      }
     });
   });
 }
