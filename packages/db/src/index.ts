@@ -9365,20 +9365,20 @@ function formatEldermereNarratorOpeningRequest(input: {
     "In the first paragraph, include one brief, natural sentence or clause explaining what the settlement is and what it is commonly known for. Present it as ordinary local knowledge, not exposition. For example: 'Thanewell is one of the terrace villages that feeds the high country,' or 'Selwick is a river town known for its salt barges and crowded quays.'",
     "Do not make an NPC appoint the player, ask the player to solve the problem, or present a prepackaged objective before the player has had a chance to respond to the scene. The opening should offer an opportunity, not an assignment.",
     "",
-    "Return only plain prose. It must contain exactly 4 paragraphs separated by blank lines. Do not add headings, labels, notes, Markdown, JSON, or commentary. Paragraph 4 must be exactly 'What do you do?'.",
+    "Return only plain prose. It must contain exactly 4 paragraphs separated by blank lines. Do not add headings, labels, notes, Markdown, JSON, or commentary. Paragraph 4 must be exactly 'What would you like to do?'.",
     "Use the supplied character profile only for present capabilities and visible details. Do not invent, reference, resolve, or imply personal history, past relationships, debts, gifts, clues, promises, or causes.",
     "Use only facts the character could reasonably see, hear, know, infer, or be told in this opening scene. Do not request dice; the player must receive control before attempting any uncertain action.",
     "Use exactly 6 semantic narration color tags across paragraphs 1-3: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, or <object>...</object>. Each tag must wrap only a short, player-visible noun or phrase. Do not nest tags, add attributes, use <em>, use Markdown emphasis, or use any other HTML/XML tags.",
     "",
     "REQUIRED FOUR-PARAGRAPH STRUCTURE:",
     "Paragraph 1 — Arrival: Place you in a specific sensory location and show the first striking detail. Include only enough immediate context to establish why you are physically there.",
-    "Paragraph 2 — The live incident: Show people doing or saying something that makes the situation legible but unresolved. Use action and dialogue before explanation. Do not explain the full stakes or background unless it is naturally visible or spoken aloud.",
+    "Paragraph 2 — The live incident: Show people doing or saying something that makes the situation legible but unresolved. Use direct, expressive dialogue to reveal the immediate conflict or pressure: when people are speaking, include at least two short quoted lines rather than summarizing their argument, accusation, reassurance, or plea. Do not explain the full stakes or background unless it is naturally visible or spoken aloud.",
     "Paragraph 3 — The opening: End on an unanswered question, visible choice point, escalation, or moment of attention that gives you room to decide your own response. Do not list suggested actions unless clarity genuinely requires it.",
-    "Paragraph 4 — Handoff: Write exactly 'What do you do?'",
+    "Paragraph 4 — Handoff: Write exactly 'What would you like to do?'",
     "",
     "Opening style: Write grounded, direct fantasy prose that feels vivid because it is specific. Build atmosphere through terrain, weather, objects, sound, movement, expression, and immediate consequences. The opener should feel like you have arrived beside a real situation in motion, not like someone has stopped to explain the campaign to you.",
     "",
-    "Before returning, silently verify that the opening_scene directives are rendered rather than summarized, the first 3 paragraphs follow the required present-first sequence, paragraph 4 is exactly 'What do you do?', and exactly 6 valid semantic color tags appear across paragraphs 1-3."
+    "Before returning, silently verify that the opening_scene directives are rendered rather than summarized, the first 3 paragraphs follow the required present-first sequence, paragraph 2 uses direct dialogue when people are speaking, paragraph 4 is exactly 'What would you like to do?', and exactly 6 valid semantic color tags appear across paragraphs 1-3."
   ].join("\n");
 }
 
@@ -10701,8 +10701,8 @@ function eldermereOpeningStructuralErrors(content: string) {
     );
   }
 
-  if (!/what do you do\?\s*$/i.test(content.trim())) {
-    errors.push("public_narration must end with 'What do you do?'");
+  if (!/what would you like to do\?\s*$/i.test(content.trim())) {
+    errors.push("public_narration must end with 'What would you like to do?'");
   }
 
   return errors;
@@ -10785,7 +10785,7 @@ async function askEldermereOpeningNarrator(
         ]
       : []),
     "Return only a complete plain-prose opener for the same opening situation, fixing every issue above.",
-    "Use exactly 4 paragraphs separated by blank lines. The fourth and final paragraph must be exactly 'What do you do?'.",
+    "Use exactly 4 paragraphs separated by blank lines. The fourth and final paragraph must be exactly 'What would you like to do?'.",
     `Use exactly ${semanticOpeningTagMinimum} semantic narration color tags using <npc>, <place>, <clue>, <danger>, <faction>, or <object>.`,
     "Do not return JSON, Markdown fences, headings, metadata, setting information, roll requests, state updates, or commentary."
   ].join("\n");
@@ -10867,9 +10867,9 @@ async function askEldermereOpeningNarrator(
     "Rewrite the same opening situation as plain prose only.",
     "Use exactly 4 paragraphs separated by blank lines.",
     "Paragraph 1: the current playable situation and why the character or party is caught in it now; explain earlier events only as brief retrospective context for a present person, object, consequence, or situation, never as a narrated journey or event sequence.",
-    "Paragraph 2: the starting location's immediate sensory and spatial details, visible NPCs, reachable objects, exits, and urgent visible pressure.",
+    "Paragraph 2: the starting location's immediate sensory and spatial details, visible NPCs, reachable objects, exits, and urgent visible pressure. When people are speaking, include at least two short quoted lines of direct dialogue that show the immediate conflict or pressure rather than summarizing it.",
     "Paragraph 3: the actionable complication and 2-3 concrete non-dice actions available right now.",
-    "Paragraph 4: exactly 'What do you do?' and nothing else.",
+    "Paragraph 4: exactly 'What would you like to do?' and nothing else.",
     `Use exactly ${semanticOpeningTagMinimum} semantic narration color tags using <npc>, <place>, <clue>, <danger>, <faction>, or <object>.`,
     "Do not include JSON, Markdown fences, a teaser, a summary, a prologue note, metadata, or anything other than exactly 4 paragraphs."
   ].join("\n");

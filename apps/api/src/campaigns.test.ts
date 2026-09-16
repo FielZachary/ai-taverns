@@ -2597,7 +2597,7 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.equal(openingPlan.starting_location, "Selwick");
   assert.match(openingPlan.concept as string, /local request turns into an escalating mystery/i);
   assert.ok(Array.isArray(openingPlan.campaign_anchors));
-  assert.match(openingPayload?.content as string, /What do you do\?$/);
+  assert.match(openingPayload?.content as string, /What would you like to do\?$/);
   assert.ok(getProviderInputs().length >= 2);
   await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -2719,6 +2719,7 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.doesNotMatch(narratorInput.message, /Backstory/);
   assert.match(narratorInput.message, /Paragraph 1 — Arrival/);
   assert.match(narratorInput.message, /Paragraph 2 — The live incident/);
+  assert.match(narratorInput.message, /at least two short quoted lines/i);
   assert.match(narratorInput.message, /opening_scene/);
   assert.match(narratorInput.message, /Paragraph 3 — The opening/);
   assert.match(narratorInput.message, /Paragraph 4 — Handoff/);
@@ -2976,7 +2977,7 @@ test.skip("POST /api/campaigns scrubs forbidden Eldermere opening terms after na
       "<npc>Mara Vell</npc> waits by a <clue>marked doorway</clue> in <place>Suncross</place>, rain silvering her cloak while guards argue nearby and market carts slow to stare. The summons in your pocket is why you are here; earlier that evening, its bearer warned that the street would turn dangerous if you were late.",
       "<danger>Guards</danger> close on the doorway as <faction>watchful locals</faction> lower their voices, and the city seems to hold its breath around the sealed entrance.",
       "You can question Mara Vell, inspect the marked doorway, or ask nearby locals what frightened them before the street closes around you.",
-      "What do you do?"
+      "What would you like to do?"
     ].join("\n\n");
 
     if (input.message.includes("Rewrite required:")) {
@@ -3008,7 +3009,7 @@ test.skip("POST /api/campaigns scrubs forbidden Eldermere opening terms after na
       id: "provider-narrator-forbidden-terms",
       content: JSON.stringify({
         public_narration:
-          "Suncross crouches beneath the old stones of the Second Dominion, where the Hush still seems to press against every shutter.\n\nMara Vell waits by a marked doorway, rain silvering her cloak.\n\nWhat do you do?",
+          "Suncross crouches beneath the old stones of the Second Dominion, where the Hush still seems to press against every shutter.\n\nMara Vell waits by a marked doorway, rain silvering her cloak.\n\nWhat would you like to do?",
         roll_requests: [],
         next_input_needed: "player_actions",
         input_targets: [],
@@ -3172,7 +3173,7 @@ test.skip("POST /api/campaigns uses a low-temperature final retry for short Elde
           narrator_instructions: [
             "Begin at the edge of Suncross.",
             "Introduce Mara Vell as a visible NPC.",
-            "Keep the opening to exactly 4 paragraphs of vivid sensory detail, with the fourth paragraph only the final direct prompt: What do you do?"
+            "Keep the opening to exactly 4 paragraphs of vivid sensory detail, with the fourth paragraph only the final direct prompt: What would you like to do?"
           ]
         }),
         debug: {
@@ -3190,7 +3191,7 @@ test.skip("POST /api/campaigns uses a low-temperature final retry for short Elde
         "<npc>Mara Vell</npc> waits by a <clue>marked doorway</clue> in <place>Suncross</place>, rain silvering her cloak while guards argue nearby and market carts slow to stare. The summons in your pocket is why you are here; earlier that evening, its bearer warned that the street would turn dangerous if you were late.",
         "<danger>Guards</danger> close on the doorway as <faction>watchful locals</faction> lower their voices, and the city seems to hold its breath around the sealed entrance.",
         "You can question Mara Vell, inspect the marked doorway, or ask nearby locals what frightened them before the street closes around you.",
-        "What do you do?"
+        "What would you like to do?"
       ].join("\n\n");
 
       return {
@@ -3298,7 +3299,7 @@ test.skip("POST /api/campaigns uses a low-temperature final retry for short Elde
 
   assert.ok(payload);
   assert.equal(content.split(/\n\s*\n/).filter(Boolean).length, 6);
-  assert.match(content, /What do you do\?$/);
+  assert.match(content, /What would you like to do\?$/);
   assert.match(content, /<place>Suncross<\/place>/);
   assert.match(content, /<npc>Mara Vell<\/npc>/);
   assert.ok(finalRetryInput);

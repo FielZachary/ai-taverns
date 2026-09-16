@@ -3886,7 +3886,7 @@ before(async () => {
           "ELDERMERE OPENING BRIEF"
         );
         const eldermerePublicNarration =
-          "A <npc>courier</npc> waits beside a <clue>weathered sign</clue> on the <place>old road</place>, glancing between you and the <danger>ruined watchtower</danger> beyond the ridge. The summons in your pocket brought you here; earlier that evening, its bearer warned that the tower's lantern had gone dark.\n\nA <object>lantern</object> flickers over wet stones and wagon ruts as <faction>nearby travelers</faction> retreat from the watchtower's distant metal knock. The road, the sign, and the courier are all within reach, but the darkness inside the ruin is no longer still.\n\nYou can question the courier, inspect the weathered sign, or follow the road toward the ruined watchtower before the lantern burns out.\n\nWhat do you do?";
+          "A <npc>courier</npc> waits beside a <clue>weathered sign</clue> on the <place>old road</place>, glancing between you and the <danger>ruined watchtower</danger> beyond the ridge. The summons in your pocket brought you here; earlier that evening, its bearer warned that the tower's lantern had gone dark.\n\nA <object>lantern</object> flickers over wet stones and wagon ruts as <faction>nearby travelers</faction> retreat from the watchtower's distant metal knock. \"That sound came from inside,\" the courier says. \"I am not going back alone.\"\n\nYou can question the courier, inspect the weathered sign, or follow the road toward the ruined watchtower before the lantern burns out.\n\nWhat would you like to do?";
         const narratorContent = isEldermereNarrator
           ? eldermerePublicNarration
           : publicNarration;
