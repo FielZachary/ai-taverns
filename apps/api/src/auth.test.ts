@@ -64,6 +64,7 @@ test("passwordless login creates a local session cookie and authenticates /auth/
 
   assert.equal(verifyBody.authenticated, true);
   assert.equal(verifyBody.user.email, "player@example.com");
+  assert.equal(verifyBody.isNewUser, true);
 
   const meResponse = await app.inject({
     method: "GET",
@@ -145,7 +146,7 @@ test("Google OAuth callback links identity, creates a session, and authenticates
 
       return Response.json({
         sub: "google-user-123",
-        email: "PLAYER@Example.COM",
+        email: "NEW-GOOGLE-PLAYER@Example.COM",
         email_verified: true,
         name: "Tavern Player"
       });
@@ -166,18 +167,18 @@ test("Google OAuth callback links identity, creates a session, and authenticates
     assert.equal(callbackResponse.statusCode, 302);
     assert.equal(
       callbackResponse.headers.location,
-      "http://localhost:3000/new-adventure"
+      "http://localhost:3000/onboarding"
     );
     assert.deepEqual(fetchCalls, [
       "https://oauth2.googleapis.com/token",
       "https://openidconnect.googleapis.com/v1/userinfo"
     ]);
-    assert.equal(database.users.at(-1)?.email, "player@example.com");
+    assert.equal(database.users.at(-1)?.email, "new-google-player@example.com");
     assert.equal(
       database.authIdentities.some(
         (identity) =>
           identity.provider === "email" &&
-          identity.provider_subject === "player@example.com"
+          identity.provider_subject === "new-google-player@example.com"
       ),
       true
     );
@@ -186,7 +187,7 @@ test("Google OAuth callback links identity, creates a session, and authenticates
         (identity) =>
           identity.provider === "google" &&
           identity.provider_subject === "google-user-123" &&
-          identity.email === "player@example.com"
+          identity.email === "new-google-player@example.com"
       ),
       true
     );
@@ -209,7 +210,7 @@ test("Google OAuth callback links identity, creates a session, and authenticates
     assert.equal(meResponse.statusCode, 200);
     const meBody = AuthMeResponseSchema.parse(meResponse.json());
     assert.equal(meBody.authenticated, true);
-    assert.equal(meBody.user.email, "player@example.com");
+    assert.equal(meBody.user.email, "new-google-player@example.com");
     assert.equal(meBody.user.displayName, "Tavern Player");
   } finally {
     globalThis.fetch = originalFetch;

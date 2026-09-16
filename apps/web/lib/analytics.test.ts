@@ -178,4 +178,36 @@ describe("client analytics retention tracking", () => {
       expect.objectContaining({ initial_utm_source: "instagram" })
     );
   });
+
+  it("sends onboarding response selections to Mixpanel", async () => {
+    const { trackAnalytics } = await import("./analytics");
+
+    trackAnalytics({
+      name: "Onboarding Referral Source Selected",
+      properties: { referralSource: "TikTok" }
+    });
+    trackAnalytics({
+      name: "Onboarding D&D Experience Selected",
+      properties: {
+        dndExperience: "I've played D&D quite a few times",
+        characterBuildMode: "custom"
+      }
+    });
+
+    expect(mixpanelMock.track).toHaveBeenCalledWith(
+      "Onboarding Referral Source Selected",
+      expect.objectContaining({
+        referralSource: "TikTok",
+        source: "web"
+      })
+    );
+    expect(mixpanelMock.track).toHaveBeenCalledWith(
+      "Onboarding D&D Experience Selected",
+      expect.objectContaining({
+        dndExperience: "I've played D&D quite a few times",
+        characterBuildMode: "custom",
+        source: "web"
+      })
+    );
+  });
 });

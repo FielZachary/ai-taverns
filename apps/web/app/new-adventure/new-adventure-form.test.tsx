@@ -191,6 +191,50 @@ describe("NewAdventureForm", () => {
     expect(screen.getByRole("button", { name: /multiplayer/i })).toBeDisabled();
   });
 
+  it("keeps onboarding welcome and referral steps in the adventure flow", async () => {
+    render(<NewAdventureForm onboarding />);
+
+    expect(
+      screen.getByRole("heading", { name: "Welcome, traveller." })
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(5_480);
+    });
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Where did you hear about AI Taverns?"
+      })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reddit" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "X" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Instagram" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "TikTok" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Other" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Reddit" }));
+    await finishFlowTransition();
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Describe your experience in D&D 5e"
+      })
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Experience level" }));
+    fireEvent.click(
+      screen.getByRole("option", { name: "I've played D&D quite a few times" })
+    );
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await finishFlowTransition();
+
+    expect(screen.getByRole("heading", { name: /choose your class/i })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: /choose your character build/i })
+    ).not.toBeInTheDocument();
+  });
+
   it("lets point-buy stats spend points and advance from valid stats", async () => {
     render(<NewAdventureForm />);
 
@@ -1090,13 +1134,14 @@ describe("NewAdventureForm", () => {
       "rune-loader"
     );
     expect(
-      screen.getByText("this'll take about a minute and a half, sit tight ;)")
+      screen.getByText("0%")
     ).toHaveClass("campaign-prep-loader-note");
 
     await act(async () => {
-      vi.advanceTimersByTime(10_000);
+      vi.advanceTimersByTime(5_000);
     });
 
+    expect(screen.getByText("83%")).toHaveClass("campaign-prep-loader-note");
     expect(screen.getByText("Integrating your backstory")).toHaveClass(
       "rune-loader"
     );

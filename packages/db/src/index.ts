@@ -101,6 +101,7 @@ export type UserRow = {
   id: string;
   email: string;
   display_name: string | null;
+  onboarding_completed_at?: Date | null;
   created_at: Date;
   updated_at: Date;
   subscription_tier_id?: number;
@@ -110,6 +111,7 @@ export type UserRecord = {
   id: UserId;
   email: string;
   displayName: string | null;
+  onboardingCompletedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   subscriptionTierId: number;
@@ -197,6 +199,7 @@ export function mapUserRow(row: UserRow): UserRecord {
     id: row.id as UserId,
     email: row.email,
     displayName: row.display_name,
+    onboardingCompletedAt: row.onboarding_completed_at ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     subscriptionTierId: row.subscription_tier_id ?? 4
@@ -268,12 +271,29 @@ export async function upsertUserByEmail(
       values ($1, $2, $3)
       on conflict (email) do update
       set display_name = coalesce(excluded.display_name, users.display_name)
-      returning id, email, display_name, created_at, updated_at, subscription_tier_id
+      returning id, email, display_name, onboarding_completed_at, created_at, updated_at, subscription_tier_id
     `,
     [input.email, input.displayName, input.subscriptionTierId ?? 4]
   );
 
   return mapUserRow(requireRow(result.rows[0], "Failed to upsert user."));
+}
+
+export async function findUserByEmail(
+  db: Queryable,
+  email: string
+): Promise<UserRecord | null> {
+  const result = await db.query<UserRow>(
+    `
+      select id, email, display_name, onboarding_completed_at, created_at, updated_at, subscription_tier_id
+      from users
+      where email = $1
+      limit 1
+    `,
+    [email]
+  );
+
+  return result.rows[0] ? mapUserRow(result.rows[0]) : null;
 }
 
 export function currentUsagePeriodStart(now = new Date()) {
@@ -344,7 +364,7 @@ export async function findUserByAuthIdentity(
 ): Promise<UserRecord | null> {
   const result = await db.query<UserRow>(
     `
-      select users.id, users.email, users.display_name, users.created_at, users.updated_at, users.subscription_tier_id
+      select users.id, users.email, users.display_name, users.onboarding_completed_at, users.created_at, users.updated_at, users.subscription_tier_id
       from auth_identities
       join users on users.id = auth_identities.user_id
       where auth_identities.provider = $1
@@ -414,6 +434,7 @@ export async function findActiveSessionByTokenHash(
         users.id,
         users.email,
         users.display_name,
+        users.onboarding_completed_at,
         users.created_at,
         users.updated_at,
         sessions.id as session_id,
@@ -699,12 +720,15 @@ const campaignAnchorTypes = [
 type CampaignAnchorType = (typeof campaignAnchorTypes)[number];
 type CampaignAnchorVisibility = "player_safe" | "dm_only";
 
-type EldermereOpeningPlan = {
+type EldermereOpeningBrief = {
   region: string;
   startingLocation: string;
-  howThePlayerGotHere: string;
+  whyThePlayerIsHereNow: string;
   concept: string;
   openingScene: string;
+};
+
+type EldermereOpeningPlan = EldermereOpeningBrief & {
   privateTruth: string;
   campaignAnchors: Array<{
     type: CampaignAnchorType;
@@ -2941,6 +2965,7 @@ export async function createCampaignForMode(
       ]
     );
     const playerRow = requireRow(player.rows[0], "Failed to create player.");
+    await markOnboardingComplete(client, input.userId);
     const mechanicsState = mechanicsStateWithActor({
       playerId: playerRow.id,
       characterName: playerRow.character_name,
@@ -3047,28 +3072,31 @@ export async function createCampaignForMode(
       | undefined;
     const opening = hasEldermereWorldProfile(createdState.campaign)
       ? await (async () => {
-          const plan = await askEldermereOpeningPlanner(
+          const brief = await askEldermereOpeningBriefPlanner(
             db,
             runtime,
             createdState.campaign,
             [createdState.player],
             openingTurn.id
           );
-          await persistEldermereOpeningPlan(
-            db,
-            createdState.campaign.id,
-            plan.plan
-          );
-          foundationCompilerPromise = runEldermereCampaignFoundationCompiler(
-            db,
-            runtime,
-            {
+          await persistEldermereOpeningBrief(db, createdState.campaign.id, brief.brief);
+          foundationCompilerPromise = (async () => {
+            const foundation = await askEldermereOpeningPlanner(
+              db,
+              runtime,
+              createdState.campaign,
+              [createdState.player],
+              openingTurn.id,
+              brief.brief
+            );
+            await persistEldermereOpeningPlan(db, createdState.campaign.id, foundation.plan);
+            return runEldermereCampaignFoundationCompiler(db, runtime, {
               campaign: createdState.campaign,
               openingRequest,
-              plan: plan.plan,
+              plan: foundation.plan,
               turnId: openingTurn.id
-            }
-          );
+            });
+          })();
 
           const opening = await askEldermereOpeningNarrator(
             db,
@@ -3076,7 +3104,7 @@ export async function createCampaignForMode(
             createdState.campaign,
             [createdState.player],
             eldermereOpeningNarratorInstructions(),
-            plan.plan,
+            brief.brief,
             openingTurn.id,
             { allowResolvedCombatWithoutRolls: true }
           );
@@ -3085,7 +3113,7 @@ export async function createCampaignForMode(
             ...opening,
             debug: {
               ...opening.debug,
-              eldermereOpeningPlanner: plan.debug
+              eldermereOpeningPlanner: brief.debug
             }
           };
         })()
@@ -3116,33 +3144,18 @@ export async function createCampaignForMode(
       aiDebug: opening.debug
     });
 
-    const foundationContextStorageState = await foundationCompilerPromise;
-
-    if (foundationContextStorageState) {
-      await attachContextStorageStateToDmEventDebug(db, {
-        campaignId: createdState.campaign.id,
-        dmEventId: resolvedTurn.dmEventId,
-        contextStorageState: foundationContextStorageState
-      });
-
-      runtime.emitDmStreamEvent?.({
-        type: "room_updated",
-        roomId: createdState.campaign.id,
-        updatedAt: foundationContextStorageState.capturedAt,
-        eventId: resolvedTurn.dmEventId
-      });
-    }
-
     await db.query("update campaigns set has_begun = true where id = $1", [
       createdState.campaign.id
     ]);
 
-    void runtime.runPostTurnContextJobs?.({
+    scheduleOpeningContextFinalization(db, {
       campaignId: createdState.campaign.id,
       turnId: openingTurn.id,
+      dmEventId: resolvedTurn.dmEventId,
+      foundationCompilerPromise,
+      runtime,
       currentAction: openingRequest,
       dmResponse: opening.content,
-      dmEventId: resolvedTurn.dmEventId,
       rollRequests: opening.rollRequests
     });
 
@@ -3667,6 +3680,8 @@ export async function joinCampaignByCode(
       throw createStatusError(409, "That game is already full.");
     }
 
+    await markOnboardingComplete(client, input.userId);
+
     if (userPlayer?.status === "active") {
       await client.query(
         `
@@ -4154,6 +4169,8 @@ export async function joinCampaignByInvite(
       throw createStatusError(409, "That game is already full.");
     }
 
+    await markOnboardingComplete(client, input.userId);
+
     if (userPlayer?.status === "active") {
       await client.query(
         `
@@ -4276,6 +4293,20 @@ export async function joinCampaignByInvite(
     current_user_player_id: clientId,
     join_code: null
   });
+}
+
+async function markOnboardingComplete(
+  db: Queryable,
+  userId: string
+): Promise<void> {
+  await db.query(
+    `
+      update users
+      set onboarding_completed_at = coalesce(onboarding_completed_at, now())
+      where id = $1
+    `,
+    [userId]
+  );
 }
 
 function isUuid(value: string) {
@@ -8821,7 +8852,7 @@ function characterSheetField(characterSheet: string, label: string) {
   return match?.[1]?.trim() ?? "";
 }
 
-function formatEldermereNarratorCharacterContext(players: PlayerRow[]) {
+function formatEldermereCampaignCharacterContext(players: PlayerRow[]) {
   const playablePlayers = players.filter(isProfileComplete);
 
   if (playablePlayers.length === 0) {
@@ -8852,7 +8883,6 @@ function formatEldermereNarratorCharacterContext(players: PlayerRow[]) {
         ...extractCharacterSheetSectionLines(sheet, "Inventory")
       ];
       const spells = extractCharacterSheetSectionLines(sheet, "Spells");
-      const backstory = extractCharacterBackstory(sheet);
 
       return [
         `${index + 1}. ${player.character_name}`,
@@ -8871,14 +8901,13 @@ function formatEldermereNarratorCharacterContext(players: PlayerRow[]) {
           ? `Relevant skills and proficiencies: ${proficientSkills.join("; ")}`
           : "",
         equipment.length > 0 ? `Equipment: ${equipment.join("; ")}` : "",
-        spells.length > 0 ? `Spells: ${spells.join("; ")}` : "",
-        backstory ? `Authoritative backstory:\n${backstory}` : ""
+        spells.length > 0 ? `Spells: ${spells.join("; ")}` : ""
       ]
         .filter(Boolean)
         .join("\n");
     }),
     "",
-    "Preserve this backstory exactly. Do not invent, alter, resolve, soften, or contradict past events, relationships, possessions, letters, promises, causes, or losses."
+    "Use this mechanical character profile only to frame capabilities, spotlight class and equipment, and judge what the character can plausibly attempt. It contains no character history; do not invent personal history, past relationships, possessions, promises, causes, or losses."
   ].join("\n\n");
 }
 
@@ -9165,7 +9194,33 @@ function eldermereOpeningPlannerInstructions() {
   ].join("\n");
 }
 
-function formatEldermereCampaignConceptRequest(input: {
+function eldermereOpeningBriefPlannerInstructions() {
+  return [
+    "You are the campaign-opening planner for AI Taverns, designing the core concept for a new Eldermere campaign.",
+    "Create a campaign concept, not player-facing narration, encounter instructions, or a world bible.",
+    "Return exactly one valid JSON object and no Markdown.",
+    "Use the exact JSON shape supplied in the request.",
+    "This is the opener-critical brief. Do not create private_truth or campaign_anchors; a background foundation planner will create those after the opening brief is approved."
+  ].join("\n");
+}
+
+function openingSceneDirectiveRequirements() {
+  return [
+    "OPENING-SCENE HANDOFF REQUIREMENTS",
+    "Write opening_scene as directions for the narrator, not player-facing narration.",
+    "Describe what the narrator should establish, introduce, reveal, withhold, or leave open in the first scene. Give the narrator freedom to choose the wording, imagery, dialogue, and incidental surface details.",
+    "Use plain, everyday language. Prefer direct, familiar words over literary, archaic, abstract, or overly elaborate language. Keep the directives practical and easy for the narrator to interpret; do not use evocative phrasing for its own sake.",
+    "Do not write sample narration, quoted dialogue, metaphors, cinematic prose, or sentence-ready descriptions. Do not prescribe exact wording except for required canonical names or facts.",
+    "The opening must begin when the player first encounters a live situation already unfolding. Start one beat before anyone recruits the player, asks for help, explains the central problem, or assigns a task.",
+    "Put a visible conflict, disruption, danger, exchange, discovery, pursuit, argument, suspicious behavior, or other active situation in motion before the player. The player must be free to engage, ignore, investigate, interrupt, help, exploit, leave, or respond in an unexpected way.",
+    "Describe only what the player can immediately observe, hear, reasonably infer, or learn from brief overheard dialogue: the exact location, striking sensory details, visible people and their behavior, the immediate source of tension, and an unanswered question or suspicious detail.",
+    "Include one short, player-safe piece of common local context about the selected starting settlement: what an ordinary person from Eldermere would recognize it as, remember it for, depend on it for, or expect to find there. This must orient the player without becoming a history lesson or explaining the campaign's deeper conflict.",
+    "Do not state the full cause, full stakes, deadline, institution, political context, hidden truth, or likely consequences unless the player could naturally know them at a glance or from what is said in the moment.",
+    "Do not assign the player a job, decide their response, or reveal hidden causes, future stakes, or private truths. Convey why an object, service, role, or system matters through visible behavior, conflict, or immediate consequence rather than explanation."
+  ];
+}
+
+function formatEldermereOpeningBriefRequest(input: {
   campaign: CampaignRow;
   players: PlayerRow[];
 }) {
@@ -9175,11 +9230,7 @@ function formatEldermereCampaignConceptRequest(input: {
 
   return [
     "PLAYER CHARACTER",
-    formatCanonicalCharacterContext(
-      input.players,
-      resolveMechanicsState(input.campaign, input.players)
-    ),
-    formatOpeningBackstoryAnchors(input.players),
+    formatEldermereCampaignCharacterContext(input.players),
     "",
     "CANONICAL START",
     `Region: ${region?.name ?? "Eldermere"}`,
@@ -9195,21 +9246,70 @@ function formatEldermereCampaignConceptRequest(input: {
       : "",
     "",
     "CONCEPT REQUIREMENTS",
-    "Create a campaign concept that begins with a specific change in the player's life.",
+    "Create a campaign concept that begins with a specific, present-tense change in the selected starting location.",
     "Before writing the concept, think through the campaign as an evolving situation: why the player's new situation exists, how it can deepen or change through play, what the player can eventually learn that changes their understanding of it, and what meaningful choices that discovery can create.",
     "Write the concept as that complete evolving situation—not merely as an opening hook, a first job, or a premise with a vague future mystery attached.",
     "The concept must:",
     "- Put the player in a clear starting position.",
+    "- Establish why the player is here now through an immediate local circumstance, such as a public problem, job, mistake, discovery, threat, or opportunity.",
     "- Establish an ongoing situation that can generate many sessions of play.",
     "- Let the player learn Eldermere naturally through action and consequences.",
     "- Use the selected region and starting location as the campaign's beginning.",
     "- Doesn't require the player to know anything about Eldermere beforehand.",
     "- Fit the concept to the lore, atmosphere, conflicts, and character of the selected Eldermere region and starting location.",
     "",
-    "OPENING-SCENE HANDOFF REQUIREMENTS",
-    "Write opening_scene as a complete handoff for the narrator, not a shorthand hook. It must identify the exact playable location, who is present and each important person's role, why the player is in that particular place, and why any important object, service, or system matters to people in the scene.",
-    "State the plain-language cause and consequence behind every immediate pressure. For example, do not merely say that a tide will not wait; explain what arrives with it, what the tide changes, and what happens if the player does not act.",
-    "The opening scene must be understandable to a player who knows only their character backstory. Do not rely on local titles, proper nouns, institutions, customs, or technical terms being self-explanatory.",
+    ...openingSceneDirectiveRequirements(),
+    "",
+    "Return only this JSON:",
+    JSON.stringify({
+      region: region?.name ?? "selected Eldermere region",
+      starting_location: settlement?.name ?? "selected Eldermere location",
+      why_the_player_is_here_now: "A short, self-contained explanation of the immediate local circumstance that puts the player in this situation. Do not rely on or invent personal history.",
+      concept: "A complete 2-3 paragraph account of the campaign as an evolving situation: its beginning, how it can deepen through play, and what the player may eventually discover and decide.",
+      opening_scene: "The exact first playable situation."
+    }, null, 2)
+  ].filter(Boolean).join("\n");
+}
+
+function formatEldermereCampaignConceptRequest(input: {
+  campaign: CampaignRow;
+  players: PlayerRow[];
+}) {
+  const start = eldermereCampaignStartFromMetadata(input.campaign);
+  const region = start?.region;
+  const settlement = start?.settlement;
+
+  return [
+    "PLAYER CHARACTER",
+    formatEldermereCampaignCharacterContext(input.players),
+    "",
+    "CANONICAL START",
+    `Region: ${region?.name ?? "Eldermere"}`,
+    `Starting location: ${settlement?.name ?? "the selected starting location"}`,
+    "",
+    "ELDERMERE GROUNDING",
+    "Eldermere is grounded high fantasy built on the ruins of a fallen magocracy. Magic is costly, old ruins remain dangerous, and local powers compete over what the past left behind.",
+    region
+      ? `Selected region: ${region.summary} Its current tensions include ${region.internalConflict} and ${region.externalConflict}.`
+      : "",
+    settlement
+      ? `Selected starting location: ${settlement.draw} Remembered detail: ${settlement.rememberedDetail}. Current friction: ${settlement.friction}.`
+      : "",
+    "",
+    "CONCEPT REQUIREMENTS",
+    "Create a campaign concept that begins with a specific, present-tense change in the selected starting location.",
+    "Before writing the concept, think through the campaign as an evolving situation: why the player's new situation exists, how it can deepen or change through play, what the player can eventually learn that changes their understanding of it, and what meaningful choices that discovery can create.",
+    "Write the concept as that complete evolving situation—not merely as an opening hook, a first job, or a premise with a vague future mystery attached.",
+    "The concept must:",
+    "- Put the player in a clear starting position.",
+    "- Establish why the player is here now through an immediate local circumstance, such as a public problem, job, mistake, discovery, threat, or opportunity.",
+    "- Establish an ongoing situation that can generate many sessions of play.",
+    "- Let the player learn Eldermere naturally through action and consequences.",
+    "- Use the selected region and starting location as the campaign's beginning.",
+    "- Doesn't require the player to know anything about Eldermere beforehand.",
+    "- Fit the concept to the lore, atmosphere, conflicts, and character of the selected Eldermere region and starting location.",
+    "",
+    ...openingSceneDirectiveRequirements(),
     "",
     "CAMPAIGN ANCHOR REQUIREMENTS",
     "Create 6-9 campaign anchors. An anchor is any person, place, object, institution, relationship, threat, mystery, or regional force that the campaign can revisit, change, depend on, or reveal over time.",
@@ -9222,8 +9322,8 @@ function formatEldermereCampaignConceptRequest(input: {
       {
         region: region?.name ?? "selected Eldermere region",
         starting_location: settlement?.name ?? "selected starting location",
-        how_the_player_got_here:
-          "A short explanation of the events that brought the player from their established backstory into this situation.",
+        why_the_player_is_here_now:
+          "A short, self-contained explanation of the immediate local circumstance that puts the player in this situation. Do not rely on or invent personal history.",
         concept:
           "A complete 2-3 paragraph account of the campaign as an evolving situation: its beginning, how it can deepen through play, and what the player may eventually discover and decide.",
         opening_scene: "The exact first playable situation.",
@@ -9262,38 +9362,46 @@ function formatEldermereCampaignConceptRequest(input: {
 
 function formatEldermereNarratorOpeningRequest(input: {
   players: PlayerRow[];
-  plan: EldermereOpeningPlan;
+  plan: EldermereOpeningBrief;
 }) {
   return [
-    formatEldermereNarratorCharacterContext(input.players),
+    formatEldermereCampaignCharacterContext(input.players),
     "",
     "ELDERMERE OPENING BRIEF",
-    JSON.stringify(narratorOpeningPlanToJson(input.plan), null, 2),
+    JSON.stringify(narratorOpeningBriefToJson(input.plan), null, 2),
     "",
     "NARRATOR TASK - WRITE THE FULL PLAYER-FACING OPENER:",
-    "The Eldermere opening plan is the campaign source of truth. Fulfill how_the_player_got_here, concept, and opening_scene as one cohesive campaign opener. Do not summarize the plan, explain its fields, or describe future campaign events as a synopsis. Turn it into the first live scene.",
+    "Use why_the_player_is_here_now and opening_scene as the authoritative requirements for this opener. opening_scene contains DM-facing directives, not prose to paraphrase. Render those directives naturally in your own narration. Do not add campaign-premise details, future stakes, or explanations not required by those directives.",
     "",
-    "PLAYER KNOWLEDGE AND OPENING FOCUS:",
-    "Assume the player knows nothing about this campaign or setting beyond their established character backstory and what this narration has already shown them.",
-    "The concept is author guidance for you, not exposition for the player. Use it to understand the direction of the campaign, but reveal only what the player can immediately encounter, observe, be told, or reasonably infer in this first scene.",
-    "Favor orientation and clear comprehension over brevity. Before asking the player to act, establish where they are, why they are in this exact place, who the important people are, what each person does here, what is happening, and what they can do now.",
-    "Explain every unfamiliar proper noun, local role, institution, machine, physical process, and time pressure that the player needs to understand the immediate scene and choice. Give each important person a clear role, each important object or service a plain purpose, and each stated consequence its concrete cause. Do not assume the player knows why a lighthouse matters, why a water purifier matters, what a dock-boss does, or what a phrase such as 'the tide will not wait' means.",
-    "This is not permission for a world-history lecture. Do not introduce wider factions, politics, history, hidden stakes, future campaign developments, or abstract implications unless they directly explain the immediate situation and choice. Explain immediate facts fully; withhold only information the character could not yet know.",
+    "PLAYER KNOWLEDGE, VOICE, AND OPENING FOCUS:",
+    "Assume the player knows nothing about this campaign or setting beyond what this narration has already shown them.",
+    "Write entirely in second person. Address the player as 'you.' Never use the player character's name as the grammatical subject and never describe the player character in third person.",
+    "Open with a lived-in moment, not a briefing. The player should first notice an interesting situation already in progress through concrete sensory details, visible behavior, and brief overheard dialogue.",
+    "Use simple, precise, colorful language. Prefer a few specific physical details—heat on stone, dust in the wind, a clenched hand, a crooked seal, a wheel stuck in mud—over abstract atmosphere, dense lore, institutional explanation, or elaborate figurative language.",
+    "Narrate as an engaged, expressive human Dungeon Master who is glad to be telling this story. Do not sound like a neutral camera log or an encounter summary.",
+    "Give the opening emotional texture through selected wording, rhythm, and implication: notice when something lands badly, when a gesture costs someone effort, when an irony is ugly, or when a crowd is relieved too soon. Let the narration savor tension, warmth, unease, humor, or wonder without explaining every feeling.",
+    "Write in plainspoken, natural language: like a gifted Dungeon Master speaking to players at the table, expressive and fluent rather than literary for its own sake. Prefer everyday, spoken vocabulary when it communicates the same idea, choosing ordinary direct words over needlessly elevated alternatives.",
+    "Let sentences carry several connected observations when the scene is unfolding or the player is taking in a place, allowing setting, action, and implication to gather before the sentence lands. Keep the narrative viewpoint moving continuously through the space so one detail leads naturally into the next, and let tension emerge through accumulation rather than repeatedly isolating details for emphasis. Favor connective language such as 'where,' 'while,' 'as,' 'before,' 'and,' and 'beyond' whenever it preserves the scene's movement. Describe mysteries plainly and let their implications do the work. Heightened, poetic, funny, blunt, or dramatic language is welcome when it fits the moment; the goal is natural expression, not restrained language.",
+    "Preserve player agency. Do not state what the player character thinks, feels, intends, or values unless the supplied character profile already establishes it. Put emotional interpretation in visible behavior, dialogue, atmosphere, and the narrator's framing of events.",
+    "Do not add detail merely to create feeling. Keep the required four-paragraph structure and existing information density. Avoid purple prose, melodrama, constant ominousness, and narrator commentary that breaks immersion.",
+    "Reveal only enough context for the player to understand what is visibly happening right now. Let the player ask why it matters, who people are, what local terms mean, and what deeper forces are involved. Do not front-load worldbuilding, political stakes, history, deadlines, backstory, or the full logic of the conflict.",
+    "In the first paragraph, include one brief, natural sentence or clause explaining what the settlement is and what it is commonly known for. Present it as ordinary local knowledge, not exposition. For example: 'Thanewell is one of the terrace villages that feeds the high country,' or 'Selwick is a river town known for its salt barges and crowded quays.'",
+    "Do not make an NPC appoint the player, ask the player to solve the problem, or present a prepackaged objective before the player has had a chance to respond to the scene. The opening should offer an opportunity, not an assignment.",
     "",
-    "Return only plain prose. It must contain exactly 4 paragraphs separated by blank lines. Do not add headings, labels, notes, Markdown, JSON, or commentary. Paragraph 4 must be exactly 'What do you do?'.",
-    "Preserve all established character-sheet and backstory facts. Do not change, resolve, soften, or invent past events, relationships, debts, gifts, clues, promises, or causes.",
+    "Return only plain prose. It must contain exactly 4 paragraphs separated by blank lines. Do not add headings, labels, notes, Markdown, JSON, or commentary. Paragraph 4 must be exactly 'What would you like to do?'.",
+    "Use the supplied character profile only for present capabilities and visible details. Do not invent, reference, resolve, or imply personal history, past relationships, debts, gifts, clues, promises, or causes.",
     "Use only facts the character could reasonably see, hear, know, infer, or be told in this opening scene. Do not request dice; the player must receive control before attempting any uncertain action.",
     "Use exactly 6 semantic narration color tags across paragraphs 1-3: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, or <object>...</object>. Each tag must wrap only a short, player-visible noun or phrase. Do not nest tags, add attributes, use <em>, use Markdown emphasis, or use any other HTML/XML tags.",
     "",
     "REQUIRED FOUR-PARAGRAPH STRUCTURE:",
-    "Paragraph 1 — Orientation and personal premise: Start by naming and plainly describing the exact selected starting location and the character's current position within it. Include only immediately useful local context: what kind of place it is, who depends on it, and what the character can see around them. Then use how_the_player_got_here to explain why the character came to the settlement and why they are in this particular establishment or scene now. State the relevant backstory connection plainly, including what the character knows and what remains unknown. Do not narrate a journey or recap a chain of travel events.",
-    "Paragraph 2 — People, purpose, and pressure: Introduce the present NPC or institution before making a demand. Explain their role in the place, their relationship to the character so far, and why the important object, service, or problem matters to the people immediately present. Then introduce the visible tension, NPC demand, danger, discovery, or interruption that makes the opening situation urgent. For every deadline or consequence, explain its ordinary physical cause and the concrete result if the character does not act. Draw only on visible consequences.",
-    "Paragraph 3 — Choice: Make the immediate problem actionable. Show why it matters now and present 2-3 distinct non-dice actions the player can take immediately. These must be genuine choices, not steps toward a predetermined outcome.",
-    "Paragraph 4 — Handoff: Write exactly 'What do you do?'",
+    "Paragraph 1 — Arrival: Place you in a specific sensory location and show the first striking detail. Include only enough immediate context to establish why you are physically there.",
+    "Paragraph 2 — The live incident: Show people doing or saying something that makes the situation legible but unresolved. Use direct, expressive dialogue to reveal the immediate conflict or pressure rather than summarizing it. Do not explain the full stakes or background unless it is naturally visible or spoken aloud.",
+    "Paragraph 3 — The opening: End on an unanswered question, visible choice point, escalation, or moment of attention that gives you room to decide your own response. Do not list suggested actions unless clarity genuinely requires it.",
+    "Paragraph 4 — Handoff: Write exactly 'What would you like to do?'",
     "",
-    "Opening style: Write grounded, direct, detailed fantasy prose. Create atmosphere through physical details, behavior, sound, weather, terrain, objects, and visible consequences—not lyrical abstractions, prophecy, or a campaign trailer. The opener should feel like a DM placing the player in a specific, dangerous, playable moment.",
+    "Opening style: Write grounded, direct fantasy prose that feels vivid because it is specific. Build atmosphere through terrain, weather, objects, sound, movement, expression, and immediate consequences. The opener should feel like you have arrived beside a real situation in motion, not like someone has stopped to explain the campaign to you.",
     "",
-    "Before returning, silently verify that the campaign concept is dramatized rather than summarized, the first 3 paragraphs follow the required present-first sequence, paragraph 4 is exactly 'What do you do?', and exactly 6 valid semantic color tags appear across paragraphs 1-3."
+    "Before returning, silently verify that the opening_scene directives are rendered rather than summarized, the first 3 paragraphs follow the required present-first sequence, paragraph 2 uses direct dialogue when people are speaking, paragraph 4 is exactly 'What would you like to do?', and exactly 6 valid semantic color tags appear across paragraphs 1-3."
   ].join("\n");
 }
 
@@ -9441,6 +9549,24 @@ function parseCampaignAnchor(value: Record<string, unknown>, index: number) {
   };
 }
 
+function parseEldermereOpeningBrief(content: string) {
+  const parsed = parseJsonRecord(content);
+  const errors: string[] = [];
+  const brief: EldermereOpeningBrief = {
+    region: readString(parsed, "region", errors),
+    startingLocation: readString(parsed, "starting_location", errors),
+    whyThePlayerIsHereNow: readString(parsed, "why_the_player_is_here_now", errors),
+    concept: readString(parsed, "concept", errors),
+    openingScene: readString(parsed, "opening_scene", errors)
+  };
+
+  if (errors.length > 0) {
+    throw new Error(`Eldermere opening brief returned invalid JSON: ${errors.join("; ")}`);
+  }
+
+  return brief;
+}
+
 function parseEldermereOpeningPlan(content: string) {
   const parsed = parseJsonRecord(content);
   const errors: string[] = [];
@@ -9453,7 +9579,7 @@ function parseEldermereOpeningPlan(content: string) {
   const plan: EldermereOpeningPlan = {
     region: readString(parsed, "region", errors),
     startingLocation: readString(parsed, "starting_location", errors),
-    howThePlayerGotHere: readString(parsed, "how_the_player_got_here", errors),
+    whyThePlayerIsHereNow: readString(parsed, "why_the_player_is_here_now", errors),
     concept: readString(parsed, "concept", errors),
     openingScene: readString(parsed, "opening_scene", errors),
     privateTruth: readString(parsed, "private_truth", errors),
@@ -9484,11 +9610,21 @@ function parseEldermereOpeningPlan(content: string) {
   return plan;
 }
 
+function applyEldermereOpeningBrief(
+  brief: EldermereOpeningBrief,
+  foundation: EldermereOpeningPlan
+): EldermereOpeningPlan {
+  return {
+    ...foundation,
+    ...brief
+  };
+}
+
 function openingPlanToJson(plan: EldermereOpeningPlan) {
   return {
     region: plan.region,
     starting_location: plan.startingLocation,
-    how_the_player_got_here: plan.howThePlayerGotHere,
+    why_the_player_is_here_now: plan.whyThePlayerIsHereNow,
     concept: plan.concept,
     opening_scene: plan.openingScene,
     private_truth: plan.privateTruth,
@@ -9505,12 +9641,21 @@ function openingPlanToJson(plan: EldermereOpeningPlan) {
   };
 }
 
-function narratorOpeningPlanToJson(plan: EldermereOpeningPlan) {
+function narratorOpeningPlanToJson(plan: EldermereOpeningBrief) {
   return {
     region: plan.region,
     starting_location: plan.startingLocation,
-    how_the_player_got_here: plan.howThePlayerGotHere,
+    why_the_player_is_here_now: plan.whyThePlayerIsHereNow,
     concept: plan.concept,
+    opening_scene: plan.openingScene
+  };
+}
+
+function narratorOpeningBriefToJson(plan: EldermereOpeningBrief) {
+  return {
+    region: plan.region,
+    starting_location: plan.startingLocation,
+    why_the_player_is_here_now: plan.whyThePlayerIsHereNow,
     opening_scene: plan.openingScene
   };
 }
@@ -9772,20 +9917,82 @@ function appendGameplayTurnOutputContractReminder(
   ].join("\n");
 }
 
-async function askEldermereOpeningPlanner(
+async function askEldermereOpeningBriefPlanner(
   db: Queryable,
   runtime: DungeonMasterRuntime,
   campaign: CampaignRow,
   players: PlayerRow[],
   turnId?: string
+): Promise<{ brief: EldermereOpeningBrief; debug: EldermereOpeningPlannerDebug }> {
+  const traceId = randomUUID();
+  const startedAt = Date.now();
+  const instructions = eldermereOpeningBriefPlannerInstructions();
+  const message = formatEldermereOpeningBriefRequest({ campaign, players });
+
+  await logTurnDebugTrace(db, {
+    campaignId: campaign.id,
+    traceId,
+    phase: "eldermere_opening_brief_planner_started",
+    turnId,
+    elapsedMs: 0,
+    payload: { message: textStats(message), instructions: textStats(instructions) }
+  });
+
+  const providerData = await runtime.askProvider({ message, instructions });
+  const brief = parseEldermereOpeningBrief(providerData.content);
+  const start = eldermereCampaignStartFromMetadata(campaign);
+
+  if (
+    (start?.region && brief.region !== start.region.name) ||
+    (start?.settlement && brief.startingLocation !== start.settlement.name)
+  ) {
+    throw new Error("Eldermere opening brief must use the selected canonical start.");
+  }
+
+  await logTurnDebugTrace(db, {
+    campaignId: campaign.id,
+    traceId,
+    phase: "eldermere_opening_brief_planner_completed",
+    turnId,
+    elapsedMs: Date.now() - startedAt,
+    payload: { region: brief.region, startingLocation: brief.startingLocation }
+  });
+
+  return {
+    brief,
+    debug: eldermereOpeningPlannerDebug({
+      instructions,
+      message,
+      providerData,
+      plan: { ...brief, privateTruth: "", campaignAnchors: [] }
+    })
+  };
+}
+
+async function askEldermereOpeningPlanner(
+  db: Queryable,
+  runtime: DungeonMasterRuntime,
+  campaign: CampaignRow,
+  players: PlayerRow[],
+  turnId?: string,
+  brief?: EldermereOpeningBrief
 ): Promise<EldermereOpeningPlannerResult> {
   const traceId = randomUUID();
   const startedAt = Date.now();
   const instructions = eldermereOpeningPlannerInstructions();
-  const message = formatEldermereCampaignConceptRequest({
+  const baseMessage = formatEldermereCampaignConceptRequest({
     campaign,
     players
   });
+  const message = brief
+    ? [
+        baseMessage,
+        "",
+        "APPROVED OPENING BRIEF — SOURCE OF TRUTH",
+        "Do not change, contradict, or replace these five fields. Return them verbatim while completing the private truth and campaign anchors.",
+        JSON.stringify(narratorOpeningPlanToJson(brief), null, 2)
+      ].join("\n")
+    : baseMessage;
 
   await logTurnDebugTrace(db, {
     campaignId: campaign.id,
@@ -9838,7 +10045,9 @@ async function askEldermereOpeningPlanner(
 
   try {
     initialData = await callPlanner("initial");
-    const plan = parseEldermereOpeningPlan(initialData.content);
+    const plan = brief
+      ? applyEldermereOpeningBrief(brief, parseEldermereOpeningPlan(initialData.content))
+      : parseEldermereOpeningPlan(initialData.content);
 
     await logTurnDebugTrace(db, {
       campaignId: campaign.id,
@@ -9877,7 +10086,9 @@ async function askEldermereOpeningPlanner(
 
     try {
       const repairData = await callPlanner("repair");
-      const plan = parseEldermereOpeningPlan(repairData.content);
+      const plan = brief
+        ? applyEldermereOpeningBrief(brief, parseEldermereOpeningPlan(repairData.content))
+        : parseEldermereOpeningPlan(repairData.content);
 
       await logTurnDebugTrace(db, {
         campaignId: campaign.id,
@@ -9956,7 +10167,7 @@ function buildCampaignFoundationCompilerPrompt() {
     "For an anchor with both public continuity and hidden truth, split it into a player_safe parent chunk and a dm_only secret chunk. Only make the parent chunk dm_only when there is no player-safe rumor, lead, place-name, symbol, or local pressure to preserve yet.",
     "Player-safe chunks may include mysteries as mysteries: use 'Unknown', 'rumored', 'unconfirmed', or 'not yet discovered' instead of revealing the true answer.",
     "Treat Pageden/canonical Eldermere material as source-grounded world truth. Treat planner-created links, motives, clocks, and secrets as campaign-local premises until established through play.",
-    "Use concept for the campaign premise and primary active thread; how_the_player_got_here for player-character context; opening_scene for current playable context; private_truth for DM-only secrets; and campaign_anchors for durable NPC, object, place, institution, relationship, faction, and threat chunks.",
+    "Use concept for the campaign premise and primary active thread; why_the_player_is_here_now for immediate player-character context; opening_scene for current playable context; private_truth for DM-only secrets; and campaign_anchors for durable NPC, object, place, institution, relationship, faction, and threat chunks.",
     "Create a dedicated context chunk for every campaign anchor. The region and settlement anchors must each receive their own player_safe relevant_world_context chunk. Honor each anchor's visibility across every field: never place dm_only anchor details in player_safe chunks.",
     "Every chunk should label its epistemic status with sections or bullets such as Canonical Grounding, Campaign-Local Premise, Established Facts, Strong Inferences, DM Seeds, Hidden Truth, Future Reveal Paths, Constraints, or Open Questions.",
     "When an anchor has both player-safe continuity and hidden truth, create a public/world or NPC chunk plus a DM-only secret chunk only when both need independent retrieval. Example: world:sunder-kiln for known leads, rumors, local pressures, and playable context, plus secret:sunder-kiln for the time-loop truth and reveal ladder.",
@@ -10033,7 +10244,7 @@ function formatCampaignFoundationCompilerRequest(input: {
       eldermereCampaignStartFromMetadata(input.campaign)
     ),
     "",
-    "Opening request and canonical character/backstory context:",
+    "Opening request and canonical character context:",
     input.openingRequest,
     "",
     "Eldermere opening planner output JSON:",
@@ -10204,9 +10415,81 @@ async function runEldermereCampaignFoundationCompiler(
   }
 }
 
+function scheduleOpeningContextFinalization(
+  db: Queryable,
+  input: {
+    campaignId: string;
+    turnId: string;
+    dmEventId?: string | undefined;
+    foundationCompilerPromise:
+      | Promise<ContextStorageDebugState | undefined>
+      | undefined;
+    runtime: DungeonMasterRuntime;
+    currentAction: string;
+    dmResponse: string;
+    rollRequests: DiceRollRequest[];
+  }
+) {
+  void (async () => {
+    const traceId = randomUUID();
+
+    try {
+      const contextStorageState = await input.foundationCompilerPromise;
+
+      if (contextStorageState) {
+        await attachContextStorageStateToDmEventDebug(db, {
+          campaignId: input.campaignId,
+          dmEventId: input.dmEventId,
+          contextStorageState
+        });
+
+        input.runtime.emitDmStreamEvent?.({
+          type: "room_updated",
+          roomId: input.campaignId,
+          updatedAt: contextStorageState.capturedAt,
+          ...(input.dmEventId ? { eventId: input.dmEventId } : {})
+        });
+      }
+    } catch (error) {
+      await logDmMemoryPatchLog(db, {
+        campaignId: input.campaignId,
+        traceId,
+        turnId: input.turnId,
+        payload: {
+          source: "opening_context_finalizer",
+          failed: true,
+          error: errorSummary(error)
+        }
+      });
+    }
+
+    try {
+      await input.runtime.runPostTurnContextJobs?.({
+        campaignId: input.campaignId,
+        turnId: input.turnId,
+        currentAction: input.currentAction,
+        dmResponse: input.dmResponse,
+        dmEventId: input.dmEventId,
+        rollRequests: input.rollRequests
+      });
+    } catch (error) {
+      await logDmMemoryPatchLog(db, {
+        campaignId: input.campaignId,
+        traceId,
+        turnId: input.turnId,
+        payload: {
+          source: "opening_post_turn_context_jobs",
+          failed: true,
+          error: errorSummary(error)
+        }
+      });
+    }
+  })().catch(() => undefined);
+}
+
 function findForbiddenOpeningTerms(
   _narration: string,
-  _plan: EldermereOpeningPlan
+  _plan: EldermereOpeningBrief
 ) {
   return [] as string[];
 }
@@ -10282,10 +10565,13 @@ function addSemanticOpeningTag(
 
 function normalizeEldermereOpeningSemanticTags(
   narration: string,
-  plan: EldermereOpeningPlan
+  plan: EldermereOpeningBrief
 ) {
   const strippedNarration = stripExtraSemanticOpeningTags(narration);
-  const playerSafeAnchors = plan.campaignAnchors.filter(
+  const campaignAnchors = hasEldermereCampaignAnchors(plan)
+    ? plan.campaignAnchors
+    : [];
+  const playerSafeAnchors = campaignAnchors.filter(
     (anchor) =>
       anchor.visibility === "player_safe" &&
       anchor.type !== "region" &&
@@ -10327,6 +10613,12 @@ function normalizeEldermereOpeningSemanticTags(
   );
 }
 
+function hasEldermereCampaignAnchors(
+  plan: EldermereOpeningBrief
+): plan is EldermereOpeningPlan {
+  return "campaignAnchors" in plan;
+}
+
 function plainReplacementForForbiddenOpeningTerm(term: string) {
   switch (term.toLowerCase()) {
     case "second dominion":
@@ -10344,14 +10636,14 @@ function plainReplacementForForbiddenOpeningTerm(term: string) {
 
 function scrubForbiddenOpeningTerms(
   narration: string,
-  _plan: EldermereOpeningPlan
+  _plan: EldermereOpeningBrief
 ) {
   return narration;
 }
 
 function repairEldermereOpeningReply(
   reply: DungeonMasterReply,
-  plan: EldermereOpeningPlan
+  plan: EldermereOpeningBrief
 ): DungeonMasterReply {
   const scrubbedContent = scrubForbiddenOpeningTerms(reply.content, plan);
 
@@ -10366,7 +10658,7 @@ function repairEldermereOpeningReply(
 
 function withEldermereOpeningSetting(
   reply: DungeonMasterReply,
-  plan: EldermereOpeningPlan
+  plan: EldermereOpeningBrief
 ): DungeonMasterReply {
   return {
     ...reply,
@@ -10383,7 +10675,7 @@ function withEldermereOpeningSetting(
 
 function eldermereOpeningSettingErrors(
   setting: CampaignSettingSummary | undefined,
-  plan: EldermereOpeningPlan
+  plan: EldermereOpeningBrief
 ) {
   const errors: string[] = [];
 
@@ -10419,21 +10711,7 @@ function openingParagraphCount(content: string) {
 }
 
 function eldermereOpeningNarrationErrors(content: string) {
-  const errors: string[] = [];
-  errors.push(...eldermereOpeningStructuralErrors(content));
-
-  const semanticTagCount = semanticOpeningTagCount(content);
-
-  if (
-    semanticTagCount < semanticOpeningTagMinimum ||
-    semanticTagCount > semanticOpeningTagMaximum
-  ) {
-    errors.push(
-      `public_narration must contain exactly ${semanticOpeningTagMinimum} semantic narration markup tags; found ${semanticTagCount}`
-    );
-  }
-
-  return errors;
+  return eldermereOpeningStructuralErrors(content);
 }
 
 function eldermereOpeningStructuralErrors(content: string) {
@@ -10446,8 +10724,8 @@ function eldermereOpeningStructuralErrors(content: string) {
     );
   }
 
-  if (!/what do you do\?\s*$/i.test(content.trim())) {
-    errors.push("public_narration must end with 'What do you do?'");
+  if (!/what would you like to do\?\s*$/i.test(content.trim())) {
+    errors.push("public_narration must end with 'What would you like to do?'");
   }
 
   return errors;
@@ -10473,7 +10751,7 @@ async function askEldermereOpeningNarrator(
   campaign: CampaignRow,
   players: PlayerRow[],
   instructions: string,
-  plan: EldermereOpeningPlan,
+  plan: EldermereOpeningBrief,
   turnId?: string,
   contractOptions?: DmContractParseOptions
 ) {
@@ -10530,7 +10808,7 @@ async function askEldermereOpeningNarrator(
         ]
       : []),
     "Return only a complete plain-prose opener for the same opening situation, fixing every issue above.",
-    "Use exactly 4 paragraphs separated by blank lines. The fourth and final paragraph must be exactly 'What do you do?'.",
+    "Use exactly 4 paragraphs separated by blank lines. The fourth and final paragraph must be exactly 'What would you like to do?'.",
     `Use exactly ${semanticOpeningTagMinimum} semantic narration color tags using <npc>, <place>, <clue>, <danger>, <faction>, or <object>.`,
     "Do not return JSON, Markdown fences, headings, metadata, setting information, roll requests, state updates, or commentary."
   ].join("\n");
@@ -10612,9 +10890,9 @@ async function askEldermereOpeningNarrator(
     "Rewrite the same opening situation as plain prose only.",
     "Use exactly 4 paragraphs separated by blank lines.",
     "Paragraph 1: the current playable situation and why the character or party is caught in it now; explain earlier events only as brief retrospective context for a present person, object, consequence, or situation, never as a narrated journey or event sequence.",
-    "Paragraph 2: the starting location's immediate sensory and spatial details, visible NPCs, reachable objects, exits, and urgent visible pressure.",
+    "Paragraph 2: the starting location's immediate sensory and spatial details, visible NPCs, reachable objects, exits, and urgent visible pressure. Use direct dialogue to show the immediate conflict or pressure rather than summarizing it.",
     "Paragraph 3: the actionable complication and 2-3 concrete non-dice actions available right now.",
-    "Paragraph 4: exactly 'What do you do?' and nothing else.",
+    "Paragraph 4: exactly 'What would you like to do?' and nothing else.",
     `Use exactly ${semanticOpeningTagMinimum} semantic narration color tags using <npc>, <place>, <clue>, <danger>, <faction>, or <object>.`,
     "Do not include JSON, Markdown fences, a teaser, a summary, a prologue note, metadata, or anything other than exactly 4 paragraphs."
   ].join("\n");
@@ -11373,12 +11651,32 @@ async function persistEldermereOpeningPlan(
       set metadata = jsonb_set(
         jsonb_set(metadata, '{eldermereOpeningPlan}', $2::jsonb, true),
         '{eldermereOpeningPlanVersion}',
-        '1'::jsonb,
+        '2'::jsonb,
         true
       )
       where id = $1
     `,
     [campaignId, JSON.stringify(openingPlanToJson(plan))]
+  );
+}
+
+async function persistEldermereOpeningBrief(
+  db: Queryable,
+  campaignId: string,
+  brief: EldermereOpeningBrief
+) {
+  await db.query(
+    `
+      update campaigns
+      set metadata = jsonb_set(
+        metadata,
+        '{eldermereOpeningBrief}',
+        $2::jsonb,
+        true
+      )
+      where id = $1
+    `,
+    [campaignId, JSON.stringify(narratorOpeningPlanToJson(brief))]
   );
 }
 
@@ -11969,28 +12267,31 @@ export async function beginRoomForUser(
       | undefined;
     const opening = hasEldermereWorldProfile(beginState.campaign)
       ? await (async () => {
-          const plan = await askEldermereOpeningPlanner(
+          const brief = await askEldermereOpeningBriefPlanner(
             db,
             runtime,
             beginState.campaign,
             beginState.players,
             openingTurn.id
           );
-          await persistEldermereOpeningPlan(
-            db,
-            beginState.campaign.id,
-            plan.plan
-          );
-          foundationCompilerPromise = runEldermereCampaignFoundationCompiler(
-            db,
-            runtime,
-            {
+          await persistEldermereOpeningBrief(db, beginState.campaign.id, brief.brief);
+          foundationCompilerPromise = (async () => {
+            const foundation = await askEldermereOpeningPlanner(
+              db,
+              runtime,
+              beginState.campaign,
+              beginState.players,
+              openingTurn.id,
+              brief.brief
+            );
+            await persistEldermereOpeningPlan(db, beginState.campaign.id, foundation.plan);
+            return runEldermereCampaignFoundationCompiler(db, runtime, {
               campaign: beginState.campaign,
               openingRequest,
-              plan: plan.plan,
+              plan: foundation.plan,
               turnId: openingTurn.id
-            }
-          );
+            });
+          })();
 
           const opening = await askEldermereOpeningNarrator(
             db,
@@ -11998,7 +12299,7 @@ export async function beginRoomForUser(
             beginState.campaign,
             beginState.players,
             eldermereOpeningNarratorInstructions(),
-            plan.plan,
+            brief.brief,
             openingTurn.id,
             { allowResolvedCombatWithoutRolls: true }
           );
@@ -12007,7 +12308,7 @@ export async function beginRoomForUser(
             ...opening,
             debug: {
               ...opening.debug,
-              eldermereOpeningPlanner: plan.debug
+              eldermereOpeningPlanner: brief.debug
             }
           };
         })()
@@ -12038,23 +12339,6 @@ export async function beginRoomForUser(
       aiDebug: opening.debug
     });
 
-    const foundationContextStorageState = await foundationCompilerPromise;
-
-    if (foundationContextStorageState) {
-      await attachContextStorageStateToDmEventDebug(db, {
-        campaignId: beginState.campaign.id,
-        dmEventId: resolvedTurn.dmEventId,
-        contextStorageState: foundationContextStorageState
-      });
-
-      runtime.emitDmStreamEvent?.({
-        type: "room_updated",
-        roomId: beginState.campaign.id,
-        updatedAt: foundationContextStorageState.capturedAt,
-        eventId: resolvedTurn.dmEventId
-      });
-    }
-
     runtime.emitDmStreamEvent?.({
       type: "dm_stream_done",
       roomId: beginState.campaign.id,
@@ -12066,12 +12350,14 @@ export async function beginRoomForUser(
       beginState.campaign.id
     ]);
 
-    void runtime.runPostTurnContextJobs?.({
+    scheduleOpeningContextFinalization(db, {
       campaignId: beginState.campaign.id,
       turnId: openingTurn.id,
+      dmEventId: resolvedTurn.dmEventId,
+      foundationCompilerPromise,
+      runtime,
       currentAction: openingRequest,
       dmResponse: opening.content,
-      dmEventId: resolvedTurn.dmEventId,
       rollRequests: opening.rollRequests
     });
   } catch (error) {

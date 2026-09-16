@@ -64,6 +64,7 @@ type UserRecord = {
   id: string;
   email: string;
   display_name: string | null;
+  onboarding_completed_at: Date | null;
   created_at: Date;
   updated_at: Date;
   subscription_tier_id?: number;
@@ -391,6 +392,15 @@ class FakeDatabase {
       return { rows: [record as T] };
     }
 
+    if (
+      normalizedSql.startsWith(
+        "select id, email, display_name, onboarding_completed_at, created_at, updated_at, subscription_tier_id from users where email = $1"
+      )
+    ) {
+      const user = this.users.find((candidate) => candidate.email === values[0]);
+      return { rows: user ? [user as T] : ([] as T[]) };
+    }
+
     if (normalizedSql.startsWith("insert into users")) {
       const email = values[0] as string;
       const displayName = values[1] as string | null;
@@ -401,6 +411,7 @@ class FakeDatabase {
           id: `user-${this.nextId++}`,
           email,
           display_name: displayName,
+          onboarding_completed_at: null,
           created_at: new Date(),
           updated_at: new Date()
           ,subscription_tier_id: (values[2] as number | undefined) ?? 4
@@ -412,6 +423,17 @@ class FakeDatabase {
       }
 
       return { rows: [user as T] };
+    }
+
+    if (normalizedSql.startsWith("update users set onboarding_completed_at")) {
+      const user = this.users.find((candidate) => candidate.id === values[0]);
+
+      if (user && user.onboarding_completed_at === null) {
+        user.onboarding_completed_at = new Date();
+        user.updated_at = new Date();
+      }
+
+      return { rows: [] as T[] };
     }
 
     if (normalizedSql === "select subscription_tier_id from users where id = $1") {
@@ -526,6 +548,7 @@ class FakeDatabase {
             id: user.id,
             email: user.email,
             display_name: user.display_name,
+            onboarding_completed_at: user.onboarding_completed_at,
             created_at: user.created_at,
             updated_at: user.updated_at,
             session_id: session.id,
@@ -2094,7 +2117,7 @@ class FakeDatabase {
         campaign.metadata = {
           ...(campaign.metadata as Record<string, unknown>),
           eldermereOpeningPlan: openingPlan,
-          eldermereOpeningPlanVersion: 1
+          eldermereOpeningPlanVersion: 2
         };
         campaign.updated_at = new Date();
       }
@@ -3717,14 +3740,14 @@ before(async () => {
             content: JSON.stringify({
               region: selectedRegion,
               starting_location: startingLocation,
-              how_the_player_got_here:
-                "The character followed an unresolved personal lead to the selected starting location.",
+              why_the_player_is_here_now:
+                "A local messenger asks the character to help with an urgent problem in the selected starting location.",
               concept:
-                "A local request turns into an escalating mystery as the character learns why several people want the same truth hidden. As the player follows the messenger's lead, they discover their arrival was anticipated and the local network is using the same personal history that brought them here. The campaign becomes a choice between exposing the network, using its leverage, or protecting the people it has trapped.",
+                "A local request turns into an escalating mystery as the character learns why several people want the same truth hidden. As the player follows the messenger's lead, they discover the local network has been exploiting the town's pressures to conceal its work. The campaign becomes a choice between exposing the network, using its leverage, or protecting the people it has trapped.",
               opening_scene:
-                "At a marked doorway in the selected starting location, a worried messenger offers the first lead while someone watches the street.",
+                "Introduce a public disruption at a marked doorway in the selected starting location. Establish that a worried messenger is present while someone watches the street. Keep the reason for the watch unexplained, and do not have the messenger assign the player a task.",
               private_truth:
-                "The messenger's request is connected to a concealed local network that selected the player because of their personal history; discovering that recontextualizes the opening and gives the player leverage over the network.",
+                "The messenger's request is connected to a concealed local network that has been exploiting the town's pressures; discovering that recontextualizes the opening and gives the player leverage over the network.",
               campaign_anchors: [
                 {
                   type: "region",
@@ -3877,7 +3900,7 @@ before(async () => {
           "ELDERMERE OPENING BRIEF"
         );
         const eldermerePublicNarration =
-          "A <npc>courier</npc> waits beside a <clue>weathered sign</clue> on the <place>old road</place>, glancing between you and the <danger>ruined watchtower</danger> beyond the ridge. The summons in your pocket brought you here; earlier that evening, its bearer warned that the tower's lantern had gone dark.\n\nA <object>lantern</object> flickers over wet stones and wagon ruts as <faction>nearby travelers</faction> retreat from the watchtower's distant metal knock. The road, the sign, and the courier are all within reach, but the darkness inside the ruin is no longer still.\n\nYou can question the courier, inspect the weathered sign, or follow the road toward the ruined watchtower before the lantern burns out.\n\nWhat do you do?";
+          "A <npc>courier</npc> waits beside a <clue>weathered sign</clue> on the <place>old road</place>, glancing between you and the <danger>ruined watchtower</danger> beyond the ridge. The summons in your pocket brought you here; earlier that evening, its bearer warned that the tower's lantern had gone dark.\n\nA <object>lantern</object> flickers over wet stones and wagon ruts as <faction>nearby travelers</faction> retreat from the watchtower's distant metal knock. \"That sound came from inside,\" the courier says. \"I am not going back alone.\"\n\nYou can question the courier, inspect the weathered sign, or follow the road toward the ruined watchtower before the lantern burns out.\n\nWhat would you like to do?";
         const narratorContent = isEldermereNarrator
           ? eldermerePublicNarration
           : publicNarration;

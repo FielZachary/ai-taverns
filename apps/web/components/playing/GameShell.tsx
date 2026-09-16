@@ -43,7 +43,6 @@ import {
   ChatHistorySidebar,
   type ChatSummary
 } from "./ChatHistorySidebar";
-import { BackstoryIntroModal } from "./BackstoryIntroModal";
 import {
   CharacterSheetOverlay,
   type PlayerResourcesTab
@@ -115,13 +114,12 @@ const openingMessages: GameMessage[] = [];
 const aiModelStorageKey = "ai-dnd.aiModel";
 const defaultAiModel: AiModelId = "deepseek-v4-flash";
 const playerIdStorageKey = "ai-dnd.playerId";
-const backstoryIntroSeenStoragePrefix = "ai-dnd.backstoryIntroSeen";
+const initialSceneViewedStoragePrefix = "ai-dnd.initialSceneViewed";
 const roomRequestTimeoutMs = 8_000;
 const turnSubmissionRequestTimeoutMs = 30_000;
 const fallbackRoomPollMs = 25_000;
 const dungeonMasterTurnTimeoutMessage =
   "The dungeon master wasn't able to respond to that, please press the retry button on the right to re-send your message";
-const backstoryIntroDelaySeconds = 10;
 const defaultCampaignPreparationMessage = "Preparing your campaign";
 const campaignPreparationMessages = [
   defaultCampaignPreparationMessage,
@@ -132,8 +130,11 @@ const campaignPreparationMessages = [
   "Writing",
   "Final touches"
 ];
-const campaignPreparationMessageIntervalMs = 10_000;
+const campaignPreparationMessageIntervalMs = 5_000;
 const campaignPreparationTransitionMs = 650;
+const campaignPreparationProgressIntervalMs = 1_000;
+const campaignPreparationProgressCeiling = 95;
+const campaignPreparationProgressApproachDivisor = 3;
 
 function isAiModelId(value: FormDataEntryValue | string | null): value is AiModelId {
   return value === "deepseek-v4-flash" || value === "qwen-3-5-plus";
@@ -221,6 +222,7 @@ type ActiveDiceReveal = {
 function CampaignPreparationLoader() {
   const [messageIndex, setMessageIndex] = useState(0);
   const [exitingMessage, setExitingMessage] = useState("");
+  const [progress, setProgress] = useState(0);
   const currentMessage =
     campaignPreparationMessages[messageIndex] ??
     defaultCampaignPreparationMessage;
@@ -258,6 +260,26 @@ function CampaignPreparationLoader() {
     };
   }, []);
 
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setProgress((currentProgress) =>
+        Math.min(
+          campaignPreparationProgressCeiling,
+          currentProgress +
+            Math.max(
+              1,
+              Math.ceil(
+                (campaignPreparationProgressCeiling - currentProgress) /
+                  campaignPreparationProgressApproachDivisor
+              )
+            )
+        )
+      );
+    }, campaignPreparationProgressIntervalMs);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
+
   return (
     <div className="campaign-prep-loader">
       <div className="campaign-prep-loader-window">
@@ -288,7 +310,7 @@ function CampaignPreparationLoader() {
         </p>
       </div>
       <p className="campaign-prep-loader-note">
-        this&apos;ll take about a minute and a half, sit tight ;)
+        {progress}%
       </p>
     </div>
   );
@@ -423,6 +445,7 @@ export function GameShell({
     useState<string | null>(null);
   const pendingSubmissionRef = useRef<PendingSubmission | null>(null);
   const retryableTurnRef = useRef<RetryableTurn | null>(null);
+  const initialSceneViewedRef = useRef(new Set<string>());
   const [roomMessages, setRoomMessages] = useState<GameMessage[]>([]);
   const [streamingDmMessages, setStreamingDmMessages] = useState<
     StreamingDmMessage[]
@@ -449,13 +472,6 @@ export function GameShell({
   const [playerResourcesInitialTab, setPlayerResourcesInitialTab] =
     useState<PlayerResourcesTab>("character_sheet");
   const [isMessageMapOpen, setIsMessageMapOpen] = useState(false);
-  const [backstoryIntro, setBackstoryIntro] = useState<{
-    backstory: string;
-    storageKey: string;
-  } | null>(null);
-  const [backstoryIntroCountdown, setBackstoryIntroCountdown] = useState(
-    backstoryIntroDelaySeconds
-  );
   const [npcCards, setNpcCards] = useState<CampaignNpcCard[]>([]);
   const [isLoadingNpcCards, setIsLoadingNpcCards] = useState(false);
   const [npcCardsError, setNpcCardsError] = useState("");
@@ -644,6 +660,67 @@ export function GameShell({
       ),
     [visibleMessages]
   );
+
+  useEffect(() => {
+    if (
+      routePath !== "/play" ||
+      !activeCampaign?.id ||
+      !playerId ||
+      !hasVisibleDmOpener
+    ) {
+      return;
+    }
+
+    const storageKey = [
+      initialSceneViewedStoragePrefix,
+      activeCampaign.id,
+      playerId
+    ].join(".");
+
+    if (
+      initialSceneViewedRef.current.has(storageKey) ||
+      window.localStorage.getItem(storageKey) === "true"
+    ) {
+      return;
+    }
+
+    initialSceneViewedRef.current.add(storageKey);
+    trackAnalytics({
+      name: "Initial Scene Viewed",
+      properties: {
+        userId,
+        guestId: analyticsGuestId(),
+        playerId,
+        campaignId: activeCampaign.id,
+        campaignMode: activeCampaign.mode,
+        playerMessageCount: roomMessages.filter(
+          (message) => message.role === "player"
+        ).length,
+        dmMessageCount: roomMessages.filter((message) => message.role === "dm")
+          .length,
+        totalMessageCount: roomMessages.length,
+        hasDiceRequest: pendingRollRequests.length > 0,
+        combatActive: Boolean(roomCombat?.active),
+        hasBegun: hasAdventureBegun
+      }
+    });
+
+    try {
+      window.localStorage.setItem(storageKey, "true");
+    } catch {
+      // Keep the in-memory guard when browser storage is unavailable.
+    }
+  }, [
+    activeCampaign,
+    hasAdventureBegun,
+    hasVisibleDmOpener,
+    pendingRollRequests.length,
+    playerId,
+    roomCombat?.active,
+    roomMessages,
+    routePath,
+    userId
+  ]);
   const isRestartPreparing =
     Boolean(restartPreparingCampaignId) &&
     activeCampaign?.id === restartPreparingCampaignId &&
@@ -907,60 +984,6 @@ export function GameShell({
       setRestartPreparingCampaignId(null);
     }
   }, [activeCampaign?.id, hasVisibleDmOpener, restartPreparingCampaignId]);
-
-  useEffect(() => {
-    if (!activeCampaign?.id || !hasAdventureBegun || !activeBackstory) {
-      return;
-    }
-
-    const storageKey = [
-      backstoryIntroSeenStoragePrefix,
-      activeCampaign.id,
-      playerId || "player"
-    ].join(".");
-
-    if (
-      backstoryIntro?.storageKey === storageKey ||
-      window.localStorage.getItem(storageKey) === "true"
-    ) {
-      return;
-    }
-
-    setBackstoryIntro({
-      backstory: activeBackstory,
-      storageKey
-    });
-    setBackstoryIntroCountdown(backstoryIntroDelaySeconds);
-  }, [
-    activeBackstory,
-    activeCampaign?.id,
-    backstoryIntro?.storageKey,
-    hasAdventureBegun,
-    playerId
-  ]);
-
-  useEffect(() => {
-    if (!backstoryIntro || backstoryIntroCountdown <= 0) {
-      return;
-    }
-
-    const timeout = window.setTimeout(() => {
-      setBackstoryIntroCountdown((currentCountdown) =>
-        Math.max(0, currentCountdown - 1)
-      );
-    }, 1_000);
-
-    return () => window.clearTimeout(timeout);
-  }, [backstoryIntro, backstoryIntroCountdown]);
-
-  function closeBackstoryIntro() {
-    if (backstoryIntro) {
-      window.localStorage.setItem(backstoryIntro.storageKey, "true");
-    }
-
-    setBackstoryIntro(null);
-    setBackstoryIntroCountdown(backstoryIntroDelaySeconds);
-  }
 
   useEffect(() => {
     if (!isCharacterSheetOpen || !activeCampaign?.id) {
@@ -2733,14 +2756,6 @@ export function GameShell({
 
       {isMessageMapOpen ? (
         <EldermereMapModal onClose={() => setIsMessageMapOpen(false)} />
-      ) : null}
-
-      {backstoryIntro ? (
-        <BackstoryIntroModal
-          backstory={backstoryIntro.backstory}
-          countdown={backstoryIntroCountdown}
-          onContinue={closeBackstoryIntro}
-        />
       ) : null}
 
       <button

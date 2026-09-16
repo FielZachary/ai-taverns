@@ -2567,8 +2567,15 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
     unknown
   >;
   const openingPlan = metadata.eldermereOpeningPlan as Record<string, unknown>;
-  const plannerInput = getProviderInputs().at(0);
-  const narratorInput = getProviderInputs().at(1);
+  const briefPlannerInput = getProviderInputs().find((input) =>
+    input.instructions.includes("opener-critical brief")
+  );
+  const plannerInput = getProviderInputs().find((input) =>
+    input.message.includes("APPROVED OPENING BRIEF — SOURCE OF TRUTH")
+  );
+  const narratorInput = getProviderInputs().find((input) =>
+    input.instructions.includes("writing a campaign opener")
+  );
   const openingEvent = database.campaignEvents.find(
     (event) =>
       event.campaign_id === created.campaign.id &&
@@ -2585,12 +2592,12 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.equal(selectedRegion.name, "The Salt Concordat");
   assert.equal(startingLocation.name, "Selwick");
   assert.equal(startingLocation.displayLocation, startingLocation.name);
-  assert.equal(metadata.eldermereOpeningPlanVersion, 1);
+  assert.equal(metadata.eldermereOpeningPlanVersion, 2);
   assert.equal(openingPlan.region, "The Salt Concordat");
   assert.equal(openingPlan.starting_location, "Selwick");
   assert.match(openingPlan.concept as string, /local request turns into an escalating mystery/i);
   assert.ok(Array.isArray(openingPlan.campaign_anchors));
-  assert.match(openingPayload?.content as string, /What do you do\?$/);
+  assert.match(openingPayload?.content as string, /What would you like to do\?$/);
   assert.ok(getProviderInputs().length >= 2);
   await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -2614,12 +2621,24 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   );
   assert.ok((contextStorageState?.contextChunkCount ?? 0) >= 3);
 
+  assert.ok(briefPlannerInput);
+  assert.match(briefPlannerInput.instructions, /opener-critical brief/);
+  assert.match(briefPlannerInput.message, /OPENING-SCENE HANDOFF REQUIREMENTS/);
+  assert.doesNotMatch(briefPlannerInput.message, /CAMPAIGN ANCHOR REQUIREMENTS/);
   assert.ok(plannerInput);
   assert.match(plannerInput.instructions, /campaign-opening planner/);
   assert.match(plannerInput.message, /PLAYER CHARACTER/);
   assert.match(plannerInput.message, /CANONICAL START/);
   assert.match(plannerInput.message, /ELDERMERE GROUNDING/);
   assert.match(plannerInput.message, /CONCEPT REQUIREMENTS/);
+  assert.match(plannerInput.message, /OPENING-SCENE HANDOFF REQUIREMENTS/);
+  assert.match(plannerInput.message, /directions for the narrator/i);
+  assert.match(plannerInput.message, /plain, everyday language/i);
+  assert.match(plannerInput.message, /Do not write sample narration/i);
+  assert.match(plannerInput.message, /live situation already unfolding/);
+  assert.match(plannerInput.message, /Start one beat before anyone recruits the player/);
+  assert.match(plannerInput.message, /common local context about the selected starting settlement/);
+  assert.match(plannerInput.message, /Do not assign the player a job/);
   assert.match(plannerInput.message, /campaign as an evolving situation/i);
   assert.match(plannerInput.message, /not merely as an opening hook/i);
   assert.match(plannerInput.message, /what the player may eventually discover and decide/i);
@@ -2630,9 +2649,12 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(plannerInput.message, /Visibility applies to the entire anchor object/);
   assert.match(plannerInput.message, /never include hidden motives/i);
   assert.match(plannerInput.message, /future_pressure_or_change/);
-  assert.match(plannerInput.message, /Player backstory anchors for the opening scene:/);
-  assert.match(plannerInput.message, /Captain Saela/);
-  assert.match(plannerInput.message, /compass that points toward Selwick/);
+  assert.match(plannerInput.message, /AUTHORITATIVE CHARACTER CONTEXT/);
+  assert.match(plannerInput.message, /Character: Rogue; Archaeologist/);
+  assert.doesNotMatch(plannerInput.message, /Player backstory anchors for the opening scene:/);
+  assert.doesNotMatch(plannerInput.message, /Captain Saela/);
+  assert.doesNotMatch(plannerInput.message, /compass that points toward Selwick/);
+  assert.doesNotMatch(plannerInput.message, /Backstory/);
   assert.match(plannerInput.message, /Doesn't require the player to know anything about Eldermere beforehand/i);
   assert.match(plannerInput.message, /serving a prison sentence/i);
   assert.match(plannerInput.message, /Region: The Salt Concordat/);
@@ -2642,17 +2664,48 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(narratorInput.message, /AUTHORITATIVE CHARACTER CONTEXT/);
   assert.match(narratorInput.message, /ELDERMERE OPENING BRIEF/);
   assert.match(narratorInput.message, /NARRATOR TASK - WRITE THE FULL PLAYER-FACING OPENER:/);
-  assert.match(narratorInput.message, /campaign source of truth/);
-  assert.match(narratorInput.message, /how_the_player_got_here/);
-  assert.match(narratorInput.message, /PLAYER KNOWLEDGE AND OPENING FOCUS:/);
+  assert.match(
+    narratorInput.message,
+    /why_the_player_is_here_now and opening_scene as the authoritative requirements/
+  );
+  assert.match(narratorInput.message, /why_the_player_is_here_now/);
+  assert.match(narratorInput.message, /PLAYER KNOWLEDGE, VOICE, AND OPENING FOCUS:/);
   assert.match(
     narratorInput.message,
     /Assume the player knows nothing about this campaign or setting/
   );
-  assert.match(narratorInput.message, /concept is author guidance/);
-  assert.match(narratorInput.message, /Favor orientation and clear comprehension over brevity/);
-  assert.match(narratorInput.message, /Explain every unfamiliar proper noun, local role, institution/);
-  assert.match(narratorInput.message, /This is not permission for a world-history lecture/);
+  assert.match(narratorInput.message, /DM-facing directives, not prose to paraphrase/);
+  assert.match(narratorInput.message, /Write entirely in second person/);
+  assert.match(narratorInput.message, /Open with a lived-in moment, not a briefing/);
+  assert.match(narratorInput.message, /Use simple, precise, colorful language/);
+  assert.match(
+    narratorInput.message,
+    /engaged, expressive human Dungeon Master who is glad to be telling this story/i
+  );
+  assert.match(
+    narratorInput.message,
+    /Give the opening emotional texture through selected wording, rhythm, and implication/i
+  );
+  assert.match(
+    narratorInput.message,
+    /Do not state what the player character thinks, feels, intends, or values/i
+  );
+  assert.match(
+    narratorInput.message,
+    /Do not add detail merely to create feeling/i
+  );
+  assert.match(narratorInput.message, /plainspoken, natural language/i);
+  assert.match(narratorInput.message, /Prefer everyday, spoken vocabulary/i);
+  assert.match(
+    narratorInput.message,
+    /Let sentences carry several connected observations when the scene is unfolding/i
+  );
+  assert.match(
+    narratorInput.message,
+    /Heightened, poetic, funny, blunt, or dramatic language is welcome/i
+  );
+  assert.match(narratorInput.message, /what the settlement is and what it is commonly known for/);
+  assert.match(narratorInput.message, /opportunity, not an assignment/);
   assert.match(narratorInput.message, /exactly 6 semantic narration color tags/);
   assert.match(narratorInput.message, /<npc>\.\.\.<\/npc>/);
   assert.match(narratorInput.message, /<place>\.\.\.<\/place>/);
@@ -2660,18 +2713,18 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(narratorInput.message, /<danger>\.\.\.<\/danger>/);
   assert.match(narratorInput.message, /<faction>\.\.\.<\/faction>/);
   assert.match(narratorInput.message, /<object>\.\.\.<\/object>/);
-  assert.match(narratorInput.message, /Authoritative backstory:/);
-  assert.match(narratorInput.message, /Captain Saela/);
-  assert.match(narratorInput.message, /Then use how_the_player_got_here/);
-  assert.match(narratorInput.message, /Paragraph 1 — Orientation and personal premise/);
-  assert.match(narratorInput.message, /exact selected starting location/);
-  assert.match(narratorInput.message, /Do not narrate a journey or recap/);
-  assert.match(narratorInput.message, /Paragraph 2 — People, purpose, and pressure/);
+  assert.doesNotMatch(narratorInput.message, /Authoritative backstory:/);
+  assert.doesNotMatch(narratorInput.message, /Captain Saela/);
+  assert.doesNotMatch(narratorInput.message, /compass that points toward Selwick/);
+  assert.doesNotMatch(narratorInput.message, /Backstory/);
+  assert.match(narratorInput.message, /Paragraph 1 — Arrival/);
+  assert.match(narratorInput.message, /Paragraph 2 — The live incident/);
+  assert.match(narratorInput.message, /Use direct, expressive dialogue/i);
   assert.match(narratorInput.message, /opening_scene/);
-  assert.match(narratorInput.message, /Paragraph 3 — Choice/);
+  assert.match(narratorInput.message, /Paragraph 3 — The opening/);
   assert.match(narratorInput.message, /Paragraph 4 — Handoff/);
   assert.match(narratorInput.message, /exactly 4 paragraphs/);
-  assert.match(narratorInput.message, /grounded, direct, detailed fantasy prose/);
+  assert.match(narratorInput.message, /grounded, direct fantasy prose that feels vivid because it is specific/);
   assert.doesNotMatch(narratorInput.message, /Flagship world context:/);
   assert.doesNotMatch(narratorInput.message, /Seven regions available for the opener:/);
   assert.doesNotMatch(narratorInput.instructions, /World Context:/);
@@ -2682,25 +2735,30 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.doesNotMatch(narratorInput.message, /Return exactly one valid JSON/);
   assert.match(narratorInput.message, /"region": "The Salt Concordat"/);
   assert.match(narratorInput.message, /"starting_location": "Selwick"/);
-  assert.match(narratorInput.message, /"how_the_player_got_here":/);
-  assert.match(narratorInput.message, /"concept":/);
+  assert.match(narratorInput.message, /"why_the_player_is_here_now":/);
+  assert.doesNotMatch(narratorInput.message, /"concept":/);
   assert.match(narratorInput.message, /"opening_scene":/);
   assert.doesNotMatch(narratorInput.message, /"private_truth":/);
   assert.doesNotMatch(narratorInput.message, /"campaign_anchors":/);
   assert.doesNotMatch(narratorInput.message, /Validated name bank for this campaign opener:/);
   assert.doesNotMatch(narratorInput.message, /Campaign opener requirements:/);
   assert.doesNotMatch(narratorInput.message, /Authoritative mechanics state:/);
-  assert.match(
-    narratorInput.message,
-    /Fulfill how_the_player_got_here, concept, and opening_scene/
-  );
+  assert.doesNotMatch(narratorInput.message, /local request turns into an escalating mystery/i);
 
   assert.ok(plannerDebug);
   assert.equal(
     JSON.parse(plannerDebug.rawResponse as string).concept,
     openingPlan.concept
   );
-  assert.deepEqual(plannerDebug.parsedOutput, openingPlan);
+  assert.deepEqual(plannerDebug.parsedOutput, {
+    region: openingPlan.region,
+    starting_location: openingPlan.starting_location,
+    why_the_player_is_here_now: openingPlan.why_the_player_is_here_now,
+    concept: openingPlan.concept,
+    opening_scene: openingPlan.opening_scene,
+    private_truth: "",
+    campaign_anchors: []
+  });
   assert.match(
     JSON.stringify(plannerDebug.requestMessages),
     /campaign-opening planner/
@@ -2709,7 +2767,7 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
     JSON.stringify(plannerDebug.requestMessages),
     /CONCEPT REQUIREMENTS/
   );
-  assert.match(JSON.stringify(plannerDebug.requestMessages), /Captain Saela/);
+  assert.doesNotMatch(JSON.stringify(plannerDebug.requestMessages), /Captain Saela/);
 });
 
 test("GET /api/campaigns/:campaignId/npc-cards lists existing NPC context cards", async () => {
@@ -2823,7 +2881,7 @@ test.skip("POST /api/campaigns scrubs forbidden Eldermere opening terms after na
       return {
         id: "provider-planner-forbidden-terms",
         content: JSON.stringify({
-          how_the_player_got_here: "The party followed a local summons to Suncross.",
+          why_the_player_is_here_now: "The party answered a local summons in Suncross.",
           concept: "A local request becomes an escalating mystery in Suncross.",
           opening_scene: "Mara Vell waits by a marked doorway while the street watches.",
           private_truth: "The marked doorway conceals evidence a local power wants erased.",
@@ -2919,7 +2977,7 @@ test.skip("POST /api/campaigns scrubs forbidden Eldermere opening terms after na
       "<npc>Mara Vell</npc> waits by a <clue>marked doorway</clue> in <place>Suncross</place>, rain silvering her cloak while guards argue nearby and market carts slow to stare. The summons in your pocket is why you are here; earlier that evening, its bearer warned that the street would turn dangerous if you were late.",
       "<danger>Guards</danger> close on the doorway as <faction>watchful locals</faction> lower their voices, and the city seems to hold its breath around the sealed entrance.",
       "You can question Mara Vell, inspect the marked doorway, or ask nearby locals what frightened them before the street closes around you.",
-      "What do you do?"
+      "What would you like to do?"
     ].join("\n\n");
 
     if (input.message.includes("Rewrite required:")) {
@@ -2951,7 +3009,7 @@ test.skip("POST /api/campaigns scrubs forbidden Eldermere opening terms after na
       id: "provider-narrator-forbidden-terms",
       content: JSON.stringify({
         public_narration:
-          "Suncross crouches beneath the old stones of the Second Dominion, where the Hush still seems to press against every shutter.\n\nMara Vell waits by a marked doorway, rain silvering her cloak.\n\nWhat do you do?",
+          "Suncross crouches beneath the old stones of the Second Dominion, where the Hush still seems to press against every shutter.\n\nMara Vell waits by a marked doorway, rain silvering her cloak.\n\nWhat would you like to do?",
         roll_requests: [],
         next_input_needed: "player_actions",
         input_targets: [],
@@ -3033,7 +3091,7 @@ test.skip("POST /api/campaigns uses a low-temperature final retry for short Elde
       return {
         id: "provider-planner-final-retry",
         content: JSON.stringify({
-          how_the_player_got_here: "The party followed a local summons to Suncross.",
+          why_the_player_is_here_now: "The party answered a local summons in Suncross.",
           concept: "A local request becomes an escalating mystery in Suncross.",
           opening_scene: "Mara Vell waits by a marked doorway while the street watches.",
           private_truth: "The marked doorway conceals evidence a local power wants erased.",
@@ -3115,7 +3173,7 @@ test.skip("POST /api/campaigns uses a low-temperature final retry for short Elde
           narrator_instructions: [
             "Begin at the edge of Suncross.",
             "Introduce Mara Vell as a visible NPC.",
-            "Keep the opening to exactly 4 paragraphs of vivid sensory detail, with the fourth paragraph only the final direct prompt: What do you do?"
+            "Keep the opening to exactly 4 paragraphs of vivid sensory detail, with the fourth paragraph only the final direct prompt: What would you like to do?"
           ]
         }),
         debug: {
@@ -3133,7 +3191,7 @@ test.skip("POST /api/campaigns uses a low-temperature final retry for short Elde
         "<npc>Mara Vell</npc> waits by a <clue>marked doorway</clue> in <place>Suncross</place>, rain silvering her cloak while guards argue nearby and market carts slow to stare. The summons in your pocket is why you are here; earlier that evening, its bearer warned that the street would turn dangerous if you were late.",
         "<danger>Guards</danger> close on the doorway as <faction>watchful locals</faction> lower their voices, and the city seems to hold its breath around the sealed entrance.",
         "You can question Mara Vell, inspect the marked doorway, or ask nearby locals what frightened them before the street closes around you.",
-        "What do you do?"
+        "What would you like to do?"
       ].join("\n\n");
 
       return {
@@ -3241,7 +3299,7 @@ test.skip("POST /api/campaigns uses a low-temperature final retry for short Elde
 
   assert.ok(payload);
   assert.equal(content.split(/\n\s*\n/).filter(Boolean).length, 6);
-  assert.match(content, /What do you do\?$/);
+  assert.match(content, /What would you like to do\?$/);
   assert.match(content, /<place>Suncross<\/place>/);
   assert.match(content, /<npc>Mara Vell<\/npc>/);
   assert.ok(finalRetryInput);
@@ -3298,6 +3356,10 @@ test("campaign creation stores a multiplayer campaign and list returns it", asyn
   const listBody = CampaignListResponseSchema.parse(listResponse.json());
   assert.equal(listBody.campaigns.length, 1);
   assert.equal(listBody.campaigns[0]?.id, createBody.campaign.id);
+  assert.ok(
+    database.users.find((user) => user.email === "campaign-owner@example.com")
+      ?.onboarding_completed_at
+  );
 });
 
 test("solo turns persist revealed written artifacts as canonical document text", async () => {
@@ -4321,6 +4383,14 @@ test("campaign join preview and join use the Fastify campaign API", async () => 
     ).length,
     2
   );
+  assert.ok(
+    database.users.find((user) => user.email === "join-owner@example.com")
+      ?.onboarding_completed_at
+  );
+  assert.ok(
+    database.users.find((user) => user.email === "joiner@example.com")
+      ?.onboarding_completed_at
+  );
 });
 
 test("campaign join rejects invalid and disabled game codes", async () => {
@@ -4513,6 +4583,14 @@ test("campaign lobby invites are owner managed and let players join unstarted lo
   assert.equal(joined.campaign.title, "Tamsin");
   assert.equal(database.campaignInvites[0]?.use_count, 1);
   assert.equal(database.campaignInviteUses.length, 1);
+  assert.ok(
+    database.users.find((user) => user.email === "invite-owner@example.com")
+      ?.onboarding_completed_at
+  );
+  assert.ok(
+    database.users.find((user) => user.email === "invite-joiner@example.com")
+      ?.onboarding_completed_at
+  );
 
   const disableResponse = await app.inject({
     method: "POST",
