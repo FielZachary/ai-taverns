@@ -130,7 +130,7 @@ const campaignPreparationMessages = [
   "Writing",
   "Final touches"
 ];
-const campaignPreparationMessageIntervalMs = 10_000;
+const campaignPreparationMessageIntervalMs = 5_000;
 const campaignPreparationTransitionMs = 650;
 const campaignPreparationProgressIntervalMs = 1_000;
 const campaignPreparationProgressCeiling = 95;

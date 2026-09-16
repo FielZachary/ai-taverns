@@ -1138,10 +1138,10 @@ describe("NewAdventureForm", () => {
     ).toHaveClass("campaign-prep-loader-note");
 
     await act(async () => {
-      vi.advanceTimersByTime(10_000);
+      vi.advanceTimersByTime(5_000);
     });
 
-    expect(screen.getByText("94%")).toHaveClass("campaign-prep-loader-note");
+    expect(screen.getByText("83%")).toHaveClass("campaign-prep-loader-note");
     expect(screen.getByText("Integrating your backstory")).toHaveClass(
       "rune-loader"
     );
