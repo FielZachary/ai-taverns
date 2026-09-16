@@ -9181,6 +9181,22 @@ function eldermereOpeningBriefPlannerInstructions() {
   ].join("\n");
 }
 
+function openingSceneDirectiveRequirements() {
+  return [
+    "OPENING-SCENE HANDOFF REQUIREMENTS",
+    "Write opening_scene as directions for the narrator, not player-facing narration.",
+    "Describe what the narrator should establish, introduce, reveal, withhold, or leave open in the first scene. Give the narrator freedom to choose the wording, imagery, dialogue, and incidental surface details.",
+    "Use plain, everyday language. Prefer direct, familiar words over literary, archaic, abstract, or overly elaborate language. Keep the directives practical and easy for the narrator to interpret; do not use evocative phrasing for its own sake.",
+    "Do not write sample narration, quoted dialogue, metaphors, cinematic prose, or sentence-ready descriptions. Do not prescribe exact wording except for required canonical names or facts.",
+    "The opening must begin when the player first encounters a live situation already unfolding. Start one beat before anyone recruits the player, asks for help, explains the central problem, or assigns a task.",
+    "Put a visible conflict, disruption, danger, exchange, discovery, pursuit, argument, suspicious behavior, or other active situation in motion before the player. The player must be free to engage, ignore, investigate, interrupt, help, exploit, leave, or respond in an unexpected way.",
+    "Describe only what the player can immediately observe, hear, reasonably infer, or learn from brief overheard dialogue: the exact location, striking sensory details, visible people and their behavior, the immediate source of tension, and an unanswered question or suspicious detail.",
+    "Include one short, player-safe piece of common local context about the selected starting settlement: what an ordinary person from Eldermere would recognize it as, remember it for, depend on it for, or expect to find there. This must orient the player without becoming a history lesson or explaining the campaign's deeper conflict.",
+    "Do not state the full cause, full stakes, deadline, institution, political context, hidden truth, or likely consequences unless the player could naturally know them at a glance or from what is said in the moment.",
+    "Do not assign the player a job, decide their response, or reveal hidden causes, future stakes, or private truths. Convey why an object, service, role, or system matters through visible behavior, conflict, or immediate consequence rather than explanation."
+  ];
+}
+
 function formatEldermereOpeningBriefRequest(input: {
   campaign: CampaignRow;
   players: PlayerRow[];
@@ -9219,14 +9235,7 @@ function formatEldermereOpeningBriefRequest(input: {
     "- Doesn't require the player to know anything about Eldermere beforehand.",
     "- Fit the concept to the lore, atmosphere, conflicts, and character of the selected Eldermere region and starting location.",
     "",
-    "OPENING-SCENE HANDOFF REQUIREMENTS",
-    "Write opening_scene as a compact handoff for the narrator: a first playable moment, not player-facing prose, a quest briefing, or a list of instructions.",
-    "The opening must begin when the player first encounters a live situation already unfolding. Start one beat before anyone recruits the player, asks for help, explains the central problem, or assigns a task.",
-    "Put a visible conflict, disruption, danger, exchange, discovery, pursuit, argument, suspicious behavior, or other active situation in motion before the player. The player must be free to engage, ignore, investigate, interrupt, help, exploit, leave, or respond in an unexpected way.",
-    "Describe only what the player can immediately observe, hear, reasonably infer, or learn from brief overheard dialogue: the exact location, striking sensory details, visible people and their behavior, the immediate source of tension, and an unanswered question or suspicious detail.",
-    "Include one short, player-safe piece of common local context about the selected starting settlement: what an ordinary person from Eldermere would recognize it as, remember it for, depend on it for, or expect to find there. This must orient the player without becoming a history lesson or explaining the campaign's deeper conflict.",
-    "Do not state the full cause, full stakes, deadline, institution, political context, hidden truth, or likely consequences unless the player could naturally know them at a glance or from what is said in the moment.",
-    "Do not have an NPC appoint the player, give the player a job, or ask the player to solve the central problem in opening_scene. Convey why an object, service, role, or system matters through visible behavior, conflict, or immediate consequence rather than explanation.",
+    ...openingSceneDirectiveRequirements(),
     "",
     "Return only this JSON:",
     JSON.stringify({
@@ -9277,14 +9286,7 @@ function formatEldermereCampaignConceptRequest(input: {
     "- Doesn't require the player to know anything about Eldermere beforehand.",
     "- Fit the concept to the lore, atmosphere, conflicts, and character of the selected Eldermere region and starting location.",
     "",
-    "OPENING-SCENE HANDOFF REQUIREMENTS",
-    "Write opening_scene as a compact handoff for the narrator: a first playable moment, not player-facing prose, a quest briefing, or a list of instructions.",
-    "The opening must begin when the player first encounters a live situation already unfolding. Start one beat before anyone recruits the player, asks for help, explains the central problem, or assigns a task.",
-    "Put a visible conflict, disruption, danger, exchange, discovery, pursuit, argument, suspicious behavior, or other active situation in motion before the player. The player must be free to engage, ignore, investigate, interrupt, help, exploit, leave, or respond in an unexpected way.",
-    "Describe only what the player can immediately observe, hear, reasonably infer, or learn from brief overheard dialogue: the exact location, striking sensory details, visible people and their behavior, the immediate source of tension, and an unanswered question or suspicious detail.",
-    "Include one short, player-safe piece of common local context about the selected starting settlement: what an ordinary person from Eldermere would recognize it as, remember it for, depend on it for, or expect to find there. This must orient the player without becoming a history lesson or explaining the campaign's deeper conflict.",
-    "Do not state the full cause, full stakes, deadline, institution, political context, hidden truth, or likely consequences unless the player could naturally know them at a glance or from what is said in the moment.",
-    "Do not have an NPC appoint the player, give the player a job, or ask the player to solve the central problem in opening_scene. Convey why an object, service, role, or system matters through visible behavior, conflict, or immediate consequence rather than explanation.",
+    ...openingSceneDirectiveRequirements(),
     "",
     "CAMPAIGN ANCHOR REQUIREMENTS",
     "Create 6-9 campaign anchors. An anchor is any person, place, object, institution, relationship, threat, mystery, or regional force that the campaign can revisit, change, depend on, or reveal over time.",
@@ -9343,15 +9345,14 @@ function formatEldermereNarratorOpeningRequest(input: {
     formatEldermereCampaignCharacterContext(input.players),
     "",
     "ELDERMERE OPENING BRIEF",
-    JSON.stringify(narratorOpeningPlanToJson(input.plan), null, 2),
+    JSON.stringify(narratorOpeningBriefToJson(input.plan), null, 2),
     "",
     "NARRATOR TASK - WRITE THE FULL PLAYER-FACING OPENER:",
-    "The Eldermere opening plan is the campaign source of truth. Fulfill why_the_player_is_here_now, concept, and opening_scene as one cohesive campaign opener. Do not summarize the plan, explain its fields, or describe future campaign events as a synopsis. Turn it into the first live scene.",
+    "Use why_the_player_is_here_now and opening_scene as the authoritative requirements for this opener. opening_scene contains DM-facing directives, not prose to paraphrase. Render those directives naturally in your own narration. Do not add campaign-premise details, future stakes, or explanations not required by those directives.",
     "",
     "PLAYER KNOWLEDGE, VOICE, AND OPENING FOCUS:",
     "Assume the player knows nothing about this campaign or setting beyond what this narration has already shown them.",
     "Write entirely in second person. Address the player as 'you.' Never use the player character's name as the grammatical subject and never describe the player character in third person.",
-    "The concept is author guidance for you, not exposition for the player. Use it to understand the direction of the campaign, but reveal only what the player can immediately encounter, observe, be told, or reasonably infer in this first scene.",
     "Open with a lived-in moment, not a briefing. The player should first notice an interesting situation already in progress through concrete sensory details, visible behavior, and brief overheard dialogue.",
     "Use simple, precise, colorful language. Prefer a few specific physical details—heat on stone, dust in the wind, a clenched hand, a crooked seal, a wheel stuck in mud—over abstract atmosphere, dense lore, institutional explanation, or elaborate figurative language.",
     "Narrate as an engaged, expressive human Dungeon Master who is glad to be telling this story. Do not sound like a neutral camera log or an encounter summary.",
@@ -9377,7 +9378,7 @@ function formatEldermereNarratorOpeningRequest(input: {
     "",
     "Opening style: Write grounded, direct fantasy prose that feels vivid because it is specific. Build atmosphere through terrain, weather, objects, sound, movement, expression, and immediate consequences. The opener should feel like you have arrived beside a real situation in motion, not like someone has stopped to explain the campaign to you.",
     "",
-    "Before returning, silently verify that the campaign concept is dramatized rather than summarized, the first 3 paragraphs follow the required present-first sequence, paragraph 4 is exactly 'What do you do?', and exactly 6 valid semantic color tags appear across paragraphs 1-3."
+    "Before returning, silently verify that the opening_scene directives are rendered rather than summarized, the first 3 paragraphs follow the required present-first sequence, paragraph 4 is exactly 'What do you do?', and exactly 6 valid semantic color tags appear across paragraphs 1-3."
   ].join("\n");
 }
 
@@ -9623,6 +9624,15 @@ function narratorOpeningPlanToJson(plan: EldermereOpeningBrief) {
     starting_location: plan.startingLocation,
     why_the_player_is_here_now: plan.whyThePlayerIsHereNow,
     concept: plan.concept,
+    opening_scene: plan.openingScene
+  };
+}
+
+function narratorOpeningBriefToJson(plan: EldermereOpeningBrief) {
+  return {
+    region: plan.region,
+    starting_location: plan.startingLocation,
+    why_the_player_is_here_now: plan.whyThePlayerIsHereNow,
     opening_scene: plan.openingScene
   };
 }

@@ -3731,7 +3731,7 @@ before(async () => {
               concept:
                 "A local request turns into an escalating mystery as the character learns why several people want the same truth hidden. As the player follows the messenger's lead, they discover the local network has been exploiting the town's pressures to conceal its work. The campaign becomes a choice between exposing the network, using its leverage, or protecting the people it has trapped.",
               opening_scene:
-                "At a marked doorway in the selected starting location, a worried messenger offers the first lead while someone watches the street.",
+                "Introduce a public disruption at a marked doorway in the selected starting location. Establish that a worried messenger is present while someone watches the street. Keep the reason for the watch unexplained, and do not have the messenger assign the player a task.",
               private_truth:
                 "The messenger's request is connected to a concealed local network that has been exploiting the town's pressures; discovering that recontextualizes the opening and gives the player leverage over the network.",
               campaign_anchors: [

@@ -2632,10 +2632,13 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(plannerInput.message, /ELDERMERE GROUNDING/);
   assert.match(plannerInput.message, /CONCEPT REQUIREMENTS/);
   assert.match(plannerInput.message, /OPENING-SCENE HANDOFF REQUIREMENTS/);
+  assert.match(plannerInput.message, /directions for the narrator/i);
+  assert.match(plannerInput.message, /plain, everyday language/i);
+  assert.match(plannerInput.message, /Do not write sample narration/i);
   assert.match(plannerInput.message, /live situation already unfolding/);
   assert.match(plannerInput.message, /Start one beat before anyone recruits the player/);
   assert.match(plannerInput.message, /common local context about the selected starting settlement/);
-  assert.match(plannerInput.message, /Do not have an NPC appoint the player/);
+  assert.match(plannerInput.message, /Do not assign the player a job/);
   assert.match(plannerInput.message, /campaign as an evolving situation/i);
   assert.match(plannerInput.message, /not merely as an opening hook/i);
   assert.match(plannerInput.message, /what the player may eventually discover and decide/i);
@@ -2661,14 +2664,17 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(narratorInput.message, /AUTHORITATIVE CHARACTER CONTEXT/);
   assert.match(narratorInput.message, /ELDERMERE OPENING BRIEF/);
   assert.match(narratorInput.message, /NARRATOR TASK - WRITE THE FULL PLAYER-FACING OPENER:/);
-  assert.match(narratorInput.message, /campaign source of truth/);
+  assert.match(
+    narratorInput.message,
+    /why_the_player_is_here_now and opening_scene as the authoritative requirements/
+  );
   assert.match(narratorInput.message, /why_the_player_is_here_now/);
   assert.match(narratorInput.message, /PLAYER KNOWLEDGE, VOICE, AND OPENING FOCUS:/);
   assert.match(
     narratorInput.message,
     /Assume the player knows nothing about this campaign or setting/
   );
-  assert.match(narratorInput.message, /concept is author guidance/);
+  assert.match(narratorInput.message, /DM-facing directives, not prose to paraphrase/);
   assert.match(narratorInput.message, /Write entirely in second person/);
   assert.match(narratorInput.message, /Open with a lived-in moment, not a briefing/);
   assert.match(narratorInput.message, /Use simple, precise, colorful language/);
@@ -2729,17 +2735,14 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(narratorInput.message, /"region": "The Salt Concordat"/);
   assert.match(narratorInput.message, /"starting_location": "Selwick"/);
   assert.match(narratorInput.message, /"why_the_player_is_here_now":/);
-  assert.match(narratorInput.message, /"concept":/);
+  assert.doesNotMatch(narratorInput.message, /"concept":/);
   assert.match(narratorInput.message, /"opening_scene":/);
   assert.doesNotMatch(narratorInput.message, /"private_truth":/);
   assert.doesNotMatch(narratorInput.message, /"campaign_anchors":/);
   assert.doesNotMatch(narratorInput.message, /Validated name bank for this campaign opener:/);
   assert.doesNotMatch(narratorInput.message, /Campaign opener requirements:/);
   assert.doesNotMatch(narratorInput.message, /Authoritative mechanics state:/);
-  assert.match(
-    narratorInput.message,
-    /Fulfill why_the_player_is_here_now, concept, and opening_scene/
-  );
+  assert.doesNotMatch(narratorInput.message, /local request turns into an escalating mystery/i);
 
   assert.ok(plannerDebug);
   assert.equal(
