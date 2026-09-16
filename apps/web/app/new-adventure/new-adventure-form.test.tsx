@@ -1141,6 +1141,7 @@ describe("NewAdventureForm", () => {
       vi.advanceTimersByTime(10_000);
     });
 
+    expect(screen.getByText("94%")).toHaveClass("campaign-prep-loader-note");
     expect(screen.getByText("Integrating your backstory")).toHaveClass(
       "rune-loader"
     );

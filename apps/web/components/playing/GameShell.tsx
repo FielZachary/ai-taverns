@@ -134,6 +134,7 @@ const campaignPreparationMessageIntervalMs = 10_000;
 const campaignPreparationTransitionMs = 650;
 const campaignPreparationProgressIntervalMs = 1_000;
 const campaignPreparationProgressCeiling = 95;
+const campaignPreparationProgressApproachDivisor = 3;
 
 function isAiModelId(value: FormDataEntryValue | string | null): value is AiModelId {
   return value === "deepseek-v4-flash" || value === "qwen-3-5-plus";
@@ -264,7 +265,14 @@ function CampaignPreparationLoader() {
       setProgress((currentProgress) =>
         Math.min(
           campaignPreparationProgressCeiling,
-          currentProgress + Math.max(1, Math.ceil((100 - currentProgress) / 12))
+          currentProgress +
+            Math.max(
+              1,
+              Math.ceil(
+                (campaignPreparationProgressCeiling - currentProgress) /
+                  campaignPreparationProgressApproachDivisor
+              )
+            )
         )
       );
     }, campaignPreparationProgressIntervalMs);
