@@ -2719,7 +2719,7 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.doesNotMatch(narratorInput.message, /Backstory/);
   assert.match(narratorInput.message, /Paragraph 1 — Arrival/);
   assert.match(narratorInput.message, /Paragraph 2 — The live incident/);
-  assert.match(narratorInput.message, /at least two short quoted lines/i);
+  assert.match(narratorInput.message, /Use direct, expressive dialogue/i);
   assert.match(narratorInput.message, /opening_scene/);
   assert.match(narratorInput.message, /Paragraph 3 — The opening/);
   assert.match(narratorInput.message, /Paragraph 4 — Handoff/);
