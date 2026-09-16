@@ -36,7 +36,9 @@ export async function GET(request: Request) {
     );
   }
 
-  const response = NextResponse.redirect(new URL(next, publicAppOrigin));
+  const body = (await upstream.json()) as { isNewUser?: boolean };
+  const redirectPath = body.isNewUser ? "/onboarding" : next;
+  const response = NextResponse.redirect(new URL(redirectPath, publicAppOrigin));
   copySetCookieHeaders(upstream, response);
 
   return response;

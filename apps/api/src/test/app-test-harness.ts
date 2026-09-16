@@ -3731,7 +3731,7 @@ before(async () => {
               concept:
                 "A local request turns into an escalating mystery as the character learns why several people want the same truth hidden. As the player follows the messenger's lead, they discover the local network has been exploiting the town's pressures to conceal its work. The campaign becomes a choice between exposing the network, using its leverage, or protecting the people it has trapped.",
               opening_scene:
-                "At a marked doorway in the selected starting location, a worried messenger offers the first lead while someone watches the street.",
+                "Introduce a public disruption at a marked doorway in the selected starting location. Establish that a worried messenger is present while someone watches the street. Keep the reason for the watch unexplained, and do not have the messenger assign the player a task.",
               private_truth:
                 "The messenger's request is connected to a concealed local network that has been exploiting the town's pressures; discovering that recontextualizes the opening and gives the player leverage over the network.",
               campaign_anchors: [
@@ -3886,7 +3886,7 @@ before(async () => {
           "ELDERMERE OPENING BRIEF"
         );
         const eldermerePublicNarration =
-          "A <npc>courier</npc> waits beside a <clue>weathered sign</clue> on the <place>old road</place>, glancing between you and the <danger>ruined watchtower</danger> beyond the ridge. The summons in your pocket brought you here; earlier that evening, its bearer warned that the tower's lantern had gone dark.\n\nA <object>lantern</object> flickers over wet stones and wagon ruts as <faction>nearby travelers</faction> retreat from the watchtower's distant metal knock. The road, the sign, and the courier are all within reach, but the darkness inside the ruin is no longer still.\n\nYou can question the courier, inspect the weathered sign, or follow the road toward the ruined watchtower before the lantern burns out.\n\nWhat do you do?";
+          "A <npc>courier</npc> waits beside a <clue>weathered sign</clue> on the <place>old road</place>, glancing between you and the <danger>ruined watchtower</danger> beyond the ridge. The summons in your pocket brought you here; earlier that evening, its bearer warned that the tower's lantern had gone dark.\n\nA <object>lantern</object> flickers over wet stones and wagon ruts as <faction>nearby travelers</faction> retreat from the watchtower's distant metal knock. \"That sound came from inside,\" the courier says. \"I am not going back alone.\"\n\nYou can question the courier, inspect the weathered sign, or follow the road toward the ruined watchtower before the lantern burns out.\n\nWhat would you like to do?";
         const narratorContent = isEldermereNarrator
           ? eldermerePublicNarration
           : publicNarration;

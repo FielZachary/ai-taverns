@@ -98,10 +98,11 @@ const campaignPreparationMessages = [
   "Repairing story holes",
   "Final touches"
 ];
-const campaignPreparationMessageIntervalMs = 10_000;
+const campaignPreparationMessageIntervalMs = 5_000;
 const campaignPreparationTransitionMs = 650;
 const campaignPreparationProgressIntervalMs = 1_000;
 const campaignPreparationProgressCeiling = 95;
+const campaignPreparationProgressApproachDivisor = 3;
 
 type NewAdventureEntryState = "preloading" | "transitioning" | "ready";
 
@@ -4289,7 +4290,14 @@ function CampaignPreparationLoader() {
       setProgress((currentProgress) =>
         Math.min(
           campaignPreparationProgressCeiling,
-          currentProgress + Math.max(1, Math.ceil((100 - currentProgress) / 12))
+          currentProgress +
+            Math.max(
+              1,
+              Math.ceil(
+                (campaignPreparationProgressCeiling - currentProgress) /
+                  campaignPreparationProgressApproachDivisor
+              )
+            )
         )
       );
     }, campaignPreparationProgressIntervalMs);

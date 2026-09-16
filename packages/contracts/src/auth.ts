@@ -22,7 +22,8 @@ export const AuthMeResponseSchema = z.discriminatedUnion("authenticated", [
   z.object({
     authenticated: z.literal(true),
     user: AuthUserSchema,
-    session: AuthSessionSchema
+    session: AuthSessionSchema,
+    isNewUser: z.boolean().optional()
   })
 ]);
 
