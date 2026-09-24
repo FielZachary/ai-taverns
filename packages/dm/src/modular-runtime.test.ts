@@ -597,6 +597,23 @@ describe("modular AI DM runtime contracts", () => {
       jobPrompt("npc_dialogue"),
       /do not force every listed behavior into every line/i
     );
+    assert.match(jobPrompt("npc_dialogue"), /Dialogue and Emotional Beats/i);
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /Weave NPC speech, visible action, interruption, reaction, expression, vocal tone, and environmental detail together beat by beat/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /Weave visible and audible emotional detail into the exchange/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /frame it as an inference rather than fact/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /Avoid generic emotional labels without an observable cue/i
+    );
     assert.match(
       jobPrompt("npc_dialogue"),
       /new authority, contact, employer, superior, relative, old friend, order, warrant, permit, badge, property right, secret password, or prior arrangement/i
@@ -1288,6 +1305,10 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(buildMemoryUpdaterPrompt(), /### How They Answer/);
     assert.match(buildMemoryUpdaterPrompt(), /### Conversation Control/);
     assert.match(buildMemoryUpdaterPrompt(), /### Emotional Leakage/);
+    assert.match(
+      buildMemoryUpdaterPrompt(),
+      /without turning into mind-reading narration/i
+    );
     assert.match(buildMemoryUpdaterPrompt(), /### Pressure Mode/);
     assert.match(buildMemoryUpdaterPrompt(), /### Avoid/);
     assert.match(buildMemoryUpdaterPrompt(), /Voice Profile Quality Check/i);
