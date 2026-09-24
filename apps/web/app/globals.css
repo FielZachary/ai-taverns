@@ -1036,7 +1036,7 @@ h1 {
 
 .onboarding-welcome-traveller {
   color: var(--ink);
-  animation: onboarding-welcome-traveller 2.5s ease-in-out both;
+  animation: onboarding-welcome-traveller 4s ease-in-out both;
 }
 
 .onboarding-referral {
@@ -1294,7 +1294,7 @@ h1 {
 }
 
 .new-adventure-flow-welcome.new-adventure-flow-exiting {
-  animation-duration: 1s;
+  animation-duration: 500ms;
 }
 
 .new-adventure-flow-entering {

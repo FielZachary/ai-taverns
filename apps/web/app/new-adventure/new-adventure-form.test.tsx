@@ -199,7 +199,7 @@ describe("NewAdventureForm", () => {
     ).toBeInTheDocument();
 
     await act(async () => {
-      vi.advanceTimersByTime(5_000);
+      vi.advanceTimersByTime(4_000);
     });
 
     expect(
