@@ -1246,6 +1246,7 @@ export function GameShell({
           realtimeEvent.type === "dm_stream_delta" &&
           realtimeEvent.roomId === activeCampaign.id
         ) {
+          setActiveStreamingDmTurnId(realtimeEvent.turnId);
           setStreamingDmMessages((currentMessages) =>
             appendStreamingDmDelta(
               currentMessages,
