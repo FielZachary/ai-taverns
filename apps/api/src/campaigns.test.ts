@@ -2642,6 +2642,11 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(plannerInput.message, /at most one unresolved question or suspicious detail/i);
   assert.match(plannerInput.message, /Do not introduce separate mysteries, suspects, threats, pursuits, objects, factions, or future hooks/i);
   assert.match(plannerInput.message, /Do not describe suggested player actions or choices/i);
+  assert.match(plannerInput.message, /PLAYER-SAFE RELEVANCE RULE/);
+  assert.match(plannerInput.message, /brief, player-safe explanation of why each important visible detail matters right now/i);
+  assert.match(plannerInput.message, /For every featured group, clue, object, or disruption, state its immediate public relevance/i);
+  assert.match(plannerInput.message, /explain its obvious immediate implication without solving the mystery/i);
+  assert.match(plannerInput.message, /Do not add hidden motives, private truths, distant stakes, or new plot hooks/i);
   assert.match(plannerInput.message, /common local context about the selected starting settlement/);
   assert.match(plannerInput.message, /Do not assign the player a job/);
   assert.match(plannerInput.message, /campaign as an evolving situation/i);
@@ -2710,6 +2715,8 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
     /Heightened, poetic, funny, blunt, or dramatic language is welcome/i
   );
   assert.match(narratorInput.message, /what the settlement is and what it is commonly known for/);
+  assert.match(narratorInput.message, /briefly make its immediate significance legible through common local knowledge, visible consequences, or natural overheard dialogue/i);
+  assert.match(narratorInput.message, /reveal its obvious meaning while withholding its hidden cause/i);
   assert.match(narratorInput.message, /opportunity, not an assignment/);
   assert.match(narratorInput.message, /exactly 6 semantic narration color tags/);
   assert.match(narratorInput.message, /Choose tags only from player-visible details already required by the same central incident/i);
