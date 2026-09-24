@@ -1071,7 +1071,7 @@ describe("NewAdventureForm", () => {
     ).toBeInTheDocument();
   });
 
-  it("passes generated Eldermere start into campaign creation", async () => {
+  it("leaves Eldermere start selection to campaign creation", async () => {
     generateCharacterBackstoryMock.mockResolvedValueOnce({
       backstory: "Mira owes a debt to a Selwick shipwright.",
       eldermereStart: {
@@ -1101,15 +1101,13 @@ describe("NewAdventureForm", () => {
 
     expect(createCampaignMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        eldermereStart: {
-          regionName: "The Salt Concordat",
-          settlementName: "Selwick",
-          reason: "The generated backstory centers on Selwick maritime debt."
-        },
         characterSheet: expect.stringContaining(
           "Mira owes a debt to a Selwick shipwright."
         )
       })
+    );
+    expect(createCampaignMock.mock.calls[0]?.[0]).not.toHaveProperty(
+      "eldermereStart"
     );
   });
 

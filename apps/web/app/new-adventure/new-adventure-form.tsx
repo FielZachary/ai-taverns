@@ -54,7 +54,6 @@ import {
 } from "@/lib/analytics";
 import type {
   CharacterBackstoryGenerateRequest,
-  EldermereCampaignStart,
   MechanicsResourceState,
   MechanicsSeed,
   SpellSlotState
@@ -4439,8 +4438,6 @@ export function NewAdventureForm({
   const [alignment, setAlignment] = useState<Alignment>("Neutral Good");
   const [gender, setGender] = useState<Gender>("Non-binary");
   const [backstory, setBackstory] = useState("");
-  const [eldermereStart, setEldermereStart] =
-    useState<EldermereCampaignStart | null>(null);
   const [characterSheet, setCharacterSheet] = useState(defaultCharacterSheet);
   const [ownerClientId, setOwnerClientId] = useState("");
   const [error, setError] = useState("");
@@ -5001,7 +4998,6 @@ export function NewAdventureForm({
       skillCount: selectedSkills.length,
       hasBackstory: Boolean(backstory.trim()),
       hasCustomWorld: isCustomGenre,
-      hasEldermereStart: Boolean(eldermereStart),
       equipmentCompleted: isEquipmentSummaryStep || chosenEquipmentGear.length > 0
     } as const;
   }, [
@@ -5010,7 +5006,6 @@ export function NewAdventureForm({
     characterClass,
     characterSpecies,
     chosenEquipmentGear.length,
-    eldermereStart,
     isCustomGenre,
     isEquipmentSummaryStep,
     mode,
@@ -5880,9 +5875,6 @@ export function NewAdventureForm({
       characterName,
       characterSheet,
       mechanicsSeed,
-      ...(eldermereStart && !isCustomGenre && selectedGenre.id === "eldermere"
-        ? { eldermereStart }
-        : {})
     });
 
     trackAnalytics({
@@ -6017,7 +6009,6 @@ export function NewAdventureForm({
       });
 
       setBackstory(generatedBackstory.backstory);
-      setEldermereStart(generatedBackstory.eldermereStart ?? null);
       return true;
     } catch (caught) {
       setError(
@@ -6529,7 +6520,6 @@ export function NewAdventureForm({
                       key={genre.id}
                       onClick={() => {
                         setCampaignGenre(genre.id);
-                        setEldermereStart(null);
                         trackAnalytics({
                           name: "Campaign World Selected",
                           properties: {
@@ -7247,7 +7237,6 @@ export function NewAdventureForm({
                           value={backstory}
                           onChange={(event) => {
                             setBackstory(event.target.value);
-                            setEldermereStart(null);
                           }}
                           placeholder="Optional: Write Backstory"
                           readOnly={isGeneratingBackstory}
