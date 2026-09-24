@@ -549,6 +549,22 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("npc_dialogue"),
+      /NPC Voice and Dramatic Presence/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /specific conversational engine/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /choose at least two voice markers/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /Avoid generic dialogue tags and descriptions/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
       /new authority, contact, employer, superior, relative, old friend, order, warrant, permit, badge, property right, secret password, or prior arrangement/i
     );
     assert.match(
