@@ -1031,12 +1031,12 @@ h1 {
   line-height: 0.95;
   white-space: nowrap;
   text-align: center;
-  animation: onboarding-welcome 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: onboarding-welcome 1s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .onboarding-welcome-traveller {
   color: var(--ink);
-  animation: onboarding-welcome-traveller 1s ease-out both;
+  animation: onboarding-welcome-traveller 5s ease-in-out both;
 }
 
 .onboarding-referral {
@@ -1216,7 +1216,7 @@ h1 {
 
 @keyframes onboarding-welcome-traveller {
   from { color: var(--ink); }
-  to { color: var(--gold-bright); }
+  38%, to { color: var(--gold-bright); }
 }
 
 @media (prefers-reduced-motion: reduce) {
