@@ -2049,7 +2049,6 @@ export function buildMemoryUpdaterPrompt() {
     "Voice Profile Quality Check:",
     "Before returning an NPC Voice Profile, rewrite any bullet that could describe almost any NPC, contains only an adjective without a speech mechanism, repeats prior narration, or describes current plot intent instead of delivery.",
     "Specifically reject and replace unsupported uses of 'flat,' 'short,' 'direct,' 'formal,' 'blunt,' 'wary,' 'calculated,' 'intense,' or 'practical.' Each replacement must explain how the trait appears in word choice, sentence construction, turn-taking, emotional leakage, pressure behavior, or an Avoid rule.",
-    "Check that the profile would make this NPC sound different from at least two other plausible NPCs in the same scene without relying on a catchphrase, caricatured dialect, or decorative fantasy prose.",
     "Give them strong motivations: what they want right now, what they are protecting, what they are hiding, what they fear losing, or what line they will not cross.",
     "Track their relationship to the party as a living disposition, not a static alignment. Note trust, suspicion, debts, grudges, leverage, respect, fear, attraction, rivalry, or obligation when relevant.",
     "Keep durable facts, active conflicts, secrets, unresolved promises, threats, bargains, and hooks that could matter in later play.",

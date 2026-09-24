@@ -1299,10 +1299,6 @@ describe("modular AI DM runtime contracts", () => {
       buildMemoryUpdaterPrompt(),
       /could describe almost any NPC/i
     );
-    assert.match(
-      buildMemoryUpdaterPrompt(),
-      /sound different from at least two other plausible NPCs/i
-    );
     assert.match(buildMemoryUpdaterPrompt(), /Canonical written artifact memory/i);
     assert.match(buildMemoryUpdaterPrompt(), /preserve the revealed text word for word/i);
     assert.match(buildMemoryUpdaterPrompt(), /notes, notebooks, ledgers, journals, letters/i);
