@@ -93,7 +93,6 @@ import {
 } from "./game-shell-dice";
 import {
   appendStreamingDmDelta,
-  completeStreamingDmMessage,
   mergeVisibleGameMessages,
   removePersistedStreamingDmMessages,
   removeStreamingDmMessage,
@@ -449,6 +448,9 @@ export function GameShell({
   const [streamingDmMessages, setStreamingDmMessages] = useState<
     StreamingDmMessage[]
   >([]);
+  const [activeStreamingDmTurnId, setActiveStreamingDmTurnId] = useState<
+    string | null
+  >(null);
   const [isRoomResolving, setIsRoomResolving] = useState(false);
   const [hasAdventureBegun, setHasAdventureBegun] = useState(false);
   const [pendingRollRequests, setPendingRollRequests] = useState<
@@ -602,8 +604,16 @@ export function GameShell({
     ]
   );
   const isShowingStreamingDmMessage = useMemo(
-    () => streamingDmMessages.length > 0,
-    [streamingDmMessages]
+    () =>
+      Boolean(
+        activeStreamingDmTurnId &&
+          streamingDmMessages.some(
+            (message) =>
+              message.turnId === activeStreamingDmTurnId &&
+              message.content.trim().length > 0
+          )
+      ),
+    [activeStreamingDmTurnId, streamingDmMessages]
   );
   const waitingPlayers = useMemo(
     () =>
@@ -1117,6 +1127,7 @@ export function GameShell({
       setRoomPlayers([]);
       setRoomMessages([]);
       setStreamingDmMessages([]);
+      setActiveStreamingDmTurnId(null);
       setHasAdventureBegun(false);
       setIsRoomResolving(false);
       setIsInputSubmitted(false);
@@ -1228,6 +1239,7 @@ export function GameShell({
           realtimeEvent.roomId === activeCampaign.id
         ) {
           setRoomResolvingState(true);
+          setActiveStreamingDmTurnId(realtimeEvent.turnId);
         }
 
         if (
@@ -1249,11 +1261,10 @@ export function GameShell({
           realtimeEvent.roomId === activeCampaign.id
         ) {
           setStreamingDmMessages((currentMessages) =>
-            completeStreamingDmMessage(
-              currentMessages,
-              realtimeEvent.turnId,
-              realtimeEvent.messageId
-            )
+            removeStreamingDmMessage(currentMessages, realtimeEvent.turnId)
+          );
+          setActiveStreamingDmTurnId((currentTurnId) =>
+            currentTurnId === realtimeEvent.turnId ? null : currentTurnId
           );
           void refreshRoom();
         }
@@ -1266,6 +1277,9 @@ export function GameShell({
 
           setStreamingDmMessages((currentMessages) =>
             removeStreamingDmMessage(currentMessages, realtimeEvent.turnId)
+          );
+          setActiveStreamingDmTurnId((currentTurnId) =>
+            currentTurnId === realtimeEvent.turnId ? null : currentTurnId
           );
           if (!shouldSuppressMessage) {
             setMessages((currentMessages) => [
@@ -1408,6 +1422,7 @@ export function GameShell({
     setRoomMessages([]);
     setRoomPlayers([]);
     setStreamingDmMessages([]);
+    setActiveStreamingDmTurnId(null);
     setHasAdventureBegun(campaign.mode === "single_player");
     setPendingRollRequests([]);
     setNextInputNeeded("player_actions");
@@ -1722,6 +1737,7 @@ export function GameShell({
       setRoomMessages([]);
       setRoomPlayers([]);
       setStreamingDmMessages([]);
+      setActiveStreamingDmTurnId(null);
       setPendingRollRequests([]);
       setNextInputNeeded("player_actions");
       setInputTargets([]);
