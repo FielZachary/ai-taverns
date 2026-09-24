@@ -97,7 +97,6 @@ import {
   mergeVisibleGameMessages,
   removePersistedStreamingDmMessages,
   removeStreamingDmMessage,
-  startStreamingDmMessage,
   withOpeningResourceMessages,
   withPlayerMessageAvatars,
   type StreamingDmMessage
@@ -1229,13 +1228,6 @@ export function GameShell({
           realtimeEvent.roomId === activeCampaign.id
         ) {
           setRoomResolvingState(true);
-          setStreamingDmMessages((currentMessages) =>
-            startStreamingDmMessage(
-              currentMessages,
-              realtimeEvent.turnId,
-              new Date().toISOString()
-            )
-          );
         }
 
         if (
