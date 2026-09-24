@@ -565,6 +565,22 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("npc_dialogue"),
+      /Natural Dialogue and Conversation Progression/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /shortest believable line that advances the NPC's immediate aim/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /Do not manufacture a dramatic ultimatum/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /Treat the immediately previous DM response as already dramatized/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
       /new authority, contact, employer, superior, relative, old friend, order, warrant, permit, badge, property right, secret password, or prior arrangement/i
     );
     assert.match(
@@ -1244,6 +1260,11 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(buildMemoryUpdaterPrompt(), /campaign context as a living world bible/i);
     assert.match(buildMemoryUpdaterPrompt(), /Store the meaning of incidental NPC dialogue/i);
     assert.match(buildMemoryUpdaterPrompt(), /fresh wording rather than repeating the prior line/i);
+    assert.match(buildMemoryUpdaterPrompt(), /NPC Memory Style Hygiene/i);
+    assert.match(buildMemoryUpdaterPrompt(), /not the prose style of the immediately preceding response/i);
+    assert.match(buildMemoryUpdaterPrompt(), /Do not preserve generic descriptive phrases/i);
+    assert.match(buildMemoryUpdaterPrompt(), /NPC Voice Profile/i);
+    assert.match(buildMemoryUpdaterPrompt(), /## Voice Profile/);
     assert.match(buildMemoryUpdaterPrompt(), /Canonical written artifact memory/i);
     assert.match(buildMemoryUpdaterPrompt(), /preserve the revealed text word for word/i);
     assert.match(buildMemoryUpdaterPrompt(), /notes, notebooks, ledgers, journals, letters/i);
