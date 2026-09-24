@@ -2718,7 +2718,7 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(narratorInput.message, /briefly make its immediate significance legible through common local knowledge, visible consequences, or natural overheard dialogue/i);
   assert.match(narratorInput.message, /reveal its obvious meaning while withholding its hidden cause/i);
   assert.match(narratorInput.message, /opportunity, not an assignment/);
-  assert.match(narratorInput.message, /exactly 6 semantic narration color tags before the final handoff paragraph/);
+  assert.match(narratorInput.message, /exactly 6 semantic narration color tags/);
   assert.match(narratorInput.message, /Choose tags only from player-visible details already required by the same central incident/i);
   assert.match(narratorInput.message, /Tags provide visual emphasis, not a reason to invent an extra clue/i);
   assert.match(narratorInput.message, /Repeating a tag type is allowed/i);
@@ -2732,16 +2732,15 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.doesNotMatch(narratorInput.message, /Captain Saela/);
   assert.doesNotMatch(narratorInput.message, /compass that points toward Selwick/);
   assert.doesNotMatch(narratorInput.message, /Backstory/);
-  assert.match(narratorInput.message, /OPENING NARRATIVE SEQUENCE/);
-  assert.match(narratorInput.message, /Let the scene develop in the order that feels most natural/i);
-  assert.match(narratorInput.message, /Do not force arrival, conflict, clue, setting context, or escalation into separate paragraphs/i);
-  assert.match(narratorInput.message, /Use natural paragraph breaks wherever the scene's movement and pacing call for them/i);
+  assert.match(narratorInput.message, /Paragraph 1 — Arrival/);
+  assert.match(narratorInput.message, /Paragraph 2 — The live incident/);
+  assert.match(narratorInput.message, /Use direct, expressive dialogue/i);
   assert.match(narratorInput.message, /opening_scene/);
-  assert.match(narratorInput.message, /Put 'What would you like to do\?' alone in the final paragraph/);
-  assert.doesNotMatch(narratorInput.message, /REQUIRED FOUR-PARAGRAPH STRUCTURE/);
-  assert.doesNotMatch(narratorInput.message, /exactly 4 paragraphs/);
+  assert.match(narratorInput.message, /Paragraph 3 — The opening/);
+  assert.match(narratorInput.message, /Paragraph 4 — Handoff/);
+  assert.match(narratorInput.message, /exactly 4 paragraphs/);
   assert.match(narratorInput.message, /grounded, direct fantasy prose that feels vivid because it is specific/);
-  assert.match(narratorInput.message, /Keep the narrative before the final handoff centered on the one central incident in opening_scene/i);
+  assert.match(narratorInput.message, /Keep the first three paragraphs centered on the one central incident in opening_scene/i);
   assert.match(narratorInput.message, /Do not invent extra leads, villains, named factions, objects, clues, suspects, or parallel conflicts/i);
   assert.doesNotMatch(narratorInput.message, /Flagship world context:/);
   assert.doesNotMatch(narratorInput.message, /Seven regions available for the opener:/);
@@ -3191,7 +3190,7 @@ test.skip("POST /api/campaigns uses a low-temperature final retry for short Elde
           narrator_instructions: [
             "Begin at the edge of Suncross.",
             "Introduce Mara Vell as a visible NPC.",
-            "Use natural paragraph breaks for vivid sensory detail, then put What would you like to do? alone in the final paragraph."
+            "Keep the opening to exactly 4 paragraphs of vivid sensory detail, with the fourth paragraph only the final direct prompt: What would you like to do?"
           ]
         }),
         debug: {
