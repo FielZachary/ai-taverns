@@ -813,9 +813,6 @@ h1 {
   min-height: 100dvh;
   place-items: center;
   padding: clamp(28px, 5vw, 72px);
-  background:
-    radial-gradient(circle at 24% 18%, rgba(173, 71, 43, 0.13), transparent 22rem),
-    linear-gradient(90deg, rgba(7, 5, 3, 0.1), rgba(7, 5, 3, 0.26));
 }
 
 .auth-panel {
