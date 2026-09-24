@@ -1036,7 +1036,7 @@ h1 {
 
 .onboarding-welcome-traveller {
   color: var(--ink);
-  animation: onboarding-welcome-traveller 5s ease-in-out both;
+  animation: onboarding-welcome-traveller 2.5s ease-in-out both;
 }
 
 .onboarding-referral {
