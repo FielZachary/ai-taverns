@@ -822,9 +822,7 @@ export function GameShell({
       const submissionUpdate = roomSnapshotSubmissionUpdate({
         room,
         currentPlayer,
-        pendingSubmission: pendingSubmissionRef.current,
-        optimisticSubmittedPlayerId,
-        playerId: resolvedPlayerId
+        pendingSubmission: pendingSubmissionRef.current
       });
 
       if (submissionUpdate) {
@@ -843,7 +841,7 @@ export function GameShell({
         }
       }
     },
-    [optimisticSubmittedPlayerId, playerId, setRoomResolvingState]
+    [playerId, setRoomResolvingState]
   );
 
   const loadCampaignMessages = useCallback(async (campaign: CampaignSummary) => {
@@ -1826,11 +1824,11 @@ export function GameShell({
     setRetryableTurnState(null);
     setIsSending(true);
     setIsInputSubmitted(!isSinglePlayer);
+    pendingSubmissionRef.current = {
+      messageId: playerMessage.id,
+      createdAt: playerMessage.createdAt
+    };
     if (!isSinglePlayer) {
-      pendingSubmissionRef.current = {
-        messageId: playerMessage.id,
-        createdAt: playerMessage.createdAt
-      };
       setOptimisticSubmittedPlayerId(playerId);
       setRoomPlayers((currentPlayers) =>
         currentPlayers.map((roomPlayer) =>
