@@ -8,11 +8,11 @@ export default function LoginPage() {
       <section className="auth-art-panel" aria-hidden="true">
         <Image
           className="auth-art-image"
-          src="/auth/viking-warrior-auth.png"
+          src="/auth/viking-warrior-auth-wide.png"
           alt=""
           fill
           priority
-          sizes="(max-width: 820px) 100vw, 50vw"
+          sizes="100vw"
         />
       </section>
 

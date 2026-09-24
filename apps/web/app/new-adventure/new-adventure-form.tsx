@@ -54,7 +54,6 @@ import {
 } from "@/lib/analytics";
 import type {
   CharacterBackstoryGenerateRequest,
-  EldermereCampaignStart,
   MechanicsResourceState,
   MechanicsSeed,
   SpellSlotState
@@ -222,6 +221,8 @@ const playerIdStorageKey = "ai-dnd.playerId";
 const characterLevel = 5;
 const proficiencyBonus = 3;
 const flowTransitionDurationMs = 240;
+const onboardingWelcomeExitStartMs = 2_500;
+const onboardingWelcomeExitDurationMs = 500;
 const createSteps = ["Mode", "Campaign", "Character", "Review"];
 const customCreateSteps = ["Mode", "Campaign", "Custom World", "Character", "Review"];
 const multiplayerCreateSteps = ["Mode", "Multiplayer", "Campaign", "Character", "Review"];
@@ -4341,10 +4342,10 @@ const referralSources = [
   { label: "Other", icon: "other" }
 ] as const;
 const onboardingExperienceOptions = [
-  "I am completely new, hehe",
+  "I am completely new.",
   "I've played Baldur's Gate but thats pretty much it!",
   "I've played D&D quite a few times",
-  "I'm an experience player or DM"
+  "I'm an experienced player or DM"
 ] as const;
 
 function ReferralIcon({ icon }: { icon: (typeof referralSources)[number]["icon"] }) {
@@ -4437,8 +4438,6 @@ export function NewAdventureForm({
   const [alignment, setAlignment] = useState<Alignment>("Neutral Good");
   const [gender, setGender] = useState<Gender>("Non-binary");
   const [backstory, setBackstory] = useState("");
-  const [eldermereStart, setEldermereStart] =
-    useState<EldermereCampaignStart | null>(null);
   const [characterSheet, setCharacterSheet] = useState(defaultCharacterSheet);
   const [ownerClientId, setOwnerClientId] = useState("");
   const [error, setError] = useState("");
@@ -4668,9 +4667,9 @@ export function NewAdventureForm({
           window.setTimeout(() => {
             setStepIndex(1);
             setFlowTransition("idle");
-          }, flowTransitionDurationMs)
+          }, onboardingWelcomeExitDurationMs)
         );
-      }, 5_000)
+      }, onboardingWelcomeExitStartMs)
     ];
 
     return () => timeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId));
@@ -4999,7 +4998,6 @@ export function NewAdventureForm({
       skillCount: selectedSkills.length,
       hasBackstory: Boolean(backstory.trim()),
       hasCustomWorld: isCustomGenre,
-      hasEldermereStart: Boolean(eldermereStart),
       equipmentCompleted: isEquipmentSummaryStep || chosenEquipmentGear.length > 0
     } as const;
   }, [
@@ -5008,7 +5006,6 @@ export function NewAdventureForm({
     characterClass,
     characterSpecies,
     chosenEquipmentGear.length,
-    eldermereStart,
     isCustomGenre,
     isEquipmentSummaryStep,
     mode,
@@ -5878,9 +5875,6 @@ export function NewAdventureForm({
       characterName,
       characterSheet,
       mechanicsSeed,
-      ...(eldermereStart && !isCustomGenre && selectedGenre.id === "eldermere"
-        ? { eldermereStart }
-        : {})
     });
 
     trackAnalytics({
@@ -6015,7 +6009,6 @@ export function NewAdventureForm({
       });
 
       setBackstory(generatedBackstory.backstory);
-      setEldermereStart(generatedBackstory.eldermereStart ?? null);
       return true;
     } catch (caught) {
       setError(
@@ -6270,7 +6263,9 @@ export function NewAdventureForm({
 
       <form className="new-adventure-form" onSubmit={handleSubmit}>
         <div
-          className={`new-adventure-flow new-adventure-flow-${flowTransition}`}
+          className={`new-adventure-flow new-adventure-flow-${flowTransition}${
+            isOnboardingWelcomeStep ? " new-adventure-flow-welcome" : ""
+          }`}
         >
           {isOnboardingWelcomeStep ? (
             <h1 className="onboarding-welcome">
@@ -6525,7 +6520,6 @@ export function NewAdventureForm({
                       key={genre.id}
                       onClick={() => {
                         setCampaignGenre(genre.id);
-                        setEldermereStart(null);
                         trackAnalytics({
                           name: "Campaign World Selected",
                           properties: {
@@ -7243,7 +7237,6 @@ export function NewAdventureForm({
                           value={backstory}
                           onChange={(event) => {
                             setBackstory(event.target.value);
-                            setEldermereStart(null);
                           }}
                           placeholder="Optional: Write Backstory"
                           readOnly={isGeneratingBackstory}

@@ -377,12 +377,7 @@ test("POST /api/campaigns/backstory generates a focused, player-readable charact
   assert.equal(response.statusCode, 200);
   assert.deepEqual(CharacterBackstoryGenerateResponseSchema.parse(response.json()), {
     backstory:
-      "Mira Vale learned the sea keeps better records than any court, especially when Ilyra Fen vanished with a tide-priest's ledger.",
-    eldermereStart: {
-      regionName: "The Salt Concordat",
-      settlementName: "Selwick",
-      reason: "The backstory centers on ports, ledgers, and sea debts."
-    }
+      "Mira Vale learned the sea keeps better records than any court, especially when Ilyra Fen vanished with a tide-priest's ledger."
   });
 
   const providerInput = getProviderInputs().at(-1);
@@ -397,13 +392,8 @@ test("POST /api/campaigns/backstory generates a focused, player-readable charact
   assert.doesNotMatch(providerInput?.message ?? "", /Factions and organizations:/);
   assert.doesNotMatch(providerInput?.message ?? "", /inventing new people, families, places/);
   assert.match(providerInput?.message ?? "", /World: Eldermere/);
-  assert.match(providerInput?.message ?? "", /Canonical Eldermere start options:/);
-  assert.match(providerInput?.message ?? "", /Region: The Salt Concordat/);
-  assert.match(
-    providerInput?.message ?? "",
-    /Settlements: Corvane, Selwick, Gullswatch, Barnacle Reach, Skerrywatch, Driftwood Landing/
-  );
-  assert.match(providerInput?.message ?? "", /eldermereStart\.regionName/);
+  assert.doesNotMatch(providerInput?.message ?? "", /Canonical Eldermere start options:/);
+  assert.doesNotMatch(providerInput?.message ?? "", /eldermereStart\.regionName/);
   assert.match(providerInput?.message ?? "", /Use generated names only for people/i);
   assert.match(providerInput?.message ?? "", /only newly invented proper nouns allowed are people names/i);
   assert.match(providerInput?.message ?? "", /Do not give names to ships, taverns, guilds/i);
@@ -551,7 +541,7 @@ test("POST /api/campaigns/backstory add details localizes Eldermere details", as
     /convert generic or non-canonical places, factions, institutions, threats, magic, customs, and historical references into Eldermere-native equivalents/i
   );
   assert.match(providerInput?.message ?? "", /When the world is Eldermere/i);
-  assert.match(providerInput?.message ?? "", /Canonical Eldermere start options:/);
+  assert.doesNotMatch(providerInput?.message ?? "", /Canonical Eldermere start options:/);
   resetProviderInputs();
 });
 
@@ -601,12 +591,7 @@ test("POST /api/campaigns/backstory localizes Eldermere backstory with minimal c
   assert.equal(response.statusCode, 200);
   assert.deepEqual(CharacterBackstoryGenerateResponseSchema.parse(response.json()), {
     backstory:
-      "Mira left her harbor home for Selwick after a dockside creditor tied her family's debt to an old Salt Concordat tithe.",
-    eldermereStart: {
-      regionName: "The Salt Concordat",
-      settlementName: "Selwick",
-      reason: "The localized backstory points toward Selwick debt trouble."
-    }
+      "Mira left her harbor home for Selwick after a dockside creditor tied her family's debt to an old Salt Concordat tithe."
   });
 
   const providerInput = getProviderInputs().at(-1);
@@ -616,11 +601,11 @@ test("POST /api/campaigns/backstory localizes Eldermere backstory with minimal c
   assert.match(providerInput?.message ?? "", /Do not expand the backstory into a new story/i);
   assert.match(providerInput?.message ?? "", /Player-written backstory:/);
   assert.match(providerInput?.message ?? "", /old coastal tax/);
-  assert.match(providerInput?.message ?? "", /Canonical Eldermere start options:/);
+  assert.doesNotMatch(providerInput?.message ?? "", /Canonical Eldermere start options:/);
   resetProviderInputs();
 });
 
-test("POST /api/campaigns/backstory accepts Eldermere starts without reasons", async () => {
+test("POST /api/campaigns/backstory ignores unrequested Eldermere starts", async () => {
   resetProviderInputs();
   setProviderOverride(async () => {
     const content = JSON.stringify({
@@ -661,11 +646,7 @@ test("POST /api/campaigns/backstory accepts Eldermere starts without reasons", a
 
   assert.equal(response.statusCode, 200);
   assert.deepEqual(CharacterBackstoryGenerateResponseSchema.parse(response.json()), {
-    backstory: "Mira follows a salt-stained debt into Selwick.",
-    eldermereStart: {
-      regionName: "The Salt Concordat",
-      settlementName: "Selwick"
-    }
+    backstory: "Mira follows a salt-stained debt into Selwick."
   });
   resetProviderInputs();
 });
@@ -737,11 +718,7 @@ test("POST /api/campaigns/:campaignId/restart/backstory generates from the saved
     const providerInput = getProviderInputs().at(0);
 
     assert.match(parsed.backstory, /old shrine bell/);
-    assert.deepEqual(parsed.eldermereStart, {
-      regionName: "The Salt Concordat",
-      settlementName: "Selwick",
-      reason: "The backstory keeps Mira pointed at Selwick."
-    });
+    assert.equal(parsed.eldermereStart, undefined);
     assert.match(providerInput?.message ?? "", /Mira follows a brass compass/);
     assert.match(providerInput?.message ?? "", /Player-written backstory:/);
     assert.match(providerInput?.message ?? "", /Eldermere/);
@@ -2637,6 +2614,16 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(plannerInput.message, /Do not write sample narration/i);
   assert.match(plannerInput.message, /live situation already unfolding/);
   assert.match(plannerInput.message, /Start one beat before anyone recruits the player/);
+  assert.match(plannerInput.message, /OPENING FOCUS RULES/);
+  assert.match(plannerInput.message, /exactly one central, visible incident or problem/i);
+  assert.match(plannerInput.message, /at most one unresolved question or suspicious detail/i);
+  assert.match(plannerInput.message, /Do not introduce separate mysteries, suspects, threats, pursuits, objects, factions, or future hooks/i);
+  assert.match(plannerInput.message, /Do not describe suggested player actions or choices/i);
+  assert.match(plannerInput.message, /PLAYER-SAFE RELEVANCE RULE/);
+  assert.match(plannerInput.message, /brief, player-safe explanation of why each important visible detail matters right now/i);
+  assert.match(plannerInput.message, /For every featured group, clue, object, or disruption, state its immediate public relevance/i);
+  assert.match(plannerInput.message, /explain its obvious immediate implication without solving the mystery/i);
+  assert.match(plannerInput.message, /Do not add hidden motives, private truths, distant stakes, or new plot hooks/i);
   assert.match(plannerInput.message, /common local context about the selected starting settlement/);
   assert.match(plannerInput.message, /Do not assign the player a job/);
   assert.match(plannerInput.message, /campaign as an evolving situation/i);
@@ -2705,8 +2692,13 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
     /Heightened, poetic, funny, blunt, or dramatic language is welcome/i
   );
   assert.match(narratorInput.message, /what the settlement is and what it is commonly known for/);
+  assert.match(narratorInput.message, /briefly make its immediate significance legible through common local knowledge, visible consequences, or natural overheard dialogue/i);
+  assert.match(narratorInput.message, /reveal its obvious meaning while withholding its hidden cause/i);
   assert.match(narratorInput.message, /opportunity, not an assignment/);
   assert.match(narratorInput.message, /exactly 6 semantic narration color tags/);
+  assert.match(narratorInput.message, /Choose tags only from player-visible details already required by the same central incident/i);
+  assert.match(narratorInput.message, /Tags provide visual emphasis, not a reason to invent an extra clue/i);
+  assert.match(narratorInput.message, /Repeating a tag type is allowed/i);
   assert.match(narratorInput.message, /<npc>\.\.\.<\/npc>/);
   assert.match(narratorInput.message, /<place>\.\.\.<\/place>/);
   assert.match(narratorInput.message, /<clue>\.\.\.<\/clue>/);
@@ -2725,6 +2717,8 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(narratorInput.message, /Paragraph 4 — Handoff/);
   assert.match(narratorInput.message, /exactly 4 paragraphs/);
   assert.match(narratorInput.message, /grounded, direct fantasy prose that feels vivid because it is specific/);
+  assert.match(narratorInput.message, /Keep the first three paragraphs centered on the one central incident in opening_scene/i);
+  assert.match(narratorInput.message, /Do not invent extra leads, villains, named factions, objects, clues, suspects, or parallel conflicts/i);
   assert.doesNotMatch(narratorInput.message, /Flagship world context:/);
   assert.doesNotMatch(narratorInput.message, /Seven regions available for the opener:/);
   assert.doesNotMatch(narratorInput.instructions, /World Context:/);

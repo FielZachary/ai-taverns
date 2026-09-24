@@ -659,3 +659,18 @@ test("analytics event contract accepts lifecycle enrichment", () => {
   assert.equal(event.properties.lifecycleStage, "hooked");
   assert.equal(event.properties.qualifiedReturnDays, 2);
 });
+
+test("analytics event contract accepts current D&D experience labels", () => {
+  const event = AnalyticsEventSchema.parse({
+    name: "Onboarding D&D Experience Selected",
+    properties: {
+      app: "ai-taverns",
+      schemaVersion: 1,
+      source: "web",
+      distinctId: "guest-1",
+      dndExperience: "I am completely new."
+    }
+  });
+
+  assert.equal(event.properties.dndExperience, "I am completely new.");
+});
