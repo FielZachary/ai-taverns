@@ -9394,28 +9394,28 @@ function formatEldermereNarratorOpeningRequest(input: {
     "Write in plainspoken, natural language: like a gifted Dungeon Master speaking to players at the table, expressive and fluent rather than literary for its own sake. Prefer everyday, spoken vocabulary when it communicates the same idea, choosing ordinary direct words over needlessly elevated alternatives.",
     "Let sentences carry several connected observations when the scene is unfolding or the player is taking in a place, allowing setting, action, and implication to gather before the sentence lands. Keep the narrative viewpoint moving continuously through the space so one detail leads naturally into the next, and let tension emerge through accumulation rather than repeatedly isolating details for emphasis. Favor connective language such as 'where,' 'while,' 'as,' 'before,' 'and,' and 'beyond' whenever it preserves the scene's movement. Describe mysteries plainly and let their implications do the work. Heightened, poetic, funny, blunt, or dramatic language is welcome when it fits the moment; the goal is natural expression, not restrained language.",
     "Preserve player agency. Do not state what the player character thinks, feels, intends, or values unless the supplied character profile already establishes it. Put emotional interpretation in visible behavior, dialogue, atmosphere, and the narrator's framing of events.",
-    "Do not add detail merely to create feeling. Keep the required four-paragraph structure and existing information density. Avoid purple prose, melodrama, constant ominousness, and narrator commentary that breaks immersion.",
+    "Do not add detail merely to create feeling. Keep the existing information density. Avoid purple prose, melodrama, constant ominousness, and narrator commentary that breaks immersion.",
     "Reveal only enough context for the player to understand what is visibly happening right now. Let the player ask why it matters, who people are, what local terms mean, and what deeper forces are involved. Do not front-load worldbuilding, political stakes, history, deadlines, backstory, or the full logic of the conflict.",
     "When you introduce an important visible group, clue, object, or disruption, briefly make its immediate significance legible through common local knowledge, visible consequences, or natural overheard dialogue. Do not leave a detail unexplained merely because it is mysterious: reveal its obvious meaning while withholding its hidden cause.",
-    "In the first paragraph, include one brief, natural sentence or clause explaining what the settlement is and what it is commonly known for. Present it as ordinary local knowledge, not exposition. For example: 'Thanewell is one of the terrace villages that feeds the high country,' or 'Selwick is a river town known for its salt barges and crowded quays.'",
+    "Near the beginning, include one brief, natural sentence or clause explaining what the settlement is and what it is commonly known for. Present it as ordinary local knowledge, not exposition. For example: 'Thanewell is one of the terrace villages that feeds the high country,' or 'Selwick is a river town known for its salt barges and crowded quays.'",
     "Do not make an NPC appoint the player, ask the player to solve the problem, or present a prepackaged objective before the player has had a chance to respond to the scene. The opening should offer an opportunity, not an assignment.",
     "",
-    "Return only plain prose. It must contain exactly 4 paragraphs separated by blank lines. Do not add headings, labels, notes, Markdown, JSON, or commentary. Paragraph 4 must be exactly 'What would you like to do?'.",
+    "Return only plain prose. Use natural paragraph breaks wherever the scene's movement and pacing call for them. Do not add headings, labels, notes, Markdown, JSON, or commentary. Put 'What would you like to do?' alone in the final paragraph.",
     "Use the supplied character profile only for present capabilities and visible details. Do not invent, reference, resolve, or imply personal history, past relationships, debts, gifts, clues, promises, or causes.",
     "Use only facts the character could reasonably see, hear, know, infer, or be told in this opening scene. Do not request dice; the player must receive control before attempting any uncertain action.",
-    "Use exactly 6 semantic narration color tags across paragraphs 1-3: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, or <object>...</object>. Each tag must wrap only a short, player-visible noun or phrase. Do not nest tags, add attributes, use <em>, use Markdown emphasis, or use any other HTML/XML tags.",
+    "Use exactly 6 semantic narration color tags before the final handoff paragraph: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, or <object>...</object>. Each tag must wrap only a short, player-visible noun or phrase. Do not nest tags, add attributes, use <em>, use Markdown emphasis, or use any other HTML/XML tags.",
     "Choose tags only from player-visible details already required by the same central incident in opening_scene. Tags provide visual emphasis, not a reason to invent an extra clue, danger, faction, object, suspect, or separate plot hook. Repeating a tag type is allowed when it best fits the scene.",
     "",
-    "REQUIRED FOUR-PARAGRAPH STRUCTURE:",
-    "Paragraph 1 — Arrival: Place you in a specific sensory location and show the first striking detail. Include only enough immediate context to establish why you are physically there.",
-    "Paragraph 2 — The live incident: Show people doing or saying something that makes the situation legible but unresolved. Use direct, expressive dialogue to reveal the immediate conflict or pressure rather than summarizing it. Do not explain the full stakes or background unless it is naturally visible or spoken aloud.",
-    "Paragraph 3 — The opening: End on an unanswered question, visible choice point, escalation, or moment of attention that gives you room to decide your own response. Do not list suggested actions unless clarity genuinely requires it.",
-    "Paragraph 4 — Handoff: Write exactly 'What would you like to do?'",
+    "OPENING NARRATIVE SEQUENCE:",
+    "Begin inside the live situation. Ground the player with concrete sensory and spatial detail, plus only the local context needed to understand the place.",
+    "Make the central incident legible through visible behavior and brief, natural dialogue. Explain the immediate public relevance of important groups, objects, or suspicious details when they appear, without revealing hidden causes or the full mystery.",
+    "Let the scene develop in the order that feels most natural. Do not force arrival, conflict, clue, setting context, or escalation into separate paragraphs. Stop once the player has enough visible information to choose their own response.",
+    "Do not list suggested actions or assign an objective. Put 'What would you like to do?' alone in the final paragraph.",
     "",
     "Opening style: Write grounded, direct fantasy prose that feels vivid because it is specific. Build atmosphere through terrain, weather, objects, sound, movement, expression, and immediate consequences. The opener should feel like you have arrived beside a real situation in motion, not like someone has stopped to explain the campaign to you.",
-    "Keep the first three paragraphs centered on the one central incident in opening_scene. Do not invent extra leads, villains, named factions, objects, clues, suspects, or parallel conflicts. Incidental details may add texture, but must not compete with the player's understanding of what is happening now.",
+    "Keep the narrative before the final handoff centered on the one central incident in opening_scene. Do not invent extra leads, villains, named factions, objects, clues, suspects, or parallel conflicts. Incidental details may add texture, but must not compete with the player's understanding of what is happening now.",
     "",
-    "Before returning, silently verify that the opening_scene directives are rendered rather than summarized, the first 3 paragraphs follow the required present-first sequence, paragraph 2 uses direct dialogue when people are speaking, paragraph 4 is exactly 'What would you like to do?', and exactly 6 valid semantic color tags appear across paragraphs 1-3."
+    "Before returning, silently verify that the opening_scene directives are rendered rather than summarized, the narrative develops through the present live situation, direct dialogue appears when people are speaking, the final paragraph is exactly 'What would you like to do?', and exactly 6 valid semantic color tags appear before that handoff."
   ].join("\n");
 }
 
@@ -10717,11 +10717,11 @@ function eldermereOpeningSettingErrors(
   return errors;
 }
 
-function openingParagraphCount(content: string) {
+function openingParagraphs(content: string) {
   return content
     .split(/\n\s*\n/)
     .map((paragraph) => paragraph.trim())
-    .filter(Boolean).length;
+    .filter(Boolean);
 }
 
 function eldermereOpeningNarrationErrors(content: string) {
@@ -10730,16 +10730,12 @@ function eldermereOpeningNarrationErrors(content: string) {
 
 function eldermereOpeningStructuralErrors(content: string) {
   const errors: string[] = [];
-  const paragraphCount = openingParagraphCount(content);
+  const finalParagraph = openingParagraphs(content).at(-1);
 
-  if (paragraphCount !== 4) {
+  if (finalParagraph !== "What would you like to do?") {
     errors.push(
-      `public_narration must contain exactly 4 paragraphs; found ${paragraphCount}`
+      "public_narration must use 'What would you like to do?' alone as its final paragraph"
     );
-  }
-
-  if (!/what would you like to do\?\s*$/i.test(content.trim())) {
-    errors.push("public_narration must end with 'What would you like to do?'");
   }
 
   return errors;
@@ -10822,8 +10818,8 @@ async function askEldermereOpeningNarrator(
         ]
       : []),
     "Return only a complete plain-prose opener for the same opening situation, fixing every issue above.",
-    "Use exactly 4 paragraphs separated by blank lines. The fourth and final paragraph must be exactly 'What would you like to do?'.",
-    `Use exactly ${semanticOpeningTagMinimum} semantic narration color tags using <npc>, <place>, <clue>, <danger>, <faction>, or <object>.`,
+    "Use natural paragraph breaks for the same opening situation. Put 'What would you like to do?' alone in the final paragraph.",
+    `Use exactly ${semanticOpeningTagMinimum} semantic narration color tags before the final handoff paragraph using <npc>, <place>, <clue>, <danger>, <faction>, or <object>.`,
     "Do not return JSON, Markdown fences, headings, metadata, setting information, roll requests, state updates, or commentary."
   ].join("\n");
   const repairedOpening = withEldermereOpeningSetting(
@@ -10902,13 +10898,10 @@ async function askEldermereOpeningNarrator(
       narrationErrors: normalizedNarrationErrors
     })}`,
     "Rewrite the same opening situation as plain prose only.",
-    "Use exactly 4 paragraphs separated by blank lines.",
-    "Paragraph 1: the current playable situation and why the character or party is caught in it now; explain earlier events only as brief retrospective context for a present person, object, consequence, or situation, never as a narrated journey or event sequence.",
-    "Paragraph 2: the starting location's immediate sensory and spatial details, visible NPCs, reachable objects, exits, and urgent visible pressure. Use direct dialogue to show the immediate conflict or pressure rather than summarizing it.",
-    "Paragraph 3: the actionable complication and 2-3 concrete non-dice actions available right now.",
-    "Paragraph 4: exactly 'What would you like to do?' and nothing else.",
-    `Use exactly ${semanticOpeningTagMinimum} semantic narration color tags using <npc>, <place>, <clue>, <danger>, <faction>, or <object>.`,
-    "Do not include JSON, Markdown fences, a teaser, a summary, a prologue note, metadata, or anything other than exactly 4 paragraphs."
+    "Use natural paragraph breaks. Begin inside the current playable situation, make the visible conflict and its immediate significance legible through sensory detail and direct dialogue, and stop once the player has enough information to choose a response.",
+    "Do not list suggested actions or assign an objective. Put 'What would you like to do?' alone in the final paragraph.",
+    `Use exactly ${semanticOpeningTagMinimum} semantic narration color tags before the final handoff paragraph using <npc>, <place>, <clue>, <danger>, <faction>, or <object>.`,
+    "Do not include JSON, Markdown fences, a teaser, a summary, a prologue note, or metadata."
   ].join("\n");
   const finalOpening = await askDungeonMaster(
     db,
