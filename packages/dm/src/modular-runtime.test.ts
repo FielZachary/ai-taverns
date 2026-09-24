@@ -563,6 +563,15 @@ describe("modular AI DM runtime contracts", () => {
       jobPrompt("npc_dialogue"),
       /Avoid generic dialogue tags and descriptions/i
     );
+    assert.match(jobPrompt("npc_dialogue"), /Distinctive and Colorful Voices/i);
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /flat, overly terse, or melodramatic fantasy-DM default/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /Do not make short, clipped speech the default voice/i
+    );
     assert.match(
       jobPrompt("npc_dialogue"),
       /Natural Dialogue and Conversation Progression/i
@@ -1281,6 +1290,19 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(buildMemoryUpdaterPrompt(), /### Emotional Leakage/);
     assert.match(buildMemoryUpdaterPrompt(), /### Pressure Mode/);
     assert.match(buildMemoryUpdaterPrompt(), /### Avoid/);
+    assert.match(buildMemoryUpdaterPrompt(), /Voice Profile Quality Check/i);
+    assert.match(
+      buildMemoryUpdaterPrompt(),
+      /varied, colorful cast of recognizable speakers/i
+    );
+    assert.match(
+      buildMemoryUpdaterPrompt(),
+      /could describe almost any NPC/i
+    );
+    assert.match(
+      buildMemoryUpdaterPrompt(),
+      /sound different from at least two other plausible NPCs/i
+    );
     assert.match(buildMemoryUpdaterPrompt(), /Canonical written artifact memory/i);
     assert.match(buildMemoryUpdaterPrompt(), /preserve the revealed text word for word/i);
     assert.match(buildMemoryUpdaterPrompt(), /notes, notebooks, ledgers, journals, letters/i);
