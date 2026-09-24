@@ -475,7 +475,7 @@ export function jobPrompt(
     "If a lie contradicts known facts, use the roll to decide whether the NPC finds a plausible explanation, doubts their own read, accepts a partial truth, or demands proof. Do not erase the contradiction unless magic or context supports it.",
     "When a player uses false identity, false authority, forged credentials, name-dropping, claimed orders, or an invented relationship to bypass resistance, request Deception by default before the NPC yields, lowers guard, gives access, hands over information, or changes official behavior.",
     "Use Persuasion when the character is honestly appealing, negotiating, pleading, or building trust. Use Intimidation when they threaten, coerce, imply force, or weaponize fear. If the player mixes tactics, choose the skill that decides the uncertain leverage.",
-    "If the player has created social pressure but has not chosen the leverage that determines the skill, do not request a generic social roll. Present the fitting approaches, ask which one they take, set roll_requests to [], and set next_input_needed to player_actions.",
+    "If the player has created social pressure but the leverage is genuinely unclear, do not request a generic social roll or present a menu of approaches or skills. Ask one natural clarification without suggesting tactics or naming skills, set roll_requests to [], and set next_input_needed to player_actions. If the declared leverage is clear, choose the single fitting resolution yourself: resolve naturally or request one specific roll.",
     "For opposed or high-stakes social pressure, pause with next_input_needed dice_results and a structured roll_requests entry. Do not let the NPC become wavering, convinced, compliant, or newly informative before the requested roll is submitted.",
     "If the player rolls extremely high, reward it with a vivid concession, useful information, improved positioning, reduced suspicion, or an unexpected opening.",
     "If the player rolls extremely low, make the consequence clear but leave at least one playable response unless the fiction already made disaster unavoidable."
@@ -483,7 +483,7 @@ export function jobPrompt(
 
   const npcDialogueExamples = [
     [
-      "Example: social pressure needs an approach before dice.",
+      "Example: social pressure with unclear leverage asks a natural question, not a skill menu.",
       'Player input: "Invalid, you say. And who is to decide that? You alone? The people deserve answers, and we deserve to have a say in what happens here!"',
       "Context: The player is challenging a magistrate in public, but has not said whether they are bluffing authority, appealing to justice, or making a threat.",
       "Good response:",
@@ -491,9 +491,7 @@ export function jobPrompt(
         completeOutputExample({
           public_narration: [
             "The magistrate lowers the parchment slowly. The crowd's murmur thins into a tense, listening hush, and the guards on the steps shift their halberds without quite crossing them.",
-            '"If you have standing, state it now with proof," she says. "If you are merely shouting, you will be removed for disrupting a legal proceeding."',
-            "Which approach do you take? If you are trying to convince them with a false claim of authority or standing, make a Deception check. If you are appealing to their sense of justice or public opinion, make a Persuasion check. If you are threatening consequences to make them stop, make an Intimidation check. Your modifier for these checks is +0.",
-            "But first, I'll need you to tell me which approach you take before I ask you to roll."
+            '"You say the people deserve a say," she says. "Are you speaking for someone, or only for yourself?"'
           ].join("\n\n"),
           resolution_mode: "resolved_without_dice",
           roll_requests: [],
@@ -574,8 +572,7 @@ export function jobPrompt(
             "The owner does flinch. You see it in the quick pull of his shoulders and the way his hand tightens around the rag behind the bar. But fear is not the same thing as surrender, and you have chosen your threat in a room full of people who know the smell of this place better than they know your name.",
             'A chair scrapes near the hearth. Someone mutters, "Easy now." Near the back, a woman with flour still on her sleeves stands up slowly, eyes fixed on you. The owner swallows, looks at them, and finds just enough courage in being watched.',
             '"You threaten my roof in front of my neighbors?" he says. His voice shakes, but it carries. "Then here is my answer: get out."',
-            "He does not reach for a weapon. Not yet. But three patrons have turned in their seats, the door is behind you, and whatever he knows is now buried under anger and public pride. You can back down, apologize, change tactics, offer coin, appeal to someone else in the room, or push harder and risk this becoming a fight.",
-            "What do you do?"
+            "He does not reach for a weapon. Not yet. But three patrons have turned in their seats, and whatever he knows is now buried under anger and public pride. The door is behind you."
           ].join("\n\n"),
           resolution_mode: "resolved_without_dice",
           roll_requests: [],
@@ -1717,6 +1714,10 @@ export function jobPrompt(
         "- Treat every NPC as a person with a present want, a private concern, a social role, and a limit. Their dialogue should come from those pressures.",
         "- Keep NPC voice distinct through word choice, rhythm, formality, evasiveness, humor, anger, fear, confidence, or class/cultural position. Do not overdo dialect.",
         "",
+        "NPC Identity Reveal:",
+        "- An NPC card's internal name is not automatically known by the player character. Use a personal name in public_narration only when the player's established context, a direct introduction, overheard speech, a visible name marker, or another player-perceivable source confirms it.",
+        "- Until then, use the NPC card's ## Player-Facing Identity label or a stable descriptive label based on visible role, clothing, location, or behavior. Do not leak internal names through narration tags, dialogue attribution, or summaries.",
+        "",
         "NPC Voice and Dramatic Presence:",
         "- Give each speaking NPC a specific conversational engine: what they want from this exchange, what they fear the player may do, and the tactic they use to get control of the conversation.",
         "- Before writing dialogue, choose at least two voice markers for each NPC: sentence length, vocabulary, social posture, humor, impatience, evasiveness, formality, habit of interruption, metaphor, rhetorical question, bluntness, or verbal tic. Do not label the trait; express it in the speech itself.",
@@ -1800,7 +1801,8 @@ export function jobPrompt(
         "- Do not make social checks into mind control. Persuasion cannot force self-destruction, Deception cannot change hard evidence by itself, and Intimidation can create fear without creating loyalty.",
         "- When no roll is needed, let the NPC respond naturally and move the conversation forward.",
         "- When uncertainty matters and the player's leverage is clear, request Deception, Persuasion, Intimidation, Insight, Performance, or another fitting check, then pause for dice.",
-        "- If the player has created social pressure but has not chosen the leverage that determines the skill, do not request a generic social roll. Present the fitting approaches, ask which one they take, set roll_requests to [], and set next_input_needed to player_actions.",
+        "- If the player has created social pressure but the leverage is genuinely unclear, do not request a generic social roll or present a menu of approaches or skills. Ask one natural clarification without suggesting tactics or naming skills, set roll_requests to [], and set next_input_needed to player_actions. If the declared leverage is clear, choose the single fitting resolution yourself: resolve naturally or request one specific roll.",
+        "- Never enumerate possible player actions, tactics, approaches, or skills. Do not tell the player they could try X, Y, or Z, and do not list Persuasion, Deception, or Intimidation as choices.",
         "- False identity, false authority, name-dropping, claimed orders, claimed employment, and impersonation almost always matter when an NPC is guarding, enforcing law, protecting secrets, bargaining for leverage, or deciding whether to let the character pass. Ask for Deception unless the claim is already canon or the NPC has no reason to care.",
         "- When resolving dice results, narrate the NPC's reaction as a visible emotional and tactical shift, not just success or failure.",
         "",
@@ -1816,7 +1818,9 @@ export function jobPrompt(
         "- For bargaining, gifting, payment, theft, rewards, bribes, and trade, include inventory or currency patches only when the exchange is accepted and completed in the resolved turn. If terms are still being negotiated, leave patches empty.",
         "",
         "Handoff:",
-        "- End with the NPC's new stance, demand, offer, refusal, question, or opening, then hand control back to the player."
+        "- End with the NPC's new stance, demand, offer, refusal, question, or opening, then hand control back to the player.",
+        "- Do not end by summarizing every faction's stance, restating the stakes, or announcing that the situation has escalated. Do not use phrases such as 'the situation has tipped,' 'the lines are drawn,' or 'everyone waits to see what happens.'",
+        "- Show the changed state through one concrete player-perceivable beat—a cart wheel creaking forward, a lantern dipping, a hand moving toward a weapon, a bystander stepping away, an NPC falling silent, or a specific line of dialogue—then leave the next move open."
       ].join("\n"),
       ...physicalCommunicationGuidance,
       ...playerRollResultOpeningGuidance,
@@ -2016,6 +2020,7 @@ export function buildMemoryUpdaterPrompt() {
     "Update an existing NPC card when the turn changes what is known about that NPC, including where they are, what they want, how they behave, how they feel about the party, what secrets they carry, or what unresolved story threads involve them.",
     "Prefer updating an existing NPC card over creating a duplicate when the same NPC is clearly referenced by name, title, alias, role, or scene context.",
     "If an NPC previously known by description, title, disguise, role, or uncertainty is later named, do not create a second NPC card. Update the original card, change ## Name, preserve the old label under ## Aliases / Former Labels, and keep the same context_id unless using rename_chunk.",
+    "An NPC's internal ## Name is DM continuity data, not proof that the player character knows that name. Track player knowledge separately in ## Player-Facing Identity.",
     "Use stable NPC ids in the form npc:kebab-case-name, for example npc:captain-vael.",
     "Use rename_chunk when a previously descriptive NPC id should become a stable named NPC id, such as npc:cloaked-figure-at-the-tower becoming npc:veria after the NPC reveals her name.",
     "Use merge_chunk only when two existing chunks are explicitly the same NPC. Provide the complete merged markdown yourself; the server will not blend prose automatically.",
@@ -2033,6 +2038,8 @@ export function buildMemoryUpdaterPrompt() {
     "Do not store an NPC's exact dialogue, dialogue cadence, or a prior question structure unless it is canonically important: a vow, threat, password, prophecy, legal wording, quoted clue, or memorable public declaration.",
     "Convert prior dialogue into its underlying social state. Store 'Maren demands evidence of practical help,' not a quoted or paraphrased version of the question she used to demand it.",
     "Preserve a physical tell only when it reveals durable information or becomes a meaningful recurring habit. Never treat a gesture from the latest reply as mandatory future staging.",
+    "Store observed events and established present facts, not narrator forecasts or interpretations of what an NPC is ready, waiting, likely, or about to do. Store 'Bram moved the cart one step forward,' not 'Bram is ready to rush the line.'",
+    "Do not store end-of-turn state summaries such as 'the situation has tipped from argument to action' or 'everyone waits to see what happens.' Future narration must advance from concrete events, not replay a summary of them.",
     "",
     "NPC Voice Profile:",
     "For recurring or named NPCs, use ## Voice Profile as a compact, performable speaking guide. It must describe how the NPC talks, not what they want, know, or ask for in the current scene.",
@@ -2068,6 +2075,10 @@ export function buildMemoryUpdaterPrompt() {
     "# <NPC Name>",
     "## Name",
     "## Aliases / Former Labels",
+    "## Player-Facing Identity",
+    "- Known name: <name or Unknown.>",
+    "- Use in narration: <stable player-safe descriptive label>",
+    "- Other known labels: <labels the player has learned>",
     "## Location",
     "## Appearance",
     "## Personality",
