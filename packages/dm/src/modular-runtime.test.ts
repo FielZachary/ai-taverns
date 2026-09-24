@@ -579,6 +579,15 @@ describe("modular AI DM runtime contracts", () => {
       jobPrompt("npc_dialogue"),
       /Treat the immediately previous DM response as already dramatized/i
     );
+    assert.match(jobPrompt("npc_dialogue"), /Using Stored Voice Profiles/i);
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /use it as performance guidance/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /do not force every listed behavior into every line/i
+    );
     assert.match(
       jobPrompt("npc_dialogue"),
       /new authority, contact, employer, superior, relative, old friend, order, warrant, permit, badge, property right, secret password, or prior arrangement/i
@@ -1265,6 +1274,13 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(buildMemoryUpdaterPrompt(), /Do not preserve generic descriptive phrases/i);
     assert.match(buildMemoryUpdaterPrompt(), /NPC Voice Profile/i);
     assert.match(buildMemoryUpdaterPrompt(), /## Voice Profile/);
+    assert.match(buildMemoryUpdaterPrompt(), /### Register and Diction/);
+    assert.match(buildMemoryUpdaterPrompt(), /### Sentence Shape and Rhythm/);
+    assert.match(buildMemoryUpdaterPrompt(), /### How They Answer/);
+    assert.match(buildMemoryUpdaterPrompt(), /### Conversation Control/);
+    assert.match(buildMemoryUpdaterPrompt(), /### Emotional Leakage/);
+    assert.match(buildMemoryUpdaterPrompt(), /### Pressure Mode/);
+    assert.match(buildMemoryUpdaterPrompt(), /### Avoid/);
     assert.match(buildMemoryUpdaterPrompt(), /Canonical written artifact memory/i);
     assert.match(buildMemoryUpdaterPrompt(), /preserve the revealed text word for word/i);
     assert.match(buildMemoryUpdaterPrompt(), /notes, notebooks, ledgers, journals, letters/i);
