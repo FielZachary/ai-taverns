@@ -2637,6 +2637,11 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(plannerInput.message, /Do not write sample narration/i);
   assert.match(plannerInput.message, /live situation already unfolding/);
   assert.match(plannerInput.message, /Start one beat before anyone recruits the player/);
+  assert.match(plannerInput.message, /OPENING FOCUS RULES/);
+  assert.match(plannerInput.message, /exactly one central, visible incident or problem/i);
+  assert.match(plannerInput.message, /at most one unresolved question or suspicious detail/i);
+  assert.match(plannerInput.message, /Do not introduce separate mysteries, suspects, threats, pursuits, objects, factions, or future hooks/i);
+  assert.match(plannerInput.message, /Do not describe suggested player actions or choices/i);
   assert.match(plannerInput.message, /common local context about the selected starting settlement/);
   assert.match(plannerInput.message, /Do not assign the player a job/);
   assert.match(plannerInput.message, /campaign as an evolving situation/i);
@@ -2707,6 +2712,9 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(narratorInput.message, /what the settlement is and what it is commonly known for/);
   assert.match(narratorInput.message, /opportunity, not an assignment/);
   assert.match(narratorInput.message, /exactly 6 semantic narration color tags/);
+  assert.match(narratorInput.message, /Choose tags only from player-visible details already required by the same central incident/i);
+  assert.match(narratorInput.message, /Tags provide visual emphasis, not a reason to invent an extra clue/i);
+  assert.match(narratorInput.message, /Repeating a tag type is allowed/i);
   assert.match(narratorInput.message, /<npc>\.\.\.<\/npc>/);
   assert.match(narratorInput.message, /<place>\.\.\.<\/place>/);
   assert.match(narratorInput.message, /<clue>\.\.\.<\/clue>/);
@@ -2725,6 +2733,8 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(narratorInput.message, /Paragraph 4 — Handoff/);
   assert.match(narratorInput.message, /exactly 4 paragraphs/);
   assert.match(narratorInput.message, /grounded, direct fantasy prose that feels vivid because it is specific/);
+  assert.match(narratorInput.message, /Keep the first three paragraphs centered on the one central incident in opening_scene/i);
+  assert.match(narratorInput.message, /Do not invent extra leads, villains, named factions, objects, clues, suspects, or parallel conflicts/i);
   assert.doesNotMatch(narratorInput.message, /Flagship world context:/);
   assert.doesNotMatch(narratorInput.message, /Seven regions available for the opener:/);
   assert.doesNotMatch(narratorInput.instructions, /World Context:/);

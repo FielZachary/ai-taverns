@@ -9213,7 +9213,13 @@ function openingSceneDirectiveRequirements() {
     "Do not write sample narration, quoted dialogue, metaphors, cinematic prose, or sentence-ready descriptions. Do not prescribe exact wording except for required canonical names or facts.",
     "The opening must begin when the player first encounters a live situation already unfolding. Start one beat before anyone recruits the player, asks for help, explains the central problem, or assigns a task.",
     "Put a visible conflict, disruption, danger, exchange, discovery, pursuit, argument, suspicious behavior, or other active situation in motion before the player. The player must be free to engage, ignore, investigate, interrupt, help, exploit, leave, or respond in an unexpected way.",
-    "Describe only what the player can immediately observe, hear, reasonably infer, or learn from brief overheard dialogue: the exact location, striking sensory details, visible people and their behavior, the immediate source of tension, and an unanswered question or suspicious detail.",
+    "OPENING FOCUS RULES",
+    "Build opening_scene around exactly one central, visible incident or problem.",
+    "Every detail must either establish that incident, show its immediate human pressure, or ground the location.",
+    "Include at most one unresolved question or suspicious detail beyond the core incident, and make it directly concern that same incident.",
+    "Do not introduce separate mysteries, suspects, threats, pursuits, objects, factions, or future hooks merely to create options, atmosphere, or variety.",
+    "Do not describe suggested player actions or choices. Leave the single live situation unresolved.",
+    "Describe only what the player can immediately observe, hear, reasonably infer, or learn from brief overheard dialogue: the exact location, striking sensory details, visible people and their behavior, the immediate source of tension, and at most one directly related unanswered question or suspicious detail.",
     "Include one short, player-safe piece of common local context about the selected starting settlement: what an ordinary person from Eldermere would recognize it as, remember it for, depend on it for, or expect to find there. This must orient the player without becoming a history lesson or explaining the campaign's deeper conflict.",
     "Do not state the full cause, full stakes, deadline, institution, political context, hidden truth, or likely consequences unless the player could naturally know them at a glance or from what is said in the moment.",
     "Do not assign the player a job, decide their response, or reveal hidden causes, future stakes, or private truths. Convey why an object, service, role, or system matters through visible behavior, conflict, or immediate consequence rather than explanation."
@@ -9392,6 +9398,7 @@ function formatEldermereNarratorOpeningRequest(input: {
     "Use the supplied character profile only for present capabilities and visible details. Do not invent, reference, resolve, or imply personal history, past relationships, debts, gifts, clues, promises, or causes.",
     "Use only facts the character could reasonably see, hear, know, infer, or be told in this opening scene. Do not request dice; the player must receive control before attempting any uncertain action.",
     "Use exactly 6 semantic narration color tags across paragraphs 1-3: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, or <object>...</object>. Each tag must wrap only a short, player-visible noun or phrase. Do not nest tags, add attributes, use <em>, use Markdown emphasis, or use any other HTML/XML tags.",
+    "Choose tags only from player-visible details already required by the same central incident in opening_scene. Tags provide visual emphasis, not a reason to invent an extra clue, danger, faction, object, suspect, or separate plot hook. Repeating a tag type is allowed when it best fits the scene.",
     "",
     "REQUIRED FOUR-PARAGRAPH STRUCTURE:",
     "Paragraph 1 — Arrival: Place you in a specific sensory location and show the first striking detail. Include only enough immediate context to establish why you are physically there.",
@@ -9400,6 +9407,7 @@ function formatEldermereNarratorOpeningRequest(input: {
     "Paragraph 4 — Handoff: Write exactly 'What would you like to do?'",
     "",
     "Opening style: Write grounded, direct fantasy prose that feels vivid because it is specific. Build atmosphere through terrain, weather, objects, sound, movement, expression, and immediate consequences. The opener should feel like you have arrived beside a real situation in motion, not like someone has stopped to explain the campaign to you.",
+    "Keep the first three paragraphs centered on the one central incident in opening_scene. Do not invent extra leads, villains, named factions, objects, clues, suspects, or parallel conflicts. Incidental details may add texture, but must not compete with the player's understanding of what is happening now.",
     "",
     "Before returning, silently verify that the opening_scene directives are rendered rather than summarized, the first 3 paragraphs follow the required present-first sequence, paragraph 2 uses direct dialogue when people are speaking, paragraph 4 is exactly 'What would you like to do?', and exactly 6 valid semantic color tags appear across paragraphs 1-3."
   ].join("\n");
