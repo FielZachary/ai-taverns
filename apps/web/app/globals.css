@@ -1293,6 +1293,10 @@ h1 {
   animation: new-adventure-flow-exit 240ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
+.new-adventure-flow-welcome.new-adventure-flow-exiting {
+  animation-duration: 1s;
+}
+
 .new-adventure-flow-entering {
   pointer-events: none;
   animation: new-adventure-flow-enter 240ms cubic-bezier(0.16, 1, 0.3, 1) both;

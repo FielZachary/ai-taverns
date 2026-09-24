@@ -222,7 +222,8 @@ const playerIdStorageKey = "ai-dnd.playerId";
 const characterLevel = 5;
 const proficiencyBonus = 3;
 const flowTransitionDurationMs = 240;
-const onboardingWelcomeDurationMs = 6_000;
+const onboardingWelcomeExitStartMs = 4_000;
+const onboardingWelcomeExitDurationMs = 1_000;
 const createSteps = ["Mode", "Campaign", "Character", "Review"];
 const customCreateSteps = ["Mode", "Campaign", "Custom World", "Character", "Review"];
 const multiplayerCreateSteps = ["Mode", "Multiplayer", "Campaign", "Character", "Review"];
@@ -4669,9 +4670,9 @@ export function NewAdventureForm({
           window.setTimeout(() => {
             setStepIndex(1);
             setFlowTransition("idle");
-          }, flowTransitionDurationMs)
+          }, onboardingWelcomeExitDurationMs)
         );
-      }, onboardingWelcomeDurationMs)
+      }, onboardingWelcomeExitStartMs)
     ];
 
     return () => timeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId));
@@ -6271,7 +6272,9 @@ export function NewAdventureForm({
 
       <form className="new-adventure-form" onSubmit={handleSubmit}>
         <div
-          className={`new-adventure-flow new-adventure-flow-${flowTransition}`}
+          className={`new-adventure-flow new-adventure-flow-${flowTransition}${
+            isOnboardingWelcomeStep ? " new-adventure-flow-welcome" : ""
+          }`}
         >
           {isOnboardingWelcomeStep ? (
             <h1 className="onboarding-welcome">
