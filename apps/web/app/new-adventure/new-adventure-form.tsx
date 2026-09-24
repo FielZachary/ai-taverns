@@ -4343,10 +4343,10 @@ const referralSources = [
   { label: "Other", icon: "other" }
 ] as const;
 const onboardingExperienceOptions = [
-  "I am completely new, hehe",
+  "I am completely new.",
   "I've played Baldur's Gate but thats pretty much it!",
   "I've played D&D quite a few times",
-  "I'm an experience player or DM"
+  "I'm an experienced player or DM"
 ] as const;
 
 function ReferralIcon({ icon }: { icon: (typeof referralSources)[number]["icon"] }) {
