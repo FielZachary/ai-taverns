@@ -222,6 +222,7 @@ const playerIdStorageKey = "ai-dnd.playerId";
 const characterLevel = 5;
 const proficiencyBonus = 3;
 const flowTransitionDurationMs = 240;
+const onboardingWelcomeDurationMs = 1_000;
 const createSteps = ["Mode", "Campaign", "Character", "Review"];
 const customCreateSteps = ["Mode", "Campaign", "Custom World", "Character", "Review"];
 const multiplayerCreateSteps = ["Mode", "Multiplayer", "Campaign", "Character", "Review"];
@@ -4670,7 +4671,7 @@ export function NewAdventureForm({
             setFlowTransition("idle");
           }, flowTransitionDurationMs)
         );
-      }, 5_000)
+      }, onboardingWelcomeDurationMs)
     ];
 
     return () => timeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId));
