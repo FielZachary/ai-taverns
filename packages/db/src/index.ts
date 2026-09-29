@@ -742,6 +742,9 @@ type EldermereOpeningPlan = EldermereOpeningBrief & {
   }>;
 };
 
+const whyThePlayerIsHereNowInstruction =
+  "Write flowing/run-on and non-dramatic/non-short player-facing sentences explaining why this specific character came to this exact place. The explanation must be understandable to a new player who knows nothing about the world: naturally explain any unfamiliar place, magic, object, or institution as part of the sentence. Show what they hope to learn, see, find, gain, feel, take, steal (anything under the sun, be creative.) Use grounded color and natural expression, not a checklist, résumé, summary, or \"that is the whole of it\" conclusion. Do not invent extra personal history, hidden stakes, or motivations beyond the supplied character context.";
+
 function extractExistingPromptNames(...values: Array<string | undefined>) {
   return [
     ...new Set(
@@ -9291,7 +9294,7 @@ function formatEldermereOpeningBriefRequest(input: {
     JSON.stringify({
       region: region?.name ?? "selected Eldermere region",
       starting_location: settlement?.name ?? "selected Eldermere location",
-      why_the_player_is_here_now: "A short, self-contained explanation of the immediate local circumstance that puts the player in this situation. Do not rely on or invent personal history.",
+      why_the_player_is_here_now: whyThePlayerIsHereNowInstruction,
       concept: "A complete 2-3 paragraph account of the campaign as an evolving situation: its beginning, how it can deepen through play, and what the player may eventually discover and decide.",
       opening_scene: "The exact first playable situation."
     }, null, 2)
@@ -9349,8 +9352,7 @@ function formatEldermereCampaignConceptRequest(input: {
       {
         region: region?.name ?? "selected Eldermere region",
         starting_location: settlement?.name ?? "selected starting location",
-        why_the_player_is_here_now:
-          "A short, self-contained explanation of the immediate local circumstance that puts the player in this situation. Do not rely on or invent personal history.",
+        why_the_player_is_here_now: whyThePlayerIsHereNowInstruction,
         concept:
           "A complete 2-3 paragraph account of the campaign as an evolving situation: its beginning, how it can deepen through play, and what the player may eventually discover and decide.",
         opening_scene: "The exact first playable situation.",

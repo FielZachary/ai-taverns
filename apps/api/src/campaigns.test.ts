@@ -2615,10 +2615,18 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
 
   assert.ok(briefPlannerInput);
   assert.match(briefPlannerInput.instructions, /opener-critical brief/);
+  assert.match(
+    briefPlannerInput.message,
+    /Write flowing\/run-on and non-dramatic\/non-short player-facing sentences/i
+  );
   assert.match(briefPlannerInput.message, /OPENING-SCENE HANDOFF REQUIREMENTS/);
   assert.doesNotMatch(briefPlannerInput.message, /CAMPAIGN ANCHOR REQUIREMENTS/);
   assert.ok(plannerInput);
   assert.match(plannerInput.instructions, /campaign-opening planner/);
+  assert.match(
+    plannerInput.message,
+    /Write flowing\/run-on and non-dramatic\/non-short player-facing sentences/i
+  );
   assert.match(plannerInput.message, /PLAYER CHARACTER/);
   assert.match(plannerInput.message, /CANONICAL START/);
   assert.match(plannerInput.message, /ELDERMERE GROUNDING/);
