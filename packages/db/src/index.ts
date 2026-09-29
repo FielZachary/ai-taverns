@@ -1063,6 +1063,25 @@ function extractCharacterSheetSectionLines(
     .filter((line) => line && !/^none$/i.test(line));
 }
 
+function characterSheetWithoutSection(characterSheet: string, sectionName: string) {
+  const normalized = characterSheet.replace(/\r\n/g, "\n");
+  const heading = sectionHeadingPattern(sectionName).exec(normalized);
+
+  if (!heading) {
+    return normalized;
+  }
+
+  const contentStart = heading.index + heading[0].length;
+  const nextHeading = /\n(?:#{1,6}\s*)?[A-Z][A-Za-z/& -]{1,60}\s*\n/g;
+  nextHeading.lastIndex = contentStart;
+  const nextMatch = nextHeading.exec(normalized);
+  const contentEnd = nextMatch?.index ?? normalized.length;
+
+  return `${normalized.slice(0, heading.index)}${normalized.slice(contentEnd)}`
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function parseCurrencyLines(lines: string[]) {
   const amounts: Record<CurrencyDenomination, number> = {
     PP: 0,
@@ -8878,10 +8897,7 @@ function formatEldermereCampaignCharacterContext(players: PlayerRow[]) {
         sheet,
         "Skills"
       ).filter((line) => /proficient/i.test(line));
-      const equipment = [
-        ...extractCharacterSheetSectionLines(sheet, "Equipment"),
-        ...extractCharacterSheetSectionLines(sheet, "Inventory")
-      ];
+      const equipment = extractCharacterSheetSectionLines(sheet, "Equipment");
       const spells = extractCharacterSheetSectionLines(sheet, "Spells");
 
       return [
@@ -9712,7 +9728,7 @@ function formatCampaignOpeningNameBank(input: {
     existingNames: extractExistingPromptNames(
       ...input.players.flatMap((player) => [
         player.character_name,
-        player.character_sheet
+        characterSheetWithoutSection(player.character_sheet, "Inventory")
       ])
     ),
     heading: "Validated name bank for this campaign opener:"

@@ -505,6 +505,7 @@ export function MessageLog({
   onViewEldermereLore
 }: MessageLogProps) {
   const logRef = useRef<HTMLDivElement>(null);
+  const hasPositionedInitialViewRef = useRef(false);
   const [openDebugMessageId, setOpenDebugMessageId] = useState<string | null>(
     null
   );
@@ -522,20 +523,27 @@ export function MessageLog({
         : null,
     [messages, openDebugMessageId]
   );
+  const hasEldermereMap = messages.some(
+    (message) => message.resourceCard?.type === "eldermere_map"
+  );
 
   useLayoutEffect(() => {
     const frameId = window.requestAnimationFrame(() => {
       const log = logRef.current;
 
-      if (log) {
-        log.scrollTo({ top: log.scrollHeight });
+      if (log && messages.length > 0) {
+        const shouldShowInitialMap =
+          !hasPositionedInitialViewRef.current && hasEldermereMap;
+
+        log.scrollTo({ top: shouldShowInitialMap ? 0 : log.scrollHeight });
+        hasPositionedInitialViewRef.current = true;
       }
     });
 
     return () => {
       window.cancelAnimationFrame(frameId);
     };
-  }, [scrollKey, isSending]);
+  }, [hasEldermereMap, isSending, messages.length, scrollKey]);
 
   return (
     <div className="message-log" aria-live="polite" ref={logRef}>

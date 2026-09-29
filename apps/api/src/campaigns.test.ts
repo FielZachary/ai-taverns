@@ -2529,7 +2529,13 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
         "",
         "Core Stats",
         "Class: Rogue",
-        "Background: Archaeologist"
+        "Background: Archaeologist",
+        "",
+        "Equipment",
+        "Lockpick set",
+        "",
+        "Inventory",
+        "Clockwork canary"
       ].join("\n"),
       eldermereStart: {
         regionName: "The Salt Concordat",
@@ -2647,6 +2653,8 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(plannerInput.message, /future_pressure_or_change/);
   assert.match(plannerInput.message, /AUTHORITATIVE CHARACTER CONTEXT/);
   assert.match(plannerInput.message, /Character: Rogue; Archaeologist/);
+  assert.match(plannerInput.message, /Equipment: Lockpick set/);
+  assert.doesNotMatch(plannerInput.message, /Inventory|Clockwork canary/i);
   assert.doesNotMatch(plannerInput.message, /Player backstory anchors for the opening scene:/);
   assert.doesNotMatch(plannerInput.message, /Captain Saela/);
   assert.doesNotMatch(plannerInput.message, /compass that points toward Selwick/);
@@ -2658,6 +2666,8 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
 
   assert.ok(narratorInput);
   assert.match(narratorInput.message, /AUTHORITATIVE CHARACTER CONTEXT/);
+  assert.match(narratorInput.message, /Equipment: Lockpick set/);
+  assert.doesNotMatch(narratorInput.message, /Inventory|Clockwork canary/i);
   assert.match(narratorInput.message, /ELDERMERE OPENING BRIEF/);
   assert.match(narratorInput.message, /NARRATOR TASK - WRITE THE FULL PLAYER-FACING OPENER:/);
   assert.match(
