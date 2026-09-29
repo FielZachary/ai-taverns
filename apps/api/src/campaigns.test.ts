@@ -367,7 +367,8 @@ test("POST /api/campaigns/backstory generates a focused, player-readable charact
     },
     payload: {
       mode: "generate",
-      characterSheet: "Character Name: Mira Vale\nClass: Fighter",
+      characterSheet:
+        "Character Name: Mira Vale\nClass: Fighter\n\nInventory\nBrass compass\nRations\n\nCurrency\n10 GP",
       campaignGenre: "Eldermere",
       campaignGenreKind: "preset",
       campaignGenrePresetId: "eldermere"
@@ -383,6 +384,10 @@ test("POST /api/campaigns/backstory generates a focused, player-readable charact
   const providerInput = getProviderInputs().at(-1);
 
   assert.match(providerInput?.message ?? "", /Character Name: Mira Vale/);
+  assert.match(providerInput?.message ?? "", /Class: Fighter/);
+  assert.match(providerInput?.message ?? "", /Currency\n10 GP/);
+  assert.doesNotMatch(providerInput?.message ?? "", /Inventory/i);
+  assert.doesNotMatch(providerInput?.message ?? "", /Brass compass|Rations/);
   assert.match(providerInput?.message ?? "", /Validated people names for this backstory:/);
   assert.match(providerInput?.message ?? "", /Use these validated candidate names only when inventing people/);
   assert.match(providerInput?.message ?? "", /Masculine people:/);
@@ -462,7 +467,8 @@ test("POST /api/campaigns/backstory adds details and falls back to plain prose",
     },
     payload: {
       mode: "add_details",
-      characterSheet: "Character Name: Mira Vale\nClass: Fighter",
+      characterSheet:
+        "Character Name: Mira Vale\nClass: Fighter\n\nInventory: brass compass\n\nCurrency\n10 GP",
       currentBackstory: "x",
       campaignGenre: "Clockwork Isles",
       campaignGenreKind: "custom",
@@ -485,6 +491,7 @@ test("POST /api/campaigns/backstory adds details and falls back to plain prose",
   assert.match(providerInput?.message ?? "", /Do not add new subplots, mysteries, prophecies, tragedies, factions, goals, or adventure hooks/i);
   assert.match(providerInput?.message ?? "", /Stay close to the original length/i);
   assert.match(providerInput?.message ?? "", /World: Clockwork Isles/);
+  assert.doesNotMatch(providerInput?.message ?? "", /Inventory|brass compass/i);
   assert.doesNotMatch(providerInput?.message ?? "", /Canonical Eldermere start options:/);
   resetProviderInputs();
 });
@@ -668,7 +675,7 @@ test("POST /api/campaigns/:campaignId/restart/backstory generates from the saved
         playerName: "Mira",
         characterName: "Mira",
         characterSheet:
-          "Character Name: Mira\nClass: Rogue\nBackstory\nMira follows a brass compass toward Selwick.",
+          "Character Name: Mira\nClass: Rogue\nBackstory\nMira follows a brass compass toward Selwick.\n\nInventory\nThieves' tools\n\nCurrency\n10 GP",
         eldermereStart: {
           regionName: "The Salt Concordat",
           settlementName: "Selwick"
@@ -722,6 +729,8 @@ test("POST /api/campaigns/:campaignId/restart/backstory generates from the saved
     assert.match(providerInput?.message ?? "", /Mira follows a brass compass/);
     assert.match(providerInput?.message ?? "", /Player-written backstory:/);
     assert.match(providerInput?.message ?? "", /Eldermere/);
+    assert.match(providerInput?.message ?? "", /Currency\n10 GP/);
+    assert.doesNotMatch(providerInput?.message ?? "", /Inventory|Thieves' tools/i);
   } finally {
     resetProviderInputs();
   }

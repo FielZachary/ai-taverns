@@ -312,6 +312,33 @@ type BackstoryPromptInput = {
   worldContext: string;
 };
 
+function characterSheetWithoutInventory(characterSheet: string) {
+  let isInInventorySection = false;
+
+  return characterSheet
+    .split("\n")
+    .filter((line) => {
+      const trimmedLine = line.trim();
+
+      if (/^Inventory\s*(?::.*)?$/i.test(trimmedLine)) {
+        isInInventorySection = true;
+        return false;
+      }
+
+      if (!isInInventorySection) {
+        return true;
+      }
+
+      if (!trimmedLine) {
+        isInInventorySection = false;
+      }
+
+      return false;
+    })
+    .join("\n")
+    .trim();
+}
+
 const backstoryJsonInstructions = [
   "You are AI Taverns, a fantasy tabletop character backstory writer and editor.",
   "Return exactly one valid JSON object with this shape: {\"backstory\":\"...\"}.",
@@ -647,7 +674,7 @@ export async function registerCampaignRoutes(
 
   fastify.post("/campaigns/backstory", async (request) => {
     const body = CharacterBackstoryGenerateRequestSchema.parse(request.body);
-    const characterSheet = body.characterSheet.trim();
+    const characterSheet = characterSheetWithoutInventory(body.characterSheet.trim());
     const currentBackstory = body.currentBackstory?.trim();
 
     await requireAuthenticatedUser(
@@ -762,7 +789,9 @@ export async function registerCampaignRoutes(
       customWorldName,
       customWorldDescription
     });
-    const characterSheet = context.character_sheet.trim();
+    const characterSheet = characterSheetWithoutInventory(
+      context.character_sheet.trim()
+    );
     const nameBank = backstoryNameBank({
       characterSheet,
       currentBackstory,
