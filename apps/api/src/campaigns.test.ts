@@ -2664,6 +2664,14 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
     narratorInput.message,
     /why_the_player_is_here_now and opening_scene as the authoritative requirements/
   );
+  assert.match(
+    narratorInput.message,
+    /required player-facing fact.*paragraph 1.*why the character came to this location and what they are trying to do here now/i
+  );
+  assert.match(
+    narratorInput.message,
+    /Do not reduce it to physical placement such as waiting at a desk or carrying an object/i
+  );
   assert.match(narratorInput.message, /why_the_player_is_here_now/);
   assert.match(narratorInput.message, /PLAYER KNOWLEDGE, VOICE, AND OPENING FOCUS:/);
   assert.match(
@@ -2708,6 +2716,14 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(narratorInput.message, /Choose tags only from player-visible details already required by the same central incident/i);
   assert.match(narratorInput.message, /Tags provide visual emphasis, not a reason to invent an extra clue/i);
   assert.match(narratorInput.message, /Repeating a tag type is allowed/i);
+  assert.match(
+    narratorInput.message,
+    /reason in why_the_player_is_here_now is approved player-facing context/i
+  );
+  assert.match(
+    narratorInput.message,
+    /Explicitly establish why you are physically there and what you came here to accomplish/i
+  );
   assert.match(narratorInput.message, /<npc>\.\.\.<\/npc>/);
   assert.match(narratorInput.message, /<place>\.\.\.<\/place>/);
   assert.match(narratorInput.message, /<clue>\.\.\.<\/clue>/);
