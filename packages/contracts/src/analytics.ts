@@ -128,10 +128,10 @@ export const AnalyticsEventSchema = z.object({
       hasEldermereStart: z.boolean().optional(),
       referralSource: z.enum(["Reddit", "X", "Instagram", "TikTok", "Other"]).optional(),
       dndExperience: z.enum([
-        "I am completely new, hehe",
+        "I am completely new.",
         "I've played Baldur's Gate but thats pretty much it!",
         "I've played D&D quite a few times",
-        "I'm an experience player or DM"
+        "I'm an experienced player or DM"
       ]).optional(),
       hasBackstory: z.boolean().optional(),
       hasPortrait: z.boolean().optional(),

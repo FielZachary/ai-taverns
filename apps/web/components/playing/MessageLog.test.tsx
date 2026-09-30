@@ -38,6 +38,10 @@ beforeEach(() => {
     configurable: true,
     value: scrollTo
   });
+  Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
+    configurable: true,
+    value: 480
+  });
 });
 
 afterEach(() => {
@@ -46,6 +50,32 @@ afterEach(() => {
 });
 
 describe("MessageLog", () => {
+  it("shows the initial Eldermere map instead of scrolling past it", () => {
+    const mapMessage = gameMessage({
+      id: "eldermere-map",
+      role: "dm",
+      content: "",
+      resourceCard: {
+        type: "eldermere_map",
+        imageUrl: "/maps/eldermere-map.png",
+        imageAlt: "Map of Eldermere",
+        actions: ["inspect_map"]
+      }
+    });
+    const { rerender } = renderMessageLog({ messages: [mapMessage] });
+
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 0 });
+
+    rerender(
+      <MessageLog
+        messages={[mapMessage, gameMessage({ id: "opening", role: "dm" })]}
+        isSending={false}
+      />
+    );
+
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 480 });
+  });
+
   it("renders player, DM, system, and ask-DM answer message variants", () => {
     renderMessageLog({
       messages: [
