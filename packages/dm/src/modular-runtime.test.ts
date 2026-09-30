@@ -547,6 +547,90 @@ describe("modular AI DM runtime contracts", () => {
       jobPrompt("npc_dialogue"),
       /Treat player statements as attempted character speech\/action, not automatic world truth/i
     );
+    assert.match(jobPrompt("npc_dialogue"), /NPC Identity Reveal/i);
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /internal name is not automatically known by the player character/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /Do not leak internal names through narration tags/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /NPC Voice and Dramatic Presence/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /specific conversational engine/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /choose at least two voice markers/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /Avoid generic dialogue tags and descriptions/i
+    );
+    assert.match(jobPrompt("npc_dialogue"), /Distinctive and Colorful Voices/i);
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /flat, overly terse, or melodramatic fantasy-DM default/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /Do not make short, clipped speech the default voice/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /Natural Dialogue and Conversation Progression/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /shortest believable line that advances the NPC's immediate aim/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /Do not manufacture a dramatic ultimatum/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /do not request a generic social roll or present a menu of approaches or skills/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /Do not end by summarizing every faction's stance/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /Treat the immediately previous DM response as already dramatized/i
+    );
+    assert.match(jobPrompt("npc_dialogue"), /Using Stored Voice Profiles/i);
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /use it as performance guidance/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /do not force every listed behavior into every line/i
+    );
+    assert.match(jobPrompt("npc_dialogue"), /Dialogue and Emotional Beats/i);
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /Weave NPC speech, visible action, interruption, reaction, expression, vocal tone, and environmental detail together beat by beat/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /Weave visible and audible emotional detail into the exchange/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /frame it as an inference rather than fact/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /Avoid generic emotional labels without an observable cue/i
+    );
     assert.match(
       jobPrompt("npc_dialogue"),
       /new authority, contact, employer, superior, relative, old friend, order, warrant, permit, badge, property right, secret password, or prior arrangement/i
@@ -557,11 +641,11 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("npc_dialogue"),
-      /has not chosen the leverage that determines the skill, do not request a generic social roll/i
+      /leverage is genuinely unclear, do not request a generic social roll or present a menu of approaches or skills/i
     );
     assert.match(
       jobPrompt("npc_dialogue"),
-      /But first, I'll need you to tell me which approach you take before I ask you to roll/i
+      /Are you speaking for someone, or only for yourself/i
     );
     assert.match(
       jobPrompt("npc_dialogue"),
@@ -1218,6 +1302,8 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(buildMemoryUpdaterPrompt(), /merge_chunk/);
     assert.match(buildMemoryUpdaterPrompt(), /Create a new NPC card/i);
     assert.match(buildMemoryUpdaterPrompt(), /Aliases \/ Former Labels/);
+    assert.match(buildMemoryUpdaterPrompt(), /Player-Facing Identity/);
+    assert.match(buildMemoryUpdaterPrompt(), /Known name: <name or Unknown/);
     assert.match(buildMemoryUpdaterPrompt(), /do not create a second NPC card/i);
     assert.match(buildMemoryUpdaterPrompt(), /previously known by description, title, disguise, role, or uncertainty/i);
     assert.match(buildMemoryUpdaterPrompt(), /Make each NPC feel like a compelling character/i);
@@ -1228,6 +1314,33 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(buildMemoryUpdaterPrompt(), /campaign context as a living world bible/i);
     assert.match(buildMemoryUpdaterPrompt(), /Store the meaning of incidental NPC dialogue/i);
     assert.match(buildMemoryUpdaterPrompt(), /fresh wording rather than repeating the prior line/i);
+    assert.match(buildMemoryUpdaterPrompt(), /NPC Memory Style Hygiene/i);
+    assert.match(buildMemoryUpdaterPrompt(), /not the prose style of the immediately preceding response/i);
+    assert.match(buildMemoryUpdaterPrompt(), /Do not preserve generic descriptive phrases/i);
+    assert.match(buildMemoryUpdaterPrompt(), /Store observed events and established present facts/i);
+    assert.match(buildMemoryUpdaterPrompt(), /Do not store end-of-turn state summaries/i);
+    assert.match(buildMemoryUpdaterPrompt(), /NPC Voice Profile/i);
+    assert.match(buildMemoryUpdaterPrompt(), /## Voice Profile/);
+    assert.match(buildMemoryUpdaterPrompt(), /### Register and Diction/);
+    assert.match(buildMemoryUpdaterPrompt(), /### Sentence Shape and Rhythm/);
+    assert.match(buildMemoryUpdaterPrompt(), /### How They Answer/);
+    assert.match(buildMemoryUpdaterPrompt(), /### Conversation Control/);
+    assert.match(buildMemoryUpdaterPrompt(), /### Emotional Leakage/);
+    assert.match(
+      buildMemoryUpdaterPrompt(),
+      /without turning into mind-reading narration/i
+    );
+    assert.match(buildMemoryUpdaterPrompt(), /### Pressure Mode/);
+    assert.match(buildMemoryUpdaterPrompt(), /### Avoid/);
+    assert.match(buildMemoryUpdaterPrompt(), /Voice Profile Quality Check/i);
+    assert.match(
+      buildMemoryUpdaterPrompt(),
+      /varied, colorful cast of recognizable speakers/i
+    );
+    assert.match(
+      buildMemoryUpdaterPrompt(),
+      /could describe almost any NPC/i
+    );
     assert.match(buildMemoryUpdaterPrompt(), /Canonical written artifact memory/i);
     assert.match(buildMemoryUpdaterPrompt(), /preserve the revealed text word for word/i);
     assert.match(buildMemoryUpdaterPrompt(), /notes, notebooks, ledgers, journals, letters/i);

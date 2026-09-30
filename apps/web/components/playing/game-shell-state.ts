@@ -343,15 +343,11 @@ export function snapshotHasResponseAfterMessage(
 export function roomSnapshotSubmissionUpdate({
   room,
   currentPlayer,
-  pendingSubmission,
-  optimisticSubmittedPlayerId,
-  playerId
+  pendingSubmission
 }: {
   room: RoomSnapshot;
   currentPlayer?: RoomPlayer;
   pendingSubmission: PendingSubmission | null;
-  optimisticSubmittedPlayerId: string | null;
-  playerId: string;
 }): RoomSnapshotSubmissionUpdate | null {
   if (currentPlayer?.status === "submitted" || room.isResolving) {
     return {
@@ -368,7 +364,6 @@ export function roomSnapshotSubmissionUpdate({
 
   if (
     pendingSubmission &&
-    optimisticSubmittedPlayerId === playerId &&
     !snapshotHasResponseAfterMessage(room, pendingSubmission)
   ) {
     return {

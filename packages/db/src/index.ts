@@ -742,6 +742,9 @@ type EldermereOpeningPlan = EldermereOpeningBrief & {
   }>;
 };
 
+const whyThePlayerIsHereNowInstruction =
+  "Write flowing/run-on and non-dramatic/non-short player-facing sentences explaining why this specific character came to this exact place. The explanation must be understandable to a new player who knows nothing about the world: naturally explain any unfamiliar place, magic, object, or institution as part of the sentence. Show what they hope to learn, see, find, gain, feel, take, steal (anything under the sun, be creative.) Use grounded color and natural expression, not a checklist, résumé, summary, or \"that is the whole of it\" conclusion. Do not invent extra personal history, hidden stakes, or motivations beyond the supplied character context.";
+
 function extractExistingPromptNames(...values: Array<string | undefined>) {
   return [
     ...new Set(
@@ -1061,6 +1064,25 @@ function extractCharacterSheetSectionLines(
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line && !/^none$/i.test(line));
+}
+
+function characterSheetWithoutSection(characterSheet: string, sectionName: string) {
+  const normalized = characterSheet.replace(/\r\n/g, "\n");
+  const heading = sectionHeadingPattern(sectionName).exec(normalized);
+
+  if (!heading) {
+    return normalized;
+  }
+
+  const contentStart = heading.index + heading[0].length;
+  const nextHeading = /\n(?:#{1,6}\s*)?[A-Z][A-Za-z/& -]{1,60}\s*\n/g;
+  nextHeading.lastIndex = contentStart;
+  const nextMatch = nextHeading.exec(normalized);
+  const contentEnd = nextMatch?.index ?? normalized.length;
+
+  return `${normalized.slice(0, heading.index)}${normalized.slice(contentEnd)}`
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 function parseCurrencyLines(lines: string[]) {
@@ -8878,10 +8900,7 @@ function formatEldermereCampaignCharacterContext(players: PlayerRow[]) {
         sheet,
         "Skills"
       ).filter((line) => /proficient/i.test(line));
-      const equipment = [
-        ...extractCharacterSheetSectionLines(sheet, "Equipment"),
-        ...extractCharacterSheetSectionLines(sheet, "Inventory")
-      ];
+      const equipment = extractCharacterSheetSectionLines(sheet, "Equipment");
       const spells = extractCharacterSheetSectionLines(sheet, "Spells");
 
       return [
@@ -9213,7 +9232,25 @@ function openingSceneDirectiveRequirements() {
     "Do not write sample narration, quoted dialogue, metaphors, cinematic prose, or sentence-ready descriptions. Do not prescribe exact wording except for required canonical names or facts.",
     "The opening must begin when the player first encounters a live situation already unfolding. Start one beat before anyone recruits the player, asks for help, explains the central problem, or assigns a task.",
     "Put a visible conflict, disruption, danger, exchange, discovery, pursuit, argument, suspicious behavior, or other active situation in motion before the player. The player must be free to engage, ignore, investigate, interrupt, help, exploit, leave, or respond in an unexpected way.",
-    "Describe only what the player can immediately observe, hear, reasonably infer, or learn from brief overheard dialogue: the exact location, striking sensory details, visible people and their behavior, the immediate source of tension, and an unanswered question or suspicious detail.",
+    "PLAYER-SIZED ENTRY POINT",
+    "Make the opening incident instantly understandable to a new player in its first sentence, even if they know nothing about Eldermere. Begin with a concrete, visible human situation or physical event whose importance needs no setting explanation: someone is hurt, trapped, missing, frightened, being threatened, losing something valuable, trying to stop something dangerous, or facing an unusual and clearly consequential phenomenon.",
+    "Do not make the player infer why the moment matters from procedures, warnings, codes, schedules, institutions, technical readings, workplace disputes, or local terminology. Those details may support the scene only after its basic situation is clear.",
+    "Give the character one natural, visible way into the incident that connects to why they came here: a person, danger, object, or phenomenon they can approach or affect. This must be an opportunity, not a forced quest, recruitment, assignment, or prescribed response.",
+    "Do not substitute a generic list of possible player actions for a real entry point. The scene itself must show why at least one reasonable action is available to this specific character.",
+    "The opening_scene must explicitly tell the narrator why the incident matters to the character and the people present. State the immediate significance in plain player-facing terms: what could happen if nobody acts, what someone may lose or protect, or why the event deserves the character's attention. Do not leave the narrator to infer this from local lore or hidden planner notes.",
+    "Before adding atmosphere or lore, test whether a player who knows nothing about the world could immediately say what is happening, why it matters, and what they might want to look at or do. If not, simplify the incident.",
+    "OPENING FOCUS RULES",
+    "Build opening_scene around exactly one central, visible incident or problem.",
+    "Every detail must either establish that incident, show its immediate human pressure, or ground the location.",
+    "Include at most one unresolved question or suspicious detail beyond the core incident, and make it directly concern that same incident.",
+    "Do not introduce separate mysteries, suspects, threats, pursuits, objects, factions, or future hooks merely to create options, atmosphere, or variety.",
+    "Do not describe suggested player actions or choices. Leave the single live situation unresolved.",
+    "PLAYER-SAFE RELEVANCE RULE",
+    "For the central incident, give the narrator a brief, player-safe explanation of why each important visible detail matters right now.",
+    "For every featured group, clue, object, or disruption, state its immediate public relevance in plain language: what an ordinary person in the location would know, what visible consequence they can recognize, or why the detail changes how the current situation is understood.",
+    "For a suspicious detail, explain its obvious immediate implication without solving the mystery. Do not merely name a clue; tell the narrator why a player would understand that it is noteworthy.",
+    "Keep these relevance explanations tied to the same central incident. Do not add hidden motives, private truths, distant stakes, or new plot hooks.",
+    "Describe only what the player can immediately observe, hear, reasonably infer, or learn from brief overheard dialogue: the exact location, striking sensory details, visible people and their behavior, the immediate source of tension, and at most one directly related unanswered question or suspicious detail.",
     "Include one short, player-safe piece of common local context about the selected starting settlement: what an ordinary person from Eldermere would recognize it as, remember it for, depend on it for, or expect to find there. This must orient the player without becoming a history lesson or explaining the campaign's deeper conflict.",
     "Do not state the full cause, full stakes, deadline, institution, political context, hidden truth, or likely consequences unless the player could naturally know them at a glance or from what is said in the moment.",
     "Do not assign the player a job, decide their response, or reveal hidden causes, future stakes, or private truths. Convey why an object, service, role, or system matters through visible behavior, conflict, or immediate consequence rather than explanation."
@@ -9264,7 +9301,7 @@ function formatEldermereOpeningBriefRequest(input: {
     JSON.stringify({
       region: region?.name ?? "selected Eldermere region",
       starting_location: settlement?.name ?? "selected Eldermere location",
-      why_the_player_is_here_now: "A short, self-contained explanation of the immediate local circumstance that puts the player in this situation. Do not rely on or invent personal history.",
+      why_the_player_is_here_now: whyThePlayerIsHereNowInstruction,
       concept: "A complete 2-3 paragraph account of the campaign as an evolving situation: its beginning, how it can deepen through play, and what the player may eventually discover and decide.",
       opening_scene: "The exact first playable situation."
     }, null, 2)
@@ -9322,8 +9359,7 @@ function formatEldermereCampaignConceptRequest(input: {
       {
         region: region?.name ?? "selected Eldermere region",
         starting_location: settlement?.name ?? "selected starting location",
-        why_the_player_is_here_now:
-          "A short, self-contained explanation of the immediate local circumstance that puts the player in this situation. Do not rely on or invent personal history.",
+        why_the_player_is_here_now: whyThePlayerIsHereNowInstruction,
         concept:
           "A complete 2-3 paragraph account of the campaign as an evolving situation: its beginning, how it can deepen through play, and what the player may eventually discover and decide.",
         opening_scene: "The exact first playable situation.",
@@ -9372,6 +9408,7 @@ function formatEldermereNarratorOpeningRequest(input: {
     "",
     "NARRATOR TASK - WRITE THE FULL PLAYER-FACING OPENER:",
     "Use why_the_player_is_here_now and opening_scene as the authoritative requirements for this opener. opening_scene contains DM-facing directives, not prose to paraphrase. Render those directives naturally in your own narration. Do not add campaign-premise details, future stakes, or explanations not required by those directives.",
+    "why_the_player_is_here_now is a required player-facing fact. In paragraph 1, explicitly state why the character came to this location and what they are trying to do here now. Do not reduce it to physical placement such as waiting at a desk or carrying an object; state the causal purpose in plain language. Use only the supplied reason and do not invent extra personal history, motives, or stakes.",
     "",
     "PLAYER KNOWLEDGE, VOICE, AND OPENING FOCUS:",
     "Assume the player knows nothing about this campaign or setting beyond what this narration has already shown them.",
@@ -9385,21 +9422,24 @@ function formatEldermereNarratorOpeningRequest(input: {
     "Preserve player agency. Do not state what the player character thinks, feels, intends, or values unless the supplied character profile already establishes it. Put emotional interpretation in visible behavior, dialogue, atmosphere, and the narrator's framing of events.",
     "Do not add detail merely to create feeling. Keep the required four-paragraph structure and existing information density. Avoid purple prose, melodrama, constant ominousness, and narrator commentary that breaks immersion.",
     "Reveal only enough context for the player to understand what is visibly happening right now. Let the player ask why it matters, who people are, what local terms mean, and what deeper forces are involved. Do not front-load worldbuilding, political stakes, history, deadlines, backstory, or the full logic of the conflict.",
+    "When you introduce an important visible group, clue, object, or disruption, briefly make its immediate significance legible through common local knowledge, visible consequences, or natural overheard dialogue. Do not leave a detail unexplained merely because it is mysterious: reveal its obvious meaning while withholding its hidden cause.",
     "In the first paragraph, include one brief, natural sentence or clause explaining what the settlement is and what it is commonly known for. Present it as ordinary local knowledge, not exposition. For example: 'Thanewell is one of the terrace villages that feeds the high country,' or 'Selwick is a river town known for its salt barges and crowded quays.'",
     "Do not make an NPC appoint the player, ask the player to solve the problem, or present a prepackaged objective before the player has had a chance to respond to the scene. The opening should offer an opportunity, not an assignment.",
     "",
     "Return only plain prose. It must contain exactly 4 paragraphs separated by blank lines. Do not add headings, labels, notes, Markdown, JSON, or commentary. Paragraph 4 must be exactly 'What would you like to do?'.",
-    "Use the supplied character profile only for present capabilities and visible details. Do not invent, reference, resolve, or imply personal history, past relationships, debts, gifts, clues, promises, or causes.",
+    "Use the supplied character profile only for present capabilities and visible details. The reason in why_the_player_is_here_now is approved player-facing context: state it without expanding it with invented personal history, relationships, debts, gifts, clues, promises, or causes.",
     "Use only facts the character could reasonably see, hear, know, infer, or be told in this opening scene. Do not request dice; the player must receive control before attempting any uncertain action.",
     "Use exactly 6 semantic narration color tags across paragraphs 1-3: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, or <object>...</object>. Each tag must wrap only a short, player-visible noun or phrase. Do not nest tags, add attributes, use <em>, use Markdown emphasis, or use any other HTML/XML tags.",
+    "Choose tags only from player-visible details already required by the same central incident in opening_scene. Tags provide visual emphasis, not a reason to invent an extra clue, danger, faction, object, suspect, or separate plot hook. Repeating a tag type is allowed when it best fits the scene.",
     "",
     "REQUIRED FOUR-PARAGRAPH STRUCTURE:",
-    "Paragraph 1 — Arrival: Place you in a specific sensory location and show the first striking detail. Include only enough immediate context to establish why you are physically there.",
-    "Paragraph 2 — The live incident: Show people doing or saying something that makes the situation legible but unresolved. Use direct, expressive dialogue to reveal the immediate conflict or pressure rather than summarizing it. Do not explain the full stakes or background unless it is naturally visible or spoken aloud.",
+    "Paragraph 1 — Arrival: Place you in a specific sensory location and show the first striking detail. Explicitly establish why you are physically there and what you came here to accomplish before the live incident interrupts or complicates it.",
+    "Paragraph 2 — The live incident: Show people doing or saying something that makes the situation legible but unresolved. Use direct, expressive dialogue to reveal the immediate conflict or pressure rather than summarizing it. Explicitly and naturally explain the incident's immediate significance: what could happen if nobody acts, what someone may lose or protect, or why it deserves your attention. Do not explain distant stakes or background unless it is naturally visible or spoken aloud.",
     "Paragraph 3 — The opening: End on an unanswered question, visible choice point, escalation, or moment of attention that gives you room to decide your own response. Do not list suggested actions unless clarity genuinely requires it.",
     "Paragraph 4 — Handoff: Write exactly 'What would you like to do?'",
     "",
     "Opening style: Write grounded, direct fantasy prose that feels vivid because it is specific. Build atmosphere through terrain, weather, objects, sound, movement, expression, and immediate consequences. The opener should feel like you have arrived beside a real situation in motion, not like someone has stopped to explain the campaign to you.",
+    "Keep the first three paragraphs centered on the one central incident in opening_scene. Do not invent extra leads, villains, named factions, objects, clues, suspects, or parallel conflicts. Incidental details may add texture, but must not compete with the player's understanding of what is happening now.",
     "",
     "Before returning, silently verify that the opening_scene directives are rendered rather than summarized, the first 3 paragraphs follow the required present-first sequence, paragraph 2 uses direct dialogue when people are speaking, paragraph 4 is exactly 'What would you like to do?', and exactly 6 valid semantic color tags appear across paragraphs 1-3."
   ].join("\n");
@@ -9697,7 +9737,7 @@ function formatCampaignOpeningNameBank(input: {
     existingNames: extractExistingPromptNames(
       ...input.players.flatMap((player) => [
         player.character_name,
-        player.character_sheet
+        characterSheetWithoutSection(player.character_sheet, "Inventory")
       ])
     ),
     heading: "Validated name bank for this campaign opener:"
