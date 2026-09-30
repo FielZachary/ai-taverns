@@ -5459,7 +5459,8 @@ h1 {
 
 .message-resource-card img {
   display: block;
-  width: 45%;
+  width: 56.25%;
+  max-width: 100%;
   height: auto;
   border: 1px solid rgba(244, 207, 122, 0.24);
   object-fit: contain;

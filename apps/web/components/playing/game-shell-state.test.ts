@@ -401,9 +401,7 @@ describe("game shell state helpers", () => {
           ...currentRoomPlayer,
           status: "submitted"
         },
-        pendingSubmission: null,
-        optimisticSubmittedPlayerId: null,
-        playerId: "player-1"
+        pendingSubmission: null
       })
     ).toEqual({
       inputSubmitted: true,
@@ -419,9 +417,7 @@ describe("game shell state helpers", () => {
           ...currentRoomPlayer,
           status: "waiting"
         },
-        pendingSubmission: null,
-        optimisticSubmittedPlayerId: null,
-        playerId: "player-1"
+        pendingSubmission: null
       })
     ).toEqual({
       inputSubmitted: true,
@@ -449,9 +445,7 @@ describe("game shell state helpers", () => {
           ...currentRoomPlayer,
           status: "waiting"
         },
-        pendingSubmission,
-        optimisticSubmittedPlayerId: "player-1",
-        playerId: "player-1"
+        pendingSubmission
       })
     ).toEqual({
       inputSubmitted: true,
@@ -472,9 +466,7 @@ describe("game shell state helpers", () => {
           ...currentRoomPlayer,
           status: "waiting"
         },
-        pendingSubmission,
-        optimisticSubmittedPlayerId: "player-1",
-        playerId: "player-1"
+        pendingSubmission
       })
     ).toEqual({
       inputSubmitted: false,
@@ -484,14 +476,34 @@ describe("game shell state helpers", () => {
     });
   });
 
+  it("keeps a solo submission pending until the room snapshot includes a response", () => {
+    const pendingSubmission = {
+      messageId: "player-turn",
+      createdAt: "2026-07-11T10:00:00.000Z"
+    };
+
+    expect(
+      roomSnapshotSubmissionUpdate({
+        room: roomSnapshot({
+          messages: [message("player-turn", "player", "2026-07-11T10:00:00.000Z")]
+        }),
+        currentPlayer: currentRoomPlayer,
+        pendingSubmission
+      })
+    ).toEqual({
+      inputSubmitted: true,
+      stopSending: false,
+      clearPendingSubmission: false,
+      clearOptimisticSubmittedPlayerId: false
+    });
+  });
+
   it("leaves submission state unchanged when the current player is absent", () => {
     expect(
       roomSnapshotSubmissionUpdate({
         room: roomSnapshot(),
         currentPlayer: undefined,
-        pendingSubmission: null,
-        optimisticSubmittedPlayerId: null,
-        playerId: "player-1"
+        pendingSubmission: null
       })
     ).toBeNull();
   });
