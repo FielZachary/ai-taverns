@@ -2637,6 +2637,13 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.match(plannerInput.message, /Do not write sample narration/i);
   assert.match(plannerInput.message, /live situation already unfolding/);
   assert.match(plannerInput.message, /Start one beat before anyone recruits the player/);
+  assert.match(plannerInput.message, /PLAYER-SIZED ENTRY POINT/);
+  assert.match(plannerInput.message, /instantly understandable to a new player in its first sentence/i);
+  assert.match(plannerInput.message, /Do not make the player infer why the moment matters from procedures, warnings, codes, schedules/i);
+  assert.match(plannerInput.message, /one natural, visible way into the incident that connects to why they came here/i);
+  assert.match(plannerInput.message, /Do not substitute a generic list of possible player actions for a real entry point/i);
+  assert.match(plannerInput.message, /explicitly tell the narrator why the incident matters to the character and the people present/i);
+  assert.match(plannerInput.message, /what could happen if nobody acts, what someone may lose or protect/i);
   assert.match(plannerInput.message, /OPENING FOCUS RULES/);
   assert.match(plannerInput.message, /exactly one central, visible incident or problem/i);
   assert.match(plannerInput.message, /at most one unresolved question or suspicious detail/i);
@@ -2754,6 +2761,7 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   assert.doesNotMatch(narratorInput.message, /Backstory/);
   assert.match(narratorInput.message, /Paragraph 1 — Arrival/);
   assert.match(narratorInput.message, /Paragraph 2 — The live incident/);
+  assert.match(narratorInput.message, /Explicitly and naturally explain the incident's immediate significance/i);
   assert.match(narratorInput.message, /Use direct, expressive dialogue/i);
   assert.match(narratorInput.message, /opening_scene/);
   assert.match(narratorInput.message, /Paragraph 3 — The opening/);
