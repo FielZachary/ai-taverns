@@ -89,13 +89,14 @@ button {
 .dm-lab-eyebrow { margin-top: 0; color: var(--gold); letter-spacing: .12em; text-transform: uppercase; font-size: .75rem; }
 .dm-lab-controls { display: grid; gap: 18px; margin-top: 20px; padding: 28px; }
 .dm-lab-controls label { display: grid; gap: 8px; color: var(--gold-bright); font-weight: 700; }
-.dm-lab-controls select, .dm-lab-controls textarea { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 12px; color: var(--ink); background: #15100d; font: 0.9rem ui-monospace, SFMono-Regular, Menlo, monospace; }
+.dm-lab-controls input, .dm-lab-controls select, .dm-lab-controls textarea { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 12px; color: var(--ink); background: #15100d; font: 0.9rem ui-monospace, SFMono-Regular, Menlo, monospace; }
 .dm-lab-controls textarea { resize: vertical; }
 .dm-lab-actions { display: flex; flex-wrap: wrap; gap: 12px; }
 .dm-lab-actions button { border: 1px solid var(--gold); border-radius: 8px; padding: 11px 16px; color: #1b1208; background: var(--gold-bright); font-weight: 800; }
 .dm-lab-actions button:disabled { cursor: not-allowed; opacity: .55; }
 .dm-lab-actions .dm-lab-secondary { color: var(--gold-bright); background: transparent; }
 .dm-lab-error { margin: 0; color: #ff9f87; }
+.dm-lab-notice { margin: 0; color: #b8d690; }
 .dm-lab-results { display: grid; gap: 20px; margin-top: 20px; padding: 28px; }
 .dm-lab-source { margin: 0; color: var(--muted); font: .78rem ui-monospace, SFMono-Regular, Menlo, monospace; }
 .dm-lab-diff h2 { margin: 0 0 10px; font-size: 1.1rem; }
