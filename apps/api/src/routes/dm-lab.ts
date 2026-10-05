@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import type { DungeonMasterRuntime } from "@ai-dnd/db";
+import { listCampaignSummariesForUser, type DungeonMasterRuntime } from "@ai-dnd/db";
 import type { ApiConfig } from "../config.js";
 import { askDungeonMasterProvider } from "../dm-provider.js";
 import { requireAuthenticatedUser } from "./auth.js";
@@ -44,6 +44,12 @@ function validationFor(content: string, format: "json" | "text") {
 
 export async function registerDmLabRoutes(fastify: FastifyInstance, options: DmLabRouteOptions) {
   const runtime = options.dmRuntime ?? { askProvider: askDungeonMasterProvider };
+  fastify.get("/internal/dm-lab/campaigns", async (request) => {
+    if (!isDmLabEnabled(options.config)) throw error(404, "DM Lab is disabled.");
+    const user = await requireAuthenticatedUser(fastify, options.config, request.cookies[options.config.authCookieName]);
+    const campaigns = await listCampaignSummariesForUser(fastify.pg, user.id, 10);
+    return { campaigns: campaigns.map((campaign) => ({ id: campaign.id, title: campaign.title, preview: campaign.preview ?? null, mode: campaign.mode })) };
+  });
   fastify.post("/internal/dm-lab/compare", async (request) => {
     if (!isDmLabEnabled(options.config)) throw error(404, "DM Lab is disabled.");
     await requireAuthenticatedUser(fastify, options.config, request.cookies[options.config.authCookieName]);

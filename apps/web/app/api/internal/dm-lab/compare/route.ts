@@ -26,3 +26,16 @@ export async function POST(request: Request) {
     }
   });
 }
+
+export async function GET() {
+  const cookie = await getRequestCookieHeader();
+  const upstream = await fetch(`${getFastifyApiBaseUrl()}/api/internal/dm-lab/campaigns`, {
+    headers: cookie ? { cookie } : undefined,
+    cache: "no-store"
+  });
+  return new Response(upstream.body, {
+    status: upstream.status,
+    statusText: upstream.statusText,
+    headers: { "content-type": upstream.headers.get("content-type") ?? "application/json" }
+  });
+}

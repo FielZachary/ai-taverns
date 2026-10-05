@@ -2629,7 +2629,8 @@ async function ensureCampaignJoinCode(
 
 export async function listCampaignSummariesForUser(
   db: Queryable,
-  userId: string
+  userId: string,
+  limit = 100
 ): Promise<CampaignSummary[]> {
   const result = await db.query<CampaignRow>(
     `
@@ -2692,9 +2693,9 @@ export async function listCampaignSummariesForUser(
           )
         )
       order by campaigns.updated_at desc, campaigns.created_at desc
-      limit 100
+      limit $5
     `,
-    [userId, userId, userId, userId]
+    [userId, userId, userId, userId, Math.min(Math.max(limit, 1), 100)]
   );
 
   return result.rows.map(mapCampaignSummaryRow);
