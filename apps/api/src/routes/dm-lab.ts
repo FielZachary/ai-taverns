@@ -23,7 +23,9 @@ const stageSchema = z.enum([
 
 const requestSchema = z.object({
   stage: stageSchema,
-  promptOverride: z.string().trim().max(20_000).optional()
+  action: z.enum(["baseline", "override"]),
+  overrideInstructions: z.string().max(30_000).optional(),
+  overrideMessage: z.string().max(60_000).optional()
 });
 
 type DmLabRouteOptions = {
@@ -143,9 +145,6 @@ export async function registerDmLabRoutes(
     );
     const body = requestSchema.parse(request.body);
     const prompt = buildLabPrompt(body.stage);
-    const overrideInstructions = body.promptOverride
-      ? `${prompt.instructions}\n\nTEMPORARY DM LAB OVERRIDE:\n${body.promptOverride}`
-      : prompt.instructions;
 
     const run = async (instructions: string) => {
       const startedAt = Date.now();
@@ -162,10 +161,7 @@ export async function registerDmLabRoutes(
       };
     };
 
-    const baseline = await run(prompt.instructions);
-    const override = await run(overrideInstructions);
-
-    return {
+    const shared = {
       source: {
         file: prompt.sourceFile,
         function: prompt.sourceFunction,
@@ -174,12 +170,35 @@ export async function registerDmLabRoutes(
       fixture: body.stage.startsWith("opening_")
         ? "eldermere-missing-cartographer"
         : "normal-turn-dockmaster-question",
-      stage: body.stage,
-      // The Lab displays the complete request, not merely the short system
-      // instruction block. This is the exact context an agent needs when
-      // evaluating or implementing a prompt change.
-      baseline: { prompt: fullRequest(prompt.instructions, prompt.message), ...baseline },
-      override: { prompt: fullRequest(overrideInstructions, prompt.message), ...override }
+      stage: body.stage
+    };
+
+    if (body.action === "baseline") {
+      return {
+        ...shared,
+        action: "baseline" as const,
+        request: {
+          instructions: prompt.instructions,
+          message: prompt.message,
+          fullPrompt: fullRequest(prompt.instructions, prompt.message)
+        },
+        result: await run(prompt.instructions)
+      };
+    }
+
+    if (!body.overrideInstructions?.trim() || !body.overrideMessage?.trim()) {
+      throw error(400, "The full override request must include instructions and fixture context.");
+    }
+
+    return {
+      ...shared,
+      action: "override" as const,
+      request: {
+        instructions: body.overrideInstructions,
+        message: body.overrideMessage,
+        fullPrompt: fullRequest(body.overrideInstructions, body.overrideMessage)
+      },
+      result: await run(body.overrideInstructions)
     };
   });
 }

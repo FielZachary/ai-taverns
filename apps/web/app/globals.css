@@ -100,7 +100,8 @@ button {
 .dm-lab-source { margin: 0; color: var(--muted); font: .78rem ui-monospace, SFMono-Regular, Menlo, monospace; }
 .dm-lab-diff h2 { margin: 0 0 10px; font-size: 1.1rem; }
 .dm-lab-diff-grid, .dm-lab-runtime { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-.dm-lab-diff pre, .dm-lab-runtime article { min-height: 140px; overflow: auto; margin: 0; border: 1px solid rgba(255,255,255,.09); border-radius: 8px; padding: 14px; background: #100c0a; color: #e8ddcb; font: .78rem/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.dm-lab-diff pre, .dm-lab-diff textarea, .dm-lab-runtime article { min-height: 140px; overflow: auto; margin: 0; border: 1px solid rgba(255,255,255,.09); border-radius: 8px; padding: 14px; background: #100c0a; color: #e8ddcb; font: .78rem/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.dm-lab-diff textarea { width: 100%; resize: vertical; }
 .dm-lab-diff span { display: block; }
 .dm-lab-diff .changed { background: rgba(217, 169, 74, .16); }
 .dm-lab-runtime article { min-height: 0; font-family: var(--body-font); }
