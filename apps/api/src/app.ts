@@ -14,6 +14,7 @@ import { roomRealtimePlugin } from "./plugins/room-realtime.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerCampaignRoutes } from "./routes/campaigns.js";
 import { registerDmRoutes } from "./routes/dm.js";
+import { registerDmLabRoutes } from "./routes/dm-lab.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerRealtimeRoutes } from "./routes/realtime.js";
 import { registerRoomRoutes } from "./routes/rooms.js";
@@ -111,6 +112,11 @@ export async function buildApp(
     prefix: "/api",
     config,
     analytics,
+    dmRuntime: options.dmRuntime
+  });
+  await fastify.register(registerDmLabRoutes, {
+    prefix: "/api",
+    config,
     dmRuntime: options.dmRuntime
   });
   return fastify;

@@ -9766,6 +9766,117 @@ function eldermereOpeningNarratorInstructions() {
   ].join("\n");
 }
 
+/**
+ * Builds a representative, non-persistent Eldermere opener request for the
+ * internal DM Lab.  Keeping this beside the production prompt builders means
+ * prompt experiments exercise the same instructions and request format as a
+ * real opener without creating a campaign or touching campaign state.
+ */
+export function buildEldermereDmLabPrompt(
+  stage: "opening_brief_planner" | "opening_planner" | "opening_narrator"
+) {
+  const region = eldermereRegions[0];
+  const settlement = region?.settlements[0];
+
+  if (!region || !settlement) {
+    throw new Error("Eldermere DM Lab fixture could not find a canonical start.");
+  }
+
+  const campaign: CampaignRow = {
+    id: "dm-lab-fixture",
+    session_id: "dm-lab-fixture",
+    mode: "single_player",
+    title: "DM Lab: The Missing Cartographer",
+    status: "active",
+    has_begun: false,
+    owner_user_id: null,
+    owner_client_id: null,
+    metadata: {
+      worldProfile: {
+        selectedRegion: { name: region.name },
+        startingLocation: { name: settlement.name }
+      }
+    },
+    created_at: new Date(0),
+    updated_at: new Date(0)
+  };
+  const players: PlayerRow[] = [
+    {
+      id: "dm-lab-player",
+      campaign_id: campaign.id,
+      client_id: "dm-lab-client",
+      user_id: null,
+      username: "DM Lab",
+      character_name: "Mara Venn",
+      character_sheet: [
+        "Name: Mara Venn",
+        "Level: 1",
+        "Species: Human",
+        "Class: Ranger",
+        "Background: Cartographer's apprentice",
+        "",
+        "Core Stats",
+        "HP: 12",
+        "",
+        "Skills",
+        "Survival: proficient",
+        "Investigation: proficient",
+        "",
+        "Equipment",
+        "Worn map case, travel cloak, charcoal, shortbow",
+        "",
+        "Backstory",
+        "Mara came to find her missing mentor, Ilyra Venn, whose last map marked a route through the selected settlement."
+      ].join("\n"),
+      slot: 0,
+      status: "active",
+      last_seen_at: new Date(0)
+    }
+  ];
+  const brief: EldermereOpeningBrief = {
+    region: region.name,
+    startingLocation: settlement.name,
+    whyThePlayerIsHereNow:
+      "You came to this settlement to follow the final marked stop on your missing mentor Ilyra Venn's map and learn who saw her leave the old road.",
+    concept:
+      "A missing cartographer's route has begun changing under travelers' feet, pulling Mara into a local conflict over the ruins beneath the settlement.",
+    openingScene:
+      "At the public map board, a courier tries to tear down Ilyra's route notice while a frightened trader insists the road it names swallowed her brother. The notice matters because it is Mara's first proof that Ilyra reached this settlement."
+  };
+
+  if (stage === "opening_narrator") {
+    return {
+      sourceFile: "packages/db/src/index.ts",
+      sourceFunction: "eldermereOpeningNarratorInstructions",
+      instructions: eldermereOpeningNarratorInstructions(),
+      message: formatEldermereNarratorOpeningRequest({ players, plan: brief }),
+      responseFormat: "text" as const
+    };
+  }
+
+  return {
+    sourceFile: "packages/db/src/index.ts",
+    sourceFunction:
+      stage === "opening_brief_planner"
+        ? "eldermereOpeningBriefPlannerInstructions"
+        : "eldermereOpeningPlannerInstructions",
+    instructions:
+      stage === "opening_brief_planner"
+        ? eldermereOpeningBriefPlannerInstructions()
+        : eldermereOpeningPlannerInstructions(),
+    message:
+      stage === "opening_brief_planner"
+        ? formatEldermereOpeningBriefRequest({ campaign, players })
+        : [
+            formatEldermereCampaignConceptRequest({ campaign, players }),
+            "",
+            "APPROVED OPENING BRIEF — SOURCE OF TRUTH",
+            JSON.stringify(narratorOpeningPlanToJson(brief), null, 2)
+          ].join("\n"),
+    responseFormat: "json" as const
+  };
+}
+
 function askDmInstructions() {
   return [
     "You are the AI Taverns DnD Dungeon Master answering an out-of-turn table question.",
