@@ -115,6 +115,16 @@ function validationFor(content: string, responseFormat: "json" | "text") {
   }
 }
 
+function fullRequest(instructions: string, message: string) {
+  return [
+    "SYSTEM INSTRUCTIONS",
+    instructions,
+    "",
+    "USER / FIXTURE MESSAGE",
+    message
+  ].join("\n");
+}
+
 export async function registerDmLabRoutes(
   fastify: FastifyInstance,
   options: DmLabRouteOptions
@@ -165,8 +175,11 @@ export async function registerDmLabRoutes(
         ? "eldermere-missing-cartographer"
         : "normal-turn-dockmaster-question",
       stage: body.stage,
-      baseline: { prompt: prompt.instructions, ...baseline },
-      override: { prompt: overrideInstructions, ...override }
+      // The Lab displays the complete request, not merely the short system
+      // instruction block. This is the exact context an agent needs when
+      // evaluating or implementing a prompt change.
+      baseline: { prompt: fullRequest(prompt.instructions, prompt.message), ...baseline },
+      override: { prompt: fullRequest(overrideInstructions, prompt.message), ...override }
     };
   });
 }

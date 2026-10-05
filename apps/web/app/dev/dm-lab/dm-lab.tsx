@@ -159,7 +159,7 @@ export function DmLab() {
       </section>
       {result ? <section className="dm-lab-results">
         <p className="dm-lab-source">{result.source.file} · {result.source.function} · {result.source.gitRevision}</p>
-        <DiffPanel title="Prompt diff" rows={promptDiff} />
+        <DiffPanel title="Full request diff (system prompt + fixture context)" rows={promptDiff} />
         <DiffPanel title="Output diff" rows={outputDiff} />
         <div className="dm-lab-runtime">
           <article><h2>Baseline</h2><p>{result.baseline.validation.valid ? "Valid" : "Invalid"} · {result.baseline.durationMs}ms · {result.baseline.model ?? "configured model"}</p><pre>{result.baseline.validation.details.join("\n")}</pre></article>
