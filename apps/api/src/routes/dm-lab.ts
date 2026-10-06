@@ -6,33 +6,15 @@ import { askDungeonMasterProvider } from "../dm-provider.js";
 import { requireAuthenticatedUser } from "./auth.js";
 
 const stageSchema = z.enum(["opening_brief_planner", "opening_planner", "opening_narrator", "router", "scene_director", "investigation", "npc_dialogue", "combat", "clarification"]);
-const packetSchema = z.object({
-  version: z.literal(1),
-  source: z.object({
-    campaignId: z.string().trim().min(1).max(200),
-    stage: stageSchema,
-    gitRevision: z.string().trim().min(1).max(200),
-    sourceFile: z.string().trim().min(1).max(500),
-    sourceFunction: z.string().trim().min(1).max(300),
-    turnId: z.string().trim().min(1).max(200).optional()
-  }),
-  request: z.object({
-    instructions: z.string().trim().min(1).max(30_000),
-    message: z.string().trim().min(1).max(60_000)
-  })
-});
-const requestSchema = z.object({
-  action: z.enum(["baseline", "override"]),
-  packet: packetSchema,
-  overrideInstructions: z.string().max(30_000).optional(),
-  overrideMessage: z.string().max(60_000).optional()
-});
+const messageSchema = z.object({ role: z.enum(["system", "user", "assistant"]), content: z.string().trim().min(1).max(60_000) });
+const requestSchema = z.object({ action: z.enum(["baseline", "override"]), campaignId: z.string().trim().min(1).max(200), stage: stageSchema, messages: z.array(messageSchema).min(2).max(50) });
 
 type DmLabRouteOptions = { config: ApiConfig; dmRuntime?: DungeonMasterRuntime | undefined };
+
 function error(statusCode: number, message: string) { return Object.assign(new Error(message), { statusCode }); }
 function isDmLabEnabled(config: ApiConfig) { return config.nodeEnv !== "production" || process.env.DM_LAB_ENABLED === "true"; }
 function responseFormat(stage: z.infer<typeof stageSchema>) { return stage === "opening_narrator" ? "text" as const : "json" as const; }
-function fullRequest(instructions: string, message: string) { return ["SYSTEM INSTRUCTIONS", instructions, "", "USER / FIXTURE MESSAGE", message].join("\n"); }
+function fullRequest(messages: z.infer<typeof messageSchema>[]) { return messages.map((message, index) => `# ${index + 1}. ${message.role.toUpperCase()}\n${message.content}`).join("\n\n"); }
 function validationFor(content: string, format: "json" | "text") {
   if (format === "text") {
     const paragraphs = content.trim().split(/\n\s*\n/).filter(Boolean);
@@ -54,19 +36,18 @@ export async function registerDmLabRoutes(fastify: FastifyInstance, options: DmL
     if (!isDmLabEnabled(options.config)) throw error(404, "DM Lab is disabled.");
     await requireAuthenticatedUser(fastify, options.config, request.cookies[options.config.authCookieName]);
     const body = requestSchema.parse(request.body);
-    const { packet } = body;
-    const instructions = body.action === "baseline" ? packet.request.instructions : body.overrideInstructions?.trim();
-    const message = body.action === "baseline" ? packet.request.message : body.overrideMessage?.trim();
-    if (!instructions || !message) throw error(400, "The full override request must include instructions and fixture context.");
-    const format = responseFormat(packet.source.stage);
+    const first = body.messages[0];
+    const last = body.messages.at(-1);
+    if (first?.role !== "system" || last?.role !== "user") throw error(400, "The debug prompt must start with SYSTEM and end with USER.");
+    const format = responseFormat(body.stage);
     const startedAt = Date.now();
-    const provider = await runtime.askProvider({ instructions, message, responseFormat: format });
+    const provider = await runtime.askProvider({ instructions: first.content, message: last.content, requestMessages: body.messages, responseFormat: format });
     return {
-      source: { file: packet.source.sourceFile, function: packet.source.sourceFunction, gitRevision: packet.source.gitRevision, campaignId: packet.source.campaignId, ...(packet.source.turnId ? { turnId: packet.source.turnId } : {}) },
-      fixture: `local campaign ${packet.source.campaignId}`,
-      stage: packet.source.stage,
+      source: { file: "debug prompt", function: "captured provider request", gitRevision: "captured", campaignId: body.campaignId },
+      fixture: `local campaign ${body.campaignId}`,
+      stage: body.stage,
       action: body.action,
-      request: { instructions, message, fullPrompt: fullRequest(instructions, message) },
+      request: { messages: body.messages, fullPrompt: fullRequest(body.messages) },
       result: { output: provider.content, validation: validationFor(provider.content, format), durationMs: Date.now() - startedAt, model: provider.debug.model ?? null }
     };
   });

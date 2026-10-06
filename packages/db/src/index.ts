@@ -27,6 +27,7 @@ import {
   validateRouterOutput,
   type EldermereCampaignStart,
   type AiDebugInfo,
+  type AiDebugMessage,
   type ContextCategory,
   type ContextChunk,
   type ExistingMemoryContext,
@@ -840,6 +841,11 @@ export type DungeonMasterRuntime = {
     message: string;
     instructions: string;
     history?: GameMessage[];
+    /**
+     * An already assembled provider transcript. This is used by local replay
+     * tooling and intentionally bypasses history-to-message normalization.
+     */
+    requestMessages?: AiDebugMessage[];
     currentPlayerAction?: string;
     dmJob?: DmJobName;
     model?: AiModelId;

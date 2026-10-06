@@ -66,6 +66,7 @@ export type DungeonMasterProviderInput = {
   message: string;
   instructions: string;
   history?: GameMessage[];
+  requestMessages?: AiDebugMessage[];
   currentPlayerAction?: string;
   dmJob?: DmJobName;
   model?: AiModelId;
@@ -218,17 +219,18 @@ function testProviderDebug(
   content: string
 ): AiDebugInfo {
   return {
-    requestMessages: [
-      {
-        role: "system",
-        content: input.instructions
-      },
-      ...(input.history ?? []).map(mapHistoryMessage),
-      {
-        role: "user",
-        content: input.message
-      }
-    ],
+    requestMessages:
+      input.requestMessages ?? [
+        {
+          role: "system",
+          content: input.instructions
+        },
+        ...(input.history ?? []).map(mapHistoryMessage),
+        {
+          role: "user",
+          content: input.message
+        }
+      ],
     rawResponse: content,
     model: "ai-taverns-test-provider",
     temperature: providerTemperatureForInput(input),
@@ -817,6 +819,7 @@ export async function askDungeonMasterProvider({
   message,
   instructions,
   history = [],
+  requestMessages: suppliedRequestMessages,
   currentPlayerAction,
   dmJob,
   model,
@@ -837,14 +840,17 @@ export async function askDungeonMasterProvider({
         ? { temperature: temperatureOverride }
         : {}),
       ...(responseFormat === "text" ? { responseFormat } : {}),
-      ...(onPublicNarrationDelta ? { onPublicNarrationDelta } : {})
+      ...(onPublicNarrationDelta ? { onPublicNarrationDelta } : {}),
+      ...(suppliedRequestMessages
+        ? { requestMessages: suppliedRequestMessages }
+        : {})
     });
   }
 
   assertDungeonMasterProviderConfigured(model);
   const settings = resolvedProviderSettings(providerConfigForModel(model));
 
-  const messages: DeepSeekMessage[] = [
+  const messages: DeepSeekMessage[] = suppliedRequestMessages ?? [
     {
       role: "system",
       content: instructions
