@@ -14,6 +14,7 @@ const stages: Array<{ value: Stage; label: string }> = [
 
 function lineDiff(before: string, after: string) { const left = before.split("\n"); const right = after.split("\n"); return Array.from({ length: Math.max(left.length, right.length) }, (_, index) => ({ index, left: left[index], right: right[index], changed: left[index] !== right[index] })); }
 function unifiedDiff(before: string, after: string) { return lineDiff(before, after).flatMap(({ left, right, changed }) => !changed ? (left === undefined ? [] : [` ${left}`]) : [...(left === undefined ? [] : [`-${left}`]), ...(right === undefined ? [] : [`+${right}`])]).join("\n"); }
+export function formatOutputForDiff(output: string) { try { return JSON.stringify(JSON.parse(output), null, 2); } catch { return output; } }
 function formatDebugPrompt(messages: DebugMessage[]) { return messages.map((message, index) => `# ${index + 1}. ${message.role.toUpperCase()}\n${message.content}`).join("\n\n"); }
 function parseDebugPrompt(value: string): DebugMessage[] {
   const headings = [...value.matchAll(/^# \d+\. (SYSTEM|USER|ASSISTANT)\r?$/gm)];
@@ -35,7 +36,7 @@ export function DmLab() {
   const [promptText, setPromptText] = useState(""); const [messages, setMessages] = useState<DebugMessage[] | null>(null);
   const [baseline, setBaseline] = useState<LabResponse | null>(null); const [overrideText, setOverrideText] = useState(""); const [override, setOverride] = useState<LabResponse | null>(null);
   const [error, setError] = useState(""); const [notice, setNotice] = useState(""); const [running, setRunning] = useState<"baseline" | "override" | null>(null);
-  const outputDiff = useMemo(() => baseline && override ? lineDiff(baseline.result.output, override.result.output) : [], [baseline, override]);
+  const outputDiff = useMemo(() => baseline && override ? lineDiff(formatOutputForDiff(baseline.result.output), formatOutputForDiff(override.result.output)) : [], [baseline, override]);
   useEffect(() => { void (async () => { try { const response = await fetch("/api/internal/dm-lab/compare", { cache: "no-store" }); const payload = (await response.json()) as { campaigns?: CampaignOption[] }; if (!response.ok) throw new Error("Campaigns could not be loaded."); setCampaigns(payload.campaigns ?? []); } catch (caught) { setCampaignLoadError(caught instanceof Error ? caught.message : "Campaigns could not be loaded."); } })(); }, []);
   function loadBaselinePrompt() { try { const loaded = parseDebugPrompt(promptText); setMessages(loaded); setBaseline(null); setOverride(null); setOverrideText(""); setError(""); setNotice(`Baseline prompt loaded: ${loaded.length} messages.`); } catch (caught) { setError(caught instanceof Error ? caught.message : "Could not parse the debug prompt."); } }
   async function call(action: "baseline" | "override", requestMessages: DebugMessage[]) { if (!campaignId.trim()) throw new Error("Choose or enter the campaign ID first."); const response = await fetch("/api/internal/dm-lab/compare", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, campaignId, stage, messages: requestMessages }) }); const payload = (await response.json()) as LabResponse | { error?: { message?: string } }; if (!response.ok) throw new Error("error" in payload ? payload.error?.message : "DM Lab run failed."); return payload as LabResponse; }
