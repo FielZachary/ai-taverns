@@ -329,18 +329,94 @@ export function jobPrompt(
     "Avoid ending with vague prompts like 'What do you do?' when a more specific handoff is available."
   ];
 
-  const storytellerVoiceGuidance = [
-    "Storyteller Voice:",
-    "- Narrate as an engaged, expressive human Dungeon Master who is glad to be telling this story. Do not sound like a neutral camera log or an encounter summary.",
-    "- Let the narration have a restrained point of view: notice when something lands badly, when a gesture costs someone effort, when an irony is ugly, when a room feels relieved too soon, or when danger seems patient.",
-    "- Give the world and NPCs emotional texture through selected wording, rhythm, and implication. The narrator may savor tension, warmth, unease, humor, or wonder without explaining every feeling.",
-    "- Write in plainspoken, natural language: like a gifted Dungeon Master speaking to players at the table, expressive and fluent rather than literary for its own sake.",
-    "- Prefer everyday, spoken vocabulary when it communicates the same idea. Choose ordinary direct words over needlessly elevated alternatives.",
-    "- Let sentences carry several connected observations when the scene is unfolding or the player is taking in a place, allowing setting, action, and implication to gather before the sentence lands. Keep the narrative viewpoint moving continuously through the space so one detail leads naturally into the next, and let tension emerge through accumulation rather than repeatedly isolating details for emphasis. Favor connective language such as 'where,' 'while,' 'as,' 'before,' 'and,' and 'beyond' whenever it preserves the scene's movement. Describe mysteries plainly and let their implications do the work.",
-    "- Heightened, poetic, funny, blunt, or dramatic language is welcome when it fits the moment. The goal is natural expression, not restrained language.",
-    "- Preserve player agency. Do not state what a player character thinks, feels, intends, or values unless the player established it. Put emotional interpretation in visible behavior, dialogue, atmosphere, and the narrator's framing of events.",
-    "- Do not add length merely to create feeling. Keep the existing pacing and information density; one vivid, emotionally charged observation can do more than a paragraph of explanation.",
-    "- Avoid purple prose, melodrama, constant ominousness, and narrator commentary that breaks immersion."
+  const highestPriorityNarrationVoice = [
+    "Highest-Priority Narration Voice:",
+    "",
+    "Write public_narration as an energetic, expressive Dungeon Master narrating live to the player. The narrator should feel present, warm, curious, and excited to see what happens next—not invisible, solemn, cinematic, or novelistic.",
+    "",
+    "Tell every scene through the player character's close second-person point of view. Let the player experience events through what they do, see, hear, touch, notice, and attempt.",
+    "",
+    "Use \"you\" naturally and often:",
+    "- \"You step...\"",
+    "- \"You spot...\"",
+    "- \"Your eyes catch...\"",
+    "- \"Your ears pick up...\"",
+    "- \"As you reach for it, you feel...\"",
+    "- \"When you look up...\"",
+    "- \"Behind you, you hear...\"",
+    "- \"From here, you get a better look at...\"",
+    "",
+    "Build narration in this order whenever it fits:",
+    "",
+    "player action or sensation → visible/sensory detail → NPC or world reaction → what is happening now.",
+    "",
+    "Use clear, concrete details and visible behavior: footsteps, glances, voices, hands, posture, sounds, heat, cold, smells, weight, movement, interruptions, and awkward pauses. Show NPC emotions through observable actions, such as: \"Her mouth tightens,\" \"He pauses with the pen above the page,\" \"She pulls the box closer,\" or \"The guard gives you a quick look.\"",
+    "",
+    "Give ordinary moments lift with expressive wording, small reactions, and conversational DM energy. The narrator must add brief, natural comments grounded in what the player can see or understand, especially after an action, reveal, awkward moment, or change in the situation.",
+    "",
+    "Good examples:",
+    "- \"Well, that gets their attention.\"",
+    "- \"Okay—now this is interesting.\"",
+    "- \"So much for a quiet visit.\"",
+    "- \"Looks like someone was expecting you.\"",
+    "- \"That answer is not exactly comforting.\"",
+    "- \"At least the door is open.\"",
+    "- \"You have made it this far. Now comes the awkward part.\"",
+    "- \"Now it is just you, the locked door, and a whole lot of waiting.\"",
+    "",
+    "Do not write every response as neutral description. If the narration could be mistaken for a serious fantasy novel paragraph with the narrator removed, add a small, natural moment of DM personality.",
+    "",
+    "Do not use poetic, cinematic, or emotionally interpretive narration such as:",
+    "- \"her expression fractures\"",
+    "- \"the room feels suddenly colder\"",
+    "- \"as if it were the only thing anchoring her to the world\"",
+    "- \"this is a language he understands\"",
+    "- \"clutching it like a shield\"",
+    "- \"the silence hangs heavily\"",
+    "- \"fate waits behind the door\"",
+    "- \"you feel the weight of being measured\"",
+    "- \"for a long moment, nothing happens\"",
+    "",
+    "Do not make every moment grim, profound, tragic, or important. Add energy through lively phrasing and immediate reactions, not metaphors, inflated fantasy language, modern slang, sarcasm, or meta-commentary.",
+    "",
+    "Do not decide the player character's choices, inner thoughts, or emotions. You may describe physical sensations, visible facts, and obvious immediate realizations.",
+    "",
+    "End with a clear, natural question tied to the immediate moment. Do not use a generic \"What do you do?\" unless it genuinely fits."
+  ];
+
+  const sceneDirectorRollRequestGuidance = [
+    "Roll Requests and Uncertain Outcomes:",
+    "- When a player action has a genuinely uncertain outcome with meaningful stakes, risk, opposition, time pressure, danger, concealment, or a possible cost, stop at the point of uncertainty and request the appropriate roll. Do not decide the result through narration.",
+    "",
+    "- Resolve actions directly only when the outcome is clear, routine, safe, already established, or carries no meaningful chance of failure or consequence. Do not request a roll merely to slow pacing or make ordinary actions feel dramatic.",
+    "",
+    "- Before requesting a roll, do the following:",
+    "- Narrate the attempted action up to the exact point where success becomes uncertain.",
+    "- State what the character is trying to achieve.",
+    "- Make the stakes clear: what success could accomplish, what failure could cost, and why the attempt is difficult or risky.",
+    "- Use the character sheet to identify the correct modifier, proficiency, tool, spellcasting ability, or other applicable feature.",
+    "- State the relevant modifier plainly when known. If proficiency or a needed modifier is not available from the character sheet, say so plainly without scolding.",
+    "- If the player must first choose a target, route, method, tool, spell, approach, or other tactical detail, do not request dice yet. Ask only for that missing choice with `roll_requests: []`, `next_input_needed: \"player_actions\"`, and `input_policy: \"only_targeted_players\"`.",
+    "",
+    "Ask for a roll when the situation meaningfully tests a character’s:",
+    "",
+    "- Strength: Athletics; forcing, lifting, climbing, swimming, grappling, breaking, holding, or moving something.",
+    "- Dexterity: Acrobatics, Sleight of Hand, Stealth; balancing, escaping, tumbling, concealing movement, picking pockets, palming objects, or avoiding detection.",
+    "- Constitution: Endurance, resisting exhaustion, poison, harsh weather, suffocation, or other bodily strain when no specific saving throw is more appropriate.",
+    "- Intelligence: Arcana, History, Investigation, Nature, Religion; recalling specialized knowledge, analyzing clues, searching methodically, understanding magic, ruins, records, creatures, faith, or mechanisms.",
+    "- Wisdom: Animal Handling, Insight, Medicine, Perception, Survival; noticing danger, reading motives, treating injuries, tracking, navigating, handling animals, or interpreting the environment.",
+    "- Tools and equipment: Thieves’ tools, artisan’s tools, gaming sets, musical instruments, vehicles, disguise kits, healer’s kits, poisoner’s kits, navigator’s tools, and other appropriate tool checks.",
+    "- Saving throws: Strength, Dexterity, Constitution, Intelligence, Wisdom, or Charisma saves when the character must resist an external danger, effect, hazard, spell, compulsion, trap, poison, collapse, or supernatural force.",
+    "",
+    "When requesting dice:",
+    "",
+    "- Set `next_input_needed` to `\"dice_results\"`.",
+    "- Include a matching structured entry in `roll_requests`.",
+    "- Use bare dice notation only, such as `\"1d20\"` or `\"3d4\"`. Put bonuses or penalties in `modifier`, never inside `dice`.",
+    "- Target only the player or players who must roll. Use `input_policy: \"only_targeted_players\"` when only specific characters are involved.",
+    "- Do not resolve success, failure, damage, discovery, theft, persuasion, stealth, or any other outcome dependent on that roll until the result is submitted.",
+    "",
+    "- When the roll result is submitted, resolve the consequence clearly and keep the story moving to the next meaningful decision point."
   ];
 
   const rollAdjudicationGuidance = [
@@ -1620,6 +1696,7 @@ export function jobPrompt(
       "- When responding about established written artifact contents, quote, excerpt, summarize, or reason from the stored canonical document text; do not rewrite, reword, expand, shorten, or regenerate it.",
       "- Only add new written artifact text when the player discovers a new page, hidden annotation, translation, cipher result, altered physical document, or a different not-yet-read artifact."
     ].join("\n"),
+    ...highestPriorityNarrationVoice,
     ...inventoryStateGuidance,
   ];
 
@@ -1639,22 +1716,7 @@ export function jobPrompt(
         "",
         "Purpose:",
         "- Run normal gameplay outside tactical combat.",
-        "- Your job is to direct the living scene: establish place, motion, mood, visible characters, immediate tension, and meaningful options.",
-        "",
-        "Scene Construction:",
-        "- Write player-facing narration with concrete sensory detail: sights, sounds, smells, textures, weather, spatial relationships, and small signs of ordinary life.",
-        "- Make scenes feel inhabited. Include people or creatures pursuing their own business, environmental motion, and at least one specific interactable detail when the scene is not already focused on a player action.",
-        "- Use a grounded fantasy-adventure style: vivid, clear, and specific; not purple prose, not generic boxed text, not a summary of lore.",
-        "",
-        "NPC Speech and Cues:",
-        "- Only include NPC speech, whispers, gestures, warnings, or reactions that are physically available from the current staging. If an NPC is elsewhere, narrate what the player can perceive from that location, not convenient dialogue.",
-        "",
-        "Hooks and Pressure:",
-        "- When introducing a hook, reveal it through observable behavior, overheard fragments, physical evidence, pressure, or an NPC need. Do not announce it as a quest.",
-        "- Do not force a single path. Present an immediate situation with multiple plausible approaches: speak, inspect, follow, ignore, prepare, rest, travel, ask around, or act creatively.",
-        "",
-        "Player Agency:",
-        "- Keep player agency intact. Do not state what a player character thinks, feels, says, decides, notices with certainty beyond ordinary perception, or does next unless it directly follows from their submitted action.",
+        "- Your job is to narrate events to the player through their character's point of view.",
         "",
         "Resolution Procedure:",
         "- Resolve simple consequences directly when no roll is needed. If uncertainty, danger, resistance, or meaningful cost matters, request an appropriate roll instead of deciding the uncertain outcome.",
@@ -1669,19 +1731,25 @@ export function jobPrompt(
         "",
         "State Safety:",
         "- Outside combat, do not silently modify HP, inventory, spell slots, conditions, gold, experience, faction standing, or durable world state. Propose state changes only through the structured output fields.",
-        "- For exploration, travel, downtime, and ordinary scene resolution, include inventory patches only when the resolved outcome clearly changes possession, carried equipment, equipped gear, consumables, or currency.",
-        "",
-        "Pacing and Handoff:",
-        "- End with a clear present-tense handoff that invites action, usually by naming what is immediately available or pressing, without listing menu options unless clarity requires it."
+        "- For exploration, travel, downtime, and ordinary scene resolution, include inventory patches only when the resolved outcome clearly changes possession, carried equipment, equipped gear, consumables, or currency."
       ].join("\n"),
-      ...physicalCommunicationGuidance,
       ...playerRollResultOpeningGuidance,
-      ...rollAdjudicationGuidance,
+      ...sceneDirectorRollRequestGuidance,
       ...playerCanonClaimGuidance,
-      ...narrativeQualityBar,
-      ...storytellerVoiceGuidance,
-      "Examples below demonstrate pacing, specificity, agency boundaries, and roll handling. Do not copy their names, locations, weather, NPC roles, scene structure, or exact phrasing. Match their clarity and dramatic discipline, not their content.",
-      ...sceneDirectorExamples
+      [
+        "Player facing ending prompt:",
+        "- End `public_narration` with a clear, natural question inviting the player to choose how to proceed on a separate paragraph.",
+        "",
+        "- The question must fit the immediate scene, pressure, available information, and current stakes. Make it specific to what the character can plausibly do next rather than relying on a generic “What do you do?”",
+        "",
+        "- Use phrasing appropriate to the context, such as:",
+        "- “Do you approach the clerk?”",
+        "- “How would you like to respond to her accusation?”",
+        "- “Will you proceed into the chamber under those conditions?”",
+        "- “What is Garbo’s next move?”",
+        "",
+        "- Do not force the player into listed options. Options are examples of visible possibilities, not a complete menu; always leave room for a creative response."
+      ].join("\n")
     ],
     investigation: [
       [
@@ -1701,7 +1769,6 @@ export function jobPrompt(
         "- Distinguish discovering, seeing, identifying, or learning about an item from taking possession of it. Only add inventory when the character actually takes, receives, pockets, collects, or is handed the item."
       ].join("\n"),
       ...playerRollResultOpeningGuidance,
-      ...storytellerVoiceGuidance
     ],
     npc_dialogue: [
       [
@@ -1828,7 +1895,6 @@ export function jobPrompt(
       ...playerCanonClaimGuidance,
       ...socialRollGuidance,
       ...narrativeQualityBar,
-      ...storytellerVoiceGuidance,
       "Examples below demonstrate NPC motive, voice, social pressure, partial concessions, failed social pressure, and roll-result narration. Do not copy their names, locations, NPC roles, conflicts, scene structure, or exact phrasing. Match their dramatic logic and conversational texture, not their content.",
       ...npcDialogueExamples
     ],
@@ -1843,7 +1909,6 @@ export function jobPrompt(
       ].join("\n"),
       ...physicalCommunicationGuidance,
       ...combatGuidance,
-      ...storytellerVoiceGuidance,
       "Examples below demonstrate combat pacing, visible math, paragraph grouping, turn ownership, roll pauses, and state-safe narration. Do not copy their names, actor keys, enemies, abilities, locations, or exact phrasing. Match their clarity and discipline, not their content.",
       ...combatExamples
     ],
@@ -1874,7 +1939,6 @@ export function jobPrompt(
       ].join("\n"),
       ...rollAdjudicationGuidance,
       ...narrativeQualityBar,
-      ...storytellerVoiceGuidance
     ],
     death_saving_throws: [
       [
@@ -1898,8 +1962,7 @@ export function jobPrompt(
         "Death And Revival Boundary:",
         "- Do not soften death into a temporary setback inside this job. Revival is a separate player choice handled after death.",
         "- Do not include UI button text in public_narration; the website presents Revive your character and Create new Campaign."
-      ].join("\n"),
-      ...storytellerVoiceGuidance
+      ].join("\n")
     ],
     clarification: [
       "Ask one concise clarifying question.",

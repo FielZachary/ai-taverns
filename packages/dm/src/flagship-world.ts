@@ -624,7 +624,6 @@ export function formatEldermereTurnPromptContext(
     "World Context:",
     "World: Eldermere, AI Taverns' flagship anchored high-fantasy setting.",
     "Core premise: Eldermere is built on the ruins of the fallen Second Dominion, an ancient empire whose works still shape roads, mines, cities, monsters, magic, and political borders. About 340 years ago, the Graywake cracked the Wellspring beneath the Dominion, shattered its empire, and began the long divine silence called the Hush. The current age is the Kindling: gods have begun speaking again only through omens, dreams, masks, miracles, and uncertain signs.",
-    "Tone: wondrous, perilous, morally clear but not simple, wry when appropriate.",
     "",
     "Magic:",
     "Wellglass is refined godsblood from the broken Wellspring. It is rare, finite, politically dangerous, and powers the strongest magic, relics, engines, and rituals. Common magic exists, but major miracles, ancient machinery, dungeon phenomena, and empire-scale works should usually involve Wellglass or Second Dominion remnants.",

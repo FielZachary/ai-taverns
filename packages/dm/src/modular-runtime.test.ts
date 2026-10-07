@@ -428,9 +428,10 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(routerPrompt, /death_saving_throws: Choose when a player character is at 0 HP and dying/i);
     assert.match(routerPrompt, /clarification: Choose only when the intended action cannot be adjudicated safely/i);
     assert.doesNotMatch(routerPrompt, new RegExp(removedOpeningJob));
-    assert.match(jobPrompt("scene_director"), /concrete sensory detail/i);
-    assert.match(jobPrompt("scene_director"), /observable behavior/i);
-    assert.match(jobPrompt("scene_director"), /Keep player agency intact/i);
+    assert.match(
+      jobPrompt("scene_director"),
+      /narrate events to the player through their character's point of view/i
+    );
     assert.doesNotMatch(jobPrompt("scene_director"), /Default narration length:/i);
     assert.match(
       jobPrompt("scene_director"),
@@ -458,48 +459,46 @@ describe("modular AI DM runtime contracts", () => {
       "npc_dialogue",
       "combat",
       "rest_mechanics",
-      "death_saving_throws"
+      "death_saving_throws",
+      "clarification"
     ] as const) {
       const prompt = jobPrompt(job);
-      assert.match(prompt, /Storyteller Voice:/);
+      assert.match(prompt, /Highest-Priority Narration Voice:/);
       assert.match(
         prompt,
-        /engaged, expressive human Dungeon Master who is glad to be telling this story/i
+        /energetic, expressive Dungeon Master narrating live to the player/i
       );
       assert.match(
         prompt,
-        /Do not add length merely to create feeling/i
+        /Tell every scene through the player character's close second-person point of view/i
       );
       assert.match(
         prompt,
-        /plainspoken, natural language/i
+        /player action or sensation → visible\/sensory detail → NPC or world reaction/i
       );
       assert.match(
         prompt,
-        /Prefer everyday, spoken vocabulary/i
+        /Do not use poetic, cinematic, or emotionally interpretive narration/i
       );
       assert.match(
         prompt,
-        /Let sentences carry several connected observations when the scene is unfolding/i
+        /not metaphors, inflated fantasy language, modern slang, sarcasm, or meta-commentary/i
       );
-      assert.match(
-        prompt,
-        /Heightened, poetic, funny, blunt, or dramatic language is welcome/i
-      );
-      assert.match(
-        prompt,
-        /Do not state what a player character thinks, feels, intends, or values/i
-      );
+      assert.doesNotMatch(prompt, /Storyteller Voice:/);
     }
-    assert.match(jobPrompt("scene_director"), /pause for dice/i);
-    assert.match(jobPrompt("scene_director"), /next_input_needed to dice_results/i);
-    assert.match(jobPrompt("scene_director"), /structured roll_requests entry/i);
-    assert.match(jobPrompt("scene_director"), /must not resolve success/i);
-    assert.match(jobPrompt("scene_director"), /rich scene hook, no roll/i);
-    assert.match(jobPrompt("scene_director"), /mixed social action plus risky theft roll/i);
-    assert.match(jobPrompt("scene_director"), /failed roll consequence/i);
-    assert.match(jobPrompt("scene_director"), /Do not copy their names/i);
-    assert.match(jobPrompt("scene_director"), /\\n\\nWhat do you do\\?/);
+    assert.match(jobPrompt("scene_director"), /Roll Requests and Uncertain Outcomes:/);
+    assert.match(
+      jobPrompt("scene_director"),
+      /genuinely uncertain outcome with meaningful stakes, risk, opposition, time pressure/i
+    );
+    assert.match(jobPrompt("scene_director"), /Ask for a roll when the situation meaningfully tests a character’s:/);
+    assert.match(jobPrompt("scene_director"), /Use bare dice notation only/i);
+    assert.match(jobPrompt("scene_director"), /Player facing ending prompt:/);
+    assert.match(jobPrompt("scene_director"), /What is Garbo’s next move\?/);
+    assert.doesNotMatch(jobPrompt("scene_director"), /Scene Construction:/);
+    assert.doesNotMatch(jobPrompt("scene_director"), /Pacing and Handoff:/);
+    assert.doesNotMatch(jobPrompt("scene_director"), /Physical Communication Boundary:/);
+    assert.doesNotMatch(jobPrompt("scene_director"), /Example: rich scene hook, no roll/i);
     assert.match(
       jobPrompt("scene_director"),
       /exploration, travel, downtime, and ordinary scene resolution/i
@@ -515,10 +514,6 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(
       jobPrompt("scene_director"),
       /Only include spellSlots changes in mechanics_state_update when the current player submission explicitly casts a known leveled spell/i
-    );
-    assert.doesNotMatch(
-      jobPrompt("scene_director"),
-      /Roll Sleight of Hand:[^"]*\\n\\nWhat do you do\?/
     );
     assert.match(jobPrompt("npc_dialogue"), /Do not make social checks into mind control/i);
     assert.match(jobPrompt("npc_dialogue"), /If a lie contradicts known facts/i);
@@ -1130,7 +1125,7 @@ describe("modular AI DM runtime contracts", () => {
       jobPrompt("combat"),
       /Roll Fireball damage:[^"]*\\n\\nWhat do you do\?/
     );
-    for (const job of ["scene_director", "npc_dialogue", "combat"] as const) {
+    for (const job of ["npc_dialogue", "combat"] as const) {
       const prompt = jobPrompt(job);
       assert.match(prompt, /Physical Communication Boundary:/);
       assert.match(
@@ -1186,7 +1181,7 @@ describe("modular AI DM runtime contracts", () => {
         /With a \[quality adjective\] roll of <clue>\[total\]<\/clue>, here's what happens:/i
       );
     }
-    assert.match(
+    assert.doesNotMatch(
       jobPrompt("scene_director"),
       /Only include NPC speech, whispers, gestures, warnings, or reactions that are physically available from the current staging/i
     );
