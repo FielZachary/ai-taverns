@@ -1819,6 +1819,14 @@ test("solo turns send the current action once outside a four-message provider hi
   const secondProviderInput = getProviderInputs().at(-1);
   assert.ok(secondProviderInput);
   assert.match(secondProviderInput.message, /I mark the trail on my map\./);
+  assert.match(
+    secondProviderInput.message,
+    /Compressed chronological campaign history:/
+  );
+  assert.match(
+    secondProviderInput.message,
+    /latest resolved action changes the immediate situation/i
+  );
   assert.match(secondProviderInput.message, /Inventory possession gate/i);
   assert.match(
     secondProviderInput.message,

@@ -273,6 +273,19 @@ type ContextChunkRecord = {
   updated_at: Date;
 };
 
+type CampaignTurnSummaryRecord = {
+  campaign_id: string;
+  turn_id: string;
+  event_id: string | null;
+  summary: string;
+  entity_keys: unknown;
+  open_thread_keys: unknown;
+  certainty_notes: unknown;
+  token_estimate: number;
+  source_checksum: string;
+  created_at: Date;
+};
+
 type DmTurnTraceRecord = {
   id: string;
   campaign_id: string;
@@ -332,6 +345,7 @@ class FakeDatabase {
   combatEvents: CombatEventRecord[] = [];
   mediaAssets: MediaAssetRecord[] = [];
   contextChunks: ContextChunkRecord[] = [];
+  campaignTurnSummaries: CampaignTurnSummaryRecord[] = [];
   dmTurnTraces: DmTurnTraceRecord[] = [];
   dmModelCalls: DmModelCallRecord[] = [];
   campaignDmGuidance: CampaignDmGuidanceRecord[] = [];
@@ -1247,6 +1261,53 @@ class FakeDatabase {
             [debugKey]: debugValue
           }
         };
+      }
+
+      return { rows: [] as T[] };
+    }
+
+    if (normalizedSql.startsWith("select turn_id, summary, entity_keys, open_thread_keys, certainty_notes, token_estimate, created_at from campaign_turn_summaries")) {
+      const campaignId = values[0] as string;
+      const excludedTurnIds = new Set(values[1] as string[]);
+      const limit = values[2] as number;
+
+      return {
+        rows: this.campaignTurnSummaries
+          .filter(
+            (record) =>
+              record.campaign_id === campaignId &&
+              !excludedTurnIds.has(record.turn_id)
+          )
+          .sort((left, right) => right.created_at.getTime() - left.created_at.getTime())
+          .slice(0, limit)
+          .map((record) => ({ ...record }) as T)
+      };
+    }
+
+    if (normalizedSql.startsWith("insert into campaign_turn_summaries")) {
+      const turnId = values[1] as string;
+      const existing = this.campaignTurnSummaries.find(
+        (record) => record.turn_id === turnId
+      );
+      const parseJson = (value: unknown) =>
+        typeof value === "string" ? JSON.parse(value) : value;
+      const next = {
+        campaign_id: values[0] as string,
+        turn_id: turnId,
+        event_id: (values[2] as string | null) ?? null,
+        summary: values[3] as string,
+        entity_keys: parseJson(values[4]),
+        open_thread_keys: parseJson(values[5]),
+        certainty_notes: parseJson(values[6]),
+        token_estimate: values[7] as number,
+        source_checksum: values[8] as string,
+        created_at: existing?.created_at ?? new Date()
+      } satisfies CampaignTurnSummaryRecord;
+
+      if (existing) {
+        Object.assign(existing, next);
+      } else {
+        this.campaignTurnSummaries.push(next);
       }
 
       return { rows: [] as T[] };
@@ -3023,7 +3084,7 @@ before(async () => {
           const hasHalkaLedgerContext = input.message.includes(
             '"context_id": "world:halkas-ledger"'
           );
-          const content = JSON.stringify(
+          const memoryPayload = (
             shouldCreateCourierLetter && !hasCourierLetterContext
               ? {
                   patches: [],
@@ -3232,6 +3293,16 @@ before(async () => {
                   remove_context_chunks: []
                 }
           );
+          const content = JSON.stringify({
+            ...memoryPayload,
+            turn_summary: {
+              summary:
+                "The party's latest resolved action changes the immediate situation, while its longer consequences remain open.",
+              entity_keys: [],
+              open_thread_keys: [],
+              certainty_notes: []
+            }
+          });
 
           return {
             id: "provider-memory-updater-1",

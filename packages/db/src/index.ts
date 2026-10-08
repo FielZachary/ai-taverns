@@ -818,6 +818,26 @@ type DmPromptContext = {
   routerDebug?: NonNullable<AiDebugInfo["router"]>;
 };
 
+type HistoryGameMessage = GameMessage & {
+  turnId?: string;
+};
+
+type CampaignTurnSummary = {
+  turnId: string;
+  summary: string;
+  entityKeys: string[];
+  openThreadKeys: string[];
+  certaintyNotes: string[];
+  tokenEstimate: number;
+  createdAt: string;
+};
+
+type ValidatedTurnSummary = Omit<CampaignTurnSummary, "turnId" | "createdAt">;
+
+const campaignTurnSummaryCandidateLimit = 200;
+const campaignTurnSummaryHistoryMaxChars = 40_000;
+const campaignTurnSummaryMaxChars = 600;
+
 const dungeonMasterContractInstructions = [
   "You are the AI Taverns DnD Dungeon Master.",
   "Return exactly one valid JSON object. Do not use Markdown outside the JSON object or Markdown emphasis inside public_narration strings.",
@@ -6336,6 +6356,197 @@ async function retrieveSelectedContextChunks(
   return { chunks, omitted };
 }
 
+function stringArray(value: unknown, maxItems = 20, maxItemLength = 120) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return [...new Set(
+    value
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0 && item.length <= maxItemLength)
+  )].slice(0, maxItems);
+}
+
+function estimateTokens(value: string) {
+  return Math.max(1, Math.ceil(value.length / 4));
+}
+
+function validateTurnSummary(value: unknown): ValidatedTurnSummary | null {
+  const payload = eventPayload(value);
+  const summary = typeof payload.summary === "string" ? payload.summary.trim() : "";
+
+  if (!summary || summary.length > campaignTurnSummaryMaxChars) {
+    return null;
+  }
+
+  return {
+    summary,
+    entityKeys: stringArray(payload.entity_keys ?? payload.entityKeys),
+    openThreadKeys: stringArray(
+      payload.open_thread_keys ?? payload.openThreadKeys
+    ),
+    certaintyNotes: stringArray(
+      payload.certainty_notes ?? payload.certaintyNotes,
+      10,
+      240
+    ),
+    tokenEstimate: estimateTokens(summary)
+  };
+}
+
+function fallbackTurnSummary(input: {
+  currentAction: string;
+  dmResponse: string;
+}): ValidatedTurnSummary {
+  const compact = (value: string, maxChars: number) =>
+    value.replace(/\s+/g, " ").trim().slice(0, maxChars);
+  const summary = compact(
+    `Player action: ${compact(input.currentAction, 200)} Outcome: ${compact(input.dmResponse, 320)}`,
+    campaignTurnSummaryMaxChars
+  );
+
+  return {
+    summary,
+    entityKeys: [],
+    openThreadKeys: [],
+    certaintyNotes: [],
+    tokenEstimate: estimateTokens(summary)
+  };
+}
+
+async function upsertCampaignTurnSummary(
+  db: Queryable,
+  input: {
+    campaignId: string;
+    turnId: string;
+    eventId?: string | undefined;
+    currentAction: string;
+    dmResponse: string;
+    summary: ValidatedTurnSummary;
+  }
+) {
+  const sourceChecksum = createHash("sha256")
+    .update(`${input.currentAction}\n\n${input.dmResponse}`)
+    .digest("hex");
+
+  await bestEffortRuntimeInsert(
+    db,
+    `
+      insert into campaign_turn_summaries (
+        campaign_id,
+        turn_id,
+        event_id,
+        summary,
+        entity_keys,
+        open_thread_keys,
+        certainty_notes,
+        token_estimate,
+        source_checksum
+      )
+      values ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8, $9)
+      on conflict (turn_id) do update
+      set event_id = excluded.event_id,
+          summary = excluded.summary,
+          entity_keys = excluded.entity_keys,
+          open_thread_keys = excluded.open_thread_keys,
+          certainty_notes = excluded.certainty_notes,
+          token_estimate = excluded.token_estimate,
+          source_checksum = excluded.source_checksum,
+          updated_at = now()
+      where campaign_turn_summaries.source_checksum is distinct from excluded.source_checksum
+        or campaign_turn_summaries.summary is distinct from excluded.summary
+    `,
+    [
+      input.campaignId,
+      input.turnId,
+      input.eventId ?? null,
+      input.summary.summary,
+      JSON.stringify(input.summary.entityKeys),
+      JSON.stringify(input.summary.openThreadKeys),
+      JSON.stringify(input.summary.certaintyNotes),
+      input.summary.tokenEstimate,
+      sourceChecksum
+    ]
+  );
+}
+
+async function listCampaignTurnSummaryHistory(
+  db: Queryable,
+  campaignId: string,
+  excludedTurnIds: string[]
+) {
+  try {
+    const result = await db.query<Record<string, unknown>>(
+      `
+        select
+          turn_id,
+          summary,
+          entity_keys,
+          open_thread_keys,
+          certainty_notes,
+          token_estimate,
+          created_at
+        from campaign_turn_summaries
+        where campaign_id = $1
+          and not (turn_id = any($2::uuid[]))
+        order by created_at desc
+        limit $3
+      `,
+      [campaignId, excludedTurnIds, campaignTurnSummaryCandidateLimit]
+    );
+    const summaries: CampaignTurnSummary[] = [];
+    let usedChars = 0;
+
+    for (const row of result.rows) {
+      const summary = String(row.summary ?? "").trim();
+      const nextChars = usedChars + summary.length;
+
+      if (!summary || nextChars > campaignTurnSummaryHistoryMaxChars) {
+        continue;
+      }
+
+      usedChars = nextChars;
+      summaries.push({
+        turnId: String(row.turn_id ?? ""),
+        summary,
+        entityKeys: stringArray(row.entity_keys),
+        openThreadKeys: stringArray(row.open_thread_keys),
+        certaintyNotes: stringArray(row.certainty_notes, 10, 240),
+        tokenEstimate:
+          typeof row.token_estimate === "number"
+            ? row.token_estimate
+            : estimateTokens(summary),
+        createdAt: row.created_at ? toIso(row.created_at as Date | string) : nowIso()
+      });
+    }
+
+    return summaries.reverse();
+  } catch (error) {
+    if (!isMissingRuntimeTableError(error)) {
+      throw error;
+    }
+
+    return [] as CampaignTurnSummary[];
+  }
+}
+
+function formatCampaignTurnSummaryHistory(summaries: CampaignTurnSummary[]) {
+  if (summaries.length === 0) {
+    return "No compressed turn summaries are available yet.";
+  }
+
+  return summaries
+    .map((entry) => {
+      const notes = entry.certaintyNotes.length
+        ? ` Uncertainty: ${entry.certaintyNotes.join("; ")}`
+        : "";
+      return `- [${entry.turnId}] ${entry.summary}${notes}`;
+    })
+    .join("\n");
+}
+
 function mechanicsActorsForValidation(campaign: Pick<CampaignRow, "metadata">) {
   return Object.fromEntries(
     Object.entries(resolveMechanicsState(campaign, []).actors).map(([key, actor]) => {
@@ -6820,7 +7031,7 @@ async function buildModularDmPromptContext(
     turnId?: string | undefined;
     currentAction: string;
     baseInstructions: string;
-    history: GameMessage[];
+    history: HistoryGameMessage[];
     model?: AiModelId;
   }
 ): Promise<DmPromptContext> {
@@ -6895,6 +7106,13 @@ async function buildModularDmPromptContext(
   });
 
   const context = await retrieveSelectedContextChunks(db, campaign.id, router);
+  const summaryHistory = await listCampaignTurnSummaryHistory(
+    db,
+    campaign.id,
+    input.history
+      .map((message) => message.turnId)
+      .filter((turnId): turnId is string => Boolean(turnId))
+  );
 
   await logDmContextSnapshot(db, {
     campaignId: campaign.id,
@@ -6923,6 +7141,9 @@ async function buildModularDmPromptContext(
       "Selected context chunks:",
       renderContextChunks(context.chunks),
       "",
+      "Compressed chronological campaign history:",
+      formatCampaignTurnSummaryHistory(summaryHistory),
+      "",
       "Current campaign DM guidance:",
       formatDmGuidance(dmGuidance),
       "",
@@ -6946,6 +7167,16 @@ async function buildModularDmPromptContext(
         omittedContextKeys: context.omitted
       },
       {
+        kind: "compressed_turn_history",
+        summaryCount: summaryHistory.length,
+        oldestTurnId: summaryHistory[0]?.turnId,
+        newestTurnId: summaryHistory.at(-1)?.turnId,
+        tokenEstimate: summaryHistory.reduce(
+          (total, entry) => total + entry.tokenEstimate,
+          0
+        )
+      },
+      {
         kind: "dm_guidance",
         guidance: dmGuidance
       }
@@ -6954,6 +7185,14 @@ async function buildModularDmPromptContext(
       maxContextChars: 24000,
       includedContextChars: context.chunks.reduce(
         (total, chunk) => total + chunk.bodyMarkdown.length,
+        0
+      ),
+      compressedHistoryChars: summaryHistory.reduce(
+        (total, entry) => total + entry.summary.length,
+        0
+      ),
+      compressedHistoryTokenEstimate: summaryHistory.reduce(
+        (total, entry) => total + entry.tokenEstimate,
         0
       )
     },
@@ -8702,6 +8941,9 @@ export async function runModularPostTurnContextJobs(
     });
 
     const parsed = parseJsonRecord(providerData.content);
+    const turnSummary =
+      validateTurnSummary(parsed?.turn_summary ?? parsed?.turnSummary) ??
+      fallbackTurnSummary(input);
     const proposedPatches = [
       ...(Array.isArray(parsed?.patches) ? parsed.patches : []),
       ...(Array.isArray(parsed?.new_context_chunks)
@@ -8733,6 +8975,15 @@ export async function runModularPostTurnContextJobs(
       input.campaignId,
       validation.accepted
     );
+
+    await upsertCampaignTurnSummary(db, {
+      campaignId: input.campaignId,
+      turnId: input.turnId,
+      ...(input.dmEventId ? { eventId: input.dmEventId } : {}),
+      currentAction: input.currentAction,
+      dmResponse: input.dmResponse,
+      summary: turnSummary
+    });
 
     const contextStorageState = await retrieveCampaignContextStorageState(
       db,
@@ -8771,10 +9022,24 @@ export async function runModularPostTurnContextJobs(
         proposedPatches,
         acceptedPatches: validation.accepted,
         discardedPatches: validation.discarded,
+        turnSummary,
         durationMs: Date.now() - startedAt
       }
     });
   } catch (error) {
+    try {
+      await upsertCampaignTurnSummary(db, {
+        campaignId: input.campaignId,
+        turnId: input.turnId,
+        ...(input.dmEventId ? { eventId: input.dmEventId } : {}),
+        currentAction: input.currentAction,
+        dmResponse: input.dmResponse,
+        summary: fallbackTurnSummary(input)
+      });
+    } catch {
+      // Preserve the original updater failure in the patch log below.
+    }
+
     await logDmMemoryPatchLog(db, {
       campaignId: input.campaignId,
       traceId,
@@ -11151,7 +11416,7 @@ async function getCampaignEventMessages(
   campaignId: string,
   limit = 30,
   excludeTurnId?: string
-): Promise<GameMessage[]> {
+): Promise<HistoryGameMessage[]> {
   const events = await db.query<EventRow>(
     `
       select id, type, payload, created_at
@@ -11202,7 +11467,7 @@ async function getCampaignEventMessages(
   );
 
   return events.rows
-    .map((event): GameMessage | null => {
+    .map((event): HistoryGameMessage | null => {
       const payload = eventPayload(event.payload);
       const content = typeof payload.content === "string" ? payload.content : "";
       const eventTurnId = typeof payload.turnId === "string" ? payload.turnId : "";
@@ -11234,6 +11499,7 @@ async function getCampaignEventMessages(
               : "turn",
         content,
         createdAt: toIso(event.created_at),
+        ...(eventTurnId ? { turnId: eventTurnId } : {}),
         ...(typeof payload.username === "string"
           ? { playerName: payload.username }
           : {}),
@@ -11243,7 +11509,7 @@ async function getCampaignEventMessages(
         ...(setting ? { setting } : {})
       };
     })
-    .filter((message): message is GameMessage => message !== null);
+    .filter((message): message is HistoryGameMessage => message !== null);
 }
 
 const mainDmHistoryMessageLimit = 4;

@@ -1293,6 +1293,9 @@ describe("modular AI DM runtime contracts", () => {
       assert.match(prompt, /new page, hidden annotation, translation, cipher result/i);
     }
     assert.match(buildMemoryUpdaterPrompt(), /Allowed operations/);
+    assert.match(buildMemoryUpdaterPrompt(), /turn_summary is required/i);
+    assert.match(buildMemoryUpdaterPrompt(), /entity_keys, open_thread_keys, and certainty_notes/i);
+    assert.match(buildMemoryUpdaterPrompt(), /Never turn a player claim, lie, guess/i);
     assert.match(buildMemoryUpdaterPrompt(), /rename_chunk/);
     assert.match(buildMemoryUpdaterPrompt(), /merge_chunk/);
     assert.match(buildMemoryUpdaterPrompt(), /Create a new NPC card/i);

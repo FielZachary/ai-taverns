@@ -2026,7 +2026,11 @@ export function buildMemoryUpdaterPrompt() {
   return [
     "You are the AI Taverns memory/context updater.",
     "Propose sparse patches after the player-facing turn has resolved.",
-    "Return strict JSON with patches, new_context_chunks, and remove_context_chunks.",
+    "Return strict JSON with turn_summary, patches, new_context_chunks, and remove_context_chunks.",
+    "turn_summary is required. Summarize this resolved turn (the player action plus accepted narration) in 40-60 tokens for chronological campaign history.",
+    "turn_summary must have summary, entity_keys, open_thread_keys, and certainty_notes. Use short stable context ids such as npc:captain-vael or thread:black-key when known; otherwise use empty arrays.",
+    "The summary records concrete outcomes and unresolved questions. Never turn a player claim, lie, guess, or attempted action into an established fact. Put uncertainty explicitly in certainty_notes, for example: 'Unverified: the party claims the guard sent them.'",
+    "Do not include hidden truths, private reasoning, or unrevealed NPC names in turn_summary.",
     "Allowed operations: append, replace_section, create_chunk, archive_chunk, rename_chunk, merge_chunk.",
     "Do not rewrite whole campaign memory or treat minor narration as durable memory.",
     "Treat campaign context as a living world bible for the AI DM. Your job is not only to record facts; it is also to maintain compelling, reusable story material that helps the DM make the world feel coherent and alive.",
@@ -2165,6 +2169,13 @@ export function buildMemoryUpdaterPrompt() {
     "Example proactive world/story response:",
     JSON.stringify(
       {
+        turn_summary: {
+          summary:
+            "The party touched the amber sphere beneath the grove, and amber light pulsed through the root chamber. The sphere's purpose remains unknown.",
+          entity_keys: ["world:amber-sphere"],
+          open_thread_keys: ["thread:the-amber-sphere"],
+          certainty_notes: []
+        },
         patches: [],
         new_context_chunks: [
           {
