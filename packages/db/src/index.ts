@@ -11246,6 +11246,9 @@ async function getCampaignEventMessages(
     .filter((message): message is GameMessage => message !== null);
 }
 
+const mainDmHistoryMessageLimit = 4;
+const mainDmHistoryEventFetchLimit = mainDmHistoryMessageLimit + 1;
+
 async function askDungeonMaster(
   db: Queryable,
   runtime: DungeonMasterRuntime,
@@ -11303,7 +11306,14 @@ async function askDungeonMaster(
 
   try {
     const history = includeHistory
-      ? await getCampaignEventMessages(db, campaign.id, 30, turnId)
+      ? (
+          await getCampaignEventMessages(
+            db,
+            campaign.id,
+            mainDmHistoryEventFetchLimit,
+            turnId
+          )
+        ).slice(-mainDmHistoryMessageLimit)
       : [];
     const promptContext = shouldBuildPromptContext
       ? runtime.buildPromptContext

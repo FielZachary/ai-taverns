@@ -1754,7 +1754,7 @@ test("solo combat catches up NPC turns instead of rejecting the player", async (
   assert.equal(secondCombatState?.actors?.[playerActorKey]?.currentHp, 12);
 });
 
-test("solo turns send the current action once outside provider history", async () => {
+test("solo turns send the current action once outside a four-message provider history window", async () => {
   const { cookie, campaignId } = await createSinglePlayerCampaign(
     "dm-runtime-current-action-history"
   );
@@ -1788,9 +1788,37 @@ test("solo turns send the current action once outside provider history", async (
 
   assert.equal(secondResponse.statusCode, 200, secondResponse.body);
 
+  const thirdResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "I inspect the stones beside the trail.",
+      clientMessageId: "history-third-action"
+    }
+  });
+
+  assert.equal(thirdResponse.statusCode, 200, thirdResponse.body);
+
+  const fourthResponse = await app.inject({
+    method: "POST",
+    url: `/api/campaigns/${campaignId}/solo-turn`,
+    headers: {
+      cookie
+    },
+    payload: {
+      message: "I mark the trail on my map.",
+      clientMessageId: "history-fourth-action"
+    }
+  });
+
+  assert.equal(fourthResponse.statusCode, 200, fourthResponse.body);
+
   const secondProviderInput = getProviderInputs().at(-1);
   assert.ok(secondProviderInput);
-  assert.match(secondProviderInput.message, /I follow the clearest trail\./);
+  assert.match(secondProviderInput.message, /I mark the trail on my map\./);
   assert.match(secondProviderInput.message, /Inventory possession gate/i);
   assert.match(
     secondProviderInput.message,
@@ -1802,13 +1830,22 @@ test("solo turns send the current action once outside provider history", async (
   );
   assert.doesNotMatch(
     secondProviderInput.history.map((message) => message.content).join("\n"),
-    /I follow the clearest trail\./
+    /I mark the trail on my map\./
+  );
+  assert.equal(secondProviderInput.history.length, 4);
+  assert.equal(
+    secondProviderInput.history.filter((message) => message.role === "player").length,
+    2
+  );
+  assert.equal(
+    secondProviderInput.history.filter((message) => message.role === "dm").length,
+    2
   );
   assert.ok(
     secondProviderInput.history.some(
       (message) =>
         message.role === "player" &&
-        message.content === "I check the old road for tracks."
+        message.content === "I follow the clearest trail."
     )
   );
 });
