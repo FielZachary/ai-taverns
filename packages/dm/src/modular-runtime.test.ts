@@ -522,6 +522,11 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(npcDialoguePrompt, /Apply the social state in this order/i);
     assert.match(npcDialoguePrompt, /Player-specific ## Disposition Toward Players entry/i);
     assert.match(npcDialoguePrompt, /not whether they must advance the story/i);
+    assert.match(npcDialoguePrompt, /NPC Expressions and Punctuation/i);
+    assert.match(npcDialoguePrompt, /By my blade!/i);
+    assert.match(npcDialoguePrompt, /Use punctuation as part of performance/i);
+    assert.match(npcDialoguePrompt, /genuine disbelief or emotional collision/i);
+    assert.match(npcDialoguePrompt, /Do not make every NPC theatrical, shouty, or melodramatic/i);
     assert.match(npcDialoguePrompt, /NPC Dialogue Roll Requests and Uncertain Outcomes/i);
     assert.match(npcDialoguePrompt, /Deception \(Charisma\)/i);
     assert.match(npcDialoguePrompt, /Persuasion \(Charisma\)/i);
