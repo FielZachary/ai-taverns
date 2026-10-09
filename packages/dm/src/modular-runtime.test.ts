@@ -1148,6 +1148,11 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(buildMemoryUpdaterPrompt(), /previously known by description, title, disguise, role, or uncertainty/i);
     assert.match(buildMemoryUpdaterPrompt(), /Make each NPC feel like a compelling character/i);
     assert.match(buildMemoryUpdaterPrompt(), /NPC Social Temperament/i);
+    assert.match(buildMemoryUpdaterPrompt(), /Cast Variety:/i);
+    assert.match(
+      buildMemoryUpdaterPrompt(),
+      /varied human cast rather than interchangeable serious, dramatic, pragmatic pressure-machines/i
+    );
     assert.match(
       buildMemoryUpdaterPrompt(),
       /Default stance toward unfamiliar people/i
@@ -1164,6 +1169,14 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(
       buildMemoryUpdaterPrompt(),
       /in_love is a present feeling/i
+    );
+    assert.match(
+      buildMemoryUpdaterPrompt(),
+      /No player-specific disposition established/i
+    );
+    assert.match(
+      buildMemoryUpdaterPrompt(),
+      /the player has not met, still choose a concrete Social Temperament/i
     );
     assert.match(buildMemoryUpdaterPrompt(), /Never infer gender or pronouns/i);
     assert.match(buildMemoryUpdaterPrompt(), /neutral wording until play establishes pronouns/i);

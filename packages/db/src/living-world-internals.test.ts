@@ -116,6 +116,11 @@ test("foundation compiler prompt shares alias-aware NPC identity contract", () =
   assert.match(prompt, /merge_chunk/);
   assert.match(prompt, /Aliases \/ Former Labels/);
   assert.match(prompt, /instead of creating a second NPC card/i);
+  assert.match(prompt, /complete person even when the player has not met them/i);
+  assert.match(prompt, /Do not use Unknown merely because the player has not met the NPC/i);
+  assert.match(prompt, /No player-specific disposition established/i);
+  assert.match(prompt, /Do not create a stranger\/Unknown entry/i);
+  assert.match(prompt, /varied cast/i);
 });
 
 test("router context index includes compact NPC identity preview", async () => {
