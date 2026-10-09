@@ -516,26 +516,11 @@ describe("modular AI DM runtime contracts", () => {
       /Only include spellSlots changes in mechanics_state_update when the current player submission explicitly casts a known leveled spell/i
     );
     assert.match(jobPrompt("npc_dialogue"), /Do not make social checks into mind control/i);
-    assert.match(jobPrompt("npc_dialogue"), /NPC Dialogue Roll Requests and Uncertain Outcomes:/);
+    assert.match(jobPrompt("npc_dialogue"), /NPCs are not quest-delivery systems/i);
+    assert.match(jobPrompt("npc_dialogue"), /Social Temperament/i);
     assert.match(
       jobPrompt("npc_dialogue"),
-      /genuinely uncertain outcome with meaningful social stakes, resistance, suspicion, leverage/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /Before requesting a social roll:/
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /Charisma: Deception for lies, disguises, false identities/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /Wisdom: Insight for reading a speaker's motives, sincerity, evasions/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /Do not resolve whether the NPC believes, trusts, fears, yields, reveals information/i
+      /Do not assume every NPC has useful information to offer/i
     );
     assert.match(jobPrompt("npc_dialogue"), /If a lie contradicts known facts/i);
     assert.match(jobPrompt("npc_dialogue"), /very high Deception against a known contradiction/i);
@@ -578,7 +563,7 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("npc_dialogue"),
-      /specific conversational engine/i
+      /Do not assume they want something from the player/i
     );
     assert.match(
       jobPrompt("npc_dialogue"),
@@ -603,7 +588,7 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("npc_dialogue"),
-      /shortest believable line that advances the NPC's immediate aim/i
+      /shortest believable line that fits the NPC's immediate state/i
     );
     assert.match(
       jobPrompt("npc_dialogue"),
@@ -709,7 +694,7 @@ describe("modular AI DM runtime contracts", () => {
     );
     assert.match(
       jobPrompt("npc_dialogue"),
-      /Prefer one meaningful reveal plus a new question, demand, cost, refusal, or lead/i
+      /An NPC may be uninformed, mistaken, uninterested, or unwilling to involve themself/i
     );
     assert.match(
       jobPrompt("npc_dialogue"),
@@ -1326,7 +1311,24 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(buildMemoryUpdaterPrompt(), /do not create a second NPC card/i);
     assert.match(buildMemoryUpdaterPrompt(), /previously known by description, title, disguise, role, or uncertainty/i);
     assert.match(buildMemoryUpdaterPrompt(), /Make each NPC feel like a compelling character/i);
-    assert.match(buildMemoryUpdaterPrompt(), /## Disposition Towards You/);
+    assert.match(buildMemoryUpdaterPrompt(), /NPC Social Temperament/i);
+    assert.match(
+      buildMemoryUpdaterPrompt(),
+      /Default stance toward unfamiliar people/i
+    );
+    assert.match(buildMemoryUpdaterPrompt(), /## Disposition Toward Players/);
+    assert.match(
+      buildMemoryUpdaterPrompt(),
+      /not one party-wide label/i
+    );
+    assert.match(
+      buildMemoryUpdaterPrompt(),
+      /Do not create a player entry merely because an NPC exists/i
+    );
+    assert.match(
+      buildMemoryUpdaterPrompt(),
+      /in_love is a present feeling/i
+    );
     assert.match(buildMemoryUpdaterPrompt(), /Never infer gender or pronouns/i);
     assert.match(buildMemoryUpdaterPrompt(), /neutral wording until play establishes pronouns/i);
     assert.match(buildMemoryUpdaterPrompt(), /do not silently normalize the conflict/i);
