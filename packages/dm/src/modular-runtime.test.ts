@@ -515,192 +515,28 @@ describe("modular AI DM runtime contracts", () => {
       jobPrompt("scene_director"),
       /Only include spellSlots changes in mechanics_state_update when the current player submission explicitly casts a known leveled spell/i
     );
-    assert.match(jobPrompt("npc_dialogue"), /Do not make social checks into mind control/i);
-    assert.match(jobPrompt("npc_dialogue"), /NPCs are not quest-delivery systems/i);
-    assert.match(jobPrompt("npc_dialogue"), /Social Temperament/i);
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /Do not assume every NPC has useful information to offer/i
-    );
-    assert.match(jobPrompt("npc_dialogue"), /If a lie contradicts known facts/i);
-    assert.match(jobPrompt("npc_dialogue"), /very high Deception against a known contradiction/i);
-    assert.match(jobPrompt("npc_dialogue"), /Persuasion partial success/i);
-    assert.match(jobPrompt("npc_dialogue"), /failed Intimidation/i);
-    assert.match(jobPrompt("npc_dialogue"), /conversational texture/i);
-    assert.match(jobPrompt("npc_dialogue"), /NPC knowledge is local, not omniscient/i);
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /concrete path by which they know it/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /DM staging material is for pacing, foreshadowing, pressure, clue placement, and contradiction checks/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /not automatically known by any NPC/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /When the player challenges how an NPC knows something/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /Treat player statements as attempted character speech\/action, not automatic world truth/i
-    );
-    assert.match(jobPrompt("npc_dialogue"), /NPC Identity Reveal/i);
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /internal name is not automatically known by the player character/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /Do not leak internal names through narration tags/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /NPC Voice and Dramatic Presence/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /Do not assume they want something from the player/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /choose at least two voice markers/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /Avoid generic dialogue tags and descriptions/i
-    );
-    assert.match(jobPrompt("npc_dialogue"), /Distinctive and Colorful Voices/i);
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /flat, overly terse, or melodramatic fantasy-DM default/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /Do not make short, clipped speech the default voice/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /Natural Dialogue and Conversation Progression/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /shortest believable line that fits the NPC's immediate state/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /Do not manufacture a dramatic ultimatum/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /do not request a generic social roll or present a menu of approaches or skills/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /Do not end by summarizing every faction's stance/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /Treat the immediately previous DM response as already dramatized/i
-    );
-    assert.match(jobPrompt("npc_dialogue"), /Using Stored Voice Profiles/i);
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /use it as performance guidance/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /do not force every listed behavior into every line/i
-    );
-    assert.match(jobPrompt("npc_dialogue"), /Dialogue and Emotional Beats/i);
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /Weave NPC speech, visible action, interruption, reaction, expression, vocal tone, and environmental detail together beat by beat/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /Weave visible and audible emotional detail into the exchange/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /frame it as an inference rather than fact/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /Avoid generic emotional labels without an observable cue/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /new authority, contact, employer, superior, relative, old friend, order, warrant, permit, badge, property right, secret password, or prior arrangement/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /request Deception by default before the NPC yields, lowers guard, gives access, hands over information, or changes official behavior/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /leverage is genuinely unclear, do not request a generic social roll or present a menu of approaches or skills/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /Are you speaking for someone, or only for yourself/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /"roll_requests": \[\][\s\S]*"next_input_needed": "player_actions"/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /Do not let the NPC become wavering, convinced, compliant, or newly informative before the requested roll is submitted/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /If an NPC has asked for the same substantive truth, confession, proof, or explanation once/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /do not have the NPC ask the same question a third time/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /On the second consistent answer, choose one decisive path/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /When uncertainty matters and the player's leverage is clear/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /state the success DC in public_narration before the roll and include the same target_dc in roll_requests/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /If you roll 13 or higher, that is enough to convince Manifold/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /A social roll must settle the immediate social question/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /Failure should create a new state: confinement, confiscation, escort, alarm, threat, price, lost trust, or a harder bargain/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /False identity, false authority, name-dropping, claimed orders, claimed employment, and impersonation almost always matter/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /An NPC may be uninformed, mistaken, uninterested, or unwilling to involve themself/i
-    );
-    assert.match(
-      jobPrompt("npc_dialogue"),
-      /validate that the acting character actually has the offered object before the NPC sees, touches, evaluates, accepts, refuses, or comments on it/i
-    );
-    assert.match(jobPrompt("npc_dialogue"), /bargaining, gifting, payment/i);
+    const npcDialoguePrompt = jobPrompt("npc_dialogue");
+    assert.match(npcDialoguePrompt, /naturally social beings/i);
+    assert.match(npcDialoguePrompt, /ordinary social life/i);
+    assert.match(npcDialoguePrompt, /Do not manufacture a hidden motive beneath ordinary sociability/i);
+    assert.match(npcDialoguePrompt, /Apply the social state in this order/i);
+    assert.match(npcDialoguePrompt, /Player-specific ## Disposition Toward Players entry/i);
+    assert.match(npcDialoguePrompt, /not whether they must advance the story/i);
+    assert.match(npcDialoguePrompt, /NPC Dialogue Roll Requests and Uncertain Outcomes/i);
+    assert.match(npcDialoguePrompt, /Deception \(Charisma\)/i);
+    assert.match(npcDialoguePrompt, /Persuasion \(Charisma\)/i);
+    assert.match(npcDialoguePrompt, /Intimidation \(Charisma\)/i);
+    assert.match(npcDialoguePrompt, /Performance \(Charisma\)/i);
+    assert.match(npcDialoguePrompt, /Insight \(Wisdom\)/i);
+    assert.match(npcDialoguePrompt, /Use bare dice notation only/i);
+    assert.match(npcDialoguePrompt, /Resolving Social Dice/i);
+    assert.match(npcDialoguePrompt, /Player facing ending prompt/i);
+    assert.match(npcDialoguePrompt, /clear, natural question inviting the player/i);
+    assert.doesNotMatch(npcDialoguePrompt, /Before Any NPC Answers/i);
+    assert.doesNotMatch(npcDialoguePrompt, /Information Economy/i);
+    assert.doesNotMatch(npcDialoguePrompt, /Social Impasse Rule/i);
+    assert.doesNotMatch(npcDialoguePrompt, /very high Deception against a known contradiction/i);
+    assert.doesNotMatch(npcDialoguePrompt, /Examples below demonstrate NPC motive/i);
     assert.match(
       jobPrompt("scene_director"),
       /Do not create new canon from a lie by having an NPC supply confirming lore/i
