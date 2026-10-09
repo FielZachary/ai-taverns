@@ -516,6 +516,27 @@ describe("modular AI DM runtime contracts", () => {
       /Only include spellSlots changes in mechanics_state_update when the current player submission explicitly casts a known leveled spell/i
     );
     assert.match(jobPrompt("npc_dialogue"), /Do not make social checks into mind control/i);
+    assert.match(jobPrompt("npc_dialogue"), /NPC Dialogue Roll Requests and Uncertain Outcomes:/);
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /genuinely uncertain outcome with meaningful social stakes, resistance, suspicion, leverage/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /Before requesting a social roll:/
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /Charisma: Deception for lies, disguises, false identities/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /Wisdom: Insight for reading a speaker's motives, sincerity, evasions/i
+    );
+    assert.match(
+      jobPrompt("npc_dialogue"),
+      /Do not resolve whether the NPC believes, trusts, fears, yields, reveals information/i
+    );
     assert.match(jobPrompt("npc_dialogue"), /If a lie contradicts known facts/i);
     assert.match(jobPrompt("npc_dialogue"), /very high Deception against a known contradiction/i);
     assert.match(jobPrompt("npc_dialogue"), /Persuasion partial success/i);
