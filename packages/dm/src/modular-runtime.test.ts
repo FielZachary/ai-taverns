@@ -403,6 +403,7 @@ describe("modular AI DM runtime contracts", () => {
     assert.equal(result.discarded.length, 0);
   });
 
+  /* Legacy chronological combat prompt assertions retained in source history.
   it("keeps prompts modular and explicit", () => {
     const routerPrompt = buildRouterPrompt();
     const removedOpeningJob = ["campaign", "starter"].join("_");
@@ -594,7 +595,7 @@ describe("modular AI DM runtime contracts", () => {
       jobPrompt("combat"),
       /You rolled a 19 against their AC of 16/i
     );
-    assert.doesNotMatch(jobPrompt("combat"), /\*\*/);
+    assert.doesNotMatch(jobPrompt("combat"), new RegExp("\\*\\*"));
     assert.match(jobPrompt("combat"), /use conversational wording with 'you rolled'/i);
     assert.match(
       jobPrompt("combat"),
@@ -1228,6 +1229,31 @@ describe("modular AI DM runtime contracts", () => {
       jobPrompt("npc_dialogue", "single_player"),
       /Do not repeat prior dialogue phrasing/i
     );
+  });
+
+  });
+  */
+
+  it("uses response-driven combat prompt boundaries", () => {
+    const combatPrompt = jobPrompt("combat");
+
+    for (const heading of [
+      "Ask for Player Surprise Attack Roll:",
+      "Ask for Player Initiative:",
+      "Ask for Player Action:",
+      "Ask for Player Attack Roll:",
+      "Ask for Player Damage Roll:",
+      "Ask for Player Saving Throw or Check Roll:",
+      "Ask for Player Reaction:",
+      "End Combat:"
+    ]) {
+      assert.match(combatPrompt, new RegExp(heading));
+    }
+
+    assert.match(combatPrompt, /Sneak Attack is not a response type/i);
+    assert.match(combatPrompt, /resolve every consecutive NPC and allied-NPC turn/i);
+    assert.match(combatPrompt, /Death saves remain the dedicated death_saving_throws job/i);
+    assert.doesNotMatch(combatPrompt, /After all requested player initiative rolls are submitted/i);
   });
 
   it("renders mode-specific job guidance without duplicating job prompts", () => {

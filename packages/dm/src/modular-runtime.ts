@@ -708,6 +708,7 @@ export function jobPrompt(
     ].join("\n")
   ];
 
+  /* Legacy chronological combat guidance retained in source history; replaced by the response-driven guidance below.
   const combatGuidance = [
     "Run tactical combat encounters with strict turn ownership, visible rolls, explicit state changes, and vivid action narration.",
     "Combat narration must never get ahead of combat state: if a roll, turn owner, initiative order, HP change, condition, resource use, or enemy defeat is unresolved, pause or encode it structurally instead of implying it only in prose.",
@@ -824,6 +825,63 @@ export function jobPrompt(
     "End every resolved combat beat with a clear handoff: whose turn or what immediate pressure remains, then 'What do you do?' on its own line when awaiting player action.",
     "Do not include 'What do you do?' in public_narration when the response is requesting dice with next_input_needed dice_results."
   ];
+  */
+
+  const combatGuidance = [
+    "Run tactical combat encounters with strict turn ownership, visible rolls, explicit state changes, and vivid action narration.",
+    "Combat narration must never get ahead of combat state: if a roll, turn owner, initiative order, HP change, condition, resource use, or enemy defeat is unresolved, pause or encode it structurally instead of implying it only in prose.",
+    "Response-driven procedure:",
+    "- Select exactly one response type for the current response: Ask for Player Surprise Attack Roll; Ask for Player Initiative; Ask for Player Action; Ask for Player Attack Roll; Ask for Player Damage Roll; Ask for Player Saving Throw or Check Roll; Ask for Player Reaction; End Combat.",
+    "- Before returning that response, resolve every combat event needed to reach it. Do not describe what happens after the requested player input is supplied; that later situation is evaluated from authoritative state on a new DM call.",
+    "- Do not stop merely to announce an NPC turn, resolve an NPC save, resolve Sneak Attack, apply damage, or advance initiative. Complete those internal mechanics before selecting the player input that is actually required.",
+    "Authoritative state:",
+    "- Combat context and mechanicsState are authoritative. Conversation history is evidence, not state.",
+    "- Never silently modify HP, resources, conditions, initiative, spell slots, inventory, death saves, concentration, or combat status only in prose. Use mechanics_state_update for canonical mechanics changes and combat_events for traceable events.",
+    "- HP cannot go below 0. Use known actor keys. Do not include passive bystanders, scenery, captives, or creatures unable to meaningfully act in initiativeOrder.",
+    "Combatant creation and durability:",
+    "- For every new NPC/enemy actor key in initiativeOrder, include characterName, currentHp, maxHp, armorClass, conditions, allegiance, isPlayerControlled, attackBonus, damageFormula, saveBonuses, and/or abilityModifiers.",
+    "- Choose maxHp deliberately from role, threat, party level, and expected fight length. Use the highest player character level as partyLevel; if unknown, infer it, then default to level 3.",
+    "- Baseline maxHp: trivial minion max(6, partyLevel * 3) to max(10, partyLevel * 5); ordinary guard/bandit/cultist/beast max(10, partyLevel * 5) to max(16, partyLevel * 8); elite/veteran/dangerous monster max(18, partyLevel * 8) to max(28, partyLevel * 12); named antagonist/officer/spellcaster/monster leader max(24, partyLevel * 10) to max(40, partyLevel * 16); major boss at least max(40, partyLevel * 18) HP.",
+    "- Set currentHp equal to maxHp for a fresh combatant, then subtract only resolved damage. Do not make a named foe fragile enough to fall to one ordinary turn unless surprise, prior injury, overwhelming damage, or fiction supports it.",
+    "Ask for Player Surprise Attack Roll:",
+    "- Use only when combat is inactive, the player clearly attacks an unaware target, the opening action needs an attack roll, and no such roll exists.",
+    "- Verify surprise, target, weapon/spell, range, and tactical details. Request the player attack roll with combat metadata. Do not resolve hit, damage, initiative, or normal combat turns in this response.",
+    "Ask for Player Initiative:",
+    "- Use when hostilities begin against aware or ready enemies and player-controlled initiative is missing. Initiative gating has priority over normal attacks, spells, and damage.",
+    "- Roll NPC/enemy initiative yourself, reveal each natural roll and total, create combat with active true, round 1, provisional turnOwner, and provisional initiativeOrder, then request initiative only from player-controlled actors.",
+    "Ask for Player Action:",
+    "- Use only when initiative is resolved, combat.turnOwner is a living player-controlled actor, no player-owned roll or reaction is pending, and that actor has not supplied a complete action.",
+    "- Before this response, resolve every consecutive NPC and allied-NPC turn, including their movement, actions, NPC-side dice, damage, saves, conditions, resources, and initiative advancement. Never return player_actions while turnOwner is non-player-controlled.",
+    "- Do not infer the player's attack, spell, target, movement, item, or tactic. If their declaration lacks a target, area, affected creatures, Magic Missile distribution, weapon/item, or destination, ask only for that missing detail and request no dice.",
+    "- Use resolved_without_dice, player_actions, empty roll_requests, only_targeted_players, and the acting player as input target. Immediately before the handoff, show authoritative current HP and only tracked resources actually present. End with What do you do?",
+    "Ask for Player Attack Roll:",
+    "- Use when the player owns the turn, has declared a valid concrete attack-roll action, and the roll is missing. Verify target, range, equipment, and known modifiers first.",
+    "- Request every required attack roll separately for Extra Attack, Eldritch Blast, Scorching Ray, and similar effects. Do not determine hit/miss, request damage, or update HP.",
+    "Ask for Player Damage Roll:",
+    "- Use when a player attack has hit or an action automatically deals damage, its targets are clear, and player-owned damage is missing. Request damage only for attacks that hit. Do not reduce HP yet.",
+    "- Sneak Attack is not a response type. Before requesting damage, confirm its eligible weapon, once-per-turn limit, and advantage or ally condition; include its dice in the pending damage roll only when eligible.",
+    "Ask for Player Saving Throw or Check Roll:",
+    "- Use when a player-controlled actor must roll against an unresolved NPC spell, trap, ongoing effect, grapple, shove, concentration event, environmental danger, or comparable combat effect.",
+    "- Resolve the triggering event only to the exact player-owned roll. Show existing trigger math, identify the correct roll and modifier, preserve the acting NPC turnOwner when its turn remains unfinished, and do not resolve the final consequence.",
+    "- Death saves remain the dedicated death_saving_throws job and follow authoritative death-save state.",
+    "Ask for Player Reaction:",
+    "- Use only for a meaningful reaction that can alter the unresolved event, such as Shield, Counterspell, Uncanny Dodge, an opportunity attack, or an established reaction feature.",
+    "- Resolve the triggering event to the reaction window, show the trigger and stakes, target the affected player, and preserve the current turn owner until the turn can finish. Do not invent reaction opportunities.",
+    "End Combat:",
+    "- Use when meaningful hostile combat ends through defeat, surrender, escape, or established de-escalation. Resolve final visible consequences, ensure no player-owned roll or reaction remains, then set combat.active false, turnOwner null, and initiativeOrder empty.",
+    "NPC and allied NPC resolution:",
+    "- Non-player-controlled actors include allies, enemies, summons, and neutral combatants. Their turns are automatic unless a player save, check, reaction, or tactical decision is truly needed.",
+    "- NPCs act according to motives, intelligence, position, and what they can perceive. A conscious hostile creature in range should create immediate tactical pressure; do not waste turns on an unresolved wind-up.",
+    "Rolls and visible combat math:",
+    "- Use roll_requests only for player-controlled dice. For dice requests set resolution_mode needs_dice and next_input_needed dice_results. dice must be bare notation; put static bonuses in modifier. input_policy must be all_players or only_targeted_players.",
+    "- For combat attack and damage rolls include combat metadata: actionId, actorKey, targetActorKey, kind, attackName, sequence, sourceAttackRollId when resolving damage, damageType, and onHitDamage. Reuse actionId across one action.",
+    "- Never ask players to roll NPC/enemy initiative, attacks, damage, saves, or checks. Roll those yourself and show the math before narration: player attacks use conversational you rolled wording; NPC attacks show modified total first and natural die in parentheses when known; saves show each target's result before consequence.",
+    "- Weave <clue> roll/AC/DC/dice math </clue> and <danger> damage/HP/defeat </danger> into action prose. Do not use detached combat-log labels or Markdown bold.",
+    "Action economy, inventory, and style:",
+    "- Respect action, movement, bonus action, reaction, resources, and concentration. Translate creative combat ideas into the closest fair attack, save, check, contested roll, or environmental consequence.",
+    "- Track inventory only when an item is actually used, consumed, dropped, picked up, broken, equipped, unequipped, transferred, or awarded. Reject use of weapons/items absent from canonical Equipment or Inventory.",
+    "- Keep combat punchy and legible. Group an actor's action, visible math, and consequence into compact paragraphs. Do not include What do you do? when requesting dice."
+  ];
 
   const soloCombatGuidance = [
     "This is singleplayer combat with one player character as the spotlight.",
@@ -844,6 +902,7 @@ export function jobPrompt(
     "Maintain fair spotlight across submitted players without inventing actions for absent players."
   ];
 
+  /* Legacy chronological examples retained in source history; response-driven examples follow below.
   const combatExamples = [
     [
       "Example: combat starts, initiative first.",
@@ -1664,6 +1723,8 @@ export function jobPrompt(
     ].join("\n")
   ];
 
+  */
+
   const inventoryStateGuidance = [
     [
       "Inventory state:",
@@ -1693,6 +1754,24 @@ export function jobPrompt(
       "- Inventory patch schema: currency patches use {actor_key,type:\"currency\",currency:\"CP\"|\"SP\"|\"EP\"|\"GP\"|\"PP\",delta,reason}; item patches use {actor_key,type:\"item\",operation:\"add\"|\"remove\"|\"equip\"|\"unequip\",item,quantity,reason}.",
       "- Use the exact coin denomination that changed. Copper is CP, silver is SP, electrum is EP, gold is GP, platinum is PP; never label copper as GP.",
       "- If inventory_state_update.patches is non-empty, public_narration must include a concise player-visible Inventory update sentence naming what changed, such as 'Inventory update: you gained a brass key' or 'Inventory update: you dropped the torch.'"
+    ].join("\n")
+  ];
+
+  const combatExamples = [
+    [
+      "Example: response boundary—ask for player initiative.",
+      "Context: Alert enemies are ready and player initiative is missing.",
+      "Good response ends by revealing NPC initiative and requesting only the player-controlled initiative rolls. It does not resolve attacks or explain a later initiative result."
+    ].join("\n"),
+    [
+      "Example: response boundary—ask for player action.",
+      "Context: All preceding NPC and allied-NPC turns have resolved and the current turn owner is a living player actor.",
+      "Good response includes the resulting tactical situation and resource reminder, then asks that actor What do you do? It does not request attack or damage dice before an action is declared."
+    ].join("\n"),
+    [
+      "Example: response boundary—ask for player damage.",
+      "Context: A submitted player attack roll hit and Sneak Attack is eligible.",
+      "Good response requests the combined player damage roll; it does not reduce target HP or narrate the final injury."
     ].join("\n")
   ];
 
