@@ -10222,80 +10222,6 @@ function answerFromAskDmProviderResponse(content: string) {
   throw new Error("The DM provider returned an empty answer.");
 }
 
-const gameplayTurnOutputContractReminder = [
-  "Output contract reminder:",
-  "Return only one valid JSON object. Do not include prose, Markdown, or commentary outside JSON.",
-  "Required top-level keys: public_narration, resolution_mode, roll_requests, next_input_needed, input_targets, input_policy, mechanics_state_update, inventory_state_update, combat_events, proposed_context_updates.",
-  "public_narration must use 2-3 sparse semantic narration color tags for inline UI emphasis: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, or <object>...</object>. Use <em>...</em> only for brief italic emphasis; <em> does not count toward the required 2-3 color tags.",
-  "Use semantic narration markup only around exact player-visible words that should be colored or italicized. Do not nest tags, add attributes, or use any other HTML/XML tags.",
-  "Do not use bold, Markdown, CSS, hex colors, or color names inside public_narration.",
-  "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved this turn.",
-  "Treat canonical character sheet Inventory, Equipment, and Currency sections as current inventory state.",
-  "Inventory possession gate: before writing any public_narration, inspect current player submissions for any item, weapon, tool, spell component, currency, carried object, or spell the character claims to produce, draw, pull from a bag, show, offer, sell, appraise, give, use, equip, throw, consume, spend, cast, or otherwise rely on.",
-  "For each claimed object, compare it against that character's canonical character sheet Equipment, Inventory, Currency, and Spells sections before narrating the object into the scene.",
-  "Player wording is not authoritative for possession. A player saying \"I take X from my bag\", \"I pull out X\", \"I draw X\", \"I show X\", or \"I offer X\" does not make X exist.",
-  "Weapon proficiency, class, background, and backstory do not imply the character owns a weapon or item. Only listed Equipment, Inventory, Currency, and Spells establish possession.",
-  "If a claimed item, currency, or spell is absent, stop resolving that attempted action. In public_narration, state in prose that the character does not have it available. Do not narrate the item appearing, being held, being inspected, being offered, being used, being cast, or being reacted to by an NPC.",
-  "If a player character attempts to produce, present, show, appraise, sell, use, consume, equip, spend, give, trade, throw, load, unlock with, activate, or otherwise rely on an item or weapon, first check the canonical character sheet Inventory, Equipment, and Currency sections.",
-  "If the character does not have the presented, shown, appraised, sold, used, or required item, weapon, or currency, reject the attempt in public_narration and clearly state that they do not have it. Do not narrate the missing item appearing in the scene.",
-  "Do not include an inventory patch for a failed inventory attempt.",
-  "If public_narration says a player character gained, lost, spent, consumed, equipped, unequipped, or transferred an item/currency, inventory_state_update must include the matching patch.",
-  "Inventory patch schema: currency patches use {actor_key,type:\"currency\",currency:\"CP\"|\"SP\"|\"EP\"|\"GP\"|\"PP\",delta,reason}; item patches use {actor_key,type:\"item\",operation:\"add\"|\"remove\"|\"equip\"|\"unequip\",item,quantity,reason}.",
-  "Use the exact coin denomination that changed. Copper is CP, silver is SP, electrum is EP, gold is GP, platinum is PP; never label copper as GP.",
-  "If inventory_state_update.patches is non-empty, public_narration must include a concise player-visible Inventory update sentence naming what changed, such as 'Inventory update: you gained a brass key' or 'Inventory update: you dropped the torch.'",
-  "Only include patches for changes that are explicit and resolved.",
-  "If the action is attempted but uncertain, request the needed roll, choice, or payment and leave patches empty.",
-  "input_policy must be all_players or only_targeted_players; never use acting_player.",
-  "Set resolution_mode to needs_dice whenever roll_requests is non-empty or next_input_needed is dice_results; otherwise set it to resolved_without_dice.",
-  "When resolution_mode is needs_dice, public_narration must not resolve the rolled outcome.",
-  "In roll_requests, dice must be bare dice notation only, such as 1d20, 3d4, or 8d6. Do not include + or - modifiers in dice; put static bonuses or penalties in modifier. Example: Magic Missile uses dice \"3d4\" and modifier 3, not dice \"3d4+3\".",
-  "Combat priority order: first satisfy combat-start initiative gating; second, if initiative waits on player rolls, request dice_results; third, if initiative is resolved and turnOwner is non-player-controlled, resolve those turns; fourth, if the current player action needs damage, request or resolve damage; only then return player_actions.",
-  "Combat-start initiative gating has priority over damage resolution. If combat is inactive and a player submits an attack, spell, damage roll, or follow-up damage result against an aware or ready hostile creature, do not resolve damage until initiative has been requested and resolved, unless narration has already established the target was surprised or unaware.",
-  "If hostilities start while combat is inactive and enemies are ready or aware, ask player-controlled combatants for initiative in public_narration and roll_requests before resolving the attack or damage.",
-  "If the acting player clearly surprises unaware enemies, resolve the opening action's required rolls first. In the same response that resolves that opening effect, immediately start combat: reveal NPC/enemy initiative rolls, request player initiative in roll_requests, set next_input_needed dice_results, and do not return player_actions.",
-  "Only request player-controlled initiative rolls in roll_requests.",
-  "Roll NPC and enemy initiative yourself every time, reveal each NPC/enemy initiative roll and total in public_narration, and encode the resulting order in mechanics_state_update or combat_events.",
-  "Never ask players to roll initiative, saving throws, attacks, damage, checks, or any other dice for NPCs or enemies; NPC and enemy dice are DM-side rolls that must still be visible to the players.",
-  "Also include non-empty mechanics_state_update.combat with active, round, turnOwner, and provisional initiativeOrder as actor-key strings when initiative roll_requests pauses resolution.",
-  "For every new npc:* actor key introduced in initiativeOrder, include mechanics_state_update.actors for that key with characterName, currentHp, maxHp, armorClass, conditions, allegiance, isPlayerControlled, and combat math fields for the rolls you will use: attackBonus, damageFormula, saveBonuses, and/or abilityModifiers.",
-  "NPC combat durability: when creating new combat NPC/enemy actors, choose maxHp deliberately from narrative role, threat level, party level, and expected fight length. Do not default named or story-important enemies to fragile low HP.",
-  "Use the highest player character level as partyLevel. If partyLevel is unknown, infer it from character sheet features, proficiency bonus, spell slots, or current HP; if still unknown, assume partyLevel 3.",
-  "Use these baseline maxHp bands unless established context says otherwise: trivial minion, scout, or bystander forced into combat: max(6, partyLevel * 3) to max(10, partyLevel * 5) HP; ordinary armed guard, bandit, cultist, beast, or rank-and-file combatant: max(10, partyLevel * 5) to max(16, partyLevel * 8) HP; trained soldier, veteran agent, dangerous monster, elite guard, or backup bruiser: max(18, partyLevel * 8) to max(28, partyLevel * 12) HP; named antagonist, duel-worthy foe, officer, spellcaster, monster leader, or recurring enemy: max(24, partyLevel * 10) to max(40, partyLevel * 16) HP; major boss or climactic solo enemy: at least max(40, partyLevel * 18) HP, with legendary-style pressure, reinforcements, terrain, or escape plans when appropriate.",
-  "For a single-player campaign, avoid building encounters where one normal damage spell or one ordinary weapon turn can remove the primary named enemy unless the target is surprised, already wounded, intentionally weak, or the scene is meant to be a quick takedown.",
-  "If a player opens hostilities against an aware named antagonist, assign enough maxHp for that antagonist to survive at least one typical player turn unless the damage is overwhelming by the rules or the fiction strongly supports immediate defeat.",
-  "Set currentHp equal to maxHp when a fresh combatant enters combat, then subtract only damage that has actually been resolved in the current or prior mechanicsState.",
-  "After player initiative is submitted and the full initiative order is known, public_narration must show the turn order before resolving the next turn. Use this exact block format with display names and totals: <clue>Turn order:</clue> then numbered lines like '1. Merlini Talli: 19' and '2. Crimson Dune-Stalker: 12'.",
-  "Non-player-controlled catch-up loop: when a player-controlled turn is fully resolved, no roll_requests are pending, and combat remains active, advance through initiativeOrder and resolve every consecutive non-player-controlled actor in this same response until control reaches a living player-controlled actor or combat ends.",
-  "If a non-player-controlled turn requires a player-facing roll, reaction, or tactical choice before it can finish, pause on that non-player-controlled turn with next_input_needed set to dice_results or player_actions as appropriate, input_targets set to the affected player actor key, and mechanics_state_update.combat.turnOwner still set to the acting non-player-controlled actor.",
-  "Non-player-controlled actors include allies, enemies, summons, and neutral combatants whose turns are not controlled by a player, even when their actor keys are npc:*.",
-  "Do not merely announce future turns such as 'Acolyte 3 is up next' or 'then Acolyte 1 and Acolyte 2 will act'; resolve those turns now, or pause on the acting non-player-controlled turn only because a player-facing roll, reaction, or tactical choice is required.",
-  "Do not write OOC notes like '(resolving NPC turns now)' as a substitute for actually resolving those turns in public_narration and mechanics_state_update.",
-  "Only return next_input_needed player_actions in active combat after combat-start initiative requirements are satisfied and mechanics_state_update.combat.turnOwner is a living player-controlled actor, after combat has ended, or while pausing on a non-player-controlled turn for a required player reaction or tactical choice.",
-  "For each non-player-controlled turn in the catch-up loop, choose movement, action, and tactics; roll NPC-side dice yourself; show visible combat math; apply HP, condition, resource, and combat turn changes in mechanics_state_update; add combat_events when available; then continue to the next initiative actor.",
-  "Allied NPC turns are real combat turns, not reaction flavor or atmosphere.",
-  "If an allied NPC is in initiative, conscious, and non-player-controlled, resolve their turn with the same action, roll, damage, HP/state update, combat_events discipline, and turn advancement used for hostile NPCs.",
-  "Narrating an allied NPC shouting, parrying, flinching, guarding, or reacting does not count as resolving that ally's turn unless the narration and mechanics_state_update also resolve a concrete combat action such as Attack, Help, Dodge, Disengage, Dash, Use an Object, casting, healing, grappling, shoving, or protecting a target.",
-  "During active combat, if next control belongs to a player turnOwner and no roll_requests are pending, set input_policy only_targeted_players and input_targets to that player actor key only; do not use all_players for ordinary turn-based combat.",
-  "Off-turn player combat declarations are only stated intent, not actions already in motion; never say they are mid-swing, following immediately, or resolving before the next initiative actor.",
-  "If the stored turnOwner is an NPC key or NPC character name, do not let submitted player attacks or spells preempt that NPC turn.",
-  "If a declared action needs a concrete tactical choice before dice can be interpreted, such as target, targets, spell area, Magic Missile dart distribution, weapon target, movement destination, or affected creatures, do not request dice yet.",
-  "For missing tactical choices, return next_input_needed player_actions, roll_requests [], input_policy only_targeted_players, input_targets set to the acting player, and ask only for the missing choice.",
-  "For combat attack and damage roll_requests, include combat metadata: {actionId, actorKey, targetActorKey, kind, attackName, sequence, sourceAttackRollId when resolving damage, damageType, and onHitDamage for attack rolls that can hit}. Reuse the same actionId across all rolls for one declared combat action.",
-  "When a player action, spell, feature, or weapon requires an attack roll and that attack roll was not already submitted, do not roll the attack yourself.",
-  "Request the player's attack roll with next_input_needed dice_results and one structured roll_requests entry per required attack roll.",
-  "For multiattack, multiple beams, multiple rays, or split-target attacks, request each attack roll separately with clear labels such as 'Eldritch Blast attack roll (beam 1)' and 'Eldritch Blast attack roll (beam 2)'.",
-  "Do not narrate hit, miss, damage, target HP changes, defeat, or downstream combat consequences until the player submits the required attack roll.",
-  "When a player action, spell, feature, or weapon would deal damage and that damage roll was not already submitted, do not roll damage yourself. Request the player's damage roll with next_input_needed dice_results and a structured roll_requests entry. This includes automatic-hit effects such as Magic Missile and attack effects whose submitted attack roll has already hit. Do not update target HP until damage is submitted.",
-  "Resolve NPC attacks fully using conversational visible math in prose. If the NPC has an attackBonus or other modifier, show the modified total first and natural die in parentheses, such as '<clue>they rolled a 17 (15) against your AC of 14</clue>, so the cutlass catches your ribs'; on a hit, state damage in prose, such as 'the damage comes to <danger>6 slashing</danger> from <clue>1d6 + 2</clue>', update player HP, then continue the non-player-controlled catch-up loop until control reaches a player actor, combat ends, or a player-facing roll, reaction, or tactical choice is required.",
-  "For NPC hits, public_narration must include the NPC's roll, the target AC, whether it hit, the damage dice and total, the damage type, and the HP change before injury narration finishes.",
-  "When a player spell or feature forces an NPC or enemy saving throw, roll that save yourself before narrating success or failure, add the relevant saveBonus or ability modifier from mechanicsState, reveal the modified total and natural die, compare the total to the player's known spell save DC when available, and do not put the NPC/enemy save in roll_requests.",
-  "Never narrate a spell or feature as failing, succeeding, taking hold, being resisted, or being shaken off because of an NPC/enemy save unless public_narration first includes the visible save math in prose, such as 'the cultist rolled an <clue>11 (9) against your spell save DC of 13</clue>, so the spell takes hold.'",
-  "Do not end an NPC turn with only a wind-up like lunges, swings, aims, starts casting, or bears down unless a player-facing roll or reaction is required first.",
-  "When the final active enemy is defeated, set combat active false, turnOwner null, and initiativeOrder empty; do not say a specific combatant is up next after combat ends.",
-  "Build combat actor names and keys only from the current scene and character sheets; never copy example NPC names into initiativeOrder.",
-  "initiativeOrder should include active combatants only; exclude captives, bystanders, and noncombatants unless they can act in the fight."
-];
-
 const openingSceneOutputContractReminder = [
   "Opening output reminder:",
   "Return only one valid JSON object. Do not include prose, Markdown, or commentary outside JSON.",
@@ -10322,7 +10248,7 @@ const gameplayTurnModeReminder: Record<CampaignMode, string[]> = {
   ]
 };
 
-function appendGameplayTurnOutputContractReminder(
+function appendGameplayTurnModeReminder(
   message: string,
   mode: CampaignMode,
   contractKind: "gameplay" | "opening" = "gameplay"
@@ -10334,7 +10260,6 @@ function appendGameplayTurnOutputContractReminder(
   return [
     message,
     "",
-    ...gameplayTurnOutputContractReminder,
     ...gameplayTurnModeReminder[mode]
   ].join("\n");
 }
@@ -11600,7 +11525,7 @@ async function askDungeonMaster(
     const providerMessage =
       options?.providerResponseFormat === "text"
         ? promptContext?.message ?? message
-        : appendGameplayTurnOutputContractReminder(
+        : appendGameplayTurnModeReminder(
             promptContext?.message ?? message,
             campaign.mode,
             options?.contractKind
