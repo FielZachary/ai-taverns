@@ -599,6 +599,7 @@ export function jobPrompt(
     "- End public_narration with a clear, natural question inviting the player to choose how to proceed on a separate paragraph.",
     "- The question must fit the immediate scene, pressure, available information, and current stakes. Make it specific to what the character can plausibly do next rather than relying on a generic 'What do you do?'",
     "- Use phrasing appropriate to the context, such as: 'Do you approach the clerk?', 'How would you like to respond to her accusation?', 'Will you proceed into the chamber under those conditions?', or 'What is Garbo's next move?'",
+    "- Do not repeat the previous turn's ending prompt, including close paraphrases or the same underlying question. Each response must end with a newly phrased question that advances beyond the prior prompt and reflects what has changed since it.",
     "- Do not force the player into listed options. Options are examples of visible possibilities, not a complete menu; always leave room for a creative response."
   ];
 
@@ -1792,6 +1793,8 @@ export function jobPrompt(
         "- “How would you like to respond to her accusation?”",
         "- “Will you proceed into the chamber under those conditions?”",
         "- “What is Garbo’s next move?”",
+        "",
+        "- Do not repeat the previous turn’s ending prompt, including close paraphrases or the same underlying question. Each response must end with a newly phrased question that advances beyond the prior prompt and reflects what has changed since it.",
         "",
         "- Do not force the player into listed options. Options are examples of visible possibilities, not a complete menu; always leave room for a creative response."
       ].join("\n")

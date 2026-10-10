@@ -495,6 +495,7 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("scene_director"), /Use bare dice notation only/i);
     assert.match(jobPrompt("scene_director"), /Player facing ending prompt:/);
     assert.match(jobPrompt("scene_director"), /What is Garbo’s next move\?/);
+    assert.match(jobPrompt("scene_director"), /Do not repeat the previous turn’s ending prompt/i);
     assert.doesNotMatch(jobPrompt("scene_director"), /Scene Construction:/);
     assert.doesNotMatch(jobPrompt("scene_director"), /Pacing and Handoff:/);
     assert.doesNotMatch(jobPrompt("scene_director"), /Physical Communication Boundary:/);
@@ -537,6 +538,7 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(npcDialoguePrompt, /Resolving Social Dice/i);
     assert.match(npcDialoguePrompt, /Player facing ending prompt/i);
     assert.match(npcDialoguePrompt, /clear, natural question inviting the player/i);
+    assert.match(npcDialoguePrompt, /Do not repeat the previous turn's ending prompt/i);
     assert.doesNotMatch(npcDialoguePrompt, /Before Any NPC Answers/i);
     assert.doesNotMatch(npcDialoguePrompt, /Information Economy/i);
     assert.doesNotMatch(npcDialoguePrompt, /Social Impasse Rule/i);
