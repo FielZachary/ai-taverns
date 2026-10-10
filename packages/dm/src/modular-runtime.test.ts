@@ -1253,6 +1253,9 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(combatPrompt, /Sneak Attack is not a response type/i);
     assert.match(combatPrompt, /resolve every consecutive NPC and allied-NPC turn/i);
     assert.match(combatPrompt, /Death saves remain the dedicated death_saving_throws job/i);
+    assert.match(combatPrompt, /Begin the final handoff with exactly: It is now your turn!/i);
+    assert.match(combatPrompt, /headed You currently have:/i);
+    assert.match(combatPrompt, /Format each tracked value as current\/max/i);
     assert.doesNotMatch(combatPrompt, /After all requested player initiative rolls are submitted/i);
   });
 
