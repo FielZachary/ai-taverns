@@ -541,6 +541,11 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(npcDialoguePrompt, /NPC dialogue must not freeze the world/i);
     assert.match(npcDialoguePrompt, /established background tasks, events, and other characters continue progressing/i);
     assert.match(npcDialoguePrompt, /Do not add idle background detail merely to imply movement/i);
+    assert.match(npcDialoguePrompt, /NPC Independence and Autonomous Action/i);
+    assert.match(npcDialoguePrompt, /NPCs have agency/i);
+    assert.match(npcDialoguePrompt, /Do not end on a static tableau/i);
+    assert.match(npcDialoguePrompt, /distinguish reaction from initiative/i);
+    assert.match(npcDialoguePrompt, /include initiative rather than chaining reactions indefinitely/i);
     assert.doesNotMatch(npcDialoguePrompt, /Before Any NPC Answers/i);
     assert.doesNotMatch(npcDialoguePrompt, /Information Economy/i);
     assert.doesNotMatch(npcDialoguePrompt, /Social Impasse Rule/i);
