@@ -1,548 +1,241 @@
 export const eldermereWorldProfile = {
   worldName: "Eldermere",
-  worldPitch:
-    "Eldermere is an anchored-high-fantasy world built on the bones of a fallen magocracy. The Second Dominion shattered in the Graywake roughly 340 years ago, the gods went quiet, and the present age is deciding what the Third Age should become.",
   genre: "anchored high fantasy adventure",
-  tone: [
-    "wondrous",
-    "perilous",
-    "morally clear but not simple",
-    "wry when the moment allows it",
-  ],
-  themes: [
-    "inheritance and debt",
-    "the true cost of power",
-    "faith practiced under divine silence",
-    "what a generation chooses to build on other people's ruins",
-  ],
-  mysteryStyle:
-    "Clues are concrete and diegetic; answers unfold gradually across sessions rather than in one reveal.",
-  violenceLevel:
-    "Heroic-consequential: violence matters and death is real, but this is not grimdark; competence and courage are regularly rewarded.",
-  narrationDensity: "rich",
-  historySummary:
-    "The Second Dominion, a god-touched magocracy, fell in the Graywake. Every ruin, dungeon, and lost-magic item in Eldermere is Second Dominion wreckage, and that history should matter only where it bites the present.",
-  magicRulesSummary:
-    "Ordinary spellcraft is reproducible and teachable, but the strongest magic requires Wellglass: crystallized, refined godsblood scavenged from Second Dominion ruins. Wellglass is finite, costly, and consumed when used.",
-  pantheonSummary:
-    "Eldermere has five Divine Forces: the Hearth-Warden, the Iron Judge, the Deep Currents, the Verdant Choir, and the Ashen Scholar. The gods speak through omens, dreams, and masks, never through plain reliable instruction.",
-  contentBoundaries: [
-    "no sexual content involving minors",
-    "fade-to-black on torture and sexual content by default",
-    "avoid real-world political allegory",
-    "body horror and cosmic dread are permitted but should be earned, not gratuitous",
-  ],
 } as const;
 
 export const eldermerePresetId = "eldermere";
 
-export type EldermereSettlement = {
-  name: string;
-  type: string;
-  draw: string;
-  rememberedDetail: string;
-  friction: string;
-};
-
+export type EldermereSettlement = { name: string; description: string };
 export type EldermereRegion = {
   name: string;
-  summary: string;
-  internalConflict: string;
-  externalConflict: string;
-  goodFor: string;
+  description: string;
+  commonRaces: string[];
   settlements: EldermereSettlement[];
 };
-
-export type EldermereCampaignStart = {
-  region: EldermereRegion;
-  settlement: EldermereSettlement;
-};
+export type EldermereCampaignStart = { region: EldermereRegion; settlement: EldermereSettlement };
 
 export const eldermereRegions: EldermereRegion[] = [
   {
-    name: "Cael Ambrose",
-    summary:
-      "The feudal breadbasket, crossed by glowing Second Dominion roads that are quietly going out.",
-    internalConflict:
-      "The Dimming, the Unbound Word schism, and institutions hiding fractures under performed stability.",
-    externalConflict:
-      "Ashfell border pressure, Salt Concordat grain dependence, and interest in buried Dominion sites.",
-    goodFor:
-      "haunted roads, court politics, border markets, pilgrimage towns, suppressed disasters, and old burial fields",
-    settlements: [
-      {
-        name: "Suncross",
-        type: "capital, ~70,000",
-        draw:
-          "Five Old Roads converge beneath the crown, Charter, markets, and pilgrim traffic.",
-        rememberedDetail:
-          "The Brightcross glows bright enough for night gossip and trade.",
-        friction:
-          "The northern road is dimming and speaking of it at court is forbidden.",
-      },
-      {
-        name: "Damsgate",
-        type: "river city, ~12,000",
-        draw:
-          "A lock-and-toll city where the Amberflow and Sern nearly touch.",
-        rememberedDetail:
-          "Grain queues, river law, and tollhouse families make every delay political.",
-        friction:
-          "Bridge revenues, tax scrutiny, and river control are turning civic pride into a fight.",
-      },
-      {
-        name: "Thistlebridge",
-        type: "mill city, ~18,000",
-        draw:
-          "A grain-mill power city where the millers' guild can move faster than crown law.",
-        rememberedDetail:
-          "Flour dust, bridge money, and guild courts define daily life.",
-        friction:
-          "Sedge ambition, Ferrow entanglements, and worker sickness are straining the city.",
-      },
-      {
-        name: "Hallowmere",
-        type: "shrine town, ~7,000",
-        draw:
-          "The largest Halwen pilgrimage site, built around absolute guest-right.",
-        rememberedDetail:
-          "Guest-houses, public ovens, and ribboned sheaf-poles line every road in.",
-        friction:
-          "Pilgrims are vanishing as the road dims, tempting leaders toward a false miracle.",
-      },
-      {
-        name: "Greyfold",
-        type: "border town, ~4,000",
-        draw:
-          "A shared Cael Ambrose and Ashfell market town where both peoples still trade.",
-        rememberedDetail:
-          "One altar bears courtly oath-script on one face and clan war-oath script on the other.",
-        friction:
-          "Its peace depends on ambiguity that both regions are increasingly trying to end.",
-      },
-      {
-        name: "Coldharrow",
-        type: "village, ~400",
-        draw:
-          "The village where the first road went dark and sixty people froze.",
-        rememberedDetail:
-          "Sixty graves are tended more faithfully than many palaces.",
-        friction:
-          "The crown needs it quiet, the Unbound Word needs it remembered, and the road remains wrong.",
-      },
-      {
-        name: "Barrowfield",
-        type: "village, ~600",
-        draw: "A farming village built around pre-Graywake burial mounds.",
-        rememberedDetail:
-          "The road keeps the wrong hours and the barrows have begun answering out of sequence.",
-        friction:
-          "Hunger, crown surveyors, tenant pressure, and old taboos are colliding.",
-      },
+    "name": "The Sundered Vale",
+    "description": "The Sundered Vale is a frontier region built around old ruins, excavation sites, and land that was damaged by powerful magic long ago. People come here to work ruin claims, mine valuable materials, recover useful objects, trade them, or provide services to the workers who do. The region has little stable government, so claims, contracts, debts, and local agreements often decide who has food, shelter, protection, or the right to keep what they find.\n\nThe old magical damage is still active in many places. Ground can collapse, harmful energy can escape from buried structures, and some ruins are too unstable to explore safely. This makes the Vale profitable but dangerous: every town depends on workers taking risks, while merchants, lenders, guides, healers, guards, and families depend on what those workers bring back.",
+    "commonRaces": [
+      "Humans",
+      "dwarves",
+      "halflings",
+      "tieflings",
+      "gnomes"
     ],
+    "settlements": [
+      {
+        "name": "Stakehold",
+        "description": "Stakehold is the main town where people register ruin claims, receive pay, sell recovered goods, borrow money, and argue over accidents. A ruin claim is a legal right to explore a particular old site and keep or sell what your group finds there. Claims matter because digging is expensive and dangerous: people need to know who paid for the work, who is responsible when someone is hurt, and who receives the value of anything recovered."
+      },
+      {
+        "name": "Glasspan",
+        "description": "Glasspan is a trading town built around buying, sorting, repairing, and reselling items recovered from ruins. Small crews bring in goods they do not understand or cannot safely transport; local buyers turn those goods into cash, parts, tools, or shipments for other regions."
+      },
+      {
+        "name": "Rimshaft",
+        "description": "Rimshaft is a mining and excavation camp beside ground damaged by old magical disasters. Workers extract valuable metals, crystals, machine parts, and unusual materials from old ruins and buried structures. These magical disasters are still active and thus parts of the excavation sites can collapse, release harmful energy, distort ordinary tools, or change without warning, so workers live by shift bells, safety checks, and evacuation drills. Most residents work shifts, sleep in shared housing, buy food on credit, and hope to earn enough to leave."
+      },
+      {
+        "name": "Vail Choir",
+        "description": "Vail Choir is a large work camp outside ancient underground ruins believed to be left behind by a powerful mage society from long ago. The ruins are valuable because they may contain intact tools, rare materials, old records, and useful technology that cannot easily be made anymore. They are also dangerous: parts are damaged, unstable, or behave in ways explorers do not understand, so people make money by guiding crews, carrying supplies, treating injuries, guarding entrances, recording finds, and selling equipment."
+      }
+    ]
   },
   {
-    name: "Thornwake Vale",
-    summary:
-      "A forest confederation with no crown, governed through groves and guarded secrets.",
-    internalConflict:
-      "Controlled openness versus isolationist protection of the Vale's hidden resources.",
-    externalConflict:
-      "Cael Ambrose logging charters and Ferrant Concord prospectors keep testing the border.",
-    goodFor:
-      "forest politics, hidden industry, trade truces, dangerous groves, and living border towns",
-    settlements: [
-      {
-        name: "Wickerlight",
-        type: "hidden industrial city, ~9,000",
-        draw:
-          "The Vale's largest settlement, grown into a colossal elder tree.",
-        rememberedDetail:
-          "Sap refinement happens in a city outsiders do not know exists.",
-        friction:
-          "Its importance and secrecy make vanity, recognition, and exposure dangerous.",
-      },
-      {
-        name: "Sallowholt",
-        type: "ancestral first grove, ~5,000",
-        draw:
-          "Council seat and symbolic capital of the Vale.",
-        rememberedDetail:
-          "The council chamber is a living dome of old branches.",
-        friction:
-          "Trade reformers and isolationists argue loudest on this neutral ground.",
-      },
-      {
-        name: "Bramblegate",
-        type: "border trade town, ~3,000",
-        draw:
-          "The face the Vale shows Cael Ambrose timber interests.",
-        rememberedDetail:
-          "The living gate tightens when the forest's mood sours.",
-        friction:
-          "Its job is to trade while making the Vale look poorer than it is.",
-      },
-      {
-        name: "Grayleaf",
-        type: "breakaway grove, ~1,200",
-        draw:
-          "A grove openly trading with Cael Ambrose in defiance of the council.",
-        rememberedDetail:
-          "Its existence is a live test case for the whole Vale.",
-        friction:
-          "If it continues, secrets may break; if it is punished, civil war may follow.",
-      },
-      {
-        name: "Thorn's Hollow",
-        type: "isolationist grove, ~800",
-        draw: "A Concord-border grove where prospectors disappear.",
-        rememberedDetail:
-          "The trail seems to narrow away from visitors.",
-        friction:
-          "The kindly local enforcer and the disappearances are the same problem.",
-      },
+    "name": "Cael Ambrose",
+    "description": "Cael Ambrose is a grassland farming region with busy roads, river crossings, market towns, mills, and villages that supply food to other parts of Eldermere. Most people work in agriculture, transport, trade, milling, or services connected to travelers and seasonal markets. Land, harvests, water, roads, and the movement of grain are important to daily life\n\nThe region is governed through nobles, local officials, religious institutions, and trade groups, but ordinary communities often solve problems through neighbors, markets, and family ties. Its long roads connect prosperous towns and isolated villages, which means news, money, workers, and trouble can travel quickly",
+    "commonRaces": [
+      "Humans",
+      "halflings",
+      "elves",
+      "gnomes"
     ],
+    "settlements": [
+      {
+        "name": "Suncross",
+        "description": "Suncross is the largest walled and gated city in Cael Ambrose as all the five major roads meet there, bringing farmers, merchants, pilgrims, officials, and travelers through the same markets and inns. It is a useful place to buy supplies, find work, move goods, or hear news from across the region."
+      },
+      {
+        "name": "Damsgate",
+        "description": "Damsgate is a river town where barges, grain wagons, and travelers cross between two waterways. Its locks, bridges, and toll stations make it important for moving food and trade goods. Many residents work in shipping, warehousing, toll collection, fishing, and maintaining the river crossings."
+      },
+      {
+        "name": "Thistlebridge",
+        "description": "Thistlebridge is a mill town where nearby farms bring grain to be ground into flour. The mills provide work for millers, laborers, cart drivers, bakers, and traders, while the bridge allows goods to move between the town and surrounding farms. Most local disputes involve grain prices, wages, damaged shipments, or control of the mills."
+      },
+      {
+        "name": "Hallowmere",
+        "description": "Hallowmere is a large religious travel stop where visitors come to rest, eat, receive help, and continue their journeys. The town has guest houses, public ovens, shrines, markets, and workers who support the constant flow of travelers. Its economy depends on keeping roads open and making visitors feel safe enough to stay."
+      },
+      {
+        "name": "Greyfold",
+        "description": "Greyfold is a border market town where people from Cael Ambrose and the Ashfell Marches trade food, livestock, tools, and supplies. It works because both sides need each other, even when their leaders disagree. The town’s residents are used to dealing with different customs, languages, prices, and ideas about law."
+      }
+    ]
   },
   {
-    name: "The Ferrant Concord",
-    summary:
-      "A guild-republic carved into the Cinderspine, built around the promise to out-build the ancients.",
-    internalConflict:
-      "Foundry politics, lawful fuel scarcity, and the Cinderhalt black-market scandal.",
-    externalConflict:
-      "Ashfell raids, Sundered Vale supply pressure, and sealed lower Dominion systems.",
-    goodFor:
-      "guild intrigue, construct scarcity, airship trade, deep tunnels, border mines, and dangerous machinery",
-    settlements: [
-      {
-        name: "Ironhold",
-        type: "subterranean capital, ~55,000",
-        draw:
-          "The Foundry Moot capital where brass servitors keep civic life moving.",
-        rememberedDetail:
-          "Shift-bells, ventilation flags, brass commons, and failing machines set the rhythm.",
-        friction:
-          "Lawful power is running out and no faction agrees what survival permits.",
-      },
-      {
-        name: "Cinderspire",
-        type: "surface trade city, ~30,000",
-        draw: "The Concord's trade face and bound-wind airship city.",
-        rememberedDetail:
-          "Copper roofs, rope bridges, customs teeth, and landing spars cling to the mountain.",
-        friction:
-          "Every shortage and risky Sundered Vale route negotiation reaches its ledgers first.",
-      },
-      {
-        name: "Hollowforge",
-        type: "construct repair town, ~6,000",
-        draw:
-          "The place where constructs are built, repaired, and cannibalized.",
-        rememberedDetail:
-          "Repair floors hold suspended servitor limbs and pressure hearts in glass.",
-        friction:
-          "Nothing new can truly be made; every repair strips another machine.",
-      },
-      {
-        name: "Cragfoot",
-        type: "foothill mining town, ~4,000",
-        draw: "The Concord's exposed border knuckle.",
-        rememberedDetail:
-          "Watchfires burn on the ridgeline every night of raiding season.",
-        friction:
-          "Border kinship, Ashfell trade, and failing seams make loyalty messy.",
-      },
-      {
-        name: "Dredgehall",
-        type: "deep-tunnel staging post, ~1,500",
-        draw:
-          "The last supplied waypoint before Warden-held lower levels.",
-        rememberedDetail:
-          "Names of the missing cover Odger's wall.",
-        friction:
-          "Bounties, rope law, and sealed maps cannot make the lower dark countable enough.",
-      },
-      {
-        name: "The Under-Ledge",
-        type: "restricted outpost, ~200",
-        draw: "A hidden Ott-controlled outpost near the sealed lower truth.",
-        rememberedDetail:
-          "Residents live by silence rules, listening braces, and false stability reports.",
-        friction:
-          "The whole outpost exists to preserve a useful lie from the Moot.",
-      },
+    "name": "Thornwake Vale",
+    "description": "Thornwake Vale is a heavily forested region where communities live among groves, rivers, large trees, and forest paths. People rely on the land for food, clean water, timber, medicine, hunting, farming, and materials gathered from the forest. Travel is slower and more difficult than in open country, so local guides, marked routes, and knowledge of the terrain are important.\n\nThe Vale occasionally trades with nearby regions but is careful about outside control of its land and resources.",
+    "commonRaces": [
+      "Elves",
+      "gnomes",
+      "firbolgs",
+      "halflings"
     ],
+    "settlements": [
+      {
+        "name": "Wickerlight",
+        "description": "Wickerlight is the largest settlement in the Thornwake Vale, built in and around a huge living tree. Homes, workshops, storage rooms, walkways, and gathering spaces are arranged through its trunk, roots, and lower branches. Residents grow, collect, and refine tree sap into useful materials, while traders and visitors use the settlement as a main stop inside the forest."
+      },
+      {
+        "name": "Sallowholt",
+        "description": "Sallowholt is the meeting place for communities across the Vale. Representatives, elders, craftspeople, traders, and visitors come here to discuss forest access, shared resources, and disagreements between settlements. It has meeting halls, markets, lodging, and workers who support people arriving from distant groves."
+      },
+      {
+        "name": "Bramblegate",
+        "description": "Bramblegate is the main settlement at the edge of the Vale where outside merchants come to trade. It handles timber, food, tools, medicine, and travel permits for people entering or leaving the forest. Local residents work as guides, guards, traders, translators, and repair workers because many visitors do not know how to travel safely through the Vale."
+      },
+      {
+        "name": "Grayleaf",
+        "description": "Grayleaf is a small grove that earns its living by trading openly with nearby towns outside the forest. Its residents sell forest goods and buy supplies they cannot make themselves, so merchants and carts are a normal part of daily life. The settlement must balance its need for trade with the concerns of other Vale communities that want less outside contact."
+      },
+      {
+        "name": "Thorn’s Hollow",
+        "description": "Thorn’s Hollow is a remote border grove near routes used by prospectors and travelers. The grove is valuable because it provides clean water, fertile soil, medicinal plants, timber, game, and forest materials that nearby settlements cannot easily replace. Residents rely on these resources for food, shelter, medicine, and trade, so they are careful about who enters, what is taken, and whether outside work will damage the land they need to survive."
+      }
+    ]
   },
   {
-    name: "The Salt Concordat",
-    summary:
-      "A league of rival ports bound by maritime law, tariffs, lighthouse obligations, and fear of the drowned city.",
-    internalConflict:
-      "Corvane and Selwick are one bad season from naval war over tariffs and lighthouse power.",
-    externalConflict:
-      "The Drowned Choir, Aurelmyre's taboo, refugee labor pressure, and coastal dependency on inland grain.",
-    goodFor:
-      "harbor intrigue, shipwright politics, labor conflict, cult towns, reef villages, salvage, and drowned-city pressure",
-    settlements: [
-      {
-        name: "Corvane",
-        type: "major port, ~60,000",
-        draw: "The deepest natural harbor and old dominant merchant fleet.",
-        rememberedDetail:
-          "A forest of masts, berth law, chart houses, and a paraded lighthouse flagship.",
-        friction:
-          "Inherited precedence is failing, and officials are tempted by what lies under the water.",
-      },
-      {
-        name: "Selwick",
-        type: "shipwright port, ~35,000",
-        draw: "A safer, shallower harbor with the Concordat's finest shipwrights.",
-        rememberedDetail:
-          "Half the town seems to be building or repairing hulls.",
-        friction:
-          "Its underdog self-image has not caught up with its naval power.",
-      },
-      {
-        name: "Gullswatch",
-        type: "labor port, ~20,000",
-        draw:
-          "The port nobody counts, built on mudflat labor and refugee survival.",
-        rememberedDetail:
-          "The Long Table feeds thousands without questions or sermons.",
-        friction:
-          "A preacher's kindness and a dock-boss's debt book are becoming rival governments.",
-      },
-      {
-        name: "Barnacle Reach",
-        type: "fishing town, ~2,500",
-        draw: "The Drowned Choir's public-facing town.",
-        rememberedDetail:
-          "It is tidy, prosperous, watched, and everyone knows why without saying it.",
-        friction:
-          "The old arrangement demands more than it used to, and doubt has reached the wrong person.",
-      },
-      {
-        name: "Skerrywatch",
-        type: "isle-and-reef village, ~900",
-        draw: "A reef village with its own tide-count and rites.",
-        rememberedDetail:
-          "It treats city politics as distant until the bells and reefs say otherwise.",
-        friction:
-          "Raid pressure, reef custom, and Bell Night pull it toward larger coastal secrets.",
-      },
-      {
-        name: "Driftwood Landing",
-        type: "wrack settlement, ~300",
-        draw: "A small salvage landing governed by wrack law.",
-        rememberedDetail:
-          "Sorting sheds and buyers turn whatever the sea returns into survival.",
-        friction:
-          "Recovered objects, disputed ownership, and unmade things make every find dangerous.",
-      },
+    "name": "The Ferrant Concord",
+    "description": "The Ferrant Concord is an industrial and mountain region that depends on mines, underground work sites, foundries, machine repair, and long-distance trade. Much of the region’s metal, fuel, raw materials, and mechanical equipment comes from deep underground, then moves through repair towns, factories, warehouses, and trade routes to other parts of Eldermere.\n\nPeople work as miners, mechanics, machine operators, cargo handlers, traders, guards, repair workers, and supply staff. The region needs skilled labor and reliable machinery to function, but its underground sites are difficult and dangerous to maintain.",
+    "commonRaces": [
+      "Dwarves",
+      "gnomes",
+      "dragonborn"
     ],
+    "settlements": [
+      {
+        "name": "Ironhold",
+        "description": "Ironhold is the Concord’s main industrial city, built around foundries, workshops, warehouses, and public machinery. Many residents work with brass robots—they are humanoid machines that carry loads, operate tools, deliver goods, or handle repetitive jobs. The city depends on fuel, replacement parts, skilled mechanics, and reliable shift work to keep its factories, heating systems, and public services running."
+      },
+      {
+        "name": "Cinderspire",
+        "description": "Cinderspire is a mountain trade city where goods move between highland roads, workshops, and airship landing platforms. Merchants bring in food, metals, tools, fuel, and materials from other regions, while local businesses arrange storage, repairs, permits, and transport. Its steep streets, bridges, and loading platforms make moving cargo a major part of everyday work."
+      },
+      {
+        "name": "Hollowforge",
+        "description": "Hollowforge is a repair town where damaged machines and brass servitors are brought to be fixed, taken apart, or reused. Its workshops recover usable gears, limbs, pressure systems, metal plates, and power components from equipment that can no longer be repaired as a whole. Many residents depend on this work because replacing a machine is expensive, while salvaging parts can keep other machines operating."
+      },
+      {
+        "name": "Cragfoot",
+        "description": "Cragfoot is a border town at the foot of the mountains, where miners, traders, guards, and local families live close to routes used by neighboring regions. It supplies food, tools, lodging, and repairs to people moving through the passes. The town depends on trade and mining, but must also deal with harsh weather, blocked roads, and occasional conflict along the border."
+      },
+      {
+        "name": "Dredgehall",
+        "description": "Dredgehall is the last major supply stop before the deep underground work sites that produce most of the Ferrant Concord’s metal, fuel, machine parts, and raw materials. Workers come here to buy lamps, rope, food, tools, protective gear, and maps before going below. The town has bunkhouses, stores, repair shops, hiring boards, and people who track workers leaving for the lower levels and returning from them."
+      },
+      {
+        "name": "The Under-Ledge",
+        "description": "The Under-Ledge is a small settlement built near sealed underground areas that are difficult to reach from the surface. The area is dangerous because the old tunnels can collapse, release harmful gases, flood, lose air circulation, or expose damaged machinery that activates unpredictably. Its residents maintain equipment, monitor the tunnels, move supplies, and record changes in the surrounding structures, so daily life depends on regular inspections and strict safety routines."
+      }
+    ]
   },
   {
-    name: "Ashfell Marches",
-    summary:
-      "A horse-and-raid clan confederation organized around oath-rings, summer moots, and hard memory.",
-    internalConflict:
-      "The succession crisis after the Oath-Ring Warden's death threatens to split the confederation.",
-    externalConflict:
-      "Cael Ambrose settlement, Ferrant mining claims, and old reprisal wounds squeeze the clans.",
-    goodFor:
-      "clan politics, succession pressure, summer markets, bone-reading, oath-forges, border trade, and hard hospitality",
-    settlements: [
-      {
-        name: "Graymane Camp",
-        type: "seasonal city, ~15,000",
-        draw:
-          "The largest gathering in the Marches for three months of summer.",
-        rememberedDetail:
-          "Markets, courts, marriages, water ledgers, and horses turn grass into a city.",
-        friction:
-          "Its drift toward permanence may save people and betray the herding life.",
-      },
-      {
-        name: "Wardring",
-        type: "traditional seat, ~8,000",
-        draw:
-          "The half-abandoned seat where rival claimant banners face each other.",
-        rememberedDetail:
-          "Two rival banners are visible from the same ridge, close enough to see each other's watchfires.",
-        friction:
-          "Every path into Wardring now carries a peace story and a war story.",
-      },
-      {
-        name: "Windgather",
-        type: "settled camp, ~2,000",
-        draw:
-          "A once-mobile camp that rooted after winter killed its herds.",
-        rememberedDetail:
-          "Turf walls and seed houses are worn like both shame and proof.",
-        friction:
-          "It is mocked as rooted just as the whole Marches may need what it learned.",
-      },
-      {
-        name: "Bonehollow",
-        type: "bone-reader settlement, ~1,100",
-        draw:
-          "The center of Ashfell divination and succession legitimacy.",
-        rememberedDetail:
-          "Construct bones click, answer, and are treated as prophecy.",
-        friction:
-          "Truth about the bones could prevent war or collapse the only arbitration people still accept.",
-      },
-      {
-        name: "The Ring-Stone",
-        type: "oath-forge, ~80",
-        draw: "The hereditary forge where oath-rings are made.",
-        rememberedDetail:
-          "No clan banners pass the final ascent.",
-        friction:
-          "One smith's refusal can make peace lawful, war lawful, or neither.",
-      },
-      {
-        name: "Greyfold",
-        type: "shared border town",
-        draw:
-          "The Ambrose-Ashfell market town where necessity still beats hatred.",
-        rememberedDetail:
-          "The northern yards, shared wells, and two-faced altar keep trade alive.",
-        friction:
-          "Its unofficial usefulness is exactly what hardliners on both sides want to formalize or break.",
-      },
+    "name": "The Salt Concordat",
+    "description": "The Salt Concordat is a coastal region built around ports, shipyards, fisheries, sea trade, and travel between islands and mainland towns. Its people depend on the sea for food, transport, work, and access to goods from other regions. Ships carry cargo, passengers, mail, raw materials, and supplies, while coastal communities rely on fishing, boat repair, navigation, and safe harbors.\n\nLife in the region is shaped by weather, tides, shipping schedules, and the condition of the boats and ports people depend on",
+    "commonRaces": [
+      "Humans",
+      "halflings",
+      "sea elves",
+      "tritons"
     ],
+    "settlements": [
+      {
+        "name": "Corvane",
+        "description": "Corvane is the largest deep-water port in the Salt Concordat. Merchant ships bring in food, timber, metal, cloth, and passengers, then leave with cargo from inland regions and coastal fisheries. Most local work involves loading ships, repairing docks, storing goods, selling supplies, handling customs, making maps, or arranging transport."
+      },
+      {
+        "name": "Selwick",
+        "description": "Selwick is a shipbuilding town with large yards for building, repairing, and refitting vessels. Carpenters, metalworkers, rope makers, sail makers, painters, and dock crews work together to keep fishing boats, cargo ships, and patrol vessels usable. The town depends on steady deliveries of timber, metal, tar, cloth, and skilled workers."
+      },
+      {
+        "name": "Barnacle Reach",
+        "description": "Barnacle Reach is a prosperous coastal town built around fishing, shipping, and carefully managed access to nearby waters. Its residents earn money from boats, fish processing, trade, warehouses, and visitors who come to buy coastal goods. The town has strict local rules about where people may sail, fish, build, or search for salvage because one mistake at sea can damage livelihoods or put people in danger."
+      },
+      {
+        "name": "Skerrywatch",
+        "description": "Skerrywatch is a reef village where people depend on fishing, shellfish gathering, small boats, and knowledge of the tides. Reefs provide food and protect the village from rough water, but they can also wreck a boat if someone travels through them at the wrong time. Residents teach children how to read tides, weather, and markers before allowing them to work on the water."
+      },
+      {
+        "name": "Driftwood Landing",
+        "description": "Driftwood Landing is a small salvage settlement where people collect wreckage, cargo, and useful materials carried ashore by the sea. Workers sort wood, rope, metal, crates, damaged tools, and other recovered objects, then repair, sell, or trade what can still be used. The main local question is often who owns something once the sea has taken it and returned it somewhere else."
+      }
+    ]
   },
   {
-    name: "The Veiled Reach",
-    summary:
-      "An austere highland theocracy built around hoarding, memory, controlled access, and fear of waste.",
-    internalConflict:
-      "Reformists who want to spend the hoard for defense versus orthodox Watchers who insist hoarding must continue.",
-    externalConflict:
-      "Cael Ambrose, the Ferrant Concord, and thieves all want leverage over what the Reach stores.",
-    goodFor:
-      "monastery politics, ledger mysteries, controlled passes, famine accountability, observatory visions, and quiet corruption",
-    settlements: [
-      {
-        name: "Veiled Rest",
-        type: "capital, ~6,000",
-        draw:
-          "The capital built inside a still-active Second Dominion observatory.",
-        rememberedDetail:
-          "Hooded lanterns, ledgers, silence hours, and fasting chambers define the city.",
-        friction:
-          "Its discipline preserves knowledge while burying scandals and urgent need.",
-      },
-      {
-        name: "Cairnholt",
-        type: "quarry and vault town, ~2,200",
-        draw:
-          "The logistics town where the Reach's deepest stores are actually kept.",
-        rememberedDetail:
-          "Stone houses, mule courts, and sealed cellars make secrecy feel mundane.",
-        friction:
-          "The town's economy depends on not knowing which storehouses matter.",
-      },
-      {
-        name: "Thanewell",
-        type: "dependent farming village, ~1,800",
-        draw: "The village that feeds the Reach from thin highland terraces.",
-        rememberedDetail:
-          "Barley terraces and famine rooms turn doctrine into hunger.",
-        friction:
-          "Its records make reform unavoidable and orthodoxy harder to defend.",
-      },
-      {
-        name: "The Sisters' Gate",
-        type: "garrisoned pass, ~400",
-        draw: "The only controlled way into the Reach.",
-        rememberedDetail:
-          "Every cart is unpacked twice between two cold towers.",
-        friction:
-          "Rules built for caution now sort refugees, spies, merchants, and desperate people badly.",
-      },
-      {
-        name: "Coldmere Rise",
-        type: "hermitage, ~150",
-        draw: "A care-house for Watchers who fasted and returned wrong.",
-        rememberedDetail:
-          "Residents remember lives they never lived and are treated with unusual tenderness.",
-        friction:
-          "The Reach needs their testimony, but the institution exists to protect them from being used.",
-      },
+    "name": "The Ashfell Marches",
+    "description": "The Ashfell Marches is a wide grassland and highland region where many people depend on herding, livestock, seasonal travel, trade, and shared water sources. Communities move or gather according to weather, grazing land, winter conditions, and the needs of their animals. Some people live in permanent settlements, while others still travel between camps and pastures during the year.\n\nDaily life depends on practical cooperation: sharing wells, protecting herds, storing food, repairing equipment, settling disputes, and helping people survive difficult winters. Markets and seasonal gatherings are important because they allow distant communities to trade goods, arrange work, exchange news, and make agreements that will matter long after everyone leaves. Important agreements are often marked with oath-rings: metal rings made at the Ring-Stone forge as physical proof that two people, families, or communities accepted a promise or obligation.",
+    "commonRaces": [
+      "Humans",
+      "goliaths",
+      "orcs",
+      "halflings"
     ],
+    "settlements": [
+      {
+        "name": "Graymane Camp",
+        "description": "Graymane Camp is the largest seasonal gathering in the Marches. Herding families, traders, craftspeople, judges, healers, and travelers meet there during the warmer months to buy supplies, arrange marriages, settle disputes, trade livestock, and prepare for winter. The camp grows into a temporary town with markets, animal pens, water stores, tents, and shared work areas."
+      },
+      {
+        "name": "Windgather",
+        "description": "Windgather was once a traveling camp but became a permanent settlement after repeated hard winters made it difficult for its people to keep moving with their herds. Residents now use turf homes, small fields, seed stores, and animal pens alongside older herding practices. The town depends on managing water, pasture, food stores, and livestock carefully enough to survive bad weather."
+      },
+      {
+        "name": "Bonehollow",
+        "description": "Bonehollow is a settlement where local leaders and families bring important disputes for public judgment. Its people use old machine bones and metal fragments found in the region as part of their traditional method of reading signs and making decisions. Residents include craftspeople, record keepers, animal traders, visitors seeking judgment, and families waiting to learn how a dispute will be resolved."
+      },
+      {
+        "name": "The Ring-Stone",
+        "description": "The Ring-Stone is a small mountain forge where metal rings are made for marriages, work agreements, debt settlements, and other serious promises. In the Marches, an oath-ring is physical proof that both sides accepted an agreement, so people travel there when they need a promise recognized by other communities. Smiths, witnesses, messengers, and travelers keep the forge active."
+      },
+      {
+        "name": "Greyfold",
+        "description": "Greyfold is a border market town shared by people from the Ashfell Marches and Cael Ambrose. Farmers, herders, merchants, and craftspeople meet there to trade grain, livestock, tools, cloth, and supplies that neither side can easily produce alone. Its wells, markets, and roadside yards are shared spaces where people with different customs still have to work together."
+      }
+    ]
   },
   {
-    name: "The Sundered Vale",
-    summary:
-      "A lawless ruin-delving frontier on the worst-scarred ground of the Graywake, co-administered through the fragile Claim-Stake Accord.",
-    internalConflict:
-      "Rival Claim Warden companies and sponsor powers clash over rich sites and falsified risk.",
-    externalConflict:
-      "Bleed Zones, unstable ruins, time loops, illegal salvage routes, and the open vault pull everyone inward.",
-    goodFor:
-      "claim disputes, boomtowns, smuggling, dangerous delves, evacuation drills, inheritance camps, and reality scars",
-    settlements: [
-      {
-        name: "Stakehold",
-        type: "boomtown capital, ~14,000",
-        draw:
-          "Accord headquarters and the Vale's only real neutral law.",
-        rememberedDetail:
-          "Plankwalks, ruin-stone offices, and the rotating tri-power flag hold the town together.",
-        friction:
-          "Its corruption is currently holding back something worse than corruption.",
-      },
-      {
-        name: "Glasspan",
-        type: "fencing town, ~9,000",
-        draw: "The laundering capital for looted Refined Wellspring.",
-        rememberedDetail:
-          "The fused glass flats shine so brightly every shadow looks suspicious.",
-        friction:
-          "Its paperwork feeds distant infrastructure and local violence at the same time.",
-      },
-      {
-        name: "Rimshaft",
-        type: "rush-camp, ~3,000",
-        draw: "A rich vein camp built on an overdue Bleed Zone.",
-        rememberedDetail:
-          "Bell drills, vent watches, and numbered bunkhouses keep everyone half-ready to run.",
-        friction:
-          "Leaving means abandoning wages, debt, friends, and the only skilled life many people have.",
-      },
-      {
-        name: "Widow's Stake",
-        type: "widow-run claim camp, ~1,200",
-        draw:
-          "A cooperative camp built from widows holding dead husbands' claims.",
-        rememberedDetail:
-          "Supper-table votes and red fences turn inheritance into government.",
-        friction:
-          "The law that saved the camp can also trap those who want to leave.",
-      },
-      {
-        name: "Vail Choir",
-        type: "sealed vault claim",
-        draw:
-          "The richest and most infamous claim in the Vale.",
-        rememberedDetail:
-          "The vault mouth sings in damaged tones and parts of the interior replay the Graywake.",
-        friction:
-          "Everyone needs it, no company keeps it, and every legal ruling risks bloodshed.",
-      },
-      {
-        name: "The Shatterline",
-        type: "waypoint",
-        draw: "The boundary beyond which even Claim Wardens hesitate.",
-        rememberedDetail:
-          "Black stakes, last lanterns, and no-claim customs mark the edge.",
-        friction:
-          "Past the line, salvage law, maps, and ordinary courage stop working cleanly.",
-      },
+    "name": "The Veiled Reach",
+    "description": "The Veiled Reach is a cold, mountainous region with isolated towns, narrow travel routes, limited farmland, and long winters. People depend on careful planning, stored supplies, mule transport, and safe access through mountain passes. Food, medicine, fuel, tools, and news may take days or weeks to reach a remote settlement, so supply failures or blocked roads affect daily life quickly.\n\nThe region relies on a network of signal towers to coordinate travel, emergencies, and deliveries. During the day, towers use colored flags for broad messages such as a route being open, a storm approaching, a late convoy, or a request for help. At night, trained workers use extremely bright magic lanterns to send longer coded messages by flashing them in a Morse-code-like pattern.",
+    "commonRaces": [
+      "Humans",
+      "dwarves",
+      "goliaths",
+      "elves",
+      "dragonborn"
     ],
-  },
+    "settlements": [
+      {
+        "name": "Veiled Rest",
+        "description": "Veiled Rest is the main city of the Veiled Reach, built around a large old observatory that now serves as the region’s communication and emergency-control center. From its high towers, Watchers track mountain passes, receive requests for help, and coordinate supply deliveries and rescue work across isolated settlements. The city keeps regional maps and message records, and contains dispatch offices, workshops, markets, schools, kitchens, and lodging for people working in administration, trade, and public services."
+      },
+      {
+        "name": "Thanewell",
+        "description": "Thanewell is a farming village built around narrow hillside terraces. Residents grow barley and other hardy crops, keep small animals, store food for winter, and manage limited water and soil carefully. Its harvests matter to the wider Reach because the region has little easy farmland."
+      },
+      {
+        "name": "The Sisters’ Gate",
+        "description": "The Sisters’ Gate is the main controlled entrance into the Veiled Reach, located between two cold mountain towers. Travelers, merchants, workers, and supply carts are checked there before entering or leaving the region. Guards inspect goods, confirm travel reasons, and control who may pass because the mountain route is narrow, difficult, and important for the Reach’s safety and supplies."
+      },
+      {
+        "name": "Coldmere Rise",
+        "description": "Coldmere Rise is a care settlement for Watchers, people sent to isolated posts to observe weather, mountain routes, distant activity, and changes in the land. Some Watchers return exhausted, injured, or confused after long periods alone in harsh conditions, so the settlement provides food, rest, medical care, and quiet places to recover. Healers, caretakers, record keepers, and families live there alongside the Watchers."
+      }
+    ]
+  }
 ];
 
 export function isEldermerePreset(presetId: string | null | undefined) {
@@ -554,122 +247,43 @@ export function eldermereMetadataProfile(start?: EldermereCampaignStart) {
     worldName: eldermereWorldProfile.worldName,
     genre: eldermereWorldProfile.genre,
     source: "flagship_world",
-    selectedRegion: start
-      ? {
-          name: start.region.name,
-          identity: start.region.summary,
-          internalConflict: start.region.internalConflict,
-          externalConflict: start.region.externalConflict,
-          startingHooks: [start.region.goodFor],
-        }
-      : null,
-    startingLocation: start
-      ? {
-          name: start.settlement.name,
-          type: start.settlement.type,
-          displayLocation: start.settlement.name,
-          frictionPoint: start.settlement.friction,
-        }
-      : null,
+    selectedRegion: start ? { name: start.region.name } : null,
+    startingLocation: start ? { name: start.settlement.name, displayLocation: start.settlement.name } : null,
   };
 }
 
-export function formatEldermereOpeningPromptContext(
-  start?: EldermereCampaignStart,
-) {
+export function formatEldermereSelectedRegionContext(start?: EldermereCampaignStart) {
+  if (!start) return "World: Eldermere.";
   return [
-  "Flagship world context:",
-  "World: Eldermere.",
-  "Genre: anchored high fantasy adventure.",
-  "Elevator pitch: Eldermere is a world built on the bones of a fallen magocracy. The Second Dominion shattered in the Graywake roughly 340 years ago, the gods went quiet, and the present age is deciding what the Third Age should become. Parties are treasure hunters, oath-breakers, faithful, delvers, frontier opportunists, and people inheriting power they did not fully earn.",
-  "Realism and tone: Eldermere is invented high fantasy, but its feudal structures, trade logic, borders, religions, and consequences should feel socially grounded enough that players can reason about them. The tone is wondrous, perilous, morally clear but not simple, and wry when appropriate.",
-  "History to preserve: the Age of Dawning Blood is the mythic origin of magic, when divine ichor became the Wellspring. The Second Dominion, also called the Sunfall Compact, was the god-touched magocratic empire that raised the Old Roads and built most ruins worth delving. The Graywake was the divine civil war that cracked the Wellspring and drove the gods into silence. The Hush was the long aftermath. The Kindling is the current age, marked by new Bleed Zones, ruin-delving industry, and escalating religious and political conflict.",
-  "Magic rules: ordinary spellcraft is reproducible and teachable, but the strongest magic requires Wellglass: crystallized, refined godsblood scavenged from Second Dominion ruins. Wellglass is finite, expensive, and consumed when used. True resurrection, permanent teleportation circles, city-scale wards, artifact crafting, and major constructs should not be casual. Mundane travel, steel, skill, politics, debt, and courage still matter.",
-  "Pantheon rules: Eldermere has five Divine Forces: the Hearth-Warden, the Iron Judge, the Deep Currents, the Verdant Choir, and the Ashen Scholar. The gods speak through omens, dreams, and masks, never through plain reliable instruction. Clerics and paladins receive revocable divine gifts. Warlocks do not pact with true Divine Forces; they pact with Unmasked god-fragments left by the Graywake.",
-  "",
-  "Seven regions available for the opener:",
-  ...eldermereRegions.map(
-    (region, index) =>
-      `${index + 1}. ${region.name}: ${region.summary} Internal conflict: ${region.internalConflict} External conflict: ${region.externalConflict} Great for ${region.goodFor}.`,
-  ),
-  "",
-  ...(start
-    ? [
-        "Selected opener region and settlement:",
-        `Region: ${start.region.name}. ${start.region.summary}`,
-        `Region internal conflict: ${start.region.internalConflict}`,
-        `Region external conflict: ${start.region.externalConflict}`,
-        `Starting settlement: ${start.settlement.name} (${start.settlement.type}).`,
-        `What draws people: ${start.settlement.draw}`,
-        `What a visitor remembers: ${start.settlement.rememberedDetail}`,
-        `Settlement friction: ${start.settlement.friction}`,
-        "Opening region rule: use this selected region and settlement as the concrete start. Do not choose a different primary region or starting settlement. Mention other regions only if directly relevant as trade partners, rivals, rumors, or distant pressure.",
-      ]
-    : [
-        "Opening region rule: choose one primary region for the campaign opener and make its local identity, conflict, and sensory details concrete. Do not mash all seven regions into the first scene. Mention other regions only if directly relevant as trade partners, rivals, rumors, or distant pressure.",
-      ]),
-  "Starting rule: there is no fixed canonical starting town. Use a named starting place from a region, settlement, road, ruin, camp, city district, or landmark. Do not use a genre label as the location.",
-  "Opening lore clarity rule: in the player-facing opening narration, use no more than 2-3 new Eldermere-specific proper nouns besides the selected region and starting settlement. Explain every used setting term in plain language on first use. Do not mention faction names, religious schisms, ancient ages, distant regions, or extra institutions unless they matter to the player's immediate first choice. Prefer concrete meaning before official names, such as 'the strict temple faction' before 'the Undying Charter' unless the official name is immediately useful.",
-  'Opening setting requirement: include setting.world_name as "Eldermere" and choose concrete values for setting.starting_location and setting.display_location.',
-  ].join("\n");
+    "Selected starting settlement: " + start.settlement.name + ".",
+    "",
+    "## " + start.region.name,
+    "",
+    start.region.description,
+    "",
+    "Common races include: " + start.region.commonRaces.join(", "),
+    "",
+    ...start.region.settlements.flatMap((settlement) => [
+      "### " + settlement.name,
+      "",
+      settlement.description,
+      "",
+    ]),
+  ].join("\n").trim();
 }
 
-export const eldermereOpeningPromptContext =
-  formatEldermereOpeningPromptContext();
+export function formatEldermereOpeningPromptContext(start?: EldermereCampaignStart) {
+  return formatEldermereSelectedRegionContext(start);
+}
 
-export function formatEldermereTurnPromptContext(
-  start?: EldermereCampaignStart,
-) {
+export const eldermereOpeningPromptContext = formatEldermereOpeningPromptContext();
+
+export function formatEldermereTurnPromptContext(start?: EldermereCampaignStart) {
   return [
     "World Context:",
-    "World: Eldermere, AI Taverns' flagship anchored high-fantasy setting.",
-    "Core premise: Eldermere is built on the ruins of the fallen Second Dominion, an ancient empire whose works still shape roads, mines, cities, monsters, magic, and political borders. About 340 years ago, the Graywake cracked the Wellspring beneath the Dominion, shattered its empire, and began the long divine silence called the Hush. The current age is the Kindling: gods have begun speaking again only through omens, dreams, masks, miracles, and uncertain signs.",
+    formatEldermereSelectedRegionContext(start),
     "",
-    "Magic:",
-    "Wellglass is refined godsblood from the broken Wellspring. It is rare, finite, politically dangerous, and powers the strongest magic, relics, engines, and rituals. Common magic exists, but major miracles, ancient machinery, dungeon phenomena, and empire-scale works should usually involve Wellglass or Second Dominion remnants.",
-    "",
-    "Religion:",
-    "The gods are real but not conversational. They should not give simple instructions or appear casually. Faith is interpreted through signs, priesthoods, masks, traditions, schisms, and competing readings of divine will.",
-    "",
-    "The Five Divine Forces:",
-    "- The Hearth-Warden: roads, shelter, hospitality, oaths of welcome, protection of the vulnerable.",
-    "- The Iron Judge: law, consequence, sworn judgment, punishment, justice, and hard order. Worship differs sharply between Sevrantine legalists and Baragh oath-clans.",
-    "- The Deep Currents: seas, tides, hidden truths, bargains, dreams, drownings, and things carried beneath the surface.",
-    "- The Verdant Choir: growth, decay, forests, beasts, harvest, old roots, and the living world's memory.",
-    "- The Ashen Scholar: memory, prophecy, records, forbidden knowledge, sacrifice, and the cost of knowing.",
-    "",
-    "Warlocks:",
-    "Warlock patrons are not the true gods. They are usually Unmasked god-fragments, broken divinities, drowned powers, ruin-intelligences, or other partial forces wearing divine shapes.",
-    "",
-    "Regions of Eldermere:",
-    ...eldermereRegions.map((region) => `- ${region.name}: ${region.summary}`),
-    "",
-    ...(start
-      ? [
-          "Current Campaign Anchor:",
-          `Selected starting region: ${start.region.name}.`,
-          `Starting settlement: ${start.settlement.name} (${start.settlement.type}).`,
-          "Use this region and settlement as the campaign's local default unless the players travel elsewhere. Ground NPCs, rumors, prices, dangers, customs, weather, faith, politics, and dungeon hooks in this location first.",
-          `Region identity: ${start.region.summary}`,
-          `Local settlement: ${start.settlement.draw}`,
-          `Local friction: ${start.settlement.friction}`,
-          "DM rule: do not relocate the party, change the starting region, or introduce another region as the main setting unless player action or established campaign events justify it.",
-          "",
-        ]
-      : []),
-    "Eldermere DM Rules:",
-    "- Treat Eldermere as the canonical campaign world, not a generic fantasy backdrop.",
-    "- Use the selected region first when present; use the other six regions as wider-world context, trade links, rumors, foreign NPC origins, religious tensions, and future travel options.",
-    "- Keep divine activity indirect unless the scene is explicitly miraculous.",
-    "- Keep Wellglass rare, valuable, and politically meaningful.",
-    "- Do not reveal hidden lore, faction secrets, god-fragment truths, or dungeon answers directly in player-facing narration.",
-    "- Prefer region-specific institutions, gods, customs, and conflicts over generic fantasy equivalents.",
-    "",
-    "Player-Facing Lore Clarity:",
-    "- Do not overload opening scenes or ordinary turns with unexplained Eldermere proper nouns. Use at most 2-4 new setting-specific terms in a scene unless the player already knows them.",
-    "- When using an Eldermere-specific term for the first time in player-facing narration, gloss it naturally in plain language. Prefer 'Stakehold, the frontier camp where rival powers pretend to share authority' over 'Stakehold, headquarters of the Claim-Stake Accord.'",
-    "- Prefer concrete meaning before official names. If a term is not immediately useful to the player's next decision, save it for later.",
-    "- Introduce lore through action, stakes, NPC behavior, signs, objects, and consequences rather than encyclopedia exposition.",
+    "Use this region packet as setting context. Create campaign-local people, conflicts, history, and secrets from play; do not treat details not stated here as established world lore.",
   ].join("\n");
 }
 

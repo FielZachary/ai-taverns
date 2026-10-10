@@ -207,37 +207,37 @@ const eldermereRegions = [
   {
     name: "Cael Ambrose",
     summary:
-      "A fertile feudal heartland of farms, river towns, Old Roads, guest-right customs, and noble obligations."
+      "A grassland farming region with busy roads, river crossings, market towns, mills, and villages that supply food to other parts of Eldermere."
   },
   {
     name: "Thornwake Vale",
     summary:
-      "An old-growth forest confederation ruled by rotating grove-speakers and older green loyalties."
+      "A heavily forested region where communities live among groves, rivers, large trees, and forest paths."
   },
   {
     name: "The Ferrant Concord",
     summary:
-      "A guild-republic of reclaimed mine tunnels, foundries, volcanic heights, ore, ambition, and hard bargains."
+      "An industrial and mountain region that depends on mines, underground work sites, foundries, machine repair, and long-distance trade."
   },
   {
     name: "The Salt Concordat",
     summary:
-      "A league of port city-states bound by maritime law, fleets, lighthouse holdings, sea faith, and drowned ruins."
+      "A coastal region built around ports, shipyards, fisheries, sea trade, and travel between islands and mainland towns."
   },
   {
     name: "Ashfell Marches",
     summary:
-      "A proud horse-and-raid clan confederation of high plains, oath-rings, border pressure, and hard hospitality."
+      "A wide grassland and highland region where many people depend on herding, livestock, seasonal travel, trade, and shared water sources."
   },
   {
     name: "The Veiled Reach",
     summary:
-      "A magic-poor highland theocracy of austere monasteries, guarded passes, hoarded Wellglass, and forbidden ledgers."
+      "A cold, mountainous region with isolated towns, narrow travel routes, limited farmland, and long winters."
   },
   {
     name: "The Sundered Vale",
     summary:
-      "A lawless ruin-delving frontier of broken ground, blue fire, unstable claims, and places that never went quiet."
+      "A frontier region built around old ruins, excavation sites, and land that was damaged by powerful magic long ago."
   }
 ];
 

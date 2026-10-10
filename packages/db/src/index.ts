@@ -9545,14 +9545,9 @@ function formatEldermereOpeningBriefRequest(input: {
     `Region: ${region?.name ?? "Eldermere"}`,
     `Starting location: ${settlement?.name ?? "the selected starting location"}`,
     "",
-    "ELDERMERE GROUNDING",
-    "Eldermere is grounded high fantasy built on the ruins of a fallen magocracy. Magic is costly, old ruins remain dangerous, and local powers compete over what the past left behind.",
-    region
-      ? `Selected region: ${region.summary} Its current tensions include ${region.internalConflict} and ${region.externalConflict}.`
-      : "",
-    settlement
-      ? `Selected starting location: ${settlement.draw} Remembered detail: ${settlement.rememberedDetail}. Current friction: ${settlement.friction}.`
-      : "",
+    "ELDERMERE REGION PACKET",
+    formatEldermereOpeningPromptContext(start),
+    "The region packet describes ordinary regional life and places. Create campaign-local people, conflicts, history, and secrets; do not treat unstated details as established lore.",
     "",
     "CONCEPT REQUIREMENTS",
     "Create a campaign concept that begins with a specific, present-tense change in the selected starting location.",
@@ -9596,14 +9591,9 @@ function formatEldermereCampaignConceptRequest(input: {
     `Region: ${region?.name ?? "Eldermere"}`,
     `Starting location: ${settlement?.name ?? "the selected starting location"}`,
     "",
-    "ELDERMERE GROUNDING",
-    "Eldermere is grounded high fantasy built on the ruins of a fallen magocracy. Magic is costly, old ruins remain dangerous, and local powers compete over what the past left behind.",
-    region
-      ? `Selected region: ${region.summary} Its current tensions include ${region.internalConflict} and ${region.externalConflict}.`
-      : "",
-    settlement
-      ? `Selected starting location: ${settlement.draw} Remembered detail: ${settlement.rememberedDetail}. Current friction: ${settlement.friction}.`
-      : "",
+    "ELDERMERE REGION PACKET",
+    formatEldermereOpeningPromptContext(start),
+    "The region packet describes ordinary regional life and places. Create campaign-local people, conflicts, history, and secrets; do not treat unstated details as established lore.",
     "",
     "CONCEPT REQUIREMENTS",
     "Create a campaign concept that begins with a specific, present-tense change in the selected starting location.",

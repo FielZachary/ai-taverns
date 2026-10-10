@@ -2629,7 +2629,11 @@ test("POST /api/campaigns seeds Eldermere world context for flagship campaigns",
   );
   assert.match(plannerInput.message, /PLAYER CHARACTER/);
   assert.match(plannerInput.message, /CANONICAL START/);
-  assert.match(plannerInput.message, /ELDERMERE GROUNDING/);
+  assert.match(plannerInput.message, /ELDERMERE REGION PACKET/);
+  assert.match(plannerInput.message, /Selected starting settlement: Selwick\./);
+  assert.match(plannerInput.message, /### Corvane/);
+  assert.match(plannerInput.message, /### Driftwood Landing/);
+  assert.doesNotMatch(plannerInput.message, /The Sundered Vale/);
   assert.match(plannerInput.message, /CONCEPT REQUIREMENTS/);
   assert.match(plannerInput.message, /OPENING-SCENE HANDOFF REQUIREMENTS/);
   assert.match(plannerInput.message, /directions for the narrator/i);
