@@ -686,7 +686,7 @@ describe("DM provider helpers", () => {
         mechanics_state_update: {},
         inventory_state_update: { patches: [] }
       }),
-      { dmJob: "investigation" }
+      { dmJob: "scene_director" }
     );
 
     assert.equal(
@@ -747,7 +747,7 @@ describe("DM provider helpers", () => {
         mechanics_state_update: {},
         inventory_state_update: { patches: [] }
       }),
-      { dmJob: "investigation" }
+      { dmJob: "scene_director" }
     );
 
     assert.equal(result.publicNarration, publicNarration);
@@ -771,7 +771,7 @@ describe("DM provider helpers", () => {
         mechanics_state_update: {},
         inventory_state_update: { patches: [] }
       }),
-      { dmJob: "investigation" }
+      { dmJob: "scene_director" }
     );
 
     assert.equal(

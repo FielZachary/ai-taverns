@@ -2850,8 +2850,6 @@ before(async () => {
           const content = JSON.stringify({
             job_needed: /\battack\b/i.test(currentTurnInput)
               ? "combat"
-              : shouldSelectCourierLetter || shouldSelectCinderhaltDocuments
-                ? "investigation"
               : "scene_director",
             context_keys: {
               npc_context: [],

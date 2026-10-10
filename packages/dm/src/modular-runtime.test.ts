@@ -419,9 +419,8 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(routerPrompt, /Do not choose clarification merely because an action is risky/i);
     assert.match(routerPrompt, /Job selection guide:/);
     assert.match(routerPrompt, /scene_director: Choose for ordinary noncombat scene movement/i);
-    assert.match(routerPrompt, /not primarily conversation, clue discovery, combat, rest, death saves, or clarification/i);
-    assert.match(routerPrompt, /investigation: Choose when the player is searching, inspecting, tracking/i);
-    assert.match(routerPrompt, /trying to uncover information the character does not automatically know/i);
+    assert.match(routerPrompt, /searching, inspecting, tracking, studying, piecing together clues/i);
+    assert.doesNotMatch(routerPrompt, /investigation: Choose/i);
     assert.match(routerPrompt, /npc_dialogue: Choose when the player directly speaks with/i);
     assert.match(routerPrompt, /combat: Choose when combat is active and the input affects turn flow/i);
     assert.match(routerPrompt, /rest_mechanics: Choose when the player attempts a short rest/i);
@@ -455,7 +454,6 @@ describe("modular AI DM runtime contracts", () => {
     );
     for (const job of [
       "scene_director",
-      "investigation",
       "npc_dialogue",
       "combat",
       "rest_mechanics",
@@ -548,19 +546,6 @@ describe("modular AI DM runtime contracts", () => {
       jobPrompt("scene_director"),
       /Do not create new canon from a lie by having an NPC supply confirming lore/i
     );
-    assert.match(
-      jobPrompt("investigation"),
-      /Distinguish discovering, seeing, identifying, or learning about an item/i
-    );
-    assert.match(
-      jobPrompt("investigation"),
-      /state the target DC or threshold in public_narration before the player rolls/i
-    );
-    assert.match(
-      jobPrompt("investigation"),
-      /what category of information that DC can unlock without revealing the hidden answer/i
-    );
-    assert.match(jobPrompt("investigation"), /target_dc/i);
     assert.match(jobPrompt("combat"), /strict turn ownership/i);
     assert.match(jobPrompt("combat"), /Group combat narration by action\/result beat/i);
     assert.match(
@@ -998,7 +983,7 @@ describe("modular AI DM runtime contracts", () => {
         /visible movement, silence, raised-voice risk, gestures the player can actually see, or require the player to move closer/i
       );
     }
-    for (const job of ["scene_director", "investigation", "npc_dialogue"] as const) {
+    for (const job of ["scene_director", "npc_dialogue"] as const) {
       const prompt = jobPrompt(job);
       assert.match(prompt, /Submitted Player Roll Result Opening:/);
       assert.match(
@@ -1039,7 +1024,6 @@ describe("modular AI DM runtime contracts", () => {
       /NPC communication is local, not omnipresent/i
     );
     for (const job of [
-      "investigation",
       "rest_mechanics",
       "death_saving_throws",
       "clarification"
@@ -1072,7 +1056,6 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("clarification"), /Do not reframe or soften the player's declared intent/i);
     for (const job of [
       "scene_director",
-      "investigation",
       "npc_dialogue",
       "combat",
       "rest_mechanics",
@@ -1133,7 +1116,7 @@ describe("modular AI DM runtime contracts", () => {
     }
     for (const prompt of [
       jobPrompt("scene_director", "single_player"),
-      jobPrompt("investigation", "multiplayer")
+      jobPrompt("scene_director", "multiplayer")
     ]) {
       assert.match(prompt, /Canonical document text/i);
       assert.match(prompt, /## Canonical Document Text section/i);

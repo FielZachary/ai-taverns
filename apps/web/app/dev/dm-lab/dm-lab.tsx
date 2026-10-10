@@ -2,14 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type Stage = "opening_brief_planner" | "opening_planner" | "opening_narrator" | "router" | "scene_director" | "investigation" | "npc_dialogue" | "combat" | "clarification";
+type Stage = "opening_brief_planner" | "opening_planner" | "opening_narrator" | "router" | "scene_director" | "npc_dialogue" | "combat" | "clarification";
 type DebugMessage = { role: "system" | "user" | "assistant"; content: string };
 type Run = { output: string; durationMs: number; model: string | null; validation: { valid: boolean; details: string[] } };
 type LabResponse = { source: { file: string; function: string; gitRevision: string; campaignId: string }; stage: Stage; action: "baseline" | "override"; request: { messages: DebugMessage[]; fullPrompt: string }; result: Run };
 type CampaignOption = { id: string; title: string; preview: string | null; mode: "single_player" | "multiplayer" };
 
 const stages: Array<{ value: Stage; label: string }> = [
-  { value: "opening_brief_planner", label: "Eldermere — Opening brief planner" }, { value: "opening_planner", label: "Eldermere — Foundation planner" }, { value: "opening_narrator", label: "Eldermere — Opening narrator" }, { value: "router", label: "Normal turn — Router" }, { value: "scene_director", label: "Normal turn — Scene director" }, { value: "npc_dialogue", label: "Normal turn — NPC dialogue" }, { value: "investigation", label: "Normal turn — Investigation" }, { value: "combat", label: "Normal turn — Combat" }, { value: "clarification", label: "Normal turn — Clarification" }
+  { value: "opening_brief_planner", label: "Eldermere — Opening brief planner" }, { value: "opening_planner", label: "Eldermere — Foundation planner" }, { value: "opening_narrator", label: "Eldermere — Opening narrator" }, { value: "router", label: "Normal turn — Router" }, { value: "scene_director", label: "Normal turn — Scene director" }, { value: "npc_dialogue", label: "Normal turn — NPC dialogue" }, { value: "combat", label: "Normal turn — Combat" }, { value: "clarification", label: "Normal turn — Clarification" }
 ];
 
 function lineDiff(before: string, after: string) { const left = before.split("\n"); const right = after.split("\n"); return Array.from({ length: Math.max(left.length, right.length) }, (_, index) => ({ index, left: left[index], right: right[index], changed: left[index] !== right[index] })); }

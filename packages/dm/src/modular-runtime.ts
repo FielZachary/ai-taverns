@@ -1,6 +1,5 @@
 export const dmJobNames = [
   "scene_director",
-  "investigation",
   "npc_dialogue",
   "combat",
   "rest_mechanics",
@@ -281,8 +280,7 @@ export function buildRouterPrompt() {
     "Choose clarification when the player's intended action is too underspecified to adjudicate safely, especially combat actions like casting a spell, making an attack, using a weapon, or targeting an area effect without a clear target, target area, or necessary tactical detail.",
     "Do not choose clarification merely because an action is risky, opposed, or requires dice; route those to the relevant gameplay job and request rolls there.",
     "Job selection guide:",
-    "- scene_director: Choose for ordinary noncombat scene movement, exploration, travel, environmental description, simple consequences, scene transitions, visible hazards, or player actions that are not primarily conversation, clue discovery, combat, rest, death saves, or clarification.",
-    "- investigation: Choose when the player is searching, inspecting, tracking, studying, piecing together clues, testing suspicions, reading hidden meaning, identifying magic or lore, examining evidence, or trying to uncover information the character does not automatically know.",
+    "- scene_director: Choose for ordinary noncombat scene movement, exploration, travel, environmental description, searching, inspecting, tracking, studying, piecing together clues, testing suspicions, reading hidden meaning, identifying magic or lore, examining evidence, simple consequences, scene transitions, visible hazards, or player actions that are not primarily conversation, combat, rest, death saves, or clarification.",
     "- npc_dialogue: Choose when the player directly speaks with, questions, persuades, deceives, intimidates, negotiates with, bargains with, interrogates, comforts, threatens, or otherwise socially engages an NPC.",
     "- combat: Choose when combat is active and the input affects turn flow, positioning, attacks, spells, saves, damage, enemy actions, initiative, tactical movement, combat resources, or battlefield state. Also choose when the player starts a hostile action that should enter combat.",
     "- rest_mechanics: Choose when the player attempts a short rest, long rest, sleep, camp, recover HP, spend hit dice, restore class resources, reset spell slots, or otherwise complete rest-based recovery.",
@@ -1799,25 +1797,6 @@ export function jobPrompt(
         "- Do not force the player into listed options. Options are examples of visible possibilities, not a complete menu; always leave room for a creative response."
       ].join("\n")
     ],
-    investigation: [
-      [
-        "Investigation Job:",
-        "",
-        "Purpose:",
-        "- Handle discovery, mysteries, hidden information, and clue progression.",
-        "",
-        "Clue Progression:",
-        "- Reveal clues gradually and avoid dead ends on failed rolls.",
-        "",
-        "Discovery Roll Procedure:",
-        "- When requesting an Investigation, Perception, Insight, Arcana, History, Nature, Religion, Survival, or other discovery roll, state the target DC or threshold in public_narration before the player rolls.",
-        "- Tell the player what category of information that DC can unlock without revealing the hidden answer. Example: \"Make an Investigation check. DC 14 reveals how the lock was disturbed; DC 18 may reveal whether the same hand altered the ledger.\" Then set next_input_needed to dice_results and include a structured roll_requests entry with a specific skill/tool label, target_dc, and a reason describing the non-spoiler information category.",
-        "",
-        "Inventory Boundary:",
-        "- Distinguish discovering, seeing, identifying, or learning about an item from taking possession of it. Only add inventory when the character actually takes, receives, pockets, collects, or is handed the item."
-      ].join("\n"),
-      ...playerRollResultOpeningGuidance,
-    ],
     npc_dialogue: [
       [
         "NPC Dialogue Job:",
@@ -2037,7 +2016,6 @@ export function jobPrompt(
   > = {
     single_player: {
       scene_director: [],
-      investigation: [],
       npc_dialogue: [],
       combat: soloCombatGuidance,
       rest_mechanics: [],
@@ -2046,7 +2024,6 @@ export function jobPrompt(
     },
     multiplayer: {
       scene_director: [],
-      investigation: [],
       npc_dialogue: [],
       combat: multiplayerCombatGuidance,
       rest_mechanics: [],

@@ -404,7 +404,7 @@ test("DeepSeek provider uses routed DM job for temperature", async () => {
       expectedTemperature: 0.8
     },
     {
-      dmJob: "investigation" as const,
+      dmJob: "scene_director" as const,
       message: "I study the blood pattern near the spear rack.",
       expectedTemperature: 0.8
     },

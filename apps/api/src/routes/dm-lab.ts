@@ -5,7 +5,7 @@ import type { ApiConfig } from "../config.js";
 import { askDungeonMasterProvider } from "../dm-provider.js";
 import { requireAuthenticatedUser } from "./auth.js";
 
-const stageSchema = z.enum(["opening_brief_planner", "opening_planner", "opening_narrator", "router", "scene_director", "investigation", "npc_dialogue", "combat", "clarification"]);
+const stageSchema = z.enum(["opening_brief_planner", "opening_planner", "opening_narrator", "router", "scene_director", "npc_dialogue", "combat", "clarification"]);
 const messageSchema = z.object({ role: z.enum(["system", "user", "assistant"]), content: z.string().trim().min(1).max(60_000) });
 const requestSchema = z.object({ action: z.enum(["baseline", "override"]), campaignId: z.string().trim().min(1).max(200), stage: stageSchema, messages: z.array(messageSchema).min(2).max(50) });
 
