@@ -537,6 +537,10 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(npcDialoguePrompt, /Player facing ending prompt/i);
     assert.match(npcDialoguePrompt, /clear, natural question inviting the player/i);
     assert.match(npcDialoguePrompt, /Do not repeat the previous turn's ending prompt/i);
+    assert.match(npcDialoguePrompt, /World Progression During NPC Dialogue/i);
+    assert.match(npcDialoguePrompt, /NPC dialogue must not freeze the world/i);
+    assert.match(npcDialoguePrompt, /established background tasks, events, and other characters continue progressing/i);
+    assert.match(npcDialoguePrompt, /Do not add idle background detail merely to imply movement/i);
     assert.doesNotMatch(npcDialoguePrompt, /Before Any NPC Answers/i);
     assert.doesNotMatch(npcDialoguePrompt, /Information Economy/i);
     assert.doesNotMatch(npcDialoguePrompt, /Social Impasse Rule/i);
