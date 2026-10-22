@@ -1238,25 +1238,26 @@ describe("modular AI DM runtime contracts", () => {
     const combatPrompt = jobPrompt("combat");
 
     for (const heading of [
-      "Ask for Player Surprise Attack Roll:",
-      "Ask for Player Initiative:",
-      "Ask for Player Action:",
-      "Ask for Player Attack Roll:",
-      "Ask for Player Damage Roll:",
-      "Ask for Player Saving Throw or Check Roll:",
-      "Ask for Player Reaction:",
-      "End Combat:"
+      "Player Surprise Attack Damage Roll",
+      "Player Initiative Roll",
+      "Player Attack and Damage Roll",
+      "Player Saving Throw or Check Roll",
+      "Ask for a Player Action",
+      "Ask for a Player Reaction",
+      "End Combat"
     ]) {
       assert.match(combatPrompt, new RegExp(heading));
     }
 
-    assert.match(combatPrompt, /Sneak Attack is not a response type/i);
-    assert.match(combatPrompt, /resolve every consecutive NPC and allied-NPC turn/i);
-    assert.match(combatPrompt, /Death saves remain the dedicated death_saving_throws job/i);
-    assert.match(combatPrompt, /Begin the final handoff with exactly: It is now your turn!/i);
-    assert.match(combatPrompt, /headed You currently have:/i);
-    assert.match(combatPrompt, /Format each tracked value as current\/max/i);
-    assert.doesNotMatch(combatPrompt, /After all requested player initiative rolls are submitted/i);
+    assert.match(combatPrompt, /If the response does not contain roll results/i);
+    assert.match(combatPrompt, /If the Player's Response Contains Roll Results/i);
+    assert.match(combatPrompt, /qualifying opening attack\s+automatically hits/i);
+    assert.match(combatPrompt, /Request the attack roll and normal damage roll together/i);
+    assert.match(combatPrompt, /Resolve every consecutive non-player-controlled turn/i);
+    assert.match(combatPrompt, /Death saving throws use the dedicated `death_saving_throws` job/i);
+    assert.match(combatPrompt, /It is now your turn!/i);
+    assert.match(combatPrompt, /You currently have:/i);
+    assert.match(combatPrompt, /HP: current\/max/i);
   });
 
   it("renders mode-specific job guidance without duplicating job prompts", () => {
