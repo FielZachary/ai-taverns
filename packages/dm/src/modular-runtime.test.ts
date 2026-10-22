@@ -1254,6 +1254,14 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(combatPrompt, /qualifying opening attack\s+automatically hits/i);
     assert.match(combatPrompt, /Request the attack roll and normal damage roll together/i);
     assert.match(combatPrompt, /Resolve every consecutive non-player-controlled turn/i);
+    assert.match(combatPrompt, /When the submitted rolls fully resolve the player's declared action:/);
+    assert.match(combatPrompt, /the player explicitly declared as part of the same turn/);
+    assert.match(combatPrompt, /complete and advance combat\.turnOwner to the next eligible actor/);
+    assert.match(combatPrompt, /Do not describe an NPC as preparing to act instead of resolving their/);
+    assert.ok(
+      combatPrompt.indexOf("### Advance After Resolving the Player's Action") > combatPrompt.indexOf("### Resolve Submitted Player Rolls") &&
+      combatPrompt.indexOf("### Advance After Resolving the Player's Action") < combatPrompt.indexOf("## If No New Player-Owned Roll Is Required")
+    );
     assert.match(combatPrompt, /Death saving throws use the dedicated `death_saving_throws` job/i);
     assert.match(combatPrompt, /It is now your turn!/i);
     assert.match(combatPrompt, /You currently have:/i);
