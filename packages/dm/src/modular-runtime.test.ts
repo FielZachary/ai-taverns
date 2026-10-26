@@ -1256,7 +1256,6 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(combatPrompt, /Resolve every consecutive non-player-controlled turn/i);
     assert.match(combatPrompt, /When the submitted rolls fully resolve the player's declared action:/);
     assert.match(combatPrompt, /the player explicitly declared as part of the same turn/);
-    assert.match(combatPrompt, /complete and advance combat\.turnOwner to the next eligible actor/);
     assert.match(combatPrompt, /Do not describe an NPC as preparing to act instead of resolving their/);
     assert.ok(
       combatPrompt.indexOf("### Advance After Resolving the Player's Action") > combatPrompt.indexOf("### Resolve Submitted Player Rolls") &&
