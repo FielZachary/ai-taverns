@@ -1958,12 +1958,15 @@ Player Claim Boundary:
 Handoff:
 - Do not end by summarizing every faction's stance, restating the stakes, or announcing that the situation has escalated. Do not use phrases such as 'the situation has tipped,' 'the lines are drawn,' or 'everyone waits to see what happens.'
 
-Player facing ending prompt:
-- End public_narration with a clear, natural question inviting the player to choose how to proceed on a separate paragraph.
-- The question must fit the immediate scene, pressure, available information, and current stakes. Make it specific to what the character can plausibly do next rather than relying on a generic 'What do you do?'
-- Use phrasing appropriate to the context, such as: 'Do you approach the clerk?', 'How would you like to respond to her accusation?', 'Will you proceed into the chamber under those conditions?', or 'What is Garbo's next move?'
-- Do not repeat the previous turn's ending prompt, including close paraphrases or the same underlying question. Each response must end with a newly phrased question that advances beyond the prior prompt and reflects what has changed since it.
-- Do not force the player into listed options. Options are examples of visible possibilities, not a complete menu; always leave room for a creative response.`],
+Player-Facing Ending Prompt:
+- End public_narration with one short, natural handoff question in its own paragraph.
+- When an NPC has spoken, asked a question, made a request, or is waiting for the character's response, default to asking what the character says to that NPC.
+- Use a broad, context-aware handoff such as 'What do you say to Hella?', 'How do you respond?', or 'What do you say?' Do not recap the conversation, list available social approaches, or suggest what the character should ask, offer, threaten, investigate, or do next.
+- Use a narrow question only when the game genuinely needs one missing detail before it can resolve the character's declared conversational action, such as the person addressed, the exact claim, offer, proof, threat, message, leverage, or approach.
+- Do not use an NPC's final spoken line to turn the handoff into a forced decision, especially an either/or question. An NPC may ask a natural question, make a request, or state an opinion, but the narration must still leave the player free to respond in any way.
+- Do not end with an either/or question, a menu of social actions, a recap of leads, or a question that frames the NPC's response as the player's only choices.
+- Do not repeat the previous handoff question or use the same wording every turn. Keep it brief, natural, and appropriate to the immediate exchange.
+- The question must leave room for any creative player response.`],
     combat: [
       [
       "# Combat Job",
