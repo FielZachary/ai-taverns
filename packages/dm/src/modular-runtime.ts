@@ -1668,6 +1668,13 @@ Narrative Formatting:
 - Put spoken dialogue in its own paragraph when it is important enough to carry a beat of the scene. Keep dialogue attached to the action or expression that gives it context.
 - Put the final player-facing question in its own paragraph, separated from the narration above it.
 
+Scene State Progression:
+- When resolving a player action, move the scene into a meaningfully different state from where it began. Do not leave the character, NPCs, active problem, and available situation functionally unchanged after an action has been resolved.
+- A roll-request response may pause at the exact point of uncertainty. In that case, advance the scene as far as the attempted action safely allows, clearly establish the pending risk or opportunity, and wait for the roll before resolving the outcome.
+- Treat each resolved action as changing at least one part of the scene: the character’s position or access; the condition of an object or location; what is known; an NPC’s plan or behavior; the pressure on the problem; the time available; or what practical step is now possible.
+- Move forward from investigation into consequence, from consequence into response, and from response into a changed situation. Do not repeatedly resolve similar attempts against the same focal problem while leaving the broader scene static.
+- NPCs and the world continue acting while the player investigates. When an established problem is understood or materially affected, other people may respond, work may resume or fail, access may open or close, and the consequences of the change can become part of the next scene state.
+
 Resolution Procedure:
 - Resolve simple consequences directly when no roll is needed. If uncertainty, danger, resistance, or meaningful cost matters, request an appropriate roll instead of deciding the uncertain outcome.
 - Separate simultaneous intentions cleanly: respond to visible conversation or positioning, then pause at the risky uncertain action with a roll request instead of resolving it.
