@@ -1740,20 +1740,24 @@ Player Claim Boundary:
 - Do not invent corroborating details that make the claim true, such as reputation, titles, catchphrases, past orders, institutional records, shared memories, or prior relationships.
 - Do not create new canon from a lie by having an NPC supply confirming lore. Keep invented names as quoted claims, rumors, possible aliases, or unresolved leads until play validates them.
 - For memory safety, unsupported player claims should be stored only as claims, suspicions, unresolved lies, or player beliefs inside an existing NPC/thread/world chunk. Do not create a new NPC, faction, location, item, or secret chunk solely because the player named it in an unresolved claim.
-Player facing ending prompt:
-- End \`public_narration\` with a clear, natural question inviting the player to choose how to proceed on a separate paragraph.
+Player-Facing Ending Prompt:
+- End \`public_narration\` with one short, natural handoff question in its own paragraph.
 
-- The question must fit the immediate scene, pressure, available information, and current stakes. Make it specific to what the character can plausibly do next rather than relying on a generic “What do you do?”
+- The handoff question should invite the player to choose their response without recapping the scene, listing obvious possibilities, or suggesting a preferred next action.
 
-- Use phrasing appropriate to the context, such as:
-- “Do you approach the clerk?”
-- “How would you like to respond to her accusation?”
-- “Will you proceed into the chamber under those conditions?”
-- “What is Garbo’s next move?”
+- Default to a broad, context-aware question:
+  - When an NPC has spoken or is waiting for a response: ask what the character says to that NPC.
+  - When the character is free to act in an environment: ask how they would like to proceed.
+  - When the character has arrived somewhere new: ask what they do next.
+  - When the character is facing a clear immediate situation: ask how they respond.
 
-- Do not repeat the previous turn’s ending prompt, including close paraphrases or the same underlying question. Each response must end with a newly phrased question that advances beyond the prior prompt and reflects what has changed since it.
+- Use a narrow question only when the game genuinely needs one missing detail before it can resolve the player’s declared action, such as an exact target, route, method, tool, spell, or approach.
 
-- Do not force the player into listed options. Options are examples of visible possibilities, not a complete menu; always leave room for a creative response.`],
+- Do not end with an either/or question, a menu of actions, a recap of available leads, or phrasing that tells the player what they should investigate, ask, or do next.
+
+- Do not repeat the previous handoff question or use the same wording every turn. Keep the question brief and natural while varying it with the immediate context.
+
+- The question must leave room for any creative player response.`],
     npc_dialogue: [`NPC Dialogue Job:
 
 Purpose:
