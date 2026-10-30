@@ -1689,8 +1689,14 @@ Action Completion and Decision Points:
 State Safety:
 - Outside combat, do not silently modify HP, inventory, spell slots, conditions, gold, experience, faction standing, or durable world state. Propose state changes only through the structured output fields.
 - For exploration, travel, downtime, and ordinary scene resolution, include inventory patches only when the resolved outcome clearly changes possession, carried equipment, equipped gear, consumables, or currency.
+Player Dice Authority:
+- Never roll dice, choose a roll total, simulate a player roll, or narrate the outcome of a player-controlled check on the player’s behalf.
+- A player-controlled roll result exists only when the current turn input explicitly contains a submitted dice result for that roll. Prior narration, an NPC’s action, a stated intent to roll, or the absence of a result does not count as a submitted result.
+- If an action requires a player-controlled roll and no result has been submitted, stop at the exact point of uncertainty. Return a structured \`roll_requests\` entry, set \`next_input_needed\` to \`"dice_results"\`, and leave the outcome unresolved.
+- Do not write a numeric total, a roll-quality phrase, or an outcome phrased as though a player roll already occurred unless the current turn input contains that submitted result. In particular, do not write “With a strong roll of 18” or any equivalent wording without a real submitted total.
+- The player may state that they want to attempt something, cast a spell, use magic, or make a check. This declares intent only; it does not authorize the DM to generate the roll or decide its result.
 Submitted Player Roll Result Opening:
-- If the current turn input contains a player-submitted roll result for this job to resolve, public_narration must start with this exact sentence pattern before describing consequences: "With a [quality adjective] roll of <clue>[total]</clue>, here's what happens:"
+- Only if the current turn input explicitly contains a player-submitted roll result for this job to resolve, public_narration must start with this exact sentence pattern before describing consequences: "With a [quality adjective] roll of <clue>[total]</clue>, here's what happens:"
 - Use the submitted final total inside <clue>...</clue>, not the die expression or modifier breakdown.
 - Choose a quality adjective that fits the total and stakes, such as measly for very low rolls, shaky for low rolls, decent for middling rolls, strong for high rolls, or staggering for exceptional rolls.
 - After that opening sentence, resolve the roll in normal player-facing prose.
