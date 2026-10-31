@@ -9209,6 +9209,32 @@ async function attachContextStorageStateToDmEventDebug(
   );
 }
 
+async function attachPostTurnUpdaterToDmEventDebug(
+  db: Queryable,
+  input: {
+    campaignId: string;
+    dmEventId?: string | undefined;
+    postTurnUpdater: unknown;
+  },
+) {
+  if (!input.dmEventId) return;
+
+  await bestEffortRuntimeInsert(
+    db,
+    `
+      update campaign_events
+      set payload = jsonb_set(
+        jsonb_set(payload, '{aiDebug}', coalesce(payload->'aiDebug', '{}'::jsonb), true),
+        '{aiDebug,postTurnUpdater}',
+        $3::jsonb,
+        true
+      )
+      where campaign_id = $1 and id = $2
+    `,
+    [input.campaignId, input.dmEventId, JSON.stringify(input.postTurnUpdater)],
+  );
+}
+
 async function attachLivingWorldPressureEngineToDmEventDebug(
   db: Queryable,
   input: {
@@ -9383,6 +9409,29 @@ export async function runModularPostTurnContextJobs(
 
     await applyAcceptedMemoryPatches(db, input.campaignId, validation.accepted);
 
+    await attachPostTurnUpdaterToDmEventDebug(db, {
+      campaignId: input.campaignId,
+      dmEventId: input.dmEventId,
+      postTurnUpdater: {
+        requestMessages: providerData.debug.requestMessages,
+        rawResponse: providerData.debug.rawResponse || providerData.content,
+        parsedOutput: parsed ?? null,
+        acceptedPatches: validation.accepted,
+        discardedPatches: validation.discarded,
+        durationMs: Date.now() - startedAt,
+        ...(providerData.debug.model ? { model: providerData.debug.model } : {}),
+        ...(typeof providerData.debug.temperature === "number"
+          ? { temperature: providerData.debug.temperature }
+          : {}),
+        ...(providerData.debug.providerResponseId
+          ? { providerResponseId: providerData.debug.providerResponseId }
+          : {}),
+        ...(providerData.debug.providerTimings
+          ? { providerTimings: providerData.debug.providerTimings }
+          : {}),
+      },
+    });
+
     await upsertCampaignTurnSummary(db, {
       campaignId: input.campaignId,
       turnId: input.turnId,
@@ -9434,6 +9483,15 @@ export async function runModularPostTurnContextJobs(
       },
     });
   } catch (error) {
+    await attachPostTurnUpdaterToDmEventDebug(db, {
+      campaignId: input.campaignId,
+      dmEventId: input.dmEventId,
+      postTurnUpdater: {
+        failed: true,
+        error: errorSummary(error),
+        durationMs: Date.now() - startedAt,
+      },
+    });
     try {
       await upsertCampaignTurnSummary(db, {
         campaignId: input.campaignId,
@@ -12131,6 +12189,7 @@ async function askDungeonMaster(
 
     if (options?.providerResponseFormat === "text") {
       const narration = providerData.content.trim();
+      const routerDebug = routerDebugFromPromptContext(promptContext);
 
       if (!narration) {
         throw new Error(
@@ -12159,7 +12218,10 @@ async function askDungeonMaster(
       return {
         id: providerData.id ?? randomUUID(),
         content: narration,
-        debug: providerData.debug,
+        debug: {
+          ...providerData.debug,
+          ...(routerDebug ? { router: routerDebug } : {}),
+        },
         rollRequests: [],
         inputTargets: [],
         inputPolicy: "all_players",

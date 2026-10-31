@@ -76,6 +76,20 @@ export type AiDebugInfo = {
     temperature?: number;
     providerResponseId?: string;
   };
+  postTurnUpdater?: {
+    requestMessages?: AiDebugMessage[];
+    rawResponse?: string;
+    parsedOutput?: unknown;
+    acceptedPatches?: unknown[];
+    discardedPatches?: unknown[];
+    failed?: boolean;
+    error?: unknown;
+    durationMs?: number;
+    model?: string;
+    temperature?: number;
+    providerResponseId?: string;
+    providerTimings?: AiDebugProviderTiming[];
+  };
   askDmContextSelector?: {
     requestMessages: AiDebugMessage[];
     rawResponse: string;

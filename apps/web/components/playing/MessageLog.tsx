@@ -397,6 +397,38 @@ function MessageDebugModal({
               </section>
             </>
           ) : null}
+          {debug.postTurnUpdater ? (
+            <>
+              <section>
+                <h3>Post-Turn Updater Prompt Sent</h3>
+                <pre>
+                  {debug.postTurnUpdater.requestMessages
+                    ? formatDebugPrompt(debug.postTurnUpdater as AiDebugInfo)
+                    : "Not recorded"}
+                </pre>
+              </section>
+              <section>
+                <h3>Post-Turn Updater Output</h3>
+                <pre>{debug.postTurnUpdater.rawResponse ?? "Not recorded"}</pre>
+              </section>
+              <section>
+                <h3>Post-Turn Updater Parsed Output</h3>
+                <pre>{formatDebugJson(debug.postTurnUpdater.parsedOutput)}</pre>
+              </section>
+              <section>
+                <h3>Post-Turn Updater Validation</h3>
+                <pre>
+                  {formatDebugJson({
+                    acceptedPatches: debug.postTurnUpdater.acceptedPatches,
+                    discardedPatches: debug.postTurnUpdater.discardedPatches,
+                    failed: debug.postTurnUpdater.failed,
+                    error: debug.postTurnUpdater.error,
+                    durationMs: debug.postTurnUpdater.durationMs
+                  })}
+                </pre>
+              </section>
+            </>
+          ) : null}
           {debug.eldermereOpeningPlanner ? (
             <>
               <section>
