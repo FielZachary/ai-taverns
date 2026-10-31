@@ -559,7 +559,8 @@ function streamedDisplayTextPrefix(buffer: string) {
 }
 
 function createPublicNarrationEmitter(
-  onPublicNarrationDelta: ((text: string) => void) | undefined
+  onPublicNarrationDelta: ((text: string) => void) | undefined,
+  responseFormat: "json" | "text"
 ) {
   let streamedContent = "";
   let emittedNarration = "";
@@ -571,7 +572,10 @@ function createPublicNarrationEmitter(
       return;
     }
 
-    const narration = streamedDisplayTextPrefix(streamedContent);
+    const narration =
+      responseFormat === "text"
+        ? streamedContent
+        : streamedDisplayTextPrefix(streamedContent);
 
     if (narration.length <= emittedNarration.length) {
       return;
@@ -676,7 +680,10 @@ async function requestDeepSeek(
     }
 
     const decoder = new TextDecoder();
-    const emitContentDelta = createPublicNarrationEmitter(onPublicNarrationDelta);
+    const emitContentDelta = createPublicNarrationEmitter(
+      onPublicNarrationDelta,
+      responseFormat
+    );
     let eventBuffer = "";
     let responseId: string | undefined;
     let responseModel: string | undefined;
@@ -923,7 +930,8 @@ export async function askDungeonMasterProvider({
   }
 
   if (fallbackBufferedAfterEmptyStream && onPublicNarrationDelta) {
-    const narration = streamedDisplayTextPrefix(content);
+    const narration =
+      responseFormat === "text" ? content : streamedDisplayTextPrefix(content);
 
     if (narration) {
       onPublicNarrationDelta(narration);

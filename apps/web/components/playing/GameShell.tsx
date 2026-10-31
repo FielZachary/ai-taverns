@@ -2692,7 +2692,6 @@ export function GameShell({
               mode={inputMode}
               isSending={isSending || Boolean(activeDiceReveal)}
               isSubmitted={
-                (isSinglePlayer && isSending) ||
                 Boolean(activeDiceReveal) ||
                 isInputSubmittedForCurrentState
               }
@@ -2715,6 +2714,11 @@ export function GameShell({
               onRestartCampaign={handleRestartCampaign}
               onSubmit={handleSubmit}
             />
+            {isRoomResolving && !isShowingStreamingDmMessage ? (
+              <p className="turn-form-submitted-label" aria-live="polite">
+                DM is noting the outcome...
+              </p>
+            ) : null}
           </div>
 
         </div>

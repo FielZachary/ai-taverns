@@ -2498,11 +2498,39 @@ Player-Facing Ending Prompt:
   ].join("\n");
 }
 
+/**
+ * Normal play is deliberately prose-only.  Keep the established job guidance,
+ * but remove the old response-envelope and server dice workflow directives
+ * before it reaches the narrator.  Structured mutations belong to the
+ * post-turn updater instead.
+ */
+export function narratorJobPrompt(
+  job: DmJobName,
+  mode: DmPromptMode,
+  options: { routerReason?: string | undefined } = {}
+) {
+  const structuredLine =
+    /\b(?:json|public_narration|resolution_mode|roll(?:_| |-)request|next_input|input_(?:target|policy)|mechanics_state_update|inventory_state_update|combat_events|proposed_context_updates|setting object|dice_results|roll id)\b/i;
+
+  return jobPrompt(
+    job,
+    mode,
+    options.routerReason ? { routerReason: options.routerReason } : {}
+  )
+    .split("\n")
+    .filter((line) => !structuredLine.test(line))
+    .filter((line) => !/^\s*[{}[\],]+\s*$/.test(line))
+    .join("\n");
+}
+
 export function buildMemoryUpdaterPrompt() {
   return [
-    "You are the AI Taverns memory/context updater.",
-    "Propose sparse patches after the player-facing turn has resolved.",
-    "Return strict JSON with turn_summary, patches, new_context_chunks, and remove_context_chunks.",
+    "You are the AI Taverns post-turn state and memory updater.",
+    "The player-facing narration is immutable evidence. Never rewrite it or add an outcome that does not follow from the player action, canonical state, and completed narration.",
+    "Return strict JSON with mechanics_state_update, combat_events, inventory_state_update, setting_update, memory_patches, turn_summary, patches, new_context_chunks, and remove_context_chunks.",
+    "Use mechanics_state_update only for resolved mechanics changes; use {} when none occurred. Use combat_events only as traceable ledger events; use [] when none occurred.",
+    "Use inventory_state_update as { patches: [] } unless an explicit completed inventory change is established. Use setting_update only for a meaningful established location change; otherwise use null.",
+    "memory_patches contains durable facts only. The legacy patches/new_context_chunks/remove_context_chunks fields remain for context storage compatibility.",
     "turn_summary is required. Summarize this resolved turn (the player action plus accepted narration) in 40-60 tokens for chronological campaign history.",
     "turn_summary must have summary, entity_keys, open_thread_keys, and certainty_notes. Use short stable context ids such as npc:captain-vael or thread:black-key when known; otherwise use empty arrays.",
     "The summary records concrete outcomes and unresolved questions. Never turn a player claim, lie, guess, or attempted action into an established fact. Put uncertainty explicitly in certainty_notes, for example: 'Unverified: the party claims the guard sent them.'",

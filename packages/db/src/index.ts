@@ -19,6 +19,7 @@ import {
   formatRouterCurrentTurnInput,
   buildLivingWorldPressureEnginePrompt,
   jobPrompt,
+  narratorJobPrompt,
   renderContextChunks,
   validateLivingWorldOutput,
   validateCombatEvents,
@@ -853,6 +854,13 @@ const dungeonMasterContractInstructions = [
   "Use semantic narration markup only around exact player-visible words that should be colored or italicized. Do not nest tags, add attributes, or use any other HTML/XML tags.",
   "Do not put CSS, hex colors, color names, or Markdown emphasis into public_narration.",
   "Always include inventory_state_update. Use {\"patches\": []} when no inventory, equipment, or currency change is clearly resolved this turn."
+].join("\n");
+const normalPlayNarratorInstructions = [
+  "You are the AI Taverns DnD Dungeon Master.",
+  "Return only non-empty player-facing narration in plain text.",
+  "Do not return JSON, code fences, field names, roll requests, input policies, or hidden state.",
+  "You may tell players to roll physical dice and report the result in their next ordinary message, but never create a structured dice workflow.",
+  "Preserve the supplied job guidance, canon, scene rules, and semantic narration tags."
 ].join("\n");
 const playerTurnDmTimeoutMs = 60_000;
 
@@ -7033,6 +7041,7 @@ async function buildModularDmPromptContext(
     baseInstructions: string;
     history: HistoryGameMessage[];
     model?: AiModelId;
+    narratorOnly?: boolean;
   }
 ): Promise<DmPromptContext> {
   const players = await getActiveCampaignPlayers(db, campaign.id);
@@ -7127,7 +7136,7 @@ async function buildModularDmPromptContext(
     instructions: [
       input.baseInstructions,
       "",
-      jobPrompt(router.jobNeeded, campaign.mode, {
+      (input.narratorOnly ? narratorJobPrompt : jobPrompt)(router.jobNeeded, campaign.mode, {
         routerReason:
           router.jobNeeded === "clarification" ? router.reason : undefined
       }),
@@ -9058,6 +9067,61 @@ export async function runModularPostTurnContextJobs(
     turnId: input.turnId,
     dmEventId: input.dmEventId
   });
+}
+
+const postTurnUpdaterTimeoutMs = 15_000;
+
+async function awaitPostTurnUpdater(
+  db: Queryable,
+  runtime: DungeonMasterRuntime,
+  input: {
+    campaignId: string;
+    turnId: string;
+    currentAction: string;
+    dmResponse: string;
+    dmEventId?: string | undefined;
+  }
+) {
+  if (!runtime.runPostTurnContextJobs) return;
+
+  const traceId = randomUUID();
+  const startedAt = Date.now();
+  const timeout = new Promise<"timeout">((resolve) => {
+    setTimeout(() => resolve("timeout"), postTurnUpdaterTimeoutMs);
+  });
+
+  await logTurnDebugTrace(db, {
+    campaignId: input.campaignId,
+    traceId,
+    turnId: input.turnId,
+    phase: "post_turn_updater_started",
+    elapsedMs: 0,
+    payload: { narration: textStats(input.dmResponse) }
+  });
+
+  try {
+    const result = await Promise.race([
+      runtime.runPostTurnContextJobs(input).then(() => "completed" as const),
+      timeout
+    ]);
+    await logTurnDebugTrace(db, {
+      campaignId: input.campaignId,
+      traceId,
+      turnId: input.turnId,
+      phase: result === "timeout" ? "post_turn_updater_timeout" : "post_turn_updates_applied",
+      elapsedMs: Date.now() - startedAt,
+      payload: { timeoutMs: result === "timeout" ? postTurnUpdaterTimeoutMs : undefined }
+    });
+  } catch (error) {
+    await logTurnDebugTrace(db, {
+      campaignId: input.campaignId,
+      traceId,
+      turnId: input.turnId,
+      phase: "post_turn_updater_failed",
+      elapsedMs: Date.now() - startedAt,
+      payload: { error: errorSummary(error) }
+    });
+  }
 }
 
 function formatCanonicalCharacterContext(
@@ -11519,6 +11583,7 @@ async function askDungeonMaster(
             currentAction: message,
             baseInstructions: instructionsWithWorldContext,
             history,
+            narratorOnly: options?.providerResponseFormat === "text",
             ...(options?.model ? { model: options.model } : {})
           })
       : null;
@@ -11593,6 +11658,38 @@ async function askDungeonMaster(
       providerData,
       durationMs: providerDurationMs
     });
+
+    if (options?.providerResponseFormat === "text") {
+      const narration = providerData.content.trim();
+
+      if (!narration) {
+        throw new Error(`The narrator returned an empty response. Trace ID: ${traceId}`);
+      }
+
+      if (/^(?:```(?:json)?\s*)?[{[]/.test(narration)) {
+        throw new Error(`The narrator returned structured output instead of prose. Trace ID: ${traceId}`);
+      }
+
+      await logTurnDebugTrace(db, {
+        campaignId: campaign.id,
+        traceId,
+        phase: "narrator_response_received",
+        turnId,
+        elapsedMs: Date.now() - startedAt,
+        payload: { reply: textStats(narration), provider: providerDebugSummary(providerData.debug) }
+      });
+
+      return {
+        id: providerData.id ?? randomUUID(),
+        content: narration,
+        debug: providerData.debug,
+        rollRequests: [],
+        inputTargets: [],
+        inputPolicy: "all_players",
+        nextInputNeeded: "player_actions",
+        resolutionMode: "resolved_without_dice"
+      };
+    }
 
     let outputEnvelope:
       | ReturnType<typeof validateMainDmOutput>
@@ -12840,53 +12937,16 @@ export async function submitRoomTurnForUser(
       throw createStatusError(400, "Player profile is incomplete.");
     }
 
-    const pendingRollRequests = pendingRollRequestsFromCampaign(campaignRow);
-    const inputTargets = inputTargetsFromCampaign(campaignRow);
-    const inputPolicy = inputPolicyFromCampaign(campaignRow);
-    const campaignMetadata = eventPayload(campaignRow.metadata);
-    const submittedRolls = rollSubmissionsFromPayload(
-      input.rollRequestId,
-      input.rollResult,
-      input.clientMessageId,
-      input.rollSubmissions
-    );
-    const isRollSubmission = submittedRolls.length > 0;
-    const rollSubmission = validatePendingRollSubmissions(
-      pendingRollRequests,
-      submittedRolls,
-      player,
-      {
-        inputTargets,
-        inputPolicy,
-        isExplicitBroadInput:
-          campaignMetadata.inputPolicy === "all_players" && inputTargets.length === 0
-      }
-    );
-
-    if (!isRollSubmission && pendingRollRequests.length > 0) {
-      throw createStatusError(409, "The DM is waiting for the required roll.");
-    }
-
-    if (
-      !isRollSubmission &&
-      inputPolicy === "only_targeted_players" &&
-      !playerMatchesInputTargets(player, inputTargets)
-    ) {
-      throw createStatusError(403, "The DM is waiting on another player.");
-    }
-
     const turn = await ensureCollectingTurn(client, campaignRow.id);
-    const trimmedContent = isRollSubmission
-      ? rollSubmission.content
-      : input.skipTurn
+    const trimmedContent = input.skipTurn
         ? `${player.character_name} skips their turn.`
-      : input.message.trim();
+        : input.message.trim();
 
     if (!trimmedContent) {
       throw createStatusError(400, "A player message is required.");
     }
 
-    if (!isRollSubmission && !input.skipTurn) {
+    if (!input.skipTurn) {
       const mechanicsState = resolveMechanicsState(campaignRow, [player]);
 
       try {
@@ -12933,25 +12993,8 @@ export async function submitRoomTurnForUser(
             end,
             status = 'submitted'
       `,
-      [campaignRow.id, turn.id, player.id, trimmedContent, isRollSubmission]
+      [campaignRow.id, turn.id, player.id, trimmedContent, false]
     );
-
-    if (isRollSubmission) {
-      await applySubmittedDeathSavingThrows({
-        db: client,
-        campaign: campaignRow,
-        resolvedRolls: rollSubmission.resolvedRolls
-      });
-      await setPendingRollRequests(
-        client,
-        campaignRow.id,
-        rollSubmission.remainingRollRequests
-      );
-      campaignRow.metadata = metadataWithPendingRollRequests(
-        campaignRow.metadata,
-        rollSubmission.remainingRollRequests
-      );
-    }
 
     await client.query("update players set last_seen_at = now() where id = $1", [
       player.id
@@ -12960,29 +13003,20 @@ export async function submitRoomTurnForUser(
       turnId: turn.id,
       clientId: player.client_id,
       role: "player",
-      messageId:
-        rollSubmission.clientMessageId ||
-        input.clientMessageId ||
-        randomUUID(),
+      messageId: input.clientMessageId || randomUUID(),
       username: player.username,
       characterName: player.character_name,
       skipped: Boolean(input.skipTurn),
       content: trimmedContent
     });
 
-    if (isRollSubmission && rollSubmission.remainingRollRequests.length > 0) {
-      return { campaign: campaignRow, shouldResolve: false as const };
-    }
-
-    const shouldResolve = isRollSubmission
-      ? true
-      : await allRequiredPlayersSubmitted(
-          client,
-          campaignRow.id,
-          turn.id,
-          inputTargets,
-          inputPolicy
-        );
+    const shouldResolve = await allRequiredPlayersSubmitted(
+      client,
+      campaignRow.id,
+      turn.id,
+      [],
+      "all_players"
+    );
 
     if (!shouldResolve) {
       return { campaign: campaignRow, shouldResolve: false as const };
@@ -13011,7 +13045,7 @@ export async function submitRoomTurnForUser(
 
     await logCampaignEvent(client, campaignRow.id, "turn_resolving", {
       turnId: turn.id,
-      reason: isRollSubmission ? "rolls_submitted" : "all_players_submitted"
+      reason: "all_players_submitted"
     });
 
     const players = (
@@ -13048,14 +13082,15 @@ export async function submitRoomTurnForUser(
         input.runtime,
         submitState.campaign,
         currentAction,
-        dungeonMasterContractInstructions,
+        normalPlayNarratorInstructions,
         true,
         submitState.turn.id,
         undefined,
         undefined,
         {
           ...(input.model ? { model: input.model } : {}),
-          timeoutMs: playerTurnDmTimeoutMs
+          timeoutMs: playerTurnDmTimeoutMs,
+          providerResponseFormat: "text"
         }
       );
       const resolvedTurn = await finishResolvedTurn(db, {
@@ -13079,13 +13114,12 @@ export async function submitRoomTurnForUser(
         messageId: reply.id
       });
 
-      void input.runtime.runPostTurnContextJobs?.({
+      await awaitPostTurnUpdater(db, input.runtime, {
         campaignId: submitState.campaign.id,
         turnId: submitState.turn.id,
         currentAction,
         dmResponse: reply.content,
-        dmEventId: resolvedTurn.dmEventId,
-        rollRequests: reply.rollRequests
+        dmEventId: resolvedTurn.dmEventId
       });
     } catch (error) {
       await markTurnFailed(db, submitState.turn.id, error);
@@ -13431,43 +13465,14 @@ export async function submitSoloTurnForUser(
       throw createStatusError(400, "A solo player profile is required.");
     }
 
-    const pendingRollRequests = pendingRollRequestsFromCampaign(campaign);
-    const inputTargets = inputTargetsFromCampaign(campaign);
-    const inputPolicy = inputPolicyFromCampaign(campaign);
-    const campaignMetadata = eventPayload(campaign.metadata);
-    const submittedRolls = rollSubmissionsFromPayload(
-      input.rollRequestId,
-      input.rollResult,
-      input.clientMessageId,
-      input.rollSubmissions
-    );
-    const isRollSubmission = submittedRolls.length > 0;
-    const rollSubmission = validatePendingRollSubmissions(
-      pendingRollRequests,
-      submittedRolls,
-      player,
-      {
-        inputTargets,
-        inputPolicy,
-        isExplicitBroadInput:
-          campaignMetadata.inputPolicy === "all_players" && inputTargets.length === 0
-      }
-    );
-
-    if (!isRollSubmission && pendingRollRequests.length > 0) {
-      throw createStatusError(409, "The DM is waiting for the required roll.");
-    }
-
     const turn = await ensureCollectingTurn(client, campaign.id);
-    const trimmedContent = isRollSubmission
-      ? rollSubmission.content
-      : input.message.trim();
+    const trimmedContent = input.message.trim();
 
     if (!trimmedContent) {
       throw createStatusError(400, "A player message is required.");
     }
 
-    if (!isRollSubmission) {
+    {
       const mechanicsState = resolveMechanicsState(campaign, [player]);
 
       try {
@@ -13515,26 +13520,10 @@ export async function submitSoloTurnForUser(
             status = 'submitted'
         returning content
       `,
-      [campaign.id, turn.id, player.id, trimmedContent, isRollSubmission]
+      [campaign.id, turn.id, player.id, trimmedContent, false]
     );
     const submittedContent = submissionResult.rows[0]?.content ?? trimmedContent;
 
-    if (isRollSubmission) {
-      await applySubmittedDeathSavingThrows({
-        db: client,
-        campaign,
-        resolvedRolls: rollSubmission.resolvedRolls
-      });
-      await setPendingRollRequests(
-        client,
-        campaign.id,
-        rollSubmission.remainingRollRequests
-      );
-      campaign.metadata = metadataWithPendingRollRequests(
-        campaign.metadata,
-        rollSubmission.remainingRollRequests
-      );
-    }
 
     await client.query("update players set last_seen_at = now() where id = $1", [
       player.id
@@ -13543,15 +13532,11 @@ export async function submitSoloTurnForUser(
       turnId: turn.id,
       clientId: player.client_id,
       role: "player",
-      messageId: rollSubmission.clientMessageId || input.clientMessageId || randomUUID(),
+      messageId: input.clientMessageId || randomUUID(),
       username: player.username,
       characterName: player.character_name,
       content: trimmedContent
     });
-
-    if (isRollSubmission && rollSubmission.remainingRollRequests.length > 0) {
-      return { campaign, shouldResolve: false, turn, player, content: submittedContent };
-    }
 
     const claimedTurn = await client.query<TurnRow>(
       `
@@ -13606,14 +13591,15 @@ export async function submitSoloTurnForUser(
       runtime,
       soloState.campaign,
       currentAction,
-      dungeonMasterContractInstructions,
+      normalPlayNarratorInstructions,
       true,
       soloState.turn.id,
       soloState.content,
       undefined,
       {
         ...(input.model ? { model: input.model } : {}),
-        timeoutMs: playerTurnDmTimeoutMs
+        timeoutMs: playerTurnDmTimeoutMs,
+        providerResponseFormat: "text"
       }
     );
     const resolvedTurn = await finishResolvedTurn(db, {
@@ -13637,13 +13623,12 @@ export async function submitSoloTurnForUser(
       messageId: reply.id
     });
 
-    void runtime.runPostTurnContextJobs?.({
+    await awaitPostTurnUpdater(db, runtime, {
       campaignId: soloState.campaign.id,
       turnId: soloState.turn.id,
       currentAction,
       dmResponse: reply.content,
-      dmEventId: resolvedTurn.dmEventId,
-      rollRequests: reply.rollRequests
+      dmEventId: resolvedTurn.dmEventId
     });
   } catch (error) {
     await markTurnFailed(db, soloState.turn.id, error);
@@ -14013,10 +13998,12 @@ export async function regenerateCampaignResponseForUser(
       runtime,
       regenerationState.campaign,
       regenerationState.currentAction,
-      dungeonMasterContractInstructions,
+      normalPlayNarratorInstructions,
       true,
       regenerationState.turn.id,
-      regenerationState.currentPlayerAction
+      regenerationState.currentPlayerAction,
+      undefined,
+      { providerResponseFormat: "text" }
     );
     const resolvedTurn = await finishResolvedTurn(db, {
       campaignId: regenerationState.campaign.id,
@@ -14040,13 +14027,12 @@ export async function regenerateCampaignResponseForUser(
       messageId: reply.id
     });
 
-    void runtime.runPostTurnContextJobs?.({
+    await awaitPostTurnUpdater(db, runtime, {
       campaignId: regenerationState.campaign.id,
       turnId: regenerationState.turn.id,
       currentAction: regenerationState.currentAction,
       dmResponse: reply.content,
-      dmEventId: resolvedTurn.dmEventId,
-      rollRequests: reply.rollRequests
+      dmEventId: resolvedTurn.dmEventId
     });
   } catch (error) {
     await markTurnFailed(db, regenerationState.turn.id, error);
