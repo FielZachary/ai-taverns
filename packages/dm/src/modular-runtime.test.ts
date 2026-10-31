@@ -5,6 +5,7 @@ import {
   buildRouterPrompt,
   formatRouterCurrentTurnInput,
   jobPrompt,
+  narratorJobPrompt,
   renderContextChunks,
   sanitizeMemoryPatchMarkdown,
   validateCombatEvents,
@@ -1303,6 +1304,20 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(multiplayerScenePrompt, /AI Taverns DM job: scene_director/i);
     assert.doesNotMatch(soloScenePrompt, /This is singleplayer combat/i);
     assert.doesNotMatch(multiplayerScenePrompt, /This is multiplayer combat/i);
+  });
+
+  it("preserves the complete semantic markup contract for prose narration", () => {
+    const prompt = narratorJobPrompt("scene_director", "single_player");
+
+    assert.match(prompt, /Use 2-3 sparse semantic color tags/i);
+    assert.match(prompt, /<npc>\.\.\.<\/npc>/);
+    assert.match(prompt, /<place>\.\.\.<\/place>/);
+    assert.match(prompt, /<clue>\.\.\.<\/clue>/);
+    assert.match(prompt, /<danger>\.\.\.<\/danger>/);
+    assert.match(prompt, /<faction>\.\.\.<\/faction>/);
+    assert.match(prompt, /<object>\.\.\.<\/object>/);
+    assert.match(prompt, /<em>\.\.\.<\/em>/);
+    assert.match(prompt, /Do not nest tags, add attributes/i);
   });
 
   it("inserts router reasons into clarification job guidance only when provided", () => {

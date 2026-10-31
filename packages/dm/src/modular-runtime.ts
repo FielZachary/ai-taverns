@@ -2512,7 +2512,14 @@ export function narratorJobPrompt(
   const structuredLine =
     /\b(?:json|public_narration|resolution_mode|roll(?:_| |-)request|next_input|input_(?:target|policy)|mechanics_state_update|inventory_state_update|combat_events|proposed_context_updates|setting object|dice_results|roll id)\b/i;
 
-  return jobPrompt(
+  const proseGuidance = [
+    "Semantic narration markup:",
+    "- Use 2-3 sparse semantic color tags around exact player-visible words: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, or <object>...</object>.",
+    "- Use <em>...</em> only for brief italic emphasis; it does not count as a color tag.",
+    "- Do not nest tags, add attributes, use CSS or color names, use Markdown emphasis, or use any other HTML/XML tags."
+  ].join("\n");
+
+  const filteredGuidance = jobPrompt(
     job,
     mode,
     options.routerReason ? { routerReason: options.routerReason } : {}
@@ -2521,6 +2528,8 @@ export function narratorJobPrompt(
     .filter((line) => !structuredLine.test(line))
     .filter((line) => !/^\s*[{}[\],]+\s*$/.test(line))
     .join("\n");
+
+  return [filteredGuidance, proseGuidance].join("\n\n");
 }
 
 export function buildMemoryUpdaterPrompt() {
