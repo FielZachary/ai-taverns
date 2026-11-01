@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import test from "node:test";
 import {
   responseFormatForDmLabStage,
+  streamsForDmLabStage,
   temperatureForDmLabStage
 } from "./dm-lab.js";
 
@@ -14,6 +15,22 @@ test("DM Lab matches the live prose narrator response format", () => {
     "clarification"
   ] as const) {
     assert.equal(responseFormatForDmLabStage(stage), "text");
+  }
+});
+
+test("DM Lab streams the same narrator stages as normal play", () => {
+  for (const stage of [
+    "opening_narrator",
+    "scene_director",
+    "npc_dialogue",
+    "combat",
+    "clarification"
+  ] as const) {
+    assert.equal(streamsForDmLabStage(stage), true);
+  }
+
+  for (const stage of ["opening_brief_planner", "opening_planner", "router"] as const) {
+    assert.equal(streamsForDmLabStage(stage), false);
   }
 });
 

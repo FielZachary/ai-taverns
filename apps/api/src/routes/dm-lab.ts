@@ -24,6 +24,9 @@ function isDmLabEnabled(config: ApiConfig) { return config.nodeEnv !== "producti
 export function responseFormatForDmLabStage(stage: z.infer<typeof stageSchema>) {
   return proseNarratorStages.has(stage) ? "text" as const : "json" as const;
 }
+export function streamsForDmLabStage(stage: z.infer<typeof stageSchema>) {
+  return proseNarratorStages.has(stage);
+}
 export function temperatureForDmLabStage(stage: z.infer<typeof stageSchema>) {
   return stage === "combat" ? 0.2 : undefined;
 }
@@ -55,7 +58,7 @@ export async function registerDmLabRoutes(fastify: FastifyInstance, options: DmL
     const format = responseFormatForDmLabStage(body.stage);
     const temperature = temperatureForDmLabStage(body.stage);
     const startedAt = Date.now();
-    const provider = await runtime.askProvider({ instructions: first.content, message: last.content, requestMessages: body.messages, responseFormat: format, model: body.model, ...(typeof temperature === "number" ? { temperature } : {}) });
+    const provider = await runtime.askProvider({ instructions: first.content, message: last.content, requestMessages: body.messages, responseFormat: format, model: body.model, ...(streamsForDmLabStage(body.stage) ? { onPublicNarrationDelta: () => {} } : {}), ...(typeof temperature === "number" ? { temperature } : {}) });
     return {
       source: { file: "debug prompt", function: "captured provider request", gitRevision: "captured", campaignId: body.campaignId },
       fixture: `local campaign ${body.campaignId}`,
