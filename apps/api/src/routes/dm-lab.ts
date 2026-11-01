@@ -23,6 +23,9 @@ function isDmLabEnabled(config: ApiConfig) { return config.nodeEnv !== "producti
 export function responseFormatForDmLabStage(stage: z.infer<typeof stageSchema>) {
   return proseNarratorStages.has(stage) ? "text" as const : "json" as const;
 }
+export function temperatureForDmLabStage(stage: z.infer<typeof stageSchema>) {
+  return stage === "combat" ? 0.2 : undefined;
+}
 function fullRequest(messages: z.infer<typeof messageSchema>[]) { return messages.map((message, index) => `# ${index + 1}. ${message.role.toUpperCase()}\n${message.content}`).join("\n\n"); }
 function validationFor(content: string, format: "json" | "text") {
   if (format === "text") {
@@ -49,8 +52,9 @@ export async function registerDmLabRoutes(fastify: FastifyInstance, options: DmL
     const last = body.messages.at(-1);
     if (first?.role !== "system" || last?.role !== "user") throw error(400, "The debug prompt must start with SYSTEM and end with USER.");
     const format = responseFormatForDmLabStage(body.stage);
+    const temperature = temperatureForDmLabStage(body.stage);
     const startedAt = Date.now();
-    const provider = await runtime.askProvider({ instructions: first.content, message: last.content, requestMessages: body.messages, responseFormat: format });
+    const provider = await runtime.askProvider({ instructions: first.content, message: last.content, requestMessages: body.messages, responseFormat: format, ...(typeof temperature === "number" ? { temperature } : {}) });
     return {
       source: { file: "debug prompt", function: "captured provider request", gitRevision: "captured", campaignId: body.campaignId },
       fixture: `local campaign ${body.campaignId}`,
