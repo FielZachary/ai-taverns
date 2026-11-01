@@ -998,26 +998,39 @@ describe("modular AI DM runtime contracts", () => {
         /visible movement, silence, raised-voice risk, gestures the player can actually see, or require the player to move closer/i
       );
     }
-    for (const job of ["scene_director", "npc_dialogue"] as const) {
-      const prompt = jobPrompt(job);
-      assert.match(prompt, /Submitted Player Roll Result Opening:/);
-      assert.match(
-        prompt,
-        /public_narration must start with this exact sentence pattern/i
-      );
-      assert.match(
-        prompt,
-        /With a \[quality adjective\] roll of <clue>\[total\]<\/clue>, here's what happens:/i
-      );
-      assert.match(
-        prompt,
-        /Use the submitted final total inside <clue>\.\.\.<\/clue>/i
-      );
-      assert.match(
-        prompt,
-        /measly for very low rolls, shaky for low rolls, decent for middling rolls, strong for high rolls, or staggering for exceptional rolls/i
-      );
-    }
+    const sceneDirectorPrompt = jobPrompt("scene_director");
+    assert.match(sceneDirectorPrompt, /Submitted Player Roll Result Opening:/);
+    assert.match(
+      sceneDirectorPrompt,
+      /public_narration must start with this exact sentence pattern/i
+    );
+    assert.match(
+      sceneDirectorPrompt,
+      /With a \[quality adjective\] roll of <clue>\[total\]<\/clue>, here's what happens:/i
+    );
+
+    const npcDialoguePrompt = jobPrompt("npc_dialogue");
+    assert.match(npcDialoguePrompt, /Submitted Player Roll Result Opening:/);
+    assert.match(
+      npcDialoguePrompt,
+      /Use the submitted final total inside <clue>\.\.\.<\/clue>/i
+    );
+    assert.match(
+      npcDialoguePrompt,
+      /Dice-result integrity:/
+    );
+    assert.match(
+      npcDialoguePrompt,
+      /Only narrate a numeric roll outcome when the current player message explicitly reports that roll result/i
+    );
+    assert.match(
+      npcDialoguePrompt,
+      /A roll mentioned in earlier conversation history.*must not be reused/i
+    );
+    assert.doesNotMatch(
+      npcDialoguePrompt,
+      /public_narration must start with this exact sentence pattern/i
+    );
     for (const job of [
       "combat",
       "rest_mechanics",
