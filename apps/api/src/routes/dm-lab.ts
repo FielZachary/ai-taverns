@@ -6,8 +6,9 @@ import { askDungeonMasterProvider } from "../dm-provider.js";
 import { requireAuthenticatedUser } from "./auth.js";
 
 const stageSchema = z.enum(["opening_brief_planner", "opening_planner", "opening_narrator", "router", "scene_director", "npc_dialogue", "combat", "clarification"]);
+const modelSchema = z.enum(["deepseek-v4-flash", "qwen-3-5-plus"]);
 const messageSchema = z.object({ role: z.enum(["system", "user", "assistant"]), content: z.string().trim().min(1) });
-const requestSchema = z.object({ action: z.enum(["baseline", "override"]), campaignId: z.string().trim().min(1).max(200), stage: stageSchema, messages: z.array(messageSchema).min(2).max(50) });
+const requestSchema = z.object({ action: z.enum(["baseline", "override"]), campaignId: z.string().trim().min(1).max(200), stage: stageSchema, model: modelSchema.default("deepseek-v4-flash"), messages: z.array(messageSchema).min(2).max(50) });
 
 type DmLabRouteOptions = { config: ApiConfig; dmRuntime?: DungeonMasterRuntime | undefined };
 const proseNarratorStages = new Set([
@@ -54,7 +55,7 @@ export async function registerDmLabRoutes(fastify: FastifyInstance, options: DmL
     const format = responseFormatForDmLabStage(body.stage);
     const temperature = temperatureForDmLabStage(body.stage);
     const startedAt = Date.now();
-    const provider = await runtime.askProvider({ instructions: first.content, message: last.content, requestMessages: body.messages, responseFormat: format, ...(typeof temperature === "number" ? { temperature } : {}) });
+    const provider = await runtime.askProvider({ instructions: first.content, message: last.content, requestMessages: body.messages, responseFormat: format, model: body.model, ...(typeof temperature === "number" ? { temperature } : {}) });
     return {
       source: { file: "debug prompt", function: "captured provider request", gitRevision: "captured", campaignId: body.campaignId },
       fixture: `local campaign ${body.campaignId}`,
