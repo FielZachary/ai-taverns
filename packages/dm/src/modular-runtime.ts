@@ -1946,12 +1946,10 @@ Ask for a social roll when the situation meaningfully tests a character's:
 
 When requesting dice:
 
-- Set \`next_input_needed\` to \`"dice_results"\`.
-- Include a matching structured entry in \`roll_requests\`.
-- Use bare dice notation only, such as \`"1d20"\`. Put bonuses or penalties in \`modifier\`, never inside \`dice\`.
-- Target only the player or players who must roll. Use \`input_policy: "only_targeted_players"\` when only specific characters are involved.
+- Ask for the roll only in player-facing narration. Do not create a structured \`roll_requests\` entry, JSON, or any structured dice workflow.
+- Use this format: “Make me a 1d20 [Ability] ([Skill]) check using your [modifier] modifier. If you fail, [immediate, specific social consequence].”
+- Use the modifier from the character sheet. State it plainly.
 - Do not resolve whether the NPC believes, trusts, fears, yields, accepts terms, or changes position until the result is submitted.
-
 - When the roll result is submitted, resolve the immediate social consequence clearly.
 Player Claim Boundary:
 - Treat player statements as attempted character speech/action, not automatic world truth.

@@ -534,7 +534,11 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(npcDialoguePrompt, /Intimidation \(Charisma\)/i);
     assert.match(npcDialoguePrompt, /Performance \(Charisma\)/i);
     assert.match(npcDialoguePrompt, /Insight \(Wisdom\)/i);
-    assert.match(npcDialoguePrompt, /Use bare dice notation only/i);
+    assert.match(
+      npcDialoguePrompt,
+      /Ask for the roll only in player-facing narration\. Do not create a structured/i
+    );
+    assert.match(npcDialoguePrompt, /immediate, specific social consequence/i);
     assert.match(npcDialoguePrompt, /Resolving Social Dice/i);
     assert.match(npcDialoguePrompt, /Player facing ending prompt/i);
     assert.match(npcDialoguePrompt, /clear, natural question inviting the player/i);
