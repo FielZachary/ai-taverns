@@ -12025,7 +12025,7 @@ async function getCampaignEventMessages(
     .filter((message): message is HistoryGameMessage => message !== null);
 }
 
-const mainDmHistoryMessageLimit = 4;
+const mainDmHistoryMessageLimit = 1;
 const mainDmHistoryEventFetchLimit = mainDmHistoryMessageLimit + 1;
 
 async function askDungeonMaster(
