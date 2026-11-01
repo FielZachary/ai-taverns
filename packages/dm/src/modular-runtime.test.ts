@@ -486,13 +486,13 @@ describe("modular AI DM runtime contracts", () => {
       );
       assert.doesNotMatch(prompt, /Storyteller Voice:/);
     }
-    assert.match(jobPrompt("scene_director"), /Roll Requests and Uncertain Outcomes:/);
+    assert.match(jobPrompt("scene_director"), /Mandatory Player-Action Roll Rule:/);
     assert.match(
       jobPrompt("scene_director"),
-      /genuinely uncertain outcome with meaningful stakes, risk, opposition, time pressure/i
+      /Every concrete player-declared action requires a player roll/i
     );
-    assert.match(jobPrompt("scene_director"), /Ask for a roll when the situation meaningfully tests a character’s:/);
-    assert.match(jobPrompt("scene_director"), /Use bare dice notation only/i);
+    assert.match(jobPrompt("scene_director"), /Scene Director Roll Menu:/);
+    assert.match(jobPrompt("scene_director"), /Do not create structured dice data, roll_requests, JSON/i);
     assert.match(jobPrompt("scene_director"), /Player facing ending prompt:/);
     assert.match(jobPrompt("scene_director"), /What is Garbo’s next move\?/);
     assert.match(jobPrompt("scene_director"), /Do not repeat the previous turn’s ending prompt/i);
