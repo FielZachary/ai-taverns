@@ -10,10 +10,19 @@ const messageSchema = z.object({ role: z.enum(["system", "user", "assistant"]), 
 const requestSchema = z.object({ action: z.enum(["baseline", "override"]), campaignId: z.string().trim().min(1).max(200), stage: stageSchema, messages: z.array(messageSchema).min(2).max(50) });
 
 type DmLabRouteOptions = { config: ApiConfig; dmRuntime?: DungeonMasterRuntime | undefined };
+const proseNarratorStages = new Set([
+  "opening_narrator",
+  "scene_director",
+  "npc_dialogue",
+  "combat",
+  "clarification"
+]);
 
 function error(statusCode: number, message: string) { return Object.assign(new Error(message), { statusCode }); }
 function isDmLabEnabled(config: ApiConfig) { return config.nodeEnv !== "production" || process.env.DM_LAB_ENABLED === "true"; }
-function responseFormat(stage: z.infer<typeof stageSchema>) { return stage === "opening_narrator" ? "text" as const : "json" as const; }
+export function responseFormatForDmLabStage(stage: z.infer<typeof stageSchema>) {
+  return proseNarratorStages.has(stage) ? "text" as const : "json" as const;
+}
 function fullRequest(messages: z.infer<typeof messageSchema>[]) { return messages.map((message, index) => `# ${index + 1}. ${message.role.toUpperCase()}\n${message.content}`).join("\n\n"); }
 function validationFor(content: string, format: "json" | "text") {
   if (format === "text") {
@@ -39,7 +48,7 @@ export async function registerDmLabRoutes(fastify: FastifyInstance, options: DmL
     const first = body.messages[0];
     const last = body.messages.at(-1);
     if (first?.role !== "system" || last?.role !== "user") throw error(400, "The debug prompt must start with SYSTEM and end with USER.");
-    const format = responseFormat(body.stage);
+    const format = responseFormatForDmLabStage(body.stage);
     const startedAt = Date.now();
     const provider = await runtime.askProvider({ instructions: first.content, message: last.content, requestMessages: body.messages, responseFormat: format });
     return {
