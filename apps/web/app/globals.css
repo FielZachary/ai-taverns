@@ -3864,8 +3864,11 @@ h1 {
 }
 
 .mobile-sidebar-toggle,
-.mobile-sidebar-backdrop,
-.chat-sidebar-close {
+.mobile-sidebar-backdrop {
+  display: none;
+}
+
+.chat-sidebar-header .chat-sidebar-close {
   display: none;
 }
 
@@ -7279,7 +7282,7 @@ h6 {
     transform: translateX(0);
   }
 
-  .chat-sidebar-close {
+  .chat-sidebar-header .chat-sidebar-close {
     display: grid;
     place-items: center;
     width: 38px;
