@@ -124,7 +124,7 @@ export function ChatHistorySidebar({
 
         <label className="chat-search">
           <Search size={17} />
-          <input type="search" placeholder="Search chats" />
+          <input type="search" placeholder="Search adventures" />
         </label>
 
         <div className="chat-list">
@@ -181,6 +181,7 @@ export function ChatHistorySidebar({
             onCloseMobileDrawer?.();
           }}
         >
+          <Plus aria-hidden="true" size={16} />
           New Campaign
         </button>
       </div>

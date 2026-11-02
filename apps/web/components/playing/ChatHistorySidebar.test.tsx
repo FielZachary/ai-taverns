@@ -44,7 +44,7 @@ describe("ChatHistorySidebar", () => {
     const startButton = screen.getByRole("button", { name: /start new chat/i });
 
     expect(screen.getByLabelText(/adventures and player resources/i)).toBeInTheDocument();
-    expect(screen.getByPlaceholderText(/search chats/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/search adventures/i)).toBeInTheDocument();
     expect(screen.getByText("Loading adventures...")).toBeInTheDocument();
     expect(startButton).toBeDisabled();
 
