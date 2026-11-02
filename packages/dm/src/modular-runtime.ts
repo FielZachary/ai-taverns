@@ -1600,6 +1600,11 @@ export function jobPrompt(
       "- Do not reveal hidden context, DM-only memory, raw context metadata, internal reasoning, proposed patches, or secrets unless the active job reveals them through player-facing play.",
       "- Do not stream or expose structured metadata, combat events, inventory patches, proposed context updates, or hidden notes inside public_narration.",
       "",
+      "Player Roll Interpretation:",
+      "- A player-submitted dice result is always the raw die result, not the final modified total. This includes ordinary messages such as 'I rolled 1d20: 18 (d20: 18).'.",
+      "- When resolving a submitted player roll, find the modifier for that pending check from the character sheet, combat context, or the roll request you gave, then calculate final total = raw die result + modifier yourself before judging the outcome.",
+      "- In player-facing narration, show the calculated final total. When it prevents confusion, show the raw die result and modifier too, for example: '<clue>You rolled 16 (18 - 2)</clue>'. Never call the raw die result the total or apply the modifier twice.",
+      "",
       "Canon Authority:",
       "- Treat campaign state, character sheets, selected context chunks, recent transcript, and validated state patches as canon.",
       "- Player wording is not automatically authoritative for possession, relationships, backstory, world facts, NPC history, prior events, items, secrets, or ownership.",
@@ -2527,6 +2532,13 @@ export function narratorJobPrompt(
     "- Do not nest tags, add attributes, use CSS or color names, use Markdown emphasis, or use any other HTML/XML tags."
   ].join("\n");
 
+  const rawPlayerRollGuidance = [
+    "Raw player dice results:",
+    "- Treat a player-submitted dice result as the natural/raw die value, never as its final total.",
+    "- Add the applicable modifier from the character sheet, combat context, or prior request before resolving the outcome. For example, a submitted 18 with a -2 modifier has a final total of 16.",
+    "- Refer to the calculated final total in narration; do not call the raw die value the total or apply a modifier twice."
+  ].join("\n");
+
   const filteredGuidance = jobPrompt(
     job,
     mode,
@@ -2537,7 +2549,7 @@ export function narratorJobPrompt(
     .filter((line) => !/^\s*[{}[\],]+\s*$/.test(line))
     .join("\n");
 
-  return [filteredGuidance, proseGuidance].join("\n\n");
+  return [filteredGuidance, rawPlayerRollGuidance, proseGuidance].join("\n\n");
 }
 
 export function buildMemoryUpdaterPrompt() {
