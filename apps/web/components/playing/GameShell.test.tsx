@@ -87,17 +87,13 @@ vi.mock("./MessageLog", () => ({
     isSending,
     regeneratingMessageId,
     regeneratableMessageId,
-    retryMessageId,
-    onRegenerateResponse,
-    onRetryLastTurn
+    onRegenerateResponse
   }: {
     messages: GameMessage[];
     isSending: boolean;
     regeneratingMessageId?: string | null;
     regeneratableMessageId?: string | null;
-    retryMessageId?: string | null;
     onRegenerateResponse?: (messageId: string) => void;
-    onRetryLastTurn?: () => void;
   }) => (
     <section aria-label="Message log" data-sending={String(isSending)}>
       {messages.map((message) => (
@@ -112,11 +108,6 @@ vi.mock("./MessageLog", () => ({
               type="button"
             >
               Regenerate
-            </button>
-          ) : null}
-          {message.id === retryMessageId ? (
-            <button onClick={onRetryLastTurn} type="button">
-              Retry last turn
             </button>
           ) : null}
         </article>
@@ -509,52 +500,14 @@ describe("GameShell", () => {
     });
     vi.useRealTimers();
 
-    await waitFor(() => {
-      expect(
-        screen.getByText(
-          "The dungeon master wasn't able to respond to that, please press the retry button on the right to re-send your message"
-        )
-      ).toBeInTheDocument();
-    });
+    expect(
+      screen.queryByText(/wasn't able to respond to that/)
+    ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Message log")).toHaveAttribute(
       "data-sending",
       "false"
     );
-
-    act(() => {
-      MockWebSocket.instances[0].emitMessage({
-        type: "dm_stream_failed",
-        roomId: campaign.id,
-        turnId: "turn-timeout",
-        message:
-          "The operation was aborted due to timeout Trace ID: 0f27fc6e-5dbc-4b01-90ac-3d5ee2d693e4"
-      });
-    });
-
-    await waitFor(() => {
-      expect(screen.queryByText(/The operation was aborted due to timeout/))
-        .not.toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Retry last turn" }));
-
-    await waitFor(() => {
-      expect(screen.getByText("The handle turns with a reluctant scrape."))
-        .toBeInTheDocument();
-    });
-
-    const submitBodies = fetchMock.mock.calls
-      .filter(
-        ([input, init]) =>
-          String(input) === `/api/campaigns/${campaign.id}/solo-turn` &&
-          init?.method === "POST"
-      )
-      .map(([, init]) => JSON.parse(String(init?.body)));
-
-    expect(submitBodies).toHaveLength(2);
-    expect(submitBodies[1]).toMatchObject({
-      message: "I test the iron handle."
-    });
+    expect(screen.queryByRole("button", { name: "Retry last turn" })).not.toBeInTheDocument();
   });
 
   it("surfaces regenerate failures without leaving the table busy", async () => {

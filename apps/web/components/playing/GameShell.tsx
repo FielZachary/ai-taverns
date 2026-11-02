@@ -116,8 +116,6 @@ const initialSceneViewedStoragePrefix = "ai-dnd.initialSceneViewed";
 const roomRequestTimeoutMs = 8_000;
 const turnSubmissionRequestTimeoutMs = 30_000;
 const fallbackRoomPollMs = 25_000;
-const dungeonMasterTurnTimeoutMessage =
-  "The dungeon master wasn't able to respond to that, please press the retry button on the right to re-send your message";
 const defaultCampaignPreparationMessage = "Preparing your campaign";
 const campaignPreparationMessages = [
   defaultCampaignPreparationMessage,
@@ -182,12 +180,6 @@ type ApiErrorResponse = {
   error?: string | {
     message?: string;
   };
-};
-
-type RetryableTurn = {
-  message: string;
-  model: AiModelId;
-  errorMessageId: string;
 };
 
 type RoomRealtimeEvent =
@@ -435,14 +427,12 @@ export function GameShell({
   const [inputValidationMessage, setInputValidationMessage] = useState("");
   const [inputValidationPulse, setInputValidationPulse] = useState(0);
   const [isInputSubmitted, setIsInputSubmitted] = useState(false);
-  const [retryableTurn, setRetryableTurn] = useState<RetryableTurn | null>(null);
   const [tableAlert, setTableAlert] = useState("");
   const [playerId, setPlayerId] = useState("");
   const [roomPlayers, setRoomPlayers] = useState<RoomPlayer[]>([]);
   const [optimisticSubmittedPlayerId, setOptimisticSubmittedPlayerId] =
     useState<string | null>(null);
   const pendingSubmissionRef = useRef<PendingSubmission | null>(null);
-  const retryableTurnRef = useRef<RetryableTurn | null>(null);
   const initialSceneViewedRef = useRef(new Set<string>());
   const [roomMessages, setRoomMessages] = useState<GameMessage[]>([]);
   const [streamingDmMessages, setStreamingDmMessages] = useState<
@@ -496,13 +486,8 @@ export function GameShell({
   }, [allowUnlistedInitialCampaign, initialCampaignId]);
   const roomReadDebugParam = includeAllMessages ? "&debugAllMessages=true" : "";
 
-  const setRetryableTurnState = useCallback((nextRetryableTurn: RetryableTurn | null) => {
-    retryableTurnRef.current = nextRetryableTurn;
-    setRetryableTurn(nextRetryableTurn);
-  }, []);
-
   const setRoomResolvingState = useCallback((isResolving: boolean) => {
-    setIsRoomResolving(isResolving && !retryableTurnRef.current);
+    setIsRoomResolving(isResolving);
   }, []);
 
   const activeCampaign = useMemo(
@@ -1058,7 +1043,6 @@ export function GameShell({
             : campaigns
         );
         setActiveCampaignId(selectedCampaign.id);
-        setRetryableTurnState(null);
         await loadCampaignMessages(selectedCampaign);
       } catch {
         if (!shouldIgnore) {
@@ -1081,8 +1065,7 @@ export function GameShell({
     fetchCampaigns,
     initialCampaignId,
     initialDebugCampaign,
-    loadCampaignMessages,
-    setRetryableTurnState
+    loadCampaignMessages
   ]);
 
   useEffect(() => {
@@ -1129,7 +1112,6 @@ export function GameShell({
       setHasAdventureBegun(false);
       setIsRoomResolving(false);
       setIsInputSubmitted(false);
-      setRetryableTurnState(null);
       pendingSubmissionRef.current = null;
       setOptimisticSubmittedPlayerId(null);
       setPendingRollRequests([]);
@@ -1272,25 +1254,21 @@ export function GameShell({
           realtimeEvent.type === "dm_stream_failed" &&
           realtimeEvent.roomId === activeCampaign.id
         ) {
-          const shouldSuppressMessage = Boolean(retryableTurnRef.current);
-
           setStreamingDmMessages((currentMessages) =>
             removeStreamingDmMessage(currentMessages, realtimeEvent.turnId)
           );
           setActiveStreamingDmTurnId((currentTurnId) =>
             currentTurnId === realtimeEvent.turnId ? null : currentTurnId
           );
-          if (!shouldSuppressMessage) {
-            setMessages((currentMessages) => [
-              ...currentMessages,
-              {
-                id: createClientId(),
-                role: "system",
-                content: realtimeEvent.message,
-                createdAt: new Date().toISOString()
-              }
-            ]);
-          }
+          setMessages((currentMessages) => [
+            ...currentMessages,
+            {
+              id: createClientId(),
+              role: "system",
+              content: realtimeEvent.message,
+              createdAt: new Date().toISOString()
+            }
+          ]);
           void refreshRoom();
         }
       });
@@ -1319,7 +1297,6 @@ export function GameShell({
     applyRoomSnapshot,
     isSinglePlayer,
     roomReadDebugParam,
-    setRetryableTurnState,
     setRoomResolvingState
   ]);
 
@@ -1417,7 +1394,6 @@ export function GameShell({
     });
     setActiveCampaignId(campaign.id);
     setDraft("");
-    setRetryableTurnState(null);
     setRoomMessages([]);
     setRoomPlayers([]);
     setStreamingDmMessages([]);
@@ -1461,8 +1437,6 @@ export function GameShell({
     setAvailableCampaigns(nextCampaigns);
     setActiveCampaignId(nextActiveCampaign?.id ?? "");
     setDraft("");
-    setRetryableTurnState(null);
-
     if (campaignId === activeCampaignId) {
       setMessages(openingMessages);
       if (nextActiveCampaign) {
@@ -1731,7 +1705,6 @@ export function GameShell({
       setRestartPreparingCampaignId(restartedCampaign.id);
       setActiveCampaignId(restartedCampaign.id);
       setDraft("");
-      setRetryableTurnState(null);
       setMessages(openingMessages);
       setRoomMessages([]);
       setRoomPlayers([]);
@@ -1821,7 +1794,6 @@ export function GameShell({
 
     setMessages((currentMessages) => [...currentMessages, playerMessage]);
     setDraft("");
-    setRetryableTurnState(null);
     setIsSending(true);
     setIsInputSubmitted(!isSinglePlayer);
     pendingSubmissionRef.current = {
@@ -1874,7 +1846,6 @@ export function GameShell({
       }
 
       const room = (await response.json()) as RoomSnapshot;
-      setRetryableTurnState(null);
       applyRoomSnapshot(room);
       const latestMessage = room.messages[room.messages.length - 1];
       const counts = analyticsMessageCounts(room);
@@ -1947,30 +1918,11 @@ export function GameShell({
       );
     } catch (error) {
       const isTurnTimeout = isAbortError(error);
-      const message =
-        isTurnTimeout && !skipTurn
-          ? dungeonMasterTurnTimeoutMessage
-          : error instanceof Error
+      if (!isTurnTimeout || skipTurn) {
+        const message =
+          error instanceof Error
             ? error.message
             : "The room connection flickered. Your turn may need to be sent again.";
-
-      if (isTurnTimeout && !skipTurn) {
-        const errorMessageId = createClientId();
-        setRetryableTurnState({
-          message: content,
-          model: options.model ?? selectedAiModelFromStorage(),
-          errorMessageId
-        });
-        setMessages((currentMessages) => [
-          ...currentMessages,
-          {
-            id: errorMessageId,
-            role: "system",
-            content: message,
-            createdAt: new Date().toISOString()
-          }
-        ]);
-      } else {
         setMessages((currentMessages) => [
           ...currentMessages,
           {
@@ -2169,14 +2121,6 @@ export function GameShell({
       setIsSending(false);
       inputRef.current?.focus();
     }
-  }
-
-  function handleRetryLastTurn() {
-    if (!retryableTurn) {
-      return;
-    }
-
-    void sendTurn(retryableTurn.message, { model: retryableTurn.model });
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -2575,13 +2519,11 @@ export function GameShell({
               hideSendingIndicator={isShowingStreamingDmMessage}
               regeneratingMessageId={regeneratingMessageId}
               regeneratableMessageId={regeneratableMessageId}
-              retryMessageId={retryableTurn?.errorMessageId}
               waitingPlayers={waitingPlayers}
               onInspectMap={() => setIsMessageMapOpen(true)}
               onRegenerateResponse={(messageId) =>
                 void handleRegenerateResponse(messageId)
               }
-              onRetryLastTurn={retryableTurn ? handleRetryLastTurn : undefined}
               onViewEldermereLore={() => {
                 setPlayerResourcesInitialTab("eldermere_lore");
                 setIsCharacterSheetOpen(true);
@@ -2708,7 +2650,6 @@ export function GameShell({
               onDraftChange={setDraft}
               onModeChange={setInputMode}
               onRollDice={handleRollDice}
-              onRetryLastTurn={retryableTurn ? handleRetryLastTurn : undefined}
               onSkipTurn={!isSinglePlayer ? handleSkipTurn : undefined}
               onGenerateRestartBackstory={handleGenerateRestartBackstory}
               onRestartCampaign={handleRestartCampaign}
