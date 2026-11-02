@@ -6498,7 +6498,7 @@ h1 {
   z-index: 35;
   display: grid;
   place-items: center;
-  padding: 22px;
+  padding: 12px;
   background: rgba(3, 2, 2, 0.76);
 }
 
@@ -6506,8 +6506,9 @@ h1 {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 14px;
-  width: min(980px, 100%);
-  max-height: min(860px, calc(100vh - 44px));
+  width: min(1680px, calc(100vw - 24px));
+  height: calc(100vh - 24px);
+  max-height: none;
   border: 1px solid var(--line);
   padding: 16px;
   background:
