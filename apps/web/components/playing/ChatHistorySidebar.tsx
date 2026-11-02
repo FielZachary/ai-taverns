@@ -171,6 +171,18 @@ export function ChatHistorySidebar({
             </div>
           ))}
         </div>
+        <button
+          className="chat-sidebar-new-campaign"
+          type="button"
+          aria-label="Start new campaign"
+          disabled={isCreatingChat}
+          onClick={() => {
+            onStartNewChat();
+            onCloseMobileDrawer?.();
+          }}
+        >
+          New Campaign
+        </button>
       </div>
 
       <div className="chat-sidebar-actions" aria-label="Table actions">

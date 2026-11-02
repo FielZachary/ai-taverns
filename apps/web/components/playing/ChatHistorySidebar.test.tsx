@@ -57,9 +57,10 @@ describe("ChatHistorySidebar", () => {
     const props = renderChatHistorySidebar();
 
     fireEvent.click(screen.getByRole("button", { name: /start new chat/i }));
+    fireEvent.click(screen.getByRole("button", { name: /start new campaign/i }));
     fireEvent.click(screen.getByRole("button", { name: /player resources/i }));
 
-    expect(props.onStartNewChat).toHaveBeenCalledTimes(1);
+    expect(props.onStartNewChat).toHaveBeenCalledTimes(2);
     expect(props.onViewCharacterSheet).toHaveBeenCalledTimes(1);
   });
 
