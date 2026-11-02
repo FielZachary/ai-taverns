@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mapCampaignSummaryRow } from "./index.js";
+import {
+  formatNarratorHistoryReference,
+  mapCampaignSummaryRow,
+} from "./index.js";
 
 test("mapCampaignSummaryRow preserves an explicit camelCase session id alias", () => {
   const summary = mapCampaignSummaryRow({
@@ -21,4 +24,23 @@ test("mapCampaignSummaryRow preserves an explicit camelCase session id alias", (
   assert.equal(summary.sessionId, "ai-dnd-session-1");
   assert.equal(summary.ownerClientId, "client-1");
   assert.equal(summary.currentUserPlayerId, "client-1");
+});
+
+test("prose narrators receive previous DM narration as reference, not an assistant turn", () => {
+  assert.equal(
+    formatNarratorHistoryReference([
+      {
+        role: "dm",
+        content: JSON.stringify({
+          public_narration: "The warden lowers the portcullis.",
+        }),
+      },
+    ]),
+    [
+      "Most recent resolved narration — reference only.",
+      "This has already happened. Do not repeat, quote, restage, or continue its wording. Respond only to the current turn input below.",
+      "",
+      "The warden lowers the portcullis.",
+    ].join("\n"),
+  );
 });

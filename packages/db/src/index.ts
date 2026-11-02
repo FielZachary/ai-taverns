@@ -12028,6 +12028,38 @@ async function getCampaignEventMessages(
 const mainDmHistoryMessageLimit = 1;
 const mainDmHistoryEventFetchLimit = mainDmHistoryMessageLimit + 1;
 
+export function formatNarratorHistoryReference(
+  history: Pick<GameMessage, "role" | "content">[],
+) {
+  const latest = history.at(-1);
+
+  if (!latest?.content.trim()) {
+    return "";
+  }
+
+  const parsed = parseJsonRecord(latest.content);
+  const narration =
+    typeof parsed.public_narration === "string"
+      ? parsed.public_narration.trim()
+      : latest.content.trim();
+
+  if (!narration) {
+    return "";
+  }
+
+  const heading =
+    latest.role === "dm"
+      ? "Most recent resolved narration — reference only."
+      : "Most recent player message — reference only.";
+
+  return [
+    heading,
+    "This has already happened. Do not repeat, quote, restage, or continue its wording. Respond only to the current turn input below.",
+    "",
+    narration,
+  ].join("\n");
+}
+
 async function askDungeonMaster(
   db: Queryable,
   runtime: DungeonMasterRuntime,
@@ -12115,9 +12147,15 @@ async function askDungeonMaster(
             ...(options?.model ? { model: options.model } : {}),
           })
       : null;
+    const narratorOnly = options?.providerResponseFormat === "text";
     const providerMessage =
-      options?.providerResponseFormat === "text"
-        ? (promptContext?.message ?? message)
+      narratorOnly
+        ? [
+            formatNarratorHistoryReference(history),
+            promptContext?.message ?? message,
+          ]
+            .filter(Boolean)
+            .join("\n\n")
         : appendGameplayTurnModeReminder(
             promptContext?.message ?? message,
             campaign.mode,
@@ -12130,7 +12168,7 @@ async function askDungeonMaster(
     const providerData = await runtime.askProvider({
       message: providerMessage,
       instructions: promptContext?.instructions ?? instructionsWithWorldContext,
-      history,
+      history: narratorOnly ? [] : history,
       ...(currentPlayerAction ? { currentPlayerAction } : {}),
       ...(promptContext?.jobNeeded ? { dmJob: promptContext.jobNeeded } : {}),
       ...(options?.model ? { model: options.model } : {}),
