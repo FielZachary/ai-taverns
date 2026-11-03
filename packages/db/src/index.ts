@@ -12060,6 +12060,22 @@ export function formatNarratorHistoryReference(
   ].join("\n");
 }
 
+/**
+ * Every router-selected gameplay job is a player-facing turn, whether it is
+ * scene direction, dialogue, combat, rest, death saves, or clarification.
+ * Keep prior narration out of the provider's assistant-role transcript for
+ * all of them; Qwen can otherwise replay it verbatim while streaming.
+ */
+export function usesNarratorHistoryReference(input: {
+  jobNeeded?: DmJobName | undefined;
+  providerResponseFormat?: "json" | "text" | undefined;
+}) {
+  return (
+    input.providerResponseFormat === "text" ||
+    input.jobNeeded !== undefined
+  );
+}
+
 async function askDungeonMaster(
   db: Queryable,
   runtime: DungeonMasterRuntime,
@@ -12148,8 +12164,12 @@ async function askDungeonMaster(
           })
       : null;
     const narratorOnly = options?.providerResponseFormat === "text";
+    const useNarratorHistoryReference = usesNarratorHistoryReference({
+      jobNeeded: promptContext?.jobNeeded,
+      providerResponseFormat: options?.providerResponseFormat,
+    });
     const providerMessage =
-      narratorOnly
+      useNarratorHistoryReference
         ? [
             formatNarratorHistoryReference(history),
             promptContext?.message ?? message,
@@ -12168,7 +12188,7 @@ async function askDungeonMaster(
     const providerData = await runtime.askProvider({
       message: providerMessage,
       instructions: promptContext?.instructions ?? instructionsWithWorldContext,
-      history: narratorOnly ? [] : history,
+      history: useNarratorHistoryReference ? [] : history,
       ...(currentPlayerAction ? { currentPlayerAction } : {}),
       ...(promptContext?.jobNeeded ? { dmJob: promptContext.jobNeeded } : {}),
       ...(options?.model ? { model: options.model } : {}),

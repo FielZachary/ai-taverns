@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   formatNarratorHistoryReference,
   mapCampaignSummaryRow,
+  usesNarratorHistoryReference,
 } from "./index.js";
 
 test("mapCampaignSummaryRow preserves an explicit camelCase session id alias", () => {
@@ -43,4 +44,27 @@ test("prose narrators receive previous DM narration as reference, not an assista
       "The warden lowers the portcullis.",
     ].join("\n"),
   );
+});
+
+test("every router-selected gameplay job uses narrator reference history", () => {
+  for (const jobNeeded of [
+    "scene_director",
+    "npc_dialogue",
+    "combat",
+    "rest_mechanics",
+    "death_saving_throws",
+    "clarification",
+  ] as const) {
+    assert.equal(
+      usesNarratorHistoryReference({ jobNeeded }),
+      true,
+      jobNeeded,
+    );
+  }
+
+  assert.equal(
+    usesNarratorHistoryReference({ providerResponseFormat: "text" }),
+    true,
+  );
+  assert.equal(usesNarratorHistoryReference({}), false);
 });
