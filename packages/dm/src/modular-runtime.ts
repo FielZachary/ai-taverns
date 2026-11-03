@@ -1749,6 +1749,7 @@ Player Claim Boundary:
 - Do not create new canon from a lie by having an NPC supply confirming lore. Keep invented names as quoted claims, rumors, possible aliases, or unresolved leads until play validates them.
 - For memory safety, unsupported player claims should be stored only as claims, suspicions, unresolved lies, or player beliefs inside an existing NPC/thread/world chunk. Do not create a new NPC, faction, location, item, or secret chunk solely because the player named it in an unresolved claim.
 Player-Facing Ending Prompt:
+- If the response requests a player roll, do not add a handoff question; the roll request is the final player-facing prompt until its result is resolved.
 - End \`public_narration\` with one short, natural handoff question in its own paragraph.
 
 - The handoff question should invite the player to choose their response without recapping the scene, listing obvious possibilities, or suggesting a preferred next action.

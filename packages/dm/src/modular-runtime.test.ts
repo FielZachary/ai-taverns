@@ -494,6 +494,10 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(jobPrompt("scene_director"), /Scene Director Roll Menu:/);
     assert.match(jobPrompt("scene_director"), /Do not create structured dice data, roll_requests, JSON/i);
     assert.match(jobPrompt("scene_director"), /Player facing ending prompt:/);
+    assert.match(
+      jobPrompt("scene_director"),
+      /If the response requests a player roll, do not add a handoff question/i
+    );
     assert.match(jobPrompt("scene_director"), /What is Garbo’s next move\?/);
     assert.match(jobPrompt("scene_director"), /Do not repeat the previous turn’s ending prompt/i);
     assert.doesNotMatch(jobPrompt("scene_director"), /Scene Construction:/);
