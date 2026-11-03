@@ -5467,11 +5467,11 @@ h1 {
   background-image:
     radial-gradient(
       ellipse 66% 58% at 50% 45%,
-      rgba(11, 8, 6, 0.48) 0%,
-      rgba(11, 8, 6, 0.72) 42%,
+      rgba(11, 8, 6, 0.34) 0%,
+      rgba(11, 8, 6, 0.64) 42%,
       rgba(5, 3, 2, 0.99) 100%
     ),
-    linear-gradient(rgba(11, 8, 6, 0.7), rgba(11, 8, 6, 0.86)),
+    linear-gradient(rgba(11, 8, 6, 0.6), rgba(11, 8, 6, 0.78)),
     url("/play/viking-tavern-chat-history.png");
   background-position: center;
   background-repeat: no-repeat;
