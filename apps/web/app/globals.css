@@ -5463,22 +5463,20 @@ h1 {
   overflow: auto;
   padding: 18px 12px 18px 18px;
   border: 1px solid rgba(226, 176, 93, 0.16);
-  /* Match the rendered play-table surface so the history flows into the
-     composer instead of appearing as a separate brown panel. */
-  background-color: #231b16;
+  background-color: #24170f;
   background-image:
     radial-gradient(
       ellipse 54% 46% at 50% 45%,
-      rgba(52, 35, 19, 0.5) 0%,
-      rgba(43, 32, 24, 0.76) 42%,
-      rgba(35, 27, 22, 0.98) 100%
+      rgba(52, 35, 19, 0.58) 0%,
+      rgba(48, 30, 14, 0.86) 42%,
+      rgba(34, 20, 9, 0.99) 100%
     ),
-    linear-gradient(rgba(244, 207, 122, 0.16), rgba(200, 135, 49, 0.28)),
+    linear-gradient(rgba(244, 207, 122, 0.28), rgba(200, 135, 49, 0.48)),
     url("/play/viking-tavern-chat-history.png");
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
-  box-shadow: none;
+  box-shadow: inset 0 0 132px 46px rgba(0, 0, 0, 0.98);
 }
 
 .message-log.chat-background-disabled {
