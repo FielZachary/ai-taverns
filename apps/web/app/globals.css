@@ -5466,7 +5466,7 @@ h1 {
 
 .message-card {
   display: grid;
-  grid-template-columns: 38px minmax(0, 1fr);
+  grid-template-columns: 56px minmax(0, 1fr);
   align-items: start;
   gap: 10px;
   width: 100%;
@@ -5541,8 +5541,8 @@ h1 {
 }
 
 .message-icon {
-  width: 38px;
-  height: 38px;
+  width: 56px;
+  height: 56px;
   border-radius: 8px;
   overflow: hidden;
 }
