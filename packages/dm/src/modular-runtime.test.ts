@@ -498,6 +498,10 @@ describe("modular AI DM runtime contracts", () => {
       jobPrompt("scene_director"),
       /If the response requests a player roll, do not add a handoff question/i
     );
+    assert.match(
+      jobPrompt("scene_director"),
+      /When no roll result or clarification is pending, end `public_narration`/i
+    );
     assert.match(jobPrompt("scene_director"), /What is Garbo’s next move\?/);
     assert.match(jobPrompt("scene_director"), /Do not repeat the previous turn’s ending prompt/i);
     assert.doesNotMatch(jobPrompt("scene_director"), /Scene Construction:/);
