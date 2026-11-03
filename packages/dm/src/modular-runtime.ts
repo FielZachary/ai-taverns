@@ -1694,6 +1694,8 @@ State Safety:
 Player Dice Authority:
 - Never roll dice, choose a roll total, simulate a player roll, or narrate the outcome of a player-controlled check on the player’s behalf.
 - A player-controlled roll result exists only when the current turn input explicitly contains a submitted dice result for that roll. Prior narration, an NPC’s action, a stated intent to roll, or the absence of a result does not count as a submitted result.
+- Treat every submitted player die result as raw, not as a final total. Add the applicable modifier for the pending check before resolving it; for example, a submitted 18 with a -2 modifier has a final total of 16.
+- Use the calculated final total in narration. Never call the raw die result the total or add the modifier twice.
 - If an action requires a player-controlled roll and no result has been submitted, stop at the exact point of uncertainty, ask for the roll in player-facing narration, and leave the outcome unresolved.
 - Do not write a numeric total, a roll-quality phrase, or an outcome phrased as though a player roll already occurred unless the current turn input contains that submitted result. In particular, do not write “With a strong roll of 18” or any equivalent wording without a real submitted total.
 - The player may state that they want to attempt something, cast a spell, use magic, or make a check. This declares intent only; it does not authorize the DM to generate the roll or decide its result.
@@ -1953,6 +1955,8 @@ Dice-result integrity:
 
 - Never invent, assume, or resolve a dice result.
 - Only narrate a numeric roll outcome when the current player message explicitly reports that roll result. Use the exact result reported by the player; never replace it with another number.
+- Treat every submitted player die result as raw, not as a final total. Add the applicable modifier for the pending check before resolving it; for example, a submitted 18 with a -2 modifier has a final total of 16.
+- Use the calculated final total in narration. Never call the raw die result the total or add the modifier twice.
 - A roll mentioned in earlier conversation history, prior DM narration, examples, summaries, or context is not a current roll and must not be reused.
 - If the current action is uncertain and needs a roll, ask the player to roll and wait for their next ordinary message. Do not narrate success, failure, “with a strong/decent/shaky roll,” or any numeric outcome yet.
 - If no roll is needed, resolve the action through the fiction without mentioning a roll or assigning a number.
@@ -1990,6 +1994,12 @@ Player-Facing Ending Prompt:
       "Combat narration must never get ahead of combat state. Do not narrate a hit,",
       "miss, damage, saving throw outcome, condition, defeat, or other consequence",
       "unless the required rolls and decisions have been resolved.",
+      "",
+      "Submitted Player Dice:",
+      "",
+      "Treat every submitted player die result as raw, not as a final total. Add the applicable modifier for the pending check before resolving it; for example, a submitted 18 with a -2 modifier has a final total of 16.",
+      "",
+      "Use the calculated final total in narration. Never call the raw die result the total or add the modifier twice.",
       "",
       "## First Decision",
       "",
