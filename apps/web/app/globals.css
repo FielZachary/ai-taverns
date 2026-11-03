@@ -5466,17 +5466,17 @@ h1 {
   background-color: #24170f;
   background-image:
     radial-gradient(
-      ellipse 60% 52% at 50% 45%,
-      rgba(52, 35, 19, 0.46) 0%,
-      rgba(48, 30, 14, 0.76) 42%,
+      ellipse 54% 46% at 50% 45%,
+      rgba(52, 35, 19, 0.58) 0%,
+      rgba(48, 30, 14, 0.86) 42%,
       rgba(34, 20, 9, 0.99) 100%
     ),
-    linear-gradient(rgba(244, 207, 122, 0.2), rgba(200, 135, 49, 0.36)),
+    linear-gradient(rgba(244, 207, 122, 0.28), rgba(200, 135, 49, 0.48)),
     url("/play/viking-tavern-chat-history.png");
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
-  box-shadow: inset 0 0 112px 38px rgba(0, 0, 0, 0.96);
+  box-shadow: inset 0 0 132px 46px rgba(0, 0, 0, 0.98);
 }
 
 .message-card {
