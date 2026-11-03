@@ -100,6 +100,7 @@ import {
   withPlayerMessageAvatars,
   type StreamingDmMessage
 } from "./game-shell-messages";
+import { clientRollRequestFromLatestDmMessage } from "./game-shell-roll-lock";
 import { extractPlayerBackstory } from "./backstory-intro";
 import {
   analyticsGuestId,
@@ -545,10 +546,6 @@ export function GameShell({
   const isCharacterDead = roomDeath?.state === "dead";
   const hasPendingDiceInput =
     nextInputNeeded === "dice_results" || pendingRollRequests.length > 0;
-  const currentRequiredRollDice = useMemo(
-    () => requiredDiceQueueFromRequests(currentPendingRollRequests),
-    [currentPendingRollRequests]
-  );
   const isWaitingOnAnotherPlayerRollState = isWaitingOnAnotherPlayerRoll({
     isSinglePlayer,
     pendingRollRequests,
@@ -613,6 +610,25 @@ export function GameShell({
           )
       ),
     [activeStreamingDmTurnId, streamingDmMessages]
+  );
+  const clientRollRequest = useMemo(
+    () =>
+      isShowingStreamingDmMessage
+        ? null
+        : clientRollRequestFromLatestDmMessage(visibleMessages),
+    [isShowingStreamingDmMessage, visibleMessages]
+  );
+  const requiredRollRequest = currentPendingRollRequest ?? clientRollRequest;
+  const currentRequiredRollDice = useMemo(
+    () =>
+      requiredDiceQueueFromRequests(
+        currentPendingRollRequest
+          ? currentPendingRollRequests
+          : clientRollRequest
+            ? [clientRollRequest]
+            : []
+      ),
+    [clientRollRequest, currentPendingRollRequest, currentPendingRollRequests]
   );
   const waitingPlayers = useMemo(
     () =>
@@ -742,9 +758,9 @@ export function GameShell({
     !hasAdventureBegun;
   const canSelectAiModel =
     isSinglePlayer || Boolean(activeCampaign?.ownerClientId === playerId);
-  const playerInputLockMessage = currentPendingRollRequest
+  const playerInputLockMessage = requiredRollRequest
     ? `Roll required: ${
-        currentRequiredRollDice?.expression ?? currentPendingRollRequest.label
+        currentRequiredRollDice?.expression ?? requiredRollRequest.label
       }`
     : isWaitingOnAnotherPlayerRollState
       ? "Waiting on another player's roll"
@@ -2322,6 +2338,27 @@ export function GameShell({
       return;
     }
 
+    if (clientRollRequest) {
+      const queuedRoll = rollQueuedDice(queuedDice);
+
+      setInputValidationMessage("");
+      setActiveDiceReveal({
+        id: createClientId(),
+        notation: queuedRoll.notation,
+        expression: queuedRoll.expression,
+        total: queuedRoll.total,
+        onComplete: () => {
+          setActiveDiceReveal(null);
+          void sendTurn(queuedRoll.content, {
+            model: canSelectAiModel
+              ? selectedAiModelFromStorage()
+              : defaultAiModel
+          });
+        }
+      });
+      return;
+    }
+
     const queuedRoll = rollQueuedDice(queuedDice);
     trackAnalytics({
       name: "Dice Roll Queued",
@@ -2654,7 +2691,7 @@ export function GameShell({
               }
               canSelectAiModel={canSelectAiModel}
               lockMessage={playerInputLockMessage}
-              requiredRoll={currentPendingRollRequest}
+              requiredRoll={requiredRollRequest}
               requiredRollExpression={currentRequiredRollDice?.expression}
               requiredQueuedDice={currentRequiredRollDice?.queuedDice}
               validationMessage={inputValidationMessage}
