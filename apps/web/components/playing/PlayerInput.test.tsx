@@ -70,6 +70,24 @@ describe("PlayerInput", () => {
     expect(screen.queryByRole("dialog", { name: /ai model/i })).not.toBeInTheDocument();
   });
 
+  it("toggles the chat background from settings", () => {
+    const onChatBackgroundEnabledChange = vi.fn();
+
+    renderPlayerInput({ onChatBackgroundEnabledChange });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /ai model: deepseek v4 flash/i })
+    );
+    fireEvent.click(screen.getByRole("tab", { name: /chat background/i }));
+
+    const toggle = screen.getByRole("switch", { name: /on/i });
+    expect(toggle).toHaveAttribute("aria-checked", "true");
+
+    fireEvent.click(toggle);
+
+    expect(onChatBackgroundEnabledChange).toHaveBeenCalledWith(false);
+  });
+
   it("shows restart settings and submits the edited backstory", async () => {
     const onGenerateRestartBackstory = vi
       .fn()

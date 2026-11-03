@@ -5479,6 +5479,14 @@ h1 {
   box-shadow: inset 0 0 132px 46px rgba(0, 0, 0, 0.98);
 }
 
+.message-log.chat-background-disabled {
+  background-color: #24170f;
+  background-image:
+    linear-gradient(180deg, rgba(244, 207, 122, 0.08), transparent 28%),
+    linear-gradient(135deg, rgba(52, 35, 19, 0.98), rgba(34, 20, 9, 0.98));
+  box-shadow: none;
+}
+
 .message-card {
   display: grid;
   grid-template-columns: 50px minmax(0, 1fr);
@@ -6392,7 +6400,7 @@ h1 {
 
 .model-settings-tabs {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -6431,6 +6439,62 @@ h1 {
 .restart-settings-panel {
   display: grid;
   gap: 12px;
+}
+
+.chat-background-settings-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 92px;
+  padding: 16px;
+  border: 1px solid rgba(244, 207, 122, 0.18);
+  background: rgba(17, 13, 10, 0.34);
+}
+
+.chat-background-settings-panel h3 {
+  margin: 0 0 4px;
+  color: var(--gold-bright);
+  font-size: 1rem;
+}
+
+.chat-background-settings-panel p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+
+.turn-form .chat-background-toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 72px;
+  min-height: 36px;
+  padding: 4px 10px 4px 5px;
+  border: 1px solid rgba(188, 169, 142, 0.34);
+  color: var(--muted);
+  background: rgba(17, 13, 10, 0.48);
+}
+
+.turn-form .chat-background-toggle > span {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(188, 169, 142, 0.5);
+  transition: transform 160ms ease, background 160ms ease;
+}
+
+.turn-form .chat-background-toggle.active {
+  border-color: rgba(244, 207, 122, 0.58);
+  color: var(--gold-bright);
+  background: rgba(217, 169, 74, 0.12);
+}
+
+.turn-form .chat-background-toggle.active > span {
+  background: var(--gold-bright);
+  transform: translateX(26px);
 }
 
 .restart-settings-panel p {
@@ -6502,6 +6566,11 @@ h1 {
 }
 
 @media (max-width: 560px) {
+  .chat-background-settings-panel {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .restart-settings-actions {
     grid-template-columns: 1fr;
   }

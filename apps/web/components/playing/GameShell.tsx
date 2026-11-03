@@ -201,6 +201,8 @@ type GameShellProps = {
   includeAllMessages?: boolean;
 };
 
+const chatBackgroundStorageKey = "ai-dnd.chatBackgroundEnabled";
+
 type ActiveDiceReveal = {
   id: string;
   notation: string;
@@ -410,6 +412,7 @@ export function GameShell({
   const [availableCampaigns, setAvailableCampaigns] = useState<CampaignSummary[]>([]);
   const [draft, setDraft] = useState("");
   const [inputMode, setInputMode] = useState<PlayerInputMode>("turn");
+  const [chatBackgroundEnabled, setChatBackgroundEnabled] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [isRestartingCampaign, setIsRestartingCampaign] = useState(false);
   const [restartPreparingCampaignId, setRestartPreparingCampaignId] =
@@ -485,6 +488,17 @@ export function GameShell({
     };
   }, [allowUnlistedInitialCampaign, initialCampaignId]);
   const roomReadDebugParam = includeAllMessages ? "&debugAllMessages=true" : "";
+
+  useEffect(() => {
+    setChatBackgroundEnabled(
+      window.localStorage.getItem(chatBackgroundStorageKey) !== "false"
+    );
+  }, []);
+
+  const handleChatBackgroundEnabledChange = useCallback((enabled: boolean) => {
+    setChatBackgroundEnabled(enabled);
+    window.localStorage.setItem(chatBackgroundStorageKey, String(enabled));
+  }, []);
 
   const setRoomResolvingState = useCallback((isResolving: boolean) => {
     setIsRoomResolving(isResolving);
@@ -2511,6 +2525,7 @@ export function GameShell({
 
             <MessageLog
               messages={visibleMessages}
+              chatBackgroundEnabled={chatBackgroundEnabled}
               isSending={
                 isLoadingMessages ||
                 isRoomResolving ||
@@ -2647,12 +2662,14 @@ export function GameShell({
               restartBackstory={activeBackstory}
               canRestartCampaign={Boolean(isSinglePlayer && activeCampaign)}
               isRestartingCampaign={isRestartingCampaign}
+              chatBackgroundEnabled={chatBackgroundEnabled}
               onDraftChange={setDraft}
               onModeChange={setInputMode}
               onRollDice={handleRollDice}
               onSkipTurn={!isSinglePlayer ? handleSkipTurn : undefined}
               onGenerateRestartBackstory={handleGenerateRestartBackstory}
               onRestartCampaign={handleRestartCampaign}
+              onChatBackgroundEnabledChange={handleChatBackgroundEnabledChange}
               onSubmit={handleSubmit}
             />
             {isRoomResolving && !isShowingStreamingDmMessage ? (

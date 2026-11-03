@@ -22,6 +22,7 @@ export type ChatPlayerStatus = {
 type MessageLogProps = {
   messages: GameMessage[];
   isSending: boolean;
+  chatBackgroundEnabled?: boolean;
   hideSendingIndicator?: boolean;
   waitingPlayers?: ChatPlayerStatus[];
   regeneratingMessageId?: string | null;
@@ -524,6 +525,7 @@ function messageLocationLabel(message: GameMessage) {
 export function MessageLog({
   messages,
   isSending,
+  chatBackgroundEnabled = true,
   hideSendingIndicator = false,
   waitingPlayers = [],
   regeneratingMessageId,
@@ -574,7 +576,13 @@ export function MessageLog({
   }, [hasEldermereMap, isSending, messages.length, scrollKey]);
 
   return (
-    <div className="message-log" aria-live="polite" ref={logRef}>
+    <div
+      className={`message-log ${
+        chatBackgroundEnabled ? "" : "chat-background-disabled"
+      }`}
+      aria-live="polite"
+      ref={logRef}
+    >
       {messages.map((message) => {
         if (message.resourceCard) {
           return (

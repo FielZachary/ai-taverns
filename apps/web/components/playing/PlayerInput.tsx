@@ -29,6 +29,7 @@ type PlayerInputProps = {
   restartBackstory?: string;
   canRestartCampaign?: boolean;
   isRestartingCampaign?: boolean;
+  chatBackgroundEnabled?: boolean;
   onDraftChange: (value: string) => void;
   onModeChange: (mode: PlayerInputMode) => void;
   onRollDice: (queuedDice: QueuedDice) => void;
@@ -38,6 +39,7 @@ type PlayerInputProps = {
     currentBackstory: string
   ) => Promise<string>;
   onRestartCampaign?: (backstory: string) => Promise<void> | void;
+  onChatBackgroundEnabledChange?: (enabled: boolean) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 };
 
@@ -73,12 +75,14 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
       restartBackstory = "",
       canRestartCampaign = false,
       isRestartingCampaign = false,
+      chatBackgroundEnabled = true,
       onDraftChange,
       onModeChange,
       onRollDice,
       onSkipTurn,
       onGenerateRestartBackstory,
       onRestartCampaign,
+      onChatBackgroundEnabledChange,
       onSubmit
     },
     ref
@@ -86,7 +90,9 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
     const [isCallingAttention, setIsCallingAttention] = useState(false);
     const [isDicePickerOpen, setIsDicePickerOpen] = useState(false);
     const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
-    const [settingsTab, setSettingsTab] = useState<"model" | "restart">("model");
+    const [settingsTab, setSettingsTab] = useState<
+      "model" | "background" | "restart"
+    >("model");
     const [isMapOpen, setIsMapOpen] = useState(false);
     const [selectedAiModel, setSelectedAiModel] =
       useState<AiModelId>("deepseek-v4-flash");
@@ -436,6 +442,15 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
                 </button>
                 <button
                   type="button"
+                  className={settingsTab === "background" ? "active" : ""}
+                  role="tab"
+                  aria-selected={settingsTab === "background"}
+                  onClick={() => setSettingsTab("background")}
+                >
+                  Chat Background
+                </button>
+                <button
+                  type="button"
                   className={settingsTab === "restart" ? "active" : ""}
                   role="tab"
                   aria-selected={settingsTab === "restart"}
@@ -462,6 +477,29 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
                       {option.label}
                     </button>
                   ))}
+                </div>
+              ) : settingsTab === "background" ? (
+                <div className="chat-background-settings-panel" role="tabpanel">
+                  <div>
+                    <h3>Chat Background</h3>
+                    <p>
+                      Show the tavern illustration behind the chat history.
+                    </p>
+                  </div>
+                  <button
+                    className={`chat-background-toggle ${
+                      chatBackgroundEnabled ? "active" : ""
+                    }`}
+                    type="button"
+                    role="switch"
+                    aria-checked={chatBackgroundEnabled}
+                    onClick={() =>
+                      onChatBackgroundEnabledChange?.(!chatBackgroundEnabled)
+                    }
+                  >
+                    <span aria-hidden="true" />
+                    {chatBackgroundEnabled ? "On" : "Off"}
+                  </button>
                 </div>
               ) : (
                 <div className="restart-settings-panel" role="tabpanel">

@@ -50,6 +50,14 @@ afterEach(() => {
 });
 
 describe("MessageLog", () => {
+  it("removes the tavern background class when disabled", () => {
+    const { container } = renderMessageLog({ chatBackgroundEnabled: false });
+
+    expect(container.querySelector(".message-log")).toHaveClass(
+      "chat-background-disabled"
+    );
+  });
+
   it("shows the initial Eldermere map instead of scrolling past it", () => {
     const mapMessage = gameMessage({
       id: "eldermere-map",
