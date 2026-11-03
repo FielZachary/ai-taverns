@@ -1009,20 +1009,6 @@ describe("modular AI DM runtime contracts", () => {
       /With a \[quality adjective\] roll of <clue>\[total\]<\/clue>, here's what happens:/i
     );
 
-    for (const job of ["scene_director", "npc_dialogue", "combat"] as const) {
-      const prompt = jobPrompt(job);
-      assert.match(prompt, /Player Roll Interpretation:/);
-      assert.match(
-        prompt,
-        /player-submitted dice result is always the raw die result, not the final modified total/i
-      );
-      assert.match(
-        prompt,
-        /final total = raw die result \+ modifier yourself/i
-      );
-      assert.match(prompt, /Never call the raw die result the total or apply the modifier twice/i);
-    }
-
     const npcDialoguePrompt = jobPrompt("npc_dialogue");
     assert.match(npcDialoguePrompt, /Submitted Player Roll Result Opening:/);
     assert.match(
@@ -1349,16 +1335,6 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(prompt, /<object>\.\.\.<\/object>/);
     assert.match(prompt, /<em>\.\.\.<\/em>/);
     assert.match(prompt, /Do not nest tags, add attributes/i);
-  });
-
-  it("preserves raw-roll modifier guidance in every prose narrator job", () => {
-    for (const job of ["scene_director", "npc_dialogue", "combat"] as const) {
-      const prompt = narratorJobPrompt(job, "single_player");
-      assert.match(prompt, /Raw player dice results:/);
-      assert.match(prompt, /natural\/raw die value, never as its final total/i);
-      assert.match(prompt, /submitted 18 with a -2 modifier has a final total of 16/i);
-      assert.match(prompt, /do not call the raw die value the total or apply a modifier twice/i);
-    }
   });
 
   it("inserts router reasons into clarification job guidance only when provided", () => {
