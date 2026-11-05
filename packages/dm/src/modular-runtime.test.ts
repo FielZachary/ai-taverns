@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   buildMemoryUpdaterPrompt,
+  buildLivingWorldPressureEnginePrompt,
   buildRouterPrompt,
   formatRouterCurrentTurnInput,
   jobPrompt,
@@ -11,10 +12,40 @@ import {
   validateCombatEvents,
   validateMainDmOutput,
   validateMemoryPatches,
+  validateLivingWorldOutput,
   validateRouterOutput
 } from "./modular-runtime.js";
 
 describe("modular AI DM runtime contracts", () => {
+  it("keeps living-world guidance to trajectory and boundaries", () => {
+    const prompt = buildLivingWorldPressureEnginePrompt();
+    assert.match(prompt, /active trajectory/i);
+    assert.match(prompt, /Casual, domestic, social, restful, or low-stakes play may remain low-stakes/i);
+    assert.doesNotMatch(prompt, /soft_moves should be flexible/i);
+    assert.doesNotMatch(prompt, /hard_moves_if_earned should be stronger/i);
+
+    const output = validateLivingWorldOutput(
+      JSON.stringify({
+        world_clock_updates: [],
+        patches: [],
+        new_context_chunks: [],
+        remove_context_chunks: [],
+        dm_guidance: {
+          current_direction: "A quiet pressure is developing offscreen.",
+          avoid: ["Do not force it into the present scene."],
+          soft_moves: ["Legacy data is ignored."]
+        },
+        possible_intrusions: [],
+        contradiction_warnings: []
+      })
+    );
+
+    assert.deepEqual(output.dmGuidance, {
+      currentDirection: "A quiet pressure is developing offscreen.",
+      avoid: ["Do not force it into the present scene."]
+    });
+  });
+
   it("validates router output and preserves selected context keys", () => {
     const result = validateRouterOutput(
       JSON.stringify({
@@ -1178,7 +1209,8 @@ describe("modular AI DM runtime contracts", () => {
     }
     assert.match(buildMemoryUpdaterPrompt(), /Allowed operations/);
     assert.match(buildMemoryUpdaterPrompt(), /turn_summary is required/i);
-    assert.match(buildMemoryUpdaterPrompt(), /entity_keys, open_thread_keys, and certainty_notes/i);
+    assert.match(buildMemoryUpdaterPrompt(), /completed_beats, entity_keys, open_thread_keys, and certainty_notes/i);
+    assert.match(buildMemoryUpdaterPrompt(), /immediate anti-repetition guard/i);
     assert.match(buildMemoryUpdaterPrompt(), /Never turn a player claim, lie, guess/i);
     assert.match(buildMemoryUpdaterPrompt(), /rename_chunk/);
     assert.match(buildMemoryUpdaterPrompt(), /merge_chunk/);

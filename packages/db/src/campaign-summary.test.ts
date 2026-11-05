@@ -27,7 +27,7 @@ test("mapCampaignSummaryRow preserves an explicit camelCase session id alias", (
   assert.equal(summary.currentUserPlayerId, "client-1");
 });
 
-test("prose narrators receive previous DM narration as reference, not an assistant turn", () => {
+test("prose narrators receive no raw previous narration", () => {
   assert.equal(
     formatNarratorHistoryReference([
       {
@@ -38,10 +38,9 @@ test("prose narrators receive previous DM narration as reference, not an assista
       },
     ]),
     [
-      "Most recent resolved narration — reference only.",
-      "This has already happened. Do not repeat, quote, restage, or continue its wording. Respond only to the current turn input below.",
-      "",
-      "The warden lowers the portcullis.",
+      "Previous resolved turn — continuity only.",
+      "Its meaning is represented by the compressed campaign history and completed-beat continuity below.",
+      "Do not reconstruct, quote, or imitate the prior response's wording.",
     ].join("\n"),
   );
 });

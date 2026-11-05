@@ -116,9 +116,6 @@ const quotedDialoguePattern = /"[^"\n]{20,240}"/g;
 
 export type LivingWorldGuidance = {
   currentDirection: string;
-  pressureToSurface: string[];
-  softMoves: string[];
-  hardMovesIfEarned: string[];
   avoid: string[];
 };
 
@@ -1821,6 +1818,16 @@ Natural Dialogue and Conversation Progression:
 - Treat the immediately previous DM response as already dramatized. Do not restage its signature gestures, descriptions, stakes, or dialogue structure unless the player's action directly changes them.
 - Do not repeat a physical tell or atmospheric detail from the prior reply unless it now has a new meaning. Respond to the specific substance of the player's answer before returning to the larger conflict.
 
+Conversation Without Plot Function:
+- Do not treat every conversation as a delivery system for plot, clues, quests, warnings, decisions, or escalating tension.
+- When a practical or plot-relevant subject has naturally ended, allow the conversation to continue as ordinary human conversation when the NPC would plausibly keep talking.
+- NPCs may make small talk, ask ordinary personal questions, share harmless memories, complain about work, discuss food, weather, travel, family, local habits, bad jokes, old embarrassments, opinions, or something they notice in the room.
+- These beats do not need to reveal hidden information, create a lead, foreshadow danger, introduce a complication, or demand a player decision.
+- Let the NPC's personality, social temperament, current disposition, and immediate surroundings determine whether they keep talking, become comfortably quiet, change the subject, make a joke, ramble, or politely end the exchange.
+- Do not force the conversation back to the main conflict because the player gives a simple, friendly, casual, or non-goal-oriented response. An ordinary reply may receive an ordinary reply.
+- If no one has an urgent reason to stop, let a shared drink, meal, walk, task, silence, or idle observation remain a real scene even when nothing important happens.
+- Do not manufacture a hidden motive beneath harmless conversation. A question, joke, or personal story may simply be human curiosity, humor, or sharing.
+
 World Progression During NPC Dialogue:
 - NPC dialogue must not freeze the world for the player's conversation.
 - While the player talks, established background tasks, events, and other characters continue progressing and can finish.
@@ -2560,7 +2567,8 @@ export function buildMemoryUpdaterPrompt() {
     "Use inventory_state_update as { patches: [] } unless an explicit completed inventory change is established. Use setting_update only for a meaningful established location change; otherwise use null.",
     "memory_patches contains durable facts only. The legacy patches/new_context_chunks/remove_context_chunks fields remain for context storage compatibility.",
     "turn_summary is required. Summarize this resolved turn (the player action plus accepted narration) in 40-60 tokens for chronological campaign history.",
-    "turn_summary must have summary, entity_keys, open_thread_keys, and certainty_notes. Use short stable context ids such as npc:captain-vael or thread:black-key when known; otherwise use empty arrays.",
+    "turn_summary must have summary, completed_beats, entity_keys, open_thread_keys, and certainty_notes. Use short stable context ids such as npc:captain-vael or thread:black-key when known; otherwise use empty arrays.",
+    "completed_beats is an immediate anti-repetition guard for the next narrator turn. Include 0-6 concise, factual, player-visible beats that were actually completed in this turn and would be harmful to re-deliver, such as an NPC offer, warning, clue, request, reveal, agreement, refusal, or resolved action. Do not include incidental gestures, atmosphere, dialogue wording, or future plans. Use [] when no meaningful replayable beat occurred.",
     "The summary records concrete outcomes and unresolved questions. Never turn a player claim, lie, guess, or attempted action into an established fact. Put uncertainty explicitly in certainty_notes, for example: 'Unverified: the party claims the guard sent them.'",
     "Do not include hidden truths, private reasoning, or unrevealed NPC names in turn_summary.",
     "Allowed operations: append, replace_section, create_chunk, archive_chunk, rename_chunk, merge_chunk.",
@@ -2876,12 +2884,13 @@ export function buildLivingWorldPressureEnginePrompt() {
     "Never reveal hidden truths in player_safe chunks. Use dm_only for true causes, reveal ladders, private motives, not-yet-discovered agents, future betrayals, and campaign-scale secrets.",
     "",
     "DM guidance rules:",
-    "DM guidance is server-side direction for the next stretch of foreground narration. It is not canon by itself.",
-    "current_direction should explain what pressure is alive, why it matters, and what the foreground DM should watch for.",
-    "pressure_to_surface should list concrete pressures that can appear through signs, rumors, NPC behavior, roadblocks, requests, clues, or consequences.",
-    "soft_moves should be flexible ways to surface the pressure without forcing a player choice.",
-    "hard_moves_if_earned should be stronger consequences that are fair only if established pressure, pacing, or player neglect supports them.",
-    "avoid should name agency, pacing, mystery, continuity, or visibility boundaries.",
+    "DM guidance is server-side direction for the next stretch of foreground play. It is not canon by itself, a recap, a scene script, or a list of narration beats the foreground DM must use.",
+    "current_direction must be a detailed, instruction-like creative direction for the foreground narrator. Establish what the narrator should prioritize, preserve, leave in the background, and allow room for across the next stretch of play.",
+    "Use current_direction to describe the active trajectory: what forces or conditions are in motion, what they make likely over time, and the tone, pacing, or focus that best follows from them. Explain causal context, uncertainty, and what can remain offscreen when useful.",
+    "Do not prescribe a scene, NPC dialogue, specific clue, interruption, request, or outcome. Never write commands such as 'have Orin say', 'show a traveler', 'reveal a clue', or 'ask the player'. The foreground narrator decides whether, when, and how the direction matters in the present moment.",
+    "Casual, domestic, social, restful, or low-stakes play may remain low-stakes. Do not require the foreground narrator to surface an active trajectory merely because it exists.",
+    "Do not restate an already delivered NPC offer, warning, clue, request, revelation, or scene beat as though it remains waiting to happen. Describe only continuing consequences or future possibilities that have not already been played.",
+    "avoid must contain detailed, concrete boundaries for agency, pacing, mystery, visibility, and recently resolved beats that must not be replayed, paraphrased, or re-offered.",
     "",
     "Possible intrusions rules:",
     "possible_intrusions are proposals for the foreground DM, not direct narration.",
@@ -2919,20 +2928,11 @@ export function buildLivingWorldPressureEnginePrompt() {
         remove_context_chunks: [],
         dm_guidance: {
           current_direction:
-            "The Accord is getting closer because the player's questions made Lysa's trail visible. Look for fair chances to show pressure without forcing the player to go to the kiln immediately.",
-          pressure_to_surface: [
-            "Surveyors asking about ruin claims",
-            "A worried ally warning that records are being sealed"
-          ],
-          soft_moves: [
-            "Show posted notices or nervous miners before a direct confrontation"
-          ],
-          hard_moves_if_earned: [
-            "If the player ignores the pressure for another beat, an Accord agent may reach the same clue first"
-          ],
+            "The Accord is quietly consolidating influence around the kiln road after the player's public questions. If left unchallenged, its presence will become harder to ignore through ordinary civic and economic friction, but the foreground can remain focused on unrelated personal or local scenes until a natural consequence reaches them.",
           avoid: [
             "Do not reveal Lysa's true fate",
-            "Do not force immediate travel to the kiln"
+            "Do not force immediate travel to the kiln",
+            "Do not replay information or offers already delivered in the current scene"
           ]
         },
         possible_intrusions: [
@@ -3081,11 +3081,6 @@ export function validateLivingWorldOutput(
       : [],
     dmGuidance: {
       currentDirection,
-      pressureToSurface: normalizeStringArray(rawGuidance.pressure_to_surface),
-      softMoves: normalizeStringArray(rawGuidance.soft_moves),
-      hardMovesIfEarned: normalizeStringArray(
-        rawGuidance.hard_moves_if_earned
-      ),
       avoid: normalizeStringArray(rawGuidance.avoid)
     },
     possibleIntrusions: Array.isArray(parsed.possible_intrusions)

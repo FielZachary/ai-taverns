@@ -362,9 +362,6 @@ test("living world prompt formatting includes guidance and cadence context", () 
     campaign,
     currentGuidance: {
       currentDirection: "Push the storm pressure.",
-      pressureToSurface: ["Dust storm"],
-      softMoves: ["Show stinging dust"],
-      hardMovesIfEarned: ["A path is buried"],
       avoid: ["Do not force the hut"],
       updatedAt: "2026-07-29T00:00:00.000Z"
     },
@@ -411,6 +408,26 @@ test("living world prompt formatting includes guidance and cadence context", () 
   assert.match(prompt, /world:wailing-wash/);
   assert.match(prompt, /current_message_count": 49/);
   assert.match(prompt, /last_covered_message_count": 21/);
+});
+
+test("completed beats form a bounded no-replay continuity guard", () => {
+  const continuity = __dbTestInternals.formatCompletedBeatContinuity({
+    turnId: "turn-1",
+    summary: "Ciri drinks with Orin after the delivery.",
+    completedBeats: [
+      "Orin gave Ciri the east-tower referral using Hella's name.",
+      "Orin offered Ciri a recommendation with his transport outfit."
+    ],
+    entityKeys: ["npc:orin-thal"],
+    openThreadKeys: ["thread:east-tower-ridge-work"],
+    certaintyNotes: [],
+    tokenEstimate: 10,
+    createdAt: "2026-11-05T00:00:00.000Z"
+  });
+
+  assert.match(continuity, /completed in the immediately preceding resolved turn/i);
+  assert.match(continuity, /east-tower referral/);
+  assert.match(continuity, /Do not repeat, paraphrase, expand, re-offer/i);
 });
 
 test("living world helpers normalize chunks and context storage debug state", () => {

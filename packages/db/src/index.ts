@@ -961,6 +961,7 @@ type HistoryGameMessage = GameMessage & {
 type CampaignTurnSummary = {
   turnId: string;
   summary: string;
+  completedBeats: string[];
   entityKeys: string[];
   openThreadKeys: string[];
   certaintyNotes: string[];
@@ -6752,6 +6753,11 @@ function validateTurnSummary(value: unknown): ValidatedTurnSummary | null {
 
   return {
     summary,
+    completedBeats: stringArray(
+      payload.completed_beats ?? payload.completedBeats,
+      6,
+      180,
+    ),
     entityKeys: stringArray(payload.entity_keys ?? payload.entityKeys),
     openThreadKeys: stringArray(
       payload.open_thread_keys ?? payload.openThreadKeys,
@@ -6778,6 +6784,7 @@ function fallbackTurnSummary(input: {
 
   return {
     summary,
+    completedBeats: [],
     entityKeys: [],
     openThreadKeys: [],
     certaintyNotes: [],
@@ -6808,16 +6815,18 @@ async function upsertCampaignTurnSummary(
         turn_id,
         event_id,
         summary,
+        completed_beats,
         entity_keys,
         open_thread_keys,
         certainty_notes,
         token_estimate,
         source_checksum
       )
-      values ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8, $9)
+      values ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb, $9, $10)
       on conflict (turn_id) do update
       set event_id = excluded.event_id,
           summary = excluded.summary,
+          completed_beats = excluded.completed_beats,
           entity_keys = excluded.entity_keys,
           open_thread_keys = excluded.open_thread_keys,
           certainty_notes = excluded.certainty_notes,
@@ -6826,12 +6835,14 @@ async function upsertCampaignTurnSummary(
           updated_at = now()
       where campaign_turn_summaries.source_checksum is distinct from excluded.source_checksum
         or campaign_turn_summaries.summary is distinct from excluded.summary
+        or campaign_turn_summaries.completed_beats is distinct from excluded.completed_beats
     `,
     [
       input.campaignId,
       input.turnId,
       input.eventId ?? null,
       input.summary.summary,
+      JSON.stringify(input.summary.completedBeats),
       JSON.stringify(input.summary.entityKeys),
       JSON.stringify(input.summary.openThreadKeys),
       JSON.stringify(input.summary.certaintyNotes),
@@ -6852,6 +6863,7 @@ async function listCampaignTurnSummaryHistory(
         select
           turn_id,
           summary,
+          completed_beats,
           entity_keys,
           open_thread_keys,
           certainty_notes,
@@ -6880,6 +6892,7 @@ async function listCampaignTurnSummaryHistory(
       summaries.push({
         turnId: String(row.turn_id ?? ""),
         summary,
+        completedBeats: stringArray(row.completed_beats, 6, 180),
         entityKeys: stringArray(row.entity_keys),
         openThreadKeys: stringArray(row.open_thread_keys),
         certaintyNotes: stringArray(row.certainty_notes, 10, 240),
@@ -6916,6 +6929,19 @@ function formatCampaignTurnSummaryHistory(summaries: CampaignTurnSummary[]) {
       return `- [${entry.turnId}] ${entry.summary}${notes}`;
     })
     .join("\n");
+}
+
+function formatCompletedBeatContinuity(summary?: CampaignTurnSummary) {
+  if (!summary?.completedBeats.length) {
+    return "No completed-beat continuity guard is available for the prior turn.";
+  }
+
+  return [
+    "The following beats were completed in the immediately preceding resolved turn:",
+    ...summary.completedBeats.map((beat) => `- ${beat}`),
+    "",
+    "These beats are complete. Do not repeat, paraphrase, expand, re-offer, or treat them as unfinished dialogue unless the player directly raises them.",
+  ].join("\n");
 }
 
 function mechanicsActorsForValidation(campaign: Pick<CampaignRow, "metadata">) {
@@ -7280,9 +7306,6 @@ function formatContextChunkIndexForMemoryUpdater(index: ContextChunkIndex) {
 
 type CampaignDmGuidance = {
   currentDirection: string;
-  pressureToSurface: string[];
-  softMoves: string[];
-  hardMovesIfEarned: string[];
   avoid: string[];
   updatedAt?: string;
 };
@@ -7308,9 +7331,6 @@ function formatDmGuidance(guidance: CampaignDmGuidance | null) {
   return JSON.stringify(
     {
       current_direction: guidance.currentDirection,
-      pressure_to_surface: guidance.pressureToSurface,
-      soft_moves: guidance.softMoves,
-      hard_moves_if_earned: guidance.hardMovesIfEarned,
       avoid: guidance.avoid,
       updated_at: guidance.updatedAt ?? null,
     },
@@ -7342,9 +7362,6 @@ async function getCurrentCampaignDmGuidance(
 
     return {
       currentDirection: String(guidance.current_direction ?? ""),
-      pressureToSurface: normalizeStringList(guidance.pressure_to_surface),
-      softMoves: normalizeStringList(guidance.soft_moves),
-      hardMovesIfEarned: normalizeStringList(guidance.hard_moves_if_earned),
       avoid: normalizeStringList(guidance.avoid),
       ...(row?.updated_at
         ? { updatedAt: toIso(row.updated_at as Date | string) }
@@ -7390,9 +7407,6 @@ async function upsertCampaignDmGuidance(
       input.coveredMessageCount,
       JSON.stringify({
         current_direction: input.guidance.currentDirection,
-        pressure_to_surface: input.guidance.pressureToSurface,
-        soft_moves: input.guidance.softMoves,
-        hard_moves_if_earned: input.guidance.hardMovesIfEarned,
         avoid: input.guidance.avoid,
       }),
     ],
@@ -7487,9 +7501,7 @@ async function buildModularDmPromptContext(
   const summaryHistory = await listCampaignTurnSummaryHistory(
     db,
     campaign.id,
-    input.history
-      .map((message) => message.turnId)
-      .filter((turnId): turnId is string => Boolean(turnId)),
+    [],
   );
 
   await logDmContextSnapshot(db, {
@@ -7513,10 +7525,6 @@ async function buildModularDmPromptContext(
             router.jobNeeded === "clarification" ? router.reason : undefined,
         },
       ),
-      "",
-      "Current campaign DM guidance:",
-      "Use this as short-lived direction for surfacing pressures when it fits the current scene. It is not canon by itself; validated campaign context chunks and campaign events remain the source of truth. Preserve player agency and do not reveal DM-only secrets directly.",
-      formatDmGuidance(dmGuidance),
     ].join("\n"),
     jobNeeded: router.jobNeeded,
     message: [
@@ -7527,7 +7535,11 @@ async function buildModularDmPromptContext(
       renderContextChunks(context.chunks),
       "",
       "Current campaign DM guidance:",
+      "Treat this as a detailed creative direction and boundary set, not a scene script. It is not canon by itself; validated campaign context chunks and campaign events remain the source of truth.",
       formatDmGuidance(dmGuidance),
+      "",
+      "Previous-turn continuity:",
+      formatCompletedBeatContinuity(summaryHistory.at(-1)),
       "",
       "Current turn input:",
       input.currentAction,
@@ -8828,9 +8840,6 @@ async function logLivingWorldEngineRun(
       input.guidance
         ? JSON.stringify({
             current_direction: input.guidance.currentDirection,
-            pressure_to_surface: input.guidance.pressureToSurface,
-            soft_moves: input.guidance.softMoves,
-            hard_moves_if_earned: input.guidance.hardMovesIfEarned,
             avoid: input.guidance.avoid,
           })
         : JSON.stringify(null),
@@ -12037,34 +12046,19 @@ export function formatNarratorHistoryReference(
     return "";
   }
 
-  const parsed = parseJsonRecord(latest.content);
-  const narration =
-    typeof parsed.public_narration === "string"
-      ? parsed.public_narration.trim()
-      : latest.content.trim();
-
-  if (!narration) {
-    return "";
-  }
-
-  const heading =
-    latest.role === "dm"
-      ? "Most recent resolved narration — reference only."
-      : "Most recent player message — reference only.";
-
   return [
-    heading,
-    "This has already happened. Do not repeat, quote, restage, or continue its wording. Respond only to the current turn input below.",
-    "",
-    narration,
+    "Previous resolved turn — continuity only.",
+    "Its meaning is represented by the compressed campaign history and completed-beat continuity below.",
+    "Do not reconstruct, quote, or imitate the prior response's wording.",
   ].join("\n");
 }
 
 /**
  * Every router-selected gameplay job is a player-facing turn, whether it is
  * scene direction, dialogue, combat, rest, death saves, or clarification.
- * Keep prior narration out of the provider's assistant-role transcript for
- * all of them; Qwen can otherwise replay it verbatim while streaming.
+ * Keep prior narration out of the provider prompt altogether for all of them;
+ * models can otherwise replay it verbatim while streaming. The turn-summary
+ * history and completed-beat guard retain the needed continuity instead.
  */
 export function usesNarratorHistoryReference(input: {
   jobNeeded?: DmJobName | undefined;
@@ -14800,6 +14794,7 @@ export const __dbTestInternals = {
   applyAcceptedMemoryPatch,
   campaignContextStorageDebugState,
   buildCampaignFoundationCompilerPrompt,
+  formatCompletedBeatContinuity,
   formatDmGuidance,
   formatContextChunkIndexForRouter,
   formatLivingWorldPressureEngineRequest,

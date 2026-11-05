@@ -278,6 +278,7 @@ type CampaignTurnSummaryRecord = {
   turn_id: string;
   event_id: string | null;
   summary: string;
+  completed_beats: unknown;
   entity_keys: unknown;
   open_thread_keys: unknown;
   certainty_notes: unknown;
@@ -1266,7 +1267,7 @@ class FakeDatabase {
       return { rows: [] as T[] };
     }
 
-    if (normalizedSql.startsWith("select turn_id, summary, entity_keys, open_thread_keys, certainty_notes, token_estimate, created_at from campaign_turn_summaries")) {
+    if (normalizedSql.startsWith("select turn_id, summary, completed_beats, entity_keys, open_thread_keys, certainty_notes, token_estimate, created_at from campaign_turn_summaries")) {
       const campaignId = values[0] as string;
       const excludedTurnIds = new Set(values[1] as string[]);
       const limit = values[2] as number;
@@ -1296,11 +1297,12 @@ class FakeDatabase {
         turn_id: turnId,
         event_id: (values[2] as string | null) ?? null,
         summary: values[3] as string,
-        entity_keys: parseJson(values[4]),
-        open_thread_keys: parseJson(values[5]),
-        certainty_notes: parseJson(values[6]),
-        token_estimate: values[7] as number,
-        source_checksum: values[8] as string,
+        completed_beats: parseJson(values[4]),
+        entity_keys: parseJson(values[5]),
+        open_thread_keys: parseJson(values[6]),
+        certainty_notes: parseJson(values[7]),
+        token_estimate: values[8] as number,
+        source_checksum: values[9] as string,
         created_at: existing?.created_at ?? new Date()
       } satisfies CampaignTurnSummaryRecord;
 
@@ -2987,17 +2989,7 @@ before(async () => {
             remove_context_chunks: [],
             dm_guidance: {
               current_direction:
-                "The Claim-Stake Accord is getting closer to Lysa's trail because the player's public investigation created noise. Surface that pressure through records being sealed, surveyors asking questions, or an ally warning the player.",
-              pressure_to_surface: [
-                "Accord surveyors asking about Lysa",
-                "Public records becoming harder to access"
-              ],
-              soft_moves: [
-                "Show posted claim notices or nervous clerks before a direct confrontation"
-              ],
-              hard_moves_if_earned: [
-                "If the player ignores the pressure, an Accord agent can reach a clue first"
-              ],
+                "The Claim-Stake Accord is quietly consolidating influence around Lysa's trail after the player's public investigation. Its pressure can remain backgrounded until an ordinary consequence naturally reaches the foreground.",
               avoid: [
                 "Do not reveal Lysa's true fate",
                 "Do not force the player to go to the kiln immediately"

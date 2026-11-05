@@ -2635,10 +2635,7 @@ test("living world engine updates chunks and injects current DM guidance", async
   );
 
   assert.ok(mainProviderInput);
-  assert.match(
-    mainProviderInput.instructions,
-    /Use this as short-lived direction/
-  );
+  assert.doesNotMatch(mainProviderInput.instructions, /Current campaign DM guidance:/);
   assert.match(
     mainProviderInput.instructions,
     /public_narration must use 2-3 sparse semantic narration color tags/
@@ -2649,7 +2646,11 @@ test("living world engine updates chunks and injects current DM guidance", async
   );
   assert.match(
     mainProviderInput.message,
-    /Claim-Stake Accord is getting closer/
+    /quietly consolidating influence/
+  );
+  assert.equal(
+    mainProviderInput.message.match(/Current campaign DM guidance:/g)?.length,
+    1
   );
 });
 
