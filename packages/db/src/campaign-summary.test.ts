@@ -3,6 +3,8 @@ import { test } from "node:test";
 import {
   formatNarratorHistoryReference,
   mapCampaignSummaryRow,
+  narratorTimestampGuidance,
+  previousNarrationTimestamp,
   usesNarratorHistoryReference,
 } from "./index.js";
 
@@ -43,6 +45,24 @@ test("prose narrators receive no raw previous narration", () => {
       "Do not reconstruct, quote, or imitate the prior response's wording.",
     ].join("\n"),
   );
+});
+
+test("normal-play timestamps carry forward the first line of prior narration", () => {
+  assert.equal(
+    previousNarrationTimestamp([
+      {
+        role: "dm",
+        content: "Night — 9:05 PM\n\nOrin chuckles into his tankard.",
+      },
+    ]),
+    "Night — 9:05 PM",
+  );
+  assert.equal(previousNarrationTimestamp([]), "Morning — 8:00 AM");
+
+  const guidance = narratorTimestampGuidance("Night — 9:05 PM");
+  assert.match(guidance, /Current campaign timestamp:\nNight — 9:05 PM/);
+  assert.match(guidance, /first non-empty line of every response/i);
+  assert.match(guidance, /fine morning/i);
 });
 
 test("every router-selected gameplay job uses narrator reference history", () => {

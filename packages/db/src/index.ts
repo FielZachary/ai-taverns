@@ -7517,6 +7517,9 @@ async function buildModularDmPromptContext(
     instructions: [
       input.baseInstructions,
       "",
+      ...(input.narratorOnly
+        ? [narratorTimestampGuidance(previousNarrationTimestamp(input.history)), ""]
+        : []),
       (input.narratorOnly ? narratorJobPrompt : jobPrompt)(
         router.jobNeeded,
         campaign.mode,
@@ -12050,6 +12053,41 @@ export function formatNarratorHistoryReference(
     "Previous resolved turn — continuity only.",
     "Its meaning is represented by the compressed campaign history and completed-beat continuity below.",
     "Do not reconstruct, quote, or imitate the prior response's wording.",
+  ].join("\n");
+}
+
+export function previousNarrationTimestamp(
+  history: Pick<GameMessage, "role" | "content">[],
+) {
+  const previousNarration = history.at(-1)?.content ?? "";
+  const firstLine = previousNarration.split(/\r?\n/, 1)[0]?.trim();
+
+  return firstLine || "Morning — 8:00 AM";
+}
+
+export function narratorTimestampGuidance(timestamp: string) {
+  return [
+    "Current campaign timestamp:",
+    timestamp,
+    "",
+    "TIME OF DAY:",
+    "- Midnight: 12:00 AM; the beginning of a new day.",
+    "- Dawn: just before and around sunrise, typically near 6:00 AM.",
+    "- Morning: sunrise until mid-day.",
+    "- Mid-Day: approximately 12:00 PM.",
+    "- Afternoon: mid-day until approximately 6:00 PM.",
+    "- Evening: around sunset.",
+    "- Dusk: partial darkness immediately before night.",
+    "- Night: darkness after dusk and before dawn.",
+    "",
+    "TIMESTAMP RULES:",
+    "- The current campaign timestamp above is the established in-game time.",
+    "- The first non-empty line of every response must be the updated campaign timestamp in exactly this format: [Time-of-day label] — [h:mm AM/PM].",
+    "- Use only Midnight, Dawn, Morning, Mid-Day, Afternoon, Evening, Dusk, or Night as the time-of-day label. Do not write the literal phrase 'Time of Day'.",
+    "- Put one blank line after the timestamp, then write the player-facing narration.",
+    "- Advance time plausibly in every resolved response: brief dialogue or a simple action usually takes 1–5 minutes; longer conversations, meals, tasks, travel, waiting, and rest take the time established by the fiction.",
+    "- Let time affect dialogue, weather, daylight, business hours, fatigue, travel, meals, and events when relevant.",
+    "- Casual player references to time, weather, mood, or place are conversational framing, not timestamp changes. Do not correct harmless phrasing such as 'fine morning' when it is currently night; an NPC may respond playfully and naturally.",
   ].join("\n");
 }
 
