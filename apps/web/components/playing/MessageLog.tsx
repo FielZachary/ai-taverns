@@ -177,6 +177,23 @@ function playerFacingMessageContent(message: GameMessage) {
   return message.content;
 }
 
+const timestampHeaderPattern =
+  /^(Midnight|Dawn|Morning|Mid-Day|Afternoon|Evening|Dusk|Night)\s+—\s+(1[0-2]|[1-9]):[0-5]\d\s+(AM|PM)$/;
+
+function splitTimestampHeader(content: string) {
+  const [firstLine = "", ...remainingLines] = content.split(/\r?\n/);
+  const timestamp = firstLine.trim();
+
+  if (!timestampHeaderPattern.test(timestamp)) {
+    return { timestamp: null, narration: content };
+  }
+
+  return {
+    timestamp,
+    narration: remainingLines.join("\n").trimStart()
+  };
+}
+
 function MessageBody({
   content
 }: {
@@ -606,6 +623,10 @@ export function MessageLog({
           canRegenerateMessage && !isLatestRegeneratableMessage;
         const locationLabel = messageLocationLabel(message);
         const messageContent = playerFacingMessageContent(message);
+        const timestampedContent =
+          message.role === "dm" && message.kind === "turn"
+            ? splitTimestampHeader(messageContent)
+            : { timestamp: null, narration: messageContent };
 
         return (
           <article
@@ -682,7 +703,14 @@ export function MessageLog({
               {message.role === "dm" && !messageContent.trim() ? (
                 <RuneLoader label="Reading the runes" />
               ) : (
-                <MessageBody content={messageContent} />
+                <>
+                  {timestampedContent.timestamp ? (
+                    <p className="message-timestamp">
+                      {timestampedContent.timestamp}
+                    </p>
+                  ) : null}
+                  <MessageBody content={timestampedContent.narration} />
+                </>
               )}
               <MessageResourceCard
                 message={message}

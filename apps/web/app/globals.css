@@ -5747,6 +5747,16 @@ h1 {
   gap: 1.45rem;
 }
 
+.message-timestamp {
+  margin: 0 0 0.65rem;
+  color: rgba(235, 230, 220, 0.56);
+  font-family: var(--body-font);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.055em;
+  line-height: 1.25;
+}
+
 .message-player .message-body p,
 .message-dm .message-body p {
   font-size: 0.95rem;

@@ -122,6 +122,43 @@ describe("MessageLog", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders a normal-play DM timestamp as a muted header", () => {
+    renderMessageLog({
+      messages: [
+        gameMessage({
+          id: "timestamped-dm-message",
+          role: "dm",
+          content:
+            "Night — 9:10 PM\n\n<npc>Orin</npc> chuckles into his tankard."
+        })
+      ]
+    });
+
+    expect(screen.getByText("Night — 9:10 PM")).toHaveClass(
+      "message-timestamp"
+    );
+    expect(screen.getByText("Orin")).toHaveClass(
+      "message-semantic-narration-npc"
+    );
+  });
+
+  it("leaves legacy DM messages without a timestamp unchanged", () => {
+    renderMessageLog({
+      messages: [
+        gameMessage({
+          id: "legacy-dm-message",
+          role: "dm",
+          content: "Orin chuckles into his tankard."
+        })
+      ]
+    });
+
+    expect(screen.queryByText("Night — 9:10 PM")).not.toBeInTheDocument();
+    expect(screen.getByText("Orin chuckles into his tankard.")).not.toHaveClass(
+      "message-timestamp"
+    );
+  });
+
   it("unwraps Ask DM JSON envelopes before rendering player-facing content", () => {
     renderMessageLog({
       messages: [
