@@ -12085,7 +12085,7 @@ export function narratorTimestampGuidance(timestamp: string) {
     "- The first non-empty line of every response must be the updated campaign timestamp in exactly this format: [Time-of-day label] — [h:mm AM/PM].",
     "- Use only Midnight, Dawn, Morning, Mid-Day, Afternoon, Evening, Dusk, or Night as the time-of-day label. Do not write the literal phrase 'Time of Day'.",
     "- Put one blank line after the timestamp, then write the player-facing narration.",
-    "- Advance time plausibly in every resolved response: brief dialogue or a simple action usually takes 1–5 minutes; longer conversations, meals, tasks, travel, waiting, and rest take the time established by the fiction.",
+    "- Advance time plausibly in every resolved response: brief dialogue or a simple action usually takes 1–2 minutes; longer conversations, meals, tasks, travel, waiting, and rest take the time established by the fiction.",
     "- Let time affect dialogue, weather, daylight, business hours, fatigue, travel, meals, and events when relevant.",
     "- Casual player references to time, weather, mood, or place are conversational framing, not timestamp changes. Do not correct harmless phrasing such as 'fine morning' when it is currently night; an NPC may respond playfully and naturally.",
   ].join("\n");

@@ -62,6 +62,7 @@ test("normal-play timestamps carry forward the first line of prior narration", (
   const guidance = narratorTimestampGuidance("Night — 9:05 PM");
   assert.match(guidance, /Current campaign timestamp:\nNight — 9:05 PM/);
   assert.match(guidance, /first non-empty line of every response/i);
+  assert.match(guidance, /usually takes 1–2 minutes/i);
   assert.match(guidance, /fine morning/i);
 });
 
