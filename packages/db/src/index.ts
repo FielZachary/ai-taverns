@@ -12287,12 +12287,6 @@ async function askDungeonMaster(
         );
       }
 
-      if (/^(?:```(?:json)?\s*)?[{[]/.test(narration)) {
-        throw new Error(
-          `The narrator returned structured output instead of prose. Trace ID: ${traceId}`,
-        );
-      }
-
       await logTurnDebugTrace(db, {
         campaignId: campaign.id,
         traceId,
