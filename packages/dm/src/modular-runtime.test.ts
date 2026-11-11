@@ -46,6 +46,17 @@ describe("modular AI DM runtime contracts", () => {
     });
   });
 
+  it("gives NPC cards durable conversation memory without a separate chunk", () => {
+    const prompt = buildMemoryUpdaterPrompt();
+
+    assert.match(prompt, /## Conversation Memory/);
+    assert.match(prompt, /at most 10 concise bullets/);
+    assert.match(prompt, /meaningful direct exchanges/);
+    assert.match(prompt, /has not yet answered/);
+    assert.match(prompt, /Do not create a separate conversation-memory context chunk/);
+    assert.match(prompt, /complete existing NPC card/);
+  });
+
   it("validates router output and preserves selected context keys", () => {
     const result = validateRouterOutput(
       JSON.stringify({
