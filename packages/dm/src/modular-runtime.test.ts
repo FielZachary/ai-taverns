@@ -50,11 +50,18 @@ describe("modular AI DM runtime contracts", () => {
     const prompt = buildMemoryUpdaterPrompt();
 
     assert.match(prompt, /## Conversation Memory/);
+    assert.match(prompt, /separate from ## Disposition Toward Players/);
+    assert.match(prompt, /must be updated whenever an eligible exchange occurs/);
+    assert.match(prompt, /Do not return patches: \[\] when an eligible exchange occurred/);
+    assert.match(prompt, /Do not return memory_patches/);
+    assert.doesNotMatch(prompt, /memory_patches contains durable facts only/);
     assert.match(prompt, /at most 10 concise bullets/);
-    assert.match(prompt, /meaningful direct exchanges/);
+    assert.match(prompt, /meaningful direct NPC-player exchanges/);
     assert.match(prompt, /has not yet answered/);
     assert.match(prompt, /Do not create a separate conversation-memory context chunk/);
     assert.match(prompt, /complete existing NPC card/);
+    assert.match(prompt, /Conversation Memory is the exception/);
+    assert.match(prompt, /Never quote dialogue verbatim/);
   });
 
   it("validates router output and preserves selected context keys", () => {
