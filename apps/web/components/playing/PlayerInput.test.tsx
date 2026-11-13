@@ -59,7 +59,7 @@ describe("PlayerInput", () => {
     renderPlayerInput();
 
     fireEvent.click(
-      screen.getByRole("button", { name: /ai model: deepseek v4 flash/i })
+      screen.getByRole("button", { name: /ai model: qwen 3\.5 plus/i })
     );
 
     expect(screen.getByRole("dialog", { name: /ai model/i })).toBeInTheDocument();
@@ -76,7 +76,7 @@ describe("PlayerInput", () => {
     renderPlayerInput({ onChatBackgroundEnabledChange });
 
     fireEvent.click(
-      screen.getByRole("button", { name: /ai model: deepseek v4 flash/i })
+      screen.getByRole("button", { name: /ai model: qwen 3\.5 plus/i })
     );
     fireEvent.click(screen.getByRole("tab", { name: /chat background/i }));
 
@@ -102,7 +102,7 @@ describe("PlayerInput", () => {
     });
 
     fireEvent.click(
-      screen.getByRole("button", { name: /ai model: deepseek v4 flash/i })
+      screen.getByRole("button", { name: /ai model: qwen 3\.5 plus/i })
     );
     fireEvent.click(screen.getByRole("tab", { name: /restart/i }));
 
@@ -136,7 +136,7 @@ describe("PlayerInput", () => {
     renderPlayerInput({ canSelectAiModel: false });
 
     const modelButton = screen.getByRole("button", {
-      name: /ai model: deepseek v4 flash/i
+      name: /ai model: qwen 3\.5 plus/i
     });
 
     expect(modelButton).toBeDisabled();
@@ -170,7 +170,7 @@ describe("PlayerInput", () => {
     renderPlayerInput();
 
     expect(
-      screen.getByRole("button", { name: /ai model: deepseek v4 flash/i })
+      screen.getByRole("button", { name: /ai model: qwen 3\.5 plus/i })
     ).toBeInTheDocument();
   });
 

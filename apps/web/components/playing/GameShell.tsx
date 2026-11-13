@@ -111,7 +111,7 @@ import {
 
 const openingMessages: GameMessage[] = [];
 const aiModelStorageKey = "ai-dnd.aiModel";
-const defaultAiModel: AiModelId = "deepseek-v4-flash";
+const defaultAiModel: AiModelId = "qwen-3-5-plus";
 const playerIdStorageKey = "ai-dnd.playerId";
 const initialSceneViewedStoragePrefix = "ai-dnd.initialSceneViewed";
 const roomRequestTimeoutMs = 8_000;

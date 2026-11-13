@@ -95,7 +95,7 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
     >("model");
     const [isMapOpen, setIsMapOpen] = useState(false);
     const [selectedAiModel, setSelectedAiModel] =
-      useState<AiModelId>("deepseek-v4-flash");
+      useState<AiModelId>("qwen-3-5-plus");
     const [queuedDice, setQueuedDice] = useState<QueuedDice>({});
     const [restartBackstoryDraft, setRestartBackstoryDraft] =
       useState(restartBackstory);

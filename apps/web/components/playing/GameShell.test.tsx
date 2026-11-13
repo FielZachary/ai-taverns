@@ -680,7 +680,7 @@ describe("GameShell", () => {
 
       expect(JSON.parse(String(submitCall?.[1]?.body))).toMatchObject({
         message: "I listen at the sealed door.",
-        model: "deepseek-v4-flash"
+        model: "qwen-3-5-plus"
       });
     });
   });
