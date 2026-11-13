@@ -580,6 +580,18 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(npcDialoguePrompt, /Apply the social state in this order/i);
     assert.match(npcDialoguePrompt, /Player-specific ## Disposition Toward Players entry/i);
     assert.match(npcDialoguePrompt, /not whether they must advance the story/i);
+    assert.match(
+      npcDialoguePrompt,
+      /Do not use an in-character question or request merely to end a response/i
+    );
+    assert.match(
+      npcDialoguePrompt,
+      /the external player handoff handles turn-taking/i
+    );
+    assert.doesNotMatch(
+      npcDialoguePrompt,
+      /when an NPC would more naturally ask for proof, a tool, a plan, a name, payment, or help/i
+    );
     assert.match(npcDialoguePrompt, /NPC Expressions and Punctuation/i);
     assert.match(npcDialoguePrompt, /By my blade!/i);
     assert.match(npcDialoguePrompt, /Use punctuation as part of performance/i);
