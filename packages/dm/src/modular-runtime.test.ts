@@ -588,6 +588,19 @@ describe("modular AI DM runtime contracts", () => {
       npcDialoguePrompt,
       /the external player handoff handles turn-taking/i
     );
+    assert.match(npcDialoguePrompt, /NPC Questions and Conversation Endings/i);
+    assert.match(
+      npcDialoguePrompt,
+      /NPCs do not need to continue, lead, sustain, or end every conversation through an in-character question/i
+    );
+    assert.match(
+      npcDialoguePrompt,
+      /These are valid scene endings, not incomplete narration or a static tableau/i
+    );
+    assert.match(
+      npcDialoguePrompt,
+      /Follow such a beat with the normal external handoff question, not an invented NPC question/i
+    );
     assert.doesNotMatch(
       npcDialoguePrompt,
       /when an NPC would more naturally ask for proof, a tool, a plan, a name, payment, or help/i

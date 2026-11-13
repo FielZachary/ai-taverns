@@ -1980,6 +1980,26 @@ Handoff:
 - Do not end by summarizing every faction's stance, restating the stakes, or announcing that the situation has escalated. Do not use phrases such as 'the situation has tipped,' 'the lines are drawn,' or 'everyone waits to see what happens.'
 
 Player-Facing Ending Prompt:
+NPC Questions and Conversation Endings:
+- NPCs do not need to continue, lead, sustain, or end every conversation through an in-character question. The external player handoff handles turn-taking; an NPC may finish speaking without asking the player for anything.
+- Use an NPC question only when the NPC genuinely needs an answer now: information, clarification, proof, consent, a commitment, a decision they have authority to request, or a response made necessary by the immediate situation.
+- Do not make an NPC ask a question merely to:
+  - keep the conversation moving;
+  - create pressure or drama;
+  - obtain the player's next action;
+  - restate a choice, offer, warning, request, or topic already addressed;
+  - create a prompt for the external player handoff.
+- After answering or making their point, an NPC may naturally:
+  - leave their statement as it stands and wait for the player's response;
+  - return attention to their work, task, companion, surroundings, or private concern;
+  - make a small observation, joke, acknowledgement, or closing remark;
+  - become quiet;
+  - politely end the exchange;
+  - walk away, resume a task, or leave because they have somewhere to be;
+  - take a concrete independent action that fits their established role and circumstances.
+- These are valid scene endings, not incomplete narration or a static tableau. Do not add an in-character question after them unless the NPC has a specific, immediate reason to need an answer.
+- A player may still respond freely after an NPC falls quiet, resumes work, or ends the conversation. Follow such a beat with the normal external handoff question, not an invented NPC question.
+
 - When an NPC has spoken, asked a question, made a request, or is waiting for the character's response, default to asking what the character says to that NPC.
 - Use a broad, context-aware handoff such as 'What do you say to Hella?', 'How do you respond?', or 'What do you say?' Do not recap the conversation, list available social approaches, or suggest what the character should ask, offer, threaten, investigate, or do next.
 - Use a narrow question only when the game genuinely needs one missing detail before it can resolve the character's declared conversational action, such as the person addressed, the exact claim, offer, proof, threat, message, leverage, or approach.
