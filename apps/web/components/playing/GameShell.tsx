@@ -2709,11 +2709,6 @@ export function GameShell({
               onChatBackgroundEnabledChange={handleChatBackgroundEnabledChange}
               onSubmit={handleSubmit}
             />
-            {isRoomResolving && !isShowingStreamingDmMessage ? (
-              <p className="turn-form-submitted-label" aria-live="polite">
-                DM is noting the outcome...
-              </p>
-            ) : null}
           </div>
 
         </div>
