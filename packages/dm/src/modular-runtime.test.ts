@@ -1371,37 +1371,30 @@ describe("modular AI DM runtime contracts", () => {
   });
   */
 
-  it("uses response-driven combat prompt boundaries", () => {
+  it("uses one self-contained state-machine combat prompt without the narration voice", () => {
     const combatPrompt = jobPrompt("combat");
 
     for (const heading of [
-      "Player Surprise Attack Damage Roll",
-      "Player Initiative Roll",
-      "Player Attack and Damage Roll",
-      "Player Saving Throw or Check Roll",
-      "Ask for a Player Action",
-      "Ask for a Player Reaction",
-      "End Combat"
+      "Combat Job — Turn Resolution Protocol",
+      "Mandatory Turn State Machine",
+      "Stop Conditions — Highest Priority",
+      "Procedure 1 — Surprise Opening Attack Awaiting Player Damage",
+      "Procedure 2 — Start Combat and Collect Initiative",
+      "Procedure 3 — Resolve Submitted Player Rolls",
+      "Procedure 7 — Resolve NPC and Allied-NPC Turns",
+      "Player-Action Handoff",
+      "Final Self-Check"
     ]) {
       assert.match(combatPrompt, new RegExp(heading));
     }
 
-    assert.match(combatPrompt, /If the response does not contain roll results/i);
-    assert.match(combatPrompt, /If the Player's Response Contains Roll Results/i);
-    assert.match(combatPrompt, /qualifying opening attack\s+automatically hits/i);
-    assert.match(combatPrompt, /Request the attack roll and normal damage roll together/i);
-    assert.match(combatPrompt, /Resolve every consecutive non-player-controlled turn/i);
-    assert.match(combatPrompt, /When the submitted rolls fully resolve the player's declared action:/);
-    assert.match(combatPrompt, /the player explicitly declared as part of the same turn/);
-    assert.match(combatPrompt, /Do not describe an NPC as preparing to act instead of resolving their/);
-    assert.ok(
-      combatPrompt.indexOf("### Advance After Resolving the Player's Action") > combatPrompt.indexOf("### Resolve Submitted Player Rolls") &&
-      combatPrompt.indexOf("### Advance After Resolving the Player's Action") < combatPrompt.indexOf("## If No New Player-Owned Roll Is Required")
-    );
-    assert.match(combatPrompt, /Death saving throws use the dedicated `death_saving_throws` job/i);
+    assert.match(combatPrompt, /qualifying surprise-opening attack automatically hits/i);
+    assert.match(combatPrompt, /Request attack and normal damage together/i);
+    assert.match(combatPrompt, /all consecutive NPC turns that need no player input are resolved/i);
+    assert.match(combatPrompt, /Death saving throws use the dedicated death_saving_throws job/i);
     assert.match(combatPrompt, /It is now your turn!/i);
-    assert.match(combatPrompt, /You currently have:/i);
-    assert.match(combatPrompt, /HP: current\/max/i);
+    assert.match(combatPrompt, /HP current\/max/i);
+    assert.doesNotMatch(combatPrompt, /Highest-Priority Narration Voice/i);
   });
 
   it("renders mode-specific job guidance without duplicating job prompts", () => {
@@ -1410,31 +1403,9 @@ describe("modular AI DM runtime contracts", () => {
     const soloScenePrompt = jobPrompt("scene_director", "single_player");
     const multiplayerScenePrompt = jobPrompt("scene_director", "multiplayer");
 
+    assert.equal(soloCombatPrompt, multiplayerCombatPrompt);
     assert.match(soloCombatPrompt, /This is singleplayer combat/i);
-    assert.match(soloCombatPrompt, /solo player actor key/i);
-    assert.doesNotMatch(soloCombatPrompt, /This is multiplayer combat/i);
-    assert.doesNotMatch(soloCombatPrompt, /multiplayer all-player prompt/i);
-    assert.doesNotMatch(
-      soloCombatPrompt,
-      /When multiple player submissions arrive/i
-    );
-    assert.doesNotMatch(
-      soloCombatPrompt,
-      /If multiple player-controlled actors are in combat/i
-    );
-
-    assert.match(multiplayerCombatPrompt, /This is multiplayer combat/i);
-    assert.match(multiplayerCombatPrompt, /all-player prompt/i);
-    assert.match(
-      multiplayerCombatPrompt,
-      /When multiple player submissions arrive, resolve the current turn owner's valid action first/i
-    );
-    assert.match(
-      multiplayerCombatPrompt,
-      /If multiple player-controlled actors are in combat, summarize only the actor who is receiving the handoff/i
-    );
-    assert.doesNotMatch(multiplayerCombatPrompt, /This is singleplayer combat/i);
-    assert.doesNotMatch(multiplayerCombatPrompt, /solo player actor key/i);
+    assert.doesNotMatch(soloCombatPrompt, /Highest-Priority Narration Voice/i);
 
     assert.match(soloScenePrompt, /AI Taverns DM job: scene_director/i);
     assert.match(multiplayerScenePrompt, /AI Taverns DM job: scene_director/i);
@@ -1456,8 +1427,8 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(prompt, /Do not nest tags, add attributes/i);
   });
 
-  it("retains raw-roll modifier guidance in every prose narrator job", () => {
-    for (const job of ["scene_director", "npc_dialogue", "combat"] as const) {
+  it("retains raw-roll modifier guidance in non-combat prose narrator jobs", () => {
+    for (const job of ["scene_director", "npc_dialogue"] as const) {
       const prompt = narratorJobPrompt(job, "single_player");
       assert.match(
         prompt,
