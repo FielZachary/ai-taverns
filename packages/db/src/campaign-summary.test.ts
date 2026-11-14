@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  campaignTimestampFromNarrations,
   formatNarratorHistoryReference,
   mapCampaignSummaryRow,
   narratorTimestampGuidance,
   previousNarrationTimestamp,
+  timestampFromNarration,
   usesNarratorHistoryReference,
 } from "./index.js";
 
@@ -47,7 +49,7 @@ test("prose narrators receive no raw previous narration", () => {
   );
 });
 
-test("normal-play timestamps carry forward the first line of prior narration", () => {
+test("normal-play timestamps carry forward a valid prior narration timestamp", () => {
   assert.equal(
     previousNarrationTimestamp([
       {
@@ -64,6 +66,26 @@ test("normal-play timestamps carry forward the first line of prior narration", (
   assert.match(guidance, /first non-empty line of every response/i);
   assert.match(guidance, /usually takes 1–2 minutes/i);
   assert.match(guidance, /fine morning/i);
+});
+
+test("campaign timestamps skip non-narration content and normalize legacy brackets", () => {
+  assert.equal(
+    campaignTimestampFromNarrations([
+      "Remember, you are not advancing your turn here.",
+      "[Morning] — 11:48 AM\n\nThe guard waits by the gate.",
+    ]),
+    "Morning — 11:48 AM",
+  );
+  assert.equal(
+    campaignTimestampFromNarrations([
+      "No timestamp on this resolved narration.",
+      "Night — 9:05 PM\n\nOrin chuckles into his tankard.",
+    ]),
+    "Night — 9:05 PM",
+  );
+  assert.equal(campaignTimestampFromNarrations([]), "Morning — 8:00 AM");
+  assert.equal(timestampFromNarration("[mid-day] — 12:03 pm"), "Mid-Day — 12:03 PM");
+  assert.equal(timestampFromNarration("Remember, this is clarification."), null);
 });
 
 test("every router-selected gameplay job uses narrator reference history", () => {

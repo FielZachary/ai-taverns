@@ -7503,6 +7503,9 @@ async function buildModularDmPromptContext(
     campaign.id,
     [],
   );
+  const campaignTimestamp = input.narratorOnly
+    ? await resolveCampaignTimestamp(db, campaign.id)
+    : null;
 
   await logDmContextSnapshot(db, {
     campaignId: campaign.id,
@@ -7518,7 +7521,12 @@ async function buildModularDmPromptContext(
       input.baseInstructions,
       "",
       ...(input.narratorOnly
-        ? [narratorTimestampGuidance(previousNarrationTimestamp(input.history)), ""]
+        ? [
+            narratorTimestampGuidance(
+              campaignTimestamp ?? campaignTimestampFallback,
+            ),
+            "",
+          ]
         : []),
       (input.narratorOnly ? narratorJobPrompt : jobPrompt)(
         router.jobNeeded,
@@ -12041,6 +12049,71 @@ async function getCampaignEventMessages(
 const mainDmHistoryMessageLimit = 1;
 const mainDmHistoryEventFetchLimit = mainDmHistoryMessageLimit + 1;
 
+const campaignTimestampFallback = "Morning — 8:00 AM";
+const campaignTimestampPattern =
+  /^\s*\[?(midnight|dawn|morning|mid-day|afternoon|evening|dusk|night)\]?\s+—\s+(1[0-2]|[1-9]):([0-5]\d)\s+(AM|PM)\s*$/i;
+
+const canonicalTimeOfDayLabels: Record<string, string> = {
+  midnight: "Midnight",
+  dawn: "Dawn",
+  morning: "Morning",
+  "mid-day": "Mid-Day",
+  afternoon: "Afternoon",
+  evening: "Evening",
+  dusk: "Dusk",
+  night: "Night",
+};
+
+export function timestampFromNarration(content: string) {
+  const firstNonEmptyLine = content
+    .split(/\r?\n/)
+    .find((line) => line.trim());
+  const match = firstNonEmptyLine?.match(campaignTimestampPattern);
+
+  if (!match) {
+    return null;
+  }
+
+  const label = canonicalTimeOfDayLabels[match[1]!.toLowerCase()];
+
+  return label
+    ? `${label} — ${match[2]}:${match[3]} ${match[4]!.toUpperCase()}`
+    : null;
+}
+
+export function campaignTimestampFromNarrations(narrations: string[]) {
+  for (const narration of narrations) {
+    const timestamp = timestampFromNarration(narration);
+
+    if (timestamp) {
+      return timestamp;
+    }
+  }
+
+  return campaignTimestampFallback;
+}
+
+async function resolveCampaignTimestamp(db: Queryable, campaignId: string) {
+  const events = await db.query<Pick<EventRow, "payload">>(
+    `
+      select payload
+      from campaign_events
+      where campaign_id = $1
+        and type in ('turn_resolved', 'adventure_begun')
+      order by created_at desc, id desc
+      limit 100
+    `,
+    [campaignId],
+  );
+
+  return campaignTimestampFromNarrations(
+    events.rows.map((event) => {
+      const content = eventPayload(event.payload).content;
+      return typeof content === "string" ? content : "";
+    }),
+  );
+}
+
 export function formatNarratorHistoryReference(
   history: Pick<GameMessage, "role" | "content">[],
 ) {
@@ -12060,10 +12133,9 @@ export function formatNarratorHistoryReference(
 export function previousNarrationTimestamp(
   history: Pick<GameMessage, "role" | "content">[],
 ) {
-  const previousNarration = history.at(-1)?.content ?? "";
-  const firstLine = previousNarration.split(/\r?\n/, 1)[0]?.trim();
-
-  return firstLine || "Morning — 8:00 AM";
+  return campaignTimestampFromNarrations(
+    history.map((message) => message.content).reverse(),
+  );
 }
 
 export function narratorTimestampGuidance(timestamp: string) {
