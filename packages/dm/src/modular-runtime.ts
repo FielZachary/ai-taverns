@@ -474,7 +474,7 @@ export function jobPrompt(
     "",
     "## 10. Final Self-Check",
     "Before output, verify: I resumed a pending gate first; I did not invent/roll player dice; I added every modifier exactly once; I narrated no unresolved result; every mechanics change has a structured event; all consecutive NPC turns that need no player input are resolved; interrupted NPC remains turnOwner; and next_input_needed matches the actual next requirement."
-  ].join("\\n");
+  ].join("\n");
 
   if (job === "combat") {
     return combatPrompt;

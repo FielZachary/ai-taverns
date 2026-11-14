@@ -1441,6 +1441,16 @@ describe("modular AI DM runtime contracts", () => {
     }
   });
 
+  it("keeps the combat job protocol in the plain-text narrator prompt", () => {
+    const prompt = narratorJobPrompt("combat", "single_player");
+
+    assert.match(prompt, /Combat Job — Turn Resolution Protocol/);
+    assert.match(prompt, /Mandatory Turn State Machine/);
+    assert.match(prompt, /Procedure 7 — Resolve NPC and Allied-NPC Turns/);
+    assert.doesNotMatch(prompt, /Highest-Priority Narration Voice/);
+    assert.doesNotMatch(prompt, /Return strict JSON only/);
+  });
+
   it("inserts router reasons into clarification job guidance only when provided", () => {
     const prompt = jobPrompt("clarification", "multiplayer", {
       routerReason: "The spell target is ambiguous."
