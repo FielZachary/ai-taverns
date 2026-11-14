@@ -764,6 +764,37 @@ describe("MessageLog", () => {
     expect(screen.queryByRole("dialog", { name: /ai debug/i })).not.toBeInTheDocument();
   });
 
+  it("copies the prompt sent from AI debug", () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    const debug: AiDebugInfo = {
+      model: "deepseek-chat",
+      requestMessages: [
+        { role: "system", content: "Stay in character." },
+        { role: "user", content: "Open the door." }
+      ],
+      rawResponse: "The hinges complain."
+    };
+
+    renderMessageLog({
+      messages: [
+        gameMessage({
+          id: "debug-copy-dm",
+          role: "dm",
+          content: "The hinges complain.",
+          debug
+        })
+      ]
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /show ai debug details/i }));
+    fireEvent.click(screen.getByRole("button", { name: /copy prompt/i }));
+
+    expect(writeText).toHaveBeenCalledWith(
+      "# 1. SYSTEM\nStay in character.\n\n# 2. USER\nOpen the door."
+    );
+  });
+
   it("updates an open AI debug modal when message debug data refreshes", () => {
     const baseDebug: AiDebugInfo = {
       model: "deepseek-chat",

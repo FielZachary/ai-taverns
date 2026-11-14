@@ -4,6 +4,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   Bug,
+  Copy,
   RefreshCcw,
   Sparkles,
   Undo2,
@@ -349,6 +350,12 @@ function MessageDebugModal({
   debug: AiDebugInfo;
   onClose: () => void;
 }) {
+  const prompt = formatDebugPrompt(debug);
+
+  function copyPrompt() {
+    void navigator.clipboard.writeText(prompt);
+  }
+
   return (
     <div className="debug-modal-backdrop" role="presentation">
       <section
@@ -374,8 +381,20 @@ function MessageDebugModal({
         </header>
         <div className="debug-modal-content">
           <section>
-            <h3>Prompt Sent</h3>
-            <pre>{formatDebugPrompt(debug)}</pre>
+            <div className="debug-section-heading">
+              <h3>Prompt Sent</h3>
+              <button
+                type="button"
+                className="debug-copy-button"
+                onClick={copyPrompt}
+                aria-label="Copy prompt"
+                title="Copy prompt"
+              >
+                <Copy size={14} />
+                Copy
+              </button>
+            </div>
+            <pre>{prompt}</pre>
           </section>
           <section>
             <h3>AI Output</h3>

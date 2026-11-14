@@ -5846,6 +5846,33 @@ h1 {
   text-transform: uppercase;
 }
 
+.debug-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.debug-copy-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(244, 207, 122, 0.32);
+  border-radius: 6px;
+  padding: 5px 8px;
+  color: var(--gold-bright);
+  background: rgba(17, 13, 10, 0.48);
+  font-family: var(--body-font);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.debug-copy-button:hover,
+.debug-copy-button:focus-visible {
+  border-color: rgba(244, 207, 122, 0.58);
+  background: rgba(217, 169, 74, 0.12);
+}
+
 .debug-modal-content pre {
   max-height: 42dvh;
   margin: 0;
