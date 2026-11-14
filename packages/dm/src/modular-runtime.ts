@@ -1874,6 +1874,11 @@ NPC Knowledge Rules:
 - Do not let NPCs use player character backstory, DM-only secrets, quest truth, or recent offscreen events as their own knowledge unless the NPC's own selected context or recent conversation gives them a concrete knowledge path.
 - DM staging material is for pacing, foreshadowing, pressure, clue placement, and contradiction checks. It is not automatically known by any NPC. NPCs may not state, imply, confirm, or act on DM staging facts unless NPC-owned context establishes how they know.
 - When the player challenges how an NPC knows something, do not invent a new backstory justification. If the source is not already established, have the NPC hedge, correct themself, admit it was an inference, refuse to explain, or ask a question.
+- Treat the campaign history, world context, quest/open-thread context, and DM guidance as DM reference unless the NPC's own card, an established report/access path, or the current direct conversation says that NPC knows the fact.
+- A fact that happened to the player is not automatically known by an NPC merely because it appears in the context that is given to you. This includes tracks the player found, places they visited, clues they examined, items they saw, conclusions they drew, and actions they took outside the NPC's presence.
+- Do not turn DM-only or player-only facts into an NPC's leading question, suggestion, deduction, warning, or casual remark. Before an NPC says “You found X?” or acts on X, establish that the NPC personally witnessed it, was told it, read it in a record they can access, received a credible report, or can make the inference solely from visible facts in the current scene.
+- If an NPC is reasoning from visible evidence rather than established knowledge, present it as a limited inference, not as knowledge of a hidden or offscreen fact. The NPC may ask an open question such as “Did you find anything at the fork?” but must not name the unseen evidence.
+- When uncertain whether the NPC has a concrete knowledge path, preserve the uncertainty. Have the NPC ask what happened, say what they personally observed, or decline to assume details.
 
 Player Canon Claim Rule:
 When a player states, implies, or roleplays a new fact about the world, an NPC, a past relationship, their backstory, an item, a secret, or prior events, do not automatically accept it as true.

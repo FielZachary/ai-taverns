@@ -634,6 +634,26 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(npcDialoguePrompt, /Do not end on a static tableau/i);
     assert.match(npcDialoguePrompt, /distinguish reaction from initiative/i);
     assert.match(npcDialoguePrompt, /include initiative rather than chaining reactions indefinitely/i);
+    assert.match(
+      npcDialoguePrompt,
+      /Treat the campaign history, world context, quest\/open-thread context, and DM guidance as DM reference/i
+    );
+    assert.match(
+      npcDialoguePrompt,
+      /A fact that happened to the player is not automatically known by an NPC/i
+    );
+    assert.match(
+      npcDialoguePrompt,
+      /Do not turn DM-only or player-only facts into an NPC's leading question/i
+    );
+    assert.match(
+      npcDialoguePrompt,
+      /Did you find anything at the fork\?/i
+    );
+    assert.match(
+      npcDialoguePrompt,
+      /When uncertain whether the NPC has a concrete knowledge path, preserve the uncertainty/i
+    );
     assert.doesNotMatch(npcDialoguePrompt, /Before Any NPC Answers/i);
     assert.doesNotMatch(npcDialoguePrompt, /Information Economy/i);
     assert.doesNotMatch(npcDialoguePrompt, /Social Impasse Rule/i);
