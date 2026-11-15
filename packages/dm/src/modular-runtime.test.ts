@@ -654,6 +654,23 @@ describe("modular AI DM runtime contracts", () => {
       npcDialoguePrompt,
       /When uncertain whether the NPC has a concrete knowledge path, preserve the uncertainty/i
     );
+    assert.match(npcDialoguePrompt, /Player-Observed Facts Are Not NPC Knowledge/i);
+    assert.match(
+      npcDialoguePrompt,
+      /their presence in this prompt never establishes that a speaking NPC knows them/i
+    );
+    assert.match(
+      npcDialoguePrompt,
+      /Shared campaign context, being in the same town, a compatible rumor, or narrative convenience are not a knowledge path/i
+    );
+    assert.match(
+      npcDialoguePrompt,
+      /the NPC knows only that the player claims it/i
+    );
+    assert.match(
+      npcDialoguePrompt,
+      /Preserve the source in NPC memory/i
+    );
     assert.doesNotMatch(npcDialoguePrompt, /Before Any NPC Answers/i);
     assert.doesNotMatch(npcDialoguePrompt, /Information Economy/i);
     assert.doesNotMatch(npcDialoguePrompt, /Social Impasse Rule/i);
