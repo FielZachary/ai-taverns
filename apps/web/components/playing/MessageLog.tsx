@@ -729,6 +729,13 @@ export function MessageLog({
                     </p>
                   ) : null}
                   <MessageBody content={timestampedContent.narration} />
+                  {message.playerFacingUpdate ? (
+                    <aside className="message-mechanics-update" aria-label="Mechanics update">
+                      {message.playerFacingUpdate.split("\n").map((line, index) => (
+                        <p key={`${index}-${line.slice(0, 16)}`}>{line}</p>
+                      ))}
+                    </aside>
+                  ) : null}
                 </>
               )}
               <MessageResourceCard

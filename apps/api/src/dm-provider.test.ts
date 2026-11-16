@@ -17,6 +17,7 @@ const originalQwenApiKey = process.env.QWEN_API_KEY;
 const originalQwenBaseUrl = process.env.QWEN_BASE_URL;
 const originalQwenModel = process.env.QWEN_MODEL;
 const originalQwen37Model = process.env.QWEN_3_7_PLUS_MODEL;
+const originalQwen37FlashModel = process.env.QWEN_3_7_FLASH_MODEL;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
@@ -54,6 +55,11 @@ afterEach(() => {
     delete process.env.QWEN_3_7_PLUS_MODEL;
   } else {
     process.env.QWEN_3_7_PLUS_MODEL = originalQwen37Model;
+  }
+  if (originalQwen37FlashModel === undefined) {
+    delete process.env.QWEN_3_7_FLASH_MODEL;
+  } else {
+    process.env.QWEN_3_7_FLASH_MODEL = originalQwen37FlashModel;
   }
 });
 
@@ -323,6 +329,31 @@ test("provider routes Qwen 3.7 Plus independently from the Qwen 3.5 override", a
   });
 
   assert.equal(requestBody?.model, "qwen3.7-plus");
+});
+
+test("provider routes Qwen 3.7 Flash independently from the other Qwen overrides", async () => {
+  process.env.QWEN_MODEL = "custom-qwen-3-5";
+  process.env.QWEN_3_7_PLUS_MODEL = "custom-qwen-3-7-plus";
+  delete process.env.QWEN_3_7_FLASH_MODEL;
+  let requestBody: { model?: string } | undefined;
+
+  globalThis.fetch = async (_url, init) => {
+    requestBody = JSON.parse(String(init?.body)) as typeof requestBody;
+
+    return jsonResponse({
+      id: "qwen-3-7-flash-chat-1",
+      model: "qwen3.7-flash",
+      choices: [{ finish_reason: "stop", message: { content: "{}" } }]
+    });
+  };
+
+  await askDungeonMasterProvider({
+    instructions: "Return JSON.",
+    message: "Apply mechanics.",
+    model: "qwen-3-7-flash"
+  });
+
+  assert.equal(requestBody?.model, "qwen3.7-flash");
 });
 
 test("provider defaults Qwen chat requests to the QwenCloud compatible endpoint", async () => {

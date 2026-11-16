@@ -2041,6 +2041,25 @@ class FakeDatabase {
       return { rows: [] as T[] };
     }
 
+    if (
+      normalizedSql.startsWith(
+        "select payload from campaign_events where campaign_id = $1 and type in ('turn_resolved', 'adventure_begun')"
+      )
+    ) {
+      const campaignId = values[0] as string;
+      return {
+        rows: this.campaignEvents
+          .filter(
+            (event) =>
+              event.campaign_id === campaignId &&
+              (event.type === "turn_resolved" || event.type === "adventure_begun")
+          )
+          .sort((left, right) => right.created_at.getTime() - left.created_at.getTime())
+          .slice(0, 100)
+          .map((event) => ({ payload: event.payload })) as T[]
+      };
+    }
+
     if (normalizedSql.startsWith("delete from campaign_events where campaign_id = $1")) {
       const campaignId = values[0] as string;
       const createdAt = values[1] as Date;
@@ -3341,6 +3360,65 @@ before(async () => {
           return providerOverride(input);
         }
 
+        if (input.instructions.includes("mechanics state updater")) {
+          const payload = JSON.parse(input.message) as {
+            current_player_action?: string;
+            finalized_narrator_prose?: string;
+            mechanics_state?: {
+              actors?: Record<
+                string,
+                { spellSlots?: Record<string, { max: number; used: number }> }
+              >;
+            };
+          };
+          const action = payload.current_player_action ?? "";
+          const prose = payload.finalized_narrator_prose ?? "";
+          const actorKey = Object.keys(payload.mechanics_state?.actors ?? {}).find(
+            (key) => key.startsWith("player:")
+          );
+          const slot = actorKey
+            ? payload.mechanics_state?.actors?.[actorKey]?.spellSlots?.["3"]
+            : undefined;
+          const resolvedCast =
+            /I cast (Fireball|Lightning Bolt)/i.test(action) &&
+            /(fireball erupts|lightning bolt tears)/i.test(prose) &&
+            actorKey &&
+            slot;
+          const content = JSON.stringify({
+            no_changes_needed: !resolvedCast,
+            mechanics_state_update: resolvedCast
+              ? {
+                  actors: {
+                    [actorKey]: {
+                      spellSlots: {
+                        "3": { max: slot.max, used: slot.used + 1 }
+                      }
+                    }
+                  }
+                }
+              : {},
+            inventory_state_update: { patches: [] },
+            player_facing_update: resolvedCast
+              ? `3rd-level spell slot consumed — ${slot.max - slot.used - 1} remaining.`
+              : null
+          });
+
+          return {
+            id: "provider-mechanics-updater-1",
+            content,
+            debug: {
+              requestMessages: [
+                { role: "system", content: input.instructions },
+                { role: "user", content: input.message }
+              ],
+              rawResponse: content,
+              model: "qwen3.7-flash",
+              temperature: 0,
+              providerTimings: []
+            }
+          };
+        }
+
         if (input.message.includes("TRIGGER_PROVIDER_DEBUG_FAILURE")) {
           const error = new Error("DeepSeek returned an empty reply.");
           (error as { debug?: unknown }).debug = {
@@ -3967,16 +4045,24 @@ before(async () => {
         );
         const eldermerePublicNarration =
           "A <npc>courier</npc> waits beside a <clue>weathered sign</clue> on the <place>old road</place>, glancing between you and the <danger>ruined watchtower</danger> beyond the ridge. The summons in your pocket brought you here; earlier that evening, its bearer warned that the tower's lantern had gone dark.\n\nA <object>lantern</object> flickers over wet stones and wagon ruts as <faction>nearby travelers</faction> retreat from the watchtower's distant metal knock. \"That sound came from inside,\" the courier says. \"I am not going back alone.\"\n\nYou can question the courier, inspect the weathered sign, or follow the road toward the ruined watchtower before the lantern burns out.\n\nWhat would you like to do?";
-        const narratorContent = isEldermereNarrator
-          ? eldermerePublicNarration
-          : publicNarration;
+        const resolvedSpellNarration = input.message.includes(
+          "I cast Fireball at the clustered skeletons."
+        )
+          ? "The Fireball erupts among the clustered skeletons."
+          : input.message.includes("I cast Lightning Bolt down the hallway.")
+            ? "The Lightning Bolt tears down the hallway."
+            : null;
+        const narratorContent =
+          resolvedSpellNarration ??
+          (isEldermereNarrator ? eldermerePublicNarration : publicNarration);
 
         input.onPublicNarrationDelta?.(narratorContent.slice(0, 28));
         input.onPublicNarrationDelta?.(narratorContent.slice(28));
 
         return {
           id: "provider-message-1",
-          content: isEldermereNarrator
+          content: resolvedSpellNarration ??
+            (isEldermereNarrator
             ? eldermerePublicNarration
             : JSON.stringify({
                 public_narration: publicNarration,
@@ -3991,7 +4077,7 @@ before(async () => {
                   scene_location: "Old Road",
                   starting_location: "Old Road"
                 }
-              }),
+              })),
           debug: {
             requestMessages: [],
             rawResponse: "{}",

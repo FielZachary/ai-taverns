@@ -50,6 +50,21 @@ afterEach(() => {
 });
 
 describe("MessageLog", () => {
+  it("shows the player-facing mechanics update in a separate card", () => {
+    renderMessageLog({
+      messages: [
+        gameMessage({
+          role: "dm",
+          playerFacingUpdate: "1st-level spell slot consumed — 2 remaining."
+        })
+      ]
+    });
+
+    expect(screen.getByLabelText("Mechanics update")).toHaveTextContent(
+      "1st-level spell slot consumed — 2 remaining."
+    );
+  });
+
   it("removes the tavern background class when disabled", () => {
     const { container } = renderMessageLog({ chatBackgroundEnabled: false });
 

@@ -110,6 +110,7 @@ export const RoomMessageSchema = z
     playerName: z.string().optional(),
     characterName: z.string().optional(),
     setting: RoomMessageSettingSchema.optional(),
+    playerFacingUpdate: z.string().min(1).optional(),
     content: z.string(),
     createdAt: z.string().datetime()
   })

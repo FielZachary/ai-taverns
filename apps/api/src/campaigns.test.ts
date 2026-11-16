@@ -3930,6 +3930,10 @@ test("mechanics state initializes and projects spell slot lifecycle", async () =
   const firstCast = CampaignSoloTurnResponseSchema.parse(
     firstCastResponse.json()
   );
+  assert.equal(
+    firstCast.messages.at(-1)?.playerFacingUpdate,
+    "3rd-level spell slot consumed — 1 remaining."
+  );
   const projectedFirstSheet = firstCast.players[0]?.characterSheet ?? "";
   assert.match(
     projectedFirstSheet,
@@ -3965,12 +3969,16 @@ test("mechanics state initializes and projects spell slot lifecycle", async () =
   const secondCast = CampaignSoloTurnResponseSchema.parse(
     secondCastResponse.json()
   );
+  assert.equal(
+    secondCast.messages.at(-1)?.playerFacingUpdate,
+    "3rd-level spell slot consumed — 0 remaining."
+  );
   assert.match(
     secondCast.players[0]?.characterSheet ?? "",
     /3rd-level slots: 2 total, 2 used, 0 remaining/
   );
 
-  const blockedResponse = await app.inject({
+  const exhaustedCastResponse = await app.inject({
     method: "POST",
     url: `/api/campaigns/${created.campaign.id}/solo-turn`,
     headers: { cookie },
@@ -3979,11 +3987,19 @@ test("mechanics state initializes and projects spell slot lifecycle", async () =
     }
   });
 
-  assert.equal(blockedResponse.statusCode, 400, blockedResponse.body);
-  assert.match(
-    ApiErrorResponseSchema.parse(blockedResponse.json()).error.message,
-    /No 3rd-level spell slots left/
+  assert.equal(
+    exhaustedCastResponse.statusCode,
+    200,
+    exhaustedCastResponse.body
   );
+  const exhaustedCast = CampaignSoloTurnResponseSchema.parse(
+    exhaustedCastResponse.json()
+  );
+  assert.match(
+    exhaustedCast.players[0]?.characterSheet ?? "",
+    /3rd-level slots: 2 total, 2 used, 0 remaining/
+  );
+  assert.equal(exhaustedCast.messages.at(-1)?.playerFacingUpdate, undefined);
 });
 
 test("mechanics state falls back to character sheet spell slots without seed", async () => {

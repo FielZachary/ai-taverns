@@ -64,8 +64,6 @@ import { entitlementForTier } from "@ai-dnd/contracts";
 import {
   actorKeyForPlayer,
   applyDeathSavingThrow,
-  applyAcceptedCast,
-  assertMechanicsActionAllowed,
   detectTrackedCastIntent,
   firstDyingPlayerActorKey,
   isDeadActor,
@@ -3436,6 +3434,11 @@ export async function createCampaignForMode(
           { allowResolvedCombatWithoutRolls: true },
           { buildPromptContext: false, contractKind: "opening" },
         );
+    const mechanicsUpdate = await runMechanicsStateUpdater(db, runtime, {
+      campaignId: createdState.campaign.id,
+      currentAction: openingRequest,
+      narration: opening.content,
+    });
     const resolvedTurn = await finishResolvedTurn(db, {
       campaignId: createdState.campaign.id,
       turnId: openingTurn.id,
@@ -3448,7 +3451,10 @@ export async function createCampaignForMode(
       nextInputNeeded: opening.nextInputNeeded,
       resolutionMode: opening.resolutionMode,
       setting: opening.setting,
-      aiDebug: opening.debug,
+      ...(mechanicsUpdate.playerFacingUpdate
+        ? { playerFacingUpdate: mechanicsUpdate.playerFacingUpdate }
+        : {}),
+      aiDebug: { ...opening.debug, mechanicsUpdater: mechanicsUpdate.debug },
     });
 
     await db.query("update campaigns set has_begun = true where id = $1", [
@@ -6073,6 +6079,9 @@ async function buildRoomSnapshot(
           ? { characterName: payload.characterName }
           : {}),
         ...(setting ? { setting } : {}),
+        ...(typeof payload.playerFacingUpdate === "string"
+          ? { playerFacingUpdate: payload.playerFacingUpdate }
+          : {}),
         ...(debug ? { debug } : {}),
       };
     })
@@ -12059,6 +12068,9 @@ async function getCampaignEventMessages(
           ? { characterName: payload.characterName }
           : {}),
         ...(setting ? { setting } : {}),
+        ...(typeof payload.playerFacingUpdate === "string"
+          ? { playerFacingUpdate: payload.playerFacingUpdate }
+          : {}),
       };
     })
     .filter((message): message is HistoryGameMessage => message !== null);
@@ -12937,6 +12949,7 @@ async function finishResolvedTurn(
     nextInputNeeded?: DmNextInputNeeded;
     resolutionMode?: "needs_dice" | "resolved_without_dice";
     setting?: CampaignSettingSummary | undefined;
+    playerFacingUpdate?: string | undefined;
     aiDebug?: AiDebugInfo | undefined;
   },
 ) {
@@ -12972,6 +12985,9 @@ async function finishResolvedTurn(
         messageId: input.modelMessageId ?? randomUUID(),
         role: "dm",
         content: input.reply,
+        ...(input.playerFacingUpdate
+          ? { playerFacingUpdate: input.playerFacingUpdate }
+          : {}),
         ...settingPatch,
         pendingRollRequest: currentPendingRollRequest,
         pendingRollRequests,
@@ -13016,6 +13032,188 @@ async function finishResolvedTurn(
   });
 
   return { dmEventId };
+}
+
+type MechanicsUpdaterResult = {
+  playerFacingUpdate?: string;
+  debug: {
+    requestMessages: AiDebugInfo["requestMessages"];
+    rawResponse: string;
+    parsedOutput: Record<string, unknown> | null;
+    acceptedMechanicsStateUpdate?: Record<string, unknown>;
+    acceptedInventoryPatches: Record<string, unknown>[];
+    discardedInventoryPatches: InventoryPatchDiscard[];
+    noChangesNeeded: boolean;
+    durationMs: number;
+    model?: string;
+    providerResponseId?: string;
+    providerTimings?: NonNullable<AiDebugInfo["providerTimings"]>;
+  };
+};
+
+function mechanicsUpdaterInstructions() {
+  return [
+    "You are AI Taverns' mechanics state updater.",
+    "Return strict JSON only. You never narrate, judge, reject, clarify, or alter the Dungeon Master's prose.",
+    "The Dungeon Master's finalized prose is the source event. Translate only resolved, player-visible mechanical consequences from that prose into state patches.",
+    "When the prose has no resolved mechanical consequence (including clarification, dialogue, travel, an attempted action, or a failed action), return no_changes_needed true and empty updates.",
+    "Use only supplied actor keys and existing inventory. Do not invent actors, items, spells, combatants, HP, resources, or rules outcomes.",
+    "Return exactly this shape: {no_changes_needed:boolean, mechanics_state_update:object, inventory_state_update:{patches:array}, player_facing_update:string|null}.",
+    "When no_changes_needed is false, player_facing_update is a concise, factual player-visible summary of the persisted mechanical changes. Include one or more short lines and exact remaining values when known.",
+    "Examples: '1st-level spell slot consumed — 2 remaining.'; 'HP: 18 → 25.'; 'Potion of Healing consumed.'",
+  ].join("\n");
+}
+
+async function runMechanicsStateUpdater(
+  db: pg.Pool,
+  runtime: DungeonMasterRuntime,
+  input: {
+    campaignId: string;
+    currentAction: string;
+    narration: string;
+  },
+): Promise<MechanicsUpdaterResult> {
+  const campaignResult = await db.query<CampaignRow>(
+    "select * from campaigns where id = $1 and status = 'active' limit 1",
+    [input.campaignId],
+  );
+  const campaign = campaignResult.rows[0];
+
+  if (!campaign) {
+    throw new Error("Campaign not found while updating mechanics state.");
+  }
+
+  const players = await getActiveCampaignPlayers(db, campaign.id);
+  const mechanicsState = resolveMechanicsState(campaign, players);
+  const message = JSON.stringify(
+    {
+      current_player_action: input.currentAction,
+      finalized_narrator_prose: input.narration,
+      mechanics_state: mechanicsState,
+      players: players.map((player) => ({
+        actor_key: actorKeyForPlayer(player.id),
+        character_name: player.character_name,
+        character_sheet: player.character_sheet,
+      })),
+    },
+    null,
+    2,
+  );
+  const startedAt = Date.now();
+  const providerData = await runtime.askProvider({
+    instructions: mechanicsUpdaterInstructions(),
+    message,
+    history: [],
+    model: "qwen-3-7-flash",
+    responseFormat: "json",
+    temperature: 0,
+  });
+  const parsed = parseJsonRecord(providerData.content);
+  const noChangesNeeded = parsed?.no_changes_needed === true;
+  const proposedMechanicsUpdate =
+    parsed?.mechanics_state_update ?? parsed?.mechanicsStateUpdate;
+  const rawInventoryStateUpdate =
+    parsed?.inventory_state_update ?? parsed?.inventoryStateUpdate;
+  const rawInventoryPatches = isRecord(rawInventoryStateUpdate)
+    ? Array.isArray(rawInventoryStateUpdate.patches)
+      ? rawInventoryStateUpdate.patches
+      : []
+    : [];
+  const proposedPlayerFacingUpdate =
+    typeof parsed?.player_facing_update === "string"
+      ? parsed.player_facing_update.trim()
+      : typeof parsed?.playerFacingUpdate === "string"
+        ? parsed.playerFacingUpdate.trim()
+        : "";
+
+  let applied: {
+    changed: boolean;
+    canonicalUpdate: Record<string, unknown> | undefined;
+    acceptedInventoryPatches: Record<string, unknown>[];
+    discardedInventoryPatches: InventoryPatchDiscard[];
+  };
+
+  applied = await withTransaction(db, async (client) => {
+    const lockedCampaign = (
+      await client.query<CampaignRow>(
+        "select * from campaigns where id = $1 and status = 'active' limit 1 for update",
+        [input.campaignId],
+      )
+    ).rows[0];
+
+    if (!lockedCampaign) {
+      throw new Error("Campaign not found while saving mechanics state.");
+    }
+
+    const lockedPlayers = await getActiveCampaignPlayers(client, lockedCampaign.id);
+    const currentState = resolveMechanicsState(lockedCampaign, lockedPlayers);
+    const canonicalUpdate = noChangesNeeded
+      ? undefined
+      : canonicalizeMechanicsStateUpdate(
+          isRecord(proposedMechanicsUpdate)
+            ? proposedMechanicsUpdate
+            : undefined,
+          lockedPlayers,
+        );
+    const nextState = canonicalUpdate
+      ? applyMechanicsStateUpdate(currentState, canonicalUpdate, nowIso(), {
+          currentAction: input.currentAction,
+        })
+      : currentState;
+    const inventoryValidation = noChangesNeeded
+      ? { accepted: [], discarded: [] as InventoryPatchDiscard[] }
+      : validateInventoryPatches(rawInventoryPatches, lockedPlayers);
+
+    if (nextState !== currentState) {
+      await writeMechanicsStateForLockedCampaign(
+        client,
+        lockedCampaign.id,
+        nextState,
+      );
+    }
+
+    const appliedInventoryPatches =
+      inventoryValidation.accepted.length > 0
+        ? await applyAcceptedInventoryPatches(
+            client,
+            lockedPlayers,
+            inventoryValidation.accepted,
+          )
+        : [];
+
+    return {
+      changed:
+        nextState !== currentState || appliedInventoryPatches.length > 0,
+      canonicalUpdate,
+      acceptedInventoryPatches: appliedInventoryPatches,
+      discardedInventoryPatches: inventoryValidation.discarded,
+    };
+  });
+
+  return {
+    ...(applied.changed && proposedPlayerFacingUpdate
+      ? { playerFacingUpdate: proposedPlayerFacingUpdate }
+      : {}),
+    debug: {
+      requestMessages: providerData.debug.requestMessages,
+      rawResponse: providerData.debug.rawResponse || providerData.content,
+      parsedOutput: parsed,
+      ...(applied.canonicalUpdate
+        ? { acceptedMechanicsStateUpdate: applied.canonicalUpdate }
+        : {}),
+      acceptedInventoryPatches: applied.acceptedInventoryPatches,
+      discardedInventoryPatches: applied.discardedInventoryPatches,
+      noChangesNeeded,
+      durationMs: Date.now() - startedAt,
+      ...(providerData.debug.model ? { model: providerData.debug.model } : {}),
+      ...(providerData.debug.providerResponseId
+        ? { providerResponseId: providerData.debug.providerResponseId }
+        : {}),
+      ...(providerData.debug.providerTimings
+        ? { providerTimings: providerData.debug.providerTimings }
+        : {}),
+    },
+  };
 }
 
 async function markTurnFailed(db: Queryable, turnId: string, error: unknown) {
@@ -13558,6 +13756,11 @@ export async function beginRoomForUser(
           { allowResolvedCombatWithoutRolls: true },
           { buildPromptContext: false, contractKind: "opening" },
         );
+    const mechanicsUpdate = await runMechanicsStateUpdater(db, runtime, {
+      campaignId: beginState.campaign.id,
+      currentAction: openingRequest,
+      narration: opening.content,
+    });
     const resolvedTurn = await finishResolvedTurn(db, {
       campaignId: beginState.campaign.id,
       turnId: openingTurn.id,
@@ -13570,7 +13773,10 @@ export async function beginRoomForUser(
       nextInputNeeded: opening.nextInputNeeded,
       resolutionMode: opening.resolutionMode,
       setting: opening.setting,
-      aiDebug: opening.debug,
+      ...(mechanicsUpdate.playerFacingUpdate
+        ? { playerFacingUpdate: mechanicsUpdate.playerFacingUpdate }
+        : {}),
+      aiDebug: { ...opening.debug, mechanicsUpdater: mechanicsUpdate.debug },
     });
 
     runtime.emitDmStreamEvent?.({
@@ -13720,44 +13926,6 @@ export async function submitRoomTurnForUser(
       throw createStatusError(400, "A player message is required.");
     }
 
-    if (!input.skipTurn) {
-      const mechanicsState = resolveMechanicsState(campaignRow, [player]);
-
-      try {
-        assertMechanicsActionAllowed({
-          state: mechanicsState,
-          player,
-          message: trimmedContent,
-        });
-      } catch (error) {
-        throw createStatusError(
-          400,
-          error instanceof Error
-            ? error.message
-            : "That action is not allowed.",
-        );
-      }
-
-      const nextMechanicsState = applyAcceptedCast({
-        state: mechanicsState,
-        player,
-        message: trimmedContent,
-        updatedAt: nowIso(),
-      });
-
-      if (nextMechanicsState !== mechanicsState) {
-        await writeMechanicsStateForLockedCampaign(
-          client,
-          campaignRow.id,
-          nextMechanicsState,
-        );
-        campaignRow.metadata = {
-          ...eventPayload(campaignRow.metadata),
-          mechanicsState: nextMechanicsState,
-        };
-      }
-    }
-
     await client.query(
       `
         insert into submissions (campaign_id, turn_id, player_id, content)
@@ -13870,6 +14038,11 @@ export async function submitRoomTurnForUser(
           providerResponseFormat: "text",
         },
       );
+      const mechanicsUpdate = await runMechanicsStateUpdater(db, input.runtime, {
+        campaignId: submitState.campaign.id,
+        currentAction,
+        narration: reply.content,
+      });
       const resolvedTurn = await finishResolvedTurn(db, {
         campaignId: submitState.campaign.id,
         turnId: submitState.turn.id,
@@ -13881,7 +14054,10 @@ export async function submitRoomTurnForUser(
         inputPolicy: reply.inputPolicy,
         nextInputNeeded: reply.nextInputNeeded,
         resolutionMode: reply.resolutionMode,
-        aiDebug: reply.debug,
+        ...(mechanicsUpdate.playerFacingUpdate
+          ? { playerFacingUpdate: mechanicsUpdate.playerFacingUpdate }
+          : {}),
+        aiDebug: { ...reply.debug, mechanicsUpdater: mechanicsUpdate.debug },
       });
 
       input.runtime.emitDmStreamEvent?.({
@@ -14260,44 +14436,6 @@ export async function submitSoloTurnForUser(
       throw createStatusError(400, "A player message is required.");
     }
 
-    {
-      const mechanicsState = resolveMechanicsState(campaign, [player]);
-
-      try {
-        assertMechanicsActionAllowed({
-          state: mechanicsState,
-          player,
-          message: trimmedContent,
-        });
-      } catch (error) {
-        throw createStatusError(
-          400,
-          error instanceof Error
-            ? error.message
-            : "That action is not allowed.",
-        );
-      }
-
-      const nextMechanicsState = applyAcceptedCast({
-        state: mechanicsState,
-        player,
-        message: trimmedContent,
-        updatedAt: nowIso(),
-      });
-
-      if (nextMechanicsState !== mechanicsState) {
-        await writeMechanicsStateForLockedCampaign(
-          client,
-          campaign.id,
-          nextMechanicsState,
-        );
-        campaign.metadata = {
-          ...eventPayload(campaign.metadata),
-          mechanicsState: nextMechanicsState,
-        };
-      }
-    }
-
     const submissionResult = await client.query<{ content: string }>(
       `
         insert into submissions (campaign_id, turn_id, player_id, content)
@@ -14393,6 +14531,11 @@ export async function submitSoloTurnForUser(
         providerResponseFormat: "text",
       },
     );
+    const mechanicsUpdate = await runMechanicsStateUpdater(db, runtime, {
+      campaignId: soloState.campaign.id,
+      currentAction,
+      narration: reply.content,
+    });
     const resolvedTurn = await finishResolvedTurn(db, {
       campaignId: soloState.campaign.id,
       turnId: soloState.turn.id,
@@ -14404,7 +14547,10 @@ export async function submitSoloTurnForUser(
       inputPolicy: reply.inputPolicy,
       nextInputNeeded: reply.nextInputNeeded,
       resolutionMode: reply.resolutionMode,
-      aiDebug: reply.debug,
+      ...(mechanicsUpdate.playerFacingUpdate
+        ? { playerFacingUpdate: mechanicsUpdate.playerFacingUpdate }
+        : {}),
+      aiDebug: { ...reply.debug, mechanicsUpdater: mechanicsUpdate.debug },
     });
 
     runtime.emitDmStreamEvent?.({
@@ -14821,6 +14967,11 @@ export async function regenerateCampaignResponseForUser(
       undefined,
       { providerResponseFormat: "text" },
     );
+    const mechanicsUpdate = await runMechanicsStateUpdater(db, runtime, {
+      campaignId: regenerationState.campaign.id,
+      currentAction: regenerationState.currentAction,
+      narration: reply.content,
+    });
     const resolvedTurn = await finishResolvedTurn(db, {
       campaignId: regenerationState.campaign.id,
       turnId: regenerationState.turn.id,
@@ -14833,7 +14984,10 @@ export async function regenerateCampaignResponseForUser(
       nextInputNeeded: reply.nextInputNeeded,
       resolutionMode: reply.resolutionMode,
       setting: reply.setting,
-      aiDebug: reply.debug,
+      ...(mechanicsUpdate.playerFacingUpdate
+        ? { playerFacingUpdate: mechanicsUpdate.playerFacingUpdate }
+        : {}),
+      aiDebug: { ...reply.debug, mechanicsUpdater: mechanicsUpdate.debug },
     });
 
     runtime.emitDmStreamEvent?.({

@@ -5526,6 +5526,23 @@ h1 {
   font-style: italic;
 }
 
+.message-mechanics-update {
+  display: grid;
+  gap: 0.3rem;
+  margin-top: 1rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid rgba(205, 209, 214, 0.26);
+  border-radius: 6px;
+  color: rgba(239, 240, 242, 0.9);
+  background: rgba(118, 124, 133, 0.24);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.message-mechanics-update p {
+  margin: 0;
+}
+
 .message-semantic-narration {
   color: var(--semantic-narration-color, var(--gold-bright));
 }

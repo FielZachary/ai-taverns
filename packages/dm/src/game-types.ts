@@ -83,6 +83,19 @@ export type AiDebugInfo = {
     providerResponseId?: string;
     providerTimings?: AiDebugProviderTiming[];
   };
+  mechanicsUpdater?: {
+    requestMessages?: AiDebugMessage[];
+    rawResponse?: string;
+    parsedOutput?: unknown;
+    acceptedMechanicsStateUpdate?: unknown;
+    acceptedInventoryPatches?: unknown[];
+    discardedInventoryPatches?: unknown[];
+    noChangesNeeded?: boolean;
+    durationMs?: number;
+    model?: string;
+    providerResponseId?: string;
+    providerTimings?: AiDebugProviderTiming[];
+  };
   providerTimings?: AiDebugProviderTiming[];
 };
 
@@ -100,6 +113,7 @@ export type GameMessage = {
     sceneLocation?: string;
     startingLocation?: string;
   };
+  playerFacingUpdate?: string;
   content: string;
   createdAt: string;
   debug?: AiDebugInfo;

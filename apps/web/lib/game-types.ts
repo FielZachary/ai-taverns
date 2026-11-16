@@ -1,6 +1,10 @@
 export type GameMessageRole = "player" | "dm" | "system";
 export type GameMessageKind = "turn" | "ask_dm_question" | "ask_dm_answer";
-export type AiModelId = "deepseek-v4-flash" | "qwen-3-5-plus";
+export type AiModelId =
+  | "deepseek-v4-flash"
+  | "qwen-3-5-plus"
+  | "qwen-3-7-plus"
+  | "qwen-3-7-flash";
 export type GameMessageResourceAction = "inspect_map" | "view_eldermere_lore";
 
 export type GameMessageResourceCard = {
@@ -90,6 +94,19 @@ export type AiDebugInfo = {
     providerResponseId?: string;
     providerTimings?: AiDebugProviderTiming[];
   };
+  mechanicsUpdater?: {
+    requestMessages?: AiDebugMessage[];
+    rawResponse?: string;
+    parsedOutput?: unknown;
+    acceptedMechanicsStateUpdate?: unknown;
+    acceptedInventoryPatches?: unknown[];
+    discardedInventoryPatches?: unknown[];
+    noChangesNeeded?: boolean;
+    durationMs?: number;
+    model?: string;
+    providerResponseId?: string;
+    providerTimings?: AiDebugProviderTiming[];
+  };
   askDmContextSelector?: {
     requestMessages: AiDebugMessage[];
     rawResponse: string;
@@ -117,6 +134,7 @@ export type GameMessage = {
     sceneLocation?: string;
     startingLocation?: string;
   };
+  playerFacingUpdate?: string;
   content: string;
   createdAt: string;
   isSyntheticIntro?: boolean;
