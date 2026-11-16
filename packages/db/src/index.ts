@@ -13056,12 +13056,88 @@ function mechanicsUpdaterInstructions() {
     "You are AI Taverns' mechanics state updater.",
     "Return strict JSON only. You never narrate, judge, reject, clarify, or alter the Dungeon Master's prose.",
     "The Dungeon Master's finalized prose is the source event. Translate only resolved, player-visible mechanical consequences from that prose into state patches.",
+    "The previous_resolved_turns field is an audit trail for the three prior resolved turns. It includes each prior narrator prose and mechanics-executor response so you can see whether a state change was already accepted, discarded, or left unchanged.",
+    "Treat mechanics_state as authoritative over the audit trail. Never repeat a prior patch when mechanics_state already reflects it. Use the audit trail only to understand multi-turn actions and avoid duplicate or missed persistence.",
     "When the prose has no resolved mechanical consequence (including clarification, dialogue, travel, an attempted action, or a failed action), return no_changes_needed true and empty updates.",
     "Use only supplied actor keys and existing inventory. Do not invent actors, items, spells, combatants, HP, resources, or rules outcomes.",
     "Return exactly this shape: {no_changes_needed:boolean, mechanics_state_update:object, inventory_state_update:{patches:array}, player_facing_update:string|null}.",
     "When no_changes_needed is false, player_facing_update is a concise, factual player-visible summary of the persisted mechanical changes. Include one or more short lines and exact remaining values when known.",
     "Examples: '1st-level spell slot consumed — 2 remaining.'; 'HP: 18 → 25.'; 'Potion of Healing consumed.'",
   ].join("\n");
+}
+
+type MechanicsUpdaterHistoryTurn = {
+  turn_id: string | null;
+  resolved_at: string;
+  narrator_prose: string;
+  mechanics_executor: Record<string, unknown> | null;
+};
+
+function mechanicsUpdaterAuditTrail(payload: Record<string, unknown>) {
+  const aiDebug = isRecord(payload.aiDebug) ? payload.aiDebug : undefined;
+  const mechanicsUpdater = aiDebug && isRecord(aiDebug.mechanicsUpdater)
+    ? aiDebug.mechanicsUpdater
+    : undefined;
+
+  if (!mechanicsUpdater) {
+    return null;
+  }
+
+  return {
+    raw_response:
+      typeof mechanicsUpdater.rawResponse === "string"
+        ? mechanicsUpdater.rawResponse
+        : null,
+    parsed_output: mechanicsUpdater.parsedOutput ?? null,
+    no_changes_needed:
+      typeof mechanicsUpdater.noChangesNeeded === "boolean"
+        ? mechanicsUpdater.noChangesNeeded
+        : null,
+    accepted_mechanics_state_update:
+      mechanicsUpdater.acceptedMechanicsStateUpdate ?? null,
+    accepted_inventory_patches:
+      mechanicsUpdater.acceptedInventoryPatches ?? [],
+    discarded_inventory_patches:
+      mechanicsUpdater.discardedInventoryPatches ?? [],
+  };
+}
+
+async function getRecentMechanicsUpdaterTurns(
+  db: Queryable,
+  campaignId: string,
+): Promise<MechanicsUpdaterHistoryTurn[]> {
+  const events = await db.query<EventRow>(
+    `
+      select id, type, payload, created_at
+      from campaign_events
+      where campaign_id = $1
+        and type in ('turn_resolved', 'adventure_begun')
+      order by created_at desc, id desc
+      limit $2
+    `,
+    [campaignId, 12],
+  );
+
+  return events.rows
+    .filter(
+      (event) =>
+        event.type === "turn_resolved" || event.type === "adventure_begun",
+    )
+    .map((event) => {
+      const payload = eventPayload(event.payload);
+      const narratorProse =
+        typeof payload.content === "string" ? payload.content.trim() : "";
+
+      return {
+        turn_id: typeof payload.turnId === "string" ? payload.turnId : null,
+        resolved_at: toIso(event.created_at),
+        narrator_prose: narratorProse,
+        mechanics_executor: mechanicsUpdaterAuditTrail(payload),
+      };
+    })
+    .filter((turn) => turn.narrator_prose.length > 0)
+    .sort((left, right) => left.resolved_at.localeCompare(right.resolved_at))
+    .slice(-3);
 }
 
 async function runMechanicsStateUpdater(
@@ -13085,10 +13161,15 @@ async function runMechanicsStateUpdater(
 
   const players = await getActiveCampaignPlayers(db, campaign.id);
   const mechanicsState = resolveMechanicsState(campaign, players);
+  const previousResolvedTurns = await getRecentMechanicsUpdaterTurns(
+    db,
+    campaign.id,
+  );
   const message = JSON.stringify(
     {
       current_player_action: input.currentAction,
       finalized_narrator_prose: input.narration,
+      previous_resolved_turns: previousResolvedTurns,
       mechanics_state: mechanicsState,
       players: players.map((player) => ({
         actor_key: actorKeyForPlayer(player.id),

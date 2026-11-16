@@ -4000,6 +4000,25 @@ test("mechanics state initializes and projects spell slot lifecycle", async () =
     /3rd-level slots: 2 total, 2 used, 0 remaining/
   );
   assert.equal(exhaustedCast.messages.at(-1)?.playerFacingUpdate, undefined);
+
+  const mechanicsExecutorInput = getProviderInputs()
+    .filter((input) => input.instructions.includes("mechanics state updater"))
+    .at(-1);
+  assert.ok(mechanicsExecutorInput);
+  const mechanicsExecutorPayload = JSON.parse(mechanicsExecutorInput.message) as {
+    previous_resolved_turns?: Array<{
+      narrator_prose: string;
+      mechanics_executor: unknown;
+    }>;
+  };
+  assert.equal(mechanicsExecutorPayload.previous_resolved_turns?.length, 3);
+  assert.ok(
+    mechanicsExecutorPayload.previous_resolved_turns?.every(
+      (turn) =>
+        turn.narrator_prose.length > 0 &&
+        turn.mechanics_executor !== null,
+    ),
+  );
 });
 
 test("mechanics state falls back to character sheet spell slots without seed", async () => {
