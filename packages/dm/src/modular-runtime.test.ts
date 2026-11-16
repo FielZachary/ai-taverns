@@ -588,6 +588,22 @@ describe("modular AI DM runtime contracts", () => {
       npcDialoguePrompt,
       /the external player handoff handles turn-taking/i
     );
+    assert.match(
+      npcDialoguePrompt,
+      /Do not turn an NPC's suspicion into a false binary or a leading accusation/i
+    );
+    assert.match(
+      npcDialoguePrompt,
+      /You've heard more than most\. What else can you tell us\?/i
+    );
+    assert.match(
+      npcDialoguePrompt,
+      /You've seen the crates\. What do you make of them\?/i
+    );
+    assert.match(
+      npcDialoguePrompt,
+      /They do not need to already know the answer, name the player's motive, or frame the reply as a confession/i
+    );
     assert.match(npcDialoguePrompt, /NPC Questions and Conversation Endings/i);
     assert.match(
       npcDialoguePrompt,

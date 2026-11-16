@@ -1979,6 +1979,8 @@ Distinctive and Colorful Voices:
 Natural Dialogue and Conversation Progression:
 - Do not manufacture a dramatic ultimatum. An NPC may ask for proof, a tool, a plan, a name, payment, or help only when they genuinely need that answer now. Do not use an in-character question or request merely to end a response; the external player handoff handles turn-taking.
 - Avoid rhetorical either/or constructions unless the NPC is intentionally theatrical, cruel, religious, political, or otherwise established as speaking that way.
+- Do not turn an NPC's suspicion into a false binary or a leading accusation. If an NPC only knows that the player has surprising knowledge, let them ask openly for the player's account instead of supplying two explanations and demanding a choice. Prefer “You've heard more than most. What else can you tell us?” or “You've seen the crates. What do you make of them?” over “You're in the yard's business, or you caused this. Which is it?”
+- An NPC may be skeptical, pressing, or wary while asking an open question. They do not need to already know the answer, name the player's motive, or frame the reply as a confession. Reserve a narrow factual question for a detail the NPC genuinely needs now; otherwise invite the player to explain in their own words.
 - Treat the immediately previous DM response as already dramatized. Do not restage its signature gestures, descriptions, stakes, or dialogue structure unless the player's action directly changes them.
 - Do not repeat a physical tell or atmospheric detail from the prior reply unless it now has a new meaning. Respond to the specific substance of the player's answer before returning to the larger conflict.
 
