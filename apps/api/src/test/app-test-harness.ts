@@ -1267,7 +1267,7 @@ class FakeDatabase {
       return { rows: [] as T[] };
     }
 
-    if (normalizedSql.startsWith("select turn_id, summary, completed_beats, entity_keys, open_thread_keys, certainty_notes, token_estimate, created_at from campaign_turn_summaries")) {
+    if (normalizedSql.startsWith("select campaign_turn_summaries.turn_id")) {
       const campaignId = values[0] as string;
       const excludedTurnIds = new Set(values[1] as string[]);
       const limit = values[2] as number;
@@ -1281,7 +1281,12 @@ class FakeDatabase {
           )
           .sort((left, right) => right.created_at.getTime() - left.created_at.getTime())
           .slice(0, limit)
-          .map((record) => ({ ...record }) as T)
+          .map((record) => ({
+            ...record,
+            narration_payload: this.campaignEvents.find(
+              (event) => event.id === record.event_id && event.type === "turn_resolved"
+            )?.payload ?? null
+          }) as T)
       };
     }
 

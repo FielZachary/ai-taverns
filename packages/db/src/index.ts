@@ -961,6 +961,7 @@ type HistoryGameMessage = GameMessage & {
 type CampaignTurnSummary = {
   turnId: string;
   summary: string;
+  timestamp?: string;
   completedBeats: string[];
   entityKeys: string[];
   openThreadKeys: string[];
@@ -6861,18 +6862,22 @@ async function listCampaignTurnSummaryHistory(
     const result = await db.query<Record<string, unknown>>(
       `
         select
-          turn_id,
-          summary,
-          completed_beats,
-          entity_keys,
-          open_thread_keys,
-          certainty_notes,
-          token_estimate,
-          created_at
+          campaign_turn_summaries.turn_id,
+          campaign_turn_summaries.summary,
+          campaign_turn_summaries.completed_beats,
+          campaign_turn_summaries.entity_keys,
+          campaign_turn_summaries.open_thread_keys,
+          campaign_turn_summaries.certainty_notes,
+          campaign_turn_summaries.token_estimate,
+          campaign_turn_summaries.created_at,
+          resolved_event.payload as narration_payload
         from campaign_turn_summaries
-        where campaign_id = $1
-          and not (turn_id = any($2::uuid[]))
-        order by created_at desc
+        left join campaign_events as resolved_event
+          on resolved_event.id = campaign_turn_summaries.event_id
+          and resolved_event.type = 'turn_resolved'
+        where campaign_turn_summaries.campaign_id = $1
+          and not (campaign_turn_summaries.turn_id = any($2::uuid[]))
+        order by campaign_turn_summaries.created_at desc
         limit $3
       `,
       [campaignId, excludedTurnIds, campaignTurnSummaryCandidateLimit],
@@ -6889,9 +6894,15 @@ async function listCampaignTurnSummaryHistory(
       }
 
       usedChars = nextChars;
+      const narrationContent = eventPayload(row.narration_payload).content;
+      const timestamp =
+        typeof narrationContent === "string"
+          ? timestampFromNarration(narrationContent)
+          : null;
       summaries.push({
         turnId: String(row.turn_id ?? ""),
         summary,
+        ...(timestamp ? { timestamp } : {}),
         completedBeats: stringArray(row.completed_beats, 6, 180),
         entityKeys: stringArray(row.entity_keys),
         openThreadKeys: stringArray(row.open_thread_keys),
@@ -6916,6 +6927,12 @@ async function listCampaignTurnSummaryHistory(
   }
 }
 
+export function formatCampaignSummaryTimestamp(timestamp?: string) {
+  const match = timestamp?.match(/^(.+?)\s+—\s+(.+)$/);
+
+  return match ? ` Time: [${match[1]}] — ${match[2]}` : "";
+}
+
 function formatCampaignTurnSummaryHistory(summaries: CampaignTurnSummary[]) {
   if (summaries.length === 0) {
     return "No compressed turn summaries are available yet.";
@@ -6926,7 +6943,8 @@ function formatCampaignTurnSummaryHistory(summaries: CampaignTurnSummary[]) {
       const notes = entry.certaintyNotes.length
         ? ` Uncertainty: ${entry.certaintyNotes.join("; ")}`
         : "";
-      return `- [${entry.turnId}] ${entry.summary}${notes}`;
+      const timestamp = formatCampaignSummaryTimestamp(entry.timestamp);
+      return `- [${entry.turnId}] ${entry.summary}${notes}${timestamp}`;
     })
     .join("\n");
 }
@@ -12155,6 +12173,13 @@ export function narratorTimestampGuidance(timestamp: string) {
     "",
     "TIMESTAMP RULES:",
     "- The current campaign timestamp above is the established in-game time.",
+    "",
+    "TIME IN SUMMARY HISTORY:",
+    "- Every resolved-turn summary may end with `Time: [Time of day] — h:mm AM/PM`.",
+    "- This is the established in-game time when that event concluded, not the real-world database timestamp.",
+    "- Read these timestamps chronologically to determine how much in-game time has passed between events.",
+    "- Keep narration consistent with them. Do not claim that an hour, a day, or a short time has passed unless the summary timestamps support that claim.",
+    "- The timestamp on the newest summary is the current established in-game time before resolving the player's new action.",
     "- The first non-empty line of every response must be the updated campaign timestamp in exactly this format: [Time-of-day label] — [h:mm AM/PM].",
     "- Use only Midnight, Dawn, Morning, Mid-Day, Afternoon, Evening, Dusk, or Night as the time-of-day label. Do not write the literal phrase 'Time of Day'.",
     "- Put one blank line after the timestamp, then write the player-facing narration.",

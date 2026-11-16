@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   campaignTimestampFromNarrations,
+  formatCampaignSummaryTimestamp,
   formatNarratorHistoryReference,
   mapCampaignSummaryRow,
   narratorTimestampGuidance,
@@ -66,6 +67,9 @@ test("normal-play timestamps carry forward a valid prior narration timestamp", (
   assert.match(guidance, /first non-empty line of every response/i);
   assert.match(guidance, /usually takes 1–2 minutes/i);
   assert.match(guidance, /fine morning/i);
+  assert.match(guidance, /TIME IN SUMMARY HISTORY:/);
+  assert.match(guidance, /not the real-world database timestamp/i);
+  assert.match(guidance, /summary timestamps support that claim/i);
 });
 
 test("campaign timestamps skip non-narration content and normalize legacy brackets", () => {
@@ -86,6 +90,14 @@ test("campaign timestamps skip non-narration content and normalize legacy bracke
   assert.equal(campaignTimestampFromNarrations([]), "Morning — 8:00 AM");
   assert.equal(timestampFromNarration("[mid-day] — 12:03 pm"), "Mid-Day — 12:03 PM");
   assert.equal(timestampFromNarration("Remember, this is clarification."), null);
+});
+
+test("compressed summary timestamps use the plain-text time suffix", () => {
+  assert.equal(
+    formatCampaignSummaryTimestamp("Afternoon — 3:18 PM"),
+    " Time: [Afternoon] — 3:18 PM",
+  );
+  assert.equal(formatCampaignSummaryTimestamp(), "");
 });
 
 test("every router-selected gameplay job uses narrator reference history", () => {
