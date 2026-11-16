@@ -464,6 +464,41 @@ function MessageDebugModal({
               </section>
             </>
           ) : null}
+          {debug.mechanicsUpdater ? (
+            <>
+              <section>
+                <h3>Mechanics Executor Prompt Sent</h3>
+                <pre>
+                  {debug.mechanicsUpdater.requestMessages
+                    ? formatDebugPrompt(debug.mechanicsUpdater as AiDebugInfo)
+                    : "Not recorded"}
+                </pre>
+              </section>
+              <section>
+                <h3>Mechanics Executor Output</h3>
+                <pre>{debug.mechanicsUpdater.rawResponse ?? "Not recorded"}</pre>
+              </section>
+              <section>
+                <h3>Mechanics Executor Parsed Output</h3>
+                <pre>{formatDebugJson(debug.mechanicsUpdater.parsedOutput)}</pre>
+              </section>
+              <section>
+                <h3>Mechanics Executor Validation</h3>
+                <pre>
+                  {formatDebugJson({
+                    acceptedMechanicsStateUpdate:
+                      debug.mechanicsUpdater.acceptedMechanicsStateUpdate,
+                    acceptedInventoryPatches:
+                      debug.mechanicsUpdater.acceptedInventoryPatches,
+                    discardedInventoryPatches:
+                      debug.mechanicsUpdater.discardedInventoryPatches,
+                    noChangesNeeded: debug.mechanicsUpdater.noChangesNeeded,
+                    durationMs: debug.mechanicsUpdater.durationMs
+                  })}
+                </pre>
+              </section>
+            </>
+          ) : null}
           {debug.eldermereOpeningPlanner ? (
             <>
               <section>

@@ -713,6 +713,30 @@ describe("MessageLog", () => {
           }
         }
       },
+      mechanicsUpdater: {
+        requestMessages: [
+          {
+            role: "system",
+            content: "You are AI Taverns' mechanics state updater."
+          },
+          {
+            role: "user",
+            content: "Finalized narrator prose: Hector puts the fish in his backpack."
+          }
+        ],
+        rawResponse:
+          '{"no_changes_needed":false,"inventory_state_update":{"patches":[{"operation":"add","item":"Strange fish"}]}}',
+        parsedOutput: {
+          no_changes_needed: false,
+          inventory_state_update: {
+            patches: [{ operation: "add", item: "Strange fish" }]
+          }
+        },
+        acceptedInventoryPatches: [{ operation: "add", item: "Strange fish" }],
+        discardedInventoryPatches: [],
+        noChangesNeeded: false,
+        durationMs: 1234
+      },
       requestMessages: [
         {
           role: "system",
@@ -773,6 +797,12 @@ describe("MessageLog", () => {
     expect(screen.getByText("Ask DM Selector Output")).toBeInTheDocument();
     expect(screen.getAllByText(/world:road-tracks/).length).toBeGreaterThanOrEqual(3);
     expect(screen.getByText("Ask DM Selector Parsed Output")).toBeInTheDocument();
+    expect(screen.getByText("Mechanics Executor Prompt Sent")).toBeInTheDocument();
+    expect(screen.getByText(/mechanics state updater/)).toBeInTheDocument();
+    expect(screen.getByText("Mechanics Executor Output")).toBeInTheDocument();
+    expect(screen.getByText(/\"no_changes_needed\":false/)).toBeInTheDocument();
+    expect(screen.getByText("Mechanics Executor Parsed Output")).toBeInTheDocument();
+    expect(screen.getByText("Mechanics Executor Validation")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /close debug details/i }));
 
