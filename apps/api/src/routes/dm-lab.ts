@@ -6,7 +6,7 @@ import type { ApiConfig } from "../config.js";
 import { askDungeonMasterProvider } from "../dm-provider.js";
 import { requireAuthenticatedUser } from "./auth.js";
 
-const stageSchema = z.enum(["opening_brief_planner", "opening_planner", "opening_narrator", "router", "scene_director", "npc_dialogue", "combat", "clarification"]);
+const stageSchema = z.enum(["opening_brief_planner", "opening_planner", "opening_narrator", "router", "scene_director", "npc_dialogue", "combat", "clarification", "mechanics_executor"]);
 const modelSchema = AiModelIdSchema;
 const messageSchema = z.object({ role: z.enum(["system", "user", "assistant"]), content: z.string().trim().min(1) });
 const requestSchema = z.object({ action: z.enum(["baseline", "override"]), campaignId: z.string().trim().min(1).max(200), stage: stageSchema, model: modelSchema.default("deepseek-v4-flash"), messages: z.array(messageSchema).min(2).max(50) });
@@ -29,7 +29,9 @@ export function streamsForDmLabStage(stage: z.infer<typeof stageSchema>) {
   return proseNarratorStages.has(stage);
 }
 export function temperatureForDmLabStage(stage: z.infer<typeof stageSchema>) {
-  return stage === "combat" ? 0.2 : undefined;
+  if (stage === "combat") return 0.2;
+  if (stage === "mechanics_executor") return 0;
+  return undefined;
 }
 function fullRequest(messages: z.infer<typeof messageSchema>[]) { return messages.map((message, index) => `# ${index + 1}. ${message.role.toUpperCase()}\n${message.content}`).join("\n\n"); }
 function validationFor(content: string, format: "json" | "text") {

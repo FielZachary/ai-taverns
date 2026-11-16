@@ -38,14 +38,16 @@ test("DM Lab keeps planning and routing stages in JSON mode", () => {
   for (const stage of [
     "opening_brief_planner",
     "opening_planner",
-    "router"
+    "router",
+    "mechanics_executor"
   ] as const) {
     assert.equal(responseFormatForDmLabStage(stage), "json");
   }
 });
 
-test("DM Lab replays combat at the live combat temperature only", () => {
+test("DM Lab uses the live temperature for combat and mechanics execution", () => {
   assert.equal(temperatureForDmLabStage("combat"), 0.2);
+  assert.equal(temperatureForDmLabStage("mechanics_executor"), 0);
 
   for (const stage of [
     "opening_brief_planner",
