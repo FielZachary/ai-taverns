@@ -1,12 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { AiModelIdSchema } from "@ai-dnd/contracts";
 import { listCampaignSummariesForUser, type DungeonMasterRuntime } from "@ai-dnd/db";
 import type { ApiConfig } from "../config.js";
 import { askDungeonMasterProvider } from "../dm-provider.js";
 import { requireAuthenticatedUser } from "./auth.js";
 
 const stageSchema = z.enum(["opening_brief_planner", "opening_planner", "opening_narrator", "router", "scene_director", "npc_dialogue", "combat", "clarification"]);
-const modelSchema = z.enum(["deepseek-v4-flash", "qwen-3-5-plus"]);
+const modelSchema = AiModelIdSchema;
 const messageSchema = z.object({ role: z.enum(["system", "user", "assistant"]), content: z.string().trim().min(1) });
 const requestSchema = z.object({ action: z.enum(["baseline", "override"]), campaignId: z.string().trim().min(1).max(200), stage: stageSchema, model: modelSchema.default("deepseek-v4-flash"), messages: z.array(messageSchema).min(2).max(50) });
 

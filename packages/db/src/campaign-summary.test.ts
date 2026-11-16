@@ -5,6 +5,7 @@ import {
   formatCampaignSummaryTimestamp,
   formatNarratorHistoryReference,
   mapCampaignSummaryRow,
+  narratorModelForJob,
   narratorTimestampGuidance,
   previousNarrationTimestamp,
   timestampFromNarration,
@@ -121,4 +122,28 @@ test("every router-selected gameplay job uses narrator reference history", () =>
     true,
   );
   assert.equal(usesNarratorHistoryReference({}), false);
+});
+
+test("combat narration always uses Qwen 3.7 Plus after routing", () => {
+  assert.equal(
+    narratorModelForJob({
+      jobNeeded: "combat",
+      selectedModel: "deepseek-v4-flash",
+    }),
+    "qwen-3-7-plus",
+  );
+  assert.equal(
+    narratorModelForJob({
+      jobNeeded: "combat",
+      selectedModel: "qwen-3-5-plus",
+    }),
+    "qwen-3-7-plus",
+  );
+  assert.equal(
+    narratorModelForJob({
+      jobNeeded: "npc_dialogue",
+      selectedModel: "qwen-3-5-plus",
+    }),
+    "qwen-3-5-plus",
+  );
 });

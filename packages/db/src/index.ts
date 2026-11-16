@@ -12206,6 +12206,20 @@ export function usesNarratorHistoryReference(input: {
   );
 }
 
+/**
+ * The router selects the job, but the server owns which provider model runs
+ * that job. Combat narration always uses the dedicated Qwen model; all other
+ * jobs preserve the model selected for the turn.
+ */
+export function narratorModelForJob(input: {
+  jobNeeded?: DmJobName | undefined;
+  selectedModel?: AiModelId | undefined;
+}): AiModelId | undefined {
+  return input.jobNeeded === "combat"
+    ? "qwen-3-7-plus"
+    : input.selectedModel;
+}
+
 async function askDungeonMaster(
   db: Queryable,
   runtime: DungeonMasterRuntime,
@@ -12294,6 +12308,10 @@ async function askDungeonMaster(
           })
       : null;
     const narratorOnly = options?.providerResponseFormat === "text";
+    const narratorModel = narratorModelForJob({
+      jobNeeded: promptContext?.jobNeeded,
+      selectedModel: options?.model,
+    });
     const useNarratorHistoryReference = usesNarratorHistoryReference({
       jobNeeded: promptContext?.jobNeeded,
       providerResponseFormat: options?.providerResponseFormat,
@@ -12321,7 +12339,7 @@ async function askDungeonMaster(
       history: useNarratorHistoryReference ? [] : history,
       ...(currentPlayerAction ? { currentPlayerAction } : {}),
       ...(promptContext?.jobNeeded ? { dmJob: promptContext.jobNeeded } : {}),
-      ...(options?.model ? { model: options.model } : {}),
+      ...(narratorModel ? { model: narratorModel } : {}),
       ...(typeof options?.temperature === "number"
         ? { temperature: options.temperature }
         : {}),

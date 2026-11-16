@@ -170,6 +170,18 @@ function providerModelForSettings(config: ModelProviderConfig) {
 }
 
 function providerConfigForModel(model: AiModelId = defaultAiModel): ModelProviderConfig {
+  if (model === "qwen-3-7-plus") {
+    return {
+      selectedModel: model,
+      providerName: "Qwen",
+      apiKeyEnv: "QWEN_API_KEY",
+      baseUrlEnv: "QWEN_BASE_URL",
+      modelEnv: "QWEN_3_7_PLUS_MODEL",
+      defaultBaseUrl: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+      defaultModel: "qwen3.7-plus"
+    };
+  }
+
   if (model === "qwen-3-5-plus") {
     return {
       selectedModel: model,

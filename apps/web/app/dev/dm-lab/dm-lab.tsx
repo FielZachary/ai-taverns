@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 type Stage = "opening_brief_planner" | "opening_planner" | "opening_narrator" | "router" | "scene_director" | "npc_dialogue" | "combat" | "clarification";
-type AiModelId = "deepseek-v4-flash" | "qwen-3-5-plus";
+type AiModelId = "deepseek-v4-flash" | "qwen-3-5-plus" | "qwen-3-7-plus";
 type DebugMessage = { role: "system" | "user" | "assistant"; content: string };
 type Run = { output: string; durationMs: number; model: string | null; validation: { valid: boolean; details: string[] } };
 type LabResponse = { source: { file: string; function: string; gitRevision: string; campaignId: string }; stage: Stage; action: "baseline" | "override"; request: { messages: DebugMessage[]; fullPrompt: string }; result: Run };
@@ -57,7 +57,7 @@ export function DmLab() {
         <label>Or enter local campaign ID<input value={campaignId} onChange={(event) => setCampaignId(event.target.value)} placeholder="Local campaign UUID or ID" /></label>
         {campaignLoadError ? <p className="dm-lab-error">{campaignLoadError}</p> : null}
         <label>Runtime stage<select value={stage} onChange={(event) => setStage(event.target.value as Stage)}>{stages.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
-        <label>Original model<select value={model} onChange={(event) => setModel(event.target.value as AiModelId)}><option value="deepseek-v4-flash">DeepSeek V4 Flash</option><option value="qwen-3-5-plus">Qwen 3.5 Plus</option></select></label>
+        <label>Original model<select value={model} onChange={(event) => setModel(event.target.value as AiModelId)}><option value="deepseek-v4-flash">DeepSeek V4 Flash</option><option value="qwen-3-5-plus">Qwen 3.5 Plus</option><option value="qwen-3-7-plus">Qwen 3.7 Plus</option></select></label>
         <label>Baseline prompt from Debug<textarea value={promptText} onChange={(event) => setPromptText(event.target.value)} placeholder={"Paste the complete prompt beginning with # 1. SYSTEM and ending with the final USER message."} rows={14} /></label>
         <div className="dm-lab-actions"><button type="button" onClick={loadBaselinePrompt}>Load baseline prompt</button>{messages ? <button type="button" className="dm-lab-secondary" onClick={triggerBaseline} disabled={running !== null}>{running === "baseline" ? "Triggering baseline…" : "Trigger baseline"}</button> : null}{baseline ? <button type="button" className="dm-lab-secondary" onClick={testOverride} disabled={running !== null}>{running === "override" ? "Testing override…" : "Test override"}</button> : null}<button type="button" className="dm-lab-secondary" onClick={copyHandoff} disabled={!override}>Copy agent handoff</button></div>
         {notice ? <p className="dm-lab-notice">{notice}</p> : null}

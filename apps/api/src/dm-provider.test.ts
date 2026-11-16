@@ -16,6 +16,7 @@ const originalDeepSeekModel = process.env.DEEPSEEK_MODEL;
 const originalQwenApiKey = process.env.QWEN_API_KEY;
 const originalQwenBaseUrl = process.env.QWEN_BASE_URL;
 const originalQwenModel = process.env.QWEN_MODEL;
+const originalQwen37Model = process.env.QWEN_3_7_PLUS_MODEL;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
@@ -48,6 +49,11 @@ afterEach(() => {
     delete process.env.QWEN_MODEL;
   } else {
     process.env.QWEN_MODEL = originalQwenModel;
+  }
+  if (originalQwen37Model === undefined) {
+    delete process.env.QWEN_3_7_PLUS_MODEL;
+  } else {
+    process.env.QWEN_3_7_PLUS_MODEL = originalQwen37Model;
   }
 });
 
@@ -285,6 +291,38 @@ test("provider routes Qwen model selections to Qwen credentials", async () => {
   assert.deepEqual(requestBody?.response_format, { type: "json_object" });
   assert.equal(response.id, "qwen-chat-1");
   assert.equal(response.debug.model, "custom-qwen-flash");
+});
+
+test("provider routes Qwen 3.7 Plus independently from the Qwen 3.5 override", async () => {
+  process.env.QWEN_MODEL = "custom-qwen-3-5";
+  delete process.env.QWEN_3_7_PLUS_MODEL;
+  let requestBody: { model?: string } | undefined;
+
+  globalThis.fetch = async (_url, init) => {
+    requestBody = JSON.parse(String(init?.body)) as typeof requestBody;
+
+    return jsonResponse({
+      id: "qwen-3-7-chat-1",
+      model: "qwen3.7-plus",
+      choices: [
+        {
+          finish_reason: "stop",
+          message: {
+            content:
+              '{"public_narration":"Steel rings out.","roll_requests":[],"next_input_needed":"player_actions","input_targets":[],"input_policy":"all_players"}'
+          }
+        }
+      ]
+    });
+  };
+
+  await askDungeonMasterProvider({
+    instructions: "Return a JSON DM response.",
+    message: "Attack.",
+    model: "qwen-3-7-plus"
+  });
+
+  assert.equal(requestBody?.model, "qwen3.7-plus");
 });
 
 test("provider defaults Qwen chat requests to the QwenCloud compatible endpoint", async () => {
