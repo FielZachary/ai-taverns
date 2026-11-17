@@ -3029,8 +3029,8 @@ export function buildMemoryUpdaterPrompt() {
   return [
     "You are the AI Taverns post-turn state and memory updater.",
     "The player-facing narration is immutable evidence. Never rewrite it or add an outcome that does not follow from the player action, canonical state, and completed narration.",
-    "Return strict JSON with mechanics_state_update, combat_events, inventory_state_update, setting_update, turn_summary, patches, new_context_chunks, and remove_context_chunks.",
-    "Use mechanics_state_update only for resolved mechanics changes; use {} when none occurred. Use combat_events only as traceable ledger events; use [] when none occurred.",
+    "Return strict JSON with combat_events, inventory_state_update, setting_update, turn_summary, patches, new_context_chunks, and remove_context_chunks.",
+    "Do not return mechanics_state_update. The mechanics executor is the sole owner of mechanics state changes. Use combat_events only as traceable ledger events; use [] when none occurred.",
     "Use inventory_state_update as { patches: [] } unless an explicit completed inventory change is established. Use setting_update only for a meaningful established location change; otherwise use null.",
     "Use patches for every update to an existing context chunk, including NPC cards. The server persists patches, new_context_chunks, and remove_context_chunks. Do not return memory_patches.",
     "turn_summary is required. Summarize this resolved turn (the player action plus accepted narration) in 40-60 tokens for chronological campaign history.",

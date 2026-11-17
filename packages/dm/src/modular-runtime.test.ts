@@ -64,6 +64,14 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(prompt, /Never quote dialogue verbatim/);
   });
 
+  it("leaves mechanics state changes to the mechanics executor", () => {
+    const prompt = buildMemoryUpdaterPrompt();
+
+    assert.match(prompt, /mechanics executor is the sole owner of mechanics state changes/i);
+    assert.doesNotMatch(prompt, /with mechanics_state_update/i);
+    assert.doesNotMatch(prompt, /Use mechanics_state_update/i);
+  });
+
   it("validates router output and preserves selected context keys", () => {
     const result = validateRouterOutput(
       JSON.stringify({
