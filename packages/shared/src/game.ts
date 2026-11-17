@@ -1,5 +1,5 @@
 export type GameMessageRole = "player" | "dm" | "system";
-export type GameMessageKind = "turn" | "ask_dm_question" | "ask_dm_answer";
+export type GameMessageKind = "turn" | "ask_dm_question" | "ask_dm_answer" | "campaign_summary";
 
 export type GameMessage = {
   id: string;

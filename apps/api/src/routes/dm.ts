@@ -7,12 +7,15 @@ import {
   CampaignReadParamsSchema,
   CampaignRegenerateRequestSchema,
   CampaignRegenerateResponseSchema,
+  CampaignResumeSummaryRequestSchema,
+  CampaignResumeSummaryResponseSchema,
   CampaignSoloTurnRequestSchema,
   CampaignSoloTurnResponseSchema
 } from "@ai-dnd/contracts";
 import type { HookMetric, RoomSnapshot } from "@ai-dnd/contracts";
 import {
   askDungeonMasterQuestionForUser,
+  generateCampaignResumeSummaryForUser,
   type DungeonMasterRuntime,
   listCampaignDebugTracesForUser,
   regenerateCampaignResponseForUser,
@@ -237,6 +240,25 @@ export async function registerDmRoutes(
       milestones: ["asked_dm"]
     });
 
+    return snapshot;
+  });
+
+  fastify.post("/campaigns/:campaignId/resume-summary", async (request) => {
+    const params = CampaignReadParamsSchema.parse(request.params);
+    const body = CampaignResumeSummaryRequestSchema.parse(request.body);
+    const user = await requireAuthenticatedUser(
+      fastify,
+      config,
+      request.cookies[config.authCookieName]
+    );
+    const snapshot = CampaignResumeSummaryResponseSchema.parse(
+      await generateCampaignResumeSummaryForUser(fastify.pg, runtime, {
+        campaignId: params.campaignId,
+        userId: user.id,
+        ...(body.model ? { model: body.model } : {})
+      })
+    );
+    await publishRoomSnapshotUpdate(fastify, snapshot);
     return snapshot;
   });
 

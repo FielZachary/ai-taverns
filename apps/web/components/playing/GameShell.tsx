@@ -415,6 +415,7 @@ export function GameShell({
   const [inputMode, setInputMode] = useState<PlayerInputMode>("turn");
   const [chatBackgroundEnabled, setChatBackgroundEnabled] = useState(true);
   const [isSending, setIsSending] = useState(false);
+  const [isCraftingCampaignSummary, setIsCraftingCampaignSummary] = useState(false);
   const [isRestartingCampaign, setIsRestartingCampaign] = useState(false);
   const [restartPreparingCampaignId, setRestartPreparingCampaignId] =
     useState<string | null>(null);
@@ -915,6 +916,23 @@ export function GameShell({
       setMessages(openingMessages);
 
       applyRoomSnapshot(room);
+
+      setIsCraftingCampaignSummary(true);
+      try {
+        const summaryResponse = await fetch(
+          `/api/campaigns/${encodeURIComponent(campaign.id)}/resume-summary`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ model: selectedAiModelFromStorage() })
+          }
+        );
+        if (summaryResponse.ok) {
+          applyRoomSnapshot((await summaryResponse.json()) as RoomSnapshot);
+        }
+      } finally {
+        setIsCraftingCampaignSummary(false);
+      }
     } catch (error) {
       setMessages([
         ...openingMessages,
@@ -2573,6 +2591,7 @@ export function GameShell({
                 isRoomResolving ||
                 (isSinglePlayer && isSending)
               }
+              isCraftingCampaignSummary={isCraftingCampaignSummary}
               hideSendingIndicator={isShowingStreamingDmMessage}
               regeneratingMessageId={regeneratingMessageId}
               regeneratableMessageId={regeneratableMessageId}

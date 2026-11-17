@@ -5,7 +5,7 @@ export const DmProviderGameMessageSchema = z
   .object({
     id: z.string().min(1),
     role: z.enum(["player", "dm", "system"]),
-    kind: z.enum(["turn", "ask_dm_question", "ask_dm_answer"]).optional(),
+    kind: z.enum(["turn", "ask_dm_question", "ask_dm_answer", "campaign_summary"]).optional(),
     content: z.string(),
     createdAt: z.string().datetime()
   })

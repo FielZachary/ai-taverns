@@ -25,6 +25,10 @@ export const CampaignRegenerateRequestSchema = z.object({
   messageId: z.string().optional()
 });
 
+export const CampaignResumeSummaryRequestSchema = z.object({
+  model: AiModelIdSchema.optional()
+});
+
 export const CampaignDebugTracesQuerySchema = z.object({
   traceId: z.string().optional(),
   limit: z.coerce.number().int().positive().max(200).optional()
@@ -40,6 +44,7 @@ export const CampaignDebugTraceSchema = z
 export const CampaignSoloTurnResponseSchema = RoomSnapshotSchema;
 export const CampaignAskDmResponseSchema = RoomSnapshotSchema;
 export const CampaignRegenerateResponseSchema = RoomSnapshotSchema;
+export const CampaignResumeSummaryResponseSchema = RoomSnapshotSchema;
 export const CampaignDebugTracesResponseSchema = z.object({
   traces: z.array(CampaignDebugTraceSchema)
 });
@@ -50,6 +55,9 @@ export type CampaignSoloTurnRequest = z.infer<
 export type CampaignAskDmRequest = z.infer<typeof CampaignAskDmRequestSchema>;
 export type CampaignRegenerateRequest = z.infer<
   typeof CampaignRegenerateRequestSchema
+>;
+export type CampaignResumeSummaryRequest = z.infer<
+  typeof CampaignResumeSummaryRequestSchema
 >;
 export type CampaignDebugTracesQuery = z.infer<
   typeof CampaignDebugTracesQuerySchema

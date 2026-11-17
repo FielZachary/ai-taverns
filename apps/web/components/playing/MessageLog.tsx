@@ -23,6 +23,7 @@ export type ChatPlayerStatus = {
 type MessageLogProps = {
   messages: GameMessage[];
   isSending: boolean;
+  isCraftingCampaignSummary?: boolean;
   chatBackgroundEnabled?: boolean;
   hideSendingIndicator?: boolean;
   waitingPlayers?: ChatPlayerStatus[];
@@ -482,6 +483,10 @@ function messageLabel(message: GameMessage) {
     return "DM Answer";
   }
 
+  if (message.kind === "campaign_summary") {
+    return "Campaign Summary";
+  }
+
   return message.role === "player"
     ? playerLabel || "Player"
     : message.role === "dm"
@@ -526,6 +531,7 @@ function messageLocationLabel(message: GameMessage) {
 export function MessageLog({
   messages,
   isSending,
+  isCraftingCampaignSummary = false,
   chatBackgroundEnabled = true,
   hideSendingIndicator = false,
   waitingPlayers = [],
@@ -685,7 +691,7 @@ export function MessageLog({
                 ) : null}
               </div>
               {message.role === "dm" && !messageContent.trim() ? (
-                <RuneLoader label="Reading the runes" />
+                <RuneLoader label={message.kind === "campaign_summary" ? "Crafting campaign summary" : "Reading the runes"} />
               ) : (
                 <>
                   {timestampedContent.timestamp ? (
@@ -738,7 +744,7 @@ export function MessageLog({
         </article>
       ))}
 
-      {isSending && !hideSendingIndicator ? (
+      {(isSending || isCraftingCampaignSummary) && !hideSendingIndicator ? (
         <article className="message-card message-dm">
           <div className="message-icon message-icon-outside" aria-hidden="true">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -760,7 +766,7 @@ export function MessageLog({
               </div>
               <p className="message-label">Dungeon Master</p>
             </div>
-            <RuneLoader label="Reading the runes" />
+            <RuneLoader label={isCraftingCampaignSummary ? "Crafting campaign summary" : "Reading the runes"} />
           </div>
         </article>
       ) : null}

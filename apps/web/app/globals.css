@@ -5776,6 +5776,15 @@ h1 {
   gap: 1.45rem;
 }
 
+.message-campaign-summary .message-content {
+  border-color: color-mix(in srgb, #77c8ff 62%, transparent);
+  background: color-mix(in srgb, #133451 82%, var(--surface, #111827));
+}
+
+.message-campaign-summary .message-label {
+  color: #a9dcff;
+}
+
 .message-timestamp {
   margin: 0 0 0.65rem;
   color: rgba(235, 230, 220, 0.56);

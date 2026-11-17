@@ -4705,6 +4705,9 @@ function isPlayerRecentlySeen(player: Pick<PlayerRow, "last_seen_at">) {
 }
 
 function roomEventMessageKind(type: string) {
+  if (type === "campaign_summary") {
+    return "campaign_summary";
+  }
   if (type === "dm_question") {
     return "ask_dm_question";
   }
@@ -6025,7 +6028,8 @@ async function buildRoomSnapshot(
             'turn_resolved',
             'adventure_begun',
             'dm_question',
-            'dm_answer'
+            'dm_answer',
+            'campaign_summary'
           )
         order by created_at desc,
           case type
@@ -13367,6 +13371,139 @@ export async function getRoomForUser(
       ? {}
       : { messageLimit: input.messageLimit },
   );
+}
+
+const campaignResumeGreeting =
+  "Welcome back, Traveller. Since its been a while, I would like to summarize the campaign to bring you up to speed and ready to play.";
+
+/** Generates one player-visible recap after an inactive session. The database,
+ * not the browser, decides eligibility so concurrent tabs cannot duplicate it. */
+export async function generateCampaignResumeSummaryForUser(
+  db: pg.Pool,
+  runtime: DungeonMasterRuntime,
+  input: { campaignId: string; userId: string; model?: AiModelId },
+): Promise<RoomSnapshot> {
+  const campaign = (
+    await db.query<CampaignRow>(
+      "select * from campaigns where id = $1 and status = 'active' limit 1",
+      [input.campaignId],
+    )
+  ).rows[0];
+
+  if (!campaign) {
+    throw createStatusError(404, "Campaign not found.");
+  }
+
+  await assertCampaignAccessForUser(db, campaign, input.userId);
+
+  const eligibility = await db.query<{
+    last_raw_at: Date | null;
+    summary_created_at: Date | null;
+    turns_since_summary: string | number;
+  }>(
+    `
+      with last_raw as (
+        select max(created_at) as created_at
+        from campaign_events
+        where campaign_id = $1
+          and type in ('turn_submitted', 'turn_resolved', 'adventure_begun', 'dm_question', 'dm_answer')
+          and coalesce(payload->>'content', '') <> ''
+      ), latest_summary as (
+        select created_at
+        from campaign_events
+        where campaign_id = $1 and type = 'campaign_summary'
+        order by created_at desc, id desc
+        limit 1
+      )
+      select last_raw.created_at as last_raw_at,
+             latest_summary.created_at as summary_created_at,
+             count(resolved.id) as turns_since_summary
+      from last_raw
+      left join latest_summary on true
+      left join campaign_events resolved
+        on resolved.campaign_id = $1
+       and resolved.type in ('turn_resolved', 'adventure_begun')
+       and (latest_summary.created_at is null or resolved.created_at > latest_summary.created_at)
+      group by last_raw.created_at, latest_summary.created_at
+    `,
+    [campaign.id],
+  );
+  const state = eligibility.rows[0];
+  const lastRawAt = state?.last_raw_at ? new Date(state.last_raw_at) : null;
+  const turnsSinceSummary = Number(state?.turns_since_summary ?? 0);
+
+  if (
+    !lastRawAt ||
+    Date.now() - lastRawAt.getTime() < 60 * 60 * 1000 ||
+    (state?.summary_created_at && turnsSinceSummary <= 3)
+  ) {
+    return buildRoomSnapshotForUser(db, campaign, input.userId);
+  }
+
+  const elapsedMs = Date.now() - lastRawAt.getTime();
+  const rawLimit = elapsedMs < 4 * 60 * 60 * 1000 ? 20 : elapsedMs <= 48 * 60 * 60 * 1000 ? 10 : 5;
+  const rawHistory = await getCampaignEventMessages(db, campaign.id, 10_000);
+  const recentRaw = rawHistory.slice(-rawLimit);
+  const summaryHistory = await listCampaignTurnSummaryHistory(
+    db,
+    campaign.id,
+    [],
+  );
+  const compressedHistory =
+    elapsedMs < 4 * 60 * 60 * 1000
+      ? []
+      : elapsedMs <= 48 * 60 * 60 * 1000
+        ? summaryHistory.slice(-40)
+        : summaryHistory;
+  const formatMessages = (messages: HistoryGameMessage[]) =>
+    messages
+      .map((message) => `${message.role === "player" ? "Player" : "Dungeon Master"}: ${message.content}`)
+      .join("\n\n");
+  const formatSummaries = (entries: CampaignTurnSummary[]) =>
+    entries.map((entry) => `- ${entry.summary}`).join("\n");
+  const provider = await runtime.askProvider({
+    ...(input.model ? { model: input.model } : {}),
+    responseFormat: "text",
+    instructions: [
+      "Write a concise, factual player-facing campaign recap.",
+      "Do not invent facts, mechanics changes, choices, rolls, or dialogue.",
+      "Cover current situation, important recent events, open threads, and what the party can do next.",
+      "Return only the recap body; the server adds the welcome message."
+    ].join("\n"),
+    message: [
+      "Compressed campaign history:",
+      formatSummaries(compressedHistory) || "No compressed history available.",
+      "",
+      "Recent raw messages:",
+      formatMessages(recentRaw)
+    ].join("\n"),
+    history: [],
+  });
+  const recap = provider.content.trim();
+  if (!recap) {
+    throw new Error("Campaign summary provider returned an empty recap.");
+  }
+
+  // Re-check under a transaction so a second tab cannot insert another recap.
+  const inserted = await withTransaction(db, async (client) => {
+    const existing = await client.query<{ id: string }>(
+      `select id from campaign_events where campaign_id = $1 and type = 'campaign_summary'
+       and created_at > $2 order by created_at desc limit 1`,
+      [campaign.id, lastRawAt],
+    );
+    if (existing.rows[0]) return false;
+    await logCampaignEvent(client, campaign.id, "campaign_summary", {
+      messageId: randomUUID(),
+      role: "dm",
+      content: `${campaignResumeGreeting}\n\n${recap}`,
+      coveredThroughMessageId: recentRaw.at(-1)?.id,
+      ...(input.model ? { model: input.model } : {}),
+      aiDebug: provider.debug,
+    });
+    return true;
+  });
+
+  return buildRoomSnapshotForUser(db, campaign, input.userId);
 }
 
 export async function registerRoomPlayerForUser(
