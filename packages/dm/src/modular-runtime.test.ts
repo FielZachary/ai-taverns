@@ -1137,11 +1137,19 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(sceneDirectorPrompt, /Submitted Player Roll Result Opening:/);
     assert.match(
       sceneDirectorPrompt,
-      /public_narration must start with this exact sentence pattern/i
+      /Use the submitted final total inside <clue>\.\.\.<\/clue>/i
     );
     assert.match(
       sceneDirectorPrompt,
-      /With a \[quality adjective\] roll of <clue>\[total\]<\/clue>, here's what happens:/i
+      /Non-Combat Spell Casting:/
+    );
+    assert.match(
+      sceneDirectorPrompt,
+      /casting a spell is a concrete magical action that requires an Arcana roll/i
+    );
+    assert.match(
+      sceneDirectorPrompt,
+      /Request an Intelligence \(Arcana\) check using the player’s Arcana modifier/i
     );
 
     for (const job of ["scene_director", "npc_dialogue", "combat"] as const) {
