@@ -2531,6 +2531,11 @@ export function GameShell({
               playerProfile.characterName ||
               "Player character"
             } portrait`}
+            playerPortraitName={
+              currentRoomPlayer?.characterName ||
+              playerProfile.characterName ||
+              "Player character"
+            }
             playerPortraitStatus={currentRoomPlayer?.portraitStatus}
             playerPortraitUrl={currentRoomPlayer?.portraitUrl}
             onViewCharacterSheet={() => {

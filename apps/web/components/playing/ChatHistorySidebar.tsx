@@ -18,6 +18,7 @@ type ChatHistorySidebarProps = {
   isCreatingChat: boolean;
   isMobileDrawerOpen?: boolean;
   playerPortraitAlt?: string;
+  playerPortraitName?: string;
   playerPortraitStatus?: "pending" | "ready" | "failed";
   playerPortraitUrl?: string;
   onCloseMobileDrawer?: () => void;
@@ -39,6 +40,7 @@ export function ChatHistorySidebar({
   isCreatingChat,
   isMobileDrawerOpen = false,
   playerPortraitAlt = "Player character portrait",
+  playerPortraitName,
   playerPortraitStatus,
   playerPortraitUrl,
   onCloseMobileDrawer,
@@ -52,6 +54,8 @@ export function ChatHistorySidebar({
   const modalPortraitUrl = playerPortraitUrl
     ? fullSizePortraitUrl(playerPortraitUrl)
     : "";
+  const portraitName = playerPortraitName || playerPortraitAlt.replace(/ portrait$/i, "");
+  const hasPortrait = Boolean(playerPortraitUrl || playerPortraitStatus === "pending");
 
   useEffect(() => {
     if (!isPortraitModalOpen) {
@@ -187,6 +191,9 @@ export function ChatHistorySidebar({
       </div>
 
       <div className="chat-sidebar-actions" aria-label="Table actions">
+        {hasPortrait ? (
+          <p className="eyebrow chat-sidebar-portrait-name">{portraitName}</p>
+        ) : null}
         {playerPortraitUrl ? (
           <button
             className="chat-sidebar-portrait"

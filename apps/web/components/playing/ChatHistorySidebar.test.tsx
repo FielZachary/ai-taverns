@@ -67,6 +67,7 @@ describe("ChatHistorySidebar", () => {
   it("shows the player portrait above the resources button and opens the portrait viewer", () => {
     const props = renderChatHistorySidebar({
       playerPortraitAlt: "Seraphina portrait",
+      playerPortraitName: "Seraphina",
       playerPortraitUrl: "/media/campaigns/campaign-1/players/player-1/portraits/asset-1/128.webp"
     });
 
@@ -77,6 +78,10 @@ describe("ChatHistorySidebar", () => {
     const resourcesButton = screen.getByRole("button", {
       name: "Player Resources"
     });
+
+    expect(screen.getByText("Seraphina")).toHaveClass(
+      "chat-sidebar-portrait-name"
+    );
 
     expect(portrait).toHaveAttribute(
       "src",

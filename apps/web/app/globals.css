@@ -3903,6 +3903,16 @@ h1 {
   padding-top: 14px;
 }
 
+.chat-sidebar-portrait-name {
+  align-self: center;
+  margin: 0;
+  color: var(--gold-bright);
+  font-weight: 800;
+  text-align: center;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .player-resources-button {
   position: relative;
   isolation: isolate;
