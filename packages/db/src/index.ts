@@ -9924,7 +9924,7 @@ function formatSoloTurn(
   const turnInput = {
     type: "solo_turn",
     action_policy:
-      "Only treat concrete declared actions as actions. Quoted speech, questions, promises, plans, and corrections are dialogue or intent unless the player also says they move, travel, enter, search, attack, take something, cast a spell, or otherwise change the scene. Treat claims like taking, drawing, pulling, or producing an item from a bag as attempted inventory actions, not proof of possession; validate the claimed item against the canonical character sheet before narrating it.",
+      "Only treat concrete declared actions as triggers for checks. Quoted speech, questions, promises, and plans are dialogue. However, if the narrator's prose confirms the player has obtained an item (via NPC gift, discovery, or drop), treat this as a resolved mechanical event requiring an inventory state update, regardless of whether the player explicitly declared 'I take item.' Validate the item exists in the world context before adding it to inventory.",
     submissions: [
       {
         player: player.username,
