@@ -1545,6 +1545,16 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(prompt, /4 remaining again/i);
     assert.match(prompt, /This is not an in-fiction turn/i);
     assert.match(prompt, /Do not create new canon merely by answering/i);
+    assert.match(prompt, /Confusion & Ambiguity Protocol:/);
+    assert.match(prompt, /DO NOT assume it resolves a pending action/i);
+    assert.match(prompt, /Just to be sure—are you trying to resolve the combat attack right now/i);
+    assert.match(prompt, /Never guess the player's intent when the input is short or purely mechanical/i);
+    assert.equal(prompt.lastIndexOf("Confusion & Ambiguity Protocol:"), prompt.indexOf("Confusion & Ambiguity Protocol:"));
+    assert.match(
+      prompt,
+      /"I strike," "I cast," or "I run"\)\.\nGlobal DM Runtime Rules:/,
+    );
+    assert.doesNotMatch(jobPrompt("combat", "single_player"), /Confusion & Ambiguity Protocol:/);
     assert.doesNotMatch(prompt, /Output Requirements:/i);
   });
 });

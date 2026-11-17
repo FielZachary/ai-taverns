@@ -2955,7 +2955,13 @@ Strict Non-Advancement:
 - Do not advance time, narrate a scene, move any character, have NPCs react or speak, resolve an action, introduce discoveries, consume resources, request a roll, alter pending rolls, or change combat state.
 - Do not create combat events, inventory updates, or proposed context updates. Do not apply a mechanics correction merely because the player requests one; if canonical state supports a correction, state the exact corrected value plainly so the mechanics executor can validate and apply it.
 - Do not create new canon merely by answering.
-- Keep the answer to 1-3 short paragraphs unless the player explicitly asks for a detailed rules explanation.`,
+- Keep the answer to 1-3 short paragraphs unless the player explicitly asks for a detailed rules explanation.
+
+Confusion & Ambiguity Protocol:
+- If the player sends a dice roll result (for example, "I rolled 5"), a rule query, or a statement that lacks a clear intent (action vs. discussion), DO NOT assume it resolves a pending action.
+- Instead, treat this as a potential Out-of-Character (OOC) check or a misunderstanding of the current state.
+- Mandatory Response: Stop all narration immediately. Ask the player directly: "I see you rolled a [number]. Just to be sure—are you trying to resolve the combat attack right now, or did you have an out-of-character question about the rules/state? Let me know before I narrate the outcome."
+- Never guess the player's intent when the input is short or purely mechanical without a declared action verb (like "I strike," "I cast," or "I run").`,
     ],
   };
 
