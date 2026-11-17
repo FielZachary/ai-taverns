@@ -13467,10 +13467,10 @@ export async function generateCampaignResumeSummaryForUser(
     ...(input.model ? { model: input.model } : {}),
     responseFormat: "text",
     instructions: [
-      "Write a concise, factual player-facing campaign recap using exactly these two Markdown headings: **Current Situation** and **How did you get here?**.",
+      "Write a concise, factual player-facing campaign recap using exactly these three Markdown headings: **Current Situation**, **How did you get here?**, and **What You Can Do Next**.",
       "Do not invent facts, mechanics changes, choices, rolls, or dialogue.",
       "Under Current Situation, explain only the immediate scene and present stakes. Under How did you get here?, chronologically summarize the important events that led to it.",
-      "Do not include Open Threads, What You Can Do Next, recommendations, options, or any other heading.",
+      "Under What You Can Do Next, give a short bulleted list of grounded, player-facing options. Do not include Open Threads or any other heading.",
       "Return only the recap body; the server adds the welcome message."
     ].join("\n"),
     message: [
