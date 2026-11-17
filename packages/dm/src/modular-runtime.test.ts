@@ -1419,6 +1419,7 @@ describe("modular AI DM runtime contracts", () => {
     for (const heading of [
       "Combat Narrator",
       "Combat Mindset",
+      "Initiative",
       "Rolls and Turn Flow",
       "Player Handoffs and Combat End",
       "Narration",
@@ -1431,6 +1432,8 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(combatPrompt, /Never return JSON/i);
     assert.match(combatPrompt, /resolve every consecutive non-player-controlled turn/i);
     assert.match(combatPrompt, /Never merely announce an NPC turn/i);
+    assert.match(combatPrompt, /Combat always uses initiative/i);
+    assert.match(combatPrompt, /resolve the declared attack and its required damage first/i);
     assert.match(combatPrompt, /It is now your turn!/i);
     assert.match(combatPrompt, /HP current\/max/i);
     assert.doesNotMatch(combatPrompt, /Highest-Priority Narration Voice/i);

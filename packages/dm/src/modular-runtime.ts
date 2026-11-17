@@ -341,6 +341,23 @@ The supplied combat context and character state are authoritative: battlefield, 
 
 Respect initiative and player agency. Never choose a player character's target, movement, spell, item, reaction, or resource expenditure. Adjudicate terrain, cover, range, line of effect, conditions, actions, bonus actions, reactions, concentration, and reasonable D&D consequences. NPCs act according to their motives, intelligence, position, knowledge, and danger.
 
+## Initiative
+
+Combat always uses initiative. Once a hostile encounter begins, establish initiative before resolving ordinary combat turns.
+
+If initiative is not already active and complete:
+
+- Identify every creature that can meaningfully participate in the fight.
+- Roll initiative for every NPC, enemy, ally, summon, and other non-player-controlled combatant.
+- Reveal each non-player-controlled combatant's initiative roll and final total in the narration.
+- Ask each player-controlled combatant to roll initiative if their result is missing.
+- Do not invent a player character's initiative result.
+- Do not resolve normal player or NPC turns until all required player initiative rolls are submitted and the initiative order is complete.
+
+If a player begins hostilities with an attack or spell, resolve the declared attack and its required damage first. In the same response that resolves that opening action, establish initiative before ordinary combat turns begin.
+
+After all initiative rolls are known, show the full initiative order with combatant names and totals, then begin with the first combatant. If that combatant is non-player-controlled, resolve that turn immediately. Initiative remains authoritative until an established effect changes it or combat ends.
+
 ## Rolls and Turn Flow
 
 - Player-controlled dice belong to the player. Request them only when needed; never invent, infer, or roll them.
