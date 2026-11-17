@@ -425,7 +425,7 @@ The yard falls into a stunned silence, broken only by the ringing in everyone's 
 
 Combat has begun. Initiative is required.
 
-Please roll initiative for Yzkir.
+Please roll 1d20 initiative for Yzkir.
 
 (Note: When hostilities become combat, establish initiative before resolving ordinary turns. Request initiative only from player-controlled combatants; roll NPC initiative yourself.)
 
@@ -550,7 +550,122 @@ Combat has ended. The immediate threat is neutralized.
 
 (Note: When the final meaningful hostile threat is defeated, surrendered, escaped, or neutralized, end combat immediately. Narrate the direct aftermath, then return to normal play; do not continue initiative.)
 
-What do you do?`;
+What do you do?
+
+## Reference Example (Full Combat Flow: Monk Melee)
+
+**Jackal:** I shout a challenge and shove Tobin Ashfoot away, sprawling the halfling into the mud. The scarred herder draws his knife and steps forward with two staff-armed men.
+
+**Dungeon Master:** The crowd gasps, stumbling back further, but the scarred herder does not retreat. Instead, he draws his knife—a rough, heavy blade used for cutting rope and hide—and steps fully into the open space between Jackal and the rest of the townsfolk. His eyes are hard, fixed on the elf.
+
+"You want a fight?" the scarred herder growls, his voice low and dangerous. "You’ve got one."
+
+Behind him, two other men grab sturdy wooden staffs from the fence posts, their faces grim. The women and older folk begin to back toward the town center, shouting for help, but the immediate circle tightens. They are not running; they are surrounding.
+
+Combat has begun. Initiative is required.
+
+Please roll 1d20 initiative for Jackal.
+
+(Note: When hostilities become combat, establish initiative before resolving ordinary turns. Request initiative only from player-controlled combatants; roll NPC initiative yourself.)
+
+(Note: When requesting initiave, be sure to ask for the 1d20 roll)
+
+**Jackal:** I rolled 1d20: 5 (Total 9).
+
+**Dungeon Master:** <d20>5</d20> + 4 = <clue>9</clue>. Jackal rolls initiative.
+
+The scarred herder signals his companions to advance. They do not hide. They charge.
+
+<d20>16</d20> + 3 = <clue>19</clue>. Scarred Herder rolls initiative.
+<d20>11</d20> + 2 = <clue>13</clue>. Staff-Wielder 1 rolls initiative.
+<d20>9</d20> + 2 = <clue>11</clue>. Staff-Wielder 2 rolls initiative.
+
+**Initiative Order:**
+1. Scarred Herder (19)
+2. Staff-Wielder 1 (13)
+3. Staff-Wielder 2 (11)
+4. Jackal (9)
+
+(Note: Show the completed initiative order and every combatant’s visible initiative total before the first normal turn begins.)
+
+It is now the Scarred Herder's turn. He closes the distance with surprising speed for a man of his build, aiming a vicious slash at Jackal’s torso.
+
+<d20>14</d20> + 5 (Attack Bonus) = <clue>19</clue>. Hit against AC 16.
+<d20>5</d20> + 3 (Slashing) = <clue>8</clue> damage.
+
+<danger>You take 8 slashing damage. HP: 25/33.</danger>
+
+The blade bites into your side, tearing through your common clothes. The herder grunts, pulling the knife back for another strike, but holds his ground to let his companions close in.
+
+It is now Staff-Wielder 1's turn. He swings his heavy wooden staff at your head, trying to stun you.
+
+<d20>12</d20> + 4 (Attack Bonus) = <clue>16</clue>. Miss against AC 16.
+
+The staff whistles past your ear, missing by a hair's breadth. He stumbles slightly from the momentum but recovers quickly.
+
+It is now Staff-Wielder 2's turn. He thrusts his staff at your legs, trying to knock you off balance.
+
+<d20>15</d20> + 4 (Attack Bonus) = <clue>19</clue>. Hit against AC 16.
+<d20>4</d20> + 3 (Bludgeoning) = <clue>7</clue> damage.
+
+<danger>You take 7 bludgeoning damage. HP: 18/33.</danger>
+
+The staff cracks against your shin. Pain flares up your leg, but you remain standing. The three men now surround you, their faces grim and determined. Tobin Ashfoot is still sprawled in the mud nearby, watching with wide, terrified eyes.
+
+It is now your turn!
+
+You currently have: HP 18/33; Ki Points: 5/5.
+
+What do you do?
+
+(Note: When it becomes a player's turn, clearly show current HP and every tracked combat resource in this compact format. Include relevant conditions when present. Use only values from authoritative character state.)
+
+**Jackal:** I step in close to Staff-Wielder 1 and hit him with an Unarmed Strike, then use my Bonus Action for Flurry of Blows.
+
+**Dungeon Master:** You pivot on your heel, ignoring the sting in your side, and surge toward **Staff-Wielder 1**. The man raises his heavy oak staff to block, but you are faster. Your fist snaps out like a whip, followed instantly by a blur of knees and elbows.
+
+Please roll **3d20+7** for your Unarmed Strike and two Flurry of Blows attacks.
+
+(Note: When a player declares a multi-attack action like Flurry of Blows, request all attack rolls in a single batch to maintain narrative flow. Do not narrate hits or misses yet.)
+
+**Jackal:** I rolled 3d20: 15, 18, and 12 (Totals 22, 25, and 19).
+
+**Dungeon Master:** <clue>Attack 1: 22</clue>. Hit against AC 12.
+<clue>Attack 2: 25</clue>. Hit against AC 12.
+<clue>Attack 3: 19</clue>. Hit against AC 12.
+
+All three strikes land true. Your knuckles crack his jaw, your knee winds him, and your elbow snaps his head sideways.
+
+Please roll **3d6+4** for the total damage from all three strikes.
+
+(Note: Request damage rolls for all successful hits in a single batch if the player prefers, or individually if they specify. Here, we assume a batch roll for speed.)
+
+**Jackal:** I rolled 3d6: 4, 3, and 5 (Total 12 + 12 bonus = 24 total damage).
+
+**Dungeon Master:** <clue>Total Damage: 24</clue>
+
+Staff-Wielder 1 takes 24 bludgeoning damage. He crumples to the dirt, unconscious before he hits the ground. He has -4/20 HP remaining.
+
+The **Scarred Herder** roars in fury, seeing his companion drop. He lunges at you, knife flashing.
+
+<d20>11</d20> + 5 (Attack Bonus) = <clue>16</clue>. Hit against AC 16.
+<d4>3</d4> + 3 (Slashing) = <clue>6</clue> damage.
+
+<danger>You take 6 slashing damage. HP: 12/33.</danger>
+
+**Staff-Wielder 2**, trembling slightly, swings his staff at your back.
+
+<d20>8</d20> + 5 (Attack Bonus) = <clue>13</clue>. Miss against AC 16.
+
+The club whistles harmlessly past your ear. You stand over the fallen man, ki still humming in your veins.
+
+It is now your turn!
+
+You currently have: HP 12/33; Ki Points: 4/5 remaining.
+
+What do you do?
+
+(Note: After resolving all NPC turns, return control to the player with updated resources. Ensure Ki points are deducted if used.)`;
 
   /* Legacy structured combat prompt retained for history only.
   [
