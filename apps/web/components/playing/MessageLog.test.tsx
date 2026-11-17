@@ -803,6 +803,15 @@ describe("MessageLog", () => {
     expect(screen.getByText(/\"no_changes_needed\":false/)).toBeInTheDocument();
     expect(screen.getByText("Mechanics Executor Parsed Output")).toBeInTheDocument();
     expect(screen.getByText("Mechanics Executor Validation")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /copy ai output/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /copy ask dm selector prompt sent/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /copy mechanics executor output/i })
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /close debug details/i }));
 
@@ -838,6 +847,32 @@ describe("MessageLog", () => {
     expect(writeText).toHaveBeenCalledWith(
       "# 1. SYSTEM\nStay in character.\n\n# 2. USER\nOpen the door."
     );
+  });
+
+  it("copies any AI debug value", () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    const debug: AiDebugInfo = {
+      model: "deepseek-chat",
+      requestMessages: [{ role: "user", content: "Open the door." }],
+      rawResponse: "The hinges complain."
+    };
+
+    renderMessageLog({
+      messages: [
+        gameMessage({
+          id: "debug-output-copy-dm",
+          role: "dm",
+          content: "The hinges complain.",
+          debug
+        })
+      ]
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /show ai debug details/i }));
+    fireEvent.click(screen.getByRole("button", { name: /copy ai output/i }));
+
+    expect(writeText).toHaveBeenCalledWith("The hinges complain.");
   });
 
   it("updates an open AI debug modal when message debug data refreshes", () => {

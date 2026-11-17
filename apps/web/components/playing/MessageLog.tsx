@@ -343,6 +343,35 @@ function formatDebugJson(value: unknown) {
   return value === undefined ? "Not recorded" : JSON.stringify(value, null, 2);
 }
 
+function DebugValueSection({
+  title,
+  value
+}: {
+  title: string;
+  value: string | number;
+}) {
+  const text = String(value);
+
+  return (
+    <section>
+      <div className="debug-section-heading">
+        <h3>{title}</h3>
+        <button
+          type="button"
+          className="debug-copy-button"
+          onClick={() => void navigator.clipboard.writeText(text)}
+          aria-label={`Copy ${title}`}
+          title={`Copy ${title}`}
+        >
+          <Copy size={14} />
+          Copy
+        </button>
+      </div>
+      <pre>{text}</pre>
+    </section>
+  );
+}
+
 function MessageDebugModal({
   debug,
   onClose
@@ -351,10 +380,6 @@ function MessageDebugModal({
   onClose: () => void;
 }) {
   const prompt = formatDebugPrompt(debug);
-
-  function copyPrompt() {
-    void navigator.clipboard.writeText(prompt);
-  }
 
   return (
     <div className="debug-modal-backdrop" role="presentation">
@@ -380,112 +405,42 @@ function MessageDebugModal({
           </button>
         </header>
         <div className="debug-modal-content">
-          <section>
-            <div className="debug-section-heading">
-              <h3>Prompt Sent</h3>
-              <button
-                type="button"
-                className="debug-copy-button"
-                onClick={copyPrompt}
-                aria-label="Copy prompt"
-                title="Copy prompt"
-              >
-                <Copy size={14} />
-                Copy
-              </button>
-            </div>
-            <pre>{prompt}</pre>
-          </section>
-          <section>
-            <h3>AI Output</h3>
-            <pre>{debug.rawResponse}</pre>
-          </section>
+          <DebugValueSection title="Prompt Sent" value={prompt} />
+          <DebugValueSection title="AI Output" value={debug.rawResponse} />
           {debug.askDmContextSelector ? (
             <>
-              <section>
-                <h3>Ask DM Selector Prompt Sent</h3>
-                <pre>{formatDebugPrompt(debug.askDmContextSelector)}</pre>
-              </section>
-              <section>
-                <h3>Ask DM Selector Output</h3>
-                <pre>{debug.askDmContextSelector.rawResponse}</pre>
-              </section>
-              <section>
-                <h3>Ask DM Selector Parsed Output</h3>
-                <pre>{formatDebugJson(debug.askDmContextSelector.parsedOutput)}</pre>
-              </section>
+              <DebugValueSection title="Ask DM Selector Prompt Sent" value={formatDebugPrompt(debug.askDmContextSelector)} />
+              <DebugValueSection title="Ask DM Selector Output" value={debug.askDmContextSelector.rawResponse} />
+              <DebugValueSection title="Ask DM Selector Parsed Output" value={formatDebugJson(debug.askDmContextSelector.parsedOutput)} />
             </>
           ) : null}
           {debug.router ? (
             <>
-              <section>
-                <h3>Router Prompt Sent</h3>
-                <pre>{formatDebugPrompt(debug.router)}</pre>
-              </section>
-              <section>
-                <h3>Router Output</h3>
-                <pre>{debug.router.rawResponse}</pre>
-              </section>
-              <section>
-                <h3>Router Parsed Output</h3>
-                <pre>{formatDebugJson(debug.router.parsedOutput)}</pre>
-              </section>
+              <DebugValueSection title="Router Prompt Sent" value={formatDebugPrompt(debug.router)} />
+              <DebugValueSection title="Router Output" value={debug.router.rawResponse} />
+              <DebugValueSection title="Router Parsed Output" value={formatDebugJson(debug.router.parsedOutput)} />
             </>
           ) : null}
           {debug.postTurnUpdater ? (
             <>
-              <section>
-                <h3>Post-Turn Updater Prompt Sent</h3>
-                <pre>
-                  {debug.postTurnUpdater.requestMessages
-                    ? formatDebugPrompt(debug.postTurnUpdater as AiDebugInfo)
-                    : "Not recorded"}
-                </pre>
-              </section>
-              <section>
-                <h3>Post-Turn Updater Output</h3>
-                <pre>{debug.postTurnUpdater.rawResponse ?? "Not recorded"}</pre>
-              </section>
-              <section>
-                <h3>Post-Turn Updater Parsed Output</h3>
-                <pre>{formatDebugJson(debug.postTurnUpdater.parsedOutput)}</pre>
-              </section>
-              <section>
-                <h3>Post-Turn Updater Validation</h3>
-                <pre>
-                  {formatDebugJson({
+              <DebugValueSection title="Post-Turn Updater Prompt Sent" value={debug.postTurnUpdater.requestMessages ? formatDebugPrompt(debug.postTurnUpdater as AiDebugInfo) : "Not recorded"} />
+              <DebugValueSection title="Post-Turn Updater Output" value={debug.postTurnUpdater.rawResponse ?? "Not recorded"} />
+              <DebugValueSection title="Post-Turn Updater Parsed Output" value={formatDebugJson(debug.postTurnUpdater.parsedOutput)} />
+              <DebugValueSection title="Post-Turn Updater Validation" value={formatDebugJson({
                     acceptedPatches: debug.postTurnUpdater.acceptedPatches,
                     discardedPatches: debug.postTurnUpdater.discardedPatches,
                     failed: debug.postTurnUpdater.failed,
                     error: debug.postTurnUpdater.error,
                     durationMs: debug.postTurnUpdater.durationMs
-                  })}
-                </pre>
-              </section>
+                  })} />
             </>
           ) : null}
           {debug.mechanicsUpdater ? (
             <>
-              <section>
-                <h3>Mechanics Executor Prompt Sent</h3>
-                <pre>
-                  {debug.mechanicsUpdater.requestMessages
-                    ? formatDebugPrompt(debug.mechanicsUpdater as AiDebugInfo)
-                    : "Not recorded"}
-                </pre>
-              </section>
-              <section>
-                <h3>Mechanics Executor Output</h3>
-                <pre>{debug.mechanicsUpdater.rawResponse ?? "Not recorded"}</pre>
-              </section>
-              <section>
-                <h3>Mechanics Executor Parsed Output</h3>
-                <pre>{formatDebugJson(debug.mechanicsUpdater.parsedOutput)}</pre>
-              </section>
-              <section>
-                <h3>Mechanics Executor Validation</h3>
-                <pre>
-                  {formatDebugJson({
+              <DebugValueSection title="Mechanics Executor Prompt Sent" value={debug.mechanicsUpdater.requestMessages ? formatDebugPrompt(debug.mechanicsUpdater as AiDebugInfo) : "Not recorded"} />
+              <DebugValueSection title="Mechanics Executor Output" value={debug.mechanicsUpdater.rawResponse ?? "Not recorded"} />
+              <DebugValueSection title="Mechanics Executor Parsed Output" value={formatDebugJson(debug.mechanicsUpdater.parsedOutput)} />
+              <DebugValueSection title="Mechanics Executor Validation" value={formatDebugJson({
                     acceptedMechanicsStateUpdate:
                       debug.mechanicsUpdater.acceptedMechanicsStateUpdate,
                     acceptedInventoryPatches:
@@ -494,46 +449,21 @@ function MessageDebugModal({
                       debug.mechanicsUpdater.discardedInventoryPatches,
                     noChangesNeeded: debug.mechanicsUpdater.noChangesNeeded,
                     durationMs: debug.mechanicsUpdater.durationMs
-                  })}
-                </pre>
-              </section>
+                  })} />
             </>
           ) : null}
           {debug.eldermereOpeningPlanner ? (
             <>
-              <section>
-                <h3>Eldermere Planner Prompt Sent</h3>
-                <pre>{formatDebugPrompt(debug.eldermereOpeningPlanner)}</pre>
-              </section>
-              <section>
-                <h3>Eldermere Planner Output</h3>
-                <pre>{debug.eldermereOpeningPlanner.rawResponse}</pre>
-              </section>
-              <section>
-                <h3>Eldermere Planner Parsed Output</h3>
-                <pre>
-                  {formatDebugJson(debug.eldermereOpeningPlanner.parsedOutput)}
-                </pre>
-              </section>
+              <DebugValueSection title="Eldermere Planner Prompt Sent" value={formatDebugPrompt(debug.eldermereOpeningPlanner)} />
+              <DebugValueSection title="Eldermere Planner Output" value={debug.eldermereOpeningPlanner.rawResponse} />
+              <DebugValueSection title="Eldermere Planner Parsed Output" value={formatDebugJson(debug.eldermereOpeningPlanner.parsedOutput)} />
             </>
           ) : null}
-          <section>
-            <h3>Temperature</h3>
-            <pre>{debug.temperature ?? "Not recorded"}</pre>
-          </section>
-          <section>
-            <h3>Combat State</h3>
-            <pre>{formatDebugJson(debug.combatState)}</pre>
-          </section>
-          <section>
-            <h3>Context Storage</h3>
-            <pre>{formatDebugJson(debug.contextStorageState)}</pre>
-          </section>
+          <DebugValueSection title="Temperature" value={debug.temperature ?? "Not recorded"} />
+          <DebugValueSection title="Combat State" value={formatDebugJson(debug.combatState)} />
+          <DebugValueSection title="Context Storage" value={formatDebugJson(debug.contextStorageState)} />
           {debug.livingWorldPressureEngine ? (
-            <section>
-              <h3>Pressure Engine Output</h3>
-              <pre>{formatDebugJson(debug.livingWorldPressureEngine)}</pre>
-            </section>
+            <DebugValueSection title="Pressure Engine Output" value={formatDebugJson(debug.livingWorldPressureEngine)} />
           ) : null}
         </div>
       </section>
