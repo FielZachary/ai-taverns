@@ -196,25 +196,12 @@ describe("PlayerInput", () => {
     expect(props.onSubmit).toHaveBeenCalledTimes(1);
   });
 
-  it("switches input modes and uses ask-DM copy in ask mode", () => {
-    const turnProps = renderPlayerInput();
+  it("does not render the legacy Ask DM input mode", () => {
+    renderPlayerInput();
 
-    fireEvent.click(screen.getByRole("button", { name: /ask dm/i }));
-
-    expect(turnProps.onModeChange).toHaveBeenCalledWith("ask_dm");
-
-    renderPlayerInput({
-      mode: "ask_dm",
-      draft: "What do I know about the sigil?"
-    });
-
-    expect(
-      screen.getByPlaceholderText("Ask the DM a question without advancing time...")
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /ask$/i })).toBeEnabled();
-    expect(
-      screen.getAllByRole("button", { name: /open dice roller/i })[1]
-    ).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /ask dm/i })).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Speak, search, attack, bargain...")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /send/i })).toBeEnabled();
   });
 
   it("enables skip turns only when multiplayer turn input is actionable", () => {

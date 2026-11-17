@@ -275,28 +275,6 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
           </p>
         ) : null}
         <div className="turn-action-bar">
-          <div className="input-mode-toggle" role="group" aria-label="Input mode">
-            <button
-              className={mode === "turn" ? "input-mode-button active" : "input-mode-button"}
-              type="button"
-              aria-pressed={mode === "turn"}
-              disabled={isSending}
-              onClick={() => onModeChange("turn")}
-            >
-              Turn
-            </button>
-            <button
-              className={
-                mode === "ask_dm" ? "input-mode-button active" : "input-mode-button"
-              }
-              type="button"
-              aria-pressed={mode === "ask_dm"}
-              disabled={isSending}
-              onClick={() => onModeChange("ask_dm")}
-            >
-              Ask DM
-            </button>
-          </div>
           <div className="dice-roll-control" ref={diceRollControlRef}>
             <button
               className="dice-roll-button"
