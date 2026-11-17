@@ -905,6 +905,7 @@ type DungeonMasterReply = {
   id: string;
   content: string;
   debug: AiDebugInfo;
+  jobNeeded?: DmJobName;
   rollRequests: DiceRollRequest[];
   inputTargets: string[];
   inputPolicy: InputPolicy;
@@ -12434,6 +12435,9 @@ async function askDungeonMaster(
           ...providerData.debug,
           ...(routerDebug ? { router: routerDebug } : {}),
         },
+        ...(promptContext?.jobNeeded
+          ? { jobNeeded: promptContext.jobNeeded }
+          : {}),
         rollRequests: [],
         inputTargets: [],
         inputPolicy: "all_players",
@@ -14123,11 +14127,20 @@ export async function submitRoomTurnForUser(
           providerResponseFormat: "text",
         },
       );
-      const mechanicsUpdate = await runMechanicsStateUpdater(db, input.runtime, {
-        campaignId: submitState.campaign.id,
-        currentAction,
-        narration: reply.content,
-      });
+      const mechanicsUpdate =
+        reply.jobNeeded === "out_of_character"
+          ? {
+              playerFacingUpdate: undefined,
+              debug: {
+                noChangesNeeded: true,
+                parsedOutput: { skipped: true, reason: "out_of_character" },
+              },
+            }
+          : await runMechanicsStateUpdater(db, input.runtime, {
+              campaignId: submitState.campaign.id,
+              currentAction,
+              narration: reply.content,
+            });
       const resolvedTurn = await finishResolvedTurn(db, {
         campaignId: submitState.campaign.id,
         turnId: submitState.turn.id,
@@ -14152,13 +14165,15 @@ export async function submitRoomTurnForUser(
         messageId: reply.id,
       });
 
-      await awaitPostTurnUpdater(db, input.runtime, {
-        campaignId: submitState.campaign.id,
-        turnId: submitState.turn.id,
-        currentAction,
-        dmResponse: reply.content,
-        dmEventId: resolvedTurn.dmEventId,
-      });
+      if (reply.jobNeeded !== "out_of_character") {
+        await awaitPostTurnUpdater(db, input.runtime, {
+          campaignId: submitState.campaign.id,
+          turnId: submitState.turn.id,
+          currentAction,
+          dmResponse: reply.content,
+          dmEventId: resolvedTurn.dmEventId,
+        });
+      }
     } catch (error) {
       await markTurnFailed(db, submitState.turn.id, error);
       await logCampaignEvent(db, submitState.campaign.id, "turn_failed", {
@@ -14616,11 +14631,20 @@ export async function submitSoloTurnForUser(
         providerResponseFormat: "text",
       },
     );
-    const mechanicsUpdate = await runMechanicsStateUpdater(db, runtime, {
-      campaignId: soloState.campaign.id,
-      currentAction,
-      narration: reply.content,
-    });
+    const mechanicsUpdate =
+      reply.jobNeeded === "out_of_character"
+        ? {
+            playerFacingUpdate: undefined,
+            debug: {
+              noChangesNeeded: true,
+              parsedOutput: { skipped: true, reason: "out_of_character" },
+            },
+          }
+        : await runMechanicsStateUpdater(db, runtime, {
+            campaignId: soloState.campaign.id,
+            currentAction,
+            narration: reply.content,
+          });
     const resolvedTurn = await finishResolvedTurn(db, {
       campaignId: soloState.campaign.id,
       turnId: soloState.turn.id,
@@ -14645,13 +14669,15 @@ export async function submitSoloTurnForUser(
       messageId: reply.id,
     });
 
-    await awaitPostTurnUpdater(db, runtime, {
-      campaignId: soloState.campaign.id,
-      turnId: soloState.turn.id,
-      currentAction,
-      dmResponse: reply.content,
-      dmEventId: resolvedTurn.dmEventId,
-    });
+    if (reply.jobNeeded !== "out_of_character") {
+      await awaitPostTurnUpdater(db, runtime, {
+        campaignId: soloState.campaign.id,
+        turnId: soloState.turn.id,
+        currentAction,
+        dmResponse: reply.content,
+        dmEventId: resolvedTurn.dmEventId,
+      });
+    }
   } catch (error) {
     await markTurnFailed(db, soloState.turn.id, error);
     await logCampaignEvent(db, soloState.campaign.id, "turn_failed", {
@@ -15052,11 +15078,20 @@ export async function regenerateCampaignResponseForUser(
       undefined,
       { providerResponseFormat: "text" },
     );
-    const mechanicsUpdate = await runMechanicsStateUpdater(db, runtime, {
-      campaignId: regenerationState.campaign.id,
-      currentAction: regenerationState.currentAction,
-      narration: reply.content,
-    });
+    const mechanicsUpdate =
+      reply.jobNeeded === "out_of_character"
+        ? {
+            playerFacingUpdate: undefined,
+            debug: {
+              noChangesNeeded: true,
+              parsedOutput: { skipped: true, reason: "out_of_character" },
+            },
+          }
+        : await runMechanicsStateUpdater(db, runtime, {
+            campaignId: regenerationState.campaign.id,
+            currentAction: regenerationState.currentAction,
+            narration: reply.content,
+          });
     const resolvedTurn = await finishResolvedTurn(db, {
       campaignId: regenerationState.campaign.id,
       turnId: regenerationState.turn.id,
@@ -15082,13 +15117,15 @@ export async function regenerateCampaignResponseForUser(
       messageId: reply.id,
     });
 
-    await awaitPostTurnUpdater(db, runtime, {
-      campaignId: regenerationState.campaign.id,
-      turnId: regenerationState.turn.id,
-      currentAction: regenerationState.currentAction,
-      dmResponse: reply.content,
-      dmEventId: resolvedTurn.dmEventId,
-    });
+    if (reply.jobNeeded !== "out_of_character") {
+      await awaitPostTurnUpdater(db, runtime, {
+        campaignId: regenerationState.campaign.id,
+        turnId: regenerationState.turn.id,
+        currentAction: regenerationState.currentAction,
+        dmResponse: reply.content,
+        dmEventId: resolvedTurn.dmEventId,
+      });
+    }
   } catch (error) {
     await markTurnFailed(db, regenerationState.turn.id, error);
     await logCampaignEvent(db, regenerationState.campaign.id, "turn_failed", {
