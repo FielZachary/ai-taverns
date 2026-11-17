@@ -1520,4 +1520,19 @@ describe("modular AI DM runtime contracts", () => {
       /Router clarification reason/
     );
   });
+
+  it("routes and answers out-of-character table discussion without output directives", () => {
+    const routerPrompt = buildRouterPrompt();
+    const prompt = jobPrompt("out_of_character", "single_player");
+
+    assert.match(routerPrompt, /Choose out_of_character when the player is speaking to the DM or table/i);
+    assert.match(routerPrompt, /out_of_character takes priority over the combat-active default/i);
+    assert.match(routerPrompt, /An in-character question to an NPC.*is not out_of_character/i);
+    assert.match(prompt, /Out-of-Character Job:/);
+    assert.match(prompt, /direct first-person DM table voice/i);
+    assert.match(prompt, /Treat the player's question or correction as a claim to verify/i);
+    assert.match(prompt, /This is not an in-fiction turn/i);
+    assert.match(prompt, /Do not create new canon merely by answering/i);
+    assert.doesNotMatch(prompt, /Output Requirements:/i);
+  });
 });

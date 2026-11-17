@@ -5,6 +5,7 @@ export const dmJobNames = [
   "rest_mechanics",
   "death_saving_throws",
   "clarification",
+  "out_of_character",
 ] as const;
 
 export type DmJobName = (typeof dmJobNames)[number];
@@ -276,6 +277,10 @@ export function buildRouterPrompt() {
     "Only select context keys from the Available context chunk keys JSON provided in the user message.",
     "Do not invent, rename, summarize, slugify, or transform context keys. Copy exact key strings only.",
     "If no available key fits a category, return an empty array for that category.",
+    "Choose out_of_character when the player is speaking to the DM or table rather than taking an action in the fiction. This includes rules, continuity, setting, or current-state questions; reports of a possible rules or continuity mistake; feedback about prior narration or adjudication; and requests for correction or clarification.",
+    "Route to out_of_character based on meaning, not only markers. Labels such as OOC, DM:, question, brackets, or parentheses are useful signals but are not required.",
+    "An in-character question to an NPC, or an attempt to investigate, recall, persuade, search, or learn something through the character, is not out_of_character. Route it to the appropriate gameplay job.",
+    "out_of_character takes priority over the combat-active default when the input clearly does not affect combat turn flow.",
     "If routing state says combat_active is true, default to combat for player input unless the input is clearly noncombat and does not affect combat turn flow.",
     "If pending_roll_requests include a Death Saving Throw, or the active player is at 0 HP and dying, choose death_saving_throws.",
     "Choose rest_mechanics when the player attempts a short rest, long rest, sleep, camp, recover class resources, spend hit dice, or otherwise complete rest-based recovery.",
@@ -288,6 +293,7 @@ export function buildRouterPrompt() {
     "- rest_mechanics: Choose when the player attempts a short rest, long rest, sleep, camp, recover HP, spend hit dice, restore class resources, reset spell slots, or otherwise complete rest-based recovery.",
     "- death_saving_throws: Choose when a player character is at 0 HP and dying, a Death Saving Throw is pending, the player submits a death save result, or the turn must resolve stabilization, death save successes or failures, revival from a natural 20, or death.",
     "- clarification: Choose only when the intended action cannot be adjudicated safely because required details are missing, such as target, spell, weapon, destination, object, direction, or tactical area. Do not choose clarification just because the action is risky or requires a roll.",
+    "- out_of_character: Choose when the player addresses the DM or table outside the fiction: asking a rules, continuity, setting, or current-state question; reporting a possible error; or requesting correction or clarification. Never choose it for an in-character action or question that should be adjudicated in play.",
     `Allowed jobs: ${dmJobNames.join(", ")}.`,
     `Context categories: ${contextCategories.join(", ")}.`,
     "You are not the narrator. Never return public_narration, roll_requests, next_input_needed, input_targets, input_policy, or any main DM response fields.",
@@ -2701,6 +2707,30 @@ NPC Questions and Conversation Endings:
         "- Do not create inventory patches just because the player clarifies intent. Only include a patch if the clarification resolves the action and the narration confirms the item or currency actually changes hands.",
       ].join("\n"),
     ],
+    out_of_character: [
+      `Out-of-Character Job:
+
+Purpose:
+- Answer the player as the DM at the table, outside the fiction.
+- Handle rules questions, continuity questions, established-world questions, and possible corrections to prior narration or adjudication.
+- Be concise, candid, and useful.
+
+Response Rules:
+- Speak in a direct first-person DM table voice.
+- Answer from the authoritative campaign state, character sheets, provided rules, and supplied context.
+- Treat supplied canonical state as authoritative over prior narration or player assumptions.
+- Treat the player's question or correction as a claim to verify, not proof that a fact is true.
+- If the player identifies a contradiction or mistake supported by canonical context, acknowledge it clearly and explain the correction.
+- If the facts are uncertain or missing, say what is established and what is not established. Do not invent an answer to fill the gap.
+- If the player requests a retcon or state change, explain that it requires an explicit correction flow; do not silently apply it.
+
+Strict Non-Advancement:
+- This is not an in-fiction turn.
+- Do not advance time, narrate a scene, move any character, have NPCs react or speak, resolve an action, introduce discoveries, consume resources, request a roll, alter pending rolls, or change combat state.
+- Do not create combat events, inventory updates, mechanics updates, or proposed context updates.
+- Do not create new canon merely by answering.
+- Keep the answer to 1-3 short paragraphs unless the player explicitly asks for a detailed rules explanation.`,
+    ],
   };
 
   const modeSpecificJobGuidance: Record<
@@ -2714,6 +2744,7 @@ NPC Questions and Conversation Endings:
       rest_mechanics: [],
       death_saving_throws: [],
       clarification: [],
+      out_of_character: [],
     },
     multiplayer: {
       scene_director: [],
@@ -2722,6 +2753,7 @@ NPC Questions and Conversation Endings:
       rest_mechanics: [],
       death_saving_throws: [],
       clarification: [],
+      out_of_character: [],
     },
   };
 

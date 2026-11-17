@@ -6,7 +6,7 @@ import type { ApiConfig } from "../config.js";
 import { askDungeonMasterProvider } from "../dm-provider.js";
 import { requireAuthenticatedUser } from "./auth.js";
 
-const stageSchema = z.enum(["opening_brief_planner", "opening_planner", "opening_narrator", "router", "scene_director", "npc_dialogue", "combat", "clarification", "mechanics_executor"]);
+const stageSchema = z.enum(["opening_brief_planner", "opening_planner", "opening_narrator", "router", "scene_director", "npc_dialogue", "combat", "clarification", "out_of_character", "mechanics_executor"]);
 const modelSchema = AiModelIdSchema;
 const messageSchema = z.object({ role: z.enum(["system", "user", "assistant"]), content: z.string().trim().min(1) });
 const requestSchema = z.object({ action: z.enum(["baseline", "override"]), campaignId: z.string().trim().min(1).max(200), stage: stageSchema, model: modelSchema.default("deepseek-v4-flash"), messages: z.array(messageSchema).min(2).max(50) });
@@ -17,7 +17,8 @@ const proseNarratorStages = new Set([
   "scene_director",
   "npc_dialogue",
   "combat",
-  "clarification"
+  "clarification",
+  "out_of_character"
 ]);
 
 function error(statusCode: number, message: string) { return Object.assign(new Error(message), { statusCode }); }
