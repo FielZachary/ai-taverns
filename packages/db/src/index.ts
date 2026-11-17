@@ -13375,6 +13375,8 @@ export async function getRoomForUser(
 
 const campaignResumeGreeting =
   "Welcome back, Traveller. Since its been a while, I would like to summarize the campaign to bring you up to speed and ready to play.";
+const campaignResumeClosing =
+  "Now, let's play some D&D!\n\nHow would you like to proceed?";
 
 /** Generates one player-visible recap after an inactive session. The database,
  * not the browser, decides eligibility so concurrent tabs cannot duplicate it. */
@@ -13496,7 +13498,7 @@ export async function generateCampaignResumeSummaryForUser(
     await logCampaignEvent(client, campaign.id, "campaign_summary", {
       messageId: randomUUID(),
       role: "dm",
-      content: `${campaignResumeGreeting}\n\n${recap}`,
+      content: `${campaignResumeGreeting}\n\n${recap}\n\n${campaignResumeClosing}`,
       coveredThroughMessageId: recentRaw.at(-1)?.id,
       ...(input.model ? { model: input.model } : {}),
       aiDebug: provider.debug,
