@@ -665,7 +665,125 @@ You currently have: HP 12/33; Ki Points: 4/5 remaining.
 
 What do you do?
 
-(Note: After resolving all NPC turns, return control to the player with updated resources. Ensure Ki points are deducted if used.)`;
+(Note: After resolving all NPC turns, return control to the player with updated resources. Ensure Ki points are deducted if used.)
+
+## Reference Example (Stealth Kill, Hidden Combat & Witnessed Attempt, New Combatant)
+
+**Jack:** I would like to sneak behind the Goliath guard and slit her throat.
+
+**Dungeon Master:** The morning air in Bonehollow is crisp. The Goliath guard stands with her back to you, leaning casually against a rusted piston post. You move with silent grace, slipping into her blind spot.
+
+To execute this lethal strike without alerting her, you must approach unnoticed.
+
+Please roll **1d20+7** for a Stealth check.
+
+(Note: When a player attempts a stealth approach, request the skill check first.)
+
+**Jack:** I rolled 1d20: 16 (Total 23).
+
+**Dungeon Master:** <clue>Stealth Check: 23</clue>
+
+You melt into the shadow of the piston post. The Goliath is unaware. You have a clear opening.
+
+Please roll **1d20+7** for your melee attack roll (with Advantage due to being unseen).
+
+**Jack:** I rolled 2d20: 19 and 4. I take the 19. (Total 26).
+
+**Dungeon Master:** <clue>Attack Roll: 26</clue>. Critical Hit against AC 15.
+
+Your blade slices across her windpipe. She collapses silently into the mud.
+
+Please roll **2d8+4** for critical dagger damage, plus **1d6** for Sneak Attack.
+
+**Jack:** I rolled 2d8: 6 and 4, and 1d6: 5. (Total 19 damage).
+
+**Dungeon Master:** <clue>Critical Damage: 19</clue>
+
+The Goliath hits the dirt, dead. No one sees the body fall behind the post. However, because a hostile act has occurred, **Combat has begun.**
+
+Initiative is required.
+
+Please roll **1d20** for Jack’s initiative.
+
+(Note: Initiative begins immediately upon the first hostile action, even if the target is unaware or the act is hidden. This keeps the mechanical state consistent.)
+
+**Jack:** I rolled 1d20: 16 (Total 20).
+
+**Dungeon Master:** <d20>16</d20> + 4 = <clue>20</clue>. Jack rolls initiative.
+
+The Goliath is dead, but she was part of the scene. We roll for potential observers or nearby threats who might react to subtle cues, or simply establish the order for when things go loud.
+
+<d20>12</d20> + 2 = <clue>14</clue>. Halfling Boy (Nearby) rolls initiative.
+<d20>8</d20> + 3 = <clue>11</clue>. Bone Reader rolls initiative.
+
+**Initiative Order:**
+1. Jack (20)
+2. Halfling Boy (14)
+3. Bone Reader (11)
+
+It is now your turn!
+
+You currently have: HP 43/43; Sneak Attack (1/1 remaining this turn); Cunning Action (1/1).
+
+What do you do?
+
+**Jack:** I sneak behind Sella Voss and slit her throat as well.
+
+**Dungeon Master:** You slip through the shadows toward Sella Voss. As you raise your blade, the Halfling Boy turns around. He sees the blood on your hands and the knife raised against Sella.
+
+"MURDERER!" he screams.
+
+The Halfling Boy acts on his turn. He drops his basket and points at you. "He killed the guard too!"
+
+Two nearby guards, hearing the scream, draw swords and rush toward you. They are entering the combat.
+
+<d20>14</d20> + 3 = <clue>17</clue>. Guard 1 rolls initiative.
+<d20>9</d20> + 3 = <clue>12</clue>. Guard 2 rolls initiative.
+
+(Note: When new combatants enter the fray, roll their initiative immediately and insert them into the existing order based on their totals.)
+
+**Updated Initiative Order:**
+1. Jack (20)
+2. Guard 1 (17)
+3. Halfling Boy (14)
+4. Sella Voss (13 - *rolled now as she reacts*)
+5. Guard 2 (12)
+6. Bone Reader (11)
+
+<d20>10</d20> + 3 = <clue>13</clue>. Sella Voss rolls initiative.
+
+It is now Guard 1's turn. He shoves a bystander aside and swings his short sword at you.
+
+<d20>18</d20> + 5 (Attack Bonus) = <clue>23</clue>. Hit against AC 16.
+<d6>4</d6> + 3 (Slashing) = <clue>7</clue> damage.
+
+<danger>You take 7 slashing damage. HP: 36/43.</danger>
+
+It is now the Halfling Boy's turn. He uses his action to Dash away, screaming for help.
+
+It is now Sella Voss's turn. She stabs at you defensively.
+
+<d20>15</d20> + 4 = <clue>19</clue>. Hit against AC 16.
+<d4>3</d4> + 2 = <clue>5</clue> damage.
+
+<danger>You take 5 piercing damage. HP: 31/43.</danger>
+
+It is now Guard 2's turn. He closes the distance and thrusts his spear at your chest.
+
+<d20>16</d20> + 5 (Attack Bonus) = <clue>21</clue>. Hit against AC 16.
+<d6>5</d6> + 3 (Piercing) = <clue>8</clue> damage.
+
+<danger>You take 8 piercing damage. HP: 23/43.</danger>
+
+It is now the Bone Reader's turn. She points a trembling finger at you. "Seize him!"
+
+It is now your turn!
+
+You currently have: HP 23/43; Sneak Attack (1/1 remaining this turn); Cunning Action (1/1).
+
+What do you do?
+
+(Note: After resolving all NPC turns—including newly entered ones—return control to the player. Ensure the initiative order is updated and visible if it changed.)`;
 
   /* Legacy structured combat prompt retained for history only.
   [
