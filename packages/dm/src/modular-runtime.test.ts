@@ -1137,12 +1137,13 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(sceneDirectorPrompt, /Submitted Player Roll Result Opening:/);
     assert.match(
       sceneDirectorPrompt,
-      /Use the submitted final total inside <clue>\.\.\.<\/clue>/i
+      /public_narration must start with this exact sentence pattern/i
     );
     assert.match(
       sceneDirectorPrompt,
-      /Non-Combat Spell Casting:/
+      /With a \[quality adjective\] roll of <clue>\[total\]<\/clue>, here's what happens:/i
     );
+    assert.match(sceneDirectorPrompt, /Non-Combat Spell Casting:/);
     assert.match(
       sceneDirectorPrompt,
       /casting a spell is a concrete magical action that requires an Arcana roll/i
