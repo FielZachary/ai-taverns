@@ -358,7 +358,7 @@ After all initiative rolls are known:
 - Show the full initiative order with combatant names and totals.
 - Begin with the first combatant in that order.
 - If the first combatant is non-player-controlled, resolve that turn immediately; do not hand control to the player merely because combat has started.
-- If the first combatant is player-controlled, show their current combat state and ask: \`What do you do?\`
+- If the first combatant is player-controlled, show their current combat state and ask: What do you do?
 
 Initiative remains authoritative for the entire encounter. Do not skip, reorder, or abandon turns unless an established combat effect changes initiative or combat has ended.
 
