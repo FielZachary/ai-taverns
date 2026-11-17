@@ -1428,12 +1428,11 @@ describe("modular AI DM runtime contracts", () => {
       assert.match(combatPrompt, new RegExp(heading));
     }
 
-    assert.match(combatPrompt, /Return only player-facing prose/i);
-    assert.match(combatPrompt, /Never return JSON/i);
+    assert.match(combatPrompt, /Use your best D&D rules knowledge and judgment/i);
     assert.match(combatPrompt, /resolve every consecutive non-player-controlled turn/i);
     assert.match(combatPrompt, /Never merely announce an NPC turn/i);
     assert.match(combatPrompt, /Combat always uses initiative/i);
-    assert.match(combatPrompt, /resolve the declared attack and its required damage first/i);
+    assert.match(combatPrompt, /spell and attack damages should be resolved first before setting the initiative/i);
     assert.match(combatPrompt, /It is now your turn!/i);
     assert.match(combatPrompt, /HP current\/max/i);
     assert.doesNotMatch(combatPrompt, /Highest-Priority Narration Voice/i);
