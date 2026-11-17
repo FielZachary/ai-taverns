@@ -13060,6 +13060,7 @@ function mechanicsUpdaterInstructions() {
     "You are AI Taverns' mechanics state updater.",
     "Return strict JSON only. You never narrate, judge, reject, clarify, or alter the Dungeon Master's prose.",
     "The Dungeon Master's finalized prose is the source event. Translate only resolved, player-visible mechanical consequences from that prose into state patches.",
+    "When out_of_character_correction is true, the player is reporting a possible mechanics mistake rather than taking an in-fiction action. Apply a correction only when the finalized DM prose explicitly confirms the corrected value and it can be validated against authoritative mechanics_state, character sheets, or the supplied audit trail. You may correct HP, spell slots, resources, conditions, or inventory in that case. If the DM prose is uncertain, rejects the premise, or cannot establish the exact correction, return no_changes_needed: true.",
     "Rest Validation & Rejection: Do not automatically apply rest mechanics just because the player declares it. You must check the finalized_narrator_prose for evidence of interruption, hostility, or environmental unsuitability.",
     "If the prose indicates the rest was successful (e.g., 'You sleep through the night,' 'The camp is quiet'), apply the standard rest resets (HP, Slots, Resources).",
     "If the prose indicates the rest was failed, interrupted, or rejected (e.g., 'You are too anxious to sleep,' 'Monsters attack before you can settle,' 'The magic prevents rest'), return no_changes_needed: true. Do not restore any resources.",
@@ -13155,6 +13156,7 @@ async function runMechanicsStateUpdater(
     campaignId: string;
     currentAction: string;
     narration: string;
+    isOutOfCharacterCorrection?: boolean;
   },
 ): Promise<MechanicsUpdaterResult> {
   const campaignResult = await db.query<CampaignRow>(
@@ -13177,6 +13179,7 @@ async function runMechanicsStateUpdater(
     {
       current_player_action: input.currentAction,
       finalized_narrator_prose: input.narration,
+      out_of_character_correction: input.isOutOfCharacterCorrection === true,
       previous_resolved_turns: previousResolvedTurns,
       mechanics_state: mechanicsState,
       players: players.map((player) => ({
@@ -14127,20 +14130,12 @@ export async function submitRoomTurnForUser(
           providerResponseFormat: "text",
         },
       );
-      const mechanicsUpdate =
-        reply.jobNeeded === "out_of_character"
-          ? {
-              playerFacingUpdate: undefined,
-              debug: {
-                noChangesNeeded: true,
-                parsedOutput: { skipped: true, reason: "out_of_character" },
-              },
-            }
-          : await runMechanicsStateUpdater(db, input.runtime, {
-              campaignId: submitState.campaign.id,
-              currentAction,
-              narration: reply.content,
-            });
+      const mechanicsUpdate = await runMechanicsStateUpdater(db, input.runtime, {
+        campaignId: submitState.campaign.id,
+        currentAction,
+        narration: reply.content,
+        isOutOfCharacterCorrection: reply.jobNeeded === "out_of_character",
+      });
       const resolvedTurn = await finishResolvedTurn(db, {
         campaignId: submitState.campaign.id,
         turnId: submitState.turn.id,
@@ -14631,20 +14626,12 @@ export async function submitSoloTurnForUser(
         providerResponseFormat: "text",
       },
     );
-    const mechanicsUpdate =
-      reply.jobNeeded === "out_of_character"
-        ? {
-            playerFacingUpdate: undefined,
-            debug: {
-              noChangesNeeded: true,
-              parsedOutput: { skipped: true, reason: "out_of_character" },
-            },
-          }
-        : await runMechanicsStateUpdater(db, runtime, {
-            campaignId: soloState.campaign.id,
-            currentAction,
-            narration: reply.content,
-          });
+    const mechanicsUpdate = await runMechanicsStateUpdater(db, runtime, {
+      campaignId: soloState.campaign.id,
+      currentAction,
+      narration: reply.content,
+      isOutOfCharacterCorrection: reply.jobNeeded === "out_of_character",
+    });
     const resolvedTurn = await finishResolvedTurn(db, {
       campaignId: soloState.campaign.id,
       turnId: soloState.turn.id,
@@ -15078,20 +15065,12 @@ export async function regenerateCampaignResponseForUser(
       undefined,
       { providerResponseFormat: "text" },
     );
-    const mechanicsUpdate =
-      reply.jobNeeded === "out_of_character"
-        ? {
-            playerFacingUpdate: undefined,
-            debug: {
-              noChangesNeeded: true,
-              parsedOutput: { skipped: true, reason: "out_of_character" },
-            },
-          }
-        : await runMechanicsStateUpdater(db, runtime, {
-            campaignId: regenerationState.campaign.id,
-            currentAction: regenerationState.currentAction,
-            narration: reply.content,
-          });
+    const mechanicsUpdate = await runMechanicsStateUpdater(db, runtime, {
+      campaignId: regenerationState.campaign.id,
+      currentAction: regenerationState.currentAction,
+      narration: reply.content,
+      isOutOfCharacterCorrection: reply.jobNeeded === "out_of_character",
+    });
     const resolvedTurn = await finishResolvedTurn(db, {
       campaignId: regenerationState.campaign.id,
       turnId: regenerationState.turn.id,

@@ -2727,7 +2727,7 @@ Response Rules:
 Strict Non-Advancement:
 - This is not an in-fiction turn.
 - Do not advance time, narrate a scene, move any character, have NPCs react or speak, resolve an action, introduce discoveries, consume resources, request a roll, alter pending rolls, or change combat state.
-- Do not create combat events, inventory updates, mechanics updates, or proposed context updates.
+- Do not create combat events, inventory updates, or proposed context updates. Do not apply a mechanics correction merely because the player requests one; if canonical state supports a correction, state the exact corrected value plainly so the mechanics executor can validate and apply it.
 - Do not create new canon merely by answering.
 - Keep the answer to 1-3 short paragraphs unless the player explicitly asks for a detailed rules explanation.`,
     ],
