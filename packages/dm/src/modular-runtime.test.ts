@@ -1413,27 +1413,24 @@ describe("modular AI DM runtime contracts", () => {
   });
   */
 
-  it("uses one self-contained state-machine combat prompt without the narration voice", () => {
+  it("uses one self-contained prose-first combat prompt", () => {
     const combatPrompt = jobPrompt("combat");
 
     for (const heading of [
-      "Combat Job — Turn Resolution Protocol",
-      "Mandatory Turn State Machine",
-      "Stop Conditions — Highest Priority",
-      "Procedure 1 — Surprise Opening Attack Awaiting Player Damage",
-      "Procedure 2 — Start Combat and Collect Initiative",
-      "Procedure 3 — Resolve Submitted Player Rolls",
-      "Procedure 7 — Resolve NPC and Allied-NPC Turns",
-      "Player-Action Handoff",
-      "Final Self-Check"
+      "Combat Narrator",
+      "Combat Mindset",
+      "Rolls and Turn Flow",
+      "Player Handoffs and Combat End",
+      "Narration",
+      "Reference Example"
     ]) {
       assert.match(combatPrompt, new RegExp(heading));
     }
 
-    assert.match(combatPrompt, /qualifying surprise-opening attack automatically hits/i);
-    assert.match(combatPrompt, /Request attack and normal damage together/i);
-    assert.match(combatPrompt, /all consecutive NPC turns that need no player input are resolved/i);
-    assert.match(combatPrompt, /Death saving throws use the dedicated death_saving_throws job/i);
+    assert.match(combatPrompt, /Return only player-facing prose/i);
+    assert.match(combatPrompt, /Never return JSON/i);
+    assert.match(combatPrompt, /resolve every consecutive non-player-controlled turn/i);
+    assert.match(combatPrompt, /Never merely announce an NPC turn/i);
     assert.match(combatPrompt, /It is now your turn!/i);
     assert.match(combatPrompt, /HP current\/max/i);
     assert.doesNotMatch(combatPrompt, /Highest-Priority Narration Voice/i);
@@ -1446,7 +1443,7 @@ describe("modular AI DM runtime contracts", () => {
     const multiplayerScenePrompt = jobPrompt("scene_director", "multiplayer");
 
     assert.equal(soloCombatPrompt, multiplayerCombatPrompt);
-    assert.match(soloCombatPrompt, /This is singleplayer combat/i);
+    assert.match(soloCombatPrompt, /You are running a D&D combat encounter/i);
     assert.doesNotMatch(soloCombatPrompt, /Highest-Priority Narration Voice/i);
 
     assert.match(soloScenePrompt, /AI Taverns DM job: scene_director/i);
@@ -1483,12 +1480,12 @@ describe("modular AI DM runtime contracts", () => {
     }
   });
 
-  it("keeps the combat job protocol in the plain-text narrator prompt", () => {
+  it("keeps the prose-first combat prompt in the plain-text narrator prompt", () => {
     const prompt = narratorJobPrompt("combat", "single_player");
 
-    assert.match(prompt, /Combat Job — Turn Resolution Protocol/);
-    assert.match(prompt, /Mandatory Turn State Machine/);
-    assert.match(prompt, /Procedure 7 — Resolve NPC and Allied-NPC Turns/);
+    assert.match(prompt, /Combat Narrator/);
+    assert.match(prompt, /Reference Example/);
+    assert.match(prompt, /Fully resolve every consecutive non-player-controlled turn/i);
     assert.doesNotMatch(prompt, /Highest-Priority Narration Voice/);
     assert.doesNotMatch(prompt, /Return strict JSON only/);
   });
