@@ -1530,7 +1530,12 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(routerPrompt, /An in-character question to an NPC.*is not out_of_character/i);
     assert.match(prompt, /Out-of-Character Job:/);
     assert.match(prompt, /direct first-person DM table voice/i);
+    assert.match(prompt, /casual, fun, and talkative/i);
+    assert.doesNotMatch(prompt, /Be concise, candid, and useful/i);
     assert.match(prompt, /Treat the player's question or correction as a claim to verify/i);
+    assert.match(prompt, /make the exact change unmistakable/i);
+    assert.match(prompt, /HP from 30 to 23/i);
+    assert.match(prompt, /4 remaining again/i);
     assert.match(prompt, /This is not an in-fiction turn/i);
     assert.match(prompt, /Do not create new canon merely by answering/i);
     assert.doesNotMatch(prompt, /Output Requirements:/i);
