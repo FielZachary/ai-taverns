@@ -4656,6 +4656,11 @@ h1 {
 .customize-prompt-content h2,
 .customize-prompt-content p { margin: 0; }
 
+.customize-prompt-introduction p {
+  font-size: 1.0625rem;
+  line-height: 1.6;
+}
+
 .customize-prompt-toggle { color: var(--gold-bright); font-weight: 800; }
 
 .customize-prompt-content textarea {
