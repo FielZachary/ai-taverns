@@ -197,6 +197,10 @@ describe("MessageLog", () => {
     expect(
       screen.getByText("You know this sigil belongs to the old guild.")
     ).toBeInTheDocument();
+    expect(document.querySelector(".message-dm .message-avatar-image")).toHaveAttribute(
+      "src",
+      "/avatars/dungeon-master.png"
+    );
   });
 
   it("renders a normal-play DM timestamp as a muted header", () => {
