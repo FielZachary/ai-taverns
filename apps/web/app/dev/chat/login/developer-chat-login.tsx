@@ -1,0 +1,4 @@
+"use client";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+export function DeveloperChatLogin() { const [password,setPassword]=useState(""); const [error,setError]=useState(""); const router=useRouter(); async function submit(event:React.FormEvent){event.preventDefault(); const response=await fetch("/api/dev-chat-auth",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({password})}); if(!response.ok){setError("Incorrect password.");return;} router.replace("/dev/chat");router.refresh();} return <main className="developer-chat-login"><form onSubmit={submit}><p className="eyebrow">Internal</p><h1>Developer chat</h1><label>Password<input autoFocus type="password" value={password} onChange={(event)=>setPassword(event.target.value)} /></label>{error?<p role="alert">{error}</p>:null}<button type="submit">Open inbox</button></form></main>; }

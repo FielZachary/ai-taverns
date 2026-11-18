@@ -49,6 +49,7 @@ import {
 } from "./CharacterSheetOverlay";
 import { EldermereMapModal } from "./EldermereMapModal";
 import { CustomizePromptOverlay } from "./CustomizePromptOverlay";
+import { DeveloperChatOverlay } from "./DeveloperChatOverlay";
 import { MessageLog } from "./MessageLog";
 import {
   emptyPlayerProfile,
@@ -467,6 +468,7 @@ export function GameShell({
     useState<ActiveDiceReveal | null>(null);
   const [isCharacterSheetOpen, setIsCharacterSheetOpen] = useState(false);
   const [isCustomizePromptOpen, setIsCustomizePromptOpen] = useState(false);
+  const [isDeveloperChatOpen, setIsDeveloperChatOpen] = useState(false);
   const [playerResourcesInitialTab, setPlayerResourcesInitialTab] =
     useState<PlayerResourcesTab>("character_sheet");
   const [isMessageMapOpen, setIsMessageMapOpen] = useState(false);
@@ -2571,6 +2573,7 @@ export function GameShell({
               });
             }}
             onCustomizePrompt={() => setIsCustomizePromptOpen(true)}
+            onDeveloperChat={() => setIsDeveloperChatOpen(true)}
           />
           <div className="story-column">
             {tableAlert ? (
@@ -2788,6 +2791,10 @@ export function GameShell({
           sessionId={activeCampaign.sessionId}
           onClose={() => setIsCustomizePromptOpen(false)}
         />
+      ) : null}
+
+      {isDeveloperChatOpen && activeCampaign ? (
+        <DeveloperChatOverlay campaignId={activeCampaign.id} onClose={() => setIsDeveloperChatOpen(false)} />
       ) : null}
 
       {isMessageMapOpen ? (

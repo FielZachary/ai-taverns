@@ -1,0 +1,3 @@
+import { getFastifyApiBaseUrl } from "@/lib/fastify-api";
+import { isDeveloperChatAuthenticated } from "@/lib/developer-chat-auth";
+export async function GET() { if (!(await isDeveloperChatAuthenticated()) || !process.env.DEV_CHAT_PASSWORD) return Response.json({ error: "Unauthorized" }, { status: 401 }); const upstream=await fetch(`${getFastifyApiBaseUrl()}/api/internal/developer-chat`,{headers:{"x-developer-chat-password":process.env.DEV_CHAT_PASSWORD},cache:"no-store"}); return new Response(upstream.body,{status:upstream.status,headers:{"content-type":upstream.headers.get("content-type")??"application/json"}}); }

@@ -19,6 +19,7 @@ import { registerHealthRoutes } from "./routes/health.js";
 import { registerRealtimeRoutes } from "./routes/realtime.js";
 import { registerRoomRoutes } from "./routes/rooms.js";
 import { registerAccountRoutes } from "./routes/account.js";
+import { registerDeveloperChatRoutes } from "./routes/developer-chat.js";
 
 export type BuildAppOptions = {
   config?: ApiConfig;
@@ -119,5 +120,6 @@ export async function buildApp(
     config,
     dmRuntime: options.dmRuntime
   });
+  await fastify.register(registerDeveloperChatRoutes, { prefix: "/api", config });
   return fastify;
 }

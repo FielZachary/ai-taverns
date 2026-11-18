@@ -28,6 +28,7 @@ type ChatHistorySidebarProps = {
   onSelectChat: (chatId: string) => void;
   onViewCharacterSheet: () => void;
   onCustomizePrompt?: () => void;
+  onDeveloperChat?: () => void;
 };
 
 function fullSizePortraitUrl(portraitUrl: string) {
@@ -50,9 +51,11 @@ export function ChatHistorySidebar({
   onRenameChat,
   onSelectChat,
   onViewCharacterSheet,
-  onCustomizePrompt
+  onCustomizePrompt,
+  onDeveloperChat
 }: ChatHistorySidebarProps) {
   const [isPortraitModalOpen, setIsPortraitModalOpen] = useState(false);
+  const [developerUnreadCount, setDeveloperUnreadCount] = useState(0);
   const modalPortraitUrl = playerPortraitUrl
     ? fullSizePortraitUrl(playerPortraitUrl)
     : "";
@@ -94,6 +97,18 @@ export function ChatHistorySidebar({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [isMobileDrawerOpen, onCloseMobileDrawer]);
+
+  useEffect(() => {
+    let active = true;
+    async function refreshUnread() {
+      const response = await fetch("/api/developer-chat/unread", { cache: "no-store" });
+      if (!response.ok || !active) return;
+      setDeveloperUnreadCount((await response.json() as { unreadCount: number }).unreadCount);
+    }
+    void refreshUnread();
+    const interval = window.setInterval(() => void refreshUnread(), 12_000);
+    return () => { active = false; window.clearInterval(interval); };
+  }, []);
 
   return (
     <aside
@@ -228,8 +243,9 @@ export function ChatHistorySidebar({
           have feedback, or want some free msgs{" "}
           <span className="chat-sidebar-developer-note-emoticon">:D</span>
         </p>
-        <button className="player-resources-button" type="button">
+        <button className="player-resources-button" type="button" onClick={() => { onDeveloperChat?.(); onCloseMobileDrawer?.(); }}>
           <span>Chat w/ Developer</span>
+          {developerUnreadCount ? <b className="developer-chat-badge" aria-label={`${developerUnreadCount} unread developer messages`}>{developerUnreadCount > 99 ? "99+" : developerUnreadCount}</b> : null}
           <i aria-hidden="true" className="player-resources-button-arrow" />
         </button>
         <a
