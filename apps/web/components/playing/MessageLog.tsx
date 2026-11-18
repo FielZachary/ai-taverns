@@ -269,7 +269,7 @@ function MessageAvatar({ message }: { message: GameMessage }) {
       <img
         alt=""
         className="message-avatar-image"
-        src="/avatars/dungeon-master.jpg"
+        src="/avatars/dungeon-master.png"
       />
     );
   }
@@ -803,7 +803,7 @@ export function MessageLog({
             <img
               alt=""
               className="message-avatar-image"
-              src="/avatars/dungeon-master.jpg"
+              src="/avatars/dungeon-master.png"
             />
           </div>
           <div className="message-content">
@@ -813,7 +813,7 @@ export function MessageLog({
                 <img
                   alt=""
                   className="message-avatar-image"
-                  src="/avatars/dungeon-master.jpg"
+                  src="/avatars/dungeon-master.png"
                 />
               </div>
               <p className="message-label">Dungeon Master</p>
