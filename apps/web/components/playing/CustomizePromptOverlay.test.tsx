@@ -78,4 +78,40 @@ describe("CustomizePromptOverlay", () => {
     expect(value).not.toContain("Semantic narration markup:");
     expect(screen.getByText(/This override affects Combat only/)).toBeInTheDocument();
   });
+
+  it("shows unsaved and saved feedback while persisting a prompt override", async () => {
+    const savedPrompt = "Combat prompt with a personal house rule.";
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ overrides: {} }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ overrides: { combat: savedPrompt } }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <CustomizePromptOverlay
+        roomId="room-1"
+        sessionId="session-1"
+        onClose={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "Combat" }));
+    const textarea = await screen.findByRole("textbox", { name: "Combat prompt" });
+    fireEvent.click(screen.getByLabelText("Override Default Prompt"));
+    fireEvent.change(textarea, { target: { value: savedPrompt } });
+
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+    const saveButton = screen.getByRole("button", { name: "Save changes" });
+    expect(saveButton).toBeEnabled();
+
+    fireEvent.click(saveButton);
+
+    await waitFor(() => expect(screen.getByText("Changes saved.")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Saved ✓" })).toBeDisabled();
+  });
 });

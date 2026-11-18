@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   defaultGlobalRulesPrompt,
   jobPrompt,
@@ -36,11 +36,14 @@ export function CustomizePromptOverlay({
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saveFeedback, setSaveFeedback] = useState<"idle" | "saved">("idle");
   const [error, setError] = useState("");
+  const saveFeedbackTimeout = useRef<number | undefined>(undefined);
   const activeJob = active === "introduction" ? null : active;
   const activeTab = useMemo(() => tabs.find((tab) => tab.id === active), [active]);
   const overridden = activeJob ? Boolean(overrides[activeJob]) : false;
   const shownPrompt = activeJob ? (overridden ? draft : defaultPrompt(activeJob)) : "";
+  const hasUnsavedChanges = activeJob && overridden && draft !== (overrides[activeJob] ?? defaultPrompt(activeJob));
 
   useEffect(() => {
     void (async () => {
@@ -60,6 +63,20 @@ export function CustomizePromptOverlay({
     setError("");
   }, [activeJob, overrides]);
 
+  useEffect(() => {
+    setSaveFeedback("idle");
+  }, [activeJob]);
+
+  useEffect(() => () => {
+    if (saveFeedbackTimeout.current) window.clearTimeout(saveFeedbackTimeout.current);
+  }, []);
+
+  function showSavedFeedback() {
+    if (saveFeedbackTimeout.current) window.clearTimeout(saveFeedbackTimeout.current);
+    setSaveFeedback("saved");
+    saveFeedbackTimeout.current = window.setTimeout(() => setSaveFeedback("idle"), 2500);
+  }
+
   async function save() {
     if (!activeJob) return;
     setSaving(true); setError("");
@@ -68,13 +85,14 @@ export function CustomizePromptOverlay({
       if (!response.ok) throw new Error("Could not save this prompt.");
       const data = await response.json() as { overrides: CampaignPromptOverrides };
       setOverrides(data.overrides);
+      showSavedFeedback();
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Could not save this prompt."); }
     finally { setSaving(false); }
   }
 
   async function reset() {
     if (!activeJob) return;
-    setSaving(true); setError("");
+    setSaving(true); setError(""); setSaveFeedback("idle");
     try {
       const response = await fetch("/api/room/prompt-overrides", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ roomId, sessionId, job: activeJob }) });
       if (!response.ok) throw new Error("Could not reset this prompt.");
@@ -90,7 +108,7 @@ export function CustomizePromptOverlay({
         {tabs.map((tab) => <button key={tab.id} type="button" role="tab" aria-selected={active === tab.id} className="player-resource-tab" onClick={() => setActive(tab.id)}>{tab.label}</button>)}
         <button className="player-resources-close" type="button" aria-label="Close customize prompt" onClick={onClose}><X size={18} /></button>
       </div>
-      {active === "introduction" ? <div className="customize-prompt-content customize-prompt-introduction"><p className="eyebrow">Campaign narrator</p><h2 id="customize-prompt-title">A little explanation,</h2><p>Hi! Here&apos;s a little explanation of why I created this tab from <em>yours truly</em>, the developer of <strong className="prompt-explanation-gold">AI Taverns</strong></p><p>I&apos;m sure If you&apos;ve come here I&apos;m sure you&apos;ve found my prompt creation a little lacking and I&apos;m aware! Which is exactly why I created this tab so you can <strong className="prompt-explanation-gold">customize the AI to your liking</strong> <em>(and probably do a better job than me)</em></p><p>Before that though, I&apos;d like to help you by explaining a little further how this whole system works, because it works <em>a little different than what you might expect.</em></p><p>Actually, before any narration text is created, your player input is sent to a tiny model that I call the <strong className="prompt-explanation-token">&quot;Router&quot;</strong>. The router takes your input and the previous turns and decides what <strong className="prompt-explanation-token">&quot;Job&quot;</strong> is best suited to use. I did this so that the main narrator model won&apos;t be given a massive mish-mash of different instructions and get confused and I found that the output was way better this way.</p><p>It also makes customizing much more interesting as you can cater your instructions to <strong>specific scenarios</strong> without worrying about contradictions with others. Moreover, you can even choose and customize what model you want to use per job! There&apos;s really a lot of ways to go about this so <em>feel free to go crazy.</em></p><p>If you want to see what job a certain response uses, just take a look beside the <strong className="prompt-explanation-token">&quot;Dungeon Master&quot;</strong> text in the main game chat</p><p><strong className="prompt-explanation-gold">Most importantly though, have fun!</strong> I found that this process of tweaking and testing your own prompt and rules is whats most fun about this whole <strong>AI D&amp;D</strong> thing so I hope you find it as great as I found it</p></div> : <div className="customize-prompt-content"><p className="eyebrow">Campaign narrator</p><h2 id="customize-prompt-title">{activeTab?.label}</h2><p>{activeTab?.description}</p><label className="customize-prompt-toggle"><input type="checkbox" checked={overridden} disabled={loading || saving} onChange={(event) => { if (event.target.checked) setOverrides((value) => ({ ...value, [activeJob!]: draft || defaultPrompt(activeJob!) })); else void reset(); }} /> Override Default Prompt</label><textarea aria-label={`${activeTab?.label} prompt`} value={shownPrompt} readOnly={!overridden} disabled={loading} className={!overridden ? "customize-prompt-readonly" : ""} onChange={(event) => setDraft(event.target.value)} rows={20} />{error ? <p role="alert" className="npc-cards-status">{error}</p> : null}<div className="customize-prompt-actions">{overridden ? <><button type="button" onClick={() => void save()} disabled={saving || !draft.trim()}>Save changes</button><button type="button" onClick={() => void reset()} disabled={saving}>Reset to default</button></> : <span>Using default prompt</span>}</div></div>}
+      {active === "introduction" ? <div className="customize-prompt-content customize-prompt-introduction"><p className="eyebrow">Campaign narrator</p><h2 id="customize-prompt-title">A little explanation,</h2><p>Hi! Here&apos;s a little explanation of why I created this tab from <em>yours truly</em>, the developer of <strong className="prompt-explanation-gold">AI Taverns</strong></p><p>I&apos;m sure If you&apos;ve come here I&apos;m sure you&apos;ve found my prompt creation a little lacking and I&apos;m aware! Which is exactly why I created this tab so you can <strong className="prompt-explanation-gold">customize the AI to your liking</strong> <em>(and probably do a better job than me)</em></p><p>Before that though, I&apos;d like to help you by explaining a little further how this whole system works, because it works <em>a little different than what you might expect.</em></p><p>Actually, before any narration text is created, your player input is sent to a tiny model that I call the <strong className="prompt-explanation-token">&quot;Router&quot;</strong>. The router takes your input and the previous turns and decides what <strong className="prompt-explanation-token">&quot;Job&quot;</strong> is best suited to use. I did this so that the main narrator model won&apos;t be given a massive mish-mash of different instructions and get confused and I found that the output was way better this way.</p><p>It also makes customizing much more interesting as you can cater your instructions to <strong>specific scenarios</strong> without worrying about contradictions with others. Moreover, you can even choose and customize what model you want to use per job! There&apos;s really a lot of ways to go about this so <em>feel free to go crazy.</em></p><p>If you want to see what job a certain response uses, just take a look beside the <strong className="prompt-explanation-token">&quot;Dungeon Master&quot;</strong> text in the main game chat</p><p><strong className="prompt-explanation-gold">Most importantly though, have fun!</strong> I found that this process of tweaking and testing your own prompt and rules is whats most fun about this whole <strong>AI D&amp;D</strong> thing so I hope you find it as great as I found it</p></div> : <div className="customize-prompt-content"><p className="eyebrow">Campaign narrator</p><h2 id="customize-prompt-title">{activeTab?.label}</h2><p>{activeTab?.description}</p><label className="customize-prompt-toggle"><input type="checkbox" checked={overridden} disabled={loading || saving} onChange={(event) => { if (event.target.checked) setOverrides((value) => ({ ...value, [activeJob!]: draft || defaultPrompt(activeJob!) })); else void reset(); }} /> Override Default Prompt</label><textarea aria-label={`${activeTab?.label} prompt`} value={shownPrompt} readOnly={!overridden} disabled={loading} className={!overridden ? "customize-prompt-readonly" : ""} onChange={(event) => { setDraft(event.target.value); setSaveFeedback("idle"); }} rows={20} />{error ? <p role="alert" className="npc-cards-status">{error}</p> : null}<div className="customize-prompt-actions">{overridden ? <><button className="customize-prompt-save" type="button" onClick={() => void save()} disabled={saving || !hasUnsavedChanges}>{saving ? <><span className="customize-prompt-save-spinner" aria-hidden="true" />Saving…</> : saveFeedback === "saved" ? "Saved ✓" : "Save changes"}</button><button type="button" onClick={() => void reset()} disabled={saving}>Reset to default</button><span className={`customize-prompt-save-status${saveFeedback === "saved" ? " is-saved" : ""}`} role="status" aria-live="polite">{saving ? "Saving changes…" : saveFeedback === "saved" ? "Changes saved." : hasUnsavedChanges ? "Unsaved changes" : "All changes saved"}</span></> : <span>Using default prompt</span>}</div></div>}
     </div>
   </section>;
 }
