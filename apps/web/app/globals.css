@@ -3919,7 +3919,7 @@ h1 {
 
 .chat-sidebar-developer-note {
   width: 100%;
-  margin: 0;
+  margin: 0 0 clamp(-5px, -0.6vh, -3px);
   color: rgba(248, 234, 208, 0.58);
   font-family: var(--body-font);
   font-size: clamp(0.48rem, 0.56vw, 0.56rem);
@@ -3948,7 +3948,7 @@ h1 {
   font-family: var(--body-font);
   font-size: clamp(0.76rem, 1.1vw, 1rem);
   font-weight: 900;
-  letter-spacing: 0.015em;
+  letter-spacing: 0.04em;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.86);
   text-transform: uppercase;
   transform-origin: left center;
