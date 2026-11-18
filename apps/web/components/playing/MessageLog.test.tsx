@@ -42,6 +42,10 @@ beforeEach(() => {
     configurable: true,
     value: 480
   });
+  Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+    configurable: true,
+    value: 480
+  });
 });
 
 afterEach(() => {
@@ -117,6 +121,15 @@ describe("MessageLog", () => {
     );
 
     expect(scrollTo).toHaveBeenLastCalledWith({ top: 480, behavior: "smooth" });
+  });
+
+  it("keeps the newest-message control mounted so it can fade out", () => {
+    const { container } = renderMessageLog({
+      messages: [gameMessage({ id: "latest" })]
+    });
+
+    expect(container.querySelector(".message-scroll-to-latest"))
+      .toHaveClass("message-scroll-to-latest-hidden");
   });
 
   it("renders player, DM, system, and ask-DM answer message variants", () => {

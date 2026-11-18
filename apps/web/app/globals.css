@@ -5583,6 +5583,8 @@ h1 {
   border: 1px solid rgba(247, 211, 126, 0.86);
   border-radius: 4px;
   color: #ffe6a7;
+  opacity: 1;
+  visibility: visible;
   background:
     linear-gradient(135deg, transparent 0 8px, rgba(27, 15, 8, 0.97) 8px),
     linear-gradient(315deg, transparent 0 8px, rgba(27, 15, 8, 0.97) 8px),
@@ -5596,7 +5598,25 @@ h1 {
   font-weight: 900;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  transition: transform 160ms ease, border-color 160ms ease, color 160ms ease;
+  transition:
+    opacity 220ms ease,
+    transform 220ms ease,
+    visibility 0s linear,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.message-scroll-to-latest-hidden {
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(10px) scale(0.94);
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease,
+    visibility 0s linear 180ms,
+    border-color 160ms ease,
+    color 160ms ease;
 }
 
 .message-scroll-to-latest::before,

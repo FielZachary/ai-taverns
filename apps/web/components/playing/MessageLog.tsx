@@ -820,13 +820,17 @@ export function MessageLog({
         </article>
       ) : null}
       <div aria-hidden="true" className="message-end" />
-      {messages.length > 0 && !isAtLatestMessage ? (
+      {messages.length > 0 ? (
         <button
           type="button"
-          className="message-scroll-to-latest"
+          className={`message-scroll-to-latest ${
+            isAtLatestMessage ? "message-scroll-to-latest-hidden" : ""
+          }`}
           onClick={scrollToLatestMessage}
           aria-label="Scroll to newest message"
           title="Scroll to newest message"
+          aria-hidden={isAtLatestMessage}
+          tabIndex={isAtLatestMessage ? -1 : undefined}
         >
           <ChevronsDown aria-hidden="true" size={22} strokeWidth={2.5} />
           <span>Newest</span>
