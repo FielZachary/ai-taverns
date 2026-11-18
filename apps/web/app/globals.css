@@ -4628,6 +4628,22 @@ h1 {
   min-height: min(760px, 82vh);
 }
 
+.customize-prompt-panel .player-resources-tabs {
+  flex-wrap: nowrap;
+}
+
+.customize-prompt-panel .player-resource-tab {
+  min-width: 0;
+  flex: 1 1 0;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+.customize-prompt-panel .player-resources-close {
+  flex: 0 0 38px;
+  margin-left: 0;
+}
+
 .customize-prompt-content {
   display: flex;
   flex: 1;
