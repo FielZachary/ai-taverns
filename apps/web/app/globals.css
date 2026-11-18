@@ -3918,7 +3918,7 @@ h1 {
 }
 
 .chat-sidebar-developer-note {
-  width: 100%;
+  width: calc(100% - clamp(52px, 5.5vw, 60px));
   margin: 0 0 clamp(-5px, -0.6vh, -3px);
   color: rgba(248, 234, 208, 0.58);
   font-family: var(--body-font);
@@ -3928,7 +3928,7 @@ h1 {
   line-height: 1.15;
   text-align: left;
   text-transform: lowercase;
-  white-space: nowrap;
+  white-space: normal;
   transform: scaleX(0.94);
   transform-origin: left;
 }
