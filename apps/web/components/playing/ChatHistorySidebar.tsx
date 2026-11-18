@@ -223,11 +223,11 @@ export function ChatHistorySidebar({
           </div>
         ) : null}
         <button className="player-resources-button" type="button">
-          <span>Join Discord</span>
+          <span>Chat w/ Developer</span>
           <i aria-hidden="true" className="player-resources-button-arrow" />
         </button>
         <button className="player-resources-button" type="button">
-          <span>Chat w/ Developer</span>
+          <span>Join Discord</span>
           <i aria-hidden="true" className="player-resources-button-arrow" />
         </button>
         <button
