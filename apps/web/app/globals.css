@@ -257,7 +257,7 @@ button {
   align-items: center;
   justify-content: center;
   min-width: 190px;
-  min-height: 54px;
+  min-height: clamp(42px, 6vh, 54px);
   padding: 16px 32px;
   border-radius: 2px;
   font-size: 0.78rem;
