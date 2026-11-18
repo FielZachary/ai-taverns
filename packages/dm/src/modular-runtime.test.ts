@@ -4,6 +4,7 @@ import {
   buildMemoryUpdaterPrompt,
   buildLivingWorldPressureEnginePrompt,
   buildRouterPrompt,
+  defaultGlobalRulesPrompt,
   formatRouterCurrentTurnInput,
   jobPrompt,
   narratorJobPrompt,
@@ -1496,8 +1497,13 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(prompt, /Combat Narrator/);
     assert.match(prompt, /Reference Example/);
     assert.match(prompt, /Fully resolve every consecutive non-player-controlled turn/i);
-    assert.doesNotMatch(prompt, /Highest-Priority Narration Voice/);
-    assert.doesNotMatch(prompt, /Return strict JSON only/);
+    assert.match(prompt, /Highest-Priority Narration Voice/);
+    assert.match(prompt, /Inventory state:/);
+    assert.match(prompt, /Semantic narration markup:/);
+    assert.equal(
+      prompt.match(/Semantic narration markup:/g)?.length,
+      1,
+    );
   });
 
   it("inserts router reasons into clarification job guidance only when provided", () => {
@@ -1558,7 +1564,7 @@ describe("modular AI DM runtime contracts", () => {
     assert.doesNotMatch(prompt, /Output Requirements:/i);
   });
 
-  it("uses campaign prompt overrides only for the selected narrator job", () => {
+  it("uses job overrides only for the selected narrator job while global rules apply to every customizable job", () => {
     const overridden = narratorJobPrompt("npc_dialogue", "single_player", {
       overrides: {
         npc_dialogue: "Speak with clipped noir dialogue.",
@@ -1576,5 +1582,47 @@ describe("modular AI DM runtime contracts", () => {
     assert.match(overridden, /Keep every response under two paragraphs\./);
     assert.doesNotMatch(untouched, /Speak with clipped noir dialogue\./);
     assert.match(untouched, /Keep every response under two paragraphs\./);
+  });
+
+  it("replaces the default shared rules with a global rules override", () => {
+    const defaultRules = defaultGlobalRulesPrompt();
+    const customRules = "Only use short, cheerful sentences.";
+
+    assert.match(defaultRules, /Global DM Runtime Rules:/);
+    assert.match(defaultRules, /Highest-Priority Narration Voice:/);
+    assert.match(defaultRules, /Inventory state:/);
+    assert.match(defaultRules, /Semantic narration markup:/);
+
+    for (const job of [
+      "npc_dialogue",
+      "combat",
+      "scene_director",
+      "clarification",
+      "out_of_character",
+    ] as const) {
+      const prompt = narratorJobPrompt(job, "single_player", {
+        overrides: { global_rules: customRules },
+      });
+
+      assert.match(prompt, new RegExp(customRules));
+      assert.doesNotMatch(prompt, /Global DM Runtime Rules:/);
+      assert.doesNotMatch(prompt, /Highest-Priority Narration Voice:/);
+      assert.doesNotMatch(prompt, /Semantic narration markup:/);
+    }
+  });
+
+  it("combines a Combat override with a global rules override and restores defaults when removed", () => {
+    const customCombat = "Run combat with cinematic brevity.";
+    const customRules = "All narration must be second person.";
+    const overridden = narratorJobPrompt("combat", "single_player", {
+      overrides: { combat: customCombat, global_rules: customRules },
+    });
+    const restored = narratorJobPrompt("combat", "single_player");
+
+    assert.match(overridden, new RegExp(customCombat));
+    assert.match(overridden, new RegExp(customRules));
+    assert.doesNotMatch(overridden, /Global DM Runtime Rules:/);
+    assert.match(restored, /Global DM Runtime Rules:/);
+    assert.match(restored, /Highest-Priority Narration Voice:/);
   });
 });

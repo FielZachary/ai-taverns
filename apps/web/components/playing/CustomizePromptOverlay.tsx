@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { narratorJobPrompt, type CampaignPromptOverrides } from "@ai-dnd/dm";
+import {
+  defaultGlobalRulesPrompt,
+  narratorJobPrompt,
+  type CampaignPromptOverrides,
+} from "@ai-dnd/dm";
 import { X } from "lucide-react";
 
 type PromptJob = "npc_dialogue" | "combat" | "scene_director" | "clarification" | "out_of_character" | "global_rules";
@@ -13,12 +17,12 @@ const tabs: Array<{ id: "introduction" | PromptJob; label: string; description?:
   { id: "scene_director", label: "Scene Director", description: "Used for exploration, consequences, clues, travel, scene transitions, and normal play outside combat." },
   { id: "clarification", label: "Clarification", description: "Used only when the narrator needs one missing detail before it can safely resolve an action." },
   { id: "out_of_character", label: "Out of Character", description: "Used for table talk, rules questions, continuity questions, and correction requests outside the fiction." },
-  { id: "global_rules", label: "Global Rules", description: "Added to every customizable narrator job in this campaign." }
+  { id: "global_rules", label: "Global Rules", description: "These are the instructions shared by every narrator job in this campaign. Overriding this prompt replaces the default shared rules for NPC Dialogue, Combat, Scene Director, Clarification, and Out of Character." }
 ];
 
 function defaultPrompt(job: PromptJob) {
   return job === "global_rules"
-    ? "Add campaign-wide narrator guidance here. These rules are appended to every narrator job when overridden."
+    ? defaultGlobalRulesPrompt()
     : narratorJobPrompt(job, "single_player");
 }
 

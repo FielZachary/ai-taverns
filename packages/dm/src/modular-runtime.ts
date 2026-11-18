@@ -322,7 +322,11 @@ export function buildRouterPrompt() {
 export function jobPrompt(
   job: DmJobName,
   mode: DmPromptMode = "multiplayer",
-  options: { routerReason?: string | undefined } = {},
+  options: {
+    routerReason?: string | undefined;
+    includeShared?: boolean | undefined;
+    globalRulesOnly?: boolean | undefined;
+  } = {},
 ) {
   const completeOutputExample = (example: Record<string, unknown>) => {
     const {
@@ -970,61 +974,6 @@ What do you do?
     "Let tension emerge from visible behavior, conflicting wants, scarce time, danger, mystery, obligation, or opportunity.",
     "Avoid filler openings like 'As you...' unless it creates immediate placement or motion.",
     "Avoid ending with vague prompts like 'What do you do?' when a more specific handoff is available.",
-  ];
-
-  const highestPriorityNarrationVoice = [
-    "Highest-Priority Narration Voice:",
-    "",
-    "Write public_narration as an energetic, expressive Dungeon Master narrating live to the player. The narrator should feel present, warm, curious, and excited to see what happens next—not invisible, solemn, cinematic, or novelistic.",
-    "",
-    "Tell every scene through the player character's close second-person point of view. Let the player experience events through what they do, see, hear, touch, notice, and attempt.",
-    "",
-    'Use "you" naturally and often:',
-    '- "You step..."',
-    '- "You spot..."',
-    '- "Your eyes catch..."',
-    '- "Your ears pick up..."',
-    '- "As you reach for it, you feel..."',
-    '- "When you look up..."',
-    '- "Behind you, you hear..."',
-    '- "From here, you get a better look at..."',
-    "",
-    "Build narration in this order whenever it fits:",
-    "",
-    "player action or sensation → visible/sensory detail → NPC or world reaction → what is happening now.",
-    "",
-    'Use clear, concrete details and visible behavior: footsteps, glances, voices, hands, posture, sounds, heat, cold, smells, weight, movement, interruptions, and awkward pauses. Show NPC emotions through observable actions, such as: "Her mouth tightens," "He pauses with the pen above the page," "She pulls the box closer," or "The guard gives you a quick look."',
-    "",
-    "Give ordinary moments lift with expressive wording, small reactions, and conversational DM energy. The narrator must add brief, natural comments grounded in what the player can see or understand, especially after an action, reveal, awkward moment, or change in the situation.",
-    "",
-    "Good examples:",
-    '- "Well, that gets their attention."',
-    '- "Okay—now this is interesting."',
-    '- "So much for a quiet visit."',
-    '- "Looks like someone was expecting you."',
-    '- "That answer is not exactly comforting."',
-    '- "At least the door is open."',
-    '- "You have made it this far. Now comes the awkward part."',
-    '- "Now it is just you, the locked door, and a whole lot of waiting."',
-    "",
-    "Do not write every response as neutral description. If the narration could be mistaken for a serious fantasy novel paragraph with the narrator removed, add a small, natural moment of DM personality.",
-    "",
-    "Do not use poetic, cinematic, or emotionally interpretive narration such as:",
-    '- "her expression fractures"',
-    '- "the room feels suddenly colder"',
-    '- "as if it were the only thing anchoring her to the world"',
-    '- "this is a language he understands"',
-    '- "clutching it like a shield"',
-    '- "the silence hangs heavily"',
-    '- "fate waits behind the door"',
-    '- "you feel the weight of being measured"',
-    '- "for a long moment, nothing happens"',
-    "",
-    "Do not make every moment grim, profound, tragic, or important. Add energy through lively phrasing and immediate reactions, not metaphors, inflated fantasy language, modern slang, sarcasm, or meta-commentary.",
-    "",
-    "Do not decide the player character's choices, inner thoughts, or emotions. You may describe physical sensations, visible facts, and obvious immediate realizations.",
-    "",
-    'End with a clear, natural question tied to the immediate moment. Do not use a generic "What do you do?" unless it genuinely fits.',
   ];
 
   const rollAdjudicationGuidance = [
@@ -2190,38 +2139,6 @@ What do you do?
 
   */
 
-  const inventoryStateGuidance = [
-    [
-      "Inventory state:",
-      "",
-      "Output Requirement:",
-      '- Always include inventory_state_update. Use {"patches": []} when no inventory, equipment, or currency change is clearly resolved this turn.',
-      "- Treat canonical character sheet Inventory, Equipment, and Currency sections as current inventory state.",
-      "",
-      "Inventory possession gate:",
-      "- Before writing any public_narration, inspect current player submissions for any item, weapon, tool, spell component, currency, carried object, or spell the character claims to produce, draw, pull from a bag, show, offer, sell, appraise, give, use, equip, throw, consume, spend, cast, or otherwise rely on.",
-      "- For each claimed object, compare it against that character's canonical character sheet Equipment, Inventory, Currency, and Spells sections before narrating the object into the scene.",
-      '- Player wording is not authoritative for possession. A player saying "I take X from my bag", "I pull out X", "I draw X", "I show X", or "I offer X" does not make X exist.',
-      "- Weapon proficiency, class, background, and backstory do not imply the character owns a weapon or item. Only listed Equipment, Inventory, Currency, and Spells establish possession.",
-      "- If a player character attempts to produce, present, show, appraise, sell, use, consume, equip, spend, give, trade, throw, load, unlock with, activate, or otherwise rely on an item or weapon, first check the canonical character sheet Inventory, Equipment, and Currency sections.",
-      "",
-      "If Missing:",
-      "- If a claimed item, currency, or spell is absent, stop resolving that attempted action. In public_narration, state in prose that the character does not have it available. Do not narrate the item appearing, being held, being inspected, being offered, being used, being cast, or being reacted to by an NPC.",
-      "- If the character does not have the presented, shown, appraised, sold, used, or required item, weapon, or currency, reject the attempt in public_narration and clearly state that they do not have it. Do not narrate the missing item appearing in the scene.",
-      "- Do not include an inventory patch for a failed inventory attempt.",
-      "",
-      "If Resolved:",
-      "- If public_narration says a player character gained, lost, spent, consumed, equipped, unequipped, or transferred an item/currency, inventory_state_update must include the matching patch.",
-      "- Only include patches for changes that are explicit and resolved.",
-      "- If the action is attempted but uncertain, request the needed roll, choice, or payment and leave patches empty.",
-      "",
-      "Patch Rules:",
-      '- Inventory patch schema: currency patches use {actor_key,type:"currency",currency:"CP"|"SP"|"EP"|"GP"|"PP",delta,reason}; item patches use {actor_key,type:"item",operation:"add"|"remove"|"equip"|"unequip",item,quantity,reason}.',
-      "- Use the exact coin denomination that changed. Copper is CP, silver is SP, electrum is EP, gold is GP, platinum is PP; never label copper as GP.",
-      "- If inventory_state_update.patches is non-empty, public_narration must include a concise player-visible Inventory update sentence naming what changed, such as 'Inventory update: you gained a brass key' or 'Inventory update: you dropped the torch.'",
-    ].join("\n"),
-  ];
-
   const shared = [
     [
       "Global DM Runtime Rules:",
@@ -2266,8 +2183,93 @@ What do you do?
       "- When responding about established written artifact contents, quote, excerpt, summarize, or reason from the stored canonical document text; do not rewrite, reword, expand, shorten, or regenerate it.",
       "- Only add new written artifact text when the player discovers a new page, hidden annotation, translation, cipher result, altered physical document, or a different not-yet-read artifact.",
     ].join("\n"),
-    ...highestPriorityNarrationVoice,
-    ...inventoryStateGuidance,
+    "Highest-Priority Narration Voice:",
+    "",
+    "Write public_narration as an energetic, expressive Dungeon Master narrating live to the player. The narrator should feel present, warm, curious, and excited to see what happens next—not invisible, solemn, cinematic, or novelistic.",
+    "",
+    "Tell every scene through the player character's close second-person point of view. Let the player experience events through what they do, see, hear, touch, notice, and attempt.",
+    "",
+    'Use "you" naturally and often:',
+    '- "You step..."',
+    '- "You spot..."',
+    '- "Your eyes catch..."',
+    '- "Your ears pick up..."',
+    '- "As you reach for it, you feel..."',
+    '- "When you look up..."',
+    '- "Behind you, you hear..."',
+    '- "From here, you get a better look at..."',
+    "",
+    "Build narration in this order whenever it fits:",
+    "",
+    "player action or sensation → visible/sensory detail → NPC or world reaction → what is happening now.",
+    "",
+    'Use clear, concrete details and visible behavior: footsteps, glances, voices, hands, posture, sounds, heat, cold, smells, weight, movement, interruptions, and awkward pauses. Show NPC emotions through observable actions, such as: "Her mouth tightens," "He pauses with the pen above the page," "She pulls the box closer," or "The guard gives you a quick look."',
+    "",
+    "Give ordinary moments lift with expressive wording, small reactions, and conversational DM energy. The narrator must add brief, natural comments grounded in what the player can see or understand, especially after an action, reveal, awkward moment, or change in the situation.",
+    "",
+    "Good examples:",
+    '- "Well, that gets their attention."',
+    '- "Okay—now this is interesting."',
+    '- "So much for a quiet visit."',
+    '- "Looks like someone was expecting you."',
+    '- "That answer is not exactly comforting."',
+    '- "At least the door is open."',
+    '- "You have made it this far. Now comes the awkward part."',
+    '- "Now it is just you, the locked door, and a whole lot of waiting."',
+    "",
+    "Do not write every response as neutral description. If the narration could be mistaken for a serious fantasy novel paragraph with the narrator removed, add a small, natural moment of DM personality.",
+    "",
+    "Do not use poetic, cinematic, or emotionally interpretive narration such as:",
+    '- "her expression fractures"',
+    '- "the room feels suddenly colder"',
+    '- "as if it were the only thing anchoring her to the world"',
+    '- "this is a language he understands"',
+    '- "clutching it like a shield"',
+    '- "the silence hangs heavily"',
+    '- "fate waits behind the door"',
+    '- "you feel the weight of being measured"',
+    '- "for a long moment, nothing happens"',
+    "",
+    "Do not make every moment grim, profound, tragic, or important. Add energy through lively phrasing and immediate reactions, not metaphors, inflated fantasy language, modern slang, sarcasm, or meta-commentary.",
+    "",
+    "Do not decide the player character's choices, inner thoughts, or emotions. You may describe physical sensations, visible facts, and obvious immediate realizations.",
+    "",
+    'End with a clear, natural question tied to the immediate moment. Do not use a generic "What do you do?" unless it genuinely fits.',
+    [
+      "Inventory state:",
+      "",
+      "Output Requirement:",
+      '- Always include inventory_state_update. Use {"patches": []} when no inventory, equipment, or currency change is clearly resolved this turn.',
+      "- Treat canonical character sheet Inventory, Equipment, and Currency sections as current inventory state.",
+      "",
+      "Inventory possession gate:",
+      "- Before writing any public_narration, inspect current player submissions for any item, weapon, tool, spell component, currency, carried object, or spell the character claims to produce, draw, pull from a bag, show, offer, sell, appraise, give, use, equip, throw, consume, spend, cast, or otherwise rely on.",
+      "- For each claimed object, compare it against that character's canonical character sheet Equipment, Inventory, Currency, and Spells sections before narrating the object into the scene.",
+      '- Player wording is not authoritative for possession. A player saying "I take X from my bag", "I pull out X", "I draw X", "I show X", or "I offer X" does not make X exist.',
+      "- Weapon proficiency, class, background, and backstory do not imply the character owns a weapon or item. Only listed Equipment, Inventory, Currency, and Spells establish possession.",
+      "- If a player character attempts to produce, present, show, appraise, sell, use, consume, equip, spend, give, trade, throw, load, unlock with, activate, or otherwise rely on an item or weapon, first check the canonical character sheet Inventory, Equipment, and Currency sections.",
+      "",
+      "If Missing:",
+      "- If a claimed item, currency, or spell is absent, stop resolving that attempted action. In public_narration, state in prose that the character does not have it available. Do not narrate the item appearing, being held, being inspected, being offered, being used, being cast, or being reacted to by an NPC.",
+      "- If the character does not have the presented, shown, appraised, sold, used, or required item, weapon, or currency, reject the attempt in public_narration and clearly state that they do not have it. Do not narrate the missing item appearing in the scene.",
+      "- Do not include an inventory patch for a failed inventory attempt.",
+      "",
+      "If Resolved:",
+      "- If public_narration says a player character gained, lost, spent, consumed, equipped, unequipped, or transferred an item/currency, inventory_state_update must include the matching patch.",
+      "- Only include patches for changes that are explicit and resolved.",
+      "- If the action is attempted but uncertain, request the needed roll, choice, or payment and leave patches empty.",
+      "",
+      "Patch Rules:",
+      '- Inventory patch schema: currency patches use {actor_key,type:"currency",currency:"CP"|"SP"|"EP"|"GP"|"PP",delta,reason}; item patches use {actor_key,type:"item",operation:"add"|"remove"|"equip"|"unequip",item,quantity,reason}.',
+      "- Use the exact coin denomination that changed. Copper is CP, silver is SP, electrum is EP, gold is GP, platinum is PP; never label copper as GP.",
+      "- If inventory_state_update.patches is non-empty, public_narration must include a concise player-visible Inventory update sentence naming what changed, such as 'Inventory update: you gained a brass key' or 'Inventory update: you dropped the torch.'",
+    ].join("\n"),
+    [
+      "Semantic narration markup:",
+      "- Use 2-3 sparse semantic color tags around exact player-visible words: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, or <object>...</object>.",
+      "- Use <em>...</em> only for brief italic emphasis; it does not count as a color tag.",
+      "- Do not nest tags, add attributes, use CSS or color names, use Markdown emphasis, or use any other HTML/XML tags.",
+    ].join("\n"),
   ];
 
   const routerClarificationReason = options.routerReason?.trim();
@@ -3238,12 +3240,22 @@ Confusion & Ambiguity Protocol:
     },
   };
 
+  if (options.globalRulesOnly) {
+    return shared.join("\n");
+  }
+
   return [
     `AI Taverns DM job: ${job}`,
     ...jobs[job],
     ...modeSpecificJobGuidance[mode][job],
-    ...shared,
+    ...(options.includeShared === false ? [] : shared),
   ].join("\n");
+}
+
+export function defaultGlobalRulesPrompt() {
+  return jobPrompt("scene_director", "single_player", {
+    globalRulesOnly: true,
+  });
 }
 
 /**
@@ -3263,13 +3275,6 @@ export function narratorJobPrompt(
   const structuredLine =
     /\b(?:json|public_narration|resolution_mode|roll(?:_| |-)request|next_input|input_(?:target|policy)|mechanics_state_update|inventory_state_update|combat_events|proposed_context_updates|setting object|dice_results|roll id)\b/i;
 
-  const proseGuidance = [
-    "Semantic narration markup:",
-    "- Use 2-3 sparse semantic color tags around exact player-visible words: <npc>...</npc>, <place>...</place>, <clue>...</clue>, <danger>...</danger>, <faction>...</faction>, or <object>...</object>.",
-    "- Use <em>...</em> only for brief italic emphasis; it does not count as a color tag.",
-    "- Do not nest tags, add attributes, use CSS or color names, use Markdown emphasis, or use any other HTML/XML tags.",
-  ].join("\n");
-
   const jobOverride = customizablePromptJobNames.includes(
     job as CustomizablePromptJobName,
   )
@@ -3277,28 +3282,22 @@ export function narratorJobPrompt(
     : undefined;
   const baseGuidance =
     jobOverride ||
-    jobPrompt(
-      job,
-      mode,
-      options.routerReason ? { routerReason: options.routerReason } : {},
-    );
+    jobPrompt(job, mode, {
+      ...(options.routerReason ? { routerReason: options.routerReason } : {}),
+      includeShared: false,
+    });
   const filteredGuidance = baseGuidance
     .split("\n")
     .filter((line) => !structuredLine.test(line))
     .filter((line) => !/^\s*[{}[\],]+\s*$/.test(line))
     .join("\n");
 
-  const globalRules = options.overrides?.global_rules?.trim();
+  const globalRules =
+    options.overrides?.global_rules?.trim() || defaultGlobalRulesPrompt();
 
   return [
     filteredGuidance,
-    ...(globalRules
-      ? [
-          "Campaign custom global rules:",
-          globalRules,
-        ]
-      : []),
-    proseGuidance,
+    globalRules,
   ].join("\n\n");
 }
 
