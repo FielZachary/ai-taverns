@@ -48,4 +48,34 @@ describe("CustomizePromptOverlay", () => {
       ),
     ).toBeInTheDocument();
   });
+
+  it("keeps the job editors limited to their job-specific prompt", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ overrides: {} }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <CustomizePromptOverlay
+        roomId="room-1"
+        sessionId="session-1"
+        onClose={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "Combat" }));
+
+    const textarea = await screen.findByRole("textbox", {
+      name: "Combat prompt",
+    });
+    const value = (textarea as HTMLTextAreaElement).value;
+
+    expect(value).toContain("Combat Narrator");
+    expect(value).not.toContain("Global DM Runtime Rules:");
+    expect(value).not.toContain("Highest-Priority Narration Voice:");
+    expect(value).not.toContain("Inventory state:");
+    expect(value).not.toContain("Semantic narration markup:");
+    expect(screen.getByText(/This override affects Combat only/)).toBeInTheDocument();
+  });
 });

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   defaultGlobalRulesPrompt,
-  narratorJobPrompt,
+  jobPrompt,
   type CampaignPromptOverrides,
 } from "@ai-dnd/dm";
 import { X } from "lucide-react";
@@ -12,18 +12,18 @@ type PromptJob = "npc_dialogue" | "combat" | "scene_director" | "clarification" 
 
 const tabs: Array<{ id: "introduction" | PromptJob; label: string; description?: string }> = [
   { id: "introduction", label: "Introduction" },
-  { id: "npc_dialogue", label: "NPC Dialogue", description: "Used when players directly talk, negotiate, persuade, threaten, or otherwise socially engage an NPC." },
-  { id: "combat", label: "Combat", description: "Used for tactical encounters, visible combat consequences, and battlefield narration." },
-  { id: "scene_director", label: "Scene Director", description: "Used for exploration, consequences, clues, travel, scene transitions, and normal play outside combat." },
-  { id: "clarification", label: "Clarification", description: "Used only when the narrator needs one missing detail before it can safely resolve an action." },
-  { id: "out_of_character", label: "Out of Character", description: "Used for table talk, rules questions, continuity questions, and correction requests outside the fiction." },
+  { id: "npc_dialogue", label: "NPC Dialogue", description: "Used when players directly talk, negotiate, persuade, threaten, or otherwise socially engage an NPC. This override affects NPC Dialogue only." },
+  { id: "combat", label: "Combat", description: "Used for tactical encounters, visible combat consequences, and battlefield narration. This override affects Combat only." },
+  { id: "scene_director", label: "Scene Director", description: "Used for exploration, consequences, clues, travel, scene transitions, and normal play outside combat. This override affects Scene Director only." },
+  { id: "clarification", label: "Clarification", description: "Used only when the narrator needs one missing detail before it can safely resolve an action. This override affects Clarification only." },
+  { id: "out_of_character", label: "Out of Character", description: "Used for table talk, rules questions, continuity questions, and correction requests outside the fiction. This override affects Out of Character only." },
   { id: "global_rules", label: "Global Rules", description: "These are the instructions shared by every narrator job in this campaign. Overriding this prompt replaces the default shared rules for NPC Dialogue, Combat, Scene Director, Clarification, and Out of Character." }
 ];
 
 function defaultPrompt(job: PromptJob) {
   return job === "global_rules"
     ? defaultGlobalRulesPrompt()
-    : narratorJobPrompt(job, "single_player");
+    : jobPrompt(job, "single_player", { includeShared: false });
 }
 
 export function CustomizePromptOverlay({
