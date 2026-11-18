@@ -232,10 +232,15 @@ export function ChatHistorySidebar({
           <span>Chat w/ Developer</span>
           <i aria-hidden="true" className="player-resources-button-arrow" />
         </button>
-        <button className="player-resources-button" type="button">
+        <a
+          className="player-resources-button"
+          href="https://discord.gg/qGExerkyU"
+          target="_blank"
+          rel="noreferrer"
+        >
           <span>Join Discord</span>
           <i aria-hidden="true" className="player-resources-button-arrow" />
-        </button>
+        </a>
         <button
           className="player-resources-button"
           type="button"
