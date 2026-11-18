@@ -3921,13 +3921,14 @@ h1 {
   align-items: center;
   justify-content: space-between;
   width: 100%;
+  min-width: 0;
   min-height: 54px;
   border: 0;
   padding: 0 6px;
   color: var(--muted);
   background: transparent;
   font-family: var(--body-font);
-  font-size: 1rem;
+  font-size: clamp(0.76rem, 1.1vw, 1rem);
   font-weight: 900;
   letter-spacing: 0.04em;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.86);
@@ -3951,20 +3952,24 @@ h1 {
 }
 
 .player-resources-button > span {
+  min-width: 0;
+  overflow: hidden;
   color: transparent;
   background: linear-gradient(90deg, var(--muted) 0 50%, var(--gold-bright) 50% 100%);
   background-position: 0 center;
   background-size: 200% 100%;
   -webkit-background-clip: text;
   background-clip: text;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   transition: background-position 680ms cubic-bezier(0.22, 1, 0.36, 1), text-shadow 680ms ease;
 }
 
 .player-resources-button-arrow {
-  width: 26px;
-  height: 32px;
+  width: clamp(20px, 2vw, 26px);
+  height: clamp(25px, 2.4vw, 32px);
   flex: 0 0 auto;
-  margin-left: 20px;
+  margin-left: clamp(10px, 1.4vw, 20px);
   background: linear-gradient(90deg, var(--muted) 0 50%, var(--gold-bright) 50% 100%);
   background-position: 0 center;
   background-size: 200% 100%;
@@ -7781,6 +7786,14 @@ h6 {
 
   .player-resources-button {
     min-height: 42px;
+    padding: 0 2px;
+    font-size: 0.76rem;
+  }
+
+  .player-resources-button-arrow {
+    width: 20px;
+    height: 25px;
+    margin-left: 8px;
   }
 
   .chat-list {
