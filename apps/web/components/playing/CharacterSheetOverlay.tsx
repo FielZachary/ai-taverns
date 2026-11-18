@@ -961,7 +961,8 @@ export function CharacterSheetOverlay({
                 onTabChange?.(tab.id);
               }}
             >
-              {tab.label}
+              <span>{tab.label}</span>
+              <i aria-hidden="true" className="player-resource-tab-arrow" />
             </button>
           ))}
           <button
