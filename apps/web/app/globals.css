@@ -3900,7 +3900,7 @@ h1 {
 
 .chat-sidebar-actions {
   flex: 1 1 68%;
-  gap: clamp(8px, 1.2vh, 10px);
+  gap: clamp(3px, 0.7vh, 6px);
   justify-content: flex-end;
   padding-top: clamp(8px, 1.5vh, 14px);
 }
@@ -3918,19 +3918,19 @@ h1 {
 }
 
 .chat-sidebar-developer-note {
-  width: 125%;
+  width: 100%;
   margin: 0;
   color: rgba(248, 234, 208, 0.58);
   font-family: var(--body-font);
-  font-size: clamp(0.48rem, 0.62vw, 0.6rem);
+  font-size: clamp(0.48rem, 0.56vw, 0.56rem);
   font-style: italic;
   letter-spacing: -0.035em;
   line-height: 1.15;
-  text-align: center;
+  text-align: left;
   text-transform: lowercase;
   white-space: nowrap;
-  transform: scaleX(0.8);
-  transform-origin: center;
+  transform: scaleX(0.88);
+  transform-origin: left;
 }
 
 .player-resources-button {
@@ -3940,7 +3940,7 @@ h1 {
   justify-content: space-between;
   width: 100%;
   min-width: 0;
-  min-height: clamp(42px, 5vh, 54px);
+  min-height: clamp(36px, 4.5vh, 44px);
   border: 0;
   padding: 0 6px;
   color: var(--muted);
