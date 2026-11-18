@@ -37,6 +37,7 @@ import {
   type DmContractParseOptions,
   type DmNextInputNeeded,
   type DmJobName,
+  type CampaignPromptOverrides,
   type InputPolicy,
   type RouterContextKeys,
   type ValidatedRouterOutput,
@@ -57,6 +58,7 @@ import type {
   SpellSlotState,
   RoomSocketEvent,
   RoomSnapshot,
+  CampaignPromptOverrides as ContractCampaignPromptOverrides,
   UsageResourceType,
   UserUsageSummary,
 } from "@ai-dnd/contracts";
@@ -5739,6 +5741,93 @@ function assertCampaignOwnerForUser(campaign: CampaignRow, userId: string) {
   }
 }
 
+const promptOverrideKeys = [
+  "npc_dialogue",
+  "combat",
+  "scene_director",
+  "clarification",
+  "out_of_character",
+  "global_rules",
+] as const;
+
+type PromptOverrideKey = (typeof promptOverrideKeys)[number];
+
+function campaignPromptOverrides(metadata: unknown): CampaignPromptOverrides {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return {};
+  }
+
+  const raw = (metadata as Record<string, unknown>).promptOverrides;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    promptOverrideKeys.flatMap((key) => {
+      const value = (raw as Record<string, unknown>)[key];
+      return typeof value === "string" && value.trim()
+        ? [[key, value.trim()]]
+        : [];
+    }),
+  ) as CampaignPromptOverrides;
+}
+
+export async function getCampaignPromptOverridesForUser(
+  db: pg.Pool,
+  input: { roomId: string; sessionId: string; userId: string },
+): Promise<{ overrides: ContractCampaignPromptOverrides; updatedAt: string | null }> {
+  const campaign = await resolveRoomCampaign(db, input.roomId, input.sessionId);
+  if (!campaign) {
+    throw createStatusError(404, "Campaign not found.");
+  }
+  await assertCampaignAccessForUser(db, campaign, input.userId);
+  return {
+    overrides: campaignPromptOverrides(campaign.metadata),
+    updatedAt: campaign.updated_at ? toIso(campaign.updated_at) : null,
+  };
+}
+
+export async function saveCampaignPromptOverrideForUser(
+  db: pg.Pool,
+  input: {
+    roomId: string;
+    sessionId: string;
+    userId: string;
+    job: PromptOverrideKey;
+    prompt?: string;
+  },
+): Promise<{ overrides: ContractCampaignPromptOverrides; updatedAt: string | null }> {
+  const campaign = await resolveRoomCampaign(db, input.roomId, input.sessionId);
+  if (!campaign) {
+    throw createStatusError(404, "Campaign not found.");
+  }
+  assertCampaignOwnerForUser(campaign, input.userId);
+
+  const metadata =
+    campaign.metadata && typeof campaign.metadata === "object" && !Array.isArray(campaign.metadata)
+      ? { ...(campaign.metadata as Record<string, unknown>) }
+      : {};
+  const overrides = { ...campaignPromptOverrides(campaign.metadata) } as Record<string, string>;
+  if (input.prompt?.trim()) {
+    overrides[input.job] = input.prompt.trim();
+  } else {
+    delete overrides[input.job];
+  }
+  metadata.promptOverrides = overrides;
+  const updated = await db.query<CampaignRow>(
+    "update campaigns set metadata = $2::jsonb, updated_at = now() where id = $1 returning *",
+    [campaign.id, JSON.stringify(metadata)],
+  );
+  const saved = updated.rows[0];
+  if (!saved) {
+    throw createStatusError(404, "Campaign not found.");
+  }
+  return {
+    overrides: campaignPromptOverrides(saved.metadata),
+    updatedAt: toIso(saved.updated_at),
+  };
+}
+
 async function getActiveRoomPlayerForUser(
   db: Queryable,
   campaignId: string,
@@ -7465,6 +7554,7 @@ async function buildModularDmPromptContext(
     campaign.id,
   );
   const dmGuidance = await getCurrentCampaignDmGuidance(db, campaign.id);
+  const promptOverrides = campaignPromptOverrides(campaign.metadata);
   const routerState = routerStateForCampaign(campaign, players);
   const routerInstructions = buildRouterPrompt();
   const routerMessage = buildRouterMessage({
@@ -7560,14 +7650,16 @@ async function buildModularDmPromptContext(
             "",
           ]
         : []),
-      (input.narratorOnly ? narratorJobPrompt : jobPrompt)(
-        router.jobNeeded,
-        campaign.mode,
-        {
-          routerReason:
-            router.jobNeeded === "clarification" ? router.reason : undefined,
-        },
-      ),
+      input.narratorOnly
+        ? narratorJobPrompt(router.jobNeeded, campaign.mode, {
+            routerReason:
+              router.jobNeeded === "clarification" ? router.reason : undefined,
+            overrides: promptOverrides,
+          })
+        : jobPrompt(router.jobNeeded, campaign.mode, {
+            routerReason:
+              router.jobNeeded === "clarification" ? router.reason : undefined,
+          }),
     ].join("\n"),
     jobNeeded: router.jobNeeded,
     message: [

@@ -6,6 +6,10 @@ import {
   RoomCombatCheatSheetGenerateResponseSchema,
   RoomPlayerUpdateRequestSchema,
   RoomPlayerUpdateResponseSchema,
+  RoomPromptOverrideDeleteRequestSchema,
+  RoomPromptOverrideSaveRequestSchema,
+  RoomPromptOverridesRequestSchema,
+  RoomPromptOverridesResponseSchema,
   RoomReadQuerySchema,
   RoomReadResponseSchema,
   RoomReviveRequestSchema,
@@ -22,6 +26,8 @@ import {
   registerRoomPlayerForUser,
   reviveSinglePlayerCharacterForUser,
   saveCombatCheatSheetForUser,
+  getCampaignPromptOverridesForUser,
+  saveCampaignPromptOverrideForUser,
   submitRoomTurnForUser
 } from "@ai-dnd/db";
 import type { ApiConfig } from "../config.js";
@@ -199,6 +205,57 @@ export async function registerRoomRoutes(
     });
 
     return snapshot;
+  });
+
+  fastify.get("/room/prompt-overrides", async (request) => {
+    const query = RoomPromptOverridesRequestSchema.parse(request.query);
+    const identity = roomIdentity(query.roomId, query.sessionId);
+    const user = await requireAuthenticatedUser(
+      fastify,
+      config,
+      request.cookies[config.authCookieName]
+    );
+    return RoomPromptOverridesResponseSchema.parse(
+      await getCampaignPromptOverridesForUser(fastify.pg, {
+        ...identity,
+        userId: user.id
+      })
+    );
+  });
+
+  fastify.put("/room/prompt-overrides", async (request) => {
+    const body = RoomPromptOverrideSaveRequestSchema.parse(request.body);
+    const identity = roomIdentity(body.roomId, body.sessionId);
+    const user = await requireAuthenticatedUser(
+      fastify,
+      config,
+      request.cookies[config.authCookieName]
+    );
+    return RoomPromptOverridesResponseSchema.parse(
+      await saveCampaignPromptOverrideForUser(fastify.pg, {
+        ...identity,
+        userId: user.id,
+        job: body.job,
+        prompt: body.prompt
+      })
+    );
+  });
+
+  fastify.delete("/room/prompt-overrides", async (request) => {
+    const body = RoomPromptOverrideDeleteRequestSchema.parse(request.body);
+    const identity = roomIdentity(body.roomId, body.sessionId);
+    const user = await requireAuthenticatedUser(
+      fastify,
+      config,
+      request.cookies[config.authCookieName]
+    );
+    return RoomPromptOverridesResponseSchema.parse(
+      await saveCampaignPromptOverrideForUser(fastify.pg, {
+        ...identity,
+        userId: user.id,
+        job: body.job
+      })
+    );
   });
 
   fastify.post("/room/begin", async (request) => {

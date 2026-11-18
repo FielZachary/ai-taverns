@@ -1557,4 +1557,24 @@ describe("modular AI DM runtime contracts", () => {
     assert.doesNotMatch(jobPrompt("combat", "single_player"), /Confusion & Ambiguity Protocol:/);
     assert.doesNotMatch(prompt, /Output Requirements:/i);
   });
+
+  it("uses campaign prompt overrides only for the selected narrator job", () => {
+    const overridden = narratorJobPrompt("npc_dialogue", "single_player", {
+      overrides: {
+        npc_dialogue: "Speak with clipped noir dialogue.",
+        global_rules: "Keep every response under two paragraphs."
+      }
+    });
+    const untouched = narratorJobPrompt("scene_director", "single_player", {
+      overrides: {
+        npc_dialogue: "Speak with clipped noir dialogue.",
+        global_rules: "Keep every response under two paragraphs."
+      }
+    });
+
+    assert.match(overridden, /Speak with clipped noir dialogue\./);
+    assert.match(overridden, /Keep every response under two paragraphs\./);
+    assert.doesNotMatch(untouched, /Speak with clipped noir dialogue\./);
+    assert.match(untouched, /Keep every response under two paragraphs\./);
+  });
 });

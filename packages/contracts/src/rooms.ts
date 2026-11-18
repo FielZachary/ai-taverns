@@ -174,6 +174,45 @@ export const RoomCombatCheatSheetGenerateRequestSchema = z.object({
   playerId: z.string().optional()
 });
 
+export const CustomizablePromptJobSchema = z.enum([
+  "npc_dialogue",
+  "combat",
+  "scene_director",
+  "clarification",
+  "out_of_character",
+  "global_rules"
+]);
+
+export const CampaignPromptOverridesSchema = z
+  .object({
+    npc_dialogue: z.string().max(30000).optional(),
+    combat: z.string().max(30000).optional(),
+    scene_director: z.string().max(30000).optional(),
+    clarification: z.string().max(30000).optional(),
+    out_of_character: z.string().max(30000).optional(),
+    global_rules: z.string().max(30000).optional()
+  })
+  .strict();
+
+export const RoomPromptOverridesRequestSchema = z.object({
+  roomId: z.string().optional(),
+  sessionId: z.string().optional()
+});
+
+export const RoomPromptOverrideSaveRequestSchema = RoomPromptOverridesRequestSchema.extend({
+  job: CustomizablePromptJobSchema,
+  prompt: z.string().trim().min(1).max(30000)
+});
+
+export const RoomPromptOverrideDeleteRequestSchema = RoomPromptOverridesRequestSchema.extend({
+  job: CustomizablePromptJobSchema
+});
+
+export const RoomPromptOverridesResponseSchema = z.object({
+  overrides: CampaignPromptOverridesSchema,
+  updatedAt: z.string().datetime().nullable()
+});
+
 export const RoomBeginRequestSchema = z.object({
   roomId: z.string().optional(),
   sessionId: z.string().optional()
@@ -270,6 +309,8 @@ export type RoomPlayerUpdateRequest = z.infer<
 export type RoomCombatCheatSheetGenerateRequest = z.infer<
   typeof RoomCombatCheatSheetGenerateRequestSchema
 >;
+export type CampaignPromptOverrides = z.infer<typeof CampaignPromptOverridesSchema>;
+export type CustomizablePromptJob = z.infer<typeof CustomizablePromptJobSchema>;
 export type RoomBeginRequest = z.infer<typeof RoomBeginRequestSchema>;
 export type RoomSubmitRequest = z.infer<typeof RoomSubmitRequestSchema>;
 export type RoomRealtimeEvent = z.infer<typeof RoomRealtimeEventSchema>;

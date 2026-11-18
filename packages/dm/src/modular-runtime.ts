@@ -10,6 +10,22 @@ export const dmJobNames = [
 
 export type DmJobName = (typeof dmJobNames)[number];
 
+/** Jobs a campaign owner may customize from the play UI. */
+export const customizablePromptJobNames = [
+  "npc_dialogue",
+  "combat",
+  "scene_director",
+  "clarification",
+  "out_of_character",
+] as const;
+
+export type CustomizablePromptJobName =
+  (typeof customizablePromptJobNames)[number];
+
+export type CampaignPromptOverrides = Partial<
+  Record<CustomizablePromptJobName | "global_rules", string>
+>;
+
 export type DmPromptMode = "single_player" | "multiplayer";
 
 export const contextCategories = [
@@ -3239,7 +3255,10 @@ Confusion & Ambiguity Protocol:
 export function narratorJobPrompt(
   job: DmJobName,
   mode: DmPromptMode,
-  options: { routerReason?: string | undefined } = {},
+  options: {
+    routerReason?: string | undefined;
+    overrides?: CampaignPromptOverrides | undefined;
+  } = {},
 ) {
   const structuredLine =
     /\b(?:json|public_narration|resolution_mode|roll(?:_| |-)request|next_input|input_(?:target|policy)|mechanics_state_update|inventory_state_update|combat_events|proposed_context_updates|setting object|dice_results|roll id)\b/i;
@@ -3251,17 +3270,36 @@ export function narratorJobPrompt(
     "- Do not nest tags, add attributes, use CSS or color names, use Markdown emphasis, or use any other HTML/XML tags.",
   ].join("\n");
 
-  const filteredGuidance = jobPrompt(
-    job,
-    mode,
-    options.routerReason ? { routerReason: options.routerReason } : {},
+  const jobOverride = customizablePromptJobNames.includes(
+    job as CustomizablePromptJobName,
   )
+    ? options.overrides?.[job as CustomizablePromptJobName]?.trim()
+    : undefined;
+  const baseGuidance =
+    jobOverride ||
+    jobPrompt(
+      job,
+      mode,
+      options.routerReason ? { routerReason: options.routerReason } : {},
+    );
+  const filteredGuidance = baseGuidance
     .split("\n")
     .filter((line) => !structuredLine.test(line))
     .filter((line) => !/^\s*[{}[\],]+\s*$/.test(line))
     .join("\n");
 
-  return [filteredGuidance, proseGuidance].join("\n\n");
+  const globalRules = options.overrides?.global_rules?.trim();
+
+  return [
+    filteredGuidance,
+    ...(globalRules
+      ? [
+          "Campaign custom global rules:",
+          globalRules,
+        ]
+      : []),
+    proseGuidance,
+  ].join("\n\n");
 }
 
 export function buildMemoryUpdaterPrompt() {

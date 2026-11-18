@@ -48,6 +48,7 @@ import {
   type PlayerResourcesTab
 } from "./CharacterSheetOverlay";
 import { EldermereMapModal } from "./EldermereMapModal";
+import { CustomizePromptOverlay } from "./CustomizePromptOverlay";
 import { MessageLog } from "./MessageLog";
 import {
   emptyPlayerProfile,
@@ -465,6 +466,7 @@ export function GameShell({
   const [activeDiceReveal, setActiveDiceReveal] =
     useState<ActiveDiceReveal | null>(null);
   const [isCharacterSheetOpen, setIsCharacterSheetOpen] = useState(false);
+  const [isCustomizePromptOpen, setIsCustomizePromptOpen] = useState(false);
   const [playerResourcesInitialTab, setPlayerResourcesInitialTab] =
     useState<PlayerResourcesTab>("character_sheet");
   const [isMessageMapOpen, setIsMessageMapOpen] = useState(false);
@@ -2568,6 +2570,7 @@ export function GameShell({
                 milestones: ["used_player_resources"]
               });
             }}
+            onCustomizePrompt={() => setIsCustomizePromptOpen(true)}
           />
           <div className="story-column">
             {tableAlert ? (
@@ -2776,6 +2779,14 @@ export function GameShell({
           }
           onGenerateCombatCheatSheet={handleGenerateCombatCheatSheet}
           onNpcCardUpdate={handleUpdateNpcCard}
+        />
+      ) : null}
+
+      {isCustomizePromptOpen && activeCampaign ? (
+        <CustomizePromptOverlay
+          roomId={activeCampaign.id}
+          sessionId={activeCampaign.sessionId}
+          onClose={() => setIsCustomizePromptOpen(false)}
         />
       ) : null}
 

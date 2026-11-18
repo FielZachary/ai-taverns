@@ -4622,6 +4622,43 @@ h1 {
   font-weight: 900;
 }
 
+.customize-prompt-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: min(760px, 82vh);
+}
+
+.customize-prompt-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  overflow: auto;
+  padding: 24px;
+}
+
+.customize-prompt-content h2,
+.customize-prompt-content p { margin: 0; }
+
+.customize-prompt-toggle { color: var(--gold-bright); font-weight: 800; }
+
+.customize-prompt-content textarea {
+  flex: 1;
+  min-height: 360px;
+  resize: vertical;
+  border: 1px solid rgba(244, 207, 122, .3);
+  border-radius: 8px;
+  background: rgba(17, 13, 10, .64);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  line-height: 1.5;
+  padding: 14px;
+}
+
+.customize-prompt-readonly { cursor: not-allowed; opacity: .48; }
+
+.customize-prompt-actions { display: flex; align-items: center; gap: 10px; min-height: 38px; }
+
 .npc-cards-panel {
   display: flex;
   flex: 1;

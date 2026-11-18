@@ -27,6 +27,7 @@ type ChatHistorySidebarProps = {
   onRenameChat: (chatId: string) => void;
   onSelectChat: (chatId: string) => void;
   onViewCharacterSheet: () => void;
+  onCustomizePrompt?: () => void;
 };
 
 function fullSizePortraitUrl(portraitUrl: string) {
@@ -48,7 +49,8 @@ export function ChatHistorySidebar({
   onDeleteChat,
   onRenameChat,
   onSelectChat,
-  onViewCharacterSheet
+  onViewCharacterSheet,
+  onCustomizePrompt
 }: ChatHistorySidebarProps) {
   const [isPortraitModalOpen, setIsPortraitModalOpen] = useState(false);
   const modalPortraitUrl = playerPortraitUrl
@@ -220,6 +222,16 @@ export function ChatHistorySidebar({
             </p>
           </div>
         ) : null}
+        <button
+          className="player-resources-button"
+          type="button"
+          onClick={() => {
+            onCustomizePrompt?.();
+            onCloseMobileDrawer?.();
+          }}
+        >
+          Customize Prompt
+        </button>
         <button
           className="player-resources-button"
           type="button"
