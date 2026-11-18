@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pencil, Plus, Search, Trash2, X } from "lucide-react";
 
 export type ChatSummary = {
@@ -56,6 +56,7 @@ export function ChatHistorySidebar({
 }: ChatHistorySidebarProps) {
   const [isPortraitModalOpen, setIsPortraitModalOpen] = useState(false);
   const [developerUnreadCount, setDeveloperUnreadCount] = useState(0);
+  const previousDeveloperUnreadCount = useRef<number | null>(null);
   const modalPortraitUrl = playerPortraitUrl
     ? fullSizePortraitUrl(playerPortraitUrl)
     : "";
@@ -103,7 +104,12 @@ export function ChatHistorySidebar({
     async function refreshUnread() {
       const response = await fetch("/api/developer-chat/unread", { cache: "no-store" });
       if (!response.ok || !active) return;
-      setDeveloperUnreadCount((await response.json() as { unreadCount: number }).unreadCount);
+      const nextCount = (await response.json() as { unreadCount: number }).unreadCount;
+      if (previousDeveloperUnreadCount.current !== null && nextCount > previousDeveloperUnreadCount.current) {
+        new Audio("/message-notif.mp3").play().catch(() => undefined);
+      }
+      previousDeveloperUnreadCount.current = nextCount;
+      setDeveloperUnreadCount(nextCount);
     }
     void refreshUnread();
     const interval = window.setInterval(() => void refreshUnread(), 12_000);
