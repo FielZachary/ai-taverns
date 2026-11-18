@@ -4,6 +4,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   Bug,
+  ChevronsDown,
   Copy,
   RefreshCcw,
   Sparkles,
@@ -571,15 +572,9 @@ export function MessageLog({
 }: MessageLogProps) {
   const logRef = useRef<HTMLDivElement>(null);
   const hasPositionedInitialViewRef = useRef(false);
+  const [isAtLatestMessage, setIsAtLatestMessage] = useState(true);
   const [openDebugMessageId, setOpenDebugMessageId] = useState<string | null>(
     null
-  );
-  const scrollKey = useMemo(
-    () =>
-      messages
-        .map((message) => `${message.id}:${message.content.length}`)
-        .join("|"),
-    [messages]
   );
   const openDebug = useMemo(
     () =>
@@ -588,19 +583,12 @@ export function MessageLog({
         : null,
     [messages, openDebugMessageId]
   );
-  const hasEldermereMap = messages.some(
-    (message) => message.resourceCard?.type === "eldermere_map"
-  );
-
   useLayoutEffect(() => {
     const frameId = window.requestAnimationFrame(() => {
       const log = logRef.current;
 
-      if (log && messages.length > 0) {
-        const shouldShowInitialMap =
-          !hasPositionedInitialViewRef.current && hasEldermereMap;
-
-        log.scrollTo({ top: shouldShowInitialMap ? 0 : log.scrollHeight });
+      if (log && messages.length > 0 && !hasPositionedInitialViewRef.current) {
+        log.scrollTo({ top: 0 });
         hasPositionedInitialViewRef.current = true;
       }
     });
@@ -608,7 +596,34 @@ export function MessageLog({
     return () => {
       window.cancelAnimationFrame(frameId);
     };
-  }, [hasEldermereMap, isSending, messages.length, scrollKey]);
+  }, [messages.length]);
+
+  useLayoutEffect(() => {
+    const log = logRef.current;
+
+    if (!log) {
+      return;
+    }
+
+    const updateLatestMessageState = () => {
+      const remainingScroll = log.scrollHeight - log.clientHeight - log.scrollTop;
+      setIsAtLatestMessage(remainingScroll <= 32);
+    };
+
+    updateLatestMessageState();
+    log.addEventListener("scroll", updateLatestMessageState, { passive: true });
+
+    return () => {
+      log.removeEventListener("scroll", updateLatestMessageState);
+    };
+  }, [messages.length]);
+
+  const scrollToLatestMessage = () => {
+    logRef.current?.scrollTo({
+      top: logRef.current.scrollHeight,
+      behavior: "smooth"
+    });
+  };
 
   return (
     <div
@@ -805,6 +820,18 @@ export function MessageLog({
         </article>
       ) : null}
       <div aria-hidden="true" className="message-end" />
+      {messages.length > 0 && !isAtLatestMessage ? (
+        <button
+          type="button"
+          className="message-scroll-to-latest"
+          onClick={scrollToLatestMessage}
+          aria-label="Scroll to newest message"
+          title="Scroll to newest message"
+        >
+          <ChevronsDown aria-hidden="true" size={22} strokeWidth={2.5} />
+          <span>Newest</span>
+        </button>
+      ) : null}
       {openDebug ? (
         <MessageDebugModal
           debug={openDebug}

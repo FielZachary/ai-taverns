@@ -73,7 +73,7 @@ describe("MessageLog", () => {
     );
   });
 
-  it("shows the initial Eldermere map instead of scrolling past it", () => {
+  it("starts the chat at the top instead of jumping to the latest message", () => {
     const mapMessage = gameMessage({
       id: "eldermere-map",
       role: "dm",
@@ -96,7 +96,27 @@ describe("MessageLog", () => {
       />
     );
 
-    expect(scrollTo).toHaveBeenLastCalledWith({ top: 480 });
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 0 });
+  });
+
+  it("smoothly scrolls to the newest message from the gothic arrow control", () => {
+    const { container } = renderMessageLog({
+      messages: [gameMessage({ id: "first" }), gameMessage({ id: "latest" })]
+    });
+    const log = container.querySelector(".message-log");
+
+    Object.defineProperties(log as HTMLElement, {
+      clientHeight: { configurable: true, value: 120 },
+      scrollHeight: { configurable: true, value: 480 },
+      scrollTop: { configurable: true, value: 0, writable: true }
+    });
+    fireEvent.scroll(log as HTMLElement);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Scroll to newest message" })
+    );
+
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 480, behavior: "smooth" });
   });
 
   it("renders player, DM, system, and ask-DM answer message variants", () => {
