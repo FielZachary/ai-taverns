@@ -222,6 +222,9 @@ export function ChatHistorySidebar({
             </p>
           </div>
         ) : null}
+        <p className="chat-sidebar-developer-note">
+          In game chat, if you found any bugs, have feedback, or want some free msgs :D
+        </p>
         <button className="player-resources-button" type="button">
           <span>Chat w/ Developer</span>
           <i aria-hidden="true" className="player-resources-button-arrow" />
