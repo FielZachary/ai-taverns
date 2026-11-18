@@ -3892,15 +3892,17 @@ h1 {
 }
 
 .chat-sidebar-history {
-  gap: 14px;
-  padding-bottom: 14px;
+  flex: 0 1 32%;
+  gap: clamp(8px, 1.5vh, 14px);
+  padding-bottom: clamp(8px, 1.5vh, 14px);
   border-bottom: 1px solid rgba(226, 176, 93, 0.18);
 }
 
 .chat-sidebar-actions {
-  gap: 10px;
+  flex: 1 1 68%;
+  gap: clamp(8px, 1.2vh, 10px);
   justify-content: flex-end;
-  padding-top: 14px;
+  padding-top: clamp(8px, 1.5vh, 14px);
 }
 
 .chat-sidebar-portrait-name {
@@ -3922,7 +3924,7 @@ h1 {
   justify-content: space-between;
   width: 100%;
   min-width: 0;
-  min-height: 54px;
+  min-height: clamp(42px, 5vh, 54px);
   border: 0;
   padding: 0 6px;
   color: var(--muted);
@@ -4015,7 +4017,7 @@ h1 {
 .chat-sidebar-portrait {
   display: block;
   align-self: center;
-  width: min(228px, 100%);
+  width: min(228px, 100%, 24vh);
   aspect-ratio: 3 / 4;
   overflow: hidden;
   border: 1px solid rgba(244, 207, 122, 0.38);
@@ -4295,7 +4297,7 @@ h1 {
   grid-template-columns: minmax(0, 1fr) 30px;
   align-items: stretch;
   width: 100%;
-  min-height: 72px;
+  min-height: clamp(52px, 6.6vh, 72px);
   border: 1px solid transparent;
   color: var(--ink);
   background: transparent;
@@ -4307,7 +4309,7 @@ h1 {
   gap: 4px;
   align-items: flex-start;
   min-width: 0;
-  padding: 12px 8px 12px 12px;
+  padding: clamp(8px, 1.2vh, 12px) 8px clamp(8px, 1.2vh, 12px) 12px;
   border: 0;
   color: inherit;
   background: transparent;
