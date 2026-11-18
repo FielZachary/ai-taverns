@@ -4688,7 +4688,18 @@ h1 {
 
 .customize-prompt-readonly { cursor: not-allowed; opacity: .48; }
 
-.customize-prompt-actions { display: flex; align-items: center; gap: 10px; min-height: 38px; }
+.customize-prompt-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-height: 38px;
+}
+
+.customize-prompt-actions button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
 
 .npc-cards-panel {
   display: flex;
