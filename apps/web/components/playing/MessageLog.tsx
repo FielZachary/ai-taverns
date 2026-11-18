@@ -606,8 +606,11 @@ export function MessageLog({
     }
 
     const updateLatestMessageState = () => {
-      const remainingScroll = log.scrollHeight - log.clientHeight - log.scrollTop;
-      setIsAtLatestMessage(remainingScroll <= 32);
+      const maxScroll = Math.max(0, log.scrollHeight - log.clientHeight);
+      const remainingScroll = Math.max(0, maxScroll - log.scrollTop);
+      const revealThreshold = maxScroll * 0.12;
+
+      setIsAtLatestMessage(remainingScroll <= revealThreshold);
     };
 
     updateLatestMessageState();

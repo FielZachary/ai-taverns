@@ -123,6 +123,35 @@ describe("MessageLog", () => {
     expect(scrollTo).toHaveBeenLastCalledWith({ top: 480, behavior: "smooth" });
   });
 
+  it("shows the newest-message control only after scrolling at least 12% away from the bottom", () => {
+    const { container } = renderMessageLog({
+      messages: [gameMessage({ id: "first" }), gameMessage({ id: "latest" })]
+    });
+    const log = container.querySelector(".message-log") as HTMLElement;
+
+    Object.defineProperties(log, {
+      clientHeight: { configurable: true, value: 120 },
+      scrollHeight: { configurable: true, value: 480 },
+      scrollTop: { configurable: true, value: 330, writable: true }
+    });
+    fireEvent.scroll(log);
+
+    expect(container.querySelector(".message-scroll-to-latest")).toHaveClass(
+      "message-scroll-to-latest-hidden"
+    );
+
+    Object.defineProperty(log, "scrollTop", {
+      configurable: true,
+      value: 300,
+      writable: true
+    });
+    fireEvent.scroll(log);
+
+    expect(container.querySelector(".message-scroll-to-latest")).not.toHaveClass(
+      "message-scroll-to-latest-hidden"
+    );
+  });
+
   it("keeps the newest-message control mounted so it can fade out", () => {
     const { container } = renderMessageLog({
       messages: [gameMessage({ id: "latest" })]
