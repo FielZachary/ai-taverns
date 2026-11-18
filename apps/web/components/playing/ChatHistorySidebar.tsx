@@ -230,7 +230,8 @@ export function ChatHistorySidebar({
             onCloseMobileDrawer?.();
           }}
         >
-          Customize Prompt
+          <span>Customize Prompt</span>
+          <i aria-hidden="true" className="player-resources-button-arrow" />
         </button>
         <button
           className="player-resources-button"
@@ -240,7 +241,8 @@ export function ChatHistorySidebar({
             onCloseMobileDrawer?.();
           }}
         >
-          Player Resources
+          <span>Player Resources</span>
+          <i aria-hidden="true" className="player-resources-button-arrow" />
         </button>
       </div>
 
