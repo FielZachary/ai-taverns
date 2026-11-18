@@ -4696,8 +4696,11 @@ h1 {
   min-height: 38px;
 }
 
-.customize-prompt-actions button {
+.character-sheet-overlay-panel .customize-prompt-actions button {
   flex: 0 0 auto;
+  width: auto;
+  height: 38px;
+  padding: 0 12px;
   white-space: nowrap;
 }
 
