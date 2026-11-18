@@ -157,6 +157,54 @@ describe("MessageLog", () => {
     );
   });
 
+  it("shows the routed job beside the normal DM label", () => {
+    renderMessageLog({
+      messages: [
+        gameMessage({
+          id: "combat-dm-message",
+          role: "dm",
+          content: "The raider raises their cutlass.",
+          debug: {
+            requestMessages: [],
+            rawResponse: "The raider raises their cutlass.",
+            router: {
+              requestMessages: [],
+              rawResponse: '{"job_needed":"combat"}',
+              parsedOutput: { jobNeeded: "combat" }
+            }
+          }
+        })
+      ]
+    });
+
+    expect(screen.getByText("Dungeon Master")).toBeInTheDocument();
+    expect(screen.getByText("(Combat)")).toHaveClass("message-job-label");
+  });
+
+  it("does not show a job label on Ask DM answers", () => {
+    renderMessageLog({
+      messages: [
+        gameMessage({
+          role: "dm",
+          kind: "ask_dm_answer",
+          content: "The sigil belongs to the old guild.",
+          debug: {
+            requestMessages: [],
+            rawResponse: "The sigil belongs to the old guild.",
+            router: {
+              requestMessages: [],
+              rawResponse: '{"job_needed":"combat"}',
+              parsedOutput: { jobNeeded: "combat" }
+            }
+          }
+        })
+      ]
+    });
+
+    expect(screen.getByText("DM Answer")).toBeInTheDocument();
+    expect(screen.queryByText("(Combat)")).not.toBeInTheDocument();
+  });
+
   it("leaves legacy DM messages without a timestamp unchanged", () => {
     renderMessageLog({
       messages: [

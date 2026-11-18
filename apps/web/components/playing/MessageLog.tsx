@@ -494,6 +494,34 @@ function messageLabel(message: GameMessage) {
       : "Table";
 }
 
+const dmJobLabels = {
+  scene_director: "Scene Director",
+  npc_dialogue: "NPC Dialogue",
+  combat: "Combat",
+  rest_mechanics: "Rest Mechanics",
+  death_saving_throws: "Death Saving Throws",
+  clarification: "Clarification",
+  out_of_character: "Out of Character"
+} as const;
+
+function messageJobLabel(message: GameMessage) {
+  if (message.role !== "dm" || message.kind !== "turn") {
+    return "";
+  }
+
+  const jobNeeded = message.debug?.router?.parsedOutput;
+
+  if (!jobNeeded || typeof jobNeeded !== "object" || Array.isArray(jobNeeded)) {
+    return "";
+  }
+
+  const job = (jobNeeded as { jobNeeded?: unknown }).jobNeeded;
+
+  return typeof job === "string" && job in dmJobLabels
+    ? dmJobLabels[job as keyof typeof dmJobLabels]
+    : "";
+}
+
 function messageLocationLabel(message: GameMessage) {
   if (message.role !== "dm" || message.kind === "ask_dm_answer") {
     return "";
@@ -612,6 +640,7 @@ export function MessageLog({
         const canRewindToMessage =
           canRegenerateMessage && !isLatestRegeneratableMessage;
         const locationLabel = messageLocationLabel(message);
+        const jobLabel = messageJobLabel(message);
         const messageContent = playerFacingMessageContent(message);
         const timestampedContent =
           message.role === "dm" && message.kind === "turn"
@@ -634,7 +663,12 @@ export function MessageLog({
                   <MessageAvatar message={message} />
                 </div>
                 <div className="message-label-stack">
-                  <p className="message-label">{messageLabel(message)}</p>
+                  <p className="message-label">
+                    {messageLabel(message)}
+                    {jobLabel ? (
+                      <span className="message-job-label"> ({jobLabel})</span>
+                    ) : null}
+                  </p>
                   {locationLabel ? (
                     <p className="message-location-label">{locationLabel}</p>
                   ) : null}

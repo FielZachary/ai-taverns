@@ -5741,6 +5741,13 @@ h1 {
   font-size: 0.96rem;
 }
 
+.message-job-label {
+  color: rgba(235, 230, 220, 0.56);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.055em;
+}
+
 .message-label-detail {
   color: var(--muted);
   font-size: 0.72rem;
