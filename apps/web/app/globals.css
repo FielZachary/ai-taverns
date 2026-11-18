@@ -3918,7 +3918,7 @@ h1 {
 }
 
 .chat-sidebar-developer-note {
-  width: calc(100% - clamp(52px, 5.5vw, 60px));
+  width: calc(100% - clamp(48px, 5vw, 56px));
   margin: 0 0 clamp(-5px, -0.6vh, -3px);
   color: rgba(248, 234, 208, 0.58);
   font-family: var(--body-font);

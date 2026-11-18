@@ -223,9 +223,9 @@ export function ChatHistorySidebar({
           </div>
         ) : null}
         <p className="chat-sidebar-developer-note">
-          In game chat: bugs or feedback?
+          In game chat, if you found any bugs,
           <br />
-          Want some free msgs? :D
+          have feedback, or want some free msgs :D
         </p>
         <button className="player-resources-button" type="button">
           <span>Chat w/ Developer</span>
