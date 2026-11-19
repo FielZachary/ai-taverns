@@ -57,7 +57,7 @@ export function DeveloperChatOverlay({
       <header><div><p className="eyebrow">AI Taverns support</p><h2>Chat w/ Developer</h2></div><button onClick={onClose} aria-label="Close chat">×</button></header>
       <div className="developer-chat-messages">{loading ? <p>Loading conversation…</p> : messages.length ? messages.map((message) => <article key={message.id} className={message.senderRole}><small>{message.senderRole === "developer" ? "Developer" : "You"}</small><p>{message.body}</p></article>) : <p>Ask about bugs, feedback, or your campaign.</p>}</div>
       <form className="developer-chat-composer" onSubmit={(event) => { event.preventDefault(); void send(); }}>
-        <textarea className="developer-chat-input" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Speak, search, attack, bargain…" maxLength={4000} rows={3} />
+        <textarea className="developer-chat-input" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Report a bug, make a suggestion, or have a little chat....." maxLength={4000} rows={3} />
         <button className="developer-chat-send" type="submit" aria-label="Send message" disabled={!draft.trim()} />
       </form>
     </section>
