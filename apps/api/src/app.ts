@@ -20,6 +20,7 @@ import { registerRealtimeRoutes } from "./routes/realtime.js";
 import { registerRoomRoutes } from "./routes/rooms.js";
 import { registerAccountRoutes } from "./routes/account.js";
 import { registerDeveloperChatRoutes } from "./routes/developer-chat.js";
+import { registerDeveloperChatDiscordNotifications } from "./developer-chat-discord.js";
 
 export type BuildAppOptions = {
   config?: ApiConfig;
@@ -121,5 +122,6 @@ export async function buildApp(
     dmRuntime: options.dmRuntime
   });
   await fastify.register(registerDeveloperChatRoutes, { prefix: "/api", config });
+  registerDeveloperChatDiscordNotifications(fastify, config);
   return fastify;
 }

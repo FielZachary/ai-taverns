@@ -57,6 +57,7 @@ const ConfigSchema = z.object({
   REDDIT_CAPI_ACCESS_TOKEN: z.string().min(1).optional(),
   REDDIT_CLIENT_SECRET: z.string().min(1).optional(),
   DEV_CHAT_PASSWORD: z.string().min(12).optional(),
+  DEV_CHAT_DISCORD_WEBHOOK_URL: z.string().url().optional(),
   SUBSCRIPTION_DEFAULT_TIER_ID: z.coerce.number().int().positive().default(4)
 });
 
@@ -94,6 +95,7 @@ export type ApiConfig = {
   redditCapiPixelId: string | undefined;
   redditCapiAccessToken: string | undefined;
   devChatPassword: string | undefined;
+  devChatDiscordWebhookUrl: string | undefined;
   subscriptionDefaultTierId: number;
 };
 
@@ -148,6 +150,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     redditCapiAccessToken:
       parsed.REDDIT_CAPI_ACCESS_TOKEN ?? parsed.REDDIT_CLIENT_SECRET,
     devChatPassword: parsed.DEV_CHAT_PASSWORD,
+    devChatDiscordWebhookUrl: parsed.DEV_CHAT_DISCORD_WEBHOOK_URL,
     subscriptionDefaultTierId: parsed.SUBSCRIPTION_DEFAULT_TIER_ID
   };
 }

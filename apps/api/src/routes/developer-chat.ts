@@ -8,6 +8,7 @@ import {
   DeveloperChatUnreadResponseSchema
 } from "@ai-dnd/contracts";
 import type { ApiConfig } from "../config.js";
+import { deliverDeveloperChatDiscordNotifications } from "../developer-chat-discord.js";
 import { requireAuthenticatedUser } from "./auth.js";
 
 type Options = { config: ApiConfig };
@@ -80,8 +81,24 @@ export async function registerDeveloperChatRoutes(fastify: FastifyInstance, opti
     await assertCampaignAccess(fastify, params.campaignId, user.id);
     const threadId = await threadForCampaign(fastify, params.campaignId);
     const player = await fastify.pg.query<{id:string}>("select id from players where campaign_id=$1 and user_id=$2 and status <> 'kicked' order by updated_at desc limit 1", [params.campaignId,user.id]);
-    await fastify.pg.query("insert into developer_chat_messages (thread_id,author_user_id,author_player_id,sender_role,body) values ($1,$2,$3,'user',$4)", [threadId,user.id,player.rows[0]?.id ?? null,body.body]);
-    await fastify.pg.query("update developer_chat_threads set updated_at=now() where id=$1", [threadId]);
+    const client = await fastify.pg.connect();
+    try {
+      await client.query("begin");
+      const message = await client.query<{ id: string }>("insert into developer_chat_messages (thread_id,author_user_id,author_player_id,sender_role,body) values ($1,$2,$3,'user',$4) returning id", [threadId,user.id,player.rows[0]?.id ?? null,body.body]);
+      await client.query("update developer_chat_threads set updated_at=now() where id=$1", [threadId]);
+      if (config.devChatDiscordWebhookUrl) {
+        await client.query("insert into developer_chat_discord_notifications (message_id) values ($1) on conflict (message_id) do nothing", [message.rows[0]!.id]);
+      }
+      await client.query("commit");
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+    void deliverDeveloperChatDiscordNotifications(fastify, config).catch((error) => {
+      fastify.log.error({ error }, "Developer-chat Discord notification dispatcher failed.");
+    });
     return DeveloperChatThreadResponseSchema.parse(await threadPayload(fastify, threadId, "user"));
   });
   fastify.get("/developer-chat/unread", async (request) => {

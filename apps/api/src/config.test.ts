@@ -46,6 +46,7 @@ test("loadConfig applies development defaults and trims web origins", () => {
   assert.equal(config.mixpanelDebug, false);
   assert.equal(config.redditCapiPixelId, undefined);
   assert.equal(config.redditCapiAccessToken, undefined);
+  assert.equal(config.devChatDiscordWebhookUrl, undefined);
   assert.equal(config.subscriptionDefaultTierId, 4);
 });
 
@@ -82,7 +83,8 @@ test("loadConfig applies production security defaults and explicit overrides", (
     MIXPANEL_ENABLED: "true",
     MIXPANEL_DEBUG: "true",
     REDDIT_CAPI_PIXEL_ID: "reddit-pixel-id",
-    REDDIT_CAPI_ACCESS_TOKEN: "reddit-access-token"
+    REDDIT_CAPI_ACCESS_TOKEN: "reddit-access-token",
+    DEV_CHAT_DISCORD_WEBHOOK_URL: "https://discord.com/api/webhooks/123/token"
   });
 
   assert.deepEqual(config, {
@@ -118,6 +120,8 @@ test("loadConfig applies production security defaults and explicit overrides", (
     mixpanelDebug: true,
     redditCapiPixelId: "reddit-pixel-id",
     redditCapiAccessToken: "reddit-access-token",
+    devChatPassword: undefined,
+    devChatDiscordWebhookUrl: "https://discord.com/api/webhooks/123/token",
     subscriptionDefaultTierId: 4
   });
 });
