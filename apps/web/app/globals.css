@@ -4299,31 +4299,41 @@ h1 {
 /* Keep the play history scrollbars within the tavern palette instead of
    exposing the browser's high-contrast native track. */
 .chat-list,
-.message-log {
+.message-log,
+.developer-chat-messages,
+.developer-chat-page aside {
   scrollbar-color: rgba(217, 169, 74, 0.68) rgba(10, 8, 7, 0.42);
   scrollbar-width: thin;
 }
 
 .chat-list::-webkit-scrollbar,
-.message-log::-webkit-scrollbar {
+.message-log::-webkit-scrollbar,
+.developer-chat-messages::-webkit-scrollbar,
+.developer-chat-page aside::-webkit-scrollbar {
   width: 10px;
 }
 
 .chat-list::-webkit-scrollbar-track,
-.message-log::-webkit-scrollbar-track {
+.message-log::-webkit-scrollbar-track,
+.developer-chat-messages::-webkit-scrollbar-track,
+.developer-chat-page aside::-webkit-scrollbar-track {
   border-left: 1px solid rgba(226, 176, 93, 0.12);
   background: rgba(10, 8, 7, 0.42);
 }
 
 .chat-list::-webkit-scrollbar-thumb,
-.message-log::-webkit-scrollbar-thumb {
+.message-log::-webkit-scrollbar-thumb,
+.developer-chat-messages::-webkit-scrollbar-thumb,
+.developer-chat-page aside::-webkit-scrollbar-thumb {
   border: 2px solid rgba(10, 8, 7, 0.42);
   border-radius: 999px;
   background: linear-gradient(180deg, rgba(244, 207, 122, 0.84), rgba(173, 71, 43, 0.76));
 }
 
 .chat-list::-webkit-scrollbar-thumb:hover,
-.message-log::-webkit-scrollbar-thumb:hover {
+.message-log::-webkit-scrollbar-thumb:hover,
+.developer-chat-messages::-webkit-scrollbar-thumb:hover,
+.developer-chat-page aside::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(180deg, #f4cf7a, #c88731);
 }
 
