@@ -28,6 +28,7 @@ function notificationContent(notification: PendingNotification, config: ApiConfi
   const character = notification.character_name?.trim() || "No character";
 
   return [
+    "@everyone",
     "**New developer-chat message**",
     `Campaign: **${notification.campaign_title}**`,
     `Character: ${character}`,
@@ -78,7 +79,7 @@ export async function deliverDeveloperChatDiscordNotifications(
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           content: notificationContent(notification, config),
-          allowed_mentions: { parse: [] }
+          allowed_mentions: { parse: ["everyone"] }
         }),
         signal: AbortSignal.timeout(10_000)
       });
