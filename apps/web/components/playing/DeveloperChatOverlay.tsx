@@ -6,6 +6,7 @@ type Message = {
   senderRole: "user" | "developer";
   body: string;
   createdAt: string;
+  deliveryStatus?: "sending" | "sent";
 };
 
 export function DeveloperChatOverlay({
@@ -18,6 +19,7 @@ export function DeveloperChatOverlay({
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(true);
+  const [isSending, setIsSending] = useState(false);
   const previousDeveloperIds = useRef(new Set<string>());
 
   async function load(playSound = false) {
@@ -34,13 +36,19 @@ export function DeveloperChatOverlay({
   }
 
   async function send() {
-    if (!draft.trim()) return;
-    const response = await fetch(`/api/developer-chat/campaign/${campaignId}/messages`, {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ body: draft })
-    });
-    if (!response.ok) return;
-    const payload = await response.json() as { messages: Message[] };
-    setMessages(payload.messages); setDraft("");
+    const body = draft.trim();
+    if (!body || isSending) return;
+    const optimisticMessage: Message = { id: `sending-${crypto.randomUUID()}`, senderRole: "user", body, createdAt: new Date().toISOString(), deliveryStatus: "sending" };
+    setMessages((current) => [...current, optimisticMessage]);
+    setDraft(""); setIsSending(true);
+    try {
+      const response = await fetch(`/api/developer-chat/campaign/${campaignId}/messages`, {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ body })
+      });
+      if (!response.ok) throw new Error("Message could not be sent.");
+      const payload = await response.json() as { messages: Message[] };
+      setMessages(payload.messages.map((message) => ({ ...message, deliveryStatus: message.senderRole === "user" ? "sent" : undefined })));
+    } finally { setIsSending(false); }
   }
 
   useEffect(() => {
@@ -55,10 +63,10 @@ export function DeveloperChatOverlay({
     <button className="developer-chat-backdrop" aria-label="Close chat" onClick={onClose} />
     <section>
       <header><div><p className="eyebrow">AI Taverns support</p><h2>Chat w/ Developer</h2></div><button onClick={onClose} aria-label="Close chat">×</button></header>
-      <div className="developer-chat-messages">{loading ? <p>Loading conversation…</p> : messages.length ? messages.map((message) => <article key={message.id} className={message.senderRole}><small>{message.senderRole === "developer" ? "Developer" : "You"}</small><p>{message.body}</p></article>) : <p>Ask about bugs, feedback, or your campaign.</p>}</div>
+      <div className="developer-chat-messages">{loading ? <p>Loading conversation…</p> : messages.length ? messages.map((message) => <article key={message.id} className={message.senderRole}><small>{message.senderRole === "user" ? message.deliveryStatus === "sending" ? "Sending…" : `Sent · ${new Date(message.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : `Developer · ${new Date(message.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`}</small><p>{message.body}</p></article>) : <p>Ask about bugs, feedback, or your campaign.</p>}</div>
       <form className="developer-chat-composer" onSubmit={(event) => { event.preventDefault(); void send(); }}>
         <textarea className="developer-chat-input" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Report a bug, make a suggestion, or have a little chat....." maxLength={4000} rows={3} />
-        <button className="developer-chat-send" type="submit" aria-label="Send message" disabled={!draft.trim()} />
+        <button className="developer-chat-send" type="submit" aria-label="Send message" disabled={!draft.trim() || isSending} />
       </form>
     </section>
   </div>;
