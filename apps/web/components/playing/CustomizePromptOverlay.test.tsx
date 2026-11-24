@@ -31,7 +31,7 @@ describe("CustomizePromptOverlay", () => {
     expect(introduction?.querySelectorAll("em")).toHaveLength(0);
     expect(introduction?.querySelectorAll("strong")).toHaveLength(1);
     expect(introduction?.querySelector(".prompt-explanation-gold")).toHaveTextContent("AI Taverns");
-    expect(introduction?.querySelectorAll(".prompt-explanation-token")).toHaveLength(0);
+    expect(introduction?.querySelectorAll(".prompt-explanation-token")).toHaveLength(3);
   });
 
   it("shows the default Global Rules as muted read-only text and uses it when starting an override", async () => {
