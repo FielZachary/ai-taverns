@@ -18,5 +18,6 @@ describe("DeveloperChatOverlay", () => {
 
     expect(screen.getByRole("dialog", { name: /chat with developer/i })).toBeInTheDocument();
     expect(screen.getByText(/feel free to msg if you find any bugs/i)).toHaveClass("developer-chat-intro");
+    expect(screen.getByText(/reply in 2–3 minutes :D/i)).toBeInTheDocument();
   });
 });
