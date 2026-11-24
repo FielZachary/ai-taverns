@@ -55,19 +55,13 @@ describe("PlayerInput", () => {
     localStorage.clear();
   });
 
-  it("opens model settings and persists the selected model", () => {
+  it("opens settings without an AI model tab", () => {
     renderPlayerInput();
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /ai model: qwen 3\.5 plus/i })
-    );
+    fireEvent.click(screen.getByRole("button", { name: /open settings/i }));
 
-    expect(screen.getByRole("dialog", { name: /ai model/i })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Qwen 3.5 Plus" }));
-
-    expect(localStorage.getItem("ai-dnd.aiModel")).toBe("qwen-3-5-plus");
-    expect(screen.queryByRole("dialog", { name: /ai model/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: /ai model settings/i })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /ai model/i })).not.toBeInTheDocument();
   });
 
   it("toggles the chat background from settings", () => {
@@ -75,9 +69,7 @@ describe("PlayerInput", () => {
 
     renderPlayerInput({ onChatBackgroundEnabledChange });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /ai model: qwen 3\.5 plus/i })
-    );
+    fireEvent.click(screen.getByRole("button", { name: /open settings/i }));
     fireEvent.click(screen.getByRole("tab", { name: /chat background/i }));
 
     const toggle = screen.getByRole("switch", { name: /on/i });
@@ -101,9 +93,7 @@ describe("PlayerInput", () => {
       onRestartCampaign
     });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /ai model: qwen 3\.5 plus/i })
-    );
+    fireEvent.click(screen.getByRole("button", { name: /open settings/i }));
     fireEvent.click(screen.getByRole("tab", { name: /restart/i }));
 
     expect(screen.getByText(/Start this character over/i)).toBeInTheDocument();
@@ -132,20 +122,6 @@ describe("PlayerInput", () => {
     });
   });
 
-  it("does not open model settings when model selection is disabled", () => {
-    renderPlayerInput({ canSelectAiModel: false });
-
-    const modelButton = screen.getByRole("button", {
-      name: /ai model: qwen 3\.5 plus/i
-    });
-
-    expect(modelButton).toBeDisabled();
-
-    fireEvent.click(modelButton);
-
-    expect(screen.queryByRole("dialog", { name: /ai model/i })).not.toBeInTheDocument();
-  });
-
   it("opens and closes the Eldermere map modal", () => {
     renderPlayerInput();
 
@@ -162,16 +138,6 @@ describe("PlayerInput", () => {
     expect(
       screen.queryByRole("dialog", { name: /eldermere map/i })
     ).not.toBeInTheDocument();
-  });
-
-  it("ignores stale provider-level model picker values", () => {
-    localStorage.setItem("ai-dnd.aiModel", "deepseek-reasoner");
-
-    renderPlayerInput();
-
-    expect(
-      screen.getByRole("button", { name: /ai model: qwen 3\.5 plus/i })
-    ).toBeInTheDocument();
   });
 
   it("shows validation messages and locks submitted turn input", () => {

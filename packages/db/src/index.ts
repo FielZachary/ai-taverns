@@ -58,6 +58,7 @@ import type {
   SpellSlotState,
   RoomSocketEvent,
   RoomSnapshot,
+  CampaignModelOverrides as ContractCampaignModelOverrides,
   CampaignPromptOverrides as ContractCampaignPromptOverrides,
   UsageResourceType,
   UserUsageSummary,
@@ -5752,6 +5753,16 @@ const promptOverrideKeys = [
 
 type PromptOverrideKey = (typeof promptOverrideKeys)[number];
 
+const narratorModelOverrideKeys = [
+  "npc_dialogue",
+  "combat",
+  "scene_director",
+  "clarification",
+  "out_of_character",
+] as const;
+
+type NarratorModelOverrideKey = (typeof narratorModelOverrideKeys)[number];
+
 function campaignPromptOverrides(metadata: unknown): CampaignPromptOverrides {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
     return {};
@@ -5772,10 +5783,35 @@ function campaignPromptOverrides(metadata: unknown): CampaignPromptOverrides {
   ) as CampaignPromptOverrides;
 }
 
+function campaignModelOverrides(metadata: unknown): ContractCampaignModelOverrides {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return {};
+  }
+
+  const raw = (metadata as Record<string, unknown>).modelOverrides;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return {};
+  }
+
+  const allowedModels = new Set<AiModelId>([
+    "deepseek-v4-flash",
+    "qwen-3-5-plus",
+    "qwen-3-7-plus",
+  ]);
+  return Object.fromEntries(
+    narratorModelOverrideKeys.flatMap((key) => {
+      const value = (raw as Record<string, unknown>)[key];
+      return typeof value === "string" && allowedModels.has(value as AiModelId)
+        ? [[key, value]]
+        : [];
+    }),
+  ) as ContractCampaignModelOverrides;
+}
+
 export async function getCampaignPromptOverridesForUser(
   db: pg.Pool,
   input: { roomId: string; sessionId: string; userId: string },
-): Promise<{ overrides: ContractCampaignPromptOverrides; updatedAt: string | null }> {
+): Promise<{ overrides: ContractCampaignPromptOverrides; modelOverrides: ContractCampaignModelOverrides; updatedAt: string | null }> {
   const campaign = await resolveRoomCampaign(db, input.roomId, input.sessionId);
   if (!campaign) {
     throw createStatusError(404, "Campaign not found.");
@@ -5783,6 +5819,7 @@ export async function getCampaignPromptOverridesForUser(
   await assertCampaignAccessForUser(db, campaign, input.userId);
   return {
     overrides: campaignPromptOverrides(campaign.metadata),
+    modelOverrides: campaignModelOverrides(campaign.metadata),
     updatedAt: campaign.updated_at ? toIso(campaign.updated_at) : null,
   };
 }
@@ -5794,9 +5831,10 @@ export async function saveCampaignPromptOverrideForUser(
     sessionId: string;
     userId: string;
     job: PromptOverrideKey;
-    prompt?: string;
+    prompt?: string | null;
+    model?: AiModelId | null;
   },
-): Promise<{ overrides: ContractCampaignPromptOverrides; updatedAt: string | null }> {
+): Promise<{ overrides: ContractCampaignPromptOverrides; modelOverrides: ContractCampaignModelOverrides; updatedAt: string | null }> {
   const campaign = await resolveRoomCampaign(db, input.roomId, input.sessionId);
   if (!campaign) {
     throw createStatusError(404, "Campaign not found.");
@@ -5808,12 +5846,23 @@ export async function saveCampaignPromptOverrideForUser(
       ? { ...(campaign.metadata as Record<string, unknown>) }
       : {};
   const overrides = { ...campaignPromptOverrides(campaign.metadata) } as Record<string, string>;
-  if (input.prompt?.trim()) {
-    overrides[input.job] = input.prompt.trim();
-  } else {
-    delete overrides[input.job];
+  const modelOverrides = { ...campaignModelOverrides(campaign.metadata) } as Record<string, AiModelId>;
+  if (input.prompt !== undefined) {
+    if (input.prompt?.trim()) {
+      overrides[input.job] = input.prompt.trim();
+    } else {
+      delete overrides[input.job];
+    }
+  }
+  if (input.model !== undefined && narratorModelOverrideKeys.includes(input.job as NarratorModelOverrideKey)) {
+    if (input.model) {
+      modelOverrides[input.job] = input.model;
+    } else {
+      delete modelOverrides[input.job];
+    }
   }
   metadata.promptOverrides = overrides;
+  metadata.modelOverrides = modelOverrides;
   const updated = await db.query<CampaignRow>(
     "update campaigns set metadata = $2::jsonb, updated_at = now() where id = $1 returning *",
     [campaign.id, JSON.stringify(metadata)],
@@ -5824,6 +5873,7 @@ export async function saveCampaignPromptOverrideForUser(
   }
   return {
     overrides: campaignPromptOverrides(saved.metadata),
+    modelOverrides: campaignModelOverrides(saved.metadata),
     updatedAt: toIso(saved.updated_at),
   };
 }
@@ -12316,17 +12366,21 @@ export function usesNarratorHistoryReference(input: {
 }
 
 /**
- * The router selects the job, but the server owns which provider model runs
- * that job. Combat narration always uses the dedicated Qwen model; all other
- * jobs preserve the model selected for the turn.
+ * Player-facing narrator jobs default to Qwen 3.7 Plus. Campaign owners may
+ * persist a model override for one supported router job; the router and
+ * background jobs remain server-owned.
  */
 export function narratorModelForJob(input: {
   jobNeeded?: DmJobName | undefined;
-  selectedModel?: AiModelId | undefined;
+  modelOverrides?: ContractCampaignModelOverrides | undefined;
 }): AiModelId | undefined {
-  return input.jobNeeded === "combat"
-    ? "qwen-3-7-plus"
-    : input.selectedModel;
+  if (!input.jobNeeded) {
+    return undefined;
+  }
+  const override = narratorModelOverrideKeys.includes(input.jobNeeded as NarratorModelOverrideKey)
+    ? input.modelOverrides?.[input.jobNeeded as NarratorModelOverrideKey]
+    : undefined;
+  return override ?? "qwen-3-7-plus";
 }
 
 async function askDungeonMaster(
@@ -12419,7 +12473,7 @@ async function askDungeonMaster(
     const narratorOnly = options?.providerResponseFormat === "text";
     const narratorModel = narratorModelForJob({
       jobNeeded: promptContext?.jobNeeded,
-      selectedModel: options?.model,
+      modelOverrides: campaignModelOverrides(campaign.metadata),
     });
     const useNarratorHistoryReference = usesNarratorHistoryReference({
       jobNeeded: promptContext?.jobNeeded,
@@ -14210,7 +14264,6 @@ export async function submitRoomTurnForUser(
     rollRequestId?: string;
     rollResult?: DiceRollResult;
     clientMessageId?: string;
-    model?: AiModelId;
     rollSubmissions?: DiceRollSubmission[];
   },
 ): Promise<RoomSnapshot> {
@@ -14362,7 +14415,6 @@ export async function submitRoomTurnForUser(
         undefined,
         undefined,
         {
-          ...(input.model ? { model: input.model } : {}),
           timeoutMs: playerTurnDmTimeoutMs,
           providerResponseFormat: "text",
         },
@@ -14858,7 +14910,6 @@ export async function submitSoloTurnForUser(
       soloState.content,
       undefined,
       {
-        ...(input.model ? { model: input.model } : {}),
         timeoutMs: playerTurnDmTimeoutMs,
         providerResponseFormat: "text",
       },

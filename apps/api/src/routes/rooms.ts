@@ -236,7 +236,8 @@ export async function registerRoomRoutes(
         ...identity,
         userId: user.id,
         job: body.job,
-        prompt: body.prompt
+        ...(body.prompt !== undefined ? { prompt: body.prompt } : {}),
+        ...(body.model !== undefined ? { model: body.model } : {})
       })
     );
   });
@@ -253,7 +254,8 @@ export async function registerRoomRoutes(
       await saveCampaignPromptOverrideForUser(fastify.pg, {
         ...identity,
         userId: user.id,
-        job: body.job
+        job: body.job,
+        prompt: null
       })
     );
   });
@@ -327,7 +329,6 @@ export async function registerRoomRoutes(
         ...(rollRequestId ? { rollRequestId } : {}),
         ...(body.rollResult ? { rollResult: body.rollResult } : {}),
         ...(clientMessageId ? { clientMessageId } : {}),
-        ...(body.model ? { model: body.model } : {}),
         ...(body.rollSubmissions ? { rollSubmissions: body.rollSubmissions } : {})
       })
     );
@@ -349,7 +350,6 @@ export async function registerRoomRoutes(
       campaignMode: "multiplayer" as const,
       messageLength: message?.length ?? 0,
       turnNumber: counts.playerMessageCount,
-      model: body.model,
       skipTurn,
       hasDiceRequest: snapshot.pendingRollRequests.length > 0,
       diceSubmissionCount: rollSubmissionCount,

@@ -20,7 +20,6 @@ import {
 } from "lucide-react";
 import type { CampaignInvite, HookMetric } from "@ai-dnd/contracts";
 import type {
-  AiModelId,
   DiceRollRequest,
   DiceRollSubmission,
   GameMessage,
@@ -112,8 +111,6 @@ import {
 } from "@/lib/analytics";
 
 const openingMessages: GameMessage[] = [];
-const aiModelStorageKey = "ai-dnd.aiModel";
-const defaultAiModel: AiModelId = "qwen-3-5-plus";
 const playerIdStorageKey = "ai-dnd.playerId";
 const initialSceneViewedStoragePrefix = "ai-dnd.initialSceneViewed";
 const roomRequestTimeoutMs = 8_000;
@@ -134,22 +131,6 @@ const campaignPreparationTransitionMs = 650;
 const campaignPreparationProgressIntervalMs = 1_000;
 const campaignPreparationProgressCeiling = 95;
 const campaignPreparationProgressApproachDivisor = 3;
-
-function isAiModelId(value: FormDataEntryValue | string | null): value is AiModelId {
-  return value === "deepseek-v4-flash" || value === "qwen-3-5-plus";
-}
-
-function selectedAiModelFromStorage(): AiModelId {
-  const savedAiModel = window.localStorage.getItem(aiModelStorageKey);
-
-  return isAiModelId(savedAiModel) ? savedAiModel : defaultAiModel;
-}
-
-function selectedAiModelFromForm(form: HTMLFormElement): AiModelId {
-  const submittedModel = new FormData(form).get("aiModel");
-
-  return isAiModelId(submittedModel) ? submittedModel : selectedAiModelFromStorage();
-}
 
 type CampaignSummary = ApiCampaignSummary & ChatSummary;
 
@@ -761,8 +742,6 @@ export function GameShell({
     !isSinglePlayer &&
     roomPlayers.length >= 2 &&
     !hasAdventureBegun;
-  const canSelectAiModel =
-    isSinglePlayer || Boolean(activeCampaign?.ownerClientId === playerId);
   const playerInputLockMessage = requiredRollRequest
     ? `Roll required: ${
         currentRequiredRollDice?.expression ?? requiredRollRequest.label
@@ -928,7 +907,7 @@ export function GameShell({
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ model: selectedAiModelFromStorage() })
+            body: JSON.stringify({})
           }
         );
         if (summaryResponse.ok) {
@@ -1799,7 +1778,7 @@ export function GameShell({
 
   async function sendTurn(
     messageText: string,
-    options: { skipTurn?: boolean; model?: AiModelId } = {}
+    options: { skipTurn?: boolean } = {}
   ) {
     const skipTurn = Boolean(options.skipTurn);
     const currentPlayerName =
@@ -1874,8 +1853,7 @@ export function GameShell({
         playerId,
         message: content,
         skipTurn,
-        clientMessageId: playerMessage.id,
-        model: options.model ?? selectedAiModelFromStorage()
+        clientMessageId: playerMessage.id
       });
       const response = await fetchWithTimeout(
         request.endpoint,
@@ -1915,7 +1893,6 @@ export function GameShell({
         campaignMode: activeCampaign.mode,
         messageLength: content.length,
         turnNumber: counts.playerMessageCount,
-        model: request.body.model,
         skipTurn,
         hasDiceRequest: rollRequestsFromRoom(room).length > 0,
         combatActive: Boolean(room.combat?.active),
@@ -2077,7 +2054,7 @@ export function GameShell({
     }
   }
 
-  async function askDungeonMaster(messageText: string, model: AiModelId) {
+  async function askDungeonMaster(messageText: string) {
     const question = messageText.trim();
 
     if (!question || isSending || !activeCampaign) {
@@ -2111,8 +2088,7 @@ export function GameShell({
           },
           body: JSON.stringify({
             question,
-            clientMessageId: playerMessage.id,
-            model
+            clientMessageId: playerMessage.id
           })
         }
       );
@@ -2136,7 +2112,6 @@ export function GameShell({
           campaignId: activeCampaign.id,
           campaignMode: activeCampaign.mode,
           messageLength: question.length,
-          model,
           responseLatencyMs: Date.now() - startedAt,
           responseType: dmResponseType(latestMessage),
           hasStateChange: hasStateChange(room),
@@ -2177,23 +2152,16 @@ export function GameShell({
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const model = canSelectAiModel
-      ? selectedAiModelFromForm(event.currentTarget)
-      : defaultAiModel;
-
     if (inputMode === "ask_dm") {
-      void askDungeonMaster(draft, model);
+      void askDungeonMaster(draft);
       return;
     }
 
-    void sendTurn(draft, { model });
+    void sendTurn(draft);
   }
 
   function handleSkipTurn() {
-    void sendTurn("", {
-      skipTurn: true,
-      model: canSelectAiModel ? selectedAiModelFromStorage() : defaultAiModel
-    });
+    void sendTurn("", { skipTurn: true });
   }
 
   async function completePendingRollBatch(
@@ -2224,8 +2192,7 @@ export function GameShell({
         singlePlayer,
         playerId,
         rollSubmissions,
-        clientMessageId: rollMessage.id,
-        model: selectedAiModelFromStorage()
+        clientMessageId: rollMessage.id
       });
       const response = await fetch(
         request.endpoint,
@@ -2371,11 +2338,7 @@ export function GameShell({
         total: queuedRoll.total,
         onComplete: () => {
           setActiveDiceReveal(null);
-          void sendTurn(queuedRoll.content, {
-            model: canSelectAiModel
-              ? selectedAiModelFromStorage()
-              : defaultAiModel
-          });
+          void sendTurn(queuedRoll.content);
         }
       });
       return;
@@ -2719,7 +2682,6 @@ export function GameShell({
                 Boolean(activeDiceReveal) ||
                 isInputSubmittedForCurrentState
               }
-              canSelectAiModel={canSelectAiModel}
               lockMessage={playerInputLockMessage}
               requiredRoll={requiredRollRequest}
               requiredRollExpression={currentRequiredRollDice?.expression}

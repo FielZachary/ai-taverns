@@ -4776,6 +4776,22 @@ h1 {
 
 .customize-prompt-toggle { color: var(--gold-bright); font-weight: 800; }
 
+.customize-prompt-model {
+  display: grid;
+  gap: 6px;
+  color: var(--gold-bright);
+  font-weight: 800;
+}
+
+.customize-prompt-model select {
+  width: 100%;
+  border: 1px solid rgba(244, 207, 122, .3);
+  border-radius: 8px;
+  background: rgba(17, 13, 10, .64);
+  color: var(--text);
+  padding: 10px 12px;
+}
+
 .customize-prompt-content textarea {
   flex: 1;
   min-height: 360px;

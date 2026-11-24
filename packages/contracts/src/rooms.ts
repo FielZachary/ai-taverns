@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { AiModelIdSchema } from "./ai-models.js";
 import { CampaignModeSchema } from "./campaigns.js";
 import { MechanicsSeedSchema } from "./mechanics.js";
 
@@ -194,6 +193,30 @@ export const CampaignPromptOverridesSchema = z
   })
   .strict();
 
+export const NarratorModelOverrideJobSchema = z.enum([
+  "npc_dialogue",
+  "combat",
+  "scene_director",
+  "clarification",
+  "out_of_character"
+]);
+
+export const PlayerNarratorModelSchema = z.enum([
+  "qwen-3-7-plus",
+  "qwen-3-5-plus",
+  "deepseek-v4-flash"
+]);
+
+export const CampaignModelOverridesSchema = z
+  .object({
+    npc_dialogue: PlayerNarratorModelSchema.optional(),
+    combat: PlayerNarratorModelSchema.optional(),
+    scene_director: PlayerNarratorModelSchema.optional(),
+    clarification: PlayerNarratorModelSchema.optional(),
+    out_of_character: PlayerNarratorModelSchema.optional()
+  })
+  .strict();
+
 export const RoomPromptOverridesRequestSchema = z.object({
   roomId: z.string().optional(),
   sessionId: z.string().optional()
@@ -201,7 +224,10 @@ export const RoomPromptOverridesRequestSchema = z.object({
 
 export const RoomPromptOverrideSaveRequestSchema = RoomPromptOverridesRequestSchema.extend({
   job: CustomizablePromptJobSchema,
-  prompt: z.string().trim().min(1).max(30000)
+  prompt: z.string().trim().min(1).max(30000).nullable().optional(),
+  model: PlayerNarratorModelSchema.nullable().optional()
+}).refine((value) => value.prompt !== undefined || value.model !== undefined, {
+  message: "Provide a prompt or model update."
 });
 
 export const RoomPromptOverrideDeleteRequestSchema = RoomPromptOverridesRequestSchema.extend({
@@ -210,6 +236,7 @@ export const RoomPromptOverrideDeleteRequestSchema = RoomPromptOverridesRequestS
 
 export const RoomPromptOverridesResponseSchema = z.object({
   overrides: CampaignPromptOverridesSchema,
+  modelOverrides: CampaignModelOverridesSchema,
   updatedAt: z.string().datetime().nullable()
 });
 
@@ -227,7 +254,6 @@ export const RoomSubmitRequestSchema = z.object({
   rollRequestId: z.string().optional(),
   rollResult: DiceRollResultSchema.optional(),
   clientMessageId: z.string().optional(),
-  model: AiModelIdSchema.optional(),
   rollSubmissions: z.array(DiceRollSubmissionSchema).optional()
 });
 
@@ -310,7 +336,9 @@ export type RoomCombatCheatSheetGenerateRequest = z.infer<
   typeof RoomCombatCheatSheetGenerateRequestSchema
 >;
 export type CampaignPromptOverrides = z.infer<typeof CampaignPromptOverridesSchema>;
+export type CampaignModelOverrides = z.infer<typeof CampaignModelOverridesSchema>;
 export type CustomizablePromptJob = z.infer<typeof CustomizablePromptJobSchema>;
+export type NarratorModelOverrideJob = z.infer<typeof NarratorModelOverrideJobSchema>;
 export type RoomBeginRequest = z.infer<typeof RoomBeginRequestSchema>;
 export type RoomSubmitRequest = z.infer<typeof RoomSubmitRequestSchema>;
 export type RoomRealtimeEvent = z.infer<typeof RoomRealtimeEventSchema>;

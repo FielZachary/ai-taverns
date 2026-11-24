@@ -100,6 +100,39 @@ describe("CustomizePromptOverlay", () => {
     expect(value).not.toContain("Inventory state:");
     expect(value).not.toContain("Semantic narration markup:");
     expect(screen.getByText(/This override affects Combat only/)).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Combat AI model" })).toHaveValue("qwen-3-7-plus");
+  });
+
+  it("does not show a model selector for Global Rules", async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ overrides: {} }) });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<CustomizePromptOverlay roomId="room-1" sessionId="session-1" onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Global Rules" }));
+
+    await screen.findByRole("textbox", { name: "Global Rules prompt" });
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+  });
+
+  it("saves a per-job model override without requiring a prompt override", async () => {
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ overrides: {}, modelOverrides: {} }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ overrides: {}, modelOverrides: { combat: "deepseek-v4-flash" } }) });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<CustomizePromptOverlay roomId="room-1" sessionId="session-1" onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Combat" }));
+    const selector = await screen.findByRole("combobox", { name: "Combat AI model" });
+    await waitFor(() => expect(selector).toBeEnabled());
+    fireEvent.change(selector, { target: { value: "deepseek-v4-flash" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toMatchObject({
+      job: "combat",
+      prompt: null,
+      model: "deepseek-v4-flash"
+    });
   });
 
   it("shows unsaved and saved feedback while persisting a prompt override", async () => {

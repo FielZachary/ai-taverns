@@ -7,7 +7,7 @@ import {
   useState
 } from "react";
 import { Map, RefreshCcw, Settings, Sparkles, Wand2 } from "lucide-react";
-import type { AiModelId, DiceRollRequest } from "@/lib/game-types";
+import type { DiceRollRequest } from "@/lib/game-types";
 import { EldermereMapModal } from "./EldermereMapModal";
 
 export type DiceFace = "d4" | "d6" | "d8" | "d10" | "d12" | "d20";
@@ -19,7 +19,6 @@ type PlayerInputProps = {
   mode: PlayerInputMode;
   isSending: boolean;
   isSubmitted: boolean;
-  canSelectAiModel?: boolean;
   lockMessage?: string;
   requiredRoll?: DiceRollRequest | null;
   requiredRollExpression?: string;
@@ -44,18 +43,8 @@ type PlayerInputProps = {
 };
 
 const diceFaces: DiceFace[] = ["d4", "d6", "d8", "d10", "d12", "d20"];
-const aiModelStorageKey = "ai-dnd.aiModel";
-const aiModelOptions: { id: AiModelId; label: string }[] = [
-  { id: "deepseek-v4-flash", label: "DeepSeek V4 Flash" },
-  { id: "qwen-3-5-plus", label: "Qwen 3.5 Plus" }
-];
-
 function queuedDiceTotal(queuedDice: QueuedDice) {
   return Object.values(queuedDice).reduce((sum, count) => sum + (count ?? 0), 0);
-}
-
-function isAiModelId(value: string): value is AiModelId {
-  return aiModelOptions.some((option) => option.id === value);
 }
 
 export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
@@ -65,7 +54,6 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
       mode,
       isSending,
       isSubmitted,
-      canSelectAiModel = true,
       lockMessage,
       requiredRoll,
       requiredRollExpression,
@@ -91,11 +79,9 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
     const [isDicePickerOpen, setIsDicePickerOpen] = useState(false);
     const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
     const [settingsTab, setSettingsTab] = useState<
-      "model" | "background" | "restart"
-    >("model");
+      "background" | "restart"
+    >("background");
     const [isMapOpen, setIsMapOpen] = useState(false);
-    const [selectedAiModel, setSelectedAiModel] =
-      useState<AiModelId>("qwen-3-5-plus");
     const [queuedDice, setQueuedDice] = useState<QueuedDice>({});
     const [restartBackstoryDraft, setRestartBackstoryDraft] =
       useState(restartBackstory);
@@ -104,14 +90,6 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
     const [isGeneratingRestartBackstory, setIsGeneratingRestartBackstory] =
       useState(false);
     const diceRollControlRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-      const savedAiModel = window.localStorage.getItem(aiModelStorageKey);
-
-      if (savedAiModel && isAiModelId(savedAiModel)) {
-        setSelectedAiModel(savedAiModel);
-      }
-    }, []);
 
     useEffect(() => {
       if (!validationMessage) {
@@ -199,16 +177,6 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
       setIsDicePickerOpen(false);
     }
 
-    function chooseAiModel(modelId: AiModelId) {
-      if (!canSelectAiModel) {
-        return;
-      }
-
-      setSelectedAiModel(modelId);
-      window.localStorage.setItem(aiModelStorageKey, modelId);
-      setIsModelPickerOpen(false);
-    }
-
     async function generateRestartBackstory(mode: "generate" | "add_details") {
       if (!onGenerateRestartBackstory || isGeneratingRestartBackstory) {
         return;
@@ -255,10 +223,6 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
       }
     }
 
-    const selectedAiModelLabel =
-      aiModelOptions.find((option) => option.id === selectedAiModel)?.label ??
-      aiModelOptions[0].label;
-
     return (
       <form
         className={`turn-form ${
@@ -268,7 +232,6 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
         }`}
         onSubmit={onSubmit}
       >
-        <input type="hidden" name="aiModel" value={selectedAiModel} />
         {validationMessage ? (
           <p className="turn-form-validation" key={validationPulse} role="alert">
             {validationMessage}
@@ -342,14 +305,12 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
               isModelPickerOpen ? "active" : ""
             }`}
             type="button"
-            aria-label={`AI model: ${selectedAiModelLabel}`}
+            aria-label="Open settings"
             aria-expanded={isModelPickerOpen}
-            disabled={isSending || !canSelectAiModel}
+            disabled={isSending}
             onClick={() => {
-              if (canSelectAiModel) {
-                setSettingsTab("model");
-                setIsModelPickerOpen(true);
-              }
+              setSettingsTab("background");
+              setIsModelPickerOpen(true);
             }}
           >
             <Settings size={17} />
@@ -411,15 +372,6 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
               <div className="model-settings-tabs" role="tablist" aria-label="Settings">
                 <button
                   type="button"
-                  className={settingsTab === "model" ? "active" : ""}
-                  role="tab"
-                  aria-selected={settingsTab === "model"}
-                  onClick={() => setSettingsTab("model")}
-                >
-                  AI Model
-                </button>
-                <button
-                  type="button"
                   className={settingsTab === "background" ? "active" : ""}
                   role="tab"
                   aria-selected={settingsTab === "background"}
@@ -438,25 +390,7 @@ export const PlayerInput = forwardRef<HTMLTextAreaElement, PlayerInputProps>(
                   Restart
                 </button>
               </div>
-              {settingsTab === "model" ? (
-                <div className="model-settings-options" role="tabpanel">
-                  {aiModelOptions.map((option) => (
-                    <button
-                      className={
-                        option.id === selectedAiModel
-                          ? "model-settings-option active"
-                          : "model-settings-option"
-                      }
-                      key={option.id}
-                      type="button"
-                      aria-pressed={option.id === selectedAiModel}
-                      onClick={() => chooseAiModel(option.id)}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              ) : settingsTab === "background" ? (
+              {settingsTab === "background" ? (
                 <div className="chat-background-settings-panel" role="tabpanel">
                   <div>
                     <h3>Chat Background</h3>

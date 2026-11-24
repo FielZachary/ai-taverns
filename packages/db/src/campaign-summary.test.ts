@@ -124,25 +124,24 @@ test("every router-selected gameplay job uses narrator reference history", () =>
   assert.equal(usesNarratorHistoryReference({}), false);
 });
 
-test("combat narration always uses Qwen 3.7 Plus after routing", () => {
+test("narrator jobs default to Qwen 3.7 Plus and honor campaign overrides", () => {
   assert.equal(
     narratorModelForJob({
       jobNeeded: "combat",
-      selectedModel: "deepseek-v4-flash",
     }),
     "qwen-3-7-plus",
   );
   assert.equal(
     narratorModelForJob({
       jobNeeded: "combat",
-      selectedModel: "qwen-3-5-plus",
+      modelOverrides: { combat: "deepseek-v4-flash" },
     }),
-    "qwen-3-7-plus",
+    "deepseek-v4-flash",
   );
   assert.equal(
     narratorModelForJob({
       jobNeeded: "npc_dialogue",
-      selectedModel: "qwen-3-5-plus",
+      modelOverrides: { npc_dialogue: "qwen-3-5-plus" },
     }),
     "qwen-3-5-plus",
   );
