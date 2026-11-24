@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { ComponentProps } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ChatHistorySidebar, type ChatSummary } from "./ChatHistorySidebar";
 
@@ -35,6 +35,17 @@ function renderChatHistorySidebar(
 }
 
 describe("ChatHistorySidebar", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ unreadCount: 0 })
+    }));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("renders the loading state and disables new chat creation while creating", () => {
     const props = renderChatHistorySidebar({
       isLoading: true,

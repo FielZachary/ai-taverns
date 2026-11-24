@@ -62,7 +62,7 @@ export function DeveloperChatOverlay({
   return <div className="developer-chat-overlay" role="dialog" aria-modal="true" aria-label="Chat with developer">
     <button className="developer-chat-backdrop" aria-label="Close chat" onClick={onClose} />
     <section>
-      <header><div><p className="eyebrow">AI Taverns support</p><h2>Chat w/ Developer</h2></div><button onClick={onClose} aria-label="Close chat">×</button></header>
+      <header><div><p className="eyebrow">AI Taverns support</p><h2>Chat w/ Developer</h2><p className="developer-chat-intro">In game chat, if you found any bugs, have feedback, or want some free msgs <span>:D</span></p></div><button onClick={onClose} aria-label="Close chat">×</button></header>
       <div className="developer-chat-messages">{loading ? <p>Loading conversation…</p> : messages.length ? messages.map((message) => <article key={message.id} className={message.senderRole}><small>{message.senderRole === "user" ? message.deliveryStatus === "sending" ? "Sending…" : `Sent · ${new Date(message.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : `Developer · ${new Date(message.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`}</small><p>{message.body}</p></article>) : <p>Ask about bugs, feedback, or your campaign.</p>}</div>
       <form className="developer-chat-composer" onSubmit={(event) => { event.preventDefault(); void send(); }}>
         <textarea className="developer-chat-input" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Report a bug, make a suggestion, or have a little chat....." maxLength={4000} rows={3} />

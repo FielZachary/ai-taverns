@@ -243,12 +243,6 @@ export function ChatHistorySidebar({
             </p>
           </div>
         ) : null}
-        <p className="chat-sidebar-developer-note">
-          In game chat, if you found any bugs,
-          <br />
-          have feedback, or want some free msgs{" "}
-          <span className="chat-sidebar-developer-note-emoticon">:D</span>
-        </p>
         <button className="player-resources-button" type="button" onClick={() => { onDeveloperChat?.(); onCloseMobileDrawer?.(); }}>
           <span>Chat w/ Developer</span>
           {developerUnreadCount ? <b className="developer-chat-badge" aria-label={`${developerUnreadCount} unread developer messages`}>{developerUnreadCount > 99 ? "99+" : developerUnreadCount}</b> : null}
