@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  campaignModelOverrides,
   campaignTimestampFromNarrations,
   formatCampaignSummaryTimestamp,
   formatNarratorHistoryReference,
@@ -144,5 +145,21 @@ test("narrator jobs default to Qwen 3.7 Plus and honor campaign overrides", () =
       modelOverrides: { npc_dialogue: "qwen-3-5-plus" },
     }),
     "qwen-3-5-plus",
+  );
+});
+
+test("model metadata applies only when its job has a prompt override", () => {
+  assert.deepEqual(
+    campaignModelOverrides({
+      modelOverrides: { npc_dialogue: "qwen-3-5-plus" },
+    }),
+    {},
+  );
+  assert.deepEqual(
+    campaignModelOverrides({
+      promptOverrides: { npc_dialogue: "Keep the dialogue concise." },
+      modelOverrides: { npc_dialogue: "qwen-3-5-plus" },
+    }),
+    { npc_dialogue: "qwen-3-5-plus" },
   );
 });

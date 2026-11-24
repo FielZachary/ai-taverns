@@ -114,15 +114,17 @@ describe("CustomizePromptOverlay", () => {
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
   });
 
-  it("saves a per-job model override without requiring a prompt override", async () => {
+  it("covers a job model selector until its prompt override is enabled", async () => {
     fetchMock
       .mockResolvedValueOnce({ ok: true, json: async () => ({ overrides: {}, modelOverrides: {} }) })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ overrides: {}, modelOverrides: { combat: "deepseek-v4-flash" } }) });
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ overrides: { combat: "Combat prompt with a selected model." }, modelOverrides: { combat: "deepseek-v4-flash" } }) });
     vi.stubGlobal("fetch", fetchMock);
     render(<CustomizePromptOverlay roomId="room-1" sessionId="session-1" onClose={vi.fn()} />);
 
     fireEvent.click(screen.getByRole("tab", { name: "Combat" }));
     const selector = await screen.findByRole("combobox", { name: "Combat AI model" });
+    expect(selector).toBeDisabled();
+    fireEvent.click(screen.getByLabelText("Override Default Prompt"));
     await waitFor(() => expect(selector).toBeEnabled());
     fireEvent.change(selector, { target: { value: "deepseek-v4-flash" } });
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
@@ -130,7 +132,7 @@ describe("CustomizePromptOverlay", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toMatchObject({
       job: "combat",
-      prompt: null,
+      prompt: expect.any(String),
       model: "deepseek-v4-flash"
     });
   });

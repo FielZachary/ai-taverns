@@ -5783,7 +5783,7 @@ function campaignPromptOverrides(metadata: unknown): CampaignPromptOverrides {
   ) as CampaignPromptOverrides;
 }
 
-function campaignModelOverrides(metadata: unknown): ContractCampaignModelOverrides {
+export function campaignModelOverrides(metadata: unknown): ContractCampaignModelOverrides {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
     return {};
   }
@@ -5798,10 +5798,11 @@ function campaignModelOverrides(metadata: unknown): ContractCampaignModelOverrid
     "qwen-3-5-plus",
     "qwen-3-7-plus",
   ]);
+  const promptOverrides = campaignPromptOverrides(metadata);
   return Object.fromEntries(
     narratorModelOverrideKeys.flatMap((key) => {
       const value = (raw as Record<string, unknown>)[key];
-      return typeof value === "string" && allowedModels.has(value as AiModelId)
+      return promptOverrides[key] && typeof value === "string" && allowedModels.has(value as AiModelId)
         ? [[key, value]]
         : [];
     }),
