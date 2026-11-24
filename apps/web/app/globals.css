@@ -5721,7 +5721,7 @@ h1 {
 .message-scroll-to-latest {
   position: sticky;
   z-index: 2;
-  align-self: flex-end;
+  align-self: center;
   bottom: 14px;
   display: inline-flex;
   align-items: center;
