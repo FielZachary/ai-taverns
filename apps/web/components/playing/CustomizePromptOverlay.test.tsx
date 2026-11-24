@@ -11,6 +11,29 @@ describe("CustomizePromptOverlay", () => {
     fetchMock.mockReset();
   });
 
+  it("keeps only AI Taverns emphasized in the introduction", () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ overrides: {} }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { container } = render(
+      <CustomizePromptOverlay
+        roomId="room-1"
+        sessionId="session-1"
+        onClose={vi.fn()}
+      />,
+    );
+
+    const introduction = container.querySelector(".customize-prompt-introduction");
+
+    expect(introduction?.querySelectorAll("em")).toHaveLength(0);
+    expect(introduction?.querySelectorAll("strong")).toHaveLength(1);
+    expect(introduction?.querySelector(".prompt-explanation-gold")).toHaveTextContent("AI Taverns");
+    expect(introduction?.querySelectorAll(".prompt-explanation-token")).toHaveLength(0);
+  });
+
   it("shows the default Global Rules as muted read-only text and uses it when starting an override", async () => {
     fetchMock.mockResolvedValue({
       ok: true,
